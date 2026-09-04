@@ -45,12 +45,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__observeHeartbeat", cluster_observe_heartbeat_fn);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__broadcast", cluster_broadcast_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__peerName", cluster_peer_name_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__peerGeneration", cluster_peer_generation_fn);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__detachPeer", cluster_detach_peer_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);

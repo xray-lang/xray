@@ -83,16 +83,6 @@ deletion_trigger = "when the locked peer table and raw transport-health facts ca
 
 [[leaf]]
 module = "cluster"
-symbol = "__ClusterDeliveryStats"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). cluster.xr fills local topic-channel counts directly; the VM fills only one locked peer-queue traversal; cluster.xr maps both facts to ClusterDelivery"
-deletion_trigger = "when peer output queues are ordinary Xray-owned values and source can count their admissions directly"
-
-[[leaf]]
-module = "cluster"
 symbol = "__runtimeSnapshot"
 class = "runtime_leaf"
 abi = "none; reads cluster runtime state under its own mutexes and atomics"
@@ -125,10 +115,10 @@ deletion_trigger = "when a caller-supplied TLS server context is an ordinary Xra
 module = "cluster"
 symbol = "__adoptPeer"
 class = "runtime_leaf"
-abi = "none; transfers an opaque NetConn body into the synchronized cluster node registry and scheduler-owned reader and writer coroutines, returning its scalar generation or zero"
+abi = "none; transfers an opaque NetConn body into the generation-keyed resource registry and scheduler-owned reader and writer coroutines"
 ownership = "none"
 effect = "nothrow"
-provider = "the native NetConn representation, sole peer-resource factory, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it; source supplies the adoption timestamp and uses the returned generation to install health state before accepting the peer as live"
+provider = "the native NetConn representation, sole peer-resource factory, generation-keyed locked resource table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). cluster.xr supplies the reserved generation, connected timestamp and source-owned reader and writer dispatchers"
 deletion_trigger = "when the live cluster node registry, output queue and transport coroutine lifecycle are expressible as Xray-owned module state"
 
 [[leaf]]
@@ -173,42 +163,12 @@ deletion_trigger = "when the peer transport-health facts are ordinary synchroniz
 
 [[leaf]]
 module = "cluster"
-symbol = "__broadcast"
-class = "runtime_leaf"
-abi = "none; enqueues one source-encoded frame for connected peers, optionally excluding one generation, and returns raw traversal counts"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the locked native peer registry and output queues. The leaf reports accepted, full, stopped and resource counts; cluster.xr owns complete frame construction, split-horizon selection, and all ClusterDelivery mapping"
-deletion_trigger = "when peer output queues are ordinary Xray-owned values"
-
-[[leaf]]
-module = "cluster"
-symbol = "__peerName"
-class = "runtime_leaf"
-abi = "none; copies the connected peer name selected by one exact generation under the native node lock"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the locked opaque peer registry only. cluster.xr owns remote monitor lifetime, matching, result delivery and requester-disappearance policy"
-deletion_trigger = "when the peer registry is ordinary Xray-owned state"
-
-[[leaf]]
-module = "cluster"
-symbol = "__peerGeneration"
-class = "runtime_leaf"
-abi = "none; returns the connected peer generation selected by one exact name under the native node lock"
-ownership = "none"
-effect = "nothrow"
-provider = "the locked opaque peer registry only. cluster.xr owns remote monitor registration, rollback and notification policy"
-deletion_trigger = "when the peer registry is ordinary Xray-owned state"
-
-[[leaf]]
-module = "cluster"
 symbol = "__detachPeer"
 class = "runtime_leaf"
-abi = "none; atomically detaches one generation from the locked registry, returns its owned name and shuts down its socket and queue"
-ownership = "fresh"
+abi = "none; atomically detaches one generation from the locked resource registry and shuts down its socket and queue"
+ownership = "none"
 effect = "nothrow"
-provider = "the native peer registry and opaque transport resources. The leaf reports only whether the generation was detached and its name; cluster.xr exclusively decides which terminal reader or writer event closes the peer and whether node-down notification follows"
+provider = "the native peer resource registry and opaque transport resources. The leaf reports only whether the generation was detached; cluster.xr owns identity and exclusively decides which terminal reader or writer event closes the peer and whether node-down notification follows"
 deletion_trigger = "when the peer registry and transport resources are ordinary Xray-owned values"
 
 [[leaf]]
@@ -236,9 +196,9 @@ module = "cluster"
 symbol = "__applyHealthDecision"
 class = "runtime_leaf"
 abi = "none; compare one locked peer generation and raw last-receive timestamp, then detach on an exact match"
-ownership = "fresh"
+ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster peer registry. cluster.xr owns adopted-at and missed-heartbeat state and supplies the exact observed generation and last-receive timestamp only after deciding removal; stale decisions are rejected and a successful detach returns an owned peer name for source-owned recent-departure and monitor notification policy"
+provider = "the VM peer resource registry. cluster.xr owns adopted-at, missed-heartbeat and identity state, supplies the exact generation and raw receive timestamp only after deciding removal, and completes tombstone and monitor effects when this leaf confirms the generation-safe detach"
 deletion_trigger = "when peer transport state is Xray-owned"
 
 [[leaf]]

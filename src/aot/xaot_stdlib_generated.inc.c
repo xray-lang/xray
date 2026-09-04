@@ -94,8 +94,6 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "cluster.__peerEnqueue") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__broadcast") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__detachPeer") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__stop") == 0)

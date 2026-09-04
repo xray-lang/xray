@@ -8,9 +8,8 @@
  * cluster_internal.h - Private distributed cluster runtime/data-plane API
  *
  * KEY CONCEPT:
- *   Decentralized cluster transport for opaque service envelopes.
- *   Each node is identified by a unique name. Nodes connect via TCP
- *   with challenge-response handshake (SHA-256).
+ *   Generation-keyed cluster transport for opaque service envelopes. Xray
+ *   owns peer identity and authenticated admission above this resource layer.
  *
  * WHY THIS DESIGN:
  *   - Transport frames never encode or inspect Xray values
@@ -45,24 +44,6 @@ struct XrVMRuntime;
 struct XrChannel;
 typedef struct XrCluster XrCluster;
 
-typedef struct XrClusterDeliveryStats {
-    int64_t accepted;
-    int64_t full;
-    int64_t stopped;
-    int64_t resource;
-} XrClusterDeliveryStats;
-
-#define XR_ADDRESS_HOST_MAX 255
-/* ========== Node State ========== */
-
-typedef enum {
-    XR_NODE_IDLE,
-    XR_NODE_CONNECTING,
-    XR_NODE_HANDSHAKING,
-    XR_NODE_CONNECTED,
-    XR_NODE_CLOSING
-} XrNodeState;
-
 typedef struct XrNodeMetrics {
     _Atomic(uint64_t) frames_sent;
     _Atomic(uint64_t) frames_recv;
@@ -76,15 +57,8 @@ typedef struct XrNodeMetrics {
 typedef struct XrClusterNode {
     _Atomic(uint32_t) ref_count;
     _Atomic(bool) shutdown_started;
-    /* Source validates the protocol name limit before adoption. This larger
-     * provider-only buffer is merely bounded registry storage. */
-    char name[256];
-    char host[XR_ADDRESS_HOST_MAX + 1];
-    uint16_t port;
-    XrNodeState state;
     XrIOConn *conn;
     int64_t last_heartbeat_recv;
-    uint32_t flags;
     uint64_t generation_token;
 
     XrClusterOutputQueue *outq;
@@ -154,7 +128,6 @@ static inline void cluster_node_shutdown(XrClusterNode *node) {
                                                  memory_order_acq_rel, memory_order_acquire))
         return;
     xr_cluster_output_queue_stop(node->outq);
-    node->state = XR_NODE_CLOSING;
     if (node->conn && node->conn->fd >= 0)
         (void) shutdown(node->conn->fd, XR_SHUT_RDWR);
 }
@@ -187,8 +160,7 @@ static inline XrClusterNode *cluster_node_acquire(XrCluster *cluster, uint64_t g
     XrClusterNode *node = NULL;
     xr_amutex_lock(&cluster->nodes_lock);
     for (XrClusterNode *candidate = cluster->nodes; candidate; candidate = candidate->next) {
-        if (candidate->generation_token == generation && candidate->state == XR_NODE_CONNECTED &&
-            candidate->conn) {
+        if (candidate->generation_token == generation && candidate->conn) {
             cluster_node_retain(candidate);
             node = candidate;
             break;
@@ -257,40 +229,6 @@ static inline bool cluster_node_remove(XrCluster *cluster, XrClusterNode *node) 
     }
     xr_amutex_unlock(&cluster->nodes_lock);
     return removed;
-}
-
-/* ========== Topic Pub/Sub ========== */
-
-/* The source layer supplies a complete, validated wire frame and decides
- * whether one peer generation is excluded. The native projection owns only
- * the locked peer walk and each synchronized queue admission result, so it
- * stays beside the node and queue representations that give those operations
- * meaning instead of exposing another transport-policy boundary. */
-static inline XrClusterDeliveryStats cluster_transport_broadcast(XrCluster *cluster,
-                                                                 uint64_t excluded_generation,
-                                                                 const uint8_t *wire,
-                                                                 uint32_t wire_length) {
-    XrClusterDeliveryStats stats = {0};
-    if (!cluster || !wire || wire_length == 0)
-        return stats;
-    xr_amutex_lock(&cluster->nodes_lock);
-    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
-        if ((excluded_generation != 0 && node->generation_token == excluded_generation) ||
-            node->state != XR_NODE_CONNECTED)
-            continue;
-        XrClusterOutputPushResult status =
-            xr_cluster_output_queue_push_copy(node->outq, wire, wire_length);
-        if (status == XR_CLUSTER_OUTPUT_ACCEPTED)
-            stats.accepted++;
-        else if (status == XR_CLUSTER_OUTPUT_FULL)
-            stats.full++;
-        else if (status == XR_CLUSTER_OUTPUT_STOPPED)
-            stats.stopped++;
-        else
-            stats.resource++;
-    }
-    xr_amutex_unlock(&cluster->nodes_lock);
-    return stats;
 }
 
 /* ========== Cluster Info API ========== */

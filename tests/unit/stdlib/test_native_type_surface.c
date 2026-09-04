@@ -180,9 +180,6 @@ TEST(native_module_object_and_enum_metadata) {
     const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
     const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
     const XaBuiltinMember *cluster_info_primitive = find_module_member("cluster", "__info");
-    const XaBuiltinMember *cluster_peer_name = find_module_member("cluster", "__peerName");
-    const XaBuiltinMember *cluster_peer_generation =
-        find_module_member("cluster", "__peerGeneration");
     ASSERT_NULL(cluster_start_signature);
     ASSERT_NOT_NULL(cluster_start_primitive);
     ASSERT_TRUE(cluster_start_primitive->is_internal);
@@ -191,22 +188,30 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_TRUE(cluster_info_primitive->is_internal);
     ASSERT_NULL(find_module_member("cluster", "__registerNodeMonitor"));
     ASSERT_NULL(find_module_member("cluster", "__registerCoroutineMonitor"));
-    ASSERT_NOT_NULL(cluster_peer_name);
-    ASSERT_TRUE(cluster_peer_name->is_internal);
-    ASSERT_NOT_NULL(cluster_peer_generation);
-    ASSERT_TRUE(cluster_peer_generation->is_internal);
+    ASSERT_NULL(find_module_member("cluster", "__broadcast"));
+    ASSERT_NULL(find_module_member("cluster", "__peerName"));
+    ASSERT_NULL(find_module_member("cluster", "__peerGeneration"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterDeliveryStats"));
+    const XaBuiltinMember *cluster_adopt = find_module_member("cluster", "__adoptPeer");
+    const XaBuiltinMember *cluster_detach = find_module_member("cluster", "__detachPeer");
+    const XaBuiltinMember *cluster_health_apply =
+        find_module_member("cluster", "__applyHealthDecision");
+    ASSERT_NOT_NULL(cluster_adopt);
+    ASSERT_NOT_NULL(cluster_detach);
+    ASSERT_NOT_NULL(cluster_health_apply);
     XrType *cluster_start_fn =
         xa_builtin_parse_full_signature(iso, cluster_start_primitive->signature);
     XrType *cluster_info_fn =
         xa_builtin_parse_full_signature(iso, cluster_info_primitive->signature);
-    XrType *cluster_peer_name_fn =
-        xa_builtin_parse_full_signature(iso, cluster_peer_name->signature);
-    XrType *cluster_peer_generation_fn =
-        xa_builtin_parse_full_signature(iso, cluster_peer_generation->signature);
+    XrType *cluster_adopt_fn = xa_builtin_parse_full_signature(iso, cluster_adopt->signature);
+    XrType *cluster_detach_fn = xa_builtin_parse_full_signature(iso, cluster_detach->signature);
+    XrType *cluster_health_apply_fn =
+        xa_builtin_parse_full_signature(iso, cluster_health_apply->signature);
     ASSERT_NOT_NULL(cluster_start_fn);
     ASSERT_NOT_NULL(cluster_info_fn);
-    ASSERT_NOT_NULL(cluster_peer_name_fn);
-    ASSERT_NOT_NULL(cluster_peer_generation_fn);
+    ASSERT_NOT_NULL(cluster_adopt_fn);
+    ASSERT_NOT_NULL(cluster_detach_fn);
+    ASSERT_NOT_NULL(cluster_health_apply_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(cluster_start_fn->function.param_count, 16);
     ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRING);
@@ -215,11 +220,12 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
-    ASSERT_EQ_INT(cluster_peer_name_fn->function.param_count, 1);
-    ASSERT_EQ_INT(cluster_peer_name_fn->function.return_type->kind, XR_KIND_STRING);
-    ASSERT_TRUE(cluster_peer_name_fn->function.return_type->is_nullable);
-    ASSERT_EQ_INT(cluster_peer_generation_fn->function.param_count, 1);
-    ASSERT_EQ_INT(cluster_peer_generation_fn->function.return_type->kind, XR_KIND_INT);
+    ASSERT_EQ_INT(cluster_adopt_fn->function.param_count, 5);
+    ASSERT_EQ_INT(cluster_adopt_fn->function.return_type->kind, XR_KIND_BOOL);
+    ASSERT_EQ_INT(cluster_detach_fn->function.param_count, 1);
+    ASSERT_EQ_INT(cluster_detach_fn->function.return_type->kind, XR_KIND_BOOL);
+    ASSERT_EQ_INT(cluster_health_apply_fn->function.param_count, 2);
+    ASSERT_EQ_INT(cluster_health_apply_fn->function.return_type->kind, XR_KIND_BOOL);
 
     /* Whole-input buffering and path metadata projections are io.xr policy.
      * The native registry retains only the descriptor read and stat leaves. */

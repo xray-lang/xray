@@ -2035,7 +2035,7 @@ module http2 {
 
 module cluster {
   object __ClusterNodeSnapshot {
-    fields: "const name: string, const host: string, const port: i64, const peerGeneration: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const lastReceivedAtMs: i64"
+    fields: "const peerGeneration: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const lastReceivedAtMs: i64"
     exact: true
     doc: "Private metrics and raw transport-health facts for one connected peer"
   }
@@ -2050,12 +2050,6 @@ module cluster {
     fields: "const peerGeneration: i64, const lastReceivedAtMs: i64"
     exact: true
     doc: "Private scalar snapshot of one connected peer's raw transport-health facts"
-  }
-
-  object __ClusterDeliveryStats {
-    fields: "const accepted: i64, const full: i64, const stopped: i64, const resource: i64"
-    exact: true
-    doc: "Private raw admission outcomes from cluster channel and queue providers"
   }
 
   fn __start {
@@ -2084,8 +2078,8 @@ module cluster {
   }
 
   fn __applyHealthDecision {
-    signature: "(peerGeneration: i64, expectedLastReceivedAtMs: i64): string?"
-    doc: "Generation-check and detach one source-declared unhealthy peer, returning only its owned name"
+    signature: "(peerGeneration: i64, expectedLastReceivedAtMs: i64): bool"
+    doc: "Compare one generation and raw receive timestamp, then detach the exact unhealthy peer resource"
     vm: "cluster_health_apply_fn"
     argc: 2
     arg_spec: "vv"
@@ -2093,7 +2087,6 @@ module cluster {
     link_object: false
     layer: "runtime"
     caps: "channel"
-    return_ownership: "fresh"
   }
 
   fn __joinTls {
@@ -2123,11 +2116,11 @@ module cluster {
   }
 
   fn __adoptPeer {
-    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, adoptedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): i64"
-    doc: "Transfer an authenticated socket into the locked cluster node registry and return its generation, or zero on refusal"
+    signature: "(conn: move NetConn, peerGeneration: i64, connectedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool"
+    doc: "Transfer a source-identified socket into the locked resource registry and start generation-keyed source transport loops"
     vm: "cluster_adopt_peer_fn"
-    argc: 8
-    arg_spec: "vssvvvvv"
+    argc: 5
+    arg_spec: "vvvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2181,50 +2174,9 @@ module cluster {
     layer: "runtime"
   }
 
-  fn __broadcast {
-    signature: "(excludedPeerGeneration: i64, wire: Array<u8>): __ClusterDeliveryStats?"
-    doc: "Return raw admission outcomes after one locked peer broadcast"
-    vm: "cluster_broadcast_fn"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-    return_ownership: "fresh"
-    effect: "nothrow"
-    allocation: "may_heap"
-  }
-
-  fn __peerName {
-    signature: "(peerGeneration: i64): string?"
-    doc: "Look up the connected peer name for one exact generation"
-    vm: "cluster_peer_name_fn"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-    effect: "nothrow"
-    allocation: "may_heap"
-  }
-
-  fn __peerGeneration {
-    signature: "(name: string): i64"
-    doc: "Look up the connected peer generation for one exact name"
-    vm: "cluster_peer_generation_fn"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    effect: "nothrow"
-  }
-
   fn __detachPeer {
-    signature: "(peerGeneration: i64): string?"
-    doc: "Atomically detach one peer generation and return its owned name after closing opaque transport resources"
+    signature: "(peerGeneration: i64): bool"
+    doc: "Atomically detach one peer generation and close its opaque transport resources"
     vm: "cluster_detach_peer_fn"
     argc: 1
     arg_spec: "v"
@@ -2233,8 +2185,6 @@ module cluster {
     layer: "runtime"
     caps: "channel"
     effect: "nothrow"
-    allocation: "may_heap"
-    return_ownership: "fresh"
   }
 
   fn __stop {

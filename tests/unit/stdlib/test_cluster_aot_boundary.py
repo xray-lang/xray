@@ -17,7 +17,6 @@ from stdlibgen import parse_defs  # noqa: E402
 SOURCE_OWNED_LEAVES = {
     "__start",
     "__stop",
-    "__broadcast",
 }
 
 RETIRED_STANDALONE_FILES = (
@@ -71,7 +70,7 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         )[1].split("static XrCFuncResult cluster_join_tls_fn", 1)[0]
         observe_heartbeat = cluster_c.split(
             "static XrValue cluster_observe_heartbeat_fn", 1
-        )[1].split("static XrValue cluster_broadcast_fn", 1)[0]
+        )[1].split("static XrValue cluster_detach_peer_fn", 1)[0]
 
         self.assertNotIn("XrPhiDetector", cluster_h)
         self.assertNotIn("last_heartbeat_sent", cluster_h)
@@ -82,7 +81,7 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertNotIn("disconnect", health_apply)
         self.assertNotIn("missed", observe_heartbeat)
         self.assertIn("node->last_heartbeat_recv == expected_last_received", health_apply)
-        self.assertIn("node->last_heartbeat_recv = adopted_at_ms", cluster_c)
+        self.assertIn("node->last_heartbeat_recv = connected_at_ms", cluster_c)
         self.assertIn("var _phiPeerStates: Array<_PhiPeerState>", cluster_xr)
         self.assertIn("adoptedAtMs: i64", cluster_xr)
         self.assertIn("missedHeartbeats: i64", cluster_xr)

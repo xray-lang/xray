@@ -220,6 +220,34 @@ type _PhiPeerSnapshot = {
     lastHeartbeatMs: i64,
 }
 
+const _PEER_RESERVED = 0
+const _PEER_COMMITTED = 1
+const _PEER_DEPARTING = 2
+
+// Peer identity is source state. Native code retains only the generation-keyed
+// socket, queue and transport counters needed to perform provider operations.
+type _PeerDirectoryEntry = {
+    runtimeToken: i64,
+    generation: i64,
+    name: string,
+    host: string,
+    port: i64,
+    flags: i64,
+    state: i64,
+}
+
+type _PeerReservation = {
+    runtimeToken: i64,
+    generation: i64,
+}
+
+type _DeliveryStats = {
+    accepted: i64,
+    full: i64,
+    stopped: i64,
+    resource: i64,
+}
+
 // Source-owned loops use generation tokens so a retiring coroutine cannot
 // affect a later start on the same isolate. Discovery has a separate token
 // because callers may enable or restart it independently of cluster startup.
@@ -228,6 +256,7 @@ const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
 const _runtimeNextToken: Atomic<i64> = Atomic<i64>(0)
 const _runtimeActiveToken: Atomic<i64> = Atomic<i64>(0)
+const _peerNextGeneration: Atomic<i64> = Atomic<i64>(0)
 const _monitorNextId: Atomic<i64> = Atomic<i64>(0)
 // Serializes source generation retirement with the non-suspending node-down
 // notification leaf. This closes the check/call window without moving active
@@ -237,6 +266,8 @@ const _topicStateLock: Atomic<bool> = Atomic<bool>(false)
 var _topicSubscriptions: Array<_TopicSubscription> = []
 const _phiStateLock: Atomic<bool> = Atomic<bool>(false)
 var _phiPeerStates: Array<_PhiPeerState> = []
+const _peerDirectoryLock: Atomic<bool> = Atomic<bool>(false)
+var _peerDirectory: Array<_PeerDirectoryEntry> = []
 // The protected section only copies or swaps one small record and never
 // suspends, so a lock-free flag preserves the synchronous public query surface
 // without exposing ordinary mutable module state across worker coroutines.
@@ -282,6 +313,154 @@ fn _lockPhiState() {
         var (_, acquired) = _phiStateLock.compareExchange(false, true)
         if (acquired) { return }
     }
+}
+
+fn _lockPeerDirectory() {
+    while (true) {
+        var (_, acquired) = _peerDirectoryLock.compareExchange(false, true)
+        if (acquired) { return }
+    }
+}
+
+fn _clearPeerDirectoryLocked() {
+    _lockPeerDirectory()
+    _peerDirectory = []
+    _peerDirectoryLock.store(false)
+}
+
+fn _peerNameConflict(name: string) -> bool {
+    _lockPeerDirectory()
+    var found = false
+    for (var i = 0; i < len(_peerDirectory); i++) {
+        if (_peerDirectory[i].name == name) { found = true }
+    }
+    _peerDirectoryLock.store(false)
+    return found
+}
+
+fn _reservePeer(runtimeToken: i64, name: string, host: string,
+                port: i64, flags: i64) -> _PeerReservation? {
+    var reservation: _PeerReservation? = null
+    _lockRuntimeDecision()
+    if (_runtimeActiveToken.load() == runtimeToken && !_recentlyDeparted(name)) {
+        var generation = _peerNextGeneration.fetchAdd(1) + 1
+        if (generation > 0) {
+            _lockPeerDirectory()
+            var conflict = false
+            for (var i = 0; i < len(_peerDirectory); i++) {
+                if (_peerDirectory[i].name == name ||
+                    _peerDirectory[i].generation == generation) {
+                    conflict = true
+                }
+            }
+            if (!conflict) {
+                _peerDirectory.push({
+                    runtimeToken: runtimeToken,
+                    generation: generation,
+                    name: name,
+                    host: host,
+                    port: port,
+                    flags: flags,
+                    state: _PEER_RESERVED,
+                })
+                reservation = { runtimeToken: runtimeToken, generation: generation }
+            }
+            _peerDirectoryLock.store(false)
+        }
+    }
+    _runtimeDecisionLock.store(false)
+    return reservation
+}
+
+fn _commitPeer(reservation: _PeerReservation) -> bool {
+    _lockRuntimeDecision()
+    if (_runtimeActiveToken.load() != reservation.runtimeToken) {
+        _runtimeDecisionLock.store(false)
+        return false
+    }
+    _lockPeerDirectory()
+    var committed = false
+    for (var i = 0; i < len(_peerDirectory); i++) {
+        var entry = _peerDirectory[i]
+        if (entry.runtimeToken == reservation.runtimeToken &&
+            entry.generation == reservation.generation && entry.state == _PEER_RESERVED) {
+            entry.state = _PEER_COMMITTED
+            _peerDirectory[i] = entry
+            committed = true
+        }
+    }
+    _peerDirectoryLock.store(false)
+    _runtimeDecisionLock.store(false)
+    return committed
+}
+
+fn _removePeerDirectoryEntry(runtimeToken: i64, generation: i64) {
+    _lockPeerDirectory()
+    var retained: Array<_PeerDirectoryEntry> = []
+    for (var i = 0; i < len(_peerDirectory); i++) {
+        var entry = _peerDirectory[i]
+        if (entry.runtimeToken != runtimeToken || entry.generation != generation) {
+            retained.push(entry)
+        }
+    }
+    _peerDirectory = retained
+    _peerDirectoryLock.store(false)
+}
+
+fn _beginPeerDeparture(runtimeToken: i64,
+                       generation: i64) -> _PeerDirectoryEntry? {
+    _lockPeerDirectory()
+    var departing: _PeerDirectoryEntry? = null
+    for (var i = 0; i < len(_peerDirectory); i++) {
+        var entry = _peerDirectory[i]
+        if (entry.runtimeToken == runtimeToken && entry.generation == generation &&
+            entry.state != _PEER_DEPARTING) {
+            departing = entry
+            entry.state = _PEER_DEPARTING
+            _peerDirectory[i] = entry
+        }
+    }
+    _peerDirectoryLock.store(false)
+    return departing
+}
+
+fn _peerDirectorySnapshot(runtimeToken: i64) -> Array<_PeerDirectoryEntry> {
+    _lockPeerDirectory()
+    var peers: Array<_PeerDirectoryEntry> = []
+    for (var i = 0; i < len(_peerDirectory); i++) {
+        var entry = _peerDirectory[i]
+        if (entry.runtimeToken == runtimeToken && entry.state == _PEER_COMMITTED) {
+            peers.push(entry)
+        }
+    }
+    _peerDirectoryLock.store(false)
+    return peers
+}
+
+fn _peerName(generation: i64) -> string? {
+    _lockPeerDirectory()
+    var name: string? = null
+    for (var i = 0; i < len(_peerDirectory); i++) {
+        var entry = _peerDirectory[i]
+        if (entry.generation == generation && entry.state == _PEER_COMMITTED) {
+            name = entry.name
+        }
+    }
+    _peerDirectoryLock.store(false)
+    return name
+}
+
+fn _peerGeneration(name: string) -> i64 {
+    _lockPeerDirectory()
+    var generation = 0
+    for (var i = 0; i < len(_peerDirectory); i++) {
+        var entry = _peerDirectory[i]
+        if (entry.name == name && entry.state == _PEER_COMMITTED) {
+            generation = entry.generation
+        }
+    }
+    _peerDirectoryLock.store(false)
+    return generation
 }
 
 // Retirement first makes new registrations fail their locked token recheck.
@@ -339,6 +518,13 @@ fn _activateRuntimeGeneration(token: i64) -> bool {
         _runtimeDecisionLock.store(false)
         return false
     }
+    _lockPeerDirectory()
+    if (len(_peerDirectory) != 0) {
+        _peerDirectoryLock.store(false)
+        _runtimeDecisionLock.store(false)
+        return false
+    }
+    _peerDirectoryLock.store(false)
     _lockMonitorState()
     if (_monitorRuntimeToken != 0 || len(_nodeMonitors) != 0 || len(_remoteMonitors) != 0 ||
         len(_recentDepartures) != 0) {
@@ -361,6 +547,7 @@ fn _retireRuntimeGeneration(token: i64) -> bool {
     }
     _runtimeActiveToken.store(0)
     _clearMonitorStateLocked(token)
+    _clearPeerDirectoryLocked()
     _runtimeDecisionLock.store(false)
     return true
 }
@@ -370,6 +557,7 @@ fn _retireCurrentRuntimeGeneration() -> i64 {
     var token = _runtimeActiveToken.load()
     _runtimeActiveToken.store(0)
     if (token != 0) { _clearMonitorStateLocked(token) }
+    _clearPeerDirectoryLocked()
     _runtimeDecisionLock.store(false)
     return token
 }
@@ -502,7 +690,7 @@ fn _registerNodeMonitor(token: i64, target: string,
 
 fn _registerRemoteMonitor(token: i64, nodeName: string, coroutineName: string,
                           notifications: Channel<string>) -> _RemoteMonitorRegistration? {
-    var peerGeneration = __peerGeneration(nodeName)
+    var peerGeneration = _peerGeneration(nodeName)
     if (peerGeneration == 0) { return null }
     var id = _monitorNextId.fetchAdd(1) + 1
     if (id <= 0) { return null }
@@ -518,7 +706,7 @@ fn _registerRemoteMonitor(token: i64, nodeName: string, coroutineName: string,
         notifications: notifications,
     })
     _monitorStateLock.store(false)
-    var current = __peerName(peerGeneration)
+    var current = _peerName(peerGeneration)
     if (current == null || current! != nodeName) {
         _unregisterRemoteMonitor(token, id)
         return null
@@ -571,13 +759,13 @@ fn _takeRemoteExitMonitors(token: i64, peerGeneration: i64,
 
 fn _notifyRemoteExit(peerGeneration: i64, coroutineName: string, reason: string) {
     var token = _runtimeActiveToken.load()
-    if (token == 0 || __peerName(peerGeneration) == null) { return }
+    if (token == 0 || _peerName(peerGeneration) == null) { return }
     var matched = _takeRemoteExitMonitors(token, peerGeneration, coroutineName)
     _publishOneShot(matched, reason)
 }
 
 fn _peerIdentityCurrent(peerGeneration: i64, expectedName: string) -> bool {
-    var current = __peerName(peerGeneration)
+    var current = _peerName(peerGeneration)
     return current != null && current! == expectedName
 }
 
@@ -936,7 +1124,7 @@ export fn decodeCoroExit(payload: Array<u8>) -> ClusterCoroExit? {
 // complete bounded frame reaches this source callback, keyed by a unique peer
 // generation so a delayed continuation cannot address a replacement peer.
 fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
-    var requester = __peerName(peerGeneration)
+    var requester = _peerName(peerGeneration)
     if (requester == null) { return }
     var requesterName = requester!
     const notifications = Coro.monitor(name)
@@ -965,17 +1153,32 @@ fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
     }
 }
 
-// Detachment is generation-keyed and returns the detached node name as a raw
-// provider fact. Only the source generation that stayed active throughout the
-// detach may select the node-down notification effect.
+fn _finishPeerDeparture(token: i64, peerGeneration: i64,
+                        departed: _PeerDirectoryEntry, markedAtMs: i64) {
+    _removePhiPeerState(token, peerGeneration)
+    if (departed.state == _PEER_COMMITTED) {
+        _notifyNodeDownIfCurrent(token, peerGeneration, departed.name, markedAtMs)
+    }
+    _removePeerDirectoryEntry(token, peerGeneration)
+}
+
+fn _completePeerDeparture(token: i64, peerGeneration: i64, markedAtMs: i64) {
+    var departed = _beginPeerDeparture(token, peerGeneration)
+    if (departed != null) {
+        _finishPeerDeparture(token, peerGeneration, departed!, markedAtMs)
+    }
+}
+
+// Native detachment is generation-keyed resource manipulation. Source keeps
+// the directory entry in a departing state until tombstone and monitor effects
+// have completed, so the same name cannot be admitted through that window.
 fn _disconnectPeer(peerGeneration: i64) {
     var token = _runtimeActiveToken.load()
     if (token == 0) { return }
-    var name = __detachPeer(peerGeneration)
-    if (name != null) {
-        _removePhiPeerState(token, peerGeneration)
-        _notifyNodeDownIfCurrent(token, peerGeneration, name!, time.monotonic())
-    }
+    var departed = _beginPeerDeparture(token, peerGeneration)
+    if (departed == null) { return }
+    __detachPeer(peerGeneration)
+    _finishPeerDeparture(token, peerGeneration, departed!, time.monotonic())
 }
 
 fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
@@ -985,6 +1188,33 @@ fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
         admission == _PEER_QUEUE_INVALID) {
         _disconnectPeer(peerGeneration)
     }
+}
+
+fn _broadcastPeers(excludedGeneration: i64, wire: Array<u8>) -> _DeliveryStats? {
+    var token = _runtimeActiveToken.load()
+    var result: _DeliveryStats? = null
+    if (token != 0) {
+        var peers = _peerDirectorySnapshot(token)
+        if (_runtimeActiveToken.load() == token) {
+            var stats: _DeliveryStats = { accepted: 0, full: 0, stopped: 0, resource: 0 }
+            for (var i = 0; i < len(peers); i++) {
+                var generation = peers[i].generation
+                if (generation == excludedGeneration) { continue }
+                var admission = __peerEnqueue(generation, wire)
+                if (admission == _PEER_QUEUE_ACCEPTED) {
+                    stats.accepted = stats.accepted + 1
+                } else if (admission == _PEER_QUEUE_FULL) {
+                    stats.full = stats.full + 1
+                } else if (admission == _PEER_QUEUE_STOPPED) {
+                    stats.stopped = stats.stopped + 1
+                } else {
+                    stats.resource = stats.resource + 1
+                }
+            }
+            if (_runtimeActiveToken.load() == token) { result = stats }
+        }
+    }
+    return result
 }
 
 fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
@@ -1014,7 +1244,7 @@ fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
         if (transport!.hopLimit > 0) {
             var forward = encodeTransportFrame(transport!.hopLimit - 1, transport!.topic,
                                                transport!.envelope)
-            if (forward != null) { __broadcast(peerGeneration, forward!) }
+            if (forward != null) { _broadcastPeers(peerGeneration, forward!) }
         }
         return true
     }
@@ -1171,20 +1401,6 @@ fn _registerPhiPeerState(runtimeToken: i64, peerGeneration: i64,
     }
     _phiPeerStates.push(state)
     _phiStateLock.store(false)
-    return true
-}
-
-fn _registerAdoptedPeer(runtimeToken: i64, peerGeneration: i64, name: string,
-                        adoptedAtMs: i64, expectedIntervalMs: i64) -> bool {
-    if (!_registerPhiPeerState(runtimeToken, peerGeneration, adoptedAtMs,
-                              expectedIntervalMs)) {
-        return false
-    }
-    var current = __peerName(peerGeneration)
-    if (current == null || current! != name) {
-        _removePhiPeerState(runtimeToken, peerGeneration)
-        return false
-    }
     return true
 }
 
@@ -1438,11 +1654,37 @@ fn _readHandshakeFrame(conn: NetConn) -> ClusterFrame? {
 }
 
 fn _mayPublishPeer(name: string) -> bool {
-    if (name == self() || _recentlyDeparted(name)) { return false }
-    var connected = nodes()
-    if (connected == null) { return false }
-    for (var i = 0; i < len(connected!); i++) {
-        if (connected![i] == name) { return false }
+    return name != self() && !_recentlyDeparted(name) && !_peerNameConflict(name)
+}
+
+fn _adoptReservedPeer(conn: move NetConn, runtimeToken: i64, name: string,
+                      host: string, port: i64, flags: i64) -> bool {
+    var reservation = _reservePeer(runtimeToken, name, host, port, flags)
+    if (reservation == null) {
+        net.close(conn)
+        return false
+    }
+    var peer = reservation!
+    var adoptedAtMs = time.monotonic()
+    var adopted = __adoptPeer(move conn, peer.generation, adoptedAtMs,
+                              _dispatchInbound, _dispatchOutbound)
+    if (!adopted) {
+        _removePeerDirectoryEntry(peer.runtimeToken, peer.generation)
+        return false
+    }
+    var source = _sourceStateSnapshot()
+    if (source == null ||
+        !_registerPhiPeerState(peer.runtimeToken, peer.generation, adoptedAtMs,
+                              source!.heartbeatIntervalMs)) {
+        __detachPeer(peer.generation)
+        _removePeerDirectoryEntry(peer.runtimeToken, peer.generation)
+        return false
+    }
+    if (!_commitPeer(peer)) {
+        __detachPeer(peer.generation)
+        _removePhiPeerState(peer.runtimeToken, peer.generation)
+        _removePeerDirectoryEntry(peer.runtimeToken, peer.generation)
+        return false
     }
     return true
 }
@@ -1458,11 +1700,11 @@ fn _dialJoinPeer(host: string, port: i64, timeoutMs: i64) -> NetConn? {
 }
 
 fn _joinPeer(host: string, port: i64) -> bool {
+    var runtimeToken = _runtimeActiveToken.load()
+    if (runtimeToken == 0) { return false }
     var source = _sourceStateSnapshot()
     if (source == null) { return false }
     var config = source!
-    var runtimeToken = _runtimeActiveToken.load()
-    if (runtimeToken == 0) { return false }
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     var pending = _dialJoinPeer(host, port, HANDSHAKE_TIMEOUT_MS)
     if (pending == null) { return false }
@@ -1522,24 +1764,11 @@ fn _joinPeer(host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    if (_runtimeActiveToken.load() != runtimeToken) {
-        net.close(live)
-        return false
-    }
-    var adoptedAtMs = time.monotonic()
-    var peerGeneration = __adoptPeer(move live, ack!.name, host, port, ack!.flags,
-                                     adoptedAtMs, _dispatchInbound, _dispatchOutbound)
-    if (peerGeneration == 0) { return false }
-    if (!_registerAdoptedPeer(runtimeToken, peerGeneration, ack!.name, adoptedAtMs,
-                             config.heartbeatIntervalMs)) {
-        __detachPeer(peerGeneration)
-        return false
-    }
-    return true
+    return _adoptReservedPeer(move live, runtimeToken, ack!.name, host, port, ack!.flags)
 }
 
 fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: string,
-                      tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
+                      tlsEnabled: bool, tlsServerReady: bool) {
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     if (_runtimeActiveToken.load() != token || !net.setDeadline(conn, deadline)) {
         net.close(conn)
@@ -1604,21 +1833,14 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    var adoptedAtMs = time.monotonic()
-    var peerGeneration = __adoptPeer(move conn, request!.name, "", 0, request!.flags,
-                                     adoptedAtMs, _dispatchInbound, _dispatchOutbound)
-    if (peerGeneration != 0 &&
-        !_registerAdoptedPeer(token, peerGeneration, request!.name, adoptedAtMs,
-                             heartbeatIntervalMs)) {
-        __detachPeer(peerGeneration)
-    }
+    _adoptReservedPeer(move conn, token, request!.name, "", 0, request!.flags)
 }
 
 // Keep the affine connection inside a single-iteration frame. A loop-carried
 // local would have one source identity on both sides of its back edge, which
 // cannot be consumed by one iteration and then reused by the next.
 fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: string,
-              tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) -> bool {
+              tlsEnabled: bool, tlsServerReady: bool) -> bool {
     if (!net.setAcceptDeadline(listener, time.monotonic() + _ACCEPT_POLL_MS)) {
         if (_runtimeActiveToken.load() != token) { return false }
         time.sleep(10)
@@ -1636,18 +1858,16 @@ fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: strin
         net.close(live)
         return false
     }
-    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady,
-                          heartbeatIntervalMs)
+    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady)
     return true
 }
 
 fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: string,
-               tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
+               tlsEnabled: bool, tlsServerReady: bool) {
     var live = listener
     defer { net.close(live) }
     while (_runtimeActiveToken.load() == token &&
-           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady,
-                      heartbeatIntervalMs)) {}
+           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady)) {}
 }
 
 fn _stopFailedHealthGeneration(token: i64) {
@@ -1698,10 +1918,8 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
                 continue
             }
             if (dead) {
-                var name = __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs)
-                if (name != null) {
-                    _removePhiPeerState(token, peer.peerGeneration)
-                    _notifyNodeDownIfCurrent(token, peer.peerGeneration, name!, sentAtMs)
+                if (__applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs)) {
+                    _completePeerDeparture(token, peer.peerGeneration, sentAtMs)
                 }
             }
         }
@@ -1748,7 +1966,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
     // Source state retains a strong listener reference so stop can close it
     // synchronously; the accept coroutine releases its own reference on exit.
     go _acceptLoop(listener, token, state.selfName, state.secret, state.tlsEnabled,
-                   state.tlsServerReady, state.heartbeatIntervalMs)
+                   state.tlsServerReady)
     return true
 }
 
@@ -2141,7 +2359,7 @@ fn _offerTopic(target: Channel<Buffer>, envelope: Array<u8>) -> i64 {
     }
 }
 
-fn _deliverTopic(topic: string, envelope: Array<u8>) -> __ClusterDeliveryStats? {
+fn _deliverTopic(topic: string, envelope: Array<u8>) -> _DeliveryStats? {
     var token = _runtimeActiveToken.load()
     if (token == 0) { return null }
     var full = 0
@@ -2156,7 +2374,7 @@ fn _deliverTopic(topic: string, envelope: Array<u8>) -> __ClusterDeliveryStats? 
         else if (outcome == 1) { stopped = stopped + 1 }
         else { full = full + 1 }
     }
-    var stats: __ClusterDeliveryStats = {
+    var stats: _DeliveryStats = {
         accepted: accepted,
         full: full,
         stopped: stopped,
@@ -2196,11 +2414,12 @@ export fn self() -> string {
 // A node that has not joined a cluster has no membership to report, which is a
 // different answer from an empty cluster and is reported as one.
 export fn nodes() -> Array<string>? {
-    if (_sourceStateSnapshot() == null) { return null }
-    var raw = __runtimeSnapshot()
-    if (raw == null) { return null }
+    var runtimeToken = _runtimeActiveToken.load()
+    if (runtimeToken == 0 || _sourceStateSnapshot() == null) { return null }
+    var peers = _peerDirectorySnapshot(runtimeToken)
+    if (_runtimeActiveToken.load() != runtimeToken) { return null }
     var names: Array<string> = []
-    for (var i = 0; i < len(raw!.nodes); i++) { names.push(raw!.nodes[i].name) }
+    for (var i = 0; i < len(peers); i++) { names.push(peers[i].name) }
     return names
 }
 
@@ -2247,12 +2466,19 @@ export fn info() -> ClusterInfo? {
     if (maybeState == null) { return null }
     var raw = __runtimeSnapshot()
     if (raw == null || _runtimeActiveToken.load() != runtimeToken) { return null }
+    var peers = _peerDirectorySnapshot(runtimeToken)
+    if (_runtimeActiveToken.load() != runtimeToken) { return null }
     var state = maybeState!
     var snapshot = raw!
     var nodes: Array<ClusterNodeInfo> = []
     var observedAtMs = time.monotonic()
     for (var i = 0; i < len(snapshot.nodes); i++) {
         var node = snapshot.nodes[i]
+        var metadata: _PeerDirectoryEntry? = null
+        for (var j = 0; j < len(peers); j++) {
+            if (peers[j].generation == node.peerGeneration) { metadata = peers[j] }
+        }
+        if (metadata == null) { continue }
         var detector = _phiPeerSnapshot(runtimeToken, node.peerGeneration)
         var sourceLastReceivedAtMs = detector.lastHeartbeatMs > 0
             ? detector.lastHeartbeatMs : detector.adoptedAtMs
@@ -2263,9 +2489,9 @@ export fn info() -> ClusterInfo? {
                                 detector.lastHeartbeatMs, observedAtMs)
                     : 0.0
         var publicNode: ClusterNodeInfo = {
-            name: node.name,
-            host: node.host,
-            port: node.port,
+            name: metadata!.name,
+            host: metadata!.host,
+            port: metadata!.port,
             // Only connected peers are published in the native registry; idle,
             // handshake and closing states remain source-owned transition state.
             state: ClusterNodeState.Connected,
@@ -2458,7 +2684,7 @@ export fn listen(pattern: string, capacity: i64 = 1024) -> Channel<Buffer>? {
 
 // Queue and channel providers report only why each admission succeeded or
 // failed. This source policy is shared by local and remote publication.
-fn _deliveryFromStats(stats: __ClusterDeliveryStats?) -> ClusterDelivery {
+fn _deliveryFromStats(stats: _DeliveryStats?) -> ClusterDelivery {
     if (stats == null) { return ClusterDelivery.Unavailable }
     var observed = stats!
     if (observed.accepted > 0) { return ClusterDelivery.Accepted }
@@ -2503,6 +2729,6 @@ export fn send(topic: string, envelope: move Buffer,
     var remoteWire = encodeTransportFrame(hopLimit, topic, envelopeBytes)
     var local = _deliveryFromStats(_deliverTopic(topic, envelopeBytes))
     var remote = remoteWire == null ? ClusterDelivery.InvalidEnvelope
-                                    : _deliveryFromStats(__broadcast(0, remoteWire!))
+                                    : _deliveryFromStats(_broadcastPeers(0, remoteWire!))
     return _combinePublicationDelivery(local, remote)
 }
