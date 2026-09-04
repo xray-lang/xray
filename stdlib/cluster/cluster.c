@@ -23,60 +23,16 @@
 #include "../../src/runtime/object/xbuffer.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
-#include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
+#include "../../src/runtime/object/xstring.h"
 #include "../../src/coro/xchannel.h"
-#include "../../src/coro/xcoro_registry.h"
-#include "../../src/coro/xcoroutine.h"
-#include "../../src/coro/xsocket.h"
-#include "../../src/coro/xworker.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/vm/xvm.h"
-#include "../../src/base/xhash.h"
 #include "../../src/base/xchecks.h"
-#include "../../src/os/os_time.h"
 
-#include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <limits.h>
-
-/* ========== Heartbeat Coroutine ========== */
-
-/*
- * Drive one native projection of the Xray-owned health policy at the cadence
- * already selected by cluster.xr. Runs as a native coroutine on the normal
- * worker pool so the cluster stays on one scheduling model end-to-end. The
- * provider does not derive a second cadence from the heartbeat interval.
- */
-static void cluster_heartbeat_context_destroy(void *context) {
-    XrCluster *c = (XrCluster *) context;
-    if (!c)
-        return;
-    atomic_store(&c->heartbeat_running, false);
-    cluster_runtime_release(c);
-}
-
-static XrCFuncResult cluster_heartbeat_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                                void *context, XrValue *result) {
-    (void) resume_value;
-    XrCluster *c = (XrCluster *) context;
-    if (!c || !atomic_load(&c->running) || status == XR_RESUME_CANCELLED ||
-        status == XR_RESUME_ERROR)
-        return XR_CFUNC_DONE;
-
-    cluster_health_tick(c);
-    return xr_yield_for_timeout(X, c->heartbeat_tick_ms, cluster_heartbeat_continue, c, result);
-}
-
-static XrCFuncResult cluster_heartbeat_entry(XrVMRuntime *X, void *context, XrValue *result) {
-    XrCluster *c = (XrCluster *) context;
-    if (!c || !atomic_load(&c->running))
-        return XR_CFUNC_DONE;
-    atomic_store(&c->heartbeat_running, true);
-    return xr_yield_for_timeout(X, c->heartbeat_tick_ms, cluster_heartbeat_continue, c, result);
-}
 
 /* ========== Cluster Lifecycle ========== */
 
@@ -134,11 +90,12 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
     return 0;
 }
 
-int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
-                          const XrClusterTlsOptions *tls, int64_t heartbeat_interval_ms,
-                          int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
-                          int64_t heartbeat_tick_ms, int64_t phi_min_samples, double phi_threshold,
-                          uint32_t topic_delivery_fanout_max, int64_t tombstone_retention_ms) {
+static int cluster_runtime_open(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
+                                const XrClusterTlsOptions *tls, int64_t heartbeat_interval_ms,
+                                int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
+                                int64_t phi_min_samples, double phi_threshold,
+                                uint32_t topic_delivery_fanout_max,
+                                int64_t tombstone_retention_ms) {
     if (X->cluster)
         return -1;  // already running
     if (!name)
@@ -164,10 +121,8 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
     }
     c->isolate = X;
 
-    // TLS bootstrap — must run before xr_io_listen so the accept loop (when
-    // it is wired up) sees a ready server_ctx. Failures here are fatal to
-    // startup: operators who asked for TLS explicitly would rather see a
-    // loud error than silently fall back to plaintext.
+    // TLS contexts must exist before the source accept loop starts. Failure is
+    // fatal because an explicit TLS request must never become plaintext.
     if (tls && tls->enabled) {
         if (build_cluster_tls(c, tls) != 0) {
             xr_secure_wipe(c->secret, sizeof(c->secret));
@@ -200,57 +155,11 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
     c->heartbeat_interval_ms = heartbeat_interval_ms;
     c->heartbeat_timeout_ms = heartbeat_timeout_ms;
     c->max_missed_heartbeats = max_missed_heartbeats;
-    c->heartbeat_tick_ms = heartbeat_tick_ms;
     c->phi_min_samples = phi_min_samples;
     c->phi_threshold = phi_threshold;
 
-    // Start listening
-    c->listen_fd = xr_io_listen(NULL, port, 128);
-    if (c->listen_fd < 0) {
-        // Release TLS contexts that build_cluster_tls may have created
-        // before the listen failure so we do not leak OpenSSL handles.
-        if (c->tls_client_ctx)
-            xr_tls_context_free(c->tls_client_ctx);
-        if (c->tls_server_ctx)
-            xr_tls_context_free(c->tls_server_ctx);
-        xr_topic_registry_destroy(c->topics);
-        xr_monitor_registry_destroy(c->monitors);
-        xr_tombstone_registry_destroy(c->tombstones);
-        xr_secure_wipe(c->secret, sizeof(c->secret));
-        xr_free(c);
-        return -1;
-    }
-
     atomic_store(&c->running, true);
-
     X->cluster = c;
-
-    XrCoroutine *background[1];
-    int background_count = 0;
-
-    /* Heartbeat remains a native scheduler provider. The source-owned accept
-     * loop starts after __start returns successfully. */
-    cluster_runtime_retain(c);
-    XrCoroutine *hb_coro = xr_coro_create_native_yieldable(
-        X, cluster_heartbeat_entry, c, cluster_heartbeat_context_destroy, "cluster_heartbeat");
-    if (hb_coro) {
-        background[background_count++] = hb_coro;
-        c->heartbeat_coro_spawned = true;
-    } else {
-        cluster_runtime_release(c);
-    }
-
-    XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
-    if (background_count != 1 || !runtime) {
-        for (int i = 0; i < background_count; i++) {
-            xr_coro_destroy(background[i]);
-        }
-        c->heartbeat_coro_spawned = false;
-        cluster_runtime_stop(c);
-        return -1;
-    }
-    xr_runtime_spawn_batch(runtime, background, background_count);
-
     return 0;
 }
 
@@ -263,6 +172,7 @@ void cluster_runtime_retain(XrCluster *c) {
 static void cluster_runtime_destroy(XrCluster *c) {
     XR_DCHECK(c != NULL, "cluster destroy requires a runtime");
     XR_DCHECK(c->nodes == NULL, "cluster destroy requires a detached node list");
+    XR_DCHECK(c->listener == NULL, "cluster destroy requires a detached listener");
 
     xr_topic_registry_destroy(c->topics);
     c->topics = NULL;
@@ -280,9 +190,6 @@ static void cluster_runtime_destroy(XrCluster *c) {
     c->tls_enabled = false;
 
     xr_secure_wipe(c->secret, sizeof(c->secret));
-    if (c->listen_fd >= 0)
-        close(c->listen_fd);
-    c->listen_fd = -1;
     xr_free(c);
 }
 
@@ -295,7 +202,7 @@ void cluster_runtime_release(XrCluster *c) {
         cluster_runtime_destroy(c);
 }
 
-void cluster_runtime_stop(XrCluster *c) {
+static void cluster_runtime_close(XrCluster *c) {
     if (!c)
         return;
     if (atomic_exchange(&c->stop_started, true))
@@ -305,16 +212,12 @@ void cluster_runtime_stop(XrCluster *c) {
     if (c->isolate && c->isolate->cluster == c)
         c->isolate->cluster = NULL;
 
-    /*
-     * Close the listen socket early so the source accept loop's pending
-     * provider call wakes up and observes running=false. Doing this before
-     * node teardown below
-     * prevents a race where a freshly accepted peer would race against
-     * the cleanup sweep.
-     */
-    if (c->listen_fd >= 0) {
-        close(c->listen_fd);
-        c->listen_fd = -1;
+    /* The source accept coroutine keeps this borrowed handle alive until it
+     * observes the stopped generation. Closing it here wakes the pending
+     * generic net.accept immediately; that coroutine owns the eventual drop. */
+    if (c->listener) {
+        xr_net_listener_close(c->listener);
+        c->listener = NULL;
     }
 
     /* Detach the list atomically, then close nodes without holding
@@ -333,17 +236,9 @@ void cluster_runtime_stop(XrCluster *c) {
         node = next;
     }
 
-    /* Release the isolate-owned reference. Background coroutines keep the
+    /* Release the isolate-owned reference. Peer transport coroutines keep the
      * runtime alive and the last one performs final destruction. */
     cluster_runtime_release(c);
-}
-
-bool cluster_runtime_is_running(XrCluster *c) {
-    return c && atomic_load(&c->running);
-}
-
-const char *cluster_runtime_self_name(XrCluster *c) {
-    return c ? c->self_name : "";
 }
 
 /* ========== Node Management ========== */
@@ -416,80 +311,6 @@ static bool cluster_binding_text_fits(const XrString *text, size_t max_length, b
     return memchr(text->data, '\0', text->length) == NULL;
 }
 
-typedef struct XrClusterAcceptState {
-    XrCluster *cluster;
-    int listen_fd;
-    int64_t deadline_ms;
-} XrClusterAcceptState;
-
-static XrCFuncResult cluster_accept_peer_finish(XrClusterAcceptState *state, XrValue value,
-                                                XrValue *result) {
-    cluster_runtime_release(state->cluster);
-    xr_free(state);
-    *result = value;
-    return XR_CFUNC_DONE;
-}
-
-static XrCFuncResult cluster_accept_peer_step(XrVMRuntime *X, XrClusterAcceptState *state,
-                                              XrValue *result);
-
-static XrCFuncResult cluster_accept_peer_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                                  void *context, XrValue *result) {
-    (void) resume_value;
-    XrClusterAcceptState *state = (XrClusterAcceptState *) context;
-    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR)
-        return cluster_accept_peer_finish(state, XR_NULL_VAL, result);
-    return cluster_accept_peer_step(X, state, result);
-}
-
-static XrCFuncResult cluster_accept_peer_step(XrVMRuntime *X, XrClusterAcceptState *state,
-                                              XrValue *result) {
-    if (!atomic_load(&state->cluster->running) || state->listen_fd < 0)
-        return cluster_accept_peer_finish(state, XR_NULL_VAL, result);
-    XrIOTryResult accepted = xr_socket_accept_try(X, state->listen_fd);
-    if (!accepted.ready) {
-        int64_t remaining = state->deadline_ms - cluster_now_ms();
-        if (remaining <= 0)
-            return cluster_accept_peer_finish(state, XR_NULL_VAL, result);
-        return xr_yield_for_io(X, state->listen_fd, XR_WAIT_READ, remaining,
-                               cluster_accept_peer_continue, state, result);
-    }
-    if (accepted.error != 0 || accepted.value < 0)
-        return cluster_accept_peer_finish(state, XR_NULL_VAL, result);
-    XrNetConn *conn = xr_net_conn_new(X, accepted.value, XR_NETCONN_TCP);
-    if (!conn) {
-        xr_closesocket(accepted.value);
-        return cluster_accept_peer_finish(state, XR_NULL_VAL, result);
-    }
-    return cluster_accept_peer_finish(state, XR_FROM_PTR(conn), result);
-}
-
-static XrCFuncResult cluster_accept_peer_fn(XrVMRuntime *X, XrValue *args, int argc,
-                                            XrValue *result) {
-    XrCluster *cluster = (XrCluster *) X->cluster;
-    if (!cluster || argc < 1 || !XR_IS_INT(args[0]) || !atomic_load(&cluster->running) ||
-        cluster->listen_fd < 0) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-    int64_t deadline = XR_TO_INT(args[0]);
-    if (deadline <= cluster_now_ms()) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-    XrClusterAcceptState *state =
-        (XrClusterAcceptState *) xr_calloc(1, sizeof(XrClusterAcceptState));
-    if (!state) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
-    }
-    state->cluster = cluster;
-    state->listen_fd = cluster->listen_fd;
-    state->deadline_ms = deadline;
-    cluster_runtime_retain(cluster);
-    return cluster_accept_peer_step(X, state, result);
-}
-
 static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *cluster = (XrCluster *) X->cluster;
     if (!cluster || argc < 1 || !XR_IS_STRING(args[0]))
@@ -499,6 +320,31 @@ static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int a
         return xr_bool(true);
     return xr_bool(
         xr_tombstone_registry_contains(cluster->tombstones, name->data, cluster_now_ms()));
+}
+
+static XrValue cluster_health_tick_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster || !atomic_load(&cluster->running))
+        return xr_bool(false);
+    cluster_health_tick(cluster);
+    return xr_bool(true);
+}
+
+static XrValue cluster_track_listener_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    XrNetListener *listener = NULL;
+    if (argc > 0 && XR_IS_PTR(args[0]) && XR_HEAP_TYPE(args[0]) == XR_TINSTANCE) {
+        listener = (XrNetListener *) XR_VALUE_GCPTR(args[0]);
+        if (!listener->klass || listener->klass->builtin_kind != XR_BK_NETLISTENER)
+            listener = NULL;
+    }
+    if (!cluster || !listener || xr_net_listener_is_closed(listener) ||
+        !atomic_load(&cluster->running) || cluster->listener)
+        return xr_bool(false);
+    cluster->listener = listener;
+    return xr_bool(true);
 }
 
 static XrCFuncResult cluster_join_tls_fn(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
@@ -587,17 +433,16 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 16 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (argc < 15 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
         !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]) ||
         !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]) || !XR_IS_INT(args[11]) ||
-        !XR_IS_INT(args[12]) || !XR_IS_FLOAT(args[13]) || !XR_IS_INT(args[14]) ||
-        !XR_IS_INT(args[15]))
+        !XR_IS_FLOAT(args[12]) || !XR_IS_INT(args[13]) || !XR_IS_INT(args[14]))
         return xr_bool(false);
 
-    /* The port range is cluster.xr's rule, checked in start() before this leaf
-     * is reached. What is left here is the machine fact that the listener field
-     * is sixteen bits wide. */
+    /* The port range is cluster.xr's rule, checked before this leaf is reached.
+     * What remains here is the machine fact that the diagnostic field is
+     * sixteen bits wide. */
     XrString *name = XR_TO_STRING(args[0]);
     XrString *secret_text = XR_TO_STRING(args[2]);
     if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false) ||
@@ -628,15 +473,15 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         tls_ptr = &tls_opts;
     }
 
-    int64_t topic_fanout_max = XR_TO_INT(args[14]);
-    if (XR_TO_INT(args[11]) <= 0 || XR_TO_INT(args[12]) <= 0 || topic_fanout_max <= 0 ||
-        topic_fanout_max > UINT32_MAX || XR_TO_INT(args[15]) <= 0)
+    int64_t topic_fanout_max = XR_TO_INT(args[13]);
+    if (XR_TO_INT(args[11]) <= 0 || topic_fanout_max <= 0 || topic_fanout_max > UINT32_MAX ||
+        XR_TO_INT(args[14]) <= 0)
         return xr_bool(false);
 
-    int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]),
-                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_INT(args[11]),
-                                   XR_TO_INT(args[12]), XR_TO_FLOAT(args[13]),
-                                   (uint32_t) topic_fanout_max, XR_TO_INT(args[15]));
+    int rc = cluster_runtime_open(X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]),
+                                  XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_INT(args[11]),
+                                  XR_TO_FLOAT(args[12]), (uint32_t) topic_fanout_max,
+                                  XR_TO_INT(args[14]));
     return xr_bool(rc == 0);
 }
 
@@ -645,7 +490,7 @@ static XrValue cluster_self(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCluster *c = (XrCluster *) X->cluster;
-    const char *name = cluster_runtime_self_name(c);
+    const char *name = c ? c->self_name : "";
     XrString *str = xr_string_intern(X, name, (uint32_t) strlen(name), 0);
     return xr_string_value(str);
 }
@@ -678,7 +523,7 @@ static XrValue cluster_nodes(XrVMRuntime *X, XrValue *args, int argc) {
 static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    cluster_runtime_stop((XrCluster *) X->cluster);
+    cluster_runtime_close((XrCluster *) X->cluster);
     return xr_null();
 }
 

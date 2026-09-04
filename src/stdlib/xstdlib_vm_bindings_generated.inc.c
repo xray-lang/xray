@@ -27,13 +27,15 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     (void) expected_count;
     XRS_EXPORT(module, isolate, "__start", cluster_start_primitive);
     expected_count++;
+    XRS_EXPORT(module, isolate, "__healthTick", cluster_health_tick_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__trackListener", cluster_track_listener_fn);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__handshakeConfig", cluster_handshake_config_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__recentlyDeparted", cluster_recently_departed_fn);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__joinTls", cluster_join_tls_fn);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__acceptPeer", cluster_accept_peer_fn);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__acceptTls", cluster_accept_tls_fn);
     expected_count++;

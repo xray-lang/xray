@@ -147,16 +147,6 @@ deletion_trigger = "when a caller-supplied TLS context is an ordinary Xray value
 
 [[leaf]]
 module = "cluster"
-symbol = "__acceptPeer"
-class = "host_abi_leaf"
-abi = "accept(2) on the cluster listener plus scheduler netpoll readiness"
-ownership = "fresh"
-effect = "suspends"
-provider = "the cluster listener fd and generic NetConn representation (stdlib/cluster/cluster.c cluster_accept_peer_fn). cluster.xr selects the deadline, owns the accept loop and dispatches each connection"
-deletion_trigger = "when a runtime-owned listener fd can be borrowed as an ordinary NetListener value without transferring its lifetime"
-
-[[leaf]]
-module = "cluster"
 symbol = "__acceptTls"
 class = "host_abi_leaf"
 abi = "OpenSSL server handshake plus the scheduler netpoll wait ABI"
@@ -249,21 +239,41 @@ deletion_trigger = "when per-node transport queues are surfaces cluster.xr can n
 module = "cluster"
 symbol = "__start"
 class = "runtime_leaf"
-abi = "socket(2), setsockopt(2) SO_REUSEADDR and IPV6_V6ONLY, bind(2), listen(2) for the node listener; OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
+abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows; standalone AOT additionally installs its opaque blocking cluster service"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray scheduler, which the VM leaf asks to publish heartbeat and accept coroutines over a listener from src/io/xnet_transport.c and a TLS context from src/io/xtls_provider.c. The AOT ABI leaf in src/aot/xrt_cluster.c declines TLS and delegates its service lifecycle to src/coro/xcluster_blocking_runtime.c, whose listener and opaque reader/writer peers come from src/io/xcluster_blocking.c on OS threads. VM and AOT use the same handshake and connected-frame projections. The node name, port range, heartbeat cadence and thresholds, topic fanout limit, and tombstone retention are cluster.xr's and are passed down as normalized scalars"
-deletion_trigger = "when cluster.xr can publish its own coroutines and build its own listener over net's leaves, and the AOT half stops declining TLS so both backends start the same node"
+provider = "the VM cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries. cluster.xr owns the listener, heartbeat and accept coroutines, validation and cadence. The AOT ABI leaf still installs the separate blocking service and declines TLS"
+deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values and standalone AOT no longer installs a separate cluster service"
+
+[[leaf]]
+module = "cluster"
+symbol = "__healthTick"
+class = "runtime_leaf"
+abi = "none; iterates the locked peer registry and enqueues heartbeat frames"
+ownership = "none"
+effect = "nothrow"
+provider = "the VM cluster peer registry, output queues, phi detector and tombstone/monitor registries. cluster.xr owns the loop generation, cadence and stop decision; this leaf projects exactly one tick"
+deletion_trigger = "when peer transport state, health observations and synchronized tombstone/monitor registries are Xray-owned values"
+
+[[leaf]]
+module = "cluster"
+symbol = "__trackListener"
+class = "runtime_leaf"
+abi = "none; borrows one opaque NetListener until cluster stop closes it"
+ownership = "borrowed_param:0"
+effect = "nothrow"
+provider = "the VM cluster runtime stores a non-owning pointer while the source accept coroutine owns the handle. Stop closes it through the generic net provider to wake a pending accept immediately, then clears the pointer before the source coroutine drops its owner"
+deletion_trigger = "when source module state can retain and synchronously close the active listener from cluster.stop"
 
 [[leaf]]
 module = "cluster"
 symbol = "__stop"
 class = "runtime_leaf"
-abi = "close(2) on the listener and the notify pipe, setsockopt(2) IP_DROP_MEMBERSHIP, OpenSSL SSL_CTX_free(3), and a secure wipe of the shared secret (memset_s / explicit_bzero / a volatile loop)"
+abi = "close(2) on peer transports, OpenSSL SSL_CTX_free(3), and a secure wipe of the shared secret (memset_s / explicit_bzero / a volatile loop); standalone AOT also closes its blocking listener"
 ownership = "none"
 effect = "nothrow"
-provider = "the cluster runtime's own teardown: channel close and coroutine join on the VM (stdlib/cluster/cluster.c cluster_runtime_stop), and the AOT ABI service-slot removal in src/aot/xrt_cluster.c followed by blocking service and peer stop/join/close in src/coro/xcluster_blocking_runtime.c and src/io/xcluster_blocking.c"
-deletion_trigger = "when cluster.xr owns the coroutines and the listener it started, so stopping them is ordinary Xray teardown; the secret wipe would still need a leaf, because Xray cannot promise the compiler will not elide a zeroing store"
+provider = "the cluster runtime's synchronized peer teardown and TLS/secret cleanup on the VM, and AOT service-slot removal followed by blocking service and peer teardown. Source already stops and owns its listener and long-lived coroutines"
+deletion_trigger = "when peer registries and TLS contexts are Xray-owned; secure secret erasure may remain a smaller leaf because ordinary stores can be elided"
 
 # ============================================================================
 # crypto

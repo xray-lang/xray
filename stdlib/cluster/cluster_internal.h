@@ -222,8 +222,8 @@ typedef struct XrCluster {
     char self_name[XR_NODE_NAME_MAX + 1];
     uint16_t listen_port;
     char secret[XR_CLUSTER_SECRET_MAX + 1];
-    int listen_fd;
     struct XrVMRuntime *isolate;
+    struct XrNetListener *listener; /* borrowed while the source accept loop owns it */
 
     // Connected nodes (linked list, protected by nodes_lock)
     XrClusterNode *nodes;
@@ -237,7 +237,6 @@ typedef struct XrCluster {
     int64_t heartbeat_interval_ms;
     int64_t heartbeat_timeout_ms;
     int64_t max_missed_heartbeats;
-    int64_t heartbeat_tick_ms;
     int64_t phi_min_samples;
     double phi_threshold;
 
@@ -248,18 +247,7 @@ typedef struct XrCluster {
     _Atomic(bool) running;
 
     /*
-     * Heartbeat coroutine — spawned in cluster_runtime_start, yields on the
-     * shared timer wheel between ticks, and observes running to exit.
-     *
-     * heartbeat_running is flipped to false by the coroutine on exit so
-     * cluster_runtime_stop can wait briefly before freeing the cluster
-     * state the coroutine still references.
-     */
-    bool heartbeat_coro_spawned;
-    _Atomic(bool) heartbeat_running;
-
-    /*
-     * Optional inter-node TLS wrap (see cluster_runtime_start).
+     * Optional inter-node TLS wrap.
      *
      *   tls_enabled     — flip to turn on TLS for every inbound and
      *                     outbound cluster connection.
@@ -285,7 +273,7 @@ typedef struct XrCluster {
 /* ========== Cluster Lifecycle API ========== */
 
 /*
- * TLS options for cluster_runtime_start.
+ * TLS options for the native cluster runtime provider.
  *
  *   enabled          — master switch. When false the other fields are
  *                      ignored and the cluster reverts to plain TCP.
@@ -310,8 +298,7 @@ typedef struct XrCluster {
  *                      should be logged by callers.
  *
  * All string pointers are borrowed for the duration of the call; the
- * contents are copied into OpenSSL contexts that live until
- * cluster_runtime_stop.
+ * contents are copied into OpenSSL contexts owned by the native runtime.
  */
 typedef struct XrClusterTlsOptions {
     bool enabled;
@@ -321,27 +308,8 @@ typedef struct XrClusterTlsOptions {
     bool insecure;
 } XrClusterTlsOptions;
 
-/*
- * Start a cluster with explicit TLS options. Passing `tls == NULL` starts
- * a plain TCP cluster.
- */
-int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
-                          const char *secret, const XrClusterTlsOptions *tls,
-                          int64_t heartbeat_interval_ms, int64_t heartbeat_timeout_ms,
-                          int64_t max_missed_heartbeats, int64_t heartbeat_tick_ms,
-                          int64_t phi_min_samples, double phi_threshold,
-                          uint32_t topic_delivery_fanout_max, int64_t tombstone_retention_ms);
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
-
-// Stop the cluster and close all connections
-void cluster_runtime_stop(XrCluster *c);
-
-// Check if cluster is running
-bool cluster_runtime_is_running(XrCluster *c);
-
-// Get self node name
-const char *cluster_runtime_self_name(XrCluster *c);
 
 /* ========== Node Query API ========== */
 

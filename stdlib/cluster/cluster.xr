@@ -124,14 +124,14 @@ const _CLUSTER_PROTOCOL_FLAGS = 0x01
 const _HANDSHAKE_FRAME_BODY_MAX = 513
 const _ACCEPT_POLL_MS = 500
 
-// Discovery is a source coroutine, so its identity and stop signal also live
-// in source. Tokens prevent a retiring loop from clearing a newer loop after a
-// stop/start cycle on the same isolate.
+// Source-owned loops use generation tokens so a retiring coroutine cannot
+// affect a later start on the same isolate. Discovery has a separate token
+// because callers may enable or restart it independently of cluster startup.
 const _discoveryNextToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
-const _acceptNextToken: Atomic<i64> = Atomic<i64>(0)
-const _acceptActiveToken: Atomic<i64> = Atomic<i64>(0)
+const _runtimeNextToken: Atomic<i64> = Atomic<i64>(0)
+const _runtimeActiveToken: Atomic<i64> = Atomic<i64>(0)
 
 // ========== Wire protocol ===========
 
@@ -745,7 +745,7 @@ fn _joinPeer(host: string, port: i64) -> bool {
 fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
     var live = conn
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
-    if (_acceptActiveToken.load() != token || !net.setDeadline(live, deadline)) {
+    if (_runtimeActiveToken.load() != token || !net.setDeadline(live, deadline)) {
         net.close(live)
         return
     }
@@ -759,7 +759,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
         // The TLS provider closes the failed handle.
         return
     }
-    if (_acceptActiveToken.load() != token) {
+    if (_runtimeActiveToken.load() != token) {
         net.close(live)
         return
     }
@@ -805,26 +805,31 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
         net.close(live)
         return
     }
-    if (_acceptActiveToken.load() != token || !_mayPublishPeer(request!.name)) {
+    if (_runtimeActiveToken.load() != token || !_mayPublishPeer(request!.name)) {
         net.close(live)
         return
     }
     __adoptPeer(move live, request!.name, "", 0, request!.flags)
 }
 
-fn _releaseAcceptLoop(token: i64) {
-    var (_, released) = _acceptActiveToken.compareExchange(token, 0)
-}
-
 // Keep the affine connection inside a single-iteration frame. A loop-carried
 // local would have one source identity on both sides of its back edge, which
 // cannot be consumed by one iteration and then reused by the next.
-fn _acceptOne(token: i64) -> bool {
-    var accepted = __acceptPeer(time.monotonic() + _ACCEPT_POLL_MS)
-    if (accepted == null) { return true }
+fn _acceptOne(listener: NetListener, token: i64) -> bool {
+    if (!net.setAcceptDeadline(listener, time.monotonic() + _ACCEPT_POLL_MS)) {
+        if (_runtimeActiveToken.load() != token) { return false }
+        time.sleep(10)
+        return true
+    }
+    var accepted = net.accept(listener)
+    if (accepted == null) {
+        if (_runtimeActiveToken.load() != token) { return false }
+        if (net.lastError(listener) != NetError.Timeout) { time.sleep(10) }
+        return true
+    }
     var live: NetConn = accepted!
     accepted = null
-    if (_acceptActiveToken.load() != token) {
+    if (_runtimeActiveToken.load() != token) {
         net.close(live)
         return false
     }
@@ -832,21 +837,51 @@ fn _acceptOne(token: i64) -> bool {
     return true
 }
 
-fn _acceptLoop(token: i64) {
-    defer { _releaseAcceptLoop(token) }
-    while (_acceptActiveToken.load() == token && _acceptOne(token)) {}
+fn _acceptLoop(listener: move NetListener, token: i64) {
+    var live = listener
+    defer { net.close(live) }
+    while (_runtimeActiveToken.load() == token && _acceptOne(live, token)) {}
 }
 
-fn _activateClusterSource(started: bool, secret: string) -> bool {
-    if (!started) { return false }
+fn _healthLoop(token: i64, tickMs: i64) {
+    while (_runtimeActiveToken.load() == token) {
+        time.sleep(tickMs)
+        if (_runtimeActiveToken.load() != token) { return }
+        if (!__healthTick()) {
+            var (_, released) = _runtimeActiveToken.compareExchange(token, 0)
+            return
+        }
+    }
+}
+
+fn _activateClusterSource(started: bool, secret: string, tickMs: i64,
+                          listener: move NetListener) -> bool {
+    var live = listener
+    if (!started) {
+        net.close(live)
+        return false
+    }
     _discoveryHashBits.store(discoveryClusterHash(secret) as i64)
+    var token = _runtimeNextToken.fetchAdd(1) + 1
+    var (_, acquired) = _runtimeActiveToken.compareExchange(0, token)
+    if (!acquired) {
+        net.close(live)
+        __stop()
+        return false
+    }
+    go _healthLoop(token, tickMs)
     var config = __handshakeConfig()
     if (config == null || (config!.tlsEnabled && !config!.tlsServerReady)) {
+        net.close(live)
         return true
     }
-    var token = _acceptNextToken.fetchAdd(1) + 1
-    var (_, acquired) = _acceptActiveToken.compareExchange(0, token)
-    if (acquired) { go _acceptLoop(token) }
+    if (!__trackListener(live)) {
+        _runtimeActiveToken.store(0)
+        net.close(live)
+        __stop()
+        return false
+    }
+    go _acceptLoop(move live, token)
     return true
 }
 
@@ -1269,12 +1304,19 @@ export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
 
 // ========== Lifecycle ==========
 
-// A node whose name is not a legal node name cannot start. Neither backend
-// checked this before: the name went straight into a fixed 64-byte field and a
-// longer one was silently truncated, so two nodes with names differing past
-// byte 63 became the same node to the cluster. The heartbeat schedule is passed
-// down rather than defaulted below the leaf, so the numbers have one owner and
-// a caller may override them.
+fn _clusterListener(port: i64) -> NetListener? {
+    try {
+        return net.listen(port, 128)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+// A node whose name is not a legal node name cannot start. The listener and
+// both long-lived loops are ordinary Xray values and coroutines; the runtime
+// leaf only constructs TLS contexts and synchronized registries. The heartbeat
+// schedule is passed down because the locked health projection needs the same
+// thresholds, while its cadence remains entirely source-owned.
 export fn start(config: ClusterConfig) -> bool {
     if (!validNodeName(config.name)) { return false }
     if (config.port < 0 || config.port > 65535) { return false }
@@ -1288,39 +1330,53 @@ export fn start(config: ClusterConfig) -> bool {
     var tick = heartbeatTickInterval(interval)
     var secret = config.secret ?? ""
     if (!_fitsCString(secret, SHARED_SECRET_MAX_BYTES, true)) { return false }
-    if (config.tls == null) {
-        var started = __start(config.name, config.port, secret, false, "", "", "", false,
-                              interval, timeout, missed, tick, PHI_MIN_SAMPLES, PHI_THRESHOLD,
-                              TOPIC_DELIVERY_FANOUT_MAX, TOMBSTONE_RETENTION_MS)
-        return _activateClusterSource(started, secret)
+
+    var tlsEnabled = false
+    var caFile = ""
+    var certFile = ""
+    var keyFile = ""
+    var insecure = false
+    if (config.tls != null) {
+        var tls = config.tls!
+        tlsEnabled = tls.enabled
+        caFile = tls.caFile ?? ""
+        certFile = tls.certFile ?? ""
+        keyFile = tls.keyFile ?? ""
+        insecure = tls.insecure
+        if (_containsZeroByte(caFile) || _containsZeroByte(certFile) ||
+            _containsZeroByte(keyFile)) {
+            return false
+        }
+        if ((len(certFile) == 0) != (len(keyFile) == 0)) { return false }
     }
-    var tls = config.tls!
-    var caFile = tls.caFile ?? ""
-    var certFile = tls.certFile ?? ""
-    var keyFile = tls.keyFile ?? ""
-    if (_containsZeroByte(caFile) || _containsZeroByte(certFile) || _containsZeroByte(keyFile)) {
+
+    var maybeListener = _clusterListener(config.port)
+    if (maybeListener == null) { return false }
+    var listener: NetListener = maybeListener!
+    maybeListener = null
+    var port = net.port(listener)
+    if (port < 0 || port > 65535) {
+        net.close(listener)
         return false
     }
-    if ((len(certFile) == 0) != (len(keyFile) == 0)) { return false }
     var started = __start(
         config.name,
-        config.port,
+        port,
         secret,
-        tls.enabled,
+        tlsEnabled,
         caFile,
         certFile,
         keyFile,
-        tls.insecure,
+        insecure,
         interval,
         timeout,
         missed,
-        tick,
         PHI_MIN_SAMPLES,
         PHI_THRESHOLD,
         TOPIC_DELIVERY_FANOUT_MAX,
         TOMBSTONE_RETENTION_MS
     )
-    return _activateClusterSource(started, secret)
+    return _activateClusterSource(started, secret, tick, move listener)
 }
 
 // The address is parsed here and the leaf is handed a host and a port, so the
@@ -1335,7 +1391,7 @@ export fn join(addr: string) -> bool {
 
 export fn stop() {
     _discoveryActiveToken.store(0)
-    _acceptActiveToken.store(0)
+    _runtimeActiveToken.store(0)
     __stop()
 }
 

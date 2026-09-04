@@ -28,7 +28,7 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
                           int64_t cert_file_len, const char *key_file, int64_t key_file_len,
                           XrValue insecure, XrValue heartbeat_interval_ms,
                           XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats,
-                          XrValue heartbeat_tick_ms, XrValue phi_min_samples, XrValue phi_threshold,
+                          XrValue phi_min_samples, XrValue phi_threshold,
                           XrValue topic_delivery_fanout_max, XrValue tombstone_retention_ms) {
     (void) ca_file;
     (void) ca_file_len;
@@ -41,9 +41,8 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
     if (!aot || name_len < 0 || secret_len < 0 || !XR_IS_INT(port_value) ||
         !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled) || !XR_IS_INT(heartbeat_interval_ms) ||
         !XR_IS_INT(heartbeat_timeout_ms) || !XR_IS_INT(max_missed_heartbeats) ||
-        !XR_IS_INT(heartbeat_tick_ms) || !XR_IS_INT(phi_min_samples) ||
-        !XR_IS_FLOAT(phi_threshold) || !XR_IS_INT(topic_delivery_fanout_max) ||
-        !XR_IS_INT(tombstone_retention_ms))
+        !XR_IS_INT(phi_min_samples) || !XR_IS_FLOAT(phi_threshold) ||
+        !XR_IS_INT(topic_delivery_fanout_max) || !XR_IS_INT(tombstone_retention_ms))
         return XR_FALSE_VAL;
     int64_t port = XR_TO_INT(port_value);
     int64_t fanout_max = XR_TO_INT(topic_delivery_fanout_max);

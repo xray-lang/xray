@@ -2047,16 +2047,40 @@ module cluster {
   }
 
   fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, heartbeatTickMs: i64, phiMinSamples: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64, tombstoneRetentionMs: i64): bool"
-    doc: "Start the backend-neutral cluster runtime from normalized scalar configuration and the health policy cluster.xr decides"
+    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64, tombstoneRetentionMs: i64): bool"
+    doc: "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration"
     vm: "cluster_start_primitive"
-    argc: 16
-    arg_spec: "svsvsssvvvvvvvvv"
+    argc: 15
+    arg_spec: "svsvsssvvvvvvvv"
     aot: "xrt_cluster_start"
     aot_direct: true
     link_object: true
     layer: "runtime"
     caps: "channel"
+  }
+
+  fn __healthTick {
+    signature: "(): bool"
+    doc: "Project one source-scheduled health tick onto the locked peer registry"
+    vm: "cluster_health_tick_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "channel"
+  }
+
+  fn __trackListener {
+    signature: "(listener: NetListener): bool"
+    doc: "Borrow the source-owned listener so native stop can wake its pending accept"
+    vm: "cluster_track_listener_fn"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "netpoll"
   }
 
   fn __handshakeConfig {
@@ -2093,20 +2117,6 @@ module cluster {
     link_object: false
     layer: "runtime"
     caps: "coro,netpoll"
-  }
-
-  fn __acceptPeer {
-    signature: "(deadlineMs: i64): NetConn?"
-    doc: "Accept one cluster listener socket under a source-selected absolute deadline"
-    vm: "cluster_accept_peer_fn"
-    vm_binding: "yieldable"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-    return_ownership: "fresh"
   }
 
   fn __acceptTls {
