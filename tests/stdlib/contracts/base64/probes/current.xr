@@ -5,7 +5,7 @@ fn emit(name: string, ok: bool) {
     print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
 }
 
-fn decodeFails(data: string, options: Base64DecodeOptions? = null) -> bool {
+fn decodeFails(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> bool {
     try {
         base64.decode(data, options)
         return false
