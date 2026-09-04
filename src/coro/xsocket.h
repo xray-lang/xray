@@ -29,8 +29,8 @@ struct XrVMRuntime;
 
 // ========== Connection Management ==========
 
-// Create listen socket
-// Returns listen_fd, -1 on failure
+// Create a non-blocking TCP listener. A null or empty host binds a
+// dual-stack wildcard when the platform supports it; port 0 is allowed.
 XR_FUNC int xr_socket_listen(const char *host, int port, int backlog);
 
 // Blocking accept (coroutine-safe)
@@ -91,8 +91,7 @@ XR_FUNC int xr_socket_wait_readable(struct XrVMRuntime *X, int fd, int timeout_m
  * Primary use case: coroutine-friendly non-blocking TCP connect.
  * After an EINPROGRESS connect(), a writable event on the socket
  * signals the connection has either succeeded (check SO_ERROR == 0)
- * or failed with a specific errno. Same pattern is used inside
- * src/io/xnet_transport.c's xr_io_connect for the cluster path.
+ * or failed with a specific errno.
  *
  * Return codes mirror the reader variant:
  *   > 0 — fd is writable (caller should check SO_ERROR / proceed)

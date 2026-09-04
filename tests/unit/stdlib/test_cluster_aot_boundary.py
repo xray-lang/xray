@@ -40,6 +40,26 @@ RETIRED_NATIVE_FILES = (
     "stdlib/cluster/cluster_node.c",
 )
 
+RETIRED_TRANSPORT_FILES = (
+    "src/io/xnet_transport.c",
+    "src/io/xnet_transport.h",
+)
+
+RETIRED_TRANSPORT_IDENTITIES = (
+    "XrIOConn",
+    "xr_io_connect",
+    "xr_io_connect_tls_with_ctx",
+    "xr_io_close",
+    "xr_io_listen",
+    "xr_io_conn_from_fd",
+    "xr_io_conn_take_net_handle",
+    "xr_io_conn_read_try",
+    "xr_io_conn_write_try",
+    "xr_io_set_timeout",
+    "xr_io_set_nonblocking",
+    "xnet_transport",
+)
+
 
 class ClusterAotBoundaryTests(unittest.TestCase):
     def test_cluster_has_no_native_definition_module(self) -> None:
@@ -55,6 +75,22 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         present = [relative for relative in RETIRED_NATIVE_FILES if (ROOT / relative).exists()]
         self.assertEqual([], present)
         self.assertNotIn('include "xrt_cluster.h"', (ROOT / "src/aot/xrt.h").read_text())
+
+    def test_retired_transport_facade_is_absent(self) -> None:
+        present = [relative for relative in RETIRED_TRANSPORT_FILES if (ROOT / relative).exists()]
+        self.assertEqual([], present)
+
+        sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((ROOT / "src").rglob("*"))
+            if path.suffix in {".c", ".h"}
+        )
+        for identity in RETIRED_TRANSPORT_IDENTITIES:
+            self.assertNotIn(identity, sources, identity)
+
+        provider = (ROOT / "src/io/xnet_provider.c").read_text(encoding="utf-8")
+        self.assertIn("xr_socket_listen(", provider)
+        self.assertIn("xr_socket_set_nonblocking(", provider)
 
     def test_build_has_no_cluster_c_exception(self) -> None:
         cmake = (ROOT / "CMakeLists.txt").read_text()

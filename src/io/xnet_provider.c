@@ -23,7 +23,6 @@
 
 #include "../base/xmalloc.h"
 #include "../../stdlib/common.h"
-#include "xnet_transport.h"
 #include "xtls_provider.h"
 #include "../module/xstdlib_runtime_cache.h"
 #include "xdns.h"
@@ -62,6 +61,7 @@ extern XrIOTryResult xr_socket_read_try(struct XrVMRuntime *X, int fd, char *buf
 extern XrIOTryResult xr_socket_write_try(struct XrVMRuntime *X, int fd, const char *data,
                                          size_t len);
 extern void xr_socket_close(struct XrVMRuntime *X, int fd);
+extern int xr_socket_listen(const char *host, int port, int backlog);
 
 #include <stdlib.h>
 #include <errno.h>
@@ -492,7 +492,7 @@ static XrCFuncResult net_connect_fd_yieldable(XrVMRuntime *X, XrValue *args, int
     if (fd < 0)
         return (net_connect_fail(X, NULL, net_error_from_errno(xr_get_socket_error()), result),
                 XR_CFUNC_DONE);
-    xr_io_set_nonblocking(fd);
+    xr_socket_set_nonblocking((xr_socket_t) fd);
     int opt = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &opt, sizeof(opt));
 
@@ -1227,7 +1227,7 @@ static XrValue net_shutdown_direction(XrVMRuntime *X, XrValue *args, int nargs) 
 
 /*
  * net.__listenFd(port, backlog, forceV4) -> __NetListenerStorage | null
- * xr_io_listen owns the dual-stack-preferred bind; forceV4 pins the socket to
+ * xr_socket_listen owns the dual-stack-preferred bind; forceV4 pins the socket to
  * an IPv4 wildcard for callers that must interoperate with v4-only tooling.
  */
 static XrValue net_listen_fd(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -1241,7 +1241,7 @@ static XrValue net_listen_fd(XrVMRuntime *X, XrValue *args, int nargs) {
         return XR_NULL_VAL;
 
     net_platform_init();
-    int fd = xr_io_listen(force_v4 ? "0.0.0.0" : NULL, port_num, backlog);
+    int fd = xr_socket_listen(force_v4 ? "0.0.0.0" : NULL, port_num, backlog);
     if (fd < 0)
         return XR_NULL_VAL;
 
@@ -1735,8 +1735,7 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
         }
     }
 
-    extern int xr_socket_set_nonblock(int fd);
-    xr_socket_set_nonblock(fd);
+    xr_socket_set_nonblocking((xr_socket_t) fd);
 
     return make_udp_handle(X, fd);
 }

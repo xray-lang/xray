@@ -729,10 +729,10 @@ deletion_trigger = "when a failing listener leaf returns the platform errno in i
 module = "net"
 symbol = "__listenFd"
 class = "host_abi_leaf"
-abi = "socket(2), setsockopt(2) SO_REUSEADDR, setsockopt(2) IPV6_V6ONLY=0 for dual stack, bind(2), listen(2), fcntl(2) F_SETFL, and getsockname(2) to read back a kernel-assigned port; the VM path also sets TCP_NOTSENT_LOWAT"
+abi = "socket(2), setsockopt(2) SO_REUSEADDR, setsockopt(2) IPV6_V6ONLY=0 for dual stack, bind(2), listen(2), fcntl(2) F_SETFL, and getsockname(2) to read back a kernel-assigned port"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel socket/bind/listen. VM src/io/xnet_provider.c -> src/io/xnet_transport.c xr_io_listen; AOT src/aot/xrt_net.h xrt_net_listen_fd. Equivalent behaviour, two implementations"
+provider = "kernel socket/bind/listen. VM src/io/xnet_provider.c delegates platform setup to the generic xr_socket_listen helper in src/coro/xsocket.c; AOT uses xrt_net_listen_fd in src/aot/xrt_net.h. Equivalent behaviour, two implementations"
 deletion_trigger = "when Xray source can issue the socket(2)/bind(2)/listen(2) sequence itself; the sequence is one atomic setup from the caller's point of view and cannot be usefully split first"
 
 [[leaf]]
