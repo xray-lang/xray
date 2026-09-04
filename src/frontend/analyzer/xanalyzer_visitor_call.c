@@ -3745,6 +3745,26 @@ static XrType *xa_mem_with_slice_mut_return_type(XaInferContext *ctx, AstNode *n
     ctx->expected_type = expected_callback;
     XrType *callback = xa_visit_infer_expr(ctx, call->arguments[3]);
     ctx->expected_type = saved_expected;
+    XaSymbol *guard_root = xa_root_variable_symbol_for_expr(ctx, call->arguments[2]);
+    XaSymbolLinks *guard_links =
+        guard_root ? xa_analyzer_get_links(ctx->analyzer, guard_root) : NULL;
+    if (call->arguments[3]->type == AST_FUNCTION_EXPR && guard_links && guard_links->root_id != 0) {
+        for (int i = 0; i < ctx->pending_capture_count; i++) {
+            XaSymbol *captured = ctx->pending_captures[i];
+            XaSymbolLinks *captured_links =
+                captured ? xa_analyzer_get_links(ctx->analyzer, captured) : NULL;
+            if (!captured_links || captured_links->root_id != guard_links->root_id)
+                continue;
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "mem.withSliceMut<T>() callback cannot capture guard owner '%s' while its "
+                     "mutable Slice is active",
+                     guard_root->name ? guard_root->name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_BORROW_CONFLICT, msg, &loc);
+            break;
+        }
+    }
     if (!callback || callback->kind != XR_KIND_FUNCTION || callback->function.param_count != 1) {
         char msg[256];
         snprintf(msg, sizeof(msg),

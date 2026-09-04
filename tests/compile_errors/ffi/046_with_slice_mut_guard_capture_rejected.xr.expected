@@ -1,0 +1,2 @@
+--> 12:1 E0382
+mem.withSliceMut<T>() callback cannot capture guard owner 'guard' while its mutable Slice is active
