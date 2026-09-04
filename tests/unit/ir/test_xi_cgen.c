@@ -3120,8 +3120,10 @@ TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
                  "verified native-direct managed/scalar call should generate");
     TEST_REQUIRE(contains(code, "xrt_net_shutdown_direction("),
                  "verified native-direct view selects the frozen provider symbol");
-    TEST_REQUIRE(contains(code, "xr_box_i64("),
-                 "native-direct scalar argument crosses the provider ABI as tagged storage");
+    TEST_REQUIRE(contains(code, "xrt_source_provider_storage("),
+                 "managed source wrapper crosses through its frozen provider storage view");
+    TEST_REQUIRE(contains(code, "XR_FROM_INT(INT64_C(2))"),
+                 "native-direct scalar argument crosses the provider ABI as a tagged value");
     xr_free(code);
     module->init = NULL;
     xi_module_free(module);
