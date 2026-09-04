@@ -29,7 +29,7 @@ C-emission recipe consumes these rows; the old method-name emitter is not an
 authorized product fallback.
 
 The bounded leaf-value aggregate direct-call family is one exact executable
-family within schema 57, not a second aggregate-only plan. SemanticPlan 45
+family within schema 57, not a second aggregate-only plan. SemanticPlan 46
 program bindings project one target-profile-derived aggregate layout,
 caller/callee value and slot rows, one `VALUE/READ` argument, and a caller-storage
 result with no adapter or ownership transfer. The callee group is exactly
@@ -440,7 +440,7 @@ failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
 TargetPlan schema 57 is a hard cutover from v56 and every earlier TargetPlan
-schema. It requires SemanticPlan schema 45, program-provenance schema 5, and
+schema. It requires SemanticPlan schema 46, program-provenance schema 5, and
 its exact generated Xi operation registry. Schema 54 preserves the PSC7 leaf
 value-product family whose canonical Xi construct/project proof
 has the exact x64 48-byte/8-byte layout and ordinal-bound target rows; it does

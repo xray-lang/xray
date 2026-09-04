@@ -50,7 +50,7 @@ SCHEMA = 2
 
 CURRENT_PLAN_SCHEMAS = {
     "psc_schema": 9,
-    "semantic_schema": 45,
+    "semantic_schema": 46,
     "target_schema": 57,
     "xtp_schema": 57,
 }
