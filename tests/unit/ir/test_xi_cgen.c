@@ -3053,8 +3053,7 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref,
     XiModule *module = xi_module_new("native-direct-view.xr", "native_direct_view", function);
     if (!function->params || !connection || !direction || !ref || !callee || !call ||
         !class_data || !module ||
-        !xi_module_set_identity(module,
-                                "memory-module-v1:id=18:native-direct-view-mutation-v1")) {
+        !xi_module_set_identity(module, "memory-module-v1:id=18:xi-cgen-fixture-v1")) {
         xi_module_free(module);
         xi_func_free(function);
         return NULL;
