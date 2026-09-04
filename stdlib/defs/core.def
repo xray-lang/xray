@@ -2059,11 +2059,11 @@ module cluster {
   }
 
   fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64): bool"
+    signature: "(tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64): bool"
     doc: "Open cluster TLS contexts and native peer provider state from source-normalized scalar configuration"
     vm: "cluster_start_primitive"
-    argc: 9
-    arg_spec: "svsvsssvv"
+    argc: 6
+    arg_spec: "vsssvv"
     aot_direct: false
     link_object: false
     layer: "runtime"

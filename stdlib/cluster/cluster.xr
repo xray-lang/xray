@@ -2261,9 +2261,6 @@ export fn start(config: ClusterConfig) -> bool {
         return false
     }
     var started = __start(
-        config.name,
-        port,
-        secret,
         tlsEnabled,
         caFile,
         certFile,

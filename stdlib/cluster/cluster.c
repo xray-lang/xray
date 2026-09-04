@@ -348,12 +348,12 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 9 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
-        !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
-        !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]))
+    if (argc < 6 || !XR_IS_BOOL(args[0]) || !XR_IS_STRING(args[1]) ||
+        !XR_IS_STRING(args[2]) || !XR_IS_STRING(args[3]) || !XR_IS_BOOL(args[4]) ||
+        !XR_IS_INT(args[5]))
         return xr_bool(false);
 
-    int64_t output_queue_high_watermark_value = XR_TO_INT(args[8]);
+    int64_t output_queue_high_watermark_value = XR_TO_INT(args[5]);
     uint64_t output_queue_high_watermark =
         output_queue_high_watermark_value > 0 ? (uint64_t) output_queue_high_watermark_value : 0;
     if (output_queue_high_watermark == 0 || output_queue_high_watermark > SIZE_MAX)
@@ -369,11 +369,11 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
     cluster->isolate = X;
     xr_amutex_init(&cluster->nodes_lock);
 
-    if (XR_TO_BOOL(args[3])) {
-        const char *ca_file = XR_TO_STRING(args[4])->data;
-        const char *cert_file = XR_TO_STRING(args[5])->data;
-        const char *key_file = XR_TO_STRING(args[6])->data;
-        bool insecure = XR_TO_BOOL(args[7]);
+    if (XR_TO_BOOL(args[0])) {
+        const char *ca_file = XR_TO_STRING(args[1])->data;
+        const char *cert_file = XR_TO_STRING(args[2])->data;
+        const char *key_file = XR_TO_STRING(args[3])->data;
+        bool insecure = XR_TO_BOOL(args[4]);
         cluster->tls_client_ctx = xr_tls_context_new_client();
         if (!cluster->tls_client_ctx ||
             (ca_file[0] && xr_tls_context_load_ca(cluster->tls_client_ctx, ca_file) != 0)) {
