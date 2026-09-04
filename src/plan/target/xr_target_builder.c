@@ -37,6 +37,7 @@
 #include "../semantic/xr_semantic_array_type_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_source_class_field_shape.h"
+#include "../semantic/xr_semantic_source_structural_field_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_string_utf8_shape.h"
@@ -7615,28 +7616,28 @@ static bool builder_add_direct_local_string_boundary_storage(XrTargetPlanBuilder
  * dynamic carrier.  The semantic judgement owns which result types belong to
  * this closed carrier roster; this target half owns only the profile geometry,
  * slot identity, and root/ownership facts. */
-static bool note_source_class_field_result_storage(XrTargetPlanBuilder *builder,
-                                                   XrTargetValueStorageAnalysis *analysis,
-                                                   const XrSemanticOperationRecord *operation,
-                                                   uint32_t operation_index, char *error,
-                                                   size_t error_size) {
+static bool note_managed_field_result_storage(XrTargetPlanBuilder *builder,
+                                              XrTargetValueStorageAnalysis *analysis,
+                                              const XrSemanticOperationRecord *operation,
+                                              uint32_t operation_index, char *error,
+                                              size_t error_size) {
     if (!builder || !analysis || !operation || operation->result_value >= analysis->total_values ||
         operation->result_type >= analysis->type_count ||
         operation->function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
         operation_index >= xr_semantic_plan_operation_count(builder->semantic_plan) ||
         analysis->defined_values[operation->result_value])
         return fail(error, error_size, "XR_TARGET_1001",
-                    "source-class field result storage authority is incomplete");
+                    "managed field result storage authority is incomplete");
     XrTargetMachineRepRecord rep;
     if (!make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "target profile cannot materialize source-class field result storage");
+                    "target profile cannot materialize managed field result storage");
     XrStableId slot_identity;
     if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
                             operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "source-class field result slot identity is incomplete");
+                    "managed field result slot identity is incomplete");
     XrTargetSlotIntent slot = {
         .identity = slot_identity,
         .function = operation->function,
@@ -7705,8 +7706,8 @@ static bool builder_add_source_class_field_result_storage(XrTargetPlanBuilder *b
                          "source-class field result carrier is unsupported");
             break;
         }
-        valid = note_source_class_field_result_storage(builder, &analysis, operation, i, error,
-                                                       error_size);
+        valid =
+            note_managed_field_result_storage(builder, &analysis, operation, i, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
@@ -7714,6 +7715,53 @@ static bool builder_add_source_class_field_result_storage(XrTargetPlanBuilder *b
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_CLASS_FIELD_RESULT_STORAGE;
+    return true;
+}
+
+/* Bind managed values read out of exact source structural shapes.  The field
+ * ordinal and result type are frozen in SemanticPlan; the containing aggregate
+ * owns the field, so OBJECT_GET_F hands out a borrowed tagged carrier. */
+static bool builder_add_source_structural_field_result_storage(XrTargetPlanBuilder *builder,
+                                                               char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value >= analysis.total_values ||
+            value->semantic_type >= analysis.type_count)
+            continue;
+        analysis.defined_values[value->semantic_value] = 1;
+        analysis.used_types[value->semantic_type] = 1;
+        analysis.value_types[value->semantic_value] = value->semantic_type;
+        analysis.value_functions[value->semantic_value] = value->semantic_function;
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        uint8_t carrier = XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_NONE;
+        if (!operation || operation->result_value >= analysis.total_values ||
+            analysis.defined_values[operation->result_value] ||
+            !xr_semantic_source_structural_field_result_carrier_is_exact(builder->semantic_plan,
+                                                                         operation, &carrier))
+            continue;
+        if (carrier != XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_BORROWED_TAGGED) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "source structural field result carrier is unsupported");
+            break;
+        }
+        valid =
+            note_managed_field_result_storage(builder, &analysis, operation, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE;
     return true;
 }
 
@@ -16486,6 +16534,7 @@ static const XrTargetFamily k_target_families[] = {
     {"direct_local_string_boundary_storage", builder_add_direct_local_string_boundary_storage},
     {"adt_enum_storage", builder_add_adt_enum_storage},
     {"source_class_field_result_storage", builder_add_source_class_field_result_storage},
+    {"source_structural_field_result_storage", builder_add_source_structural_field_result_storage},
     {"direct_local_callee_storage", builder_add_direct_local_callee_storage},
     {"direct_local_go_callee_storage", builder_add_direct_local_go_callee_storage},
     {"direct_local_go_task_result_storage", builder_add_direct_local_go_task_result_storage},

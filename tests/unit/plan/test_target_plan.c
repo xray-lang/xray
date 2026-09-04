@@ -16,6 +16,7 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_source_class_field_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_source_structural_field_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_index_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
@@ -3832,6 +3833,83 @@ static XrSemanticPlan *build_source_class_field_result_semantic(void) {
     bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "source-class field result semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
+    root->module = NULL;
+    xi_func_free(root);
+    module->init = NULL;
+    xi_module_free(module);
+    return plan;
+}
+
+static XrSemanticPlan *build_source_structural_field_result_semantic(void) {
+    const char *field_names[1] = {"label"};
+    XrType *field_types[1] = {&stub_exact_string};
+    XrType structural = {
+        .kind = XR_KIND_STRUCT_OBJECT,
+        .id = 147,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .object =
+            {
+                .field_names = field_names,
+                .field_types = field_types,
+                .field_count = 1,
+            },
+    };
+    XiFunc *root = xi_func_new("target_source_structural_field_result", &stub_int);
+    XiFunc *consumer = xi_func_new("consume_structural_field", &stub_int);
+    REQUIRE(root != NULL && consumer != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *consumer_entry = xi_block_new(consumer);
+    REQUIRE(root_entry != NULL && consumer_entry != NULL);
+
+    consumer->nparams = consumer->min_params = 1;
+    consumer->params = (XiValue **) xr_calloc(1, sizeof(*consumer->params));
+    REQUIRE(consumer->params != NULL);
+    consumer->params[0] = xi_param(consumer, consumer_entry, 0, &stub_exact_string);
+    REQUIRE(consumer->params[0] != NULL);
+    consumer->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    set_single_parameter_ownership(consumer, XI_OWN_BORROWED);
+    XiValue *consumer_result = xi_const_int(consumer, consumer_entry, 1, &stub_int);
+    REQUIRE(consumer_result != NULL);
+    xi_block_set_return(consumer_entry, consumer_result);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = consumer;
+    root->nchildren = root->children_cap = 1;
+    consumer->parent_func = root;
+
+    XiValue *object = xi_value_new(root, root_entry, XI_OBJECT_NEW, &structural, 0);
+    XiValue *field = xi_value_new(root, root_entry, XI_OBJECT_GET_F, &stub_exact_string, 1);
+    XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
+    REQUIRE(object != NULL && field != NULL && closure != NULL && call != NULL);
+    object->aux = (void *) field_names;
+    object->aux_int = xi_object_pack_aux(1, 0);
+    field->args[0] = object;
+    field->aux_int = 0;
+    field->xg_object_access_id = 73;
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = consumer;
+    call->args[0] = closure;
+    call->args[1] = field;
+    xi_block_set_return(root_entry, call);
+    root->stage = consumer->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module = xi_module_new("pkg/target_source_structural_field_result.xr",
+                                     "target_source_structural_field_result", root);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=40:target-source-structural-field-result-v1"));
+    root->module = module;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source structural field result semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
     root->module = NULL;
     xi_func_free(root);
@@ -8142,6 +8220,86 @@ static void test_source_class_field_result_authority(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_source_structural_field_result_authority(void) {
+    XrSemanticPlan *semantic = build_source_structural_field_result_semantic();
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    XrSemanticOperationRecord *field = NULL;
+    uint32_t field_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < semantic->operation_count; i++) {
+        XrSemanticOperationRecord *operation = &semantic->operations[i];
+        if (operation->opcode != XI_OBJECT_GET_F)
+            continue;
+        REQUIRE(field == NULL);
+        field = operation;
+        field_operation = i;
+    }
+    uint8_t carrier = XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_NONE;
+    uint32_t receiver_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t field_ordinal = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(
+        field != NULL && field_operation != XR_SEMANTIC_INDEX_NONE &&
+        xr_semantic_source_structural_field_read_is_exact(semantic, field, &receiver_type,
+                                                          &field_ordinal) &&
+        xr_semantic_source_structural_shape_is_exact(semantic, receiver_type) &&
+        field_ordinal == 0 &&
+        xr_semantic_source_structural_field_result_carrier_is_exact(semantic, field, &carrier) &&
+        carrier == XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_BORROWED_TAGGED);
+
+    int64_t saved_immediate = field->semantic_immediate;
+    field->semantic_immediate = 1;
+    REQUIRE(!xr_semantic_source_structural_field_read_is_exact(semantic, field, NULL, NULL));
+    field->semantic_immediate = saved_immediate;
+    uint32_t saved_result_type = field->result_type;
+    field->result_type = receiver_type;
+    REQUIRE(!xr_semantic_source_structural_field_read_is_exact(semantic, field, NULL, NULL));
+    field->result_type = saved_result_type;
+    uint8_t saved_result_ownership = field->result_ownership;
+    field->result_ownership = XI_GEN_RESULT_OWNERSHIP_OWNED;
+    REQUIRE(!xr_semantic_source_structural_field_read_is_exact(semantic, field, NULL, NULL));
+    field->result_ownership = saved_result_ownership;
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source structural field result TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->calls_count == 1 && plan->call_arguments_count == 1 &&
+            (plan->completed_family_mask &
+             XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE) != 0 &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+    const XrTargetValueRepRecord *binding = xr_target_plan_value_rep(plan, field->result_value);
+    REQUIRE(binding != NULL && binding->slot < plan->slots_count &&
+            plan->slots[binding->slot].semantic_operation == field_operation &&
+            plan->slots[binding->slot].role == XR_TARGET_SLOT_TEMPORARY &&
+            plan->slots[binding->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[binding->slot].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            plan->machine_reps[binding->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[binding->register_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            plan->machine_reps[binding->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[binding->memory_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED);
+    XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    REQUIRE(argument->semantic_value == field->result_value &&
+            argument->caller_slot == binding->slot && argument->mode == XR_TARGET_CALL_VALUE &&
+            argument->ownership == XR_TARGET_CALL_READ);
+
+    uint8_t saved_slot_ownership = plan->slots[binding->slot].ownership;
+    plan->slots[binding->slot].ownership = XR_TARGET_OWNERSHIP_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->slots[binding->slot].ownership = saved_slot_ownership;
+    uint8_t saved_argument_ownership = argument->ownership;
+    argument->ownership = XR_TARGET_CALL_CONSUME;
+    xr_target_call_compute_fingerprint(plan, 0, &plan->calls[0].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->ownership = saved_argument_ownership;
+    xr_target_call_compute_fingerprint(plan, 0, &plan->calls[0].fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_source_class_array_fill_authority(void) {
     XrSemanticPlan *semantic = build_source_class_array_fill_semantic();
     char error[512] = {0};
@@ -10183,6 +10341,11 @@ int main(int argc, char **argv) {
         puts("Source-class field result authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "source-structural-field-result-authority") == 0) {
+        test_source_structural_field_result_authority();
+        puts("Source structural field result authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "source-class-array-fill-authority") == 0) {
         test_source_class_array_fill_authority();
         puts("Source-class Array.fill authority tests passed");
@@ -10205,6 +10368,7 @@ int main(int argc, char **argv) {
     test_nested_array_push_authority();
     test_class_field_array_push_authority();
     test_source_class_field_result_authority();
+    test_source_structural_field_result_authority();
     test_source_class_array_fill_authority();
     test_stringbuilder_constructor_call_authority();
     test_stringbuilder_append_rune_call_authority();

@@ -32,6 +32,7 @@
 #include "../semantic/xr_semantic_array_type_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_source_class_field_shape.h"
+#include "../semantic/xr_semantic_source_structural_field_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_enum_shape.h"
 #include "../semantic/xr_semantic_range_slice_shape.h"
@@ -1449,6 +1450,19 @@ static bool semantic_source_class_field_result_is_exact_verify(
     uint8_t carrier = XR_SEM_SOURCE_CLASS_FIELD_RESULT_NONE;
     return xr_semantic_source_class_field_result_carrier_is_exact(semantic, operation, &carrier) &&
            carrier == XR_SEM_SOURCE_CLASS_FIELD_RESULT_BORROWED_TAGGED &&
+           operation->result_value == semantic_value && operation->result_type == semantic_type &&
+           operation->function == semantic_function;
+}
+
+/* Independently re-derive an exact source structural field selection and bind
+ * it to the value row under verification. */
+static bool semantic_source_structural_field_result_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint32_t semantic_value, uint32_t semantic_type, uint32_t semantic_function) {
+    uint8_t carrier = XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_NONE;
+    return xr_semantic_source_structural_field_result_carrier_is_exact(semantic, operation,
+                                                                       &carrier) &&
+           carrier == XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_BORROWED_TAGGED &&
            operation->result_value == semantic_value && operation->result_type == semantic_type &&
            operation->function == semantic_function;
 }
@@ -4099,6 +4113,9 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             semantic_source_class_field_result_is_exact_verify(
                 semantic, operation, operation->result_value, operation->result_type,
                 operation->function) ||
+            semantic_source_structural_field_result_is_exact_verify(
+                semantic, operation, operation->result_value, operation->result_type,
+                operation->function) ||
             semantic_array_index_tagged_read_is_exact_verify(
                 semantic, operation, operation->result_value, operation->result_type,
                 operation->function) ||
@@ -4293,6 +4310,9 @@ static bool verify_value_binding(
         semantic, operation, semantic_value, semantic_type, semantic_function);
     bool exact_source_class_field_result = semantic_source_class_field_result_is_exact_verify(
         semantic, operation, semantic_value, semantic_type, semantic_function);
+    bool exact_source_structural_field_result =
+        semantic_source_structural_field_result_is_exact_verify(semantic, operation, semantic_value,
+                                                                semantic_type, semantic_function);
     bool exact_array_index_read = semantic_array_index_tagged_read_is_exact_verify(
         semantic, operation, semantic_value, semantic_type, semantic_function);
     bool exact_tagged_ref_place_load = semantic_direct_local_tagged_ref_place_load_is_exact_verify(
@@ -4500,10 +4520,10 @@ static bool verify_value_binding(
                 exact_array_allocation || exact_array_intrinsic || exact_array_hof_result ||
                 exact_container_copy || exact_array_fill || exact_string_shared_read ||
                 exact_array_shared_read || exact_array_field_read || exact_array_index_read ||
-                exact_source_class_field_result || exact_tagged_ref_place_load ||
-                exact_class_object || exact_class_instance || exact_class_receiver ||
-                exact_string_literal || exact_bigint_value || exact_string_concat ||
-                exact_string_convert || exact_direct_string_result ||
+                exact_source_class_field_result || exact_source_structural_field_result ||
+                exact_tagged_ref_place_load || exact_class_object || exact_class_instance ||
+                exact_class_receiver || exact_string_literal || exact_bigint_value ||
+                exact_string_concat || exact_string_convert || exact_direct_string_result ||
                 exact_source_export_string_result || exact_stringbuilder ||
                 exact_stringbuilder_append || exact_stringbuilder_to_string ||
                 exact_stringbuilder_append_string || exact_stringbuilder_clear ||
@@ -4579,18 +4599,18 @@ static bool verify_value_binding(
         exact_class_object || exact_array_intrinsic || exact_array_hof_result ||
         exact_container_copy || exact_string_shared_read || exact_array_shared_read ||
         exact_array_field_read || exact_array_index_read || exact_source_class_field_result ||
-        exact_tagged_ref_place_load || exact_array_fill || exact_class_instance ||
-        exact_class_receiver || exact_string_literal || exact_bigint_value || exact_string_concat ||
-        exact_string_convert || exact_direct_string_result || exact_stringbuilder ||
-        exact_source_export_string_result || exact_stringbuilder_append ||
-        exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
-        exact_stringbuilder_clear || exact_string_runes || exact_map_entries_iterator ||
-        exact_map_entry_iterator_next || exact_string_slice_range || exact_rune_to_string ||
-        exact_json_namespace_value || exact_panic_info_constructor || exact_array_member_result ||
-        exact_direct_callee || exact_go_callee || exact_go_task || exact_channel ||
-        exact_source_namespace || exact_native_module_namespace || exact_nullable_scalar ||
-        exact_adt_enum || exact_array_value_parameter || exact_string_value_parameter ||
-        exact_direct_array_result) {
+        exact_source_structural_field_result || exact_tagged_ref_place_load || exact_array_fill ||
+        exact_class_instance || exact_class_receiver || exact_string_literal ||
+        exact_bigint_value || exact_string_concat || exact_string_convert ||
+        exact_direct_string_result || exact_stringbuilder || exact_source_export_string_result ||
+        exact_stringbuilder_append || exact_stringbuilder_to_string ||
+        exact_stringbuilder_append_string || exact_stringbuilder_clear || exact_string_runes ||
+        exact_map_entries_iterator || exact_map_entry_iterator_next || exact_string_slice_range ||
+        exact_rune_to_string || exact_json_namespace_value || exact_panic_info_constructor ||
+        exact_array_member_result || exact_direct_callee || exact_go_callee || exact_go_task ||
+        exact_channel || exact_source_namespace || exact_native_module_namespace ||
+        exact_nullable_scalar || exact_adt_enum || exact_array_value_parameter ||
+        exact_string_value_parameter || exact_direct_array_result) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
         expected_layout = verifier_layout_for_type(plan, view, semantic_type);
         eligibility =
@@ -4700,7 +4720,7 @@ static bool verify_value_binding(
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              exact_adt_enum_borrowed || exact_string_shared_read || exact_array_shared_read ||
              exact_array_field_read || exact_array_index_read || exact_source_class_field_result ||
-             exact_tagged_ref_place_load ||
+             exact_source_structural_field_result || exact_tagged_ref_place_load ||
              (exact_array_value_parameter && !array_parameter_callee_owns) ||
              exact_string_value_parameter_borrowed ||
              ((exact_stringbuilder_append || exact_stringbuilder_append_string ||

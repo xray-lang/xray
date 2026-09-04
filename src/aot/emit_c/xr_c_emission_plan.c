@@ -4789,7 +4789,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan, const XrSemanticP
         XR_TARGET_FAMILY_PANIC_CATCH_STORAGE | XR_TARGET_FAMILY_ADT_ENUM_STORAGE |
         XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |
         XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE | XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE |
-        XR_TARGET_FAMILY_AGGREGATE | XR_TARGET_FAMILY_CALL_ADAPTER;
+        XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE | XR_TARGET_FAMILY_AGGREGATE |
+        XR_TARGET_FAMILY_CALL_ADAPTER;
     if ((xr_target_plan_completed_family_mask(target_plan) & required_value_families) !=
         required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",

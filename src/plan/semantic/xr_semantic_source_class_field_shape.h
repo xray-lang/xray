@@ -30,6 +30,18 @@ typedef enum XrSemanticSourceClassFieldResultCarrier {
     XR_SEM_SOURCE_CLASS_FIELD_RESULT_BORROWED_TAGGED,
 } XrSemanticSourceClassFieldResultCarrier;
 
+/* Every managed field family uses the same closed carrier roster.  The field
+ * producer proves how the value was selected; this type judgement proves only
+ * that the selected value has the runtime's single tagged representation. */
+static inline bool xr_semantic_managed_field_result_type_is_exact(const XrSemanticPlan *plan,
+                                                                  uint32_t semantic_type) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    return xr_semantic_tagged_string_type_is_exact(type) ||
+           xr_semantic_array_type_row_is_exact(type) ||
+           xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
+           xr_semantic_adt_enum_type_is_exact(type);
+}
+
 /* An evidence-backed field selection on an exact source-class receiver.  The
  * field id is the pointer-free Xg class-layout identity stamped by lowering;
  * the metadata row preserves the source selector for diagnostics and stable
@@ -76,13 +88,7 @@ xr_semantic_source_class_field_result_carrier_is_exact(const XrSemanticPlan *pla
                                                        uint8_t *result_carrier) {
     if (!xr_semantic_source_class_field_read_is_exact(plan, operation, NULL))
         return false;
-    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
-    bool tagged =
-        xr_semantic_tagged_string_type_is_exact(type) ||
-        xr_semantic_array_type_row_is_exact(type) ||
-        xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
-        xr_semantic_adt_enum_type_is_exact(type);
-    if (!tagged)
+    if (!xr_semantic_managed_field_result_type_is_exact(plan, operation->result_type))
         return false;
     if (result_carrier)
         *result_carrier = XR_SEM_SOURCE_CLASS_FIELD_RESULT_BORROWED_TAGGED;

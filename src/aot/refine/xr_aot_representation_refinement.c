@@ -44,6 +44,7 @@
 #include "../../plan/semantic/xr_semantic_native_module_call_shape.h"
 #include "../../plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../../plan/semantic/xr_semantic_value_aggregate_shape.h"
+#include "../../plan/semantic/xr_semantic_source_structural_field_shape.h"
 #include "../../plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../plan/semantic/xr_semantic_dynamic_value_shape.h"
 #include "../../plan/semantic/xr_semantic_union_as_shape.h"
@@ -4073,9 +4074,16 @@ static bool oracle_struct_object_field_read_storage(const VerifyAuthority *ctx,
         operation_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
+    uint8_t source_structural_carrier = XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_NONE;
+    bool exact_source_structural =
+        operation &&
+        xr_semantic_source_structural_field_result_carrier_is_exact(ctx->semantic, operation,
+                                                                    &source_structural_carrier) &&
+        source_structural_carrier == XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_BORROWED_TAGGED;
     if (!operation || operation->opcode != XI_OBJECT_GET_F ||
         operation->result_value != semantic_value ||
-        !oracle_struct_object_field_access_is_exact(ctx, operation_index))
+        (!exact_source_structural &&
+         !oracle_struct_object_field_access_is_exact(ctx, operation_index)))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -9947,10 +9955,16 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return false;
             return oracle_value_aggregate_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_OBJECT_GET_F:
-            /* The receiver of a proved field read stays the tagged carrier it
-             * is, and the read has no other operand. */
-            if (operand_index != 0 ||
-                !oracle_struct_object_field_access_is_exact(ctx, operation_index))
+            /* A source structural receiver keeps its exact aggregate storage;
+             * a bare runtime object keeps its tagged carrier. Both hand the
+             * selected managed field back as a tagged value. */
+            if (operand_index != 0)
+                return false;
+            if (xr_semantic_source_structural_field_result_carrier_is_exact(ctx->semantic,
+                                                                            operation, NULL))
+                return oracle_value_aggregate_storage(ctx, source_value, out_storage,
+                                                      &ignored_kind);
+            if (!oracle_struct_object_field_access_is_exact(ctx, operation_index))
                 return false;
             return oracle_dynamic_struct_object_storage(ctx, source_value, out_storage,
                                                         &ignored_kind);
