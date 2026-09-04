@@ -337,7 +337,7 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
     /* Source-level callsite composition does not carry the private/public ABI
      * distinction of embedded module members.  Consume the sealed native ABI
      * registry first, including internal stdlib primitives such as
-     * `os.__sleep`; a source module shadow stays on the Xi target path.
+     * `time.__sleep`; a source module shadow stays on the Xi target path.
      *
      * The registry answer only becomes a yieldability proof once the import
      * reference is grounded by the module-graph resolver.  Until then the

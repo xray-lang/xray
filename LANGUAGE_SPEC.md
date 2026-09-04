@@ -6629,7 +6629,6 @@ os.platform()             // "darwin" / "linux" / "windows"
 os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
 os.sep()                  // path separator
 os.eol()                  // end-of-line
-os.sleep(100)             // sleep in milliseconds (equivalent to `time.sleep`)
 ```
 
 > **Naming convention**: `os.*` follows POSIX function names (`getenv` / `getcwd` / `getpid`); it does not track Node.js. Node-style `process.env` mapping is not provided — use `os.getenv(name)` / `os.environ()`.

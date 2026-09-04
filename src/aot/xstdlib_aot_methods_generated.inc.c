@@ -55,7 +55,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"os", "__freeMemory", 0, "xrt_os_free_memory", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__uptime", 0, "xrt_os_uptime", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__loadavg", 0, "xrt_os_loadavg", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"os", "__sleep", 1, "xrt_os_sleep", "v", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__chmod", 2, "xrt_io_chmod_value", "pv", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__chdir", 1, "xrt_io_chdir", "p", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__cwd", 0, "xrt_io_cwd", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

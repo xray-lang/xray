@@ -993,19 +993,6 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __sleep {
-    signature: "(ms: i64): ()"
-    doc: "Sleep for milliseconds"
-    vm: "os_sleep"
-    vm_binding: "yieldable"
-    aot: "xrt_os_sleep"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
 }
 
 module io {

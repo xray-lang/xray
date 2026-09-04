@@ -456,7 +456,6 @@ tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr  # source v
 tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/stdlib/os_exec_system_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/stdlib/os_query_system_direct.xr  # front-end Comparison: cannot compare non-nullable type <case> with null (at post-monomorphization ...
-tests/diff/cases/semantics/stdlib/os_sleep_system_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/stdlib/parallel_api_reference.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
 tests/diff/cases/semantics/stdlib/parallel_default_options.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/stdlib/parallel_for_each_vm_batch.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority

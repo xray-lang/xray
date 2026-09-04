@@ -3968,7 +3968,7 @@ static void test_source_export_call_target_authority(void) {
 
 static void test_native_yieldable_call_target_authority(void) {
     XrSemanticPlan *plan =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_CALL, 1, true, true);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_CALL, 1, true, true);
     REQUIRE(xr_semantic_plan_call_target_count(plan) == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
     REQUIRE(target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE &&
@@ -3976,7 +3976,7 @@ static void test_native_yieldable_call_target_authority(void) {
             target->operation < plan->operation_count &&
             plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=46:operation=") != NULL);
-    REQUIRE(strstr(target->canonical_key, ":native=os.__sleep:kind=2") != NULL);
+    REQUIRE(strstr(target->canonical_key, ":native=time.__sleep:kind=2") != NULL);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE;
@@ -4029,7 +4029,8 @@ static void test_native_yieldable_call_target_authority(void) {
     xr_semantic_plan_free(plan);
 
     XrSemanticPlan *unknown =
-        build_native_yieldable_call_target_plan("os", "__not_a_native", XI_CALL, 1, false, false);
+        build_native_yieldable_call_target_plan("time", "__not_a_native", XI_CALL, 1, false,
+                                                false);
     REQUIRE(unknown->call_target_count == 0);
     xr_semantic_plan_free(unknown);
     XrSemanticPlan *non_yieldable =
@@ -4037,19 +4038,20 @@ static void test_native_yieldable_call_target_authority(void) {
     REQUIRE(non_yieldable->call_target_count == 0);
     xr_semantic_plan_free(non_yieldable);
     XrSemanticPlan *wrong_arity =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_CALL, 0, false, false);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_CALL, 0, false, false);
     REQUIRE(wrong_arity->call_target_count == 0);
     xr_semantic_plan_free(wrong_arity);
     XrSemanticPlan *relative =
-        build_native_yieldable_call_target_plan("./os", "__sleep", XI_CALL, 1, false, false);
+        build_native_yieldable_call_target_plan("./time", "__sleep", XI_CALL, 1, false, false);
     REQUIRE(relative->call_target_count == 0);
     xr_semantic_plan_free(relative);
     XrSemanticPlan *tail =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_TAIL_CALL, 1, false, false);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_TAIL_CALL, 1, false, false);
     REQUIRE(tail->call_target_count == 0);
     xr_semantic_plan_free(tail);
     XrSemanticPlan *method =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_CALL_METHOD, 1, false, false);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_CALL_METHOD, 1, false,
+                                                false);
     REQUIRE(method->call_target_count == 0);
     xr_semantic_plan_free(method);
 }

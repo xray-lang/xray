@@ -19,9 +19,6 @@
 #ifdef _WIN32
 #include "../shared/xr_win_utf.h"
 #endif
-#ifndef _WIN32
-#include <errno.h>
-#endif
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -388,32 +385,6 @@ static inline XrValue xrt_os_loadavg(void) {
     ((double *) typed->data)[1] = avg[1];
     ((double *) typed->data)[2] = avg[2];
     return arr;
-}
-
-static inline XrValue xrt_os_sleep(XrValue ms_value) {
-    if (!XR_IS_INT(ms_value))
-        return XR_NULL_VAL;
-
-    int64_t ms = XR_TO_INT(ms_value);
-    if (ms <= 0)
-        return XR_NULL_VAL;
-
-#ifdef _WIN32
-    uint64_t remaining = (uint64_t) ms;
-    while (remaining > 0) {
-        DWORD chunk = remaining > 0xffffffffULL ? 0xffffffffUL : (DWORD) remaining;
-        Sleep(chunk);
-        remaining -= (uint64_t) chunk;
-    }
-#else
-    struct timespec req;
-    req.tv_sec = (time_t) (ms / 1000);
-    req.tv_nsec = (long) ((ms % 1000) * 1000000L);
-    struct timespec rem;
-    while (nanosleep(&req, &rem) == -1 && errno == EINTR)
-        req = rem;
-#endif
-    return XR_NULL_VAL;
 }
 
 #endif  // XRT_OS_H

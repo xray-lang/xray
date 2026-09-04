@@ -4070,11 +4070,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
         .summary = "",
     },
     {
-        .name = "sleep",
-        .signature = "(ms: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "spawn",
         .signature = "(program: string, args: Array<string>): ExecResult?",
         .summary = "",
@@ -9914,7 +9909,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.ppid` | `(): i64` |  |\n"
             "| `os.sep` | `(): string` |  |\n"
             "| `os.setenv` | `(name: string, value: string): bool` |  |\n"
-            "| `os.sleep` | `(ms: i64): ()` |  |\n"
             "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` |  |\n"
             "| `os.tmpdir` | `(): string` |  |\n"
             "| `os.totalMemory` | `(): i64` |  |\n"

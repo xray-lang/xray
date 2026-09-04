@@ -71,8 +71,8 @@ TEST(module_exports_are_invisible_until_atomic_publication) {
     XrValue os_value = xr_module_import(isolate, "os");
     ASSERT_TRUE(xr_value_is_module(os_value));
     XrModule *os_module = xr_value_to_module(os_value);
-    ASSERT_TRUE(xr_value_is_closure(xr_module_get_export(isolate, os_module, "sleep")));
-    ASSERT_TRUE(xr_value_is_cfunction(xr_module_get_export(isolate, os_module, "__sleep")));
+    ASSERT_TRUE(XR_IS_NULL(xr_module_get_export(isolate, os_module, "sleep")));
+    ASSERT_TRUE(XR_IS_NULL(xr_module_get_export(isolate, os_module, "__sleep")));
     ASSERT_TRUE(xr_value_is_cfunction(xr_module_get_export(isolate, os_module, "__getpid")));
 #else
     ASSERT_TRUE(XR_IS_NULL(xr_module_import(isolate, "os")));

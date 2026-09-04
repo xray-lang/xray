@@ -14,8 +14,6 @@
 
 #include "../common.h"
 #include "../../src/base/xplatform.h"
-#include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
-#include "../../src/vm/xvm.h"           // xr_yieldable_cfunction_new
 #include <stdlib.h>
 #include <string.h>
 #include "../../src/os/os_fs.h"
@@ -443,24 +441,6 @@ static XrValue os_kill(XrVMRuntime *X, XrValue *args, int argc) {
 #else
     return xr_bool(kill(pid, sig) == 0);
 #endif
-}
-
-// sleep(ms) - Coroutine-friendly sleep for milliseconds.
-// Yields the coroutine via the timer wheel so the worker thread can
-// service other coroutines during the wait.
-static XrCFuncResult os_sleep(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !XR_IS_INT(args[0])) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    int64_t ms = XR_TO_INT(args[0]);
-    if (ms <= 0) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    return xr_yield_for_timeout(X, ms, xr_yield_finish_null, NULL, result);
 }
 
 /* ========== Platform Information ========== */

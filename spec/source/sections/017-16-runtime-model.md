@@ -154,7 +154,6 @@ os.platform()             // "darwin" / "linux" / "windows"
 os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
 os.sep()                  // 路径分隔符
 os.eol()                  // 行尾
-os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 ```
 
 > **命名约定**：`os.*` 以 POSIX 函数名为主（`getenv` / `getcwd` / `getpid`）；不随 Node.js。Node 风格的 `process.env` 映射不提供，请用 `os.getenv(name)` / `os.environ()`。
@@ -441,7 +440,6 @@ os.platform()             // "darwin" / "linux" / "windows"
 os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
 os.sep()                  // path separator
 os.eol()                  // end-of-line
-os.sleep(100)             // sleep in milliseconds (equivalent to `time.sleep`)
 ```
 
 > **Naming convention**: `os.*` follows POSIX function names (`getenv` / `getcwd` / `getpid`); it does not track Node.js. Node-style `process.env` mapping is not provided — use `os.getenv(name)` / `os.environ()`.

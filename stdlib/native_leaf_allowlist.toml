@@ -1048,16 +1048,6 @@ deletion_trigger = "when Xray source can write the process environment itself, a
 
 [[leaf]]
 module = "os"
-symbol = "__sleep"
-class = "runtime_leaf"
-abi = "none on the VM: the coroutine is parked on the scheduler's timer wheel and no host call is made. On AOT, nanosleep(2) retried on EINTR; Win32 Sleep"
-ownership = "none"
-effect = "suspends"
-provider = "the Xray scheduler on the VM (stdlib/os/os.c os_sleep is a yieldable C function over xr_yield_for_timeout, so the worker stays free); the kernel on AOT (src/aot/xrt_os.h xrt_os_sleep blocks the OS thread). os.xr alone owns the non-positive-duration no-op policy. This is the widest VM/AOT split in the module"
-deletion_trigger = "when the scheduler's timer wheel is a surface Xray source can await, so a sleep is an ordinary suspension point; the AOT half additionally has to stop blocking its worker thread, or the same program has two concurrency behaviours"
-
-[[leaf]]
-module = "os"
 symbol = "__systemHomedir"
 class = "host_abi_leaf"
 abi = "getuid(2) then getpwuid(3), reading pw_dir; Windows has no equivalent path here and both backends answer null"

@@ -123,7 +123,6 @@ EXPECTED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/stdlib/sys_process_direct.xr",
     # Timer, parallel worker, and runtime-domain channel fixtures directly
     # exercise services implemented by the coroutine runtime archive.
-    "tests/diff/cases/semantics/stdlib/os_sleep_system_direct.xr",
     "tests/diff/cases/semantics/stdlib/parallel_default_options.xr",
     "tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the

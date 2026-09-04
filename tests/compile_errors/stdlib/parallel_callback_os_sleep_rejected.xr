@@ -1,6 +1,0 @@
-import os
-import parallel
-
-parallel.forEach(0..4, (i) -> {
-    os.sleep(0)
-}, parallel.Options(2))

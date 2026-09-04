@@ -327,8 +327,6 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT(module, isolate, "__loadavg", os_loadavg);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__sleep", os_sleep);
-    expected_count++;
     return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */

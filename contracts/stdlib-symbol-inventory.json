@@ -1,16 +1,16 @@
 {
   "schema": 1,
-  "base": "d0427d7c33f9a194d1a799572d8a60ae5793e419",
+  "base": "3be3f340269539129261afbe0fc74c6073ec53f0",
   "counts": {
     "modules": 32,
     "production_modules": 30,
     "test_only_modules": 2,
-    "symbols": 1633,
-    "production_symbols": 1607,
-    "xray_body_symbols": 1445,
+    "symbols": 1631,
+    "production_symbols": 1605,
+    "xray_body_symbols": 1444,
     "handwritten_c_semantic_owner": 0,
-    "native_leaf_symbols": 160,
-    "production_native_leaf_symbols": 160,
+    "native_leaf_symbols": 159,
+    "production_native_leaf_symbols": 159,
     "unclassified_native_leaf": 0,
     "whole_module_native_policy": 0,
     "public_native_symbols": 0,
@@ -477,12 +477,12 @@
       "c_sources": [
         "stdlib/os/os.c"
       ],
-      "c_function_count": 22,
+      "c_function_count": 21,
       "enters_module_graph": true,
-      "symbol_count": 55,
-      "xray_body_symbols": 33,
-      "handwritten_c_symbols": 22,
-      "native_leaf_symbols": 22,
+      "symbol_count": 53,
+      "xray_body_symbols": 32,
+      "handwritten_c_symbols": 21,
+      "native_leaf_symbols": 21,
       "queue": "native-leaf-only",
       "queue_reason": "no handwritten C owner and no per-module loader",
       "probe": {}
@@ -8181,21 +8181,6 @@
     },
     {
       "module": "os",
-      "symbol": "__sleep",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/os/os.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none on the VM: the coroutine is parked on the scheduler's timer wheel and no host call is made. On AOT, nanosleep(2) retried on EINTR; Win32 Sleep; ownership=none; effect=suspends; provider=the Xray scheduler on the VM (stdlib/os/os.c os_sleep is a yieldable C function over xr_yield_for_timeout, so the worker stays free); the kernel on AOT (src/aot/xrt_os.h xrt_os_sleep blocks the OS thread). os.xr alone owns the non-positive-duration no-op policy. This is the widest VM/AOT split in the module; deletion_trigger=when the scheduler's timer wheel is a surface Xray source can await, so a sleep is an ordinary suspension point; the AOT half additionally has to stop blocking its worker thread, or the same program has two concurrency behaviours",
-      "plan_coverage": "native_binding",
-      "vm_binding": "os_sleep",
-      "aot_binding": "xrt_os_sleep",
-      "covered_c_deletion": "stdlib/os/os.c"
-    },
-    {
-      "module": "os",
       "symbol": "ExecResult.ExecResult",
       "kind": "type",
       "audience": "production",
@@ -8422,15 +8407,6 @@
     {
       "module": "os",
       "symbol": "setenv",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/os/os.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "os",
-      "symbol": "sleep",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/os/os.xr",
