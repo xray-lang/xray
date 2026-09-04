@@ -167,7 +167,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     fail closed. The verifier independently reconstructs the same unique local
     declaration/PSC join instead of trusting the publisher's annotation or
     scanning same-shaped PSC rows.
-15. SemanticPlan schema 47 and program-provenance schema 5 admit the bounded
+15. SemanticPlan schema 48 and program-provenance schema 5 admit the bounded
     scalar, leaf aggregate, leaf value-product, and graph families only after
     PSC-to-Xi verification. The plan stores pointer-free
     PSC schema/family/fingerprint/GCI/counts, its exact module row, and typed

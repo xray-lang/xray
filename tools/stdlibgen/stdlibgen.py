@@ -2581,6 +2581,7 @@ def emit_defs_header(
             "    const char *define;",
             "    const char *layer;",
             "    const char *aot_kind;",
+            "    const char *return_ownership;",
             "    uint32_t runtime_capabilities;",
             "    uint16_t argc;",
             "    uint16_t target_leaf;",
@@ -2711,7 +2712,8 @@ def emit_defs_header(
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
             f"{c_string(e.aot_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
-            f"{c_string(e.aot_kind)}, {runtime_caps}, {argc}, {TARGET_LEAF_KINDS[e.target_leaf]}, "
+            f"{c_string(e.aot_kind)}, {c_string(e.return_ownership)}, {runtime_caps}, {argc}, "
+            f"{TARGET_LEAF_KINDS[e.target_leaf]}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )

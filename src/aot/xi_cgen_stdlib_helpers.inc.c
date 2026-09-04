@@ -89,6 +89,21 @@ static const CgAotStdlibMethod *cg_aot_stdlib_method_at(int index) {
 static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, const char *method,
                                                           uint16_t argc);
 
+static bool cg_native_direct_call_identity(XrStableId target, XrStableId native,
+                                           uint32_t capabilities, XrStableId *out) {
+    char target_hex[XR_STABLE_ID_BYTES * 2u + 1u];
+    char native_hex[XR_STABLE_ID_BYTES * 2u + 1u];
+    char key[192];
+    XrFingerprint digest;
+    xr_stable_id_hex(target, target_hex);
+    xr_stable_id_hex(native, native_hex);
+    int length =
+        snprintf(key, sizeof(key), "xray-target-native-direct-v2:first=%s:second=%s:ordinal=%u",
+                 target_hex, native_hex, capabilities);
+    return out && length > 0 && (size_t) length < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
+}
+
 /* Rebind one live Xi call to the immutable SemanticPlan/TargetPlan authority
  * before exposing the generated shim row to emission.  The generated registry
  * is implementation data, not authorization: it may classify a candidate so
@@ -155,6 +170,39 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
     const XrTargetCallRecord *calls = xr_target_plan_calls(authority->target_plan, &call_count);
     const XrTargetCallArgumentRecord *arguments =
         xr_target_plan_call_arguments(authority->target_plan, &argument_count);
+    uint32_t target_partition = UINT32_MAX;
+    uint32_t partition_count = 0;
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(authority->target_plan, &partition_count);
+    if (!xr_target_plan_partition_for_semantic(authority->target_plan, authority->semantic_plan,
+                                               &target_partition))
+        goto invalid;
+    uint32_t call_begin = 0;
+    uint32_t call_end = call_count;
+    uint32_t argument_begin = 0;
+    uint32_t argument_end = argument_count;
+    uint32_t function_begin = 0;
+    uint32_t function_count = (uint32_t) xr_semantic_plan_function_count(authority->semantic_plan);
+    if (partition_count != 0) {
+        if (!partitions || target_partition >= partition_count)
+            goto invalid;
+        const XrTargetModulePartitionRecord *partition = &partitions[target_partition];
+        if (partition->calls_begin > call_count ||
+            partition->calls_count > call_count - partition->calls_begin ||
+            partition->call_arguments_begin > argument_count ||
+            partition->call_arguments_count > argument_count - partition->call_arguments_begin ||
+            operation->function >= partition->functions_count)
+            goto invalid;
+        call_begin = partition->calls_begin;
+        call_end = call_begin + partition->calls_count;
+        argument_begin = partition->call_arguments_begin;
+        argument_end = argument_begin + partition->call_arguments_count;
+        function_begin = partition->functions_begin;
+        function_count = partition->functions_count;
+    }
+    if (operation->function >= function_count || function_begin > UINT32_MAX - operation->function)
+        goto invalid;
+    uint32_t target_function = function_begin + operation->function;
     const XrTargetCallRecord *call = NULL;
     uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
     uint32_t operation_count =
@@ -168,7 +216,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
     }
     if (operation_index == XR_SEMANTIC_INDEX_NONE)
         goto invalid;
-    for (uint32_t i = 0; calls && i < call_count; i++) {
+    for (uint32_t i = call_begin; calls && i < call_end; i++) {
         if (calls[i].semantic_operation != operation_index)
             continue;
         if (call)
@@ -179,10 +227,14 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         call && call->semantic_call_target != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_call_target(authority->semantic_plan, call->semantic_call_target)
             : NULL;
+    XrStableId expected_call_identity = {{0}};
     if (!call || !target || target->kind != XR_SEM_CALL_TARGET_NATIVE_DIRECT ||
         target->operation != operation_index || call->id >= call_count ||
         &calls[call->id] != call || call->semantic_operation != operation_index ||
-        call->caller_function != operation->function ||
+        !cg_native_direct_call_identity(target->id, native_identity, entry->runtime_capabilities,
+                                        &expected_call_identity) ||
+        !xr_stable_id_equal(call->identity, expected_call_identity) ||
+        call->caller_function != target_function ||
         call->callee_function != XR_SEMANTIC_INDEX_NONE ||
         call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
         call->source_export != XR_SEMANTIC_INDEX_NONE ||
@@ -190,10 +242,52 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         call->runtime_capabilities != entry->runtime_capabilities ||
         call->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT ||
         call->target_kind != XR_TARGET_CALL_TARGET_NATIVE_DIRECT || call->argument_count != argc ||
-        call->argument_begin > argument_count ||
-        call->argument_count > argument_count - call->argument_begin || call->adapter_count != 0 ||
+        call->argument_begin < argument_begin || call->argument_begin > argument_end ||
+        call->argument_count > argument_end - call->argument_begin || call->adapter_count != 0 ||
         call->flags != 0)
         goto invalid;
+
+    uint32_t live_result = XR_SEMANTIC_INDEX_NONE;
+    const XrTargetValueRepRecord *result = xr_target_plan_value_rep_for_module(
+        authority->target_plan, target_partition, operation->result_value);
+    const XrTargetMachineRepRecord *result_register =
+        result ? xr_target_plan_machine_rep(authority->target_plan, result->register_rep) : NULL;
+    const XrTargetMachineRepRecord *result_memory =
+        result ? xr_target_plan_machine_rep(authority->target_plan, result->memory_rep) : NULL;
+    XrSemanticNativeDirectResultKind result_kind =
+        xr_semantic_native_direct_result_kind(authority->semantic_plan, operation, entry);
+    if (!cg_value_semantic_id(ctx, function, value, &live_result) ||
+        live_result != operation->result_value || !result ||
+        result->semantic_value != operation->result_value ||
+        call->result_value != operation->result_value || call->result_slot != result->slot ||
+        call->result_register_rep != result->register_rep ||
+        call->result_memory_rep != result->memory_rep || !result_register || !result_memory)
+        goto invalid;
+    if (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NULLABLE_NATIVE) {
+        uint32_t slot_count = 0;
+        const XrTargetSlotRecord *slots = xr_target_plan_slots(authority->target_plan, &slot_count);
+        const XrTargetSlotRecord *slot =
+            slots && result->slot < slot_count ? &slots[result->slot] : NULL;
+        if (call->result_mode != XR_TARGET_CALL_VALUE ||
+            call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+            result_register->kind != XR_MACHINE_REP_DYN_VALUE ||
+            result_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
+            result_register->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+            result_memory->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+            result_register->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+            result_memory->ownership != XR_TARGET_OWNERSHIP_OWNED || !slot ||
+            slot->semantic_value != operation->result_value ||
+            slot->semantic_operation != operation_index || slot->function != target_function ||
+            slot->role != XR_TARGET_SLOT_TEMPORARY || slot->register_rep != result->register_rep ||
+            slot->memory_rep != result->memory_rep || slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+            slot->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+            cg_value_plan_storage_rep(ctx, value) != XR_REP_TAGGED)
+            goto invalid;
+    } else if (result_kind != XR_SEM_NATIVE_DIRECT_RESULT_TRIVIAL ||
+               call->result_mode != XR_TARGET_CALL_VALUE ||
+               call->result_ownership != XR_TARGET_CALL_NONE) {
+        goto invalid;
+    }
 
     for (uint16_t ordinal = 0; ordinal < argc; ordinal++) {
         uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;

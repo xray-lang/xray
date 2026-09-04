@@ -267,13 +267,6 @@ static XrType union_int_string = {
         },
 };
 
-static XrType union_as_dynamic_result = {
-    .kind = XR_KIND_UNKNOWN,
-    .id = 302,
-    .scalar_rep = XR_SCALAR_REP_NONE,
-    .frozen = true,
-};
-
 static XrType scalar_unit = {
     .kind = XR_KIND_UNIT,
     .id = 4,
@@ -3538,6 +3531,147 @@ static XrTargetPlan *build_attached_target_plan(XiFunc *function, XrTargetProfil
     return target_plan;
 }
 
+static XiFunc *native_direct_fresh_result_refinement_fixture(XiValue **out_call) {
+    static XrType nullable_storage = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 9201,
+        .frozen = true,
+        .is_nullable = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .instance = {.class_name = "__NetConnStorage", .class_ref = NULL},
+    };
+    static XrFunctionParam parameters[] = {
+        {.type = &scalar_int, .mode = XR_PARAM_READ},
+        {.type = &scalar_string, .mode = XR_PARAM_READ},
+    };
+    static XrType callee_type = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 9202,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .function =
+            {
+                .params = parameters,
+                .param_count = 2,
+                .min_params = 2,
+                .return_type = &nullable_storage,
+                .throw_effect = XR_FN_EFFECT_MAY_THROW,
+            },
+    };
+    XiFunc *function = xi_func_new("native_direct_fresh_result_refinement", &scalar_int);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    XiValue *port = function && entry ? xi_const_int(function, entry, 0, &scalar_int) : NULL;
+    XiValue *address = function && entry ? xi_const_str(function, entry, "", &scalar_string) : NULL;
+    XiImportRef *ref =
+        function ? (XiImportRef *) xi_func_arena_alloc(function, sizeof(*ref)) : NULL;
+    XiValue *callee =
+        function && entry ? xi_value_new(function, entry, XI_IMPORT_REF, &callee_type, 0) : NULL;
+    XiValue *call =
+        function && entry ? xi_value_new(function, entry, XI_CALL, &nullable_storage, 3) : NULL;
+    XiCallPlan *call_plan =
+        function ? (XiCallPlan *) xi_func_arena_alloc(function, sizeof(*call_plan)) : NULL;
+    XiCallArgPlan *argument_plan =
+        function ? (XiCallArgPlan *) xi_func_arena_alloc(function, 2u * sizeof(*argument_plan))
+                 : NULL;
+    REQUIRE(function && entry && port && address && ref && callee && call && call_plan &&
+            argument_plan);
+    *ref = (XiImportRef) {
+        .module_path = "net",
+        .member_name = "__udpBind",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    callee->aux = ref;
+    call->args[0] = callee;
+    call->args[1] = port;
+    call->args[2] = address;
+    call->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, 2u * sizeof(*argument_plan));
+    for (uint16_t i = 0; i < 2; i++) {
+        argument_plan[i].param_mode = XR_PARAM_READ;
+        argument_plan[i].access = XR_CALL_ARG_PLAIN;
+        argument_plan[i].origin_var_id = XI_NO_VAR_ID;
+    }
+    call_plan->args = argument_plan;
+    call_plan->nargs = 2;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &scalar_int);
+    REQUIRE(release && result);
+    release->args[0] = call;
+    release->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XiModule *module = xi_module_new("net/net.xr", "net", function);
+    REQUIRE(module &&
+            xi_module_set_identity(module, "stdlib-module-v1:module=3:net:path=10:net/net.xr"));
+    function->module = module;
+    if (out_call)
+        *out_call = call;
+    return function;
+}
+
+static void expect_native_direct_fresh_refinement_refused(XrTargetPlan *target,
+                                                          const XiRepPolicy *policy) {
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), policy, &plan, &diag));
+    REQUIRE(plan == NULL && diag.issue != XR_AOT_REFINEMENT_OK);
+}
+
+static void test_native_direct_fresh_result_refinement_authority_is_exact(void) {
+    XiValue *live_call = NULL;
+    XiFunc *function = native_direct_fresh_result_refinement_fixture(&live_call);
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    REQUIRE(live_call && target->calls_count == 1);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
+    REQUIRE(plan != NULL);
+    xr_aot_refinement_plan_free(plan);
+
+    XrTargetCallRecord saved_call = target->calls[0];
+    XrFingerprint saved_plan = target->fingerprint;
+    target->calls[0].result_ownership = XR_TARGET_CALL_NONE;
+    xr_target_call_compute_fingerprint(target, 0, &target->calls[0].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    expect_native_direct_fresh_refinement_refused(target, &policy);
+    target->calls[0] = saved_call;
+    target->fingerprint = saved_plan;
+
+    target->calls[0].result_slot = XR_SEMANTIC_INDEX_NONE;
+    xr_target_call_compute_fingerprint(target, 0, &target->calls[0].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    expect_native_direct_fresh_refinement_refused(target, &policy);
+    target->calls[0] = saved_call;
+    target->fingerprint = saved_plan;
+
+    target->calls[0].native_callee_identity.bytes[0] ^= 1u;
+    xr_target_call_compute_fingerprint(target, 0, &target->calls[0].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    expect_native_direct_fresh_refinement_refused(target, &policy);
+    target->calls[0] = saved_call;
+    target->fingerprint = saved_plan;
+
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed(void) {
     XiFunc *function = xi_func_new("borrowed_byte_slice_parameter", &scalar_byte);
     REQUIRE(function != NULL);
@@ -5134,7 +5268,10 @@ static XrTargetPlan *build_union_as_conversion_target(uint32_t target_tid, const
     XiValue *constant = xi_const_int(function, entry, 7, &scalar_int);
     XiValue *store = xi_value_new(function, entry, XI_SET_SHARED, &scalar_unit, 1);
     XiValue *load = xi_value_new(function, entry, XI_GET_SHARED, &union_int_string, 0);
-    XiValue *conversion = xi_value_new(function, entry, XI_AS, &union_as_dynamic_result, 1);
+    XrType *result_type = target_tid == XR_TID_I64      ? &scalar_int
+                          : target_tid == XR_TID_STRING ? &scalar_string
+                                                       : &scalar_bool;
+    XiValue *conversion = xi_value_new(function, entry, XI_AS, result_type, 1);
     REQUIRE(function && entry && constant && store && load && conversion);
     store->aux_int = 0;
     store->args[0] = constant;
@@ -5216,6 +5353,11 @@ int main(int argc, char **argv) {
         puts("Assertion AOT refinement tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "native-direct-fresh") == 0) {
+        test_native_direct_fresh_result_refinement_authority_is_exact();
+        puts("Native-direct fresh-result AOT refinement tests passed");
+        return 0;
+    }
     if (argc != 1) {
         fprintf(stderr, "unknown focused test selector\n");
         return 2;
@@ -5241,6 +5383,7 @@ int main(int argc, char **argv) {
     test_stringbuilder_constructor_refinement_is_exact();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
+    test_native_direct_fresh_result_refinement_authority_is_exact();
     test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
     test_fixed_array_backing_projection_is_exact_and_fail_closed();
     test_named_aggregate_emission_is_exact_and_fail_closed();

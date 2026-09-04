@@ -122,7 +122,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__tlsServerHandshakeWithContext", 3, "xrt_net_tls_server_handshake_context", "vvv", ".w.", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__tlsHandshake", 4, "xrt_net_tls_handshake", "vvvv", "w...", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpBind", 2, "xrt_net_udp_bind", "vv", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"net", "__udpMulticastBind", 4, "xrt_net_udp_multicast_bind", "svvv", "....", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"net", "__udpMulticastBind", 4, "xrt_net_udp_multicast_bind", "vvvv", "....", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpSendTo", 5, "xrt_net_udp_send_to", "vvvvv", "w....", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpRecvInto", 3, "xrt_net_udp_recv_into", "vvv", "w..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpFromHost", 1, "xrt_net_udp_from_host", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

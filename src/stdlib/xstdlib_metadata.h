@@ -29,8 +29,27 @@ static inline void xr_stdlib_metadata_hash_string(XrSHA256Context *ctx, const ch
         xr_sha256_update(ctx, (const uint8_t *) value, length);
 }
 
+static inline void
+xr_stdlib_metadata_native_class_fingerprint(const XrStdlibNativeClassDefEntry *entry,
+                                            XrFingerprint *out) {
+    static const uint8_t domain[] = "xray-stdlib-native-class-v1\0";
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->module : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->name : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->super_slot : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->core_slot : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->native_body_expr : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->flags : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->builtin_kind : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->source_wrapper : NULL);
+    xr_stdlib_metadata_hash_string(&ctx, entry ? entry->source_storage_field : NULL);
+    xr_sha256_final(&ctx, out->bytes);
+}
+
 static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-stdlib-definition-registry-v1\0";
+    static const uint8_t domain[] = "xray-stdlib-definition-registry-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -51,12 +70,58 @@ static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
         xr_stdlib_metadata_hash_string(&ctx, entry->define);
         xr_stdlib_metadata_hash_string(&ctx, entry->layer);
         xr_stdlib_metadata_hash_string(&ctx, entry->aot_kind);
+        xr_stdlib_metadata_hash_string(&ctx, entry->return_ownership);
         xr_stdlib_metadata_hash_u64(&ctx, entry->runtime_capabilities);
         xr_stdlib_metadata_hash_u64(&ctx, entry->argc);
         xr_stdlib_metadata_hash_u64(&ctx, entry->target_leaf);
         xr_stdlib_metadata_hash_u64(&ctx, entry->aot_direct ? 1u : 0u);
     }
+    xr_stdlib_metadata_hash_u64(&ctx, XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT);
+    for (uint32_t i = 0; i < XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT; i++) {
+        XrFingerprint native_class;
+        xr_stdlib_metadata_native_class_fingerprint(&xr_stdlib_native_class_def_entries[i],
+                                                    &native_class);
+        xr_sha256_update(&ctx, native_class.bytes, sizeof(native_class.bytes));
+    }
     xr_sha256_final(&ctx, out->bytes);
+}
+
+static inline const XrStdlibNativeClassDefEntry *
+xr_stdlib_metadata_unique_native_class_span(const char *module, size_t module_length,
+                                            const char *name, size_t name_length) {
+    if (!module || module_length == 0 || module[0] == '.' || !name || name_length == 0)
+        return NULL;
+    const XrStdlibNativeClassDefEntry *found = NULL;
+    for (uint32_t i = 0; i < XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibNativeClassDefEntry *entry = &xr_stdlib_native_class_def_entries[i];
+        if (!entry->module || !entry->name || strlen(entry->module) != module_length ||
+            memcmp(entry->module, module, module_length) != 0 ||
+            strlen(entry->name) != name_length || memcmp(entry->name, name, name_length) != 0)
+            continue;
+        if (found)
+            return NULL;
+        found = entry;
+    }
+    return found;
+}
+
+static inline const XrStdlibNativeClassDefEntry *
+xr_stdlib_metadata_fresh_result_native_class(const XrStdlibDefEntry *entry) {
+    if (!entry || !entry->module || !entry->signature || !entry->return_ownership ||
+        strcmp(entry->return_ownership, "fresh") != 0)
+        return NULL;
+    const char *result = strrchr(entry->signature, ':');
+    if (!result)
+        return NULL;
+    for (result++; *result == ' '; result++) {
+    }
+    const char *end = result + strlen(result);
+    while (end > result && end[-1] == ' ')
+        end--;
+    if (end <= result + 1 || end[-1] != '?')
+        return NULL;
+    return xr_stdlib_metadata_unique_native_class_span(entry->module, strlen(entry->module), result,
+                                                       (size_t) (end - result - 1));
 }
 
 static inline const XrStdlibDefEntry *
@@ -67,8 +132,7 @@ xr_stdlib_metadata_unique_func_span(const char *module, size_t module_length, co
     for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
         const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
         if (!entry->module || !entry->name || strlen(entry->module) != module_length ||
-            memcmp(entry->module, module, module_length) != 0 ||
-            strcmp(entry->name, name) != 0)
+            memcmp(entry->module, module, module_length) != 0 || strcmp(entry->name, name) != 0)
             continue;
         if (found)
             return NULL;
@@ -77,8 +141,8 @@ xr_stdlib_metadata_unique_func_span(const char *module, size_t module_length, co
     return found;
 }
 
-static inline const XrStdlibDefEntry *
-xr_stdlib_metadata_unique_func(const char *module, const char *name) {
+static inline const XrStdlibDefEntry *xr_stdlib_metadata_unique_func(const char *module,
+                                                                     const char *name) {
     return module ? xr_stdlib_metadata_unique_func_span(module, strlen(module), name) : NULL;
 }
 
@@ -179,7 +243,7 @@ xr_stdlib_metadata_exact_native_direct_call_span(const char *module, size_t modu
         xr_stdlib_metadata_unique_func_arity_span(module, module_length, name, argument_count);
     if (!entry || !entry->aot_direct || !entry->aot || !entry->aot_kind || !entry->ret ||
         !entry->vm || !entry->vm_binding || !entry->arg_spec || !entry->aot_enum ||
-        !entry->vm_ifdef || !entry->define || !entry->signature)
+        !entry->vm_ifdef || !entry->define || !entry->signature || !entry->return_ownership)
         return NULL;
     if (entry->aot[0] == '\0' || entry->vm[0] == '\0' || strcmp(entry->aot_kind, "method") != 0 ||
         strcmp(entry->ret, "value") != 0 || strcmp(entry->vm_binding, "normal") != 0 ||

@@ -276,7 +276,7 @@ roots, or general product activation.
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V56 is a breaking hard cutover from
    v55 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 47,
-   TargetProfile schema 3, TargetPlan schema 58, program-provenance schema 5,
+   TargetProfile schema 3, TargetPlan schema 59, program-provenance schema 5,
    and exact PSC v9 provenance, typed program bindings, and the direct-local
    scalar-ref v1 call-row interpretation; no compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
@@ -340,7 +340,7 @@ roots, or general product activation.
    therefore remains fail closed for cross-module artifacts. The bounded scalar
    module-graph family instead uses the same public TargetPlan loader with
    PROGRAM_MODULE_SET authority, which selects the unique program-graph
-   materializer. TargetPlan schema 58 carries one program-graph row and canonical
+   materializer. TargetPlan schema 59 carries one program-graph row and canonical
    module partitions over global TargetPlan tables; each partition identifies
    its SemanticPlan through the full canonical program module set and records
    pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 216-byte rows and has

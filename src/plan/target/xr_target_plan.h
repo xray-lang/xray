@@ -83,6 +83,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE (UINT64_C(1) << 49)
 #define XR_TARGET_FAMILY_SOURCE_CLASS_FIELD_RESULT_STORAGE (UINT64_C(1) << 50)
 #define XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE (UINT64_C(1) << 51)
+#define XR_TARGET_FAMILY_NATIVE_CLASS_ARGUMENT_STORAGE (UINT64_C(1) << 52)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -168,6 +169,7 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE |                                  \
                  XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE |                           \
                  XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE |                                  \
+                 XR_TARGET_FAMILY_NATIVE_CLASS_ARGUMENT_STORAGE |                                  \
                  XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |                                   \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |                            \
                  XR_TARGET_FAMILY_PANIC_CATCH_STORAGE | XR_TARGET_FAMILY_ADT_ENUM_STORAGE |        \
@@ -365,9 +367,11 @@ typedef enum XrTargetCallConvention {
  * is a module handle rather than a value and whose arguments and result are all
  * plain scalars, so the row carries no argument intent of its own.
  * NATIVE_DIRECT names a non-suspending plain-call member through the frozen
- * stdlib registry. Its tagged-value ABI admits managed borrowed arguments, so
- * the exact semantic operand contract and registry capability mask are part of
- * the target identity even though no source callee or parameter row exists.
+ * stdlib registry. Its tagged-value ABI admits managed borrowed arguments and
+ * one freshly owned nullable native-storage result, so the exact semantic
+ * operand/result contract, return-ownership metadata, and registry capability
+ * mask are part of the target identity even though no source callee or
+ * parameter row exists.
  * SOURCE_CLASS_CONSTRUCTOR names the construction of a declared class through
  * its own class object, taken from the SemanticPlan call target of the same
  * name; it names no callee function and carries no argument, and it never

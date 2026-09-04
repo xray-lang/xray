@@ -1242,7 +1242,7 @@ static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTarge
     ASSERT_NOT_NULL(semantic);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(xr_target_plan_schema_version(plan), XR_TARGET_PLAN_SCHEMA_VERSION);
-    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 58);
+    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 59);
     ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
     ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(plan));
     ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_semantic_fingerprint(plan),

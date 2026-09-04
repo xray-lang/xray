@@ -14,7 +14,9 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
+#include "xr_semantic_class_shape.h"
 #include "xr_semantic_plan.h"
+#include <string.h>
 
 /* The compiler's own "unknown" reference type: source can neither write it nor
  * name it, so a record carrying it was produced by the compiler and nowhere
@@ -226,6 +228,32 @@ static inline bool xr_semantic_dynamic_value_is_join(const XrSemanticOperationRe
     return operation && operation->opcode == XI_PHI;
 }
 
+/* Every checked conversion freezes the same operation kernel before its
+ * target family is interpreted. Keeping this base in one judgement prevents
+ * scalar/string and source-class `as` from drifting into separate authorities
+ * for effects, ownership, evidence or auxiliary storage metadata. */
+static inline bool xr_semantic_checked_as_base_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    return xr_semantic_dynamic_value_common_is_exact(plan, operation) &&
+           xr_semantic_dynamic_value_producer_is_exact(operation) && operation->opcode == XI_AS &&
+           operation->effects == xi_generated_op_effects(XI_AS) &&
+           operation->flags == xi_generated_op_default_flags(XI_AS) &&
+           operation->ownership_use == xi_generated_op_own_use(XI_AS) &&
+           operation->result_ownership == xi_generated_op_result_ownership(XI_AS) &&
+           operation->transfer_mode == XR_TRANSFER_SHARE &&
+           operation->parameter_mode == XR_PARAM_READ &&
+           operation->parameter_ownership == XI_OWN_NONE &&
+           operation->result_alias_operand == -1 && operation->evidence[0] == 0 &&
+           operation->evidence[1] == 0 && operation->evidence[2] == 0 &&
+           operation->evidence[3] == 0 && operation->evidence[4] == 0 &&
+           operation->evidence[5] == 0 && operation->evidence[6] == 0 &&
+           operation->evidence[7] == XR_SEMANTIC_INDEX_NONE &&
+           operation->array_element_storage == 0 &&
+           operation->array_hof_kind == XR_SEM_ARRAY_HOF_NONE &&
+           operation->array_result_element_storage == 0 && operation->reserved_view[0] == 0 &&
+           operation->reserved_view[1] == 0;
+}
+
 /* Re-prove the typed SSA source behind one incoming edge. Target consumers call
  * this only after the whole SemanticPlan verifier has accepted CFG dominance;
  * this local judgement still checks the identity facts that decide whether the
@@ -307,12 +335,65 @@ static inline bool xr_semantic_reference_phi_is_exact(const XrSemanticPlan *plan
     return true;
 }
 
+/* A checked union narrowing to one exact source class still produces the
+ * ordinary tagged carrier.  XI lowering freezes the narrowed result type; the
+ * SemanticPlan must independently prove that it is one unique member of the
+ * source union and that the runtime target spelling names the same frozen
+ * source-class row.  This admits the carrier, not an arbitrary class-typed
+ * operation, and leaves scalar/string conversions to their narrower family. */
+static inline bool
+xr_semantic_dynamic_source_class_as_is_exact(const XrSemanticPlan *plan,
+                                             const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0;
+    uint32_t metadata_count = 0;
+    uint32_t child_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    const XrSemanticTypeRecord *result =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    uint32_t source_class = xr_semantic_class_instance_type_source_class(plan, result);
+    const XrSemanticSourceClassRecord *declaration =
+        source_class != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_source_class(plan, source_class)
+            : NULL;
+    if (!plan || !operation || !operands || !metadata || !children || !declaration ||
+        !xr_semantic_checked_as_base_is_exact(plan, operation) ||
+        !xr_semantic_dynamic_value_carrier_type_is_exact(result) ||
+        operation->operand_begin >= operand_count || operation->metadata_begin >= metadata_count ||
+        !metadata[operation->metadata_begin] || !declaration->name ||
+        strcmp(metadata[operation->metadata_begin], declaration->name) != 0 ||
+        operation->semantic_immediate != ((int64_t) UINT32_MAX << 1))
+        return false;
+
+    const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *source_type = xr_semantic_plan_type(plan, source->type);
+    if (!source_type || source_type->kind != XR_KIND_UNION || source_type->child_count < 2 ||
+        !xr_semantic_dynamic_value_carrier_type_is_exact(source_type) ||
+        source_type->child_begin > child_count ||
+        source_type->child_count > child_count - source_type->child_begin ||
+        source->value == XR_SEMANTIC_INDEX_NONE || source->role != XR_SEM_OPERAND_VALUE ||
+        source->parameter != -1 || source->transfer_mode != XR_TRANSFER_SHARE ||
+        source->ownership_action != XR_SEM_OPERAND_BORROW ||
+        source->parameter_mode != XR_PARAM_READ || source->access != XR_CALL_ARG_PLAIN ||
+        source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
+        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0)
+        return false;
+    uint32_t matches = 0;
+    for (uint16_t i = 0; i < source_type->child_count; i++)
+        matches += children[source_type->child_begin + i] == operation->result_type ? 1u : 0u;
+    return matches == 1u;
+}
+
 static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan,
                                                        const XrSemanticOperationRecord *operation) {
     const XrSemanticTypeRecord *type =
         operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
     if (operation && operation->opcode == XI_PHI)
         return xr_semantic_reference_phi_is_exact(plan, operation);
+    if (operation && operation->opcode == XI_AS &&
+        xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE)
+        return xr_semantic_dynamic_source_class_as_is_exact(plan, operation);
     if (!xr_semantic_dynamic_value_producer_is_exact(operation) ||
         !xr_semantic_dynamic_value_common_is_exact(plan, operation))
         return false;

@@ -15,6 +15,7 @@
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_source_class_field_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_source_structural_field_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_string_slice_shape.h"
@@ -154,6 +155,18 @@ static XrType stub_net_conn = {
         {
             .class_name = "NetConn",
             .class_ref = &stub_net_conn_class_info,
+        },
+};
+static XrType stub_nullable_net_storage = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 904,
+    .frozen = true,
+    .is_nullable = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance =
+        {
+            .class_name = "__NetConnStorage",
+            .class_ref = NULL,
         },
 };
 
@@ -562,13 +575,13 @@ static XrSemanticPlan *build_native_direct_ref_semantic(void) {
 
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    XiModule *module =
-        xi_module_new("pkg/native_direct_ref_probe.xr", "native_direct_ref_probe", function);
+    XiModule *module = xi_module_new("net/net.xr", "net", function);
     REQUIRE(module != NULL &&
-            xi_module_set_identity(module, "memory-module-v1:id=26:native-direct-ref-probe-v1"));
+            xi_module_set_identity(module, "stdlib-module-v1:module=3:net:path=10:net/net.xr"));
     function->module = module;
     XiClassData source_class = {
         .class_info = &stub_net_conn_class_info,
+        .xg_class_id = stub_net_conn_class_info.xg_class_id,
         .class_name = "NetConn",
         .explicit_final = true,
         .needs_runtime_type = true,
@@ -580,6 +593,90 @@ static XrSemanticPlan *build_native_direct_ref_semantic(void) {
     bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "native direct ref semantic fixture failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    function->module = NULL;
+    module->init = NULL;
+    xi_module_free(module);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_native_direct_fresh_result_semantic(void) {
+    XrFunctionParam native_parameters[2] = {
+        {.type = &stub_int, .mode = XR_PARAM_READ},
+        {.type = &stub_exact_string, .mode = XR_PARAM_READ},
+    };
+    XrType native_function = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 905,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .function =
+            {
+                .params = native_parameters,
+                .param_count = 2,
+                .min_params = 2,
+                .return_type = &stub_nullable_net_storage,
+                .throw_effect = XR_FN_EFFECT_MAY_THROW,
+            },
+    };
+    XiFunc *function = xi_func_new("native_direct_fresh_result_probe", &stub_unit);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *port = xi_const_int(function, entry, 0, &stub_int);
+    XiValue *address = xi_const_str(function, entry, "", &stub_exact_string);
+    XiImportRef import_ref = {
+        .module_path = "net",
+        .member_name = "__udpBind",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &native_function, 0);
+    XiValue *call = xi_value_new(function, entry, XI_CALL, &stub_nullable_net_storage, 3);
+    REQUIRE(port != NULL && address != NULL && callee != NULL && call != NULL);
+    callee->aux = &import_ref;
+    call->args[0] = callee;
+    call->args[1] = port;
+    call->args[2] = address;
+    call->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    XiCallPlan *call_plan =
+        (XiCallPlan *) xi_func_arena_alloc(function, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan =
+        (XiCallArgPlan *) xi_func_arena_alloc(function, 2u * (uint32_t) sizeof(*argument_plan));
+    REQUIRE(call_plan != NULL && argument_plan != NULL);
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, 2u * sizeof(*argument_plan));
+    for (uint16_t i = 0; i < 2; i++) {
+        argument_plan[i].param_mode = XR_PARAM_READ;
+        argument_plan[i].access = XR_CALL_ARG_PLAIN;
+        argument_plan[i].origin_var_id = XI_NO_VAR_ID;
+    }
+    call_plan->args = argument_plan;
+    call_plan->nargs = 2;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = call;
+    release->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, NULL);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module = xi_module_new("net/net.xr", "net", function);
+    REQUIRE(module != NULL &&
+            xi_module_set_identity(module, "stdlib-module-v1:module=3:net:path=10:net/net.xr"));
+    function->module = module;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native direct fresh result semantic fixture failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
     function->module = NULL;
     module->init = NULL;
@@ -2845,6 +2942,114 @@ static void test_native_direct_ref_authority(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_native_direct_fresh_result_authority(void) {
+    XrSemanticPlan *semantic = build_native_direct_fresh_result_semantic();
+    REQUIRE(xr_semantic_plan_call_target_count(semantic) == 1);
+    const XrSemanticCallTargetRecord *semantic_target = xr_semantic_plan_call_target(semantic, 0);
+    const XrSemanticOperationRecord *operation =
+        semantic_target ? xr_semantic_plan_operation(semantic, semantic_target->operation) : NULL;
+    const XrStdlibDefEntry *entry = NULL;
+    REQUIRE(semantic_target && semantic_target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT &&
+            operation &&
+            xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, &entry) && entry &&
+            strcmp(entry->module, "net") == 0 && strcmp(entry->name, "__udpBind") == 0);
+
+    XrStdlibDefEntry metadata_mutation = *entry;
+    metadata_mutation.return_ownership = "";
+    REQUIRE(xr_semantic_native_direct_result_kind(semantic, operation, &metadata_mutation) ==
+            XR_SEM_NATIVE_DIRECT_RESULT_INVALID);
+    XrSemanticTypeRecord *result_type = &semantic->types[operation->result_type];
+    XrStableId zero = {{0}};
+    REQUIRE(result_type->source_class == XR_SEMANTIC_INDEX_NONE &&
+            xr_stable_id_equal(result_type->source_class_identity, zero) &&
+            strstr(result_type->canonical_key, ";named:16:__NetConnStorage[0]") != NULL);
+    uint32_t saved_source_class = result_type->source_class;
+    result_type->source_class = 0;
+    REQUIRE(!xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL));
+    result_type->source_class = saved_source_class;
+    XrStableId saved_source_identity = result_type->source_class_identity;
+    result_type->source_class_identity.bytes[0] ^= 1u;
+    REQUIRE(!xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL));
+    result_type->source_class_identity = saved_source_identity;
+    const char *saved_key = result_type->canonical_key;
+    result_type->canonical_key = "type-v3:11:0:0:1:0:0:0:0:0:0:;named:14:NetConnStorage[0]";
+    REQUIRE(!xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL));
+    result_type->canonical_key = "type-v3:11:0:0:1:0:0:0:0:0:0:;named:16:__Net";
+    REQUIRE(!xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL));
+    result_type->canonical_key = "type-v3:011:0:0:1:0:0:0:0:0:0:;named:016:__NetConnStorage[0]";
+    REQUIRE(!xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL));
+    result_type->canonical_key = saved_key;
+    size_t saved_key_length = strlen(saved_key);
+    char *nullable_key_mutation = (char *) xr_malloc(saved_key_length + 1u);
+    REQUIRE(nullable_key_mutation != NULL);
+    memcpy(nullable_key_mutation, saved_key, saved_key_length + 1u);
+    const char nullable_prefix[] = "type-v3:11:0:0:1:";
+    REQUIRE(strncmp(nullable_key_mutation, nullable_prefix, sizeof(nullable_prefix) - 1u) == 0);
+    nullable_key_mutation[sizeof(nullable_prefix) - 3u] = '0';
+    XrStableId saved_type_id = result_type->id;
+    XrFingerprint digest;
+    REQUIRE(xr_stable_id_from_key(nullable_key_mutation, &result_type->id, &digest));
+    result_type->canonical_key = nullable_key_mutation;
+    REQUIRE(!xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL));
+    result_type->canonical_key = saved_key;
+    result_type->id = saved_type_id;
+    xr_free(nullable_key_mutation);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    REQUIRE(operands && operation->operand_begin < operand_count);
+    const XrSemanticOperationRecord *native_import = xr_semantic_native_direct_import_for_value(
+        semantic, operation->function, operands[operation->operand_begin].value);
+    REQUIRE(native_import && native_import->metadata_begin < semantic->metadata_count);
+    const char *saved_module = semantic->metadata[native_import->metadata_begin];
+    semantic->metadata[native_import->metadata_begin] = "http";
+    REQUIRE(!xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL));
+    semantic->metadata[native_import->metadata_begin] = saved_module;
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native direct fresh result TargetPlan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_target_plan_verify(plan, error, sizeof(error)));
+
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    REQUIRE(calls && call_count == 1);
+    const XrTargetCallRecord *call = &calls[0];
+    const XrTargetValueRepRecord *result = xr_target_plan_value_rep(plan, operation->result_value);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        result && result->slot < slot_count ? &slots[result->slot] : NULL;
+    REQUIRE(call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            call->result_value == operation->result_value && result && slot &&
+            call->result_slot == result->slot &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->register_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            plan->machine_reps[result->memory_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            slot->ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    XrTargetCallRecord saved_call = plan->calls[0];
+    plan->calls[0].result_ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->calls[0] = saved_call;
+    uint8_t saved_rep_ownership = plan->machine_reps[result->register_rep].ownership;
+    plan->machine_reps[result->register_rep].ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[result->register_rep].ownership = saved_rep_ownership;
+    uint8_t saved_slot_root = plan->slots[result->slot].root_kind;
+    plan->slots[result->slot].root_kind = XR_TARGET_ROOT_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->slots[result->slot].root_kind = saved_slot_root;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_builder_materializes_canonical_scalar_intents(void) {
     XrSemanticPlan *semantic = build_exact_string_semantic_plan();
     XrTargetProfile *profile = build_profile(0);
@@ -4991,7 +5196,7 @@ static void test_imported_source_class_constructor_authority(void) {
             semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
             semantic_target->callable_type == operation->result_type &&
             xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
-            strstr(semantic_target->canonical_key, "call-target-v10:schema=47:") != NULL &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=48:") != NULL &&
             xr_semantic_imported_class_construction_authority_source_class(
                 semantic, dependency, &semantic->dependencies[0], source_export, operation,
                 &constructor) == 0 &&
@@ -10624,6 +10829,11 @@ int main(int argc, char **argv) {
         puts("Native direct ref authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "native-direct-fresh-result-authority") == 0) {
+        test_native_direct_fresh_result_authority();
+        puts("Native direct fresh result authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "fingerprint-snapshot-determinism") == 0) {
         test_plan_snapshot_and_determinism();
         puts("TargetPlan snapshot fingerprint tests passed");
@@ -10856,6 +11066,7 @@ int main(int argc, char **argv) {
     test_plan_snapshot_and_determinism();
     test_native_target_leaf_scalar_authority();
     test_native_direct_ref_authority();
+    test_native_direct_fresh_result_authority();
     test_builder_materializes_canonical_scalar_intents();
     test_builder_materializes_parameter_without_operation();
     test_builder_materializes_effect_void_independent_of_type();

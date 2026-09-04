@@ -34,6 +34,7 @@
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/semantic/xr_semantic_string_shape.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_module.h"
@@ -3050,10 +3051,10 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref,
     XiValue *call = xi_value_new(function, entry, XI_CALL, &bool_type, 3);
     XiClassData *class_data =
         (XiClassData *) xi_func_arena_alloc(function, (uint32_t) sizeof(*class_data));
-    XiModule *module = xi_module_new("native-direct-view.xr", "native_direct_view", function);
+    XiModule *module = xi_module_new("net/net.xr", "net", function);
     if (!function->params || !connection || !direction || !ref || !callee || !call ||
         !class_data || !module ||
-        !xi_module_set_identity(module, "memory-module-v1:id=18:xi-cgen-fixture-v1")) {
+        !xi_module_set_identity(module, "stdlib-module-v1:module=3:net:path=10:net/net.xr")) {
         xi_module_free(module);
         xi_func_free(function);
         return NULL;
@@ -3068,7 +3069,7 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref,
         .class_info = &net_conn_class,
         .xg_class_id = net_conn_class.xg_class_id,
         .class_name = "NetConn",
-        .source_file = "native-direct-view.xr",
+        .source_file = "net/net.xr",
         .source_provider_field_index = -1,
         .clinit_child_idx = -1,
         .explicit_final = true,
@@ -3107,6 +3108,224 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref,
     return function;
 }
 
+static XiFunc *native_direct_fresh_result_fixture(XiValue **out_call) {
+    static XrType int_type = {
+        .kind = XR_KIND_INT,
+        .id = 1912,
+        .scalar_rep = XR_NATIVE_I64,
+        .frozen = true,
+    };
+    static XrType string_type = {
+        .kind = XR_KIND_STRING,
+        .id = 1913,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+    };
+    static XrType unit_type = {
+        .kind = XR_KIND_UNIT,
+        .id = 1916,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+    };
+    static XrType nullable_storage_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 1914,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+        .is_nullable = true,
+        .instance =
+            {
+                .class_name = "__NetConnStorage",
+                .class_ref = NULL,
+            },
+    };
+    static XrFunctionParam native_parameters[] = {
+        {.type = &int_type, .mode = XR_PARAM_READ},
+        {.type = &string_type, .mode = XR_PARAM_READ},
+    };
+    static XrType native_function = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 1915,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+        .function =
+            {
+                .params = native_parameters,
+                .param_count = 2,
+                .min_params = 2,
+                .return_type = &nullable_storage_type,
+                .throw_effect = XR_FN_EFFECT_MAY_THROW,
+            },
+    };
+    XiFunc *function = xi_func_new("native_direct_fresh_result", &int_type);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    XiValue *port = function && entry ? xi_const_int(function, entry, 0, &int_type) : NULL;
+    XiValue *address = function && entry ? xi_const_str(function, entry, "", &string_type) : NULL;
+    XiImportRef *ref =
+        function ? (XiImportRef *) xi_func_arena_alloc(function, sizeof(*ref)) : NULL;
+    XiValue *callee = function && entry
+                          ? xi_value_new(function, entry, XI_IMPORT_REF, &native_function, 0)
+                          : NULL;
+    XiValue *call = function && entry
+                        ? xi_value_new(function, entry, XI_CALL, &nullable_storage_type, 3)
+                        : NULL;
+    if (!function || !entry || !port || !address || !ref || !callee || !call) {
+        xi_func_free(function);
+        return NULL;
+    }
+    *ref = (XiImportRef) {
+        .module_path = "net",
+        .member_name = "__udpBind",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    callee->aux = ref;
+    call->args[0] = callee;
+    call->args[1] = port;
+    call->args[2] = address;
+    call->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &unit_type, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &int_type);
+    if (!release || !result) {
+        xi_func_free(function);
+        return NULL;
+    }
+    release->args[0] = call;
+    release->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, result);
+    XiModule *module = xi_module_new("net/net.xr", "net", function);
+    if (!module ||
+        !xi_module_set_identity(module, "stdlib-module-v1:module=3:net:path=10:net/net.xr")) {
+        xi_module_free(module);
+        xi_func_free(function);
+        return NULL;
+    }
+    function->module = module;
+    if (out_call)
+        *out_call = call;
+    return function;
+}
+
+static size_t count_substring(const char *text, const char *needle) {
+    size_t count = 0;
+    size_t needle_length = needle ? strlen(needle) : 0;
+    if (!text || needle_length == 0)
+        return 0;
+    for (const char *cursor = text; (cursor = strstr(cursor, needle)) != NULL;
+         cursor += needle_length)
+        count++;
+    return count;
+}
+
+TEST(cgen_native_direct_fresh_result_is_single_owned_materialization) {
+    XiValue *call = NULL;
+    XiFunc *ir = native_direct_fresh_result_fixture(&call);
+    TEST_REQUIRE(ir != NULL && call != NULL, "native-direct fresh-result fixture allocated");
+    uint32_t call_id = call->id;
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "net", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "verified native-direct fresh result should generate");
+    TEST_REQUIRE(count_substring(code, "xrt_net_udp_bind(") == 1,
+                 "fresh provider is materialized exactly once");
+    char retain[64];
+    char release[64];
+    snprintf(retain, sizeof(retain), "xrt_retain(v%u)", (unsigned) call_id);
+    snprintf(release, sizeof(release), "xrt_release(v%u)", (unsigned) call_id);
+    TEST_REQUIRE(!contains(code, retain), "fresh provider result is not retained again");
+    TEST_REQUIRE(count_substring(code, release) == 1,
+                 "unused fresh provider result is released exactly once");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+typedef enum NativeDirectFreshMutation {
+    NATIVE_DIRECT_FRESH_MUTATE_RESULT_OWNERSHIP = 0,
+    NATIVE_DIRECT_FRESH_MUTATE_RESULT_REP,
+    NATIVE_DIRECT_FRESH_MUTATE_RESULT_ROOT,
+    NATIVE_DIRECT_FRESH_MUTATE_RESULT_SLOT,
+    NATIVE_DIRECT_FRESH_MUTATE_PROVIDER_IDENTITY,
+    NATIVE_DIRECT_FRESH_MUTATION_COUNT,
+} NativeDirectFreshMutation;
+
+static void expect_native_direct_fresh_cgen_mutation_rejected(NativeDirectFreshMutation mutation) {
+    XiValue *live_call = NULL;
+    XiFunc *ir = native_direct_fresh_result_fixture(&live_call);
+    TEST_REQUIRE(ir && live_call && test_prepare_backend_ir(ir),
+                 "fresh-result CGen mutation fixture reached Backend");
+    XiModule *module = ir->module;
+    XiModule *modules[] = {module};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+    XrTargetPlan *target = (XrTargetPlan *) xaot_bundle_program_target_plan(&plan.bundle);
+    TEST_REQUIRE(target && target->calls_count == 1, "fresh-result mutation has one target call");
+    XrTargetCallRecord *call = &target->calls[0];
+    XrTargetValueRepRecord *result =
+        (XrTargetValueRepRecord *) xr_target_plan_value_rep(target, call->result_value);
+    TEST_REQUIRE(result && result->slot < target->slots_count,
+                 "fresh-result mutation has one owned result slot");
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry emission_registry;
+    TEST_REQUIRE(ctx != NULL, "fresh-result mutation CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan.bundle),
+                 "fresh-result mutation installed verified emission plans");
+
+    switch (mutation) {
+        case NATIVE_DIRECT_FRESH_MUTATE_RESULT_OWNERSHIP:
+            call->result_ownership = XR_TARGET_CALL_NONE;
+            xr_target_call_compute_fingerprint(target, call->id, &call->fingerprint);
+            break;
+        case NATIVE_DIRECT_FRESH_MUTATE_RESULT_REP:
+            target->machine_reps[result->register_rep].ownership = XR_TARGET_OWNERSHIP_BORROWED;
+            break;
+        case NATIVE_DIRECT_FRESH_MUTATE_RESULT_ROOT:
+            target->slots[result->slot].root_kind = XR_TARGET_ROOT_NONE;
+            break;
+        case NATIVE_DIRECT_FRESH_MUTATE_RESULT_SLOT:
+            call->result_slot = XR_SEMANTIC_INDEX_NONE;
+            xr_target_call_compute_fingerprint(target, call->id, &call->fingerprint);
+            break;
+        case NATIVE_DIRECT_FRESH_MUTATE_PROVIDER_IDENTITY:
+            call->native_callee_identity.bytes[0] ^= 1u;
+            xr_target_call_compute_fingerprint(target, call->id, &call->fingerprint);
+            break;
+        case NATIVE_DIRECT_FRESH_MUTATION_COUNT:
+            TEST_REQUIRE(false, "invalid fresh-result mutation kind");
+            break;
+    }
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+
+    char *mutated_code = NULL;
+    size_t mutated_size = 0;
+    FILE *stream = xr_open_memstream(&mutated_code, &mutated_size);
+    TEST_REQUIRE(stream != NULL, "fresh-result mutation output stream allocated");
+    xi_cgen_program(ctx, stream, module);
+    TEST_REQUIRE(xr_close_memstream(stream, &mutated_code, &mutated_size) == 0,
+                 "fresh-result mutation output stream closed");
+    TEST_REQUIRE(xi_cgen_has_error(ctx),
+                 "mutated fresh-result authority must fail C generation closed");
+    TEST_REQUIRE(!contains(mutated_code, "xrt_net_udp_bind("),
+                 "mutated fresh-result authority cannot select the provider");
+
+    xr_free(mutated_code);
+    xi_cgen_ctx_free(ctx);
+    test_c_emission_registry_free(&emission_registry);
+    test_aot_plan_free(&plan);
+    xi_func_free(ir);
+}
+
+TEST(cgen_native_direct_fresh_result_authority_mutations_fail_closed) {
+    for (uint8_t mutation = 0; mutation < NATIVE_DIRECT_FRESH_MUTATION_COUNT; mutation++)
+        expect_native_direct_fresh_cgen_mutation_rejected((NativeDirectFreshMutation) mutation);
+}
+
 TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
     XiImportRef *ref = NULL;
     XiModule *module = NULL;
@@ -3130,6 +3349,10 @@ TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
     ir = native_direct_managed_scalar_fixture(&ref, &module);
     TEST_REQUIRE(ir != NULL && ref != NULL && test_prepare_backend_ir(ir),
                  "native-direct mutation fixture reached Backend with frozen plans");
+    TEST_REQUIRE(module != NULL && module->identity &&
+                     strcmp(module->identity, "stdlib-module-v1:module=3:net:path=10:net/net.xr") ==
+                         0,
+                 "native-direct mutation fixture module has stable net identity");
     XiModule *modules[] = {module};
     TestAotPlan plan;
     test_aot_plan_prepare(&plan, modules, 1, 0);
@@ -15102,6 +15325,8 @@ int main(int argc, char **argv) {
     run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
     run_cgen_panicinfo_constructor_token_emits_no_local();
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
+    run_cgen_native_direct_fresh_result_is_single_owned_materialization();
+    run_cgen_native_direct_fresh_result_authority_mutations_fail_closed();
     run_cgen_native_direct_uses_verified_call_and_argument_view();
     run_cgen_native_target_leaf_consumes_numeric_target_authority();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();

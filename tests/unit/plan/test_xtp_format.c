@@ -751,8 +751,12 @@ static XtpFixture make_source_export_fixture(void) {
     fixture.profile = build_profile();
     const XrSemanticPlan *dependencies[] = {fixture.dependency};
     char error[512] = {0};
-    REQUIRE(xr_target_plan_build_module_set(fixture.semantic, dependencies, 1, fixture.profile,
-                                            &fixture.plan, error, sizeof(error)));
+    bool built = xr_target_plan_build_module_set(fixture.semantic, dependencies, 1,
+                                                 fixture.profile, &fixture.plan, error,
+                                                 sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-export XTP fixture TargetPlan failed: %s\n", error);
+    REQUIRE(built);
     REQUIRE(xr_target_plan_is_verified(fixture.plan));
     REQUIRE(xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error, sizeof(error)));
     REQUIRE(fixture.bytes && fixture.size >= XR_XTP_HEADER_SIZE);
@@ -2101,10 +2105,10 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-58-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-59-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
         test_previous_schema_is_rejected();
-        puts("XTP schema 58 cutover tests passed");
+        puts("XTP schema 59 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

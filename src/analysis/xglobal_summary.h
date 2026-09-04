@@ -64,7 +64,7 @@ enum {
      * 43: constructions of a class without a declared constructor carry their
      * own callsite kind instead of the open closure kind.
      * 44: nested bodies publish their frozen lexical-parent body identity. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 47,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 48,
 };
 
 /* Return ownership as published to the whole-program evidence.

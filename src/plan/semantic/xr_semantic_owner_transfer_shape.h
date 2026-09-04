@@ -24,9 +24,8 @@
  * operation and operand shapes remain exact, so another consuming operation
  * cannot acquire representation authority merely because it has one operand.
  */
-static inline bool xr_semantic_owner_transfer_is_exact(const XrSemanticPlan *plan,
-                                                       const XrSemanticOperationRecord *operation,
-                                                       uint32_t *source_value_out) {
+static inline const XrSemanticOperandRecord *xr_semantic_owner_transfer_base_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     if (!plan || !operation || !operands ||
@@ -52,12 +51,12 @@ static inline bool xr_semantic_owner_transfer_is_exact(const XrSemanticPlan *pla
         operation->view_complete != 0 || operation->array_element_storage != 0 ||
         operation->reserved_view[0] != 0 || operation->reserved_view[1] != 0 ||
         operation->array_hof_kind != 0 || operation->array_result_element_storage != 0)
-        return false;
+        return NULL;
 
     if (operation->opcode == XI_OWNER_FORWARD) {
         if (operation->result_alias_operand != -1 ||
             operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_complete != 1)
-            return false;
+            return NULL;
     } else {
         /* SOURCE_MOVE preserves the source value's return provenance. A move
          * inside a function has no return provenance; moving a complete owned
@@ -72,17 +71,27 @@ static inline bool xr_semantic_owner_transfer_is_exact(const XrSemanticPlan *pla
             operation->evidence[3] != 0 || operation->evidence[4] != 0 ||
             operation->evidence[5] != 0 || operation->evidence[6] == 0 ||
             operation->evidence[7] != XR_SEMANTIC_INDEX_NONE || !exact_return)
-            return false;
+            return NULL;
     }
 
     const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
-    if (source->value == XR_SEMANTIC_INDEX_NONE || source->type != operation->result_type ||
-        source->role != XR_SEM_OPERAND_VALUE || source->parameter != -1 ||
+    if (source->value == XR_SEMANTIC_INDEX_NONE || source->role != XR_SEM_OPERAND_VALUE ||
+        source->parameter != -1 ||
         source->transfer_mode != XR_TRANSFER_SHARE ||
         source->ownership_action != XR_SEM_OPERAND_CONSUME ||
         source->parameter_mode != XR_PARAM_READ || source->access != XR_CALL_ARG_PLAIN ||
         source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
         source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0)
+        return NULL;
+    return source;
+}
+
+static inline bool xr_semantic_owner_transfer_is_exact(const XrSemanticPlan *plan,
+                                                       const XrSemanticOperationRecord *operation,
+                                                       uint32_t *source_value_out) {
+    const XrSemanticOperandRecord *source =
+        xr_semantic_owner_transfer_base_is_exact(plan, operation);
+    if (!source || source->type != operation->result_type)
         return false;
     if (source_value_out)
         *source_value_out = source->value;

@@ -22,6 +22,7 @@
 #include "../../../src/shared/xobject_shape.h"
 #include "../../../src/stdlib/xstdlib_metadata.h"
 #include "../../../src/module/xstdlib_runtime_cache.h"
+#include "../../../src/plan/semantic/xr_semantic_ids.h"
 
 static const XrModuleIdentityAuthority k_native_surface_memory_authority = {
     .kind = XR_MODULE_IDENTITY_MEMORY,
@@ -134,7 +135,7 @@ TEST(native_module_object_and_enum_metadata) {
     const XaBuiltinMember *connect_fd = find_module_member("net", "__connectFd");
     ASSERT_NOT_NULL(connect_fd);
     ASSERT_TRUE(connect_fd->is_internal);
-    XrType *fn = xa_builtin_parse_full_signature(iso, connect_fd->signature);
+    XrType *fn = xa_builtin_parse_full_signature_for_module(iso, "net", connect_fd->signature);
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
@@ -144,24 +145,21 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_TRUE(fn->function.return_type->is_nullable);
     ASSERT_STR_EQ(fn->function.return_type->instance.class_name, "__NetConnStorage");
 
-    const XaBuiltinClass *conn_bridge =
-        xa_builtin_find_source_provider_bridge("net", "NetConn");
+    const XaBuiltinClass *conn_bridge = xa_builtin_find_source_provider_bridge("net", "NetConn");
     ASSERT_NOT_NULL(conn_bridge);
     ASSERT_TRUE(conn_bridge->is_internal);
     ASSERT_STR_EQ(conn_bridge->name, "__NetConnStorage");
     ASSERT_STR_EQ(conn_bridge->source_storage_field, "_storage");
     ASSERT_NULL(xa_builtin_find_source_provider_bridge("http", "NetConn"));
 
-    XrType *net_conn_leaf_type =
-        xa_builtin_parse_type_string_for_module(iso, "net", "NetConn");
+    XrType *net_conn_leaf_type = xa_builtin_parse_type_string_for_module(iso, "net", "NetConn");
     ASSERT_NOT_NULL(net_conn_leaf_type);
     ASSERT_EQ_INT(net_conn_leaf_type->kind, XR_KIND_INSTANCE);
     ASSERT_STR_EQ(net_conn_leaf_type->instance.class_name, "NetConn");
     ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(iso, "http", "NetConn")->kind,
                   XR_KIND_ERROR);
-    ASSERT_EQ_INT(
-        xa_builtin_parse_type_string_for_module(iso, "http", "__NetConnStorage")->kind,
-        XR_KIND_ERROR);
+    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(iso, "http", "__NetConnStorage")->kind,
+                  XR_KIND_ERROR);
 
     /* ws is a pure-script module: its entire connection layer (WsConn,
      * connect, send/recv, serve) lives in stdlib/ws/ws.xr, so ws exposes no
@@ -225,6 +223,37 @@ TEST(native_direct_member_resolves_private_page_alloc_leaf) {
     ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 2));
 }
 
+TEST(native_direct_fresh_net_results_publish_exact_provider_abi) {
+    const XrStdlibDefEntry *udp_bind =
+        xr_stdlib_metadata_exact_native_direct_member("net", "__udpBind", 2);
+    const XrStdlibDefEntry *multicast =
+        xr_stdlib_metadata_exact_native_direct_member("net", "__udpMulticastBind", 4);
+
+    ASSERT_NOT_NULL(udp_bind);
+    ASSERT_NOT_NULL(multicast);
+    ASSERT_STR_EQ(udp_bind->return_ownership, "fresh");
+    ASSERT_STR_EQ(multicast->return_ownership, "fresh");
+    ASSERT_STR_EQ(udp_bind->arg_spec, "vv");
+    ASSERT_STR_EQ(multicast->arg_spec, "vvvv");
+    const XrStdlibNativeClassDefEntry *storage =
+        xr_stdlib_metadata_fresh_result_native_class(multicast);
+    ASSERT_NOT_NULL(storage);
+    ASSERT_STR_EQ(storage->module, "net");
+    ASSERT_STR_EQ(storage->name, "__NetConnStorage");
+    ASSERT_STR_EQ(storage->builtin_kind, "XR_BK_NET_CONN_STORAGE");
+    ASSERT_TRUE(xr_stdlib_metadata_unique_native_class_span("net", 3, "__NetConnStorage", 16) ==
+                storage);
+    ASSERT_NULL(xr_stdlib_metadata_unique_native_class_span("http", 4, "__NetConnStorage", 16));
+
+    XrFingerprint identity;
+    XrFingerprint mutated_identity;
+    xr_stdlib_metadata_native_class_fingerprint(storage, &identity);
+    XrStdlibNativeClassDefEntry mutation = *storage;
+    mutation.builtin_kind = "XR_BK_NET_LISTENER_STORAGE";
+    xr_stdlib_metadata_native_class_fingerprint(&mutation, &mutated_identity);
+    ASSERT_FALSE(xr_fingerprint_equal(identity, mutated_identity));
+}
+
 TEST(native_direct_member_identity_rejects_duplicate_tuple) {
     const XrStdlibDefEntry entries[] = {
         {.module = "fixture", .name = "call", .argc = 1},
@@ -247,5 +276,6 @@ RUN_TEST(native_receiver_alias_contracts_are_typed_data);
 RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
 RUN_TEST(native_module_object_and_enum_metadata);
 RUN_TEST(native_direct_member_resolves_private_page_alloc_leaf);
+RUN_TEST(native_direct_fresh_net_results_publish_exact_provider_abi);
 RUN_TEST(native_direct_member_identity_rejects_duplicate_tuple);
 TEST_MAIN_END()
