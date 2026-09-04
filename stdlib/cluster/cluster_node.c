@@ -93,9 +93,19 @@ void cluster_node_release(XrClusterNode *node) {
     }
 }
 
-/* ========== Writer Coroutine ========== */
+/* ========== Opaque Peer Transport Coroutines ========== */
+
+typedef enum XrPeerTransportLane {
+    XR_PEER_TRANSPORT_WRITER,
+    XR_PEER_TRANSPORT_READER,
+} XrPeerTransportLane;
+
+typedef struct XrPeerTransportContext {
+    XrPeerTransportLane lane;
+} XrPeerTransportContext;
 
 typedef struct XrWriterContext {
+    XrPeerTransportContext transport;
     struct XrCluster *cluster;
     XrClusterNode *node;
     XrClusterOutputBatch *frames;
@@ -106,112 +116,8 @@ typedef struct XrWriterContext {
     bool event_pending;
 } XrWriterContext;
 
-static void cluster_writer_context_destroy(void *context) {
-    XrWriterContext *ctx = (XrWriterContext *) context;
-    if (!ctx)
-        return;
-    xr_cluster_output_batch_drop(ctx->node->outq, ctx->frames);
-    if (ctx->event_pending)
-        cluster_node_shutdown(ctx->node);
-    xr_rc_release_value(ctx->handler_owner_heap, ctx->outbound_handler);
-    atomic_store(&ctx->node->writer_running, false);
-    atomic_store(&ctx->node->writer_exited, true);
-    cluster_node_release(ctx->node);
-    cluster_runtime_release(ctx->cluster);
-    xr_free(ctx);
-}
-
-static XrCFuncResult cluster_writer_drive(XrVMRuntime *X, void *context, XrValue *result);
-
-static XrCFuncResult cluster_writer_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                             void *context, XrValue *result) {
-    (void) resume_value;
-    XrWriterContext *ctx = (XrWriterContext *) context;
-    if (ctx->event_pending)
-        return XR_CFUNC_DONE;
-    if (status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR)
-        return XR_CFUNC_DONE;
-    return cluster_writer_drive(X, context, result);
-}
-
-static XrCFuncResult cluster_writer_drive(XrVMRuntime *X, void *context, XrValue *result) {
-    XrWriterContext *ctx = (XrWriterContext *) context;
-    XrClusterNode *node = ctx ? ctx->node : NULL;
-    if (!node || !atomic_load(&node->writer_running) || node->state != XR_NODE_CONNECTED ||
-        !node->conn)
-        return XR_CFUNC_DONE;
-
-    for (int operations = 0; operations < 64; operations++) {
-        if (!ctx->frames) {
-            bool slow = xr_cluster_output_queue_is_full(node->outq);
-            ctx->frames = xr_cluster_output_queue_take_all(node->outq);
-            if (slow) {
-                atomic_fetch_add(&node->metrics.slow_consumer_events, 1);
-                ctx->event_status = 1;
-                ctx->event_pending = true;
-                return xr_call_closure(X, xr_value_to_closure(ctx->outbound_handler), NULL, 0,
-                                       cluster_writer_continue, ctx, result);
-            }
-        }
-
-        if (!ctx->frames) {
-            uint8_t drain[64];
-            int notify_fd = xr_cluster_output_queue_notify_fd(node->outq);
-            XrIOTryResult read_result =
-                xr_socket_read_try(X, notify_fd, (char *) drain, sizeof(drain));
-            if (!read_result.ready) {
-                return xr_yield_for_io(X, notify_fd, XR_WAIT_READ, -1, cluster_writer_continue, ctx,
-                                       result);
-            }
-            if (read_result.error != 0 || read_result.value == 0)
-                goto dispatch_closed;
-            continue;
-        }
-
-        uint32_t frame_length = xr_cluster_output_batch_length(ctx->frames);
-        const uint8_t *frame_data = xr_cluster_output_batch_data(ctx->frames);
-        int wait_events = XR_WAIT_WRITE;
-        int n = xr_io_conn_write_try(node->conn, frame_data + ctx->offset,
-                                     (size_t) frame_length - ctx->offset, &wait_events);
-        if (n == -1) {
-            return xr_yield_for_io(X, node->conn->fd, wait_events, -1, cluster_writer_continue, ctx,
-                                   result);
-        }
-        if (n <= 0) {
-            atomic_fetch_add(&node->metrics.send_errors, 1);
-            goto dispatch_closed;
-        }
-
-        ctx->offset += (size_t) n;
-        atomic_fetch_add(&node->metrics.bytes_sent, (uint64_t) n);
-        if (ctx->offset == frame_length) {
-            ctx->offset = 0;
-            xr_cluster_output_batch_consume(node->outq, &ctx->frames);
-            atomic_fetch_add(&node->metrics.frames_sent, 1);
-        }
-    }
-
-    return xr_yield(X, cluster_writer_continue, ctx);
-
-dispatch_closed:
-    ctx->event_status = 2;
-    ctx->event_pending = true;
-    return xr_call_closure(X, xr_value_to_closure(ctx->outbound_handler), NULL, 0,
-                           cluster_writer_continue, ctx, result);
-}
-
-/*
- * Frame-processing reader coroutine.
- *
- * Ownership contract:
- *   - cluster_process_node owns disconnect cleanup once it starts:
- *     it removes the node, fires monitors, stops the writer, and frees
- *     the XrClusterNode.
- *   - The reader loop must therefore not dereference node after
- *     cluster_process_node returns. That includes reader_running; the
- *     frame loop clears it immediately before teardown.
- */
 typedef struct XrReaderContext {
+    XrPeerTransportContext transport;
     struct XrCluster *cluster;
     XrClusterNode *node;
     uint8_t header[XR_FRAME_HEADER_SIZE + 1];
@@ -229,10 +135,34 @@ typedef struct XrReaderContext {
     bool event_pending;
 } XrReaderContext;
 
-static void cluster_reader_context_destroy(void *context) {
-    XrReaderContext *ctx = (XrReaderContext *) context;
-    if (!ctx)
+static XrCFuncResult cluster_writer_drive(XrVMRuntime *X, void *context, XrValue *result);
+static XrCFuncResult cluster_reader_drive(XrVMRuntime *X, void *context, XrValue *result);
+
+/*
+ * Both lanes are one opaque transport resource from the scheduler's point of
+ * view. Xray owns what a delivered event means; this destructor only releases
+ * the socket/queue/callback state retained by that resource.
+ */
+static void cluster_transport_context_destroy(void *context) {
+    XrPeerTransportContext *transport = (XrPeerTransportContext *) context;
+    if (!transport)
         return;
+
+    if (transport->lane == XR_PEER_TRANSPORT_WRITER) {
+        XrWriterContext *ctx = (XrWriterContext *) context;
+        xr_cluster_output_batch_drop(ctx->node->outq, ctx->frames);
+        if (ctx->event_pending)
+            cluster_node_shutdown(ctx->node);
+        xr_rc_release_value(ctx->handler_owner_heap, ctx->outbound_handler);
+        atomic_store(&ctx->node->writer_running, false);
+        atomic_store(&ctx->node->writer_exited, true);
+        cluster_node_release(ctx->node);
+        cluster_runtime_release(ctx->cluster);
+        xr_free(ctx);
+        return;
+    }
+
+    XrReaderContext *ctx = (XrReaderContext *) context;
     if (cluster_node_remove(ctx->cluster, ctx->node)) {
         if (atomic_load(&ctx->cluster->running))
             xr_monitor_registry_notify_node(ctx->cluster->monitors, ctx->cluster->isolate,
@@ -252,11 +182,20 @@ static void cluster_reader_context_destroy(void *context) {
     xr_free(ctx);
 }
 
-static XrCFuncResult cluster_reader_drive(XrVMRuntime *X, void *context, XrValue *result);
-
-static XrCFuncResult cluster_reader_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                             void *context, XrValue *result) {
+static XrCFuncResult cluster_transport_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                                void *context, XrValue *result) {
     (void) resume_value;
+    XrPeerTransportContext *transport = (XrPeerTransportContext *) context;
+    if (!transport)
+        return XR_CFUNC_DONE;
+
+    if (transport->lane == XR_PEER_TRANSPORT_WRITER) {
+        XrWriterContext *ctx = (XrWriterContext *) context;
+        if (ctx->event_pending || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR)
+            return XR_CFUNC_DONE;
+        return cluster_writer_drive(X, ctx, result);
+    }
+
     XrReaderContext *ctx = (XrReaderContext *) context;
     if (ctx->event_pending) {
         int64_t event_status = ctx->event_status;
@@ -283,6 +222,83 @@ static XrCFuncResult cluster_reader_continue(XrVMRuntime *X, int status, XrValue
     return cluster_reader_drive(X, ctx, result);
 }
 
+static XrCFuncResult cluster_writer_drive(XrVMRuntime *X, void *context, XrValue *result) {
+    XrWriterContext *ctx = (XrWriterContext *) context;
+    XrClusterNode *node = ctx ? ctx->node : NULL;
+    if (!node || !atomic_load(&node->writer_running) || node->state != XR_NODE_CONNECTED ||
+        !node->conn)
+        return XR_CFUNC_DONE;
+
+    for (int operations = 0; operations < 64; operations++) {
+        if (!ctx->frames) {
+            bool slow = xr_cluster_output_queue_is_full(node->outq);
+            ctx->frames = xr_cluster_output_queue_take_all(node->outq);
+            if (slow) {
+                atomic_fetch_add(&node->metrics.slow_consumer_events, 1);
+                ctx->event_status = 1;
+                ctx->event_pending = true;
+                return xr_call_closure(X, xr_value_to_closure(ctx->outbound_handler), NULL, 0,
+                                       cluster_transport_continue, ctx, result);
+            }
+        }
+
+        if (!ctx->frames) {
+            uint8_t drain[64];
+            int notify_fd = xr_cluster_output_queue_notify_fd(node->outq);
+            XrIOTryResult read_result =
+                xr_socket_read_try(X, notify_fd, (char *) drain, sizeof(drain));
+            if (!read_result.ready) {
+                return xr_yield_for_io(X, notify_fd, XR_WAIT_READ, -1,
+                                       cluster_transport_continue, ctx, result);
+            }
+            if (read_result.error != 0 || read_result.value == 0)
+                goto dispatch_closed;
+            continue;
+        }
+
+        uint32_t frame_length = xr_cluster_output_batch_length(ctx->frames);
+        const uint8_t *frame_data = xr_cluster_output_batch_data(ctx->frames);
+        int wait_events = XR_WAIT_WRITE;
+        int n = xr_io_conn_write_try(node->conn, frame_data + ctx->offset,
+                                     (size_t) frame_length - ctx->offset, &wait_events);
+        if (n == -1) {
+            return xr_yield_for_io(X, node->conn->fd, wait_events, -1,
+                                   cluster_transport_continue, ctx, result);
+        }
+        if (n <= 0) {
+            atomic_fetch_add(&node->metrics.send_errors, 1);
+            goto dispatch_closed;
+        }
+
+        ctx->offset += (size_t) n;
+        atomic_fetch_add(&node->metrics.bytes_sent, (uint64_t) n);
+        if (ctx->offset == frame_length) {
+            ctx->offset = 0;
+            xr_cluster_output_batch_consume(node->outq, &ctx->frames);
+            atomic_fetch_add(&node->metrics.frames_sent, 1);
+        }
+    }
+
+    return xr_yield(X, cluster_transport_continue, ctx);
+
+dispatch_closed:
+    ctx->event_status = 2;
+    ctx->event_pending = true;
+    return xr_call_closure(X, xr_value_to_closure(ctx->outbound_handler), NULL, 0,
+                           cluster_transport_continue, ctx, result);
+}
+
+/*
+ * Frame-processing reader coroutine.
+ *
+ * Ownership contract:
+ *   - cluster_process_node owns disconnect cleanup once it starts:
+ *     it removes the node, fires monitors, stops the writer, and frees
+ *     the XrClusterNode.
+ *   - The reader loop must therefore not dereference node after
+ *     cluster_process_node returns. That includes reader_running; the
+ *     frame loop clears it immediately before teardown.
+ */
 static XrCFuncResult cluster_reader_drive(XrVMRuntime *X, void *context, XrValue *result) {
     XrReaderContext *ctx = (XrReaderContext *) context;
     if (!ctx || !atomic_load(&ctx->cluster->running) || ctx->node->state != XR_NODE_CONNECTED ||
@@ -303,8 +319,8 @@ static XrCFuncResult cluster_reader_drive(XrVMRuntime *X, void *context, XrValue
         int wait_events = XR_WAIT_READ;
         int n = xr_io_conn_read_try(ctx->node->conn, target, remaining, &wait_events);
         if (n == -1) {
-            return xr_yield_for_io(X, ctx->node->conn->fd, wait_events, -1, cluster_reader_continue,
-                                   ctx, result);
+            return xr_yield_for_io(X, ctx->node->conn->fd, wait_events, -1,
+                                   cluster_transport_continue, ctx, result);
         }
         if (n <= 0) {
             goto dispatch_closed;
@@ -347,17 +363,17 @@ static XrCFuncResult cluster_reader_drive(XrVMRuntime *X, void *context, XrValue
         ctx->event_status = 0;
         ctx->event_pending = true;
         return xr_call_closure(X, xr_value_to_closure(ctx->inbound_handler), NULL, 0,
-                               cluster_reader_continue, ctx, result);
+                               cluster_transport_continue, ctx, result);
     }
 
-    return xr_yield(X, cluster_reader_continue, ctx);
+    return xr_yield(X, cluster_transport_continue, ctx);
 
 dispatch_closed:
     ctx->received_at_ms = (int64_t) xr_time_monotonic_ms();
     ctx->event_status = 1;
     ctx->event_pending = true;
     return xr_call_closure(X, xr_value_to_closure(ctx->inbound_handler), NULL, 0,
-                           cluster_reader_continue, ctx, result);
+                           cluster_transport_continue, ctx, result);
 }
 
 XrValue cluster_take_inbound_frame_fn(XrVMRuntime *isolate, XrValue *args, int argc) {
@@ -417,11 +433,13 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrVal
         atomic_store(&node->reader_running, false);
         return false;
     }
+    writer_ctx->transport.lane = XR_PEER_TRANSPORT_WRITER;
     writer_ctx->cluster = cluster;
     writer_ctx->node = node;
     writer_ctx->outbound_handler = outbound_handler;
     writer_ctx->handler_owner_heap = xr_current_coro_heap();
     xr_rc_retain_value(writer_ctx->outbound_handler);
+    reader_ctx->transport.lane = XR_PEER_TRANSPORT_READER;
     reader_ctx->cluster = cluster;
     reader_ctx->node = node;
     reader_ctx->inbound_handler = inbound_handler;
@@ -435,7 +453,7 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrVal
     cluster_runtime_retain(cluster);
     XrCoroutine *writer = xr_coro_create_vm_cfunc(
         cluster->isolate, cluster_writer_drive, writer_ctx,
-        (XrCoroContextDestroy) cluster_writer_context_destroy, "cluster_writer");
+        (XrCoroContextDestroy) cluster_transport_context_destroy, "cluster_writer");
     if (!writer) {
         atomic_store(&node->reader_running, false);
         xr_rc_release_value(reader_ctx->handler_owner_heap, reader_ctx->inbound_handler);
@@ -447,7 +465,7 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrVal
     cluster_runtime_retain(cluster);
     XrCoroutine *reader = xr_coro_create_vm_cfunc(
         cluster->isolate, cluster_reader_drive, reader_ctx,
-        (XrCoroContextDestroy) cluster_reader_context_destroy, "cluster_reader");
+        (XrCoroContextDestroy) cluster_transport_context_destroy, "cluster_reader");
     if (!reader) {
         xr_coro_destroy(writer);
         return false;
