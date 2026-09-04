@@ -89,6 +89,7 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
     }
     memset(cls, 0, sizeof(XrClass));
     xr_obj_header_init_type(&cls->hdr, XR_TCLASS);
+    cls->source_provider_field_index = -1;
 
     finalize_basic_and_supers(builder, cls);
 

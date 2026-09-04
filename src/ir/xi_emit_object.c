@@ -1677,6 +1677,10 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     desc->super_global_index = -1;
     desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
     desc->clinit_proto_index = -1;
+    desc->source_provider_field_ordinal =
+        cdata->source_provider_field_index >= 0
+            ? (uint16_t) (cdata->source_provider_field_index + 1)
+            : 0;
     if (cd->explicit_final)
         desc->flags |= XR_CLASS_FINAL;
     desc->flags |=

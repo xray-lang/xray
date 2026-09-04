@@ -58,6 +58,17 @@ XrValue xr_instance_get_field(XrVMRuntime *X, XrObjectInstance *inst, const char
     return inst->fields[index];
 }
 
+XrValue xr_instance_source_provider_storage(XrValue wrapper) {
+    if (!XR_IS_INSTANCE(wrapper))
+        return xr_null();
+    XrObjectInstance *inst = XR_TO_INSTANCE(wrapper);
+    XrClass *klass = inst ? inst->klass : NULL;
+    int index = klass ? klass->source_provider_field_index : -1;
+    if (index < 0 || index >= xr_class_instance_field_count(klass))
+        return xr_null();
+    return inst->fields[index];
+}
+
 void xr_instance_set_field(XrVMRuntime *X, XrObjectInstance *inst, const char *name, XrValue value) {
     if (!X || !inst || !name)
         return;

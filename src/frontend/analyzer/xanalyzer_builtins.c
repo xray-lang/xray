@@ -1012,6 +1012,30 @@ static const XaBuiltinClass *xa_builtin_find_class_by_name(const char *class_nam
     return NULL;
 }
 
+static const XaBuiltinClass *
+xa_builtin_find_source_provider_bridge_n(const char *module_name, const char *source_wrapper,
+                                         size_t source_wrapper_len) {
+    const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
+    if (!mod || !source_wrapper)
+        return NULL;
+    for (int i = 0; i < mod->class_count; i++) {
+        const XaBuiltinClass *candidate = &mod->classes[i];
+        if (candidate->source_wrapper && candidate->source_wrapper[0] &&
+            strlen(candidate->source_wrapper) == source_wrapper_len &&
+            memcmp(candidate->source_wrapper, source_wrapper, source_wrapper_len) == 0)
+            return candidate;
+    }
+    return NULL;
+}
+
+const XaBuiltinClass *xa_builtin_find_source_provider_bridge(const char *module_name,
+                                                             const char *source_wrapper) {
+    return source_wrapper
+               ? xa_builtin_find_source_provider_bridge_n(module_name, source_wrapper,
+                                                          strlen(source_wrapper))
+               : NULL;
+}
+
 XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
                                           const XaBuiltinObjectShape *object_shape) {
     if (!object_shape || object_shape->field_count < 0 ||
@@ -1208,7 +1232,7 @@ const char *xa_builtin_get_type_name(XrType *type) {
 }
 
 // Parse a type string (e.g., "i64", "string?", "Array<i64>") to XrType
-static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len);
+static XrType *parse_type_str(XrVMRuntime *X, const char *module_name, const char *s, size_t len);
 
 // Helper for parse_type_str: when s starts with '(' return the byte index
 // just past the matching ')' at depth 0; otherwise len. If the slice past
@@ -1259,13 +1283,18 @@ static inline bool has_arrow_after_paren(const char *s, size_t len) {
 // of a NUL-terminated string, so it composes safely inside nested type
 // expressions (e.g. the first parameter of Array<T>.reduce, which is
 // itself a function type "fn(acc: U, item: T): U").
-static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len);
+static XrType *parse_fn_type_str(XrVMRuntime *X, const char *module_name, const char *s, size_t len);
 
 // Public wrapper with NUL-terminated string.
 XrType *xa_builtin_parse_type_string(XrVMRuntime *X, const char *s) {
+    return xa_builtin_parse_type_string_for_module(X, NULL, s);
+}
+
+XrType *xa_builtin_parse_type_string_for_module(XrVMRuntime *X, const char *module_name,
+                                                const char *s) {
     if (!s)
         return xr_type_new_error(X);
-    return parse_type_str(X, s, strlen(s));
+    return parse_type_str(X, module_name, s, strlen(s));
 }
 
 // Helper: skip leading whitespace.
@@ -1302,7 +1331,7 @@ static size_t parse_type_find_top_pipe(const char *s, size_t len, size_t from) {
     return len;
 }
 
-static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
+static XrType *parse_type_str(XrVMRuntime *X, const char *module_name, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_type_new_error(X);
 
@@ -1311,7 +1340,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     s += start;
     len = end - start;
     if (len >= 6 && strncmp(s, "const ", 6) == 0) {
-        XrType *inner = parse_type_str(X, s + 6, len - 6);
+        XrType *inner = parse_type_str(X, module_name, s + 6, len - 6);
         return inner ? xr_type_make_const(X, inner) : xr_type_new_error(X);
     }
 
@@ -1331,7 +1360,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
             size_t mstart = parse_type_skip_ws(s, len, start);
             size_t mend = parse_type_trim_right(s, mstart, pipe);
             if (mend > mstart) {
-                XrType *m = parse_type_str(X, s + mstart, mend - mstart);
+                XrType *m = parse_type_str(X, module_name, s + mstart, mend - mstart);
                 if (m)
                     members[count++] = m;
             }
@@ -1425,12 +1454,12 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         // Array<ElemType>: parse inner type between '<' and last '>'
         const char *inner = s + 6;
         size_t inner_len = base_len - 7;  // strip "Array<" and ">"
-        type = xr_type_new_array(X, parse_type_str(X, inner, inner_len));
+        type = xr_type_new_array(X, parse_type_str(X, module_name, inner, inner_len));
     } else if (base_len >= strlen(TYPE_NAME_SLICE) + 2 &&
                strncmp(s, TYPE_NAME_SLICE "<", strlen(TYPE_NAME_SLICE) + 1) == 0) {
         const char *inner = s + strlen(TYPE_NAME_SLICE) + 1;
         size_t inner_len = base_len - strlen(TYPE_NAME_SLICE) - 2;
-        type = xr_type_new_slice(X, parse_type_str(X, inner, inner_len));
+        type = xr_type_new_slice(X, parse_type_str(X, module_name, inner, inner_len));
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_MAP "<", 4) == 0) {
         // Map<K, V>: find comma separator at depth 0
         const char *inner = s + 4;
@@ -1454,18 +1483,19 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                 vstart++;
             size_t vlen = inner_len - (vstart - inner);
             type =
-                xr_type_new_map(X, parse_type_str(X, inner, klen), parse_type_str(X, vstart, vlen));
+                xr_type_new_map(X, parse_type_str(X, module_name, inner, klen),
+                                parse_type_str(X, module_name, vstart, vlen));
         } else {
             type = xr_type_new_error(X);
         }
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_SET "<", 4) == 0) {
         const char *inner = s + 4;
         size_t inner_len = base_len - 5;
-        type = xr_type_new_set(X, parse_type_str(X, inner, inner_len));
+        type = xr_type_new_set(X, parse_type_str(X, module_name, inner, inner_len));
     } else if (base_len >= 8 && strncmp(s, "Channel<", 8) == 0) {
         const char *inner = s + 8;
         size_t inner_len = base_len - 9;
-        type = xr_type_new_channel(X, parse_type_str(X, inner, inner_len));
+        type = xr_type_new_channel(X, parse_type_str(X, module_name, inner, inner_len));
     } else if (base_len >= 4 && s[base_len - 1] == '>') {
         const char *lt = NULL;
         int depth = 0;
@@ -1507,7 +1537,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                         break;
                     e++;
                 }
-                args[argc++] = parse_type_str(X, inner + p, e - p);
+                args[argc++] = parse_type_str(X, module_name, inner + p, e - p);
                 p = e;
             }
 
@@ -1534,7 +1564,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     } else if (base_len >= 3 && strncmp(s, "fn", 2) == 0 && (s[2] == '(' || s[2] == ' ')) {
         // fn(p: T, ...): R — legacy function type literal accepted for older
         // declaration metadata.
-        type = parse_fn_type_str(X, s, base_len);
+        type = parse_fn_type_str(X, module_name, s, base_len);
     } else if (base_len >= 2 && s[0] == '(' &&
                /* (p: T, ...) -> R — current-syntax function type literal.
                 * The helper peeks past the matching `)` for ` -> ` so a
@@ -1574,7 +1604,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                 off += ret_len;
             }
             synth[off] = '\0';
-            type = parse_fn_type_str(X, synth, off);
+            type = parse_fn_type_str(X, module_name, synth, off);
             xr_free(synth);
         } else {
             type = xr_type_new_error(X);
@@ -1608,7 +1638,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                     break;
                 e++;
             }
-            elems[count++] = parse_type_str(X, inner + p, e - p);
+            elems[count++] = parse_type_str(X, module_name, inner + p, e - p);
             p = e;
         }
         if (count > 0)
@@ -1620,13 +1650,31 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         char name[2] = {s[0], '\0'};
         type = xr_type_new_type_param(X, name, s[0] - 'A');
     } else {
+        /* A source provider wrapper is nameable only while parsing a private
+         * leaf signature owned by its declaring stdlib module.  It is not a
+         * prelude type and never enters the native-class registry. */
+        const XaBuiltinClass *provider =
+            module_name
+                ? xa_builtin_find_source_provider_bridge_n(module_name, s, base_len)
+                : NULL;
+        if (provider) {
+            type = xr_type_new_instance(X, NULL);
+            if (type) {
+                /* Generated builtin metadata is a process-lifetime static
+                 * table whose strings are C literals. XrType borrows nominal
+                 * names, so this pointer remains valid for every analyzer and
+                 * emitted semantic snapshot that can retain the type. */
+                type->instance.class_name = provider->source_wrapper;
+            }
+        }
+
         // Last resort: consult the prelude registry. SIMPLE entries
         // (BigInt, Logger, NetConn, NetListener, Range,
         // StringBuilder) all surface here as named instances so that
         // typed cfunc signatures like "(): NetConn?" round-trip
         // through the analyzer. Generic / singleton kinds were already
         // handled by the dedicated branches above.
-        if (X) {
+        if (!type && X) {
             const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
             if (symbols) {
                 const XrPreludeTypeEntry *entry = xr_prelude_lookup_type(symbols, s, base_len);
@@ -1685,7 +1733,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
 // Parse a "fn(p: T, ...): R" function type literal from a bounded slice.
 // Operates on [s, s+len) so it can be used recursively inside larger type
 // expressions where the inner fn is not NUL-terminated.
-static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
+static XrType *parse_fn_type_str(XrVMRuntime *X, const char *module_name, const char *s,
+                                 size_t len) {
     XR_DCHECK(s != NULL, "parse_fn_type_str: NULL s");
     // Skip "fn" prefix and any spaces before '('.
     size_t i = 2;
@@ -1790,7 +1839,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
                 te++;
             }
 
-            param_types[param_count] = parse_type_str(X, s + ts, te - ts);
+            param_types[param_count] = parse_type_str(X, module_name, s + ts, te - ts);
             param_modes[param_count] = mode;
             if (!seen_optional)
                 min_params = param_count + 1;
@@ -1816,7 +1865,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
         rt++;
         while (rt < len && s[rt] == ' ')
             rt++;
-        ret_type = parse_type_str(X, s + rt, len - rt);
+        ret_type = parse_type_str(X, module_name, s + rt, len - rt);
     } else {
         ret_type = xr_type_new_unit(NULL);
     }
@@ -1842,6 +1891,14 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
 // Parse full function signature: "(param: type, param2: type): ReturnType"
 // Returns a complete function type with parameter types
 XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
+    return xa_builtin_parse_full_signature_for_module(X, NULL, sig);
+}
+
+static XrType *parse_return_type_from_sig_for_module(XrVMRuntime *X, const char *module_name,
+                                                      const char *sig);
+
+XrType *xa_builtin_parse_full_signature_for_module(XrVMRuntime *X, const char *module_name,
+                                                   const char *sig) {
     if (!sig)
         return xr_type_new_function(X, NULL, 0, xr_type_new_error(X), false);
 
@@ -1867,7 +1924,7 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
     }
     if (!close || close <= open) {
         // Empty params "()"
-        XrType *ret_type = xa_builtin_parse_return_type_from_sig(X, sig);
+        XrType *ret_type = parse_return_type_from_sig_for_module(X, module_name, sig);
         return xr_type_new_function(X, NULL, 0, ret_type ? ret_type : xr_type_new_unit(NULL),
                                     false);
     }
@@ -1960,7 +2017,8 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
                 type_end++;
             }
 
-            param_types[param_count] = parse_type_str(X, type_start, type_end - type_start);
+            param_types[param_count] =
+                parse_type_str(X, module_name, type_start, type_end - type_start);
             param_modes[param_count] = mode;
             if (!seen_optional)
                 min_params = param_count + 1;
@@ -1980,7 +2038,7 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
     }
 
     // Parse return type
-    XrType *ret_type = xa_builtin_parse_return_type_from_sig(X, sig);
+    XrType *ret_type = parse_return_type_from_sig_for_module(X, module_name, sig);
     if (!ret_type)
         ret_type = xr_type_new_unit(NULL);
 
@@ -2010,6 +2068,11 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
 //                                       some hand-authored builtin tables)
 // Returns an XrType based on the return type portion after the separator.
 XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char *sig) {
+    return parse_return_type_from_sig_for_module(X, NULL, sig);
+}
+
+static XrType *parse_return_type_from_sig_for_module(XrVMRuntime *X, const char *module_name,
+                                                      const char *sig) {
     if (!sig)
         return NULL;
 
@@ -2034,5 +2097,5 @@ XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char *sig) {
     if (!ret || *ret == '\0')
         return xr_type_new_unit(NULL);
 
-    return parse_type_str(X, ret, strlen(ret));
+    return parse_type_str(X, module_name, ret, strlen(ret));
 }

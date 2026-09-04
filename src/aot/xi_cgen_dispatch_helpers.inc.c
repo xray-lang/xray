@@ -11646,6 +11646,40 @@ static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out
     }
     if (emit_type_names)
         fprintf(out, "    xrt_type_set_name(_tid, \"%s\", NULL);\n", name);
+    if (cd->source_provider_field_index >= 0) {
+        uint16_t field_index = (uint16_t) cd->source_provider_field_index;
+        const XrAggregateFieldLayout *field =
+            cd->instance_layout ? cg_struct_field(cd->instance_layout, field_index) : NULL;
+        const char *field_name =
+            cd->instance_layout && cd->instance_layout->field_names
+                ? cd->instance_layout->field_names[field_index]
+                : NULL;
+        const XrType *field_type =
+            field_index >= cd->inherited_field_count && cd->instance_field_types
+                ? cd->instance_field_types[field_index - cd->inherited_field_count]
+                : NULL;
+        const XiModule *provider_module = cg_class_native_module_for_data(ctx, cd);
+        const XaBuiltinClass *provider =
+            provider_module && provider_module->name
+                ? xa_builtin_find_source_provider_bridge(provider_module->name, cd->class_name)
+                : NULL;
+        if (!provider || !field || field->native_type != XR_NATIVE_VALUE || !field_name ||
+            strcmp(field_name, provider->source_storage_field) != 0 || !field_type ||
+            !XR_TYPE_IS_INSTANCE(field_type) || !field_type->instance.class_name ||
+            strcmp(field_type->instance.class_name, provider->name) != 0) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: invalid source provider layout for '%s.%s' field %u\n",
+                    provider_module && provider_module->name ? provider_module->name : "?", name,
+                    (unsigned) field_index);
+        } else {
+            fprintf(out, "    xrt_type_set_source_provider(_tid, (uint32_t)offsetof(");
+            emit_class_native_type_name(out, prefix, cd->class_name);
+            fprintf(out, ", ");
+            emit_class_native_field_path(ctx, out, cd, field_index);
+            fprintf(out, "));\n");
+        }
+    }
     if (is_mono) {
         if (origin_slot >= 0) {
             fprintf(out, "    xrt_type_set_generic_origin(_tid, (uint16_t)%s[%d].i);\n",

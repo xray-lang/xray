@@ -116,6 +116,8 @@ typedef struct XrStdlibNativeClassDefEntry {
     const char *native_body_expr;
     const char *flags;
     const char *builtin_kind;
+    const char *source_wrapper;
+    const char *source_storage_field;
 } XrStdlibNativeClassDefEntry;
 
 typedef struct XrStdlibClassDefEntry {
@@ -385,10 +387,10 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
-    {"mem", "__BufferStorage", "objectClass", "memBufferClass", "xr_buffer_native_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER"},
-    {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
-    {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
-    {"net", "__TlsContextStorage", "", "tlsContextStorageClass", "xr_tls_context_storage_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", ""},
+    {"mem", "__BufferStorage", "objectClass", "memBufferClass", "xr_buffer_native_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER", "", ""},
+    {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN", "", ""},
+    {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER", "", ""},
+    {"net", "__TlsContextStorage", "", "tlsContextStorageClass", "xr_tls_context_storage_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "", "", ""},
 };
 #define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
 

@@ -21,6 +21,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_typed_program.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"

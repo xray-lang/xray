@@ -880,6 +880,8 @@ static bool bc_write_class_descriptor(BcWriter *w, XrValue val) {
         if (!bc_write_field_descriptor(w, &desc->instance_fields[i]))
             return false;
     }
+    if (!bc_put_u16(w, desc->source_provider_field_ordinal))
+        return false;
 
     if (!bc_put_u32(w, desc->static_field_count))
         return false;
@@ -1132,6 +1134,9 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
                 return xr_null();
         }
     }
+    desc->source_provider_field_ordinal = bc_get_u16(r);
+    if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
+        return xr_null();
 
     desc->static_field_count = bc_get_u32(r);
     if (desc->static_field_count > 0) {

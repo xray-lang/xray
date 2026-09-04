@@ -745,6 +745,7 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     desc->clinit_proto_index = -1;
     desc->super_global_index = -1;
     desc->instance_field_count = 1;
+    desc->source_provider_field_ordinal = 1;
     desc->instance_fields = xr_calloc(1, sizeof(XrFieldDescriptorEntry));
     ASSERT_NOT_NULL(desc->instance_fields);
     desc->instance_fields[0].name = "value";
@@ -781,6 +782,7 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     ASSERT_EQ_INT(roundtrip_desc->super_global_index, -1);
     ASSERT_EQ_UINT(roundtrip_desc->descriptor_version, XR_CLASS_DESCRIPTOR_VERSION);
     ASSERT_EQ_UINT(roundtrip_desc->instance_field_count, 1);
+    ASSERT_EQ_UINT(roundtrip_desc->source_provider_field_ordinal, 1);
     ASSERT_STR_EQ(roundtrip_desc->instance_fields[0].name, "value");
     ASSERT_STR_EQ(roundtrip_desc->instance_fields[0].type_name, "Int");
     ASSERT_TRUE(XR_IS_INT(roundtrip_desc->instance_fields[0].default_value));

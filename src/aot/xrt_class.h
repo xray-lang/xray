@@ -110,6 +110,10 @@ typedef struct {
     XrtUserEqFn eq_fn;                   // compiled operator ==; NULL unless user-Hashable
     const XrtSymbolMethod *sym_methods;  // symbol-keyed dispatch rows (dynamic fallback)
     uint16_t sym_method_count;
+    /* Offset of the private XrValue provider field for a stdlib source
+     * wrapper, or UINT32_MAX for an ordinary class.  Only generated
+     * stdlib-internal leaf calls consult this metadata. */
+    uint32_t source_provider_offset;
 } XrtTypeInfo;
 
 typedef struct {
@@ -204,6 +208,7 @@ static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vt
     ti->eq_fn = NULL;
     ti->sym_methods = NULL;
     ti->sym_method_count = 0;
+    ti->source_provider_offset = UINT32_MAX;
     ni->name = NULL;
     ni->display_name = NULL;
     ni->mono_type_arg_names = NULL;
@@ -236,6 +241,34 @@ static inline void xrt_type_set_runtime_clone(uint16_t type_id, XrtRuntimeClone 
     if (type_id == 0 || type_id >= xrt_type_count)
         return;
     xrt_type_table[type_id].runtime_clone = clone_fn;
+}
+
+static inline void xrt_type_set_source_provider(uint16_t type_id, uint32_t field_offset) {
+    if (type_id == 0 || type_id >= xrt_type_count)
+        return;
+    XrtTypeInfo *ti = &xrt_type_table[type_id];
+    if (field_offset > ti->instance_size ||
+        ti->instance_size - field_offset < (uint32_t) sizeof(XrValue))
+        return;
+    ti->source_provider_offset = field_offset;
+}
+
+/* Project an erased source wrapper to its opaque provider storage.  Calls not
+ * marked by generated private-leaf metadata never invoke this helper, and an
+ * ordinary/non-wrapper value fails closed by returning null. */
+static inline XrValue xrt_source_provider_storage(XrValue wrapper) {
+    if (wrapper.tag != XR_TAG_PTR || wrapper.heap_type != XR_TINSTANCE || !wrapper.ptr)
+        return XR_NULL_VAL;
+    uint16_t type_id = xrt_aot_class_type_id((const XrObjHeader *) wrapper.ptr);
+    if (type_id == 0 || type_id >= xrt_type_count)
+        return XR_NULL_VAL;
+    const XrtTypeInfo *ti = &xrt_type_table[type_id];
+    if (ti->source_provider_offset == UINT32_MAX ||
+        ti->source_provider_offset > ti->instance_size ||
+        ti->instance_size - ti->source_provider_offset < (uint32_t) sizeof(XrValue))
+        return XR_NULL_VAL;
+    const uint8_t *base = (const uint8_t *) wrapper.ptr;
+    return *(const XrValue *) (base + ti->source_provider_offset);
 }
 
 /* Record a class's own hash() / operator == so the runtime keys Map/Set by

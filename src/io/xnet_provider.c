@@ -153,10 +153,14 @@ static inline bool is_listener_handle(XrValue v) {
 }
 
 static inline XrNetConn *unwrap_conn(XrValue v) {
+    if (!is_conn_handle(v))
+        v = xr_instance_source_provider_storage(v);
     return is_conn_handle(v) ? (XrNetConn *) XR_VALUE_GCPTR(v) : NULL;
 }
 
 static inline XrNetListener *unwrap_listener(XrValue v) {
+    if (!is_listener_handle(v))
+        v = xr_instance_source_provider_storage(v);
     return is_listener_handle(v) ? (XrNetListener *) XR_VALUE_GCPTR(v) : NULL;
 }
 

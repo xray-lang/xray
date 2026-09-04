@@ -283,8 +283,9 @@ static XrAggregateLayout *class_make_native_layout_from_info(XiLower *l, XrClass
     return layout;
 }
 
-static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
-                                                            uint16_t *out_inherited) {
+static XrAggregateLayout *class_make_native_instance_layout(
+    XiLower *l, ClassDeclNode *cd, const XaBuiltinClass *source_provider,
+    uint16_t *out_inherited) {
     if (!l || !l->func || !l->isolate || !cd)
         return NULL;
 
@@ -365,6 +366,14 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
             native = XR_NATIVE_MAP_REF;
         if (native < 0 && type->kind == XR_KIND_SET)
             native = XR_NATIVE_SET_REF;
+        /* A generated stdlib provider wrapper has one private nominal storage
+         * field.  It crosses the AOT object layout as an owned tagged value;
+         * stdlibgen has already proved the exact name/type/module contract. */
+        if (native < 0 && source_provider && source_provider->source_storage_field &&
+            strcmp(f->name, source_provider->source_storage_field) == 0 &&
+            XR_TYPE_IS_INSTANCE(type) && type->instance.class_name &&
+            strcmp(type->instance.class_name, source_provider->name) == 0)
+            native = XR_NATIVE_VALUE;
         /* The verified AOT class-field plan represents nominal, enum,
          * structural and nullable values as an owned tagged XrValue.  A
          * Json-derived class must use that same physical lane so recursive
@@ -893,6 +902,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->instance_field_source_node_ids = NULL;
     data->instance_field_defaults = NULL;
     data->instance_field_count = 0;
+    data->source_provider_field_index = -1;
     data->is_generic_skeleton = cd->type_param_count > 0 || cd->is_generic_skeleton;
     data->is_monomorphized = cd->is_monomorphized;
     data->needs_runtime_type = !owner_is_value_aggregate;
@@ -1000,6 +1010,10 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (cls_sym) {
             XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, cls_sym);
             XrClassInfo *class_info = links ? links->class_info : NULL;
+            const XaBuiltinClass *source_provider =
+                links && links->module_name
+                    ? xa_builtin_find_source_provider_bridge(links->module_name, cd->name)
+                    : NULL;
             data->class_info = class_info;
             /* The AST type reference preserves the spelling but can still be
              * an unresolved nominal instance (class_ref == NULL).  Json AOT
@@ -1031,8 +1045,33 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 }
             }
             if (class_info && !class_info->struct_layout)
-                data->instance_layout =
-                    class_make_native_instance_layout(l, cd, &data->inherited_field_count);
+                data->instance_layout = class_make_native_instance_layout(
+                    l, cd, source_provider, &data->inherited_field_count);
+            if (source_provider) {
+                int provider_field = -1;
+                for (uint16_t field_index = 0; field_index < data->instance_field_count;
+                     field_index++) {
+                    const char *field_name = data->instance_field_names[field_index];
+                    XrType *field_type = data->instance_field_types[field_index];
+                    if (!field_name ||
+                        strcmp(field_name, source_provider->source_storage_field) != 0)
+                        continue;
+                    if (!field_type || !XR_TYPE_IS_INSTANCE(field_type) ||
+                        !field_type->instance.class_name ||
+                        strcmp(field_type->instance.class_name, source_provider->name) != 0) {
+                        l->had_error = true;
+                        return;
+                    }
+                    provider_field = (int) data->inherited_field_count + field_index;
+                }
+                if (provider_field < 0 || !data->instance_layout ||
+                    provider_field >= data->instance_layout->field_count ||
+                    data->instance_layout->fields[provider_field].native_type != XR_NATIVE_VALUE) {
+                    l->had_error = true;
+                    return;
+                }
+                data->source_provider_field_index = (int16_t) provider_field;
+            }
             if (links && links->type && links->type->is_cycle_candidate)
                 data->is_cycle_candidate = true;
         }

@@ -934,6 +934,10 @@ typedef struct XiClassData {
     uint32_t *instance_field_source_node_ids; /* evidence-stable IDs parallel to field names */
     XiFieldDefault *instance_field_defaults;  /* declaration defaults parallel to field names */
     uint16_t instance_field_count;
+    /* Exact flattened field index for a generated stdlib source/provider
+     * bridge, or -1.  Both VM descriptors and AOT offsetof metadata consume
+     * this compile-time proof; neither backend performs name lookup. */
+    int16_t source_provider_field_index;
     XiClassMethod *methods;   /* arena array [nmethod] of method descriptors */
     uint16_t nmethod;         /* total method count (instance + static) */
     uint16_t *child_idx;      /* maps method order → XiFunc::children index */

@@ -73,6 +73,9 @@ typedef struct XrClassDescriptor {
     /* ========== Fields ========== */
     XrFieldDescriptorEntry *instance_fields;
     uint32_t instance_field_count;
+    /* One-based flattened instance-field ordinal for a generated stdlib
+     * source/provider bridge. Zero means ordinary class. */
+    uint16_t source_provider_field_ordinal;
 
     XrFieldDescriptorEntry *static_fields;
     uint32_t static_field_count;
@@ -99,7 +102,7 @@ typedef struct XrClassDescriptor {
     uint32_t checksum;
 } XrClassDescriptor;
 
-#define XR_CLASS_DESCRIPTOR_VERSION 1
+#define XR_CLASS_DESCRIPTOR_VERSION 2
 
 /* ========== Helper Functions ========== */
 

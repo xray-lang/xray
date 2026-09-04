@@ -177,7 +177,7 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 #define GEN_MATH_FUNCTION_COUNT 28
 
 static const XaBuiltinClass g_gen_mem_classes[] = {
-    {"__BufferStorage", true},
+    {"__BufferStorage", true, "", ""},
 };
 #define GEN_MEM_CLASS_COUNT 1
 
@@ -205,9 +205,9 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
 #define GEN_MEM_FUNCTION_COUNT 18
 
 static const XaBuiltinClass g_gen_net_classes[] = {
-    {"NetConn", true},
-    {"NetListener", true},
-    {"__TlsContextStorage", true},
+    {"NetConn", true, "", ""},
+    {"NetListener", true, "", ""},
+    {"__TlsContextStorage", true, "", ""},
 };
 #define GEN_NET_CLASS_COUNT 3
 

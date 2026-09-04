@@ -467,6 +467,8 @@ class StdlibNativeClassEntry:
     flags: str
     builtin_kind: str
     visibility: str
+    source_wrapper: str
+    source_storage_field: str
 
     @property
     def symbol(self) -> str:
@@ -615,6 +617,38 @@ def parse_function_signature_shape(signature: str) -> tuple[list[str], str]:
     return split_top_level_csv(signature[1:close]), tail[1:].strip()
 
 
+def function_parameter_type(fragment: str, context: str) -> str:
+    """Return the exact top-level type spelling for one signature parameter."""
+    depth = 0
+    colon = -1
+    for index, char in enumerate(fragment):
+        if char in "<([":
+            depth += 1
+        elif char in ">)]":
+            depth = max(depth - 1, 0)
+        elif char == ":" and depth == 0:
+            colon = index
+            break
+    if colon < 0:
+        raise ValueError(f"{context}: parameter has no top-level type separator: {fragment!r}")
+
+    type_text = fragment[colon + 1 :].strip()
+    depth = 0
+    default = len(type_text)
+    for index, char in enumerate(type_text):
+        if char in "<([":
+            depth += 1
+        elif char in ">)]":
+            depth = max(depth - 1, 0)
+        elif char == "=" and depth == 0:
+            default = index
+            break
+    type_text = type_text[:default].strip()
+    if not type_text:
+        raise ValueError(f"{context}: parameter has an empty type: {fragment!r}")
+    return type_text
+
+
 _NON_RC_RETURN_RE = re.compile(
     r"^(?:\(\)|unit|bool|rune|i(?:8|16|32|64)|u(?:8|16|32|64)|f(?:32|64)|isize|usize)(?:\?)?$"
 )
@@ -722,6 +756,193 @@ def matching_source_brace(text: str, open_index: int, context: str) -> int:
 
 def source_line(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
+
+
+def source_top_level_lines(body: str) -> list[tuple[int, str]]:
+    """Return source lines that begin at class-body depth zero.
+
+    This small lexer is sufficient to distinguish fields from constructor and
+    method bodies without teaching stdlibgen the whole Xray grammar. Braces
+    and comment markers inside strings are ignored.
+    """
+    result: list[tuple[int, str]] = []
+    depth = 0
+    in_string = False
+    escaped = False
+    in_line_comment = False
+    line_no = 1
+    line_start_depth = 0
+    line: list[str] = []
+    index = 0
+    while index < len(body):
+        ch = body[index]
+        next_ch = body[index + 1] if index + 1 < len(body) else ""
+        if in_line_comment:
+            if ch == "\n":
+                if line_start_depth == 0:
+                    stripped = "".join(line).strip()
+                    if stripped:
+                        result.append((line_no, stripped))
+                line = []
+                line_no += 1
+                line_start_depth = depth
+                in_line_comment = False
+            index += 1
+            continue
+        if not in_string and ch == "/" and next_ch == "/":
+            in_line_comment = True
+            index += 2
+            continue
+        if escaped:
+            escaped = False
+        elif in_string and ch == "\\":
+            escaped = True
+        elif ch == '"':
+            in_string = not in_string
+        elif not in_string and ch == "{":
+            depth += 1
+        elif not in_string and ch == "}":
+            depth -= 1
+        if ch == "\n":
+            if line_start_depth == 0:
+                stripped = "".join(line).strip()
+                if stripped:
+                    result.append((line_no, stripped))
+            line = []
+            line_no += 1
+            line_start_depth = depth
+        else:
+            line.append(ch)
+        index += 1
+    if line_start_depth == 0:
+        stripped = "".join(line).strip()
+        if stripped:
+            result.append((line_no, stripped))
+    return result
+
+
+def validate_source_provider_bridges(
+    root: Path,
+    entries: list[StdlibEntry],
+    native_classes: list[StdlibNativeClassEntry],
+) -> None:
+    """Freeze module-private source-wrapper/provider bridge contracts."""
+    providers = [entry for entry in native_classes if entry.source_wrapper]
+    wrappers_by_name: dict[str, set[str]] = {}
+    providers_by_module_wrapper: dict[tuple[str, str], StdlibNativeClassEntry] = {}
+    for provider in providers:
+        wrappers_by_name.setdefault(provider.source_wrapper, set()).add(provider.module)
+        providers_by_module_wrapper[(provider.module, provider.source_wrapper)] = provider
+
+        path = root / "stdlib" / provider.module / f"{provider.module}.xr"
+        if not path.is_file():
+            raise SystemExit(f"{provider.symbol}: source provider wrapper requires {path}")
+        text = path.read_text(encoding="utf-8")
+        class_re = re.compile(
+            rf"^\s*export\s+final\s+class\s+{re.escape(provider.source_wrapper)}\s*\{{",
+            re.MULTILINE,
+        )
+        matches = list(class_re.finditer(text))
+        if len(matches) != 1:
+            raise SystemExit(
+                f"{provider.symbol}: expected exactly one exported final source class "
+                f"{provider.module}.{provider.source_wrapper}, found {len(matches)}"
+            )
+        match = matches[0]
+        open_index = text.find("{", match.start())
+        close_index = matching_source_brace(
+            text,
+            open_index,
+            f"{path}:{source_line(text, match.start())}: {provider.source_wrapper}",
+        )
+        body_start_line = source_line(text, open_index + 1)
+        body = text[open_index + 1 : close_index]
+        field_re = re.compile(
+            r"^(?:(public|private)\s+)?(static\s+)?"
+            r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*"
+            r"([A-Za-z_][A-Za-z0-9_]*)(?:\s*=.*)?$"
+        )
+        fields: list[tuple[int, str, bool, str, str]] = []
+        for relative_line, line in source_top_level_lines(body):
+            field_match = field_re.fullmatch(line)
+            if not field_match:
+                continue
+            visibility = field_match.group(1) or "public"
+            fields.append(
+                (
+                    body_start_line + relative_line - 1,
+                    visibility,
+                    field_match.group(2) is not None,
+                    field_match.group(3),
+                    field_match.group(4),
+                )
+            )
+        storage_fields = [field for field in fields if field[3] == provider.source_storage_field]
+        if len(storage_fields) != 1:
+            raise SystemExit(
+                f"{provider.symbol}: source wrapper {provider.source_wrapper} must declare "
+                f"exactly one {provider.source_storage_field} storage field, "
+                f"found {len(storage_fields)}"
+            )
+        field_line, visibility, is_static, field_name, field_type = storage_fields[0]
+        if is_static:
+            raise SystemExit(
+                f"{path}:{field_line}: {provider.source_wrapper}.{field_name} must be an "
+                "instance field"
+            )
+        if visibility != "private":
+            raise SystemExit(
+                f"{path}:{field_line}: {provider.source_wrapper}.{field_name} must be private"
+            )
+        if field_type != provider.name:
+            raise SystemExit(
+                f"{path}:{field_line}: {provider.source_wrapper}.{field_name} must have exact "
+                f"storage type {provider.name}, found {field_type}"
+            )
+
+    if not providers:
+        return
+    for entry in entries:
+        params, return_type = parse_function_signature_shape(entry.signature)
+        for wrapper, owner_modules in wrappers_by_name.items():
+            wrapper_re = re.compile(
+                rf"(?<![A-Za-z0-9_]){re.escape(wrapper)}(?![A-Za-z0-9_])"
+            )
+            used_params: list[int] = []
+            for index, param in enumerate(params):
+                if not wrapper_re.search(param):
+                    continue
+                try:
+                    parameter_type = function_parameter_type(param, entry.symbol)
+                except ValueError as exc:
+                    raise SystemExit(str(exc)) from exc
+                if parameter_type != wrapper:
+                    raise SystemExit(
+                        f"{entry.symbol}: source provider wrapper {wrapper} must be an exact "
+                        "non-nullable nominal parameter type"
+                    )
+                used_params.append(index)
+            if wrapper_re.search(return_type):
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper {wrapper} is valid only in "
+                    "parameters; native leaves must return private storage"
+                )
+            if not used_params:
+                continue
+            if (entry.module, wrapper) not in providers_by_module_wrapper:
+                owners = ", ".join(sorted(owner_modules))
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper {wrapper} belongs to module "
+                    f"{owners}, not {entry.module}"
+                )
+            if not entry.is_internal:
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper parameters are stdlib-internal only"
+                )
+            if entry.argc == "variadic":
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper parameters require fixed arity"
+                )
 
 
 def source_decl_doc(text: str, offset: int, name: str, fallback: str) -> str:
@@ -1293,6 +1514,25 @@ def parse_def_metadata(
                     "of native_body or native_body_expr"
                 )
             native_body_expr = f"&{body_symbol}" if body_symbol else body_expr
+            source_wrapper = str(props.get("source_wrapper", "")).strip()
+            source_storage_field = str(props.get("source_storage_field", "")).strip()
+            if bool(source_wrapper) != bool(source_storage_field):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} source_wrapper and "
+                    "source_storage_field must be declared together"
+                )
+            if source_wrapper and not re.fullmatch(r"[A-Z][A-Za-z0-9_]*", source_wrapper):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} source_wrapper must be "
+                    "an exported source type name"
+                )
+            if source_storage_field and not re.fullmatch(
+                r"_[A-Za-z_][A-Za-z0-9_]*", source_storage_field
+            ):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} source_storage_field "
+                    "must be a private-looking field name"
+                )
             native_classes.append(
                 StdlibNativeClassEntry(
                     module=current_module,
@@ -1305,6 +1545,8 @@ def parse_def_metadata(
                     visibility=resolve_visibility(
                         props, "public", f"{path}:{line_no}: {current_module}.{current_name}"
                     ),
+                    source_wrapper=source_wrapper,
+                    source_storage_field=source_storage_field,
                 )
             )
         elif current_kind == "class":
@@ -1500,6 +1742,25 @@ def parse_def_metadata(
         (entry.module, entry.name): entry.visibility
         for entry in (*native_classes, *classes)
     }
+
+    provider_wrappers: dict[tuple[str, str], str] = {}
+    for entry in native_classes:
+        if not entry.source_wrapper:
+            continue
+        if not entry.is_internal:
+            raise SystemExit(
+                f"{entry.symbol}: source provider storage must have internal visibility"
+            )
+        key = (entry.module, entry.source_wrapper)
+        previous = provider_wrappers.get(key)
+        if previous:
+            raise SystemExit(
+                f"duplicate source provider wrapper {entry.module}.{entry.source_wrapper}: "
+                f"{previous} and {entry.name}"
+            )
+        provider_wrappers[key] = entry.name
+
+    validate_source_provider_bridges(root, entries, native_classes)
 
     def inherit(entry, owner: str):
         if entry.visibility:
@@ -1724,11 +1985,38 @@ def emit_aot_methods(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
     enums: list[StdlibEnumEntry],
+    native_classes: list[StdlibNativeClassEntry],
 ) -> str:
     rows = [e for e in entries if e.aot_direct and e.aot_kind == "method"]
     builtin_rows = [e for e in entries if e.aot_direct and e.aot_kind == "builtin"]
     const_rows = [c for c in constants if c.aot_const_kind]
     enum_by_symbol = {enum.symbol: enum for enum in enums}
+    wrappers_by_module: dict[str, frozenset[str]] = {}
+    for storage in native_classes:
+        if storage.source_wrapper:
+            wrappers_by_module[storage.module] = frozenset(
+                (*wrappers_by_module.get(storage.module, frozenset()), storage.source_wrapper)
+            )
+
+    def source_provider_arg_spec(entry: StdlibEntry) -> str | None:
+        if entry.argc == "variadic":
+            return None
+        wrappers = wrappers_by_module.get(entry.module, frozenset())
+        params, _ = parse_function_signature_shape(entry.signature)
+        spec: list[str] = []
+        for fragment in params:
+            try:
+                type_text = function_parameter_type(fragment, entry.symbol)
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+            spec.append("w" if type_text in wrappers else ".")
+        expected = int(entry.argc)
+        if len(spec) != expected:
+            raise SystemExit(
+                f"{entry.symbol}: source provider arg spec length {len(spec)} "
+                f"does not match argc {expected}"
+            )
+        return "".join(spec)
     lines = generated_header("xstdlib_aot_methods_generated.inc.c - AOT stdlib direct-call table")
     for e in rows:
         if not e.aot_enum:
@@ -1746,6 +2034,7 @@ def emit_aot_methods(
     for e in rows:
         if not e.aot:
             raise SystemExit(f"{e.symbol}: aot_direct requires aot symbol")
+        provider_spec = source_provider_arg_spec(e)
         enum = (
             enum_by_symbol.get(f"{e.module}.{e.aot_enum}") if e.aot_enum else None
         )
@@ -1760,7 +2049,9 @@ def emit_aot_methods(
         lines.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {argc_expr(e)}, {c_string(e.aot)}, "
-            f"{c_string(e.arg_spec)}, {ret_expr(e)}, NULL, UINT32_C({layout_id}), "
+            f"{c_string(e.arg_spec)}, "
+            f"{c_string(provider_spec) if provider_spec is not None else 'NULL'}, "
+            f"{ret_expr(e)}, NULL, UINT32_C({layout_id}), "
             f"{enum_name}, {variants_ref}, {variant_count}"
             "},"
         )
@@ -2349,6 +2640,8 @@ def emit_defs_header(
             "    const char *native_body_expr;",
             "    const char *flags;",
             "    const char *builtin_kind;",
+            "    const char *source_wrapper;",
+            "    const char *source_storage_field;",
             "} XrStdlibNativeClassDefEntry;",
             "",
             "typedef struct XrStdlibClassDefEntry {",
@@ -2562,7 +2855,8 @@ def emit_defs_header(
             "    {"
             f"{c_string(cls.module)}, {c_string(cls.name)}, {c_string(cls.super_slot)}, "
             f"{c_string(cls.core_slot)}, {c_string(cls.native_body_expr)}, {c_string(cls.flags)}, "
-            f"{c_string(cls.builtin_kind)}"
+            f"{c_string(cls.builtin_kind)}, {c_string(cls.source_wrapper)}, "
+            f"{c_string(cls.source_storage_field)}"
             "},"
         )
     lines.extend(
@@ -2649,7 +2943,7 @@ def output_paths(root: Path) -> dict[Path, str]:
     declarations = parse_module_declarations(root)
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
-            entries, constants, enums
+            entries, constants, enums, native_classes
         ),
         root / "src" / "aot" / "xaot_stdlib_generated.inc.c": emit_driver_metadata(
             entries, constants

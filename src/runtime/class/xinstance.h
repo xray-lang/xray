@@ -78,6 +78,10 @@ XR_FUNC void xr_instance_set_field(XrVMRuntime *X, XrObjectInstance *inst, const
 // Fast path by index
 XR_FUNC XrValue xr_instance_get_field_by_index(XrObjectInstance *inst, int index);
 XR_FUNC void xr_instance_set_field_by_index(XrObjectInstance *inst, int index, XrValue value);
+/* Project a generated stdlib source wrapper to its private native storage.
+ * The class descriptor carries the exact field index; ordinary values fail
+ * closed and no field-name lookup occurs on this path. */
+XR_FUNC XrValue xr_instance_source_provider_storage(XrValue wrapper);
 /* Store one already type-checked Json-decoded value. Ordinary classes use the
  * tagged field slot; value structs additionally materialize their native body
  * while the tagged slot remains the ownership anchor for referenced values. */

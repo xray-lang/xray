@@ -3610,6 +3610,14 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     sym->is_exported = node->is_exported;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    const char *stdlib_module = xa_intrinsic_owner_module(ctx);
+    if (links && stdlib_module) {
+        /* Preserve canonical stdlib provenance past analysis.  Lowering uses
+         * this identity to attach generated provider-bridge layout metadata;
+         * a source filename or bare class spelling is not sufficient. */
+        links->module_name = stdlib_module;
+        links->file_path = ctx->file_path;
+    }
     xa_publish_deprecated_attrs(links, cls->attributes, cls->attr_count);
     XrClassInfo *info = links ? links->class_info : NULL;
     const char *capability_name = cls->generic_origin_name ? cls->generic_origin_name : cls->name;

@@ -2050,7 +2050,8 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (!links)
             continue;
-        links->type = xa_builtin_parse_full_signature(analyzer->isolate, member->signature);
+        links->type = xa_builtin_parse_full_signature_for_module(
+            analyzer->isolate, mod->name, member->signature);
         if (!links->type)
             links->type = xr_type_new_unknown(analyzer->isolate);
         links->declared_type = links->type;

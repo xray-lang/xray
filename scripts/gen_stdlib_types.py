@@ -636,6 +636,8 @@ def load_def_module_classes():
         modules.setdefault(entry.module, []).append({
             'name': entry.name,
             'is_internal': entry.is_internal,
+            'source_wrapper': getattr(entry, 'source_wrapper', ''),
+            'source_storage_field': getattr(entry, 'source_storage_field', ''),
         })
     return modules
 
@@ -1172,7 +1174,11 @@ def generate_header(type_results, module_results):
                 lines.append(f"static const XaBuiltinClass g_gen_{mod_ident}_classes[] = {{")
                 for class_decl in mod_data['classes']:
                     internal = "true" if class_decl.get("is_internal") else "false"
-                    lines.append(f'    {{"{c_string(class_decl["name"])}", {internal}}},')
+                    lines.append(
+                        f'    {{"{c_string(class_decl["name"])}", {internal}, '
+                        f'"{c_string(class_decl.get("source_wrapper", ""))}", '
+                        f'"{c_string(class_decl.get("source_storage_field", ""))}"}},'
+                    )
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_macro}_CLASS_COUNT {len(mod_data['classes'])}")
                 lines.append("")

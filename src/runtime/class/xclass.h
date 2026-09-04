@@ -202,6 +202,9 @@ struct XrClass {
     uint16_t field_count;      // Total fields (including inherited)
     uint16_t own_field_count;  // Own fields (excluding inherited)
     uint16_t instance_size;    // Instance size in bytes
+    /* Exact flattened field index for a generated stdlib source/provider
+     * bridge, or -1. Hot leaf calls project through this index directly. */
+    int16_t source_provider_field_index;
 
     // Field lookup: Symbol -> index
     int *field_symbol_to_index;
