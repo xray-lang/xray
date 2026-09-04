@@ -17,7 +17,6 @@
 #include "../../stdlib/common.h"
 #include "../../src/io/xnet_transport.h"
 #include "../../src/io/xnet_handle.h"
-#include "../../src/io/xnet_provider.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
@@ -125,43 +124,6 @@ static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) 
     }
     cluster_runtime_release(cluster);
     return xr_bool(applied);
-}
-
-static XrCFuncResult cluster_join_tls_fn(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-#ifdef XR_ENABLE_TLS
-    XrCFuncResult status = xr_net_tls_handshake_with_context(
-        X, args, argc, result, cluster && cluster->tls_enabled ? cluster->tls_client_ctx : NULL);
-    cluster_runtime_release(cluster);
-    return status;
-#else
-    cluster_runtime_release(cluster);
-    XrNetConn *conn = argc > 0 && args ? xr_net_conn_from_value(args[0]) : NULL;
-    if (conn)
-        xr_net_conn_close(conn);
-    *result = xr_int(XR_NETERR_TLS);
-    return XR_CFUNC_DONE;
-#endif
-}
-
-static XrCFuncResult cluster_accept_tls_fn(XrVMRuntime *X, XrValue *args, int argc,
-                                           XrValue *result) {
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-#ifdef XR_ENABLE_TLS
-    XrCFuncResult status = xr_net_tls_server_handshake_with_context(
-        X, args, argc, result, cluster && cluster->tls_enabled ? cluster->tls_server_ctx : NULL);
-    cluster_runtime_release(cluster);
-    return status;
-#else
-    cluster_runtime_release(cluster);
-    XrNetConn *conn = argc > 0 && args ? xr_net_conn_from_value(args[0]) : NULL;
-    if (conn)
-        xr_net_conn_close(conn);
-    *result = xr_int(XR_NETERR_TLS);
-    return XR_CFUNC_DONE;
-#endif
 }
 
 static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -273,55 +235,24 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 6 || !XR_IS_BOOL(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
-        !XR_IS_STRING(args[3]) || !XR_IS_BOOL(args[4]) || !XR_IS_INT(args[5]))
+    if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_bool(false);
 
-    int64_t output_queue_high_watermark_value = XR_TO_INT(args[5]);
+    int64_t output_queue_high_watermark_value = XR_TO_INT(args[0]);
     uint64_t output_queue_high_watermark =
         output_queue_high_watermark_value > 0 ? (uint64_t) output_queue_high_watermark_value : 0;
     if (output_queue_high_watermark == 0 || output_queue_high_watermark > SIZE_MAX)
         return xr_bool(false);
 
-    /* Xray owns the validated configuration and start ordering. This leaf
-     * materializes only TLS contexts, the locked peer table and the
-     * isolate-local provider slot. */
+    /* Xray owns validated configuration, TLS resources and start ordering.
+     * This leaf materializes only the locked peer table and isolate-local
+     * provider slot. */
     XrCluster *cluster = (XrCluster *) xr_calloc(1, sizeof(*cluster));
     if (!cluster)
         return xr_bool(false);
     atomic_store(&cluster->ref_count, 1);
     cluster->isolate = X;
     xr_amutex_init(&cluster->nodes_lock);
-
-    if (XR_TO_BOOL(args[0])) {
-        const char *ca_file = XR_TO_STRING(args[1])->data;
-        const char *cert_file = XR_TO_STRING(args[2])->data;
-        const char *key_file = XR_TO_STRING(args[3])->data;
-        bool insecure = XR_TO_BOOL(args[4]);
-        cluster->tls_client_ctx = xr_tls_context_new_client();
-        if (!cluster->tls_client_ctx ||
-            (ca_file[0] && xr_tls_context_load_ca(cluster->tls_client_ctx, ca_file) != 0)) {
-            cluster_runtime_release(cluster);
-            return xr_bool(false);
-        }
-        if (insecure)
-            xr_tls_context_set_verify(cluster->tls_client_ctx, false);
-        if (cert_file[0] && key_file[0]) {
-            cluster->tls_server_ctx = xr_tls_context_new_server(cert_file, key_file);
-            if (!cluster->tls_server_ctx) {
-                cluster_runtime_release(cluster);
-                return xr_bool(false);
-            }
-            if (!insecure && ca_file[0]) {
-                if (xr_tls_context_load_ca(cluster->tls_server_ctx, ca_file) != 0) {
-                    cluster_runtime_release(cluster);
-                    return xr_bool(false);
-                }
-                xr_tls_context_set_verify(cluster->tls_server_ctx, true);
-            }
-        }
-        cluster->tls_enabled = true;
-    }
 
     cluster->output_queue_high_watermark = (size_t) output_queue_high_watermark;
     atomic_store(&cluster->running, true);

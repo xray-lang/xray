@@ -29,7 +29,6 @@
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/io/xnet_transport.h"
-#include "../../src/io/xtls_provider.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -86,28 +85,6 @@ typedef struct XrCluster {
     // Running state
     _Atomic(bool) running;
 
-    /*
-     * Optional inter-node TLS wrap.
-     *
-     *   tls_enabled     — flip to turn on TLS for every inbound and
-     *                     outbound cluster connection.
-     *   tls_client_ctx  — used by the outgoing join state machine when TLS is on.
-     *                     Built at start_ex time with caller-supplied CA
-     *                     bundle, optional client cert/key (for mTLS), and
-     *                     optional verify_peer toggle.
-     *   tls_server_ctx  — used by the cluster accept TLS provider to promote
-     *                     an accepted NetConn before source starts the wire
-     *                     handshake. NULL if the
-     *                     operator did not supply a cert+key pair; in
-     *                     that case tls_enabled + NULL tls_server_ctx
-     *                     causes the accept loop to refuse all inbound
-     *                     connections rather than silently downgrade.
-     *
-     * These fields stay NULL/false when TLS is not requested.
-     */
-    bool tls_enabled;
-    XrTlsContext *tls_client_ctx;
-    XrTlsContext *tls_server_ctx;
 } XrCluster;
 
 /* ========== Opaque Provider Resource Primitives ========== */
@@ -172,8 +149,7 @@ static inline XrClusterNode *cluster_node_acquire(XrCluster *cluster, uint64_t g
 
 /* Transport coroutines retain the provider runtime independently of the
  * source-owned start/stop generation. The last transport reference reclaims
- * only opaque registries and TLS contexts; source policy never enters this
- * primitive. */
+ * only opaque peer resources; source policy never enters this primitive. */
 static inline void cluster_runtime_retain(void *provider) {
     XrCluster *cluster = (XrCluster *) provider;
     if (cluster)
@@ -197,10 +173,6 @@ static inline void cluster_runtime_release(XrCluster *cluster) {
         return;
 
     XR_DCHECK(cluster->nodes == NULL, "cluster release requires a detached node list");
-    if (cluster->tls_client_ctx)
-        xr_tls_context_free(cluster->tls_client_ctx);
-    if (cluster->tls_server_ctx)
-        xr_tls_context_free(cluster->tls_server_ctx);
     xr_free(cluster);
 }
 

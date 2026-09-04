@@ -1655,6 +1655,13 @@ module net {
     builtin_kind: "XR_BK_NETLISTENER"
   }
 
+  native_class __TlsContextStorage {
+    visibility: "internal"
+    core_slot: "tlsContextStorageClass"
+    native_body_expr: "xr_tls_context_storage_body_desc()"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+  }
+
   fn __resolveAll {
     signature: "(host: string): Array<string>"
     doc: "Resolve every address for a host, RFC 8305 interleaved; empty on failure"
@@ -1874,6 +1881,56 @@ module net {
     layer: "runtime"
   }
 
+  fn __newTlsClientContext {
+    signature: "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool): __TlsContextStorage?"
+    doc: "Create one immutable client TLS policy resource from source-validated paths and verification policy"
+    vm: "net_tls_client_context_new"
+    argc: 4
+    arg_spec: "sssv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
+  fn __newTlsServerContext {
+    signature: "(certFile: string, keyFile: string, caFile: string, requireClientCertificate: bool): __TlsContextStorage?"
+    doc: "Create one immutable server TLS policy resource, optionally requiring a CA-verified client certificate"
+    vm: "net_tls_server_context_new"
+    argc: 4
+    arg_spec: "sssv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
+  fn __tlsClientHandshakeWithContext {
+    signature: "(context: __TlsContextStorage, conn: NetConn, hostname: string, deadlineMs: i64): i64"
+    doc: "Promote a TCP connection with an immutable client TLS context under one absolute deadline"
+    vm: "net_tls_client_handshake_context_yieldable"
+    vm_binding: "yieldable"
+    argc: 4
+    arg_spec: "vvsv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "coro,netpoll"
+  }
+
+  fn __tlsServerHandshakeWithContext {
+    signature: "(context: __TlsContextStorage, conn: NetConn, deadlineMs: i64): i64"
+    doc: "Promote an accepted TCP connection with an immutable server TLS context under one absolute deadline"
+    vm: "net_tls_server_handshake_context_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "coro,netpoll"
+  }
+
   fn __tlsHandshake {
     signature: "(conn: NetConn, hostname: string, deadlineMs: i64): i64"
     doc: "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code"
@@ -2053,11 +2110,11 @@ module cluster {
   }
 
   fn __start {
-    signature: "(tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64): bool"
-    doc: "Open cluster TLS contexts and native peer provider state from source-normalized scalar configuration"
+    signature: "(outputQueueHighWatermark: i64): bool"
+    doc: "Open the native peer resource registry with source-selected queue capacity"
     vm: "cluster_start_primitive"
-    argc: 6
-    arg_spec: "vsssvv"
+    argc: 1
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2087,32 +2144,6 @@ module cluster {
     link_object: false
     layer: "runtime"
     caps: "channel"
-  }
-
-  fn __joinTls {
-    signature: "(conn: NetConn, hostname: string, deadlineMs: i64): i64"
-    doc: "Promote an outbound cluster socket with the cluster-specific TLS client context"
-    vm: "cluster_join_tls_fn"
-    vm_binding: "yieldable"
-    argc: 3
-    arg_spec: "vsv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-  }
-
-  fn __acceptTls {
-    signature: "(conn: NetConn, deadlineMs: i64): i64"
-    doc: "Promote an accepted cluster socket with the cluster-specific TLS server context"
-    vm: "cluster_accept_tls_fn"
-    vm_binding: "yieldable"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
   }
 
   fn __adoptPeer {

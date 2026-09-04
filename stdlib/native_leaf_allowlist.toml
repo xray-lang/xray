@@ -93,26 +93,6 @@ deletion_trigger = "when the peer table and metrics are Xray-owned values"
 
 [[leaf]]
 module = "cluster"
-symbol = "__joinTls"
-class = "host_abi_leaf"
-abi = "OpenSSL client handshake plus the scheduler netpoll wait ABI"
-ownership = "none"
-effect = "suspends"
-provider = "the generic non-blocking NetConn TLS provider (src/io/xnet_provider.c) parameterized by the cluster runtime's client context. cluster.xr chooses whether, when and under which absolute deadline it runs"
-deletion_trigger = "when a caller-supplied TLS context is an ordinary Xray value accepted by net.upgradeTLS"
-
-[[leaf]]
-module = "cluster"
-symbol = "__acceptTls"
-class = "host_abi_leaf"
-abi = "OpenSSL server handshake plus the scheduler netpoll wait ABI"
-ownership = "none"
-effect = "suspends"
-provider = "the generic non-blocking NetConn TLS provider (src/io/xnet_provider.c) parameterized by the cluster runtime's server context. cluster.xr chooses whether, when and under which absolute deadline it runs"
-deletion_trigger = "when a caller-supplied TLS server context is an ordinary Xray value accepted by net"
-
-[[leaf]]
-module = "cluster"
 symbol = "__adoptPeer"
 class = "runtime_leaf"
 abi = "none; transfers an opaque NetConn body into the generation-keyed resource registry and scheduler-owned reader and writer coroutines"
@@ -817,6 +797,26 @@ deletion_trigger = "when the TLS provider is present in every supported build, s
 
 [[leaf]]
 module = "net"
+symbol = "__newTlsClientContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_CTX_new(3), trust-store loading and optional certificate/private-key loading"
+ownership = "fresh"
+effect = "nothrow"
+provider = "OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths and chooses verification policy"
+deletion_trigger = "never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider"
+
+[[leaf]]
+module = "net"
+symbol = "__newTlsServerContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_CTX_new(3), server certificate/private-key loading and optional peer trust-store loading"
+ownership = "fresh"
+effect = "nothrow"
+provider = "OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths and chooses verification policy"
+deletion_trigger = "never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider"
+
+[[leaf]]
+module = "net"
 symbol = "__lastCode"
 class = "runtime_leaf"
 abi = "none; reads the portable XR_NETERR_* code cached on the handle by whichever call last failed"
@@ -924,6 +924,26 @@ ownership = "none"
 effect = "suspends"
 provider = "OpenSSL, on the VM only (src/io/xtls_provider.c xr_tls_conn_handshake_try; WANT_READ/WANT_WRITE park the coroutine on the netpoll). The standalone AOT runtime links no TLS engine and src/aot/xrt_net.h closes the connection and returns NETERR_TLS -- divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md"
 deletion_trigger = "never on the security grounds alone: a TLS handshake reimplemented in Xray would move certificate validation and the record layer out of an audited provider. The leaf changes only when the provider changes, and it can narrow once both backends link the same one"
+
+[[leaf]]
+module = "net"
+symbol = "__tlsClientHandshakeWithContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_new(3), SNI and hostname verification setup, SSL_connect(3), SSL_get_error(3), plus the scheduler netpoll wait ABI"
+ownership = "none"
+effect = "suspends"
+provider = "the generic non-blocking NetConn TLS provider parameterized by an immutable TlsClientContext managed by Xray source"
+deletion_trigger = "never while OpenSSL owns client TLS handshakes; it may merge with the default-context leaf when both backends share one provider ABI"
+
+[[leaf]]
+module = "net"
+symbol = "__tlsServerHandshakeWithContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_new(3), SSL_accept(3), SSL_get_error(3), plus the scheduler netpoll wait ABI"
+ownership = "none"
+effect = "suspends"
+provider = "the generic non-blocking NetConn TLS provider parameterized by an immutable TlsServerContext managed by Xray source"
+deletion_trigger = "never while OpenSSL owns server TLS handshakes; it remains the audited security-provider boundary"
 
 [[leaf]]
 module = "net"

@@ -483,8 +483,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"DialOptions", XLSP_SYM_CLASS, "type DialOptions", "Class type", NULL, 0},
     {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult", "Class type", NULL, 0},
     {"UdpFrom", XLSP_SYM_CLASS, "type UdpFrom", "Class type", NULL, 0},
+    {"TlsClientContext", XLSP_SYM_CLASS, "type TlsClientContext", "Class type", NULL, 0},
+    {"TlsServerContext", XLSP_SYM_CLASS, "type TlsServerContext", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 37
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 39
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {

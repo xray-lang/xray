@@ -31,10 +31,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__applyHealthDecision", cluster_health_apply_fn);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__joinTls", cluster_join_tls_fn);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__acceptTls", cluster_accept_tls_fn);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__adoptPeer", cluster_adopt_peer_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__readPeer", cluster_peer_read_fn);
@@ -262,6 +258,7 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
         return false;
     size_t expected_count = 0;
     (void) expected_count;
+    xr_stdlib_vm_register___tls_context_storage_class_generated(isolate);
     XRS_EXPORT_YIELDABLE(module, isolate, "__resolveAll", net_resolve_all_yieldable);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__connectFd", net_connect_fd_yieldable);
@@ -295,6 +292,14 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "__lastErrno", net_last_errno);
     expected_count++;
     XRS_EXPORT(module, isolate, "__hasTLS", net_has_tls);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__newTlsClientContext", net_tls_client_context_new);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__newTlsServerContext", net_tls_server_context_new);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__tlsClientHandshakeWithContext", net_tls_client_handshake_context_yieldable);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__tlsServerHandshakeWithContext", net_tls_server_handshake_context_yieldable);
     expected_count++;
 #ifdef XR_ENABLE_TLS
     XRS_EXPORT_YIELDABLE(module, isolate, "__tlsHandshake", net_tls_handshake_yieldable);

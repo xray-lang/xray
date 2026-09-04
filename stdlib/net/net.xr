@@ -177,6 +177,68 @@ export fn upgradeTLS(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_
 
 export fn hasTLS() -> bool { return __hasTLS() }
 
+fn _containsZeroByte(value: string) -> bool {
+    var bytes: const Slice<u8> = value.bytes()
+    for (var i = 0; i < len(bytes); i++) {
+        if (bytes[i] == 0) { return true }
+    }
+    return false
+}
+
+// Public context identities and policy live in Xray. Their only native field
+// is an opaque, non-copyable OpenSSL storage object whose destroy hook runs
+// after the final Xray reference dies.
+export final class TlsClientContext {
+    private _storage: __TlsContextStorage
+
+    private constructor(storage: __TlsContextStorage) { this._storage = storage }
+
+    static create(caFile: string = "", certFile: string = "", keyFile: string = "",
+                  verifyPeer: bool = true) -> TlsClientContext {
+        if (!__hasTLS()) { throw NetError.Tls }
+        if (_containsZeroByte(caFile) || _containsZeroByte(certFile) ||
+            _containsZeroByte(keyFile) || (len(certFile) == 0) != (len(keyFile) == 0)) {
+            throw NetError.Invalid
+        }
+        var storage = __newTlsClientContext(caFile, certFile, keyFile, verifyPeer)
+        if (storage == null) { throw NetError.Tls }
+        return TlsClientContext(storage!)
+    }
+
+    upgrade(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS) {
+        if (timeoutMs <= 0 || _containsZeroByte(hostname)) { throw NetError.Invalid }
+        var code = __tlsClientHandshakeWithContext(
+            this._storage, conn, hostname, time.monotonic() + timeoutMs)
+        if (code != 0) { throw _classify(code) }
+    }
+}
+
+export final class TlsServerContext {
+    private _storage: __TlsContextStorage
+
+    private constructor(storage: __TlsContextStorage) { this._storage = storage }
+
+    static create(certFile: string, keyFile: string, caFile: string = "",
+                  requireClientCertificate: bool = false) -> TlsServerContext {
+        if (!__hasTLS()) { throw NetError.Tls }
+        if (len(certFile) == 0 || len(keyFile) == 0 || _containsZeroByte(certFile) ||
+            _containsZeroByte(keyFile) || _containsZeroByte(caFile)) {
+            throw NetError.Invalid
+        }
+        var storage = __newTlsServerContext(
+            certFile, keyFile, caFile, requireClientCertificate)
+        if (storage == null) { throw NetError.Tls }
+        return TlsServerContext(storage!)
+    }
+
+    accept(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS) {
+        if (timeoutMs <= 0) { throw NetError.Invalid }
+        var code = __tlsServerHandshakeWithContext(
+            this._storage, conn, time.monotonic() + timeoutMs)
+        if (code != 0) { throw _classify(code) }
+    }
+}
+
 
 
 // ========== Listen / accept ==========

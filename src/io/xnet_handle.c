@@ -31,8 +31,8 @@
 static void *alloc_handle(struct XrVMRuntime *X, size_t size) {
     XR_DCHECK(X != NULL, "net_handle: alloc requires isolate");
     /*
-     * NetConn / NetListener must be shareable across coroutines (go accept
-     * → go serve). Allocate on the system shared heap like Channel.
+     * Network handles and immutable TLS contexts are shared across coroutines.
+     * Allocate them on the system shared heap like Channel.
      */
     XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
     return heap ? xr_sysheap_alloc_shared(heap, size, XR_TINSTANCE) : NULL;
@@ -76,6 +76,37 @@ XrNetListener *xr_net_listener_new(struct XrVMRuntime *X, int fd, int port) {
     return l;
 }
 
+enum {
+    XR_NET_TLS_CONTEXT_CLIENT = 1,
+    XR_NET_TLS_CONTEXT_SERVER = 2,
+};
+
+static XrNetTlsContextHandle *new_tls_context_handle(struct XrVMRuntime *X, void *provider_context,
+                                                     uint8_t role) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XrClass *klass = core ? core->tlsContextStorageClass : NULL;
+    if (!provider_context || !klass)
+        return NULL;
+    XrNetTlsContextHandle *context =
+        (XrNetTlsContextHandle *) alloc_handle(X, sizeof(XrNetTlsContextHandle));
+    if (!context)
+        return NULL;
+    context->klass = klass;
+    context->provider_context = provider_context;
+    context->role = role;
+    return context;
+}
+
+XrNetTlsContextHandle *xr_net_tls_client_context_handle_new(struct XrVMRuntime *X,
+                                                            void *provider_context) {
+    return new_tls_context_handle(X, provider_context, XR_NET_TLS_CONTEXT_CLIENT);
+}
+
+XrNetTlsContextHandle *xr_net_tls_server_context_handle_new(struct XrVMRuntime *X,
+                                                            void *provider_context) {
+    return new_tls_context_handle(X, provider_context, XR_NET_TLS_CONTEXT_SERVER);
+}
+
 /* ========== Accessors ========== */
 
 int xr_net_conn_fd(const XrNetConn *c) {
@@ -103,6 +134,31 @@ XrNetConn *xr_net_conn_from_value(XrValue value) {
         return NULL;
     XrNetConn *conn = (XrNetConn *) XR_VALUE_GCPTR(value);
     return conn->klass && conn->klass->builtin_kind == XR_BK_NETCONN ? conn : NULL;
+}
+
+static XrNetTlsContextHandle *tls_context_from_value(XrVMRuntime *X, XrValue value,
+                                                     uint8_t expected_role) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XrClass *expected_class = core ? core->tlsContextStorageClass : NULL;
+    if (!expected_class || !XR_IS_PTR(value) || XR_HEAP_TYPE(value) != XR_TINSTANCE)
+        return NULL;
+    XrNetTlsContextHandle *context = (XrNetTlsContextHandle *) XR_VALUE_GCPTR(value);
+    return context->klass == expected_class && context->provider_context &&
+                   context->role == expected_role
+               ? context
+               : NULL;
+}
+
+XrNetTlsContextHandle *xr_net_tls_client_context_from_value(XrVMRuntime *X, XrValue value) {
+    return tls_context_from_value(X, value, XR_NET_TLS_CONTEXT_CLIENT);
+}
+
+XrNetTlsContextHandle *xr_net_tls_server_context_from_value(XrVMRuntime *X, XrValue value) {
+    return tls_context_from_value(X, value, XR_NET_TLS_CONTEXT_SERVER);
+}
+
+void *xr_net_tls_context_provider(const XrNetTlsContextHandle *context) {
+    return context ? context->provider_context : NULL;
 }
 
 int xr_net_listener_fd(const XrNetListener *l) {
@@ -189,6 +245,16 @@ static void netlistener_body_destroy(void *body) {
     xr_net_listener_close(l);
 }
 
+static void tls_context_body_destroy(void *body) {
+    XrNetTlsContextHandle *context =
+        (XrNetTlsContextHandle *) ((char *) body -
+                                   offsetof(XrNetTlsContextHandle, provider_context));
+#ifdef XR_ENABLE_TLS
+    xr_tls_context_free((XrTlsContext *) context->provider_context);
+#endif
+    context->provider_context = NULL;
+}
+
 /* ========== Native body descriptors ========== */
 
 static XrNativeBodyDesc g_netconn_body_desc = {
@@ -209,10 +275,23 @@ static XrNativeBodyDesc g_netlistener_body_desc = {
     .deep_copy = NULL,
 };
 
+static XrNativeBodyDesc g_tls_context_body_desc = {
+    .body_size = sizeof(XrNetTlsContextHandle) - offsetof(XrNetTlsContextHandle, provider_context),
+    .body_align = _Alignof(void *),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = NULL,
+    .destroy = tls_context_body_destroy,
+    .deep_copy = NULL,
+};
+
 XrNativeBodyDesc *xr_netconn_body_desc(void) {
     return &g_netconn_body_desc;
 }
 
 XrNativeBodyDesc *xr_netlistener_body_desc(void) {
     return &g_netlistener_body_desc;
+}
+
+XrNativeBodyDesc *xr_tls_context_storage_body_desc(void) {
+    return &g_tls_context_body_desc;
 }

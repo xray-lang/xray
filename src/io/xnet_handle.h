@@ -101,10 +101,20 @@ typedef struct XrNetListener {
     uint8_t last_error;
 } XrNetListener;
 
+/* TLS policies are immutable after construction. A managed handle keeps the
+ * provider context alive while source code shares it across handshakes; the
+ * native body destroy hook releases the provider exactly once. */
+typedef struct XrNetTlsContextHandle {
+    XrObjHeader gc_header;
+    struct XrClass *klass;
+    void *provider_context;
+    uint8_t role;
+} XrNetTlsContextHandle;
+
 /* ========== Constructors ========== */
 
 /*
- * Allocate an XrNetConn on the calling coroutine's GC heap. fd takes
+ * Allocate an XrNetConn on the isolate's shared system heap. fd takes
  * ownership: callers must NOT close it directly after this returns.
  * Use xr_net_conn_close (or let the object destroy hook fire).
  */
@@ -114,6 +124,11 @@ XR_FUNC XrNetConn *xr_net_conn_new(struct XrVMRuntime *X, int fd, XrNetConnKind 
  * Listener variant. port is informational (queryable by scripts).
  */
 XR_FUNC XrNetListener *xr_net_listener_new(struct XrVMRuntime *X, int fd, int port);
+
+XR_FUNC XrNetTlsContextHandle *xr_net_tls_client_context_handle_new(struct XrVMRuntime *X,
+                                                                    void *provider_context);
+XR_FUNC XrNetTlsContextHandle *xr_net_tls_server_context_handle_new(struct XrVMRuntime *X,
+                                                                    void *provider_context);
 
 /* ========== Accessors ========== */
 
@@ -126,6 +141,11 @@ XR_FUNC bool xr_net_conn_is_closed(const XrNetConn *c);
 /* Validate and unwrap the opaque script value without exposing its layout to
  * module-specific providers. */
 XR_FUNC XrNetConn *xr_net_conn_from_value(XrValue value);
+XR_FUNC XrNetTlsContextHandle *xr_net_tls_client_context_from_value(struct XrVMRuntime *X,
+                                                                    XrValue value);
+XR_FUNC XrNetTlsContextHandle *xr_net_tls_server_context_from_value(struct XrVMRuntime *X,
+                                                                    XrValue value);
+XR_FUNC void *xr_net_tls_context_provider(const XrNetTlsContextHandle *context);
 
 XR_FUNC int xr_net_listener_fd(const XrNetListener *l);
 XR_FUNC int xr_net_listener_port(const XrNetListener *l);
@@ -155,6 +175,7 @@ XR_FUNC void xr_net_listener_close(XrNetListener *l);
 struct XrNativeBodyDesc;
 XR_FUNC struct XrNativeBodyDesc *xr_netconn_body_desc(void);
 XR_FUNC struct XrNativeBodyDesc *xr_netlistener_body_desc(void);
+XR_FUNC struct XrNativeBodyDesc *xr_tls_context_storage_body_desc(void);
 
 #ifdef __cplusplus
 }

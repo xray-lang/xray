@@ -67,7 +67,7 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         )[1].split("static XrValue cluster_health_apply_fn", 1)[0]
         health_apply = cluster_c.split(
             "static XrValue cluster_health_apply_fn", 1
-        )[1].split("static XrCFuncResult cluster_join_tls_fn", 1)[0]
+        )[1].split("static XrValue cluster_adopt_peer_fn", 1)[0]
         observe_heartbeat = cluster_c.split(
             "static XrValue cluster_observe_heartbeat_fn", 1
         )[1].split("static XrValue cluster_detach_peer_fn", 1)[0]
@@ -90,6 +90,27 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertIn(
             "_enqueueControlFrame(peer.peerGeneration, heartbeat!)", cluster_xr
         )
+
+    def test_tls_context_policy_and_lifetime_are_source_owned(self) -> None:
+        cluster_c = (ROOT / "stdlib/cluster/cluster.c").read_text()
+        cluster_h = (ROOT / "stdlib/cluster/cluster_internal.h").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        net_xr = (ROOT / "stdlib/net/net.xr").read_text()
+        tls_provider = (ROOT / "src/io/xtls_provider.c").read_text()
+        tls_conn = tls_provider.split("struct XrTlsConn", 1)[1].split("};", 1)[0]
+
+        self.assertNotIn("cluster_join_tls_fn", cluster_c)
+        self.assertNotIn("cluster_accept_tls_fn", cluster_c)
+        self.assertNotIn("tls_client_ctx", cluster_h)
+        self.assertNotIn("tls_server_ctx", cluster_h)
+        self.assertIn("var _sourceTlsResources: _ClusterTlsResources?", cluster_xr)
+        self.assertIn("context!.upgrade", cluster_xr)
+        self.assertIn("context!.accept", cluster_xr)
+        self.assertIn("export final class TlsClientContext", net_xr)
+        self.assertIn("export final class TlsServerContext", net_xr)
+        self.assertIn("requireClientCertificate: bool", net_xr)
+        self.assertNotIn("XrTlsContext *ctx", tls_conn)
+        self.assertIn("SSL_VERIFY_FAIL_IF_NO_PEER_CERT", tls_provider)
 
 
 if __name__ == "__main__":

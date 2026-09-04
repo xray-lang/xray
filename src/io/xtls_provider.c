@@ -34,13 +34,11 @@
 struct XrTlsContext {
     SSL_CTX *ssl_ctx;
     bool is_client;
-    bool verify_peer;
 };
 
 struct XrTlsConn {
     SSL *ssl;
     int fd;
-    XrTlsContext *ctx;
 };
 
 /* ========== Availability ========== */
@@ -73,7 +71,6 @@ XrTlsContext *xr_tls_context_new_client(void) {
         return NULL;
 
     ctx->is_client = true;
-    ctx->verify_peer = true;  // Verify certificate by default
 
     // Create SSL context with TLS client method
     ctx->ssl_ctx = SSL_CTX_new(TLS_client_method());
@@ -118,6 +115,16 @@ XrTlsContext *xr_tls_context_new_client(void) {
     return ctx;
 }
 
+int xr_tls_context_load_identity(XrTlsContext *ctx, const char *cert_file, const char *key_file) {
+    if (!ctx || !ctx->ssl_ctx || !cert_file || !cert_file[0] || !key_file || !key_file[0])
+        return -1;
+    if (SSL_CTX_use_certificate_file(ctx->ssl_ctx, cert_file, SSL_FILETYPE_PEM) <= 0)
+        return -1;
+    if (SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, key_file, SSL_FILETYPE_PEM) <= 0)
+        return -1;
+    return SSL_CTX_check_private_key(ctx->ssl_ctx) ? 0 : -1;
+}
+
 XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_file) {
     xr_tls_init();
 
@@ -140,22 +147,7 @@ XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_f
     // Min TLS 1.2
     SSL_CTX_set_min_proto_version(ctx->ssl_ctx, TLS1_2_VERSION);
 
-    // Load certificate
-    if (SSL_CTX_use_certificate_file(ctx->ssl_ctx, cert_file, SSL_FILETYPE_PEM) <= 0) {
-        SSL_CTX_free(ctx->ssl_ctx);
-        xr_free(ctx);
-        return NULL;
-    }
-
-    // Load private key
-    if (SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, key_file, SSL_FILETYPE_PEM) <= 0) {
-        SSL_CTX_free(ctx->ssl_ctx);
-        xr_free(ctx);
-        return NULL;
-    }
-
-    // Verify private key matches certificate
-    if (!SSL_CTX_check_private_key(ctx->ssl_ctx)) {
+    if (xr_tls_context_load_identity(ctx, cert_file, key_file) != 0) {
         SSL_CTX_free(ctx->ssl_ctx);
         xr_free(ctx);
         return NULL;
@@ -178,13 +170,10 @@ void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify) {
     if (!ctx || !ctx->ssl_ctx)
         return;
 
-    ctx->verify_peer = verify;
-
-    if (verify) {
-        SSL_CTX_set_verify(ctx->ssl_ctx, SSL_VERIFY_PEER, NULL);
-    } else {
-        SSL_CTX_set_verify(ctx->ssl_ctx, SSL_VERIFY_NONE, NULL);
-    }
+    int mode = verify ? SSL_VERIFY_PEER : SSL_VERIFY_NONE;
+    if (verify && !ctx->is_client)
+        mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+    SSL_CTX_set_verify(ctx->ssl_ctx, mode, NULL);
 }
 
 int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file) {
@@ -228,7 +217,6 @@ XrTlsConn *xr_tls_conn_new(XrTlsContext *ctx, int fd) {
     if (!conn)
         return NULL;
 
-    conn->ctx = ctx;
     conn->fd = fd;
 
     // Create SSL object
@@ -558,6 +546,13 @@ XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_f
     (void) cert_file;
     (void) key_file;
     return NULL;
+}
+
+int xr_tls_context_load_identity(XrTlsContext *ctx, const char *cert_file, const char *key_file) {
+    (void) ctx;
+    (void) cert_file;
+    (void) key_file;
+    return -1;
 }
 void xr_tls_context_free(XrTlsContext *ctx) {
     (void) ctx;

@@ -116,11 +116,9 @@ static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"__start", "(tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64): bool", "Open cluster TLS contexts and native peer provider state from source-normalized scalar configuration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__start", "(outputQueueHighWatermark: i64): bool", "Open the native peer resource registry with source-selected queue capacity", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__healthSnapshot", "(): Array<__ClusterHealthPeerSnapshot>?", "Snapshot locked raw peer health facts without applying heartbeat queue policy", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64): bool", "Compare one generation and raw receive timestamp, then detach the exact unhealthy peer resource", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__adoptPeer", "(conn: move NetConn, peerGeneration: i64, connectedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer a source-identified socket into the locked resource registry and start generation-keyed source transport loops", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__readPeer", "(peerGeneration: i64, maxFramePayload: i64, callback: fn(peerGeneration: i64, wire: Array<u8>?, reason: i64): ()): i64", "Start one owned peer read and deliver wire bytes or an orthogonal raw reason to the source callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writePeer", "(peerGeneration: i64, callback: fn(peerGeneration: i64, reason: i64): ()): i64", "Start one owned peer write and deliver an orthogonal raw queue, socket, provider or cancellation reason to the source callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -130,7 +128,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics and raw transport-health facts", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 13
+#define GEN_CLUSTER_FUNCTION_COUNT 11
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
@@ -259,8 +257,9 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
 static const XaBuiltinClass g_gen_net_classes[] = {
     {"NetConn", true},
     {"NetListener", true},
+    {"__TlsContextStorage", true},
 };
-#define GEN_NET_CLASS_COUNT 2
+#define GEN_NET_CLASS_COUNT 3
 
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
@@ -281,6 +280,10 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__lastCode", "(handle: NetConn | NetListener): i64", "Portable error code of the last failed operation; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__lastErrno", "(handle: NetConn | NetListener): i64", "Raw errno captured for the last failed operation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__hasTLS", "(): bool", "Whether TLS support is compiled in", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__newTlsClientContext", "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool): __TlsContextStorage?", "Create one immutable client TLS policy resource from source-validated paths and verification policy", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__newTlsServerContext", "(certFile: string, keyFile: string, caFile: string, requireClientCertificate: bool): __TlsContextStorage?", "Create one immutable server TLS policy resource, optionally requiring a CA-verified client certificate", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__tlsClientHandshakeWithContext", "(context: __TlsContextStorage, conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote a TCP connection with an immutable client TLS context under one absolute deadline", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__tlsServerHandshakeWithContext", "(context: __TlsContextStorage, conn: NetConn, deadlineMs: i64): i64", "Promote an accepted TCP connection with an immutable server TLS context under one absolute deadline", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__udpBind", "(port: i64, addr: string): NetConn?", "Bind a UDP socket; empty addr binds the wildcard address", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__udpMulticastBind", "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?", "Open an IPv4 multicast UDP socket after source-side address and option validation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
@@ -289,7 +292,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_NET_FUNCTION_COUNT 24
+#define GEN_NET_FUNCTION_COUNT 28
 
 // os.__ExecResult handle fields
 static const XaBuiltinHandleField g_gen_os___execresult_fields[] = {

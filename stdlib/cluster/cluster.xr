@@ -43,7 +43,7 @@ import crypto
 import math
 import mem
 import net
-import { DialOptions, NetError, UdpFrom } from net
+import { DialOptions, NetError, TlsClientContext, TlsServerContext, UdpFrom } from net
 import time
 
 // ========== Protocol constants ==========
@@ -170,6 +170,11 @@ type _SourceListener = {
     listener: NetListener,
 }
 
+type _ClusterTlsResources = {
+    client: TlsClientContext,
+    server: TlsServerContext?,
+}
+
 // Topic routing is ordinary source state. Holding the Channel in this record
 // gives the registry its own strong reference, while temporary delivery
 // snapshots keep each target alive after the registry lock is released.
@@ -274,6 +279,7 @@ var _peerDirectory: Array<_PeerDirectoryEntry> = []
 const _sourceStateLock: Atomic<bool> = Atomic<bool>(false)
 var _sourceState: _ClusterSourceState? = null
 var _sourceListener: _SourceListener? = null
+var _sourceTlsResources: _ClusterTlsResources? = null
 const _monitorStateLock: Atomic<bool> = Atomic<bool>(false)
 var _monitorRuntimeToken = 0
 var _nodeMonitors: Array<_NodeMonitor> = []
@@ -776,13 +782,14 @@ fn _sourceStateSnapshot() -> _ClusterSourceState? {
     return state
 }
 
-fn _installSourceState(state: _ClusterSourceState) -> bool {
+fn _installSourceState(state: _ClusterSourceState, tls: _ClusterTlsResources?) -> bool {
     _lockSourceState()
-    if (_sourceState != null) {
+    if (_sourceState != null || _sourceTlsResources != null) {
         _sourceStateLock.store(false)
         return false
     }
     _sourceState = state
+    _sourceTlsResources = tls
     _sourceStateLock.store(false)
     return true
 }
@@ -790,7 +797,24 @@ fn _installSourceState(state: _ClusterSourceState) -> bool {
 fn _clearSourceState() {
     _lockSourceState()
     _sourceState = null
+    _sourceTlsResources = null
     _sourceStateLock.store(false)
+}
+
+fn _tlsClientContextSnapshot() -> TlsClientContext? {
+    _lockSourceState()
+    var context: TlsClientContext? = null
+    if (_sourceTlsResources != null) { context = _sourceTlsResources!.client }
+    _sourceStateLock.store(false)
+    return context
+}
+
+fn _tlsServerContextSnapshot() -> TlsServerContext? {
+    _lockSourceState()
+    var context: TlsServerContext? = null
+    if (_sourceTlsResources != null) { context = _sourceTlsResources!.server }
+    _sourceStateLock.store(false)
+    return context
 }
 
 fn _installSourceListener(runtimeToken: i64, listener: NetListener) -> bool {
@@ -1715,9 +1739,19 @@ fn _joinPeer(host: string, port: i64) -> bool {
         return false
     }
 
-    if (config.tlsEnabled && __joinTls(live, host, deadline) != 0) {
-        // The TLS provider consumes the failed socket, matching net.upgradeTLS.
-        return false
+    if (config.tlsEnabled) {
+        var context = _tlsClientContextSnapshot()
+        var remaining = deadline - time.monotonic()
+        if (context == null || remaining <= 0) {
+            net.close(live)
+            return false
+        }
+        try {
+            context!.upgrade(live, host, remaining)
+        } catch (e: NetError) {
+            // The generic TLS provider closes the connection on failure.
+            return false
+        }
     }
 
     var nonce = _handshakeNonce()
@@ -1779,9 +1813,19 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    if (tlsEnabled && __acceptTls(conn, deadline) != 0) {
-        // The TLS provider closes the failed handle.
-        return
+    if (tlsEnabled) {
+        var context = _tlsServerContextSnapshot()
+        var remaining = deadline - time.monotonic()
+        if (context == null || remaining <= 0) {
+            net.close(conn)
+            return
+        }
+        try {
+            context!.accept(conn, remaining)
+        } catch (e: NetError) {
+            // The generic TLS provider closes the connection on failure.
+            return
+        }
     }
     if (_runtimeActiveToken.load() != token) {
         net.close(conn)
@@ -1926,7 +1970,8 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
     }
 }
 
-fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64,
+fn _activateClusterSource(started: bool, state: _ClusterSourceState,
+                          tls: _ClusterTlsResources?, tickMs: i64,
                           pending: move NetListener?) -> bool {
     if (pending == null) { return false }
     const listener: NetListener = pending!
@@ -1935,7 +1980,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
         net.close(listener)
         return false
     }
-    if (!_installSourceState(state)) {
+    if (!_installSourceState(state, tls)) {
         net.close(listener)
         __stop()
         return false
@@ -2583,9 +2628,9 @@ fn _clusterListener(port: i64) -> NetListener? {
     }
 }
 
-// A node whose name is not a legal node name cannot start. The listener and
-// both long-lived loops are ordinary Xray values and coroutines; the runtime
-// leaf only constructs TLS contexts and synchronized registries. Heartbeat
+// A node whose name is not a legal node name cannot start. The listener, TLS
+// contexts and both long-lived loops are ordinary Xray values and coroutines;
+// the runtime leaf only constructs synchronized peer resources. Heartbeat
 // cadence, adopted-at state, missed-beat progression and thresholds remain
 // entirely source-owned.
 export fn start(config: ClusterConfig) -> bool {
@@ -2621,6 +2666,21 @@ export fn start(config: ClusterConfig) -> bool {
         if ((len(certFile) == 0) != (len(keyFile) == 0)) { return false }
     }
 
+    var tlsResources: _ClusterTlsResources? = null
+    if (tlsEnabled) {
+        try {
+            var client = TlsClientContext.create(caFile, certFile, keyFile, !insecure)
+            var server: TlsServerContext? = null
+            if (len(certFile) > 0) {
+                server = TlsServerContext.create(
+                    certFile, keyFile, caFile, !insecure && len(caFile) > 0)
+            }
+            tlsResources = { client: client, server: server }
+        } catch (e: NetError) {
+            return false
+        }
+    }
+
     var listener = _clusterListener(config.port)
     if (listener == null) { return false }
     var port = net.port(listener!)
@@ -2628,14 +2688,7 @@ export fn start(config: ClusterConfig) -> bool {
         net.close(listener!)
         return false
     }
-    var started = __start(
-        tlsEnabled,
-        caFile,
-        certFile,
-        keyFile,
-        insecure,
-        OUTPUT_QUEUE_HIGH_WATERMARK_BYTES
-    )
+    var started = __start(OUTPUT_QUEUE_HIGH_WATERMARK_BYTES)
     var state: _ClusterSourceState = {
         selfName: config.name,
         port: port,
@@ -2647,7 +2700,7 @@ export fn start(config: ClusterConfig) -> bool {
         tlsClientReady: tlsEnabled,
         tlsServerReady: tlsEnabled && len(certFile) > 0,
     }
-    return _activateClusterSource(started, state, tick, move listener)
+    return _activateClusterSource(started, state, tlsResources, tick, move listener)
 }
 
 // The address is parsed here and the leaf is handed a host and a port, so the

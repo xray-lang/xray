@@ -65,4 +65,20 @@ static void xr_stdlib_vm_register_net_listener_class_generated(XrVMRuntime *X) {
 }
 #endif  /* XR_STDLIB_VM_BIND_CLASS_NET_LISTENER */
 
+#ifdef XR_STDLIB_VM_BIND_CLASS___TLS_CONTEXT_STORAGE
+static void xr_stdlib_vm_register___tls_context_storage_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register___tls_context_storage_class_generated: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register___tls_context_storage_class_generated: core not initialised");
+    XR_DCHECK(core->tlsContextStorageClass == NULL, "xr_stdlib_vm_register___tls_context_storage_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "__TlsContextStorage", NULL);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register___tls_context_storage_class_generated: builder alloc failed");
+    xr_class_builder_set_native_body(builder, xr_tls_context_storage_body_desc());
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register___tls_context_storage_class_generated: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    core->tlsContextStorageClass = cls;
+}
+#endif  /* XR_STDLIB_VM_BIND_CLASS___TLS_CONTEXT_STORAGE */
+
 /* clang-format on */

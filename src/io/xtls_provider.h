@@ -55,10 +55,15 @@ XR_FUNC XrTlsContext *xr_tls_context_new_client(void);
 // Create a server TLS context
 XR_FUNC XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_file);
 
+// Load a PEM certificate and its private key into an existing context.
+XR_FUNC int xr_tls_context_load_identity(XrTlsContext *ctx, const char *cert_file,
+                                         const char *key_file);
+
 // Free a TLS context
 XR_FUNC void xr_tls_context_free(XrTlsContext *ctx);
 
-// Set whether to verify certificates (client)
+// Enable peer verification. On a server, true also requires the client to
+// present a certificate.
 XR_FUNC void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify);
 
 /*

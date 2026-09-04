@@ -27,7 +27,6 @@
 #include "../module/xstdlib_runtime_cache.h"
 #include "xdns.h"
 #include "xnet_handle.h"
-#include "xnet_provider.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_builder.h"
 #include "../runtime/class/xclass_system.h"
@@ -1372,6 +1371,71 @@ static XrValue net_has_tls(XrVMRuntime *X, XrValue *args, int nargs) {
 #endif
 }
 
+static XrValue net_tls_client_context_new(XrVMRuntime *X, XrValue *args, int nargs) {
+#ifdef XR_ENABLE_TLS
+    if (nargs < 4 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
+        !XR_IS_BOOL(args[3]))
+        return XR_NULL_VAL;
+    const char *ca_file = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+    const char *cert_file = XR_STRING_CHARS(XR_TO_STRING(args[1]));
+    const char *key_file = XR_STRING_CHARS(XR_TO_STRING(args[2]));
+    if ((cert_file[0] == '\0') != (key_file[0] == '\0'))
+        return XR_NULL_VAL;
+    XrTlsContext *provider = xr_tls_context_new_client();
+    if (!provider)
+        return XR_NULL_VAL;
+    bool configured =
+        (!ca_file[0] || xr_tls_context_load_ca(provider, ca_file) == 0) &&
+        (!cert_file[0] || xr_tls_context_load_identity(provider, cert_file, key_file) == 0);
+    if (!configured) {
+        xr_tls_context_free(provider);
+        return XR_NULL_VAL;
+    }
+    xr_tls_context_set_verify(provider, XR_TO_BOOL(args[3]));
+    XrNetTlsContextHandle *context = xr_net_tls_client_context_handle_new(X, provider);
+    if (!context) {
+        xr_tls_context_free(provider);
+        return XR_NULL_VAL;
+    }
+    return XR_FROM_PTR(context);
+#else
+    (void) X;
+    (void) args;
+    (void) nargs;
+    return XR_NULL_VAL;
+#endif
+}
+
+static XrValue net_tls_server_context_new(XrVMRuntime *X, XrValue *args, int nargs) {
+#ifdef XR_ENABLE_TLS
+    if (nargs < 4 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
+        !XR_IS_BOOL(args[3]))
+        return XR_NULL_VAL;
+    const char *cert_file = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+    const char *key_file = XR_STRING_CHARS(XR_TO_STRING(args[1]));
+    const char *ca_file = XR_STRING_CHARS(XR_TO_STRING(args[2]));
+    XrTlsContext *provider = xr_tls_context_new_server(cert_file, key_file);
+    if (!provider)
+        return XR_NULL_VAL;
+    if (XR_TO_BOOL(args[3]) && xr_tls_context_load_ca(provider, ca_file) != 0) {
+        xr_tls_context_free(provider);
+        return XR_NULL_VAL;
+    }
+    xr_tls_context_set_verify(provider, XR_TO_BOOL(args[3]));
+    XrNetTlsContextHandle *context = xr_net_tls_server_context_handle_new(X, provider);
+    if (!context) {
+        xr_tls_context_free(provider);
+        return XR_NULL_VAL;
+    }
+    return XR_FROM_PTR(context);
+#else
+    (void) X;
+    (void) args;
+    (void) nargs;
+    return XR_NULL_VAL;
+#endif
+}
+
 // ========== Yieldable net.__tlsHandshake ==========
 
 #ifdef XR_ENABLE_TLS
@@ -1503,22 +1567,48 @@ static XrCFuncResult net_tls_handshake_with_context(XrVMRuntime *X, XrValue *arg
     return net_tls_handshake_step(X, state, result);
 }
 
-XrCFuncResult xr_net_tls_handshake_with_context(XrVMRuntime *X, XrValue *args, int nargs,
-                                                XrValue *result, XrTlsContext *context) {
-    return net_tls_handshake_with_context(X, args, nargs, result, context, false);
-}
-
-XrCFuncResult xr_net_tls_server_handshake_with_context(XrVMRuntime *X, XrValue *args, int nargs,
-                                                       XrValue *result, XrTlsContext *context) {
-    return net_tls_handshake_with_context(X, args, nargs, result, context, true);
-}
-
 static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                                  XrValue *result) {
-    return xr_net_tls_handshake_with_context(X, args, nargs, result, get_tls_client_ctx());
+    return net_tls_handshake_with_context(X, args, nargs, result, get_tls_client_ctx(), false);
 }
 
 #endif  // XR_ENABLE_TLS
+
+static XrCFuncResult net_tls_client_handshake_context_yieldable(XrVMRuntime *X, XrValue *args,
+                                                                int nargs, XrValue *result) {
+#ifdef XR_ENABLE_TLS
+    XrNetTlsContextHandle *context =
+        nargs > 0 ? xr_net_tls_client_context_from_value(X, args[0]) : NULL;
+    return net_tls_handshake_with_context(
+        X, nargs > 0 ? args + 1 : args, nargs > 0 ? nargs - 1 : 0, result,
+        (XrTlsContext *) xr_net_tls_context_provider(context), false);
+#else
+    (void) X;
+    XrNetConn *conn = nargs > 1 ? unwrap_conn(args[1]) : NULL;
+    if (conn)
+        xr_net_conn_close(conn);
+    *result = xr_int(XR_NETERR_TLS);
+    return XR_CFUNC_DONE;
+#endif
+}
+
+static XrCFuncResult net_tls_server_handshake_context_yieldable(XrVMRuntime *X, XrValue *args,
+                                                                int nargs, XrValue *result) {
+#ifdef XR_ENABLE_TLS
+    XrNetTlsContextHandle *context =
+        nargs > 0 ? xr_net_tls_server_context_from_value(X, args[0]) : NULL;
+    return net_tls_handshake_with_context(
+        X, nargs > 0 ? args + 1 : args, nargs > 0 ? nargs - 1 : 0, result,
+        (XrTlsContext *) xr_net_tls_context_provider(context), true);
+#else
+    (void) X;
+    XrNetConn *conn = nargs > 1 ? unwrap_conn(args[1]) : NULL;
+    if (conn)
+        xr_net_conn_close(conn);
+    *result = xr_int(XR_NETERR_TLS);
+    return XR_CFUNC_DONE;
+#endif
+}
 
 // ========== UDP primitives ==========
 
@@ -1584,8 +1674,8 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
  * This leaf owns only the socket/bind/setsockopt host ABI projection.
  */
 static XrValue net_udp_multicast_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 4 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) ||
-        !XR_IS_INT(args[2]) || !XR_IS_BOOL(args[3]))
+    if (nargs < 4 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
+        !XR_IS_BOOL(args[3]))
         return XR_NULL_VAL;
 
     const char *group = XR_STRING_CHARS(XR_TO_STRING(args[0]));
@@ -1853,15 +1943,17 @@ static XrValue net_udp_from_port(XrVMRuntime *X, XrValue *args, int nargs) {
     return xr_int(conn ? conn->udp_from_port : 0);
 }
 
+#define XR_STDLIB_VM_BIND_CLASS_NET_CONN 1
+#define XR_STDLIB_VM_BIND_CLASS_NET_LISTENER 1
+#define XR_STDLIB_VM_BIND_CLASS___TLS_CONTEXT_STORAGE 1
+#include "../stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS___TLS_CONTEXT_STORAGE
+#undef XR_STDLIB_VM_BIND_CLASS_NET_LISTENER
+#undef XR_STDLIB_VM_BIND_CLASS_NET_CONN
+
 #define XR_STDLIB_VM_BIND_MODULE_NET 1
 #include "../stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_NET
-
-#define XR_STDLIB_VM_BIND_CLASS_NET_CONN 1
-#define XR_STDLIB_VM_BIND_CLASS_NET_LISTENER 1
-#include "../stdlib/xstdlib_class_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_CLASS_NET_LISTENER
-#undef XR_STDLIB_VM_BIND_CLASS_NET_CONN
 
 /* NetConn and NetListener class registrations are invoked
  * unconditionally during isolate init by
