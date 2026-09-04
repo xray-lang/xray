@@ -135,7 +135,7 @@ fn _isTokenByte(c: i64) -> bool {
 // looser -- no control characters and no spaces -- so `GET@X` passed one and
 // failed the other, and the disagreement surfaced as a connection failure.
 fn _methodValid(method: string) -> bool {
-    var b: Slice<u8> = method.bytes()
+    var b: const Slice<u8> = method.bytes()
     if (len(b) == 0) { return false }
     for (var i = 0; i < len(b); i++) {
         if (!_isTokenByte(b[i] as i64)) { return false }
@@ -147,7 +147,7 @@ fn _methodValid(method: string) -> bool {
 // this also rejects the pseudo-headers a caller must not supply -- this
 // module writes those itself.
 fn _headerNameValid(name: string) -> bool {
-    var b: Slice<u8> = name.bytes()
+    var b: const Slice<u8> = name.bytes()
     if (len(b) == 0) { return false }
     for (var i = 0; i < len(b); i++) {
         if (!_isTokenByte(b[i] as i64)) { return false }
@@ -159,7 +159,7 @@ fn _headerNameValid(name: string) -> bool {
 // obs-text above 0x7F. It may not hold a control character, which is what
 // stops header injection.
 fn _headerValueValid(value: string) -> bool {
-    var b: Slice<u8> = value.bytes()
+    var b: const Slice<u8> = value.bytes()
     for (var i = 0; i < len(b); i++) {
         var c = b[i] as i64
         if (c == 9) { continue }
@@ -172,7 +172,7 @@ fn _headerValueValid(value: string) -> bool {
 // field names on the wire, and a conformant peer answers a mixed-case name
 // with RST_STREAM(PROTOCOL_ERROR).
 fn _asciiLower(s: string) -> string {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     var out = Array<u8>(len(b))
     for (var i = 0; i < len(b); i++) {
         var c = b[i] as i64
@@ -182,7 +182,7 @@ fn _asciiLower(s: string) -> string {
 }
 
 fn _trimAscii(s: string) -> string {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     var start = 0
     var end = len(b)
     while (start < end && (b[start] == 32 || b[start] == 9)) { start = start + 1 }
@@ -1031,14 +1031,14 @@ export enum StreamState {
 }
 
 fn _startsWithColon(s: string) -> bool {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     return len(b) > 0 && b[0] == 58
 }
 
 // RFC 7540 Section 8.1.2.4: `:status` is exactly three digits. The C reader
 // accepted any prefix, so `"200abc"` became 200 and `"abc"` became 0.
 fn _parseStatus(value: string) -> i64 {
-    var b: Slice<u8> = value.bytes()
+    var b: const Slice<u8> = value.bytes()
     if (len(b) != 3) { return 0 }
     var status = 0
     for (var i = 0; i < 3; i++) {
@@ -1066,21 +1066,21 @@ final class Target {
     }
 }
 
-fn _indexOfByte(b: Slice<u8>, needle: i64, from: i64) -> i64 {
+fn _indexOfByte(b: const Slice<u8>, needle: i64, from: i64) -> i64 {
     for (var i = from; i < len(b); i++) {
         if ((b[i] as i64) == needle) { return i }
     }
     return -1
 }
 
-fn _sliceString(b: Slice<u8>, start: i64, end: i64) -> string {
+fn _sliceString(b: const Slice<u8>, start: i64, end: i64) -> string {
     var out = Array<u8>(end - start)
     for (var i = start; i < end; i++) { out[i - start] = b[i] }
     return string.fromUtf8Lossy(out[:])
 }
 
 fn _parsePort(text: string) -> i64 {
-    var b: Slice<u8> = text.bytes()
+    var b: const Slice<u8> = text.bytes()
     if (len(b) == 0 || len(b) > 5) {
         throw Http2Error.ProtocolError { reason: "invalid port: " + text }
     }
@@ -1103,7 +1103,7 @@ fn _parsePort(text: string) -> i64 {
 // dance are both out of scope, so anything but https is refused rather than
 // silently downgraded.
 fn _parseTarget(url: string) -> Target {
-    var b: Slice<u8> = url.bytes()
+    var b: const Slice<u8> = url.bytes()
     var schemeEnd = -1
     for (var i = 0; i + 2 < len(b); i++) {
         if ((b[i] as i64) == 58 && (b[i + 1] as i64) == 47 && (b[i + 2] as i64) == 47) {
@@ -1126,7 +1126,7 @@ fn _parseTarget(url: string) -> Target {
         if (c == 47 || c == 63 || c == 35) { authEnd = i; break }
     }
     var authority = _sliceString(b, authStart, authEnd)
-    var ab: Slice<u8> = authority.bytes()
+    var ab: const Slice<u8> = authority.bytes()
     if (len(ab) == 0) {
         throw Http2Error.ProtocolError { reason: "URL has no authority: " + url }
     }

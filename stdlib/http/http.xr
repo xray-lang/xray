@@ -1542,7 +1542,7 @@ fn _contentLengthFrom(headers: Headers) -> i64? {
 }
 
 fn _byteCrlfIndex(raw: string, start: i64) -> i64 {
-    var bytes: Slice<u8> = raw.bytes()
+    var bytes: const Slice<u8> = raw.bytes()
     var pos = start
     while (pos + 1 < len(bytes)) {
         if (bytes[pos] == 13 && bytes[pos + 1] == 10) {
@@ -1562,7 +1562,7 @@ fn _byteSlice(raw: string, start: i64, end: i64) -> string? {
 }
 
 fn _byteCrlfAt(raw: string, pos: i64) -> bool {
-    var bytes: Slice<u8> = raw.bytes()
+    var bytes: const Slice<u8> = raw.bytes()
     return pos + 1 < len(bytes) &&
            bytes[pos] == 13 &&
            bytes[pos + 1] == 10

@@ -147,7 +147,7 @@ fn byteString(b: i64) -> string {
 
 fn encodeImpl(s: string, form: bool) -> string {
     var src = s.copyBytes()
-    var alphabet: Slice<u8> = HEX.bytes()
+    var alphabet: const Slice<u8> = HEX.bytes()
     var out = ""
     for (var i = 0; i < len(src); i++) {
         var b = src[i] as i64
@@ -271,7 +271,7 @@ fn startsWithAt(s: string, pos: i64, prefix: string) -> bool {
 }
 
 fn portIsValid(port: string) -> bool {
-    var bytes: Slice<u8> = port.bytes()
+    var bytes: const Slice<u8> = port.bytes()
     if (len(bytes) == 0 || len(bytes) > 5) { return false }
     var v = 0
     for (var i = 0; i < len(bytes); i++) {
