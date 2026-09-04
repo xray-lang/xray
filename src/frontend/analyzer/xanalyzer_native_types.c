@@ -381,7 +381,7 @@ static XrTypeId class_name_to_tid(const char *name, const char **out_display) {
 
 static bool class_name_is_generated_plain_class(const char *name) {
     XR_DCHECK(name != NULL, "class_name_is_generated_plain_class: NULL name");
-    return strcmp(name, "RegexMatch") == 0 || strcmp(name, "PanicInfo") == 0;
+    return strcmp(name, "PanicInfo") == 0;
 }
 
 /* ========== Initialization ========== */

@@ -2723,13 +2723,13 @@ static bool emit_coro_net_bidi_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
     for (uint32_t i = 0; i < XR_STDLIB_ENUM_DEF_ENTRY_COUNT; i++) {
         const XrStdlibEnumDefEntry *candidate = &xr_stdlib_enum_def_entries[i];
         if (candidate->module && candidate->name && strcmp(candidate->module, "net") == 0 &&
-            strcmp(candidate->name, "NetError") == 0) {
+            strcmp(candidate->name, "__NetError") == 0) {
             error_enum = candidate;
             break;
         }
     }
     if (argc != 2 || !method || !method->ret || strcmp(method->ret, "i64_pair_result") != 0 ||
-        !method->aot_enum || strcmp(method->aot_enum, "NetError") != 0 || !error_enum) {
+        !method->aot_enum || strcmp(method->aot_enum, "__NetError") != 0 || !error_enum) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT net.copyBidirectional contract\n");
         emit_codegen_abort_aot_result(out);

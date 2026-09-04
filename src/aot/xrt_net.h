@@ -902,7 +902,7 @@ static inline XrtI64PairResult xrt_net_bidi_result(int64_t first, int64_t second
 static inline int32_t xrt_net_error_variant_index(uint8_t kind) {
     if (kind >= XRT_NETERR_TIMEOUT && kind <= XRT_NETERR_INVALID)
         return (int32_t) kind - 1;
-    return 6; /* NetError.Io */
+    return 6; /* __NetError.Io */
 }
 
 static inline int64_t xrt_net_min_active_deadline(int64_t current, int64_t candidate) {
@@ -913,7 +913,7 @@ static inline int64_t xrt_net_min_active_deadline(int64_t current, int64_t candi
 
 /* Hosted AOT data plane for net.copyBidirectional. The helper returns a
  * native pair plus an enum ordinal; codegen materializes the declared sealed
- * structural object and publishes the generated stable NetError value when needed. */
+ * structural object and publishes the generated private transport error when needed. */
 static inline XrtI64PairResult xrt_net_copy_bidirectional(XrValue a_value, XrValue b_value) {
     xrt_net_conn_object_t *a = xrt_net_conn_ptr(a_value);
     xrt_net_conn_object_t *b = xrt_net_conn_ptr(b_value);
@@ -1102,7 +1102,7 @@ static inline XrtNetBidiAsyncState *xrt_net_bidi_async_state_new(XrValue a, XrVa
     atomic_init(&state->refs, 1);
     state->a = a;
     state->b = b;
-    state->result = xrt_net_bidi_result(0, 0, 9); /* NetError.OutOfMemory */
+    state->result = xrt_net_bidi_result(0, 0, 9); /* __NetError.OutOfMemory */
     xrt_retain(a);
     xrt_retain(b);
     return state;

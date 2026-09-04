@@ -409,18 +409,12 @@ static XrValue mem_buffer_resize(XrVMRuntime *isolate, XrValue self, XrValue *ar
     return xr_bool(true);
 }
 
-static int mem_page_default_prot(void) {
-    return XR_MEM_PROT_READ | XR_MEM_PROT_WRITE;
-}
-
-static int mem_page_prot_arg(XrValue v) {
-    return XR_IS_INT(v) ? (int) XR_TO_INT(v) : mem_page_default_prot();
-}
-
 static XrValue mem_page_alloc(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
-    int64_t bytes = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
-    int prot = argc >= 2 ? mem_page_prot_arg(args[1]) : mem_page_default_prot();
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return mem_ptr_result(NULL);
+    int64_t bytes = XR_TO_INT(args[0]);
+    int prot = (int) XR_TO_INT(args[1]);
     if (bytes <= 0)
         return mem_ptr_result(NULL);
     return mem_ptr_result(xr_mem_map((size_t) bytes, prot));
@@ -428,13 +422,13 @@ static XrValue mem_page_alloc(XrVMRuntime *isolate, XrValue *args, int argc) {
 
 static XrValue mem_page_protect(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
-    if (argc < 3 || !XR_IS_INT(args[1]))
+    if (argc < 3 || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return xr_bool(false);
     int64_t bytes = XR_TO_INT(args[1]);
     if (bytes <= 0)
         return xr_bool(false);
     return xr_bool(
-        xr_mem_protect(mem_rawptr_arg(args[0]), (size_t) bytes, mem_page_prot_arg(args[2])));
+        xr_mem_protect(mem_rawptr_arg(args[0]), (size_t) bytes, (int) XR_TO_INT(args[2])));
 }
 
 static XrValue mem_page_free(XrVMRuntime *isolate, XrValue *args, int argc) {

@@ -340,7 +340,7 @@ def check_l2_thinning(root: Path) -> list[str]:
     expected_native = {
         "io": set(),
         "os": set(),
-        "net": {"NetError"},
+        "net": set(),
     }
     expected_sources = {
         "io": "stdlib/io/io.xr",

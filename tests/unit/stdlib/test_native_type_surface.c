@@ -140,7 +140,7 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(a_to_b_index, expected_a_to_b);
     ASSERT_EQ_INT(b_to_a_index, 1 - expected_a_to_b);
 
-    const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "NetError");
+    const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "__NetError");
     ASSERT_NOT_NULL(enum_decl);
     ASSERT_EQ_INT(enum_decl->variant_count, 10);
     ASSERT_TRUE(enum_decl->layout_id != 0);
@@ -155,9 +155,9 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(enum_info->variant_count, 10);
     ASSERT_EQ_INT(enum_type->enum_type.layout_id, enum_decl->layout_id);
 
-    XrEnumType *runtime_enum = xr_stdlib_enum_type_get(iso, "net", "NetError");
+    XrEnumType *runtime_enum = xr_stdlib_enum_type_get(iso, "net", "__NetError");
     ASSERT_NOT_NULL(runtime_enum);
-    ASSERT_TRUE(runtime_enum == xr_stdlib_enum_type_get(iso, "net", "NetError"));
+    ASSERT_TRUE(runtime_enum == xr_stdlib_enum_type_get(iso, "net", "__NetError"));
     ASSERT_NOT_NULL(runtime_enum->layout);
     ASSERT_EQ_INT(runtime_enum->layout->layout_id, enum_decl->layout_id);
     ASSERT_EQ_INT(runtime_enum->members[0].ctor->layout_id, enum_decl->layout_id);
@@ -236,21 +236,14 @@ TEST(native_module_object_and_enum_metadata) {
     xray_vm_delete(iso);
 }
 
-TEST(native_direct_member_resolves_each_page_alloc_arity) {
-    const XrStdlibDefEntry *one =
-        xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 1);
-    const XrStdlibDefEntry *two =
-        xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 2);
+TEST(native_direct_member_resolves_private_page_alloc_leaf) {
+    const XrStdlibDefEntry *leaf =
+        xr_stdlib_metadata_exact_native_direct_member("mem", "__pageAlloc", 2);
 
-    ASSERT_NOT_NULL(one);
-    ASSERT_NOT_NULL(two);
-    ASSERT_TRUE(one != two);
-    ASSERT_EQ_INT(one->argc, 1);
-    ASSERT_EQ_INT(two->argc, 2);
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 0));
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 3));
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "missing", 1));
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("missing", "pageAlloc", 1));
+    ASSERT_NOT_NULL(leaf);
+    ASSERT_EQ_INT(leaf->argc, 2);
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "__pageAlloc", 1));
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 2));
 }
 
 TEST(native_direct_member_identity_rejects_duplicate_tuple) {

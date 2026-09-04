@@ -1298,7 +1298,7 @@ static uint32_t net_error_variant_index(uint8_t error) {
 }
 
 static XrEnumType *net_error_type(XrVMRuntime *X) {
-    return xr_stdlib_enum_type_get(X, "net", "NetError");
+    return xr_stdlib_enum_type_get(X, "net", "__NetError");
 }
 
 static void net_publish_error(XrVMRuntime *X, uint8_t error) {

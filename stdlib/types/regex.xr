@@ -9,12 +9,6 @@
 // Xray value without the collector losing it. It starts empty and regex.xr
 // fills it by pushing: a class-typed parameter is a read capability, so the
 // field itself cannot be assigned from there, but its elements can.
-class RegexMatch {
-    start: i64
-    end: i64
-    text: string
-    groups: Array<string>
-}
 class Regex {
     pattern: string
     flags: i64

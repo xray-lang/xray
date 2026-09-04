@@ -52,14 +52,6 @@ enum {
     XR_REGEX_FIELD_PROG = 2,
 };
 
-/* RegexMatch field slots, in declaration order. */
-enum {
-    XR_REGEX_MATCH_FIELD_START = 0,
-    XR_REGEX_MATCH_FIELD_END = 1,
-    XR_REGEX_MATCH_FIELD_TEXT = 2,
-    XR_REGEX_MATCH_FIELD_GROUPS = 3,
-};
-
 static const char *value_to_cstring(XrValue v, int *len) {
     if (!XR_IS_STRING(v))
         return NULL;
@@ -91,24 +83,6 @@ static XrValue make_regex(XrVMRuntime *isolate, XrValue pattern, int64_t flags) 
      * capability and cannot have its fields assigned. */
     XrArray *prog = xr_array_new(xr_current_coro(isolate));
     xr_instance_set_field_fast(inst, XR_REGEX_FIELD_PROG, xr_value_from_array(prog));
-    return XR_FROM_PTR(inst);
-}
-
-/* __regexMatchNew(start, end, text, groups) - allocation only; every value is
- * computed by regex.xr. */
-static XrValue regex_match_new(XrVMRuntime *isolate, XrValue *args, int argc) {
-    if (argc < 4)
-        return xr_null();
-    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core && core->regexMatchClass, "regex_match_new: regexMatchClass not registered");
-    XrObjectInstance *inst = xr_instance_new(isolate, core->regexMatchClass);
-    if (!inst)
-        return xr_null();
-    xr_rc_retain_value(args[2]);
-    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_START, args[0]);
-    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_END, args[1]);
-    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_TEXT, args[2]);
-    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_GROUPS, args[3]);
     return XR_FROM_PTR(inst);
 }
 
@@ -188,14 +162,11 @@ XrValue xr_regex_compile_literal(XrVMRuntime *isolate, XrValue pattern_val, XrVa
  * ======================================================================== */
 
 #define XR_STDLIB_VM_BIND_CLASS_REGEX 1
-#define XR_STDLIB_VM_BIND_CLASS_REGEX_MATCH 1
 #include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_CLASS_REGEX_MATCH
 #undef XR_STDLIB_VM_BIND_CLASS_REGEX
 
 void xr_regex_register_class(XrVMRuntime *isolate) {
     xr_stdlib_vm_register_regex_class_generated(isolate);
-    xr_stdlib_vm_register_regex_match_class_generated(isolate);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_REGEX 1

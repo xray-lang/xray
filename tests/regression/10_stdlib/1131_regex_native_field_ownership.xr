@@ -1,4 +1,5 @@
 import regex
+import { RegexMatch } from regex
 
 fn makeDynamicPattern(seed: i64) -> string {
     return "([a-z]+)(" + string(seed) + "+)"

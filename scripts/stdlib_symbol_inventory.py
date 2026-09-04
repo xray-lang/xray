@@ -119,7 +119,7 @@ LEAF_EFFECT_TOKENS = {
 # A `.def` entry may state its effect as the set of error variants it raises;
 # those variants are legal effect tokens so the allowlist can restate the
 # declaration without losing which errors it names.
-THROWN_VARIANT_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
+THROWN_VARIANT_RE = re.compile(r"^(?:__)?[A-Z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
 
 LEAF_RECORD_KEYS = {
     "module",

@@ -28,6 +28,19 @@ const _DEFAULT_COPY_BUFFER: i64 = 65536
 const _MIN_COPY_BUFFER: i64 = 1024
 const _MAX_COPY_BUFFER: i64 = 1048576
 
+export enum NetError {
+    Timeout,
+    Closed,
+    Reset,
+    Refused,
+    Dns,
+    Tls,
+    Io,
+    Invalid,
+    Cancelled,
+    OutOfMemory
+}
+
 fn _classify(code: i64) -> NetError {
     if (code == _CODE_TIMEOUT) { return NetError.Timeout }
     if (code == _CODE_CLOSED) { return NetError.Closed }
@@ -37,6 +50,19 @@ fn _classify(code: i64) -> NetError {
     if (code == _CODE_TLS) { return NetError.Tls }
     if (code == _CODE_INVALID) { return NetError.Invalid }
     if (code == _CODE_CANCELLED) { return NetError.Cancelled }
+    return NetError.Io
+}
+
+fn _classifyNative(error: __NetError) -> NetError {
+    if (error == __NetError.Timeout) { return NetError.Timeout }
+    if (error == __NetError.Closed) { return NetError.Closed }
+    if (error == __NetError.Reset) { return NetError.Reset }
+    if (error == __NetError.Refused) { return NetError.Refused }
+    if (error == __NetError.Dns) { return NetError.Dns }
+    if (error == __NetError.Tls) { return NetError.Tls }
+    if (error == __NetError.Invalid) { return NetError.Invalid }
+    if (error == __NetError.Cancelled) { return NetError.Cancelled }
+    if (error == __NetError.OutOfMemory) { return NetError.OutOfMemory }
     return NetError.Io
 }
 
@@ -275,8 +301,12 @@ export fn copy(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFE
 // to two child tasks, so the pair-pump stays a native primitive until that
 // plan lands.
 export fn copyBidirectional(a: NetConn, b: NetConn) -> CopyBidirectionalResult {
-    var raw = __copyBidirectional(a, b)
-    return CopyBidirectionalResult(raw.aToB, raw.bToA)
+    try {
+        var raw = __copyBidirectional(a, b)
+        return CopyBidirectionalResult(raw.aToB, raw.bToA)
+    } catch (error: __NetError) {
+        throw _classifyNative(error)
+    }
 }
 
 // ========== UDP ==========

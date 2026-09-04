@@ -2526,10 +2526,6 @@ static inline XrValue xrt_mem_page_alloc(XrValue bytes, XrValue prot) {
     return xr_mkptr(xr_hook_page_alloc((size_t) n, xrt_mem_int_arg(prot)), XR_TAG_PTR);
 }
 
-static inline XrValue xrt_mem_page_alloc_default(XrValue bytes) {
-    return xrt_mem_page_alloc(bytes, XR_FROM_INT(XRT_MEM_PROT_READ | XRT_MEM_PROT_WRITE));
-}
-
 static inline XrValue xrt_mem_page_protect(XrValue ptr, XrValue bytes, XrValue prot) {
     int64_t n = xrt_mem_int_arg(bytes);
     if (!ptr.ptr || n <= 0)

@@ -29,6 +29,20 @@
 //   * Array<i64>(n) does not zero-fill: 255 of 256 elements came back non-zero
 //     from reused memory. Every sized allocation states its fill value.
 
+export final class RegexMatch {
+    start: i64
+    end: i64
+    text: string
+    groups: Array<string>
+
+    constructor(start: i64, end: i64, text: string, groups: Array<string>) {
+        this.start = start
+        this.end = end
+        this.text = text
+        this.groups = groups
+    }
+}
+
 const RX_F_NONE: i64 = 0
 const RX_F_IGNORECASE: i64 = 1
 const RX_F_MULTILINE: i64 = 2
@@ -1832,7 +1846,7 @@ fn rxMakeMatch(text: Array<u8>, caps: Array<i64>, ncaps: i64) -> RegexMatch {
         }
         i = i + 1
     }
-    return __regexMatchNew(caps[0], caps[1], rxBytesToStr(text, caps[0], caps[1]), g)
+    return RegexMatch(caps[0], caps[1], rxBytesToStr(text, caps[0], caps[1]), g)
 }
 
 // Mine 3 (KEPT): offset shifts the text base, so ^ \A and \b can hold again at

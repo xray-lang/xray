@@ -8,7 +8,6 @@ contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 contains="standard_libraries": false
 c_contains=#include "xrt_core_freestanding.h"
-c_contains=xrt_mem_page_alloc_default(
 c_contains=xrt_mem_page_alloc(
 c_contains=xrt_mem_page_protect(
 c_contains=xrt_mem_page_free(

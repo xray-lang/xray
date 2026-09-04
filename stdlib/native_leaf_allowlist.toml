@@ -725,13 +725,23 @@ deletion_trigger = "when Xray can express a store that bypasses the cache togeth
 
 [[leaf]]
 module = "mem"
+symbol = "__pageAlloc"
+class = "host_abi_leaf"
+abi = "mmap(2); Win32 VirtualAlloc with MEM_RESERVE | MEM_COMMIT"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the kernel. VM stdlib/mem/mem.c -> src/os/unix/mem_unix.c xr_mem_map; AOT src/aot/xrt_mem.h calls mmap directly. Protection uses Xray's stable bits and one exact two-argument entry. Under the freestanding profile it reaches xr_hook_page_alloc"
+deletion_trigger = "when Xray source can issue the host page-mapping call itself; allocation is the smallest host boundary, while the protection default and lifetime policy already live in mem.xr"
+
+[[leaf]]
+module = "mem"
 symbol = "__pageFree"
 class = "host_abi_leaf"
 abi = "munmap(2); Win32 VirtualFree with MEM_RELEASE"
 ownership = "none"
 effect = "nothrow"
 provider = "the kernel. VM stdlib/mem/mem.c -> src/os/unix/mem_unix.c xr_mem_unmap; AOT src/aot/xrt_mem.h calls munmap directly, bypassing src/os. Under the freestanding profile neither is reached: src/aot/xrt_core_freestanding.h calls xr_hook_page_free, which the embedder must supply"
-deletion_trigger = "when Xray source can issue the munmap(2) call itself; releasing a mapping is the boundary and has no smaller form. Its counterpart mem.pageAlloc is still a public native pair, so this leaf cannot move before that one does"
+deletion_trigger = "when Xray source can issue the munmap(2) call itself; releasing a mapping is the boundary and has no smaller form"
 
 [[leaf]]
 module = "mem"
@@ -741,7 +751,7 @@ abi = "mprotect(2); Win32 VirtualProtect"
 ownership = "none"
 effect = "nothrow"
 provider = "the kernel. VM stdlib/mem/mem.c -> src/os/unix/mem_unix.c xr_mem_protect; AOT src/aot/xrt_mem.h calls mprotect directly. The protection bits are Xray's own abstraction (0 none, 1 read, 2 write, 4 exec) translated by two independent but equivalent tables. Under the freestanding profile it reaches xr_hook_page_protect instead"
-deletion_trigger = "when Xray source can issue the mprotect(2) call itself; as with mem.__pageFree, mem.pageAlloc has to stop being a public native pair first, since these three describe one mapping's lifetime"
+deletion_trigger = "when Xray source can issue the mprotect(2) call itself; changing host page-table permissions is the smallest host boundary"
 
 [[leaf]]
 module = "mem"
@@ -801,6 +811,16 @@ deletion_trigger = "when Xray can mark a store as one the optimiser may not elid
 
 [[leaf]]
 module = "net"
+symbol = "__NetError"
+class = "native_record_shape_leaf"
+abi = "private zero-payload enum with stable ordinal order Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory"
+ownership = "fresh"
+effect = "nothrow"
+provider = "generated stdlib enum metadata used only by the bidirectional VM/AOT pump error channel; net.xr maps every variant to the source-owned public NetError"
+deletion_trigger = "when __copyBidirectional returns a private scalar status or the two source pumps replace the native implementation"
+
+[[leaf]]
+module = "net"
 symbol = "__CopyBidirectionalResult"
 class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
@@ -845,7 +865,7 @@ symbol = "__copyBidirectional"
 class = "host_abi_leaf"
 abi = "read(2)/write(2) through the xr_socket_recv/xr_socket_send shims, shutdown(2) SHUT_WR on each half-close and shutdown(2) SHUT_RDWR at the end; the AOT pump additionally uses select(2)"
 ownership = "fresh"
-effect = "suspends, NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
+effect = "suspends, __NetError.Timeout, __NetError.Closed, __NetError.Reset, __NetError.Refused, __NetError.Dns, __NetError.Tls, __NetError.Io, __NetError.Invalid, __NetError.Cancelled, __NetError.OutOfMemory"
 provider = "kernel read/write/shutdown. The pump differs completely: the VM spawns two native coroutines driven by the netpoll (stdlib/net/net.c), while AOT runs a single blocking select(2) loop on the runtime async thread pool and refuses any TLS connection outright (divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md)"
 deletion_trigger = "when net.xr can spawn two coroutines over __readInto/__writeBytes and express the half-close rule itself, which needs the AOT side to stop declining TLS connections so both backends run the same program"
 
@@ -1360,7 +1380,7 @@ deletion_trigger = "when Xray source can issue the boot-time query itself; the b
 # are deleted, and so is the DFA, whose unsynchronised shared cache was a data
 # race on any Regex shared between coroutines.
 #
-# What is left is two handle constructors and three forwards to definitions
+# What is left is one handle constructor and three forwards to definitions
 # other files own. None of them decides anything about matching.
 
 [[leaf]]
@@ -1372,16 +1392,6 @@ ownership = "fresh"
 effect = "nothrow"
 provider = "stdlib/regex/xregex_binding.c make_regex. Regex is the VM native handle required by XI_REGEX_COMPILE. The returned instance owns one retained pattern reference and the creator reference of the empty program array; ordinary instance destruction releases both fields. regex.xr alone compiles and fills the program array"
 deletion_trigger = "Regex has to stay a native class for as long as the regex literal syntax exists: /pat/flags lowers to XI_REGEX_COMPILE with its result type pinned to type_regex in src/ir/xi_lower_expr.c:11349. The leaf goes when a literal can lower to a call of an Xray constructor instead, at which point Regex can be an ordinary Xray class"
-
-[[leaf]]
-module = "regex"
-symbol = "__regexMatchNew"
-class = "runtime_leaf"
-abi = "none; allocates one XrObjectInstance, stores scalar start and end fields, and retains the borrowed text and groups into fields 2 and 3"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex_binding.c regex_match_new. Every value is computed by regex.xr. The returned instance owns the retained text and groups references, and ordinary instance destruction releases both fields"
-deletion_trigger = "goes when an .xr body can construct the native RegexMatch class, or when RegexMatch becomes an ordinary Xray class; no backend implementation owns this construction outside the VM binding"
 
 [[leaf]]
 module = "regex"

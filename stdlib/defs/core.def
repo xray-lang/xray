@@ -988,13 +988,6 @@ module regex {
     builtin_kind: XR_BK_REGEX
   }
 
-  class RegexMatch {
-    super_slot: objectClass
-    core_slot: regexMatchClass
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_FINAL"
-    builtin_kind: XR_BK_REGEX_MATCH
-  }
-
   class_field Regex.pattern {
     visibility: "internal"
   }
@@ -1007,35 +1000,12 @@ module regex {
     visibility: "internal"
   }
 
-  class_field RegexMatch.start {
-  }
-
-  class_field RegexMatch.end {
-  }
-
-  class_field RegexMatch.text {
-  }
-
-  class_field RegexMatch.groups {
-  }
-
   fn __regexNew {
     signature: "(pattern: string, flags: i64): Regex"
     doc: "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation"
     vm: "regex_compile"
     argc: 2
     arg_spec: "sv"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __regexMatchNew {
-    signature: "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch"
-    doc: "Allocate a RegexMatch with its four fields set"
-    vm: "regex_match_new"
-    argc: 4
-    arg_spec: "vvsv"
     layer: "alloc"
     allocation: "may_heap"
     return_ownership: "fresh"
@@ -2021,22 +1991,9 @@ module mem {
     return_ownership: "fresh"
   }
 
-  fn pageAlloc {
-    signature: "(bytes: i64, prot?: i64): MutPtr<u8>"
-    doc: "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
-    allocation: "may_heap"
-    vm: "mem_page_alloc"
-    aot: "xrt_mem_page_alloc_default"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn pageAlloc {
-    signature: "(bytes: i64, prot?: i64): MutPtr<u8>"
-    doc: "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
+  fn __pageAlloc {
+    signature: "(bytes: i64, prot: i64): MutPtr<u8>"
+    doc: "Map zero-filled anonymous pages with explicit protection bits"
     allocation: "may_heap"
     vm: "mem_page_alloc"
     aot: "xrt_mem_page_alloc"
@@ -2227,9 +2184,9 @@ module Coro {
 }
 
 module net {
-  enum NetError {
+  enum __NetError {
     variants: "Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory"
-    doc: "Typed failure from network operations; classification from native codes lives in net.xr"
+    doc: "Private transport error from the bidirectional native pump"
   }
 
   object __CopyBidirectionalResult {
@@ -2413,12 +2370,12 @@ module net {
     argc: 2
     arg_spec: "vv"
     ret: "i64_pair_result"
-    aot_enum: "NetError"
+    aot_enum: "__NetError"
     aot_direct: true
     link_object: false
     layer: "runtime"
     caps: "coro,netpoll"
-    effect: "NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
+    effect: "__NetError.Timeout, __NetError.Closed, __NetError.Reset, __NetError.Refused, __NetError.Dns, __NetError.Tls, __NetError.Io, __NetError.Invalid, __NetError.Cancelled, __NetError.OutOfMemory"
     return_ownership: "fresh"
   }
 

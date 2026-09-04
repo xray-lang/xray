@@ -5,17 +5,11 @@
 // its meaning can be stated in Xray, and stays in the .def when the compiler
 // owns its meaning.
 //
-// Two groups keep .def rows:
+// One group keeps public .def rows:
 //
 //   1. Buffer and its four methods, because a native class and its methods have
 //      no internal spelling in the .def metadata: renaming them cannot make
 //      them private, and Buffer additionally occupies a runtime core class slot.
-//
-//   2. pageAlloc, because its .def declares two arities that select two
-//      different AOT entry points (xrt_mem_page_alloc_default for the
-//      read/write default, xrt_mem_page_alloc when protection bits are given).
-//      Xray has no function overloading, and collapsing the pair into one
-//      default-argument function would erase the one-argument entry point.
 //
 // The layout, pointer and borrow intrinsics — sizeOf, alignOf, offsetOf, ptr,
 // mutPtr, addr, slice, load, store, withSliceMut, assumeInitialized — have no
@@ -70,8 +64,12 @@ export fn alloc(n: i64) -> Buffer { return __alloc(n) }
 export fn allocZeroed(n: i64) -> Buffer { return __allocZeroed(n) }
 export fn allocAligned(n: i64, align: i64) -> Buffer { return __allocAligned(n, align) }
 
-// Anonymous page protection and release. pageAlloc itself remains a .def row:
-// see the header note on its two arities.
+// Anonymous page lifetime. The public default belongs to this declaration;
+// the native layer exposes one exact mapping primitive.
+export fn pageAlloc(bytes: i64,
+                    prot: i64 = PROT_READ | PROT_WRITE) -> MutPtr<u8> {
+    return __pageAlloc(bytes, prot)
+}
 export fn pageProtect(ptr: MutPtr<u8>, bytes: i64, prot: i64) -> bool {
     return __pageProtect(ptr, bytes, prot)
 }

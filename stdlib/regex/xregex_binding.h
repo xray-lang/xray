@@ -26,7 +26,7 @@
 struct XrModule;
 
 /*
- * Register the Regex and RegexMatch classes. Regex stays a native class
+ * Register the Regex class. Regex stays a native class
  * because the literal syntax /pat/flags lowers to XI_REGEX_COMPILE with its
  * result type pinned to type_regex (src/ir/xi_lower_expr.c:11349); it carries
  * three ordinary GC-visible fields (pattern, flags, prog) and no native body.

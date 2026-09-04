@@ -1463,9 +1463,6 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = "Regex";
-    } else if (base_len == 10 && strncmp(s, "RegexMatch", 10) == 0) {
-        type = xr_type_new_instance(X, NULL);
-        type->instance.class_name = "RegexMatch";
     } else if (base_len == strlen(TYPE_NAME_BUFFER) &&
                strncmp(s, TYPE_NAME_BUFFER, strlen(TYPE_NAME_BUFFER)) == 0) {
         type = xr_type_new_instance(X, NULL);

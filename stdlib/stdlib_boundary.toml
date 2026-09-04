@@ -159,11 +159,10 @@ policy = "xray_semantic"
 semantic_source = "stdlib/regex/regex.xr"
 # Regex remains a runtime class because literal syntax lowers to
 # XI_REGEX_COMPILE, but its class row and fields are internal binding metadata.
-# RegexMatch and its fields are the only native declarations on the public API;
-# every method and module function is now implemented in Xray.
-public_native = ["RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text"]
+# RegexMatch, every method, and every module function are implemented in Xray.
+public_native = []
 private_native_sources = ["stdlib/regex/*.c"]
-private_native_reason = "Handle allocation plus three lookups owned elsewhere: the shared flag-string mask and the unicode property tables"
+private_native_reason = "Regex literal handle allocation plus the shared flag-string mask and unicode property tables"
 perf_suite = "stdlib/regex"
 
 [[module]]
@@ -176,17 +175,15 @@ semantic_source = "stdlib/mem/mem.xr"
 # than up front by the prelude, so the loader has to be told to run its
 # generated registrar.
 load_time_classes = ["Buffer"]
-# Partial migration. The retained rows are the ones whose meaning the compiler
-# owns rather than the source: Buffer plus its methods occupy a runtime core
-# class slot and have no public spelling in .def metadata, and pageAlloc
-# declares two arities that select two AOT entry points, which Xray cannot
-# express without function overloading. The layout, pointer and borrow
-# intrinsics no longer appear here: they are declared by
+# The retained public rows are the ones whose meaning the compiler owns rather
+# than the source: Buffer plus its methods occupy a runtime core class slot and
+# have no public spelling in .def metadata. The layout, pointer and borrow
+# intrinsics are declared by
 # src/frontend/analyzer/xa_intrinsic_registry.def instead, because their result
 # type comes from an explicit type argument and they lower to backend ops
 # rather than to calls, so a .def row could only restate a signature nothing
 # reads.
-public_native = ["pageAlloc"]
+public_native = []
 private_native_sources = ["stdlib/mem/mem.c"]
 private_native_reason = "Private fence, cache, allocation, page, address and bulk-byte leaves consumed by mem.xr"
 perf_suite = "stdlib/mem"
@@ -378,9 +375,9 @@ public = true
 layer = "L2"
 policy = "xray_semantic"
 semantic_source = "stdlib/net/net.xr"
-public_native = ["NetError"]
+public_native = []
 private_native_sources = ["stdlib/net/*.c"]
-private_native_reason = "Private socket, TLS, deadline and netpoll primitives consumed by net.xr"
+private_native_reason = "Private socket, TLS, deadline, netpoll and bidirectional-pump primitives consumed by net.xr"
 perf_suite = "stdlib/net"
 
 [[module]]
