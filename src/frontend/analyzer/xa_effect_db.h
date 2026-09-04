@@ -187,6 +187,11 @@ XR_FUNC bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary
                                            const XaEffectSummary *src);
 XR_FUNC void xa_effect_summary_add_semantic_effects(XaEffectSummary *summary,
                                                     XaSemanticEffectSet effects);
+/* Forget prior conclusions for dimensions that the current analysis pass owns
+ * before publishing their freshly derived state.  Other product dimensions,
+ * including error effects, remain unchanged. */
+XR_FUNC void xa_effect_summary_reset_semantic_effects(XaEffectSummary *summary,
+                                                      XaSemanticEffectSet effects);
 XR_FUNC bool xa_effect_summary_has_semantic_effect(const XaEffectSummary *summary,
                                                    XaSemanticEffect effect);
 XR_FUNC void xa_effect_summary_mark_contains_unsafe(XaEffectSummary *summary);

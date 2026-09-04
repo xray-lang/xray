@@ -2927,10 +2927,11 @@ fn _topicTargets(topic: string, token: i64,
 }
 
 fn _bufferFromBytes(source: Array<u8>) -> Buffer {
-    var out = mem.alloc(len(source))
-    if (len(source) > 0) {
+    var byteCount = len(source)
+    var out = mem.alloc(byteCount)
+    if (byteCount > 0) {
         unsafe {
-            mem.withSliceMut<u8>(out.borrowPtr(), len(out), ref out,
+            mem.withSliceMut<u8>(out.borrowPtr(), byteCount, ref out,
                 fn(target: ref Slice<u8>) {
                     var bytes: Slice<u8> = source[:]
                     target.copyFrom(bytes)

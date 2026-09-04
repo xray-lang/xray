@@ -519,6 +519,23 @@ void xa_effect_summary_add_semantic_effects(XaEffectSummary *summary, XaSemantic
     summary->fingerprint = 0;
 }
 
+void xa_effect_summary_reset_semantic_effects(XaEffectSummary *summary,
+                                              XaSemanticEffectSet effects) {
+    if (!summary || effects == XA_SEM_EFFECT_NONE)
+        return;
+    summary->semantic_effects &= ~effects;
+    summary->unknown_semantic_effects &= ~effects;
+    /* unknown_reasons is a shared diagnostic superset.  Once no semantic
+     * dimension remains unknown, the independently tracked error reasons are
+     * the complete surviving set and the aggregate completeness can be
+     * reconstructed exactly. */
+    if (summary->unknown_semantic_effects == XA_SEM_EFFECT_NONE) {
+        summary->unknown_reasons = summary->error_unknown_reasons;
+        summary->completeness = summary->error_set_completeness;
+    }
+    summary->fingerprint = 0;
+}
+
 bool xa_effect_summary_has_semantic_effect(const XaEffectSummary *summary,
                                            XaSemanticEffect effect) {
     return summary && effect != XA_SEM_EFFECT_NONE &&

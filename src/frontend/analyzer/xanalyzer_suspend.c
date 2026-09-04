@@ -961,6 +961,9 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
             xa_effect_db_get(pass->analyzer->effect_db, row->symbol->links.effect_id);
         bool ok =
             !current || xa_effect_summary_add_summary(pass->analyzer->effect_db, &summary, current);
+        xa_effect_summary_reset_semantic_effects(&summary, XA_SEM_EFFECT_SCHED_SUSPEND |
+                                                               XA_SEM_EFFECT_GEN_SUSPEND |
+                                                               XA_SEM_EFFECT_TASK_SPAWN);
         if (row->result == XA_SUSPEND_MAY)
             xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_SCHED_SUSPEND);
         else if (row->result == XA_SUSPEND_INCOMPLETE)

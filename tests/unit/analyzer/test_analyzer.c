@@ -15,11 +15,13 @@
 #include "xtype_names.h"
 #include "xanalyzer_symbol.h"
 #include "xanalyzer.h"
+#include "xanalyzer_allocation.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_capability.h"
 #include "xanalyzer_flow.h"
 #include "xanalyzer_infer.h"
 #include "xanalyzer_mono.h"
+#include "xanalyzer_suspend.h"
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_xrd.h"
 #include "xast_nodes.h"
@@ -406,8 +408,7 @@ TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     ASSERT(const_slice->is_const);
     ASSERT(xr_type_is_exact_u8(const_slice->container.element_type));
 
-    XrType *private_native_class =
-        xa_builtin_parse_type_string(g_isolate, "__BufferStorage");
+    XrType *private_native_class = xa_builtin_parse_type_string(g_isolate, "__BufferStorage");
     ASSERT(private_native_class != NULL);
     ASSERT(private_native_class->kind == XR_KIND_INSTANCE);
     ASSERT(private_native_class->instance.class_name != NULL);
@@ -2078,6 +2079,53 @@ TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
     ASSERT(dynamic->error_set_completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((dynamic->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
 
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_effect_passes_replace_only_their_owned_dimensions) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    AstNode *program = xr_parse(g_session, "fn scalar() -> i64 { return 1 }\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_dimension_reanalysis.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
+
+    XaSymbol *scalar = xa_analyzer_lookup(a, "scalar");
+    ASSERT(scalar != NULL);
+    const XaEffectSummary *current = analyzer_function_effect_summary(a, "scalar");
+    ASSERT(current != NULL);
+
+    /* Model a prior analysis whose allocation conclusion became unknown and
+     * whose suspension conclusion became stale.  Each subsequent pass must
+     * replace its own dimensions without erasing the other pass's product. */
+    XaEffectSummary stale;
+    xa_effect_summary_init(&stale);
+    ASSERT(xa_effect_summary_add_summary(a->effect_db, &stale, current));
+    xa_effect_summary_add_semantic_effects(&stale,
+                                           XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SCHED_SUSPEND);
+    xa_effect_summary_mark_semantic_incomplete(&stale, XA_SEM_EFFECT_ALLOC,
+                                               XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+    scalar->links.effect_id = xa_effect_db_intern(a->effect_db, &stale);
+    xa_effect_summary_clear(&stale);
+    ASSERT(scalar->links.effect_id != XA_EFFECT_NONE);
+
+    xa_infer_allocation_effects(a, program);
+    current = analyzer_function_effect_summary(a, "scalar");
+    ASSERT(current != NULL);
+    ASSERT(!xa_effect_summary_has_semantic_effect(current, XA_SEM_EFFECT_ALLOC));
+    ASSERT((current->unknown_semantic_effects & XA_SEM_EFFECT_ALLOC) == 0);
+    ASSERT(xa_effect_summary_has_semantic_effect(current, XA_SEM_EFFECT_SCHED_SUSPEND));
+
+    xa_verify_no_suspend(a, program);
+    current = analyzer_function_effect_summary(a, "scalar");
+    ASSERT(current != NULL);
+    ASSERT(!xa_effect_summary_has_semantic_effect(current, XA_SEM_EFFECT_SCHED_SUSPEND));
+    ASSERT((current->unknown_semantic_effects & XA_SEM_EFFECT_ANY_SUSPEND) == 0);
+    ASSERT(current->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(current->unknown_reasons == XA_UNKNOWN_NONE);
+
+    xr_program_destroy(program);
     xa_analyzer_free(a);
     setup_pool();
 }
@@ -7549,6 +7597,7 @@ int main(void) {
     RUN_TEST(symbol_export_view_rekeys_foreign_symbol_identity);
     RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
+    RUN_TEST(analyzer_effect_passes_replace_only_their_owned_dimensions);
     RUN_TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);

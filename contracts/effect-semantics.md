@@ -4,6 +4,13 @@ Status: re-frozen after suspension was split into two independent product
 dimensions. Task 242 gave numeric conversions typed evidence and Task 245
 separated semantic effects from native code-shape controls; the fail-closed
 semantics remain unchanged.
+Canonical effect inference is dimension-replacing, not append-only.  A pass
+first removes both the known and unknown conclusions for the semantic
+dimensions it owns, then publishes its freshly derived result while retaining
+every other product dimension.  This makes post-monomorphization and embedded
+source re-analysis idempotent: an earlier conservative allocation, scheduler,
+generator, or task-spawn conclusion cannot survive after the typed body has
+been re-proven otherwise.
 Task 254 makes mutable-capture cell and weak-field memory effects explicit Xi
 operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
@@ -543,13 +550,13 @@ admitted family.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_effect_db.h 3f8e0952e2b25291fa4aaeb96baa05197f789c4292db2ec2291da407d9724b01
-anchor-sha256: src/frontend/analyzer/xa_effect_db.c bbf0a9f9fd78e8daf7301437bcaace000fd4d22ac91167d79ca7b71307814a7f
+anchor-sha256: src/frontend/analyzer/xa_effect_db.h 998390822ff322bb4bdfed0269b970439e559072e559b4db9b72236cded79eec
+anchor-sha256: src/frontend/analyzer/xa_effect_db.c 8ca92758cf36570ddadd7c9508032f66b054d2036183ba57dce495a9a9f71964
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
 anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 46bb2c02ec15f6bcbf0eb41a97333f93b96380958748fff26e48e363f70a38c7
-anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c ceeb7a45b38b0d3632100f6716bb9cc39359b8942008c8fbcea15fb6db1375dc
-anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b5447f9c3826852dea8fd79da5b09706b3c73a6e66d072af9901ef38a28b20d7
+anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c 212d6b4960b0e4dad44ff7fc3995b448654e374edbf2eb47310b7e5d28d9e9c2
+anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b5cce6448541148ee391fabf0007e61c1ea8ed62deffd9bf74731e932e2e07a6
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 37ded58432af0c583c64271fd3600dcecfabd6f552e7513e0d8db164e57d96f0
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c 4ded6b8892f1f6dd254d528109492caba805380e7c3a96bb3c10e7a01f0e80c3
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h a8921aeb7fb69e437cc935f9a493a9768a24e42fe2dca194e456308f5db81d4f
@@ -560,7 +567,7 @@ anchor-sha256: src/ir/xi.h 3160abfd948d12cbe076ed8d1c24815ec3e56eb32ec38f4989e8f
 anchor-sha256: src/ir/xi_lower.c 689908399810b5fa026a91c71bcd57479f86f17afe4f215d5ae1086add2e6630
 anchor-sha256: src/app/cli/xcmd_verify.c 4d806bacb7a94efeba2d3d05e1ef657596fb7cbac2f315aff0d40f0e4de49629
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
-anchor-sha256: tests/unit/analyzer/test_analyzer.c dadc4674624aeccaf46fa8e15eed8c51fafd72d695360211fe005732d9e9c415
+anchor-sha256: tests/unit/analyzer/test_analyzer.c 0914020fa6e61f25370134d0619b68a409afaeadf7b825cd20fd4bbcbf2f8a64
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
 anchor-sha256: tests/unit/ir/test_xi_lower.c cd4e8a7917f5434c1456d1bfdda5970767939c6745eb677ad8a455bd0010853e
 anchor-sha256: src/frontend/analyzer/xanalyzer.c b69acdd9c2bebb9f00a705988e9634f72378c8c6081320647e02c11b1bd1e539
