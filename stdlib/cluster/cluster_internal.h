@@ -25,6 +25,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xcluster_output_queue.h"
+#include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xmonitor_registry.h"
 #include "../../src/coro/xphi_detector.h"
 #include "../../src/coro/xtombstone_registry.h"
@@ -138,8 +139,10 @@ void cluster_node_shutdown(XrClusterNode *node);
 void cluster_node_release(XrClusterNode *node);
 bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrValue inbound_handler,
                            XrValue outbound_handler);
-XrValue cluster_take_inbound_frame_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
-XrValue cluster_take_outbound_event_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
+XrCFuncResult cluster_peer_read_fn(struct XrVMRuntime *isolate, XrValue *args, int argc,
+                                   XrValue *result);
+XrCFuncResult cluster_peer_write_fn(struct XrVMRuntime *isolate, XrValue *args, int argc,
+                                    XrValue *result);
 
 /* ========== Cluster State ========== */
 

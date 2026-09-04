@@ -109,16 +109,9 @@ static const XaBuiltinObjectField g_gen_cluster___clusterruntimesnapshot_object_
 
 // cluster.__ClusterInboundFrame object fields
 static const XaBuiltinObjectField g_gen_cluster___clusterinboundframe_object_fields[] = {
-    {"peerGeneration", "i64"},
     {"receivedAtMs", "i64"},
     {"status", "i64"},
     {"wire", "Array<u8>?"},
-};
-
-// cluster.__ClusterOutboundEvent object fields
-static const XaBuiltinObjectField g_gen_cluster___clusteroutboundevent_object_fields[] = {
-    {"peerGeneration", "i64"},
-    {"status", "i64"},
 };
 
 // cluster.__ClusterHealthPeerSnapshot object fields
@@ -135,11 +128,10 @@ static const XaBuiltinObjectField g_gen_cluster___clusterhealthpeersnapshot_obje
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
     {"__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", g_gen_cluster___clusternodesnapshot_object_fields, 16, true},
     {"__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", g_gen_cluster___clusterruntimesnapshot_object_fields, 3, true},
-    {"__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", g_gen_cluster___clusterinboundframe_object_fields, 4, true},
-    {"__ClusterOutboundEvent", "Private projection of one slow-consumer or terminal writer event", g_gen_cluster___clusteroutboundevent_object_fields, 2, true},
+    {"__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", g_gen_cluster___clusterinboundframe_object_fields, 3, true},
     {"__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's failure detector state", g_gen_cluster___clusterhealthpeersnapshot_object_fields, 7, true},
 };
-#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 5
+#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 4
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
@@ -150,9 +142,9 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__recentlyDeparted", "(name: string): bool", "Project whether a node name is present in the locked recent-departure registry", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(): (), outbound: fn(): ()): bool", "Transfer an authenticated socket into the locked cluster node registry and start framed transport with source dispatchers", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__takeInboundFrame", "(): __ClusterInboundFrame?", "Borrow the complete bounded frame and peer generation owned by the current reader callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__takeOutboundEvent", "(): __ClusterOutboundEvent?", "Project the terminal event owned by the current writer callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__readPeer", "(peerGeneration: i64): __ClusterInboundFrame?", "Suspend until one complete bounded frame or terminal socket event is available for a live peer generation", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__writePeer", "(peerGeneration: i64): i64", "Suspend while writing one queued batch and return its transport status for a live peer generation", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__peerEnqueue", "(peerGeneration: i64, wire: Array<u8>): bool", "Enqueue one source-encoded wire frame for the current peer generation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__observeHeartbeat", "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool", "Project one source-decoded heartbeat observation onto locked peer health state", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__deliverInbound", "(topic: string, envelope: Array<u8>): i64", "Offer one source-decoded envelope to the synchronized topic registry", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},

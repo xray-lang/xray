@@ -506,16 +506,7 @@ fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
     if (response != null) { __peerEnqueue(peerGeneration, response!) }
 }
 
-fn _dispatchInbound() {
-    var inbound = __takeInboundFrame()
-    if (inbound == null) { return }
-    var peerGeneration = inbound!.peerGeneration
-    var receivedAtMs = inbound!.receivedAtMs
-    if (inbound!.status != 0 || inbound!.wire == null) {
-        __disconnectPeer(peerGeneration)
-        return
-    }
-    var wire = inbound!.wire!
+fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64, wire: Array<u8>) {
     var frame = decodeFrame(wire)
     if (frame == null) { return }
     if (frame!.kind == FRAME_HEARTBEAT_PING) {
@@ -558,6 +549,23 @@ fn _dispatchInbound() {
     }
     // CORO_DEMONITOR is deliberately a no-op until remote monitor identity is
     // part of the wire contract; the protocol has no safe removal key today.
+}
+
+fn _dispatchInboundOne(peerGeneration: i64) -> bool {
+    var inbound = __readPeer(peerGeneration)
+    if (inbound == null) { return false }
+    if (inbound!.status != 0 || inbound!.wire == null) {
+        __disconnectPeer(peerGeneration)
+        return false
+    }
+    _dispatchInboundFrame(peerGeneration, inbound!.receivedAtMs, inbound!.wire!)
+    return true
+}
+
+fn _dispatchInbound(peerGeneration: i64) {
+    // The single-iteration frame keeps each owned wire scoped outside the
+    // loop-carried state while Xray retains scheduling authority.
+    while (_dispatchInboundOne(peerGeneration)) { Coro.yield() }
 }
 
 // HMAC-SHA256 is provided by crypto.xr; cluster owns the proof construction
@@ -634,10 +642,18 @@ export final class PhiDetector {
 // high-watermark or the socket stopped accepting bytes. Detaching that peer is
 // a source policy decision and uses the same generation-safe path as inbound
 // termination, so a delayed callback cannot close a replacement connection.
-fn _dispatchOutbound() {
-    var event = __takeOutboundEvent()
-    if (event == null || event!.status == 0) { return }
-    __disconnectPeer(event!.peerGeneration)
+fn _dispatchOutbound(peerGeneration: i64) {
+    while (true) {
+        var status = __writePeer(peerGeneration)
+        if (status < 0) { return }
+        if (status != 0) {
+            __disconnectPeer(peerGeneration)
+            return
+        }
+        // Each leaf invocation owns one detached queue batch. Xray chooses the
+        // next scheduling point and whether another batch should be requested.
+        Coro.yield()
+    }
 }
 
 // During detector warm-up the fixed timeout is deliberately conservative;

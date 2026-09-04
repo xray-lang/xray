@@ -2035,15 +2035,9 @@ module cluster {
   }
 
   object __ClusterInboundFrame {
-    fields: "const peerGeneration: i64, const receivedAtMs: i64, const status: i64, const wire: Array<u8>?"
+    fields: "const receivedAtMs: i64, const status: i64, const wire: Array<u8>?"
     exact: true
     doc: "Private projection of one complete frame or terminal reader event"
-  }
-
-  object __ClusterOutboundEvent {
-    fields: "const peerGeneration: i64, const status: i64"
-    exact: true
-    doc: "Private projection of one slow-consumer or terminal writer event"
   }
 
   object __ClusterHealthPeerSnapshot {
@@ -2139,8 +2133,8 @@ module cluster {
   }
 
   fn __adoptPeer {
-    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(): (), outbound: fn(): ()): bool"
-    doc: "Transfer an authenticated socket into the locked cluster node registry and start framed transport with source dispatchers"
+    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool"
+    doc: "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops"
     vm: "cluster_adopt_peer_fn"
     argc: 8
     arg_spec: "vssvvvvv"
@@ -2150,28 +2144,31 @@ module cluster {
     caps: "coro,channel"
   }
 
-  fn __takeInboundFrame {
-    signature: "(): __ClusterInboundFrame?"
-    doc: "Borrow the complete bounded frame and peer generation owned by the current reader callback"
-    vm: "cluster_take_inbound_frame_fn"
-    argc: 0
-    arg_spec: ""
+  fn __readPeer {
+    signature: "(peerGeneration: i64): __ClusterInboundFrame?"
+    doc: "Suspend until one complete bounded frame or terminal socket event is available for a live peer generation"
+    vm: "cluster_peer_read_fn"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
     return_ownership: "fresh"
   }
 
-  fn __takeOutboundEvent {
-    signature: "(): __ClusterOutboundEvent?"
-    doc: "Project the terminal event owned by the current writer callback"
-    vm: "cluster_take_outbound_event_fn"
-    argc: 0
-    arg_spec: ""
+  fn __writePeer {
+    signature: "(peerGeneration: i64): i64"
+    doc: "Suspend while writing one queued batch and return its transport status for a live peer generation"
+    vm: "cluster_peer_write_fn"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
-    return_ownership: "fresh"
+    caps: "coro,netpoll"
   }
 
   fn __peerEnqueue {
