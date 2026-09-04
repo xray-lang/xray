@@ -18,6 +18,7 @@
 #include "app/toolchain/xtc_probe_cache.h"
 #include "app/toolchain/xtc_runtime_manifest.h"
 #include "base/xjson.h"
+#include "base/xsha256.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,33 @@ typedef struct CommandCapture {
     char args[48][256];
     size_t count;
 } CommandCapture;
+
+static void expected_build_tree_sdk_digest(const XrToolchainTarget *target,
+                                           const XrRuntimeArtifactSet *runtime, char out[72]) {
+    static const char domain[] = "xray-build-tree-runtime-sdk-v1";
+    XrSHA256Context ctx;
+    uint8_t digest[32];
+    uint8_t artifact_count = (uint8_t) runtime->artifact_count;
+    static const char hex[] = "0123456789abcdef";
+
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, (const uint8_t *) domain, sizeof(domain));
+    xr_sha256_update(&ctx, (const uint8_t *) target->name, strlen(target->name) + 1);
+    xr_sha256_update(&ctx, &artifact_count, sizeof(artifact_count));
+    for (size_t i = 0; i < runtime->artifact_count; i++) {
+        const XrRuntimeArtifact *artifact = &runtime->artifacts[i];
+        xr_sha256_update(&ctx, (const uint8_t *) artifact->id, strlen(artifact->id) + 1);
+        xr_sha256_update(&ctx, (const uint8_t *) artifact->sha256, strlen(artifact->sha256) + 1);
+    }
+    xr_sha256_final(&ctx, digest);
+
+    memcpy(out, "sha256:", 7);
+    for (size_t i = 0; i < sizeof(digest); i++) {
+        out[7 + i * 2] = hex[digest[i] >> 4];
+        out[7 + i * 2 + 1] = hex[digest[i] & 0x0f];
+    }
+    out[71] = '\0';
+}
 
 static bool command_capture_add(void *context, const char *arg, char *err, size_t err_size) {
     CommandCapture *capture = context;
@@ -458,6 +486,7 @@ TEST(build_tree_runtime_manifest_matches_host_platform) {
     XrToolchainTarget target;
     XrRuntimeArtifactSet runtime;
     XrToolchainReasonCode reason = XR_TOOLCHAIN_REASON_NONE;
+    char expected_sdk_digest[72];
     char err[512] = {0};
 
     ASSERT_TRUE(xtc_target_parse(NULL, &target, err, sizeof(err)));
@@ -499,6 +528,8 @@ TEST(build_tree_runtime_manifest_matches_host_platform) {
 #else
     ASSERT_EQ_INT(runtime.artifact_count, 2);
 #endif
+    expected_build_tree_sdk_digest(&target, &runtime, expected_sdk_digest);
+    ASSERT_STR_EQ(runtime.sdk_digest, expected_sdk_digest);
     ASSERT_EQ_INT(reason, XR_TOOLCHAIN_REASON_NONE);
 }
 

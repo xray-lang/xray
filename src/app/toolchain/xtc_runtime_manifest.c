@@ -95,6 +95,32 @@ static bool xtc_sha256_file(const char *path, char out[65]) {
     return true;
 }
 
+static void xtc_sha256_update_cstring(XrSHA256Context *ctx, const char *value) {
+    xr_sha256_update(ctx, (const uint8_t *) value, strlen(value) + 1);
+}
+
+static void xtc_runtime_build_tree_digest(const XrToolchainTarget *target,
+                                          XrRuntimeArtifactSet *runtime) {
+    static const char domain[] = "xray-build-tree-runtime-sdk-v1";
+    XrSHA256Context ctx;
+    uint8_t digest[32];
+    uint8_t artifact_count = (uint8_t) runtime->artifact_count;
+
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, (const uint8_t *) domain, sizeof(domain));
+    xtc_sha256_update_cstring(&ctx, target->name);
+    xr_sha256_update(&ctx, &artifact_count, sizeof(artifact_count));
+    for (size_t i = 0; i < runtime->artifact_count; i++) {
+        xtc_sha256_update_cstring(&ctx, runtime->artifacts[i].id);
+        xtc_sha256_update_cstring(&ctx, runtime->artifacts[i].sha256);
+    }
+    xr_sha256_final(&ctx, digest);
+
+    char digest_hex[65];
+    xtc_sha256_hex(digest, digest_hex);
+    snprintf(runtime->sdk_digest, sizeof(runtime->sdk_digest), "sha256:%s", digest_hex);
+}
+
 static bool xtc_runtime_provider_allowed(XrJsonValue *providers, XrToolchainProviderId provider) {
     const char *name = xtc_provider_name(provider);
     int count = xjson_array_len(providers);
@@ -329,16 +355,7 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
              "%s", "dl");
 #endif
 #endif
-    uint8_t digest[32];
-    char identity[512];
-    int written = snprintf(identity, sizeof(identity), "%s:%s:%s", target->name,
-                           out->artifacts[0].sha256, out->artifacts[1].sha256);
-    if (written < 0 || (size_t) written >= sizeof(identity))
-        return false;
-    xr_sha256((const uint8_t *) identity, (size_t) written, digest);
-    char digest_hex[65];
-    xtc_sha256_hex(digest, digest_hex);
-    snprintf(out->sdk_digest, sizeof(out->sdk_digest), "sha256:%s", digest_hex);
+    xtc_runtime_build_tree_digest(target, out);
     return true;
 #else
     (void) target;
