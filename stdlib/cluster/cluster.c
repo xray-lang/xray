@@ -17,6 +17,7 @@
 #include "../../stdlib/common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe
 #include "../../src/io/xnet_transport.h"
+#include "../../src/io/xcluster_discovery_provider.h"
 #include "../../src/runtime/object/xbuffer.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
@@ -561,7 +562,6 @@ static void cluster_runtime_destroy(XrCluster *c) {
     XR_DCHECK(c != NULL, "cluster destroy requires a runtime");
     XR_DCHECK(c->nodes == NULL, "cluster destroy requires a detached node list");
 
-    cluster_discovery_stop(c);
     xr_topic_registry_destroy(c->topics);
     c->topics = NULL;
     xr_monitor_registry_destroy(c->monitors);
@@ -1169,18 +1169,6 @@ static XrValue cluster_nodes(XrVMRuntime *X, XrValue *args, int argc) {
     xr_amutex_unlock(&c->nodes_lock);
 
     return xr_value_from_array(arr);
-}
-
-// cluster.discover() - start LAN auto-discovery via UDP multicast
-static XrValue cluster_discover_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    XrCluster *c = (XrCluster *) X->cluster;
-    if (!c)
-        return xr_bool(0);
-
-    int rc = cluster_discovery_start(c);
-    return xr_bool(rc == 0);
 }
 
 // cluster.stop()

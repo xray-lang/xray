@@ -2113,15 +2113,16 @@ module cluster {
     layer: "runtime"
   }
 
-  fn __discover {
-    signature: "(): bool"
-    doc: "Start LAN auto-discovery"
-    vm: "cluster_discover_fn"
-    argc: 0
-    arg_spec: ""
+  fn __discoveryOpen {
+    signature: "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?"
+    doc: "Open one IPv4 multicast UDP handle for the source-owned discovery loop"
+    vm: "xr_cluster_discovery_socket_open"
+    argc: 4
+    arg_spec: "svvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn __stop {

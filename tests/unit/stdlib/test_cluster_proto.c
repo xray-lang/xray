@@ -18,7 +18,6 @@
 
 #include "../test_framework.h"
 #include "../../../stdlib/cluster/cluster_internal.h"
-#include "../../../src/io/xdiscovery_announcement.h"
 
 #include <string.h>
 
@@ -573,38 +572,6 @@ TEST(cluster_frame_decoders_reject_truncated_payloads) {
                   -1);
 }
 
-TEST(cluster_discovery_announcement_is_byte_exact) {
-    uint8_t packet[XR_DISCOVERY_ANNOUNCEMENT_MAX_SIZE] = {0};
-    const uint64_t cluster_hash = UINT64_C(0x0102030405060708);
-    int wrote =
-        xr_discovery_announcement_encode(packet, sizeof(packet), "node-a", 47201, cluster_hash);
-    ASSERT_EQ_INT(wrote, 22);
-    ASSERT_EQ_INT(packet[0], 0x58);
-    ASSERT_EQ_INT(packet[1], 0x52);
-    ASSERT_EQ_INT(packet[2], 0x44);
-    ASSERT_EQ_INT(packet[3], 0x59);
-    ASSERT_EQ_INT(packet[4], 2);
-    ASSERT_EQ_INT(packet[5], 6);
-    ASSERT_EQ_INT(memcmp(packet + 6, "node-a", 6), 0);
-    ASSERT_EQ_INT(packet[12], 0xB8);
-    ASSERT_EQ_INT(packet[13], 0x61);
-    for (int i = 0; i < 8; i++)
-        ASSERT_EQ_INT(packet[14 + i], i + 1);
-
-    char name[XR_NODE_NAME_MAX + 1] = {0};
-    uint16_t port = 0;
-    uint64_t decoded_hash = 0;
-    ASSERT_EQ_INT(xr_discovery_announcement_decode(packet, (size_t) wrote, name, sizeof(name),
-                                                   &port, &decoded_hash),
-                  0);
-    ASSERT_STR_EQ(name, "node-a");
-    ASSERT_EQ_INT(port, 47201);
-    ASSERT_TRUE(decoded_hash == cluster_hash);
-    ASSERT_EQ_INT(xr_discovery_announcement_decode(packet, (size_t) wrote + 1u, name, sizeof(name),
-                                                   &port, &decoded_hash),
-                  -1);
-}
-
 TEST(cluster_phi_projection_uses_bounded_history) {
     XrPhiDetector detector;
     xr_phi_detector_init(&detector, 5000.0);
@@ -712,7 +679,6 @@ RUN_TEST(cluster_handshake_projection_shares_one_proof_flow);
 RUN_TEST(cluster_heartbeat_round_trips);
 RUN_TEST(cluster_coro_frames_round_trip);
 RUN_TEST(cluster_frame_decoders_reject_truncated_payloads);
-RUN_TEST(cluster_discovery_announcement_is_byte_exact);
 RUN_TEST(cluster_phi_projection_uses_bounded_history);
 RUN_TEST(cluster_wire_constants_match_the_xray_surface);
 RUN_TEST(cluster_topic_projection_matches_the_xray_surface);

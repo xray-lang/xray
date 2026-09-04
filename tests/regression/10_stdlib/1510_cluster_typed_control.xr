@@ -1,5 +1,44 @@
 import cluster
-import { ClusterConfig, ClusterInfo, ClusterTlsOptions } from cluster
+import { ClusterConfig, ClusterDiscoveryAnnouncement, ClusterInfo, ClusterTlsOptions } from cluster
+
+@test
+fn test_xray_owned_discovery_protocol_and_admission() {
+    var value: ClusterDiscoveryAnnouncement = {
+        name: "node-a",
+        port: 47201,
+        clusterHash: 0x0102030405060708 as u64
+    }
+    var packet = cluster.encodeDiscoveryAnnouncement(value)
+    assert(packet != null)
+    assertEqual(len(packet!), 22)
+    assertEqual(packet![0], 0x58)
+    assertEqual(packet![1], 0x52)
+    assertEqual(packet![2], 0x44)
+    assertEqual(packet![3], 0x59)
+    assertEqual(packet![4], 2)
+    assertEqual(packet![5], 6)
+    assertEqual(packet![12], 0xB8)
+    assertEqual(packet![13], 0x61)
+    for (var i = 0; i < 8; i++) { assertEqual(packet![14 + i], (i + 1) as u8) }
+
+    var decoded = cluster.decodeDiscoveryAnnouncement(packet!)
+    assert(decoded != null)
+    assertEqual(decoded!.name, "node-a")
+    assertEqual(decoded!.port, 47201)
+    assertEqual(decoded!.clusterHash, value.clusterHash)
+
+    var connected: Array<string> = ["node-b"]
+    var departed: Array<string> = []
+    assert(cluster.shouldJoinDiscoveredNode("self", connected, departed, decoded!,
+                                            value.clusterHash))
+    connected.push("node-a")
+    assert(!cluster.shouldJoinDiscoveredNode("self", connected, departed, decoded!,
+                                             value.clusterHash))
+    connected.clear()
+    departed.push("node-a")
+    assert(!cluster.shouldJoinDiscoveredNode("self", connected, departed, decoded!,
+                                             value.clusterHash))
+}
 
 @test
 fn test_xray_owned_admission_policy() {

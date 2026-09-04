@@ -39,6 +39,9 @@
 
 import crypto
 import math
+import net
+import { NetError } from net
+import time
 
 // ========== Protocol constants ==========
 
@@ -114,6 +117,16 @@ export const DISCOVERY_VERSION = 2
 export const DISCOVERY_MULTICAST_GROUP = "239.42.42.42"
 export const DISCOVERY_MULTICAST_PORT = 47200
 export const DISCOVERY_INTERVAL_MS = 3000
+const _DISCOVERY_MULTICAST_TTL = 1
+const _DISCOVERY_LOOPBACK = false
+const _DISCOVERY_ANNOUNCEMENT_MAX_SIZE = 128
+
+// Discovery is a source coroutine, so its identity and stop signal also live
+// in source. Tokens prevent a retiring loop from clearing a newer loop after a
+// stop/start cycle on the same isolate.
+const _discoveryNextToken: Atomic<i64> = Atomic<i64>(0)
+const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
+const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
 
 // ========== Wire protocol ===========
 
@@ -150,6 +163,11 @@ export type ClusterDiscoveryAnnouncement = {
     name: string,
     port: i64,
     clusterHash: u64,
+}
+
+type _DiscoveryTombstone = {
+    name: string,
+    markedAtMs: i64,
 }
 
 fn _bytes(text: string) -> Array<u8> {
@@ -544,6 +562,95 @@ export fn shouldJoinDiscoveredNode(selfName: string, connectedNames: Array<strin
     return true
 }
 
+fn _releaseDiscovery(token: i64) {
+    var (_, released) = _discoveryActiveToken.compareExchange(token, 0)
+}
+
+fn _drainDiscoveryTombstones(notifications: Channel<string>,
+                             tombstones: ref Array<_DiscoveryTombstone>, nowMs: i64) {
+    while (true) {
+        match (notifications.tryRecv()) {
+            Recv.Value { value: departed } -> {
+                var retained: Array<_DiscoveryTombstone> = []
+                for (var i = 0; i < len(tombstones); i++) {
+                    var entry = tombstones[i]
+                    if (entry.name != departed && tombstoneIsLive(entry.markedAtMs, nowMs)) {
+                        retained.push(entry)
+                    }
+                }
+                tombstones.clear()
+                for (var i = 0; i < len(retained); i++) { tombstones.push(retained[i]) }
+                tombstones.push({ name: departed, markedAtMs: nowMs })
+            }
+            _ -> { return }
+        }
+    }
+}
+
+fn _liveDiscoveryTombstoneNames(tombstones: ref Array<_DiscoveryTombstone>,
+                                nowMs: i64) -> Array<string> {
+    var retained: Array<_DiscoveryTombstone> = []
+    var names: Array<string> = []
+    for (var i = 0; i < len(tombstones); i++) {
+        var entry = tombstones[i]
+        if (tombstoneIsLive(entry.markedAtMs, nowMs)) {
+            retained.push(entry)
+            names.push(entry.name)
+        }
+    }
+    tombstones.clear()
+    for (var i = 0; i < len(retained); i++) { tombstones.push(retained[i]) }
+    return names
+}
+
+fn _joinDiscoveredNode(host: string, port: i64) { __join(host, port) }
+
+fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName: string,
+                  expectedHash: u64, announcement: move Array<u8>, token: i64) {
+    var live = socket
+    var wire = announcement
+    defer {
+        net.close(live)
+        notifications.close()
+        _releaseDiscovery(token)
+    }
+
+    var buffer = Array<u8>(_DISCOVERY_ANNOUNCEMENT_MAX_SIZE)
+    var tombstones: Array<_DiscoveryTombstone> = []
+    var nextAnnouncementMs = 0
+    while (_discoveryActiveToken.load() == token) {
+        var nowMs = time.monotonic()
+        _drainDiscoveryTombstones(notifications, ref tombstones, nowMs)
+        if (nowMs >= nextAnnouncementMs) {
+            try {
+                net.sendTo(live, wire, DISCOVERY_MULTICAST_GROUP,
+                           DISCOVERY_MULTICAST_PORT, 0)
+            } catch (e) {}
+            nextAnnouncementMs = nowMs + DISCOVERY_INTERVAL_MS
+        }
+
+        var waitMs = nextAnnouncementMs - time.monotonic()
+        if (waitMs < 1) { waitMs = 1 }
+        var sender = net.recvFrom(live, ref buffer, waitMs)
+        if (sender == null) {
+            var error = net.lastError(live)
+            if (error != null && error != NetError.Timeout) { return }
+            continue
+        }
+        if (_discoveryActiveToken.load() != token) { return }
+
+        nowMs = time.monotonic()
+        _drainDiscoveryTombstones(notifications, ref tombstones, nowMs)
+        var candidate = decodeDiscoveryAnnouncement(buffer)
+        var connected = nodes()
+        if (candidate == null || connected == null) { continue }
+        var departed = _liveDiscoveryTombstoneNames(ref tombstones, nowMs)
+        if (shouldJoinDiscoveredNode(selfName, connected!, departed, candidate!, expectedHash)) {
+            go _joinDiscoveredNode(sender!.host, candidate!.port)
+        }
+    }
+}
+
 // ========== Configuration ==========
 
 export type ClusterTlsOptions = {
@@ -797,7 +904,43 @@ export fn self() -> string { return __self() }
 // different answer from an empty cluster and is reported as one.
 export fn nodes() -> Array<string>? { return __nodes() }
 
-export fn discover() -> bool { return __discover() }
+export fn discover() -> bool {
+    var snapshot = info()
+    if (snapshot == null || !snapshot!.running) { return false }
+    var hash = _discoveryHashBits.load() as u64
+    var value: ClusterDiscoveryAnnouncement = {
+        name: snapshot!.self,
+        port: snapshot!.port,
+        clusterHash: hash,
+    }
+    var announcement = encodeDiscoveryAnnouncement(value)
+    if (announcement == null) { return false }
+
+    var token = _discoveryNextToken.fetchAdd(1) + 1
+    var (_, acquired) = _discoveryActiveToken.compareExchange(0, token)
+    if (!acquired) { return false }
+
+    var socket = __discoveryOpen(DISCOVERY_MULTICAST_GROUP, DISCOVERY_MULTICAST_PORT,
+                                 _DISCOVERY_MULTICAST_TTL, _DISCOVERY_LOOPBACK)
+    if (socket == null) {
+        _releaseDiscovery(token)
+        return false
+    }
+    var notifications = monitor("*")
+    if (notifications == null) {
+        net.close(socket!)
+        _releaseDiscovery(token)
+        return false
+    }
+
+    var live: NetConn = socket!
+    socket = null
+    const sharedNotifications: Channel<string> = notifications!
+    var wire: Array<u8> = announcement!
+    announcement = null
+    go _discoveryLoop(move live, sharedNotifications, snapshot!.self, hash, move wire, token)
+    return true
+}
 
 fn _nodeStateFromCode(code: i64) -> ClusterNodeState {
     if (code == 0) { return ClusterNodeState.Idle }
@@ -899,9 +1042,11 @@ export fn start(config: ClusterConfig) -> bool {
     var secret = config.secret ?? ""
     if (!_fitsCString(secret, SHARED_SECRET_MAX_BYTES, true)) { return false }
     if (config.tls == null) {
-        return __start(config.name, config.port, secret, false, "", "", "", false, interval,
-                       timeout, missed, tick, PHI_MIN_SAMPLES, PHI_THRESHOLD,
-                       TOPIC_DELIVERY_FANOUT_MAX, TOMBSTONE_RETENTION_MS)
+        var started = __start(config.name, config.port, secret, false, "", "", "", false,
+                              interval, timeout, missed, tick, PHI_MIN_SAMPLES, PHI_THRESHOLD,
+                              TOPIC_DELIVERY_FANOUT_MAX, TOMBSTONE_RETENTION_MS)
+        if (started) { _discoveryHashBits.store(discoveryClusterHash(secret) as i64) }
+        return started
     }
     var tls = config.tls!
     var caFile = tls.caFile ?? ""
@@ -911,7 +1056,7 @@ export fn start(config: ClusterConfig) -> bool {
         return false
     }
     if ((len(certFile) == 0) != (len(keyFile) == 0)) { return false }
-    return __start(
+    var started = __start(
         config.name,
         config.port,
         secret,
@@ -929,6 +1074,8 @@ export fn start(config: ClusterConfig) -> bool {
         TOPIC_DELIVERY_FANOUT_MAX,
         TOMBSTONE_RETENTION_MS
     )
+    if (started) { _discoveryHashBits.store(discoveryClusterHash(secret) as i64) }
+    return started
 }
 
 // The address is parsed here and the leaf is handed a host and a port, so the
@@ -941,7 +1088,10 @@ export fn join(addr: string) -> bool {
     return __join(parsed.host, parsed.port)
 }
 
-export fn stop() { __stop() }
+export fn stop() {
+    _discoveryActiveToken.store(0)
+    __stop()
+}
 
 // ========== Publish and subscribe ==========
 

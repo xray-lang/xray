@@ -87,13 +87,13 @@ deletion_trigger = "when cluster runtime state is exposed through scalar accesso
 
 [[leaf]]
 module = "cluster"
-symbol = "__discover"
+symbol = "__discoveryOpen"
 class = "host_abi_leaf"
-abi = "socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP (IP_DROP_MEMBERSHIP on stop), sendto(2) and recvfrom(2)"
-ownership = "none"
+abi = "socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP"
+ownership = "fresh"
 effect = "nothrow"
-provider = "kernel multicast sockets, driven by a native yieldable coroutine on the Xray netpoll. VM stdlib/cluster/cluster_discovery.c create_mcast_socket/cluster_discovery_start. There is no AOT binding: the code generator refuses a reachable call"
-deletion_trigger = "when cluster.xr can open a multicast socket over net's own leaves and run the announce/listen loop itself, which needs net to expose setsockopt(2) for the multicast options it currently does not"
+provider = "kernel multicast socket setup only (src/io/xcluster_discovery_provider.c). cluster.xr owns announcement bytes, cadence, monitoring, admission, join dispatch and lifecycle; net.xr owns datagram I/O and netpoll. There is no AOT binding: the code generator refuses a reachable call"
+deletion_trigger = "when the portable socket layer can construct a multicast NetConn without a module-private host ABI leaf"
 
 [[leaf]]
 module = "cluster"

@@ -93,7 +93,6 @@ static inline int xr_cluster_fcntl_noop(int fd, int cmd, int flags) {
 struct XrVMRuntime;
 struct XrChannel;
 typedef struct XrCluster XrCluster;
-typedef struct XrClusterDiscovery XrClusterDiscovery;
 
 typedef enum XrClusterDelivery {
     XR_CLUSTER_DELIVERY_ACCEPTED = 0,
@@ -276,9 +275,6 @@ typedef struct XrCluster {
     bool accept_coro_spawned;
     _Atomic(bool) accept_running;
 
-    // LAN auto-discovery (NULL if not enabled)
-    XrClusterDiscovery *discovery;
-
     /*
      * Optional inter-node TLS wrap (see cluster_runtime_start).
      *
@@ -423,11 +419,6 @@ bool cluster_monitor_register_remote(XrCluster *cluster, const char *node_name,
 
 void cluster_monitor_handle_coro_request(XrCluster *cluster, struct XrClusterNode *node,
                                          const char *coroutine_name);
-
-/* ========== LAN Discovery ========== */
-
-int cluster_discovery_start(XrCluster *c);
-void cluster_discovery_stop(XrCluster *c);
 
 /* ========== Cluster Info API ========== */
 
