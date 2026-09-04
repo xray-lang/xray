@@ -51,8 +51,7 @@ void cluster_transport_handle_frame(XrCluster *cluster, XrClusterNode *source, c
         !xr_topic_name_valid(topic))
         return;
 
-    (void) xr_topic_registry_deliver(cluster->topics, cluster->isolate, topic, envelope,
-                                     envelope_length);
+    (void) xr_topic_registry_deliver(cluster->topics, topic, envelope, envelope_length);
     if (hop_limit == 0)
         return;
     (void) cluster_transport_broadcast(cluster, source, (uint8_t) (hop_limit - 1), topic, envelope,

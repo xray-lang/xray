@@ -42,6 +42,18 @@ TEST(cluster_transport_frame_is_byte_exact) {
     ASSERT_EQ_INT(frame[6], strlen(topic));
     ASSERT_EQ_INT(memcmp(frame + 7, topic, strlen(topic)), 0);
     ASSERT_EQ_INT(memcmp(frame + 7 + strlen(topic), envelope, sizeof(envelope)), 0);
+
+    XrFrameTransport transport;
+    memset(&transport, 0, sizeof(transport));
+    ASSERT_EQ_INT(
+        cluster_frame_decode_transport(frame + XR_FRAME_HEADER_SIZE + 1, payload_len, &transport),
+        0);
+    ASSERT_EQ_INT(transport.hop_limit, 3);
+    ASSERT_EQ_INT(transport.topic_length, strlen(topic));
+    ASSERT_STR_EQ(transport.topic, topic);
+    ASSERT_EQ_UINT(transport.envelope_length, sizeof(envelope));
+    ASSERT_TRUE(transport.envelope == frame + 7 + strlen(topic));
+    ASSERT_EQ_INT(memcmp(transport.envelope, envelope, sizeof(envelope)), 0);
 }
 
 TEST(cluster_transport_frame_rejects_invalid_shapes) {
@@ -64,6 +76,18 @@ TEST(cluster_transport_frame_rejects_invalid_shapes) {
     ASSERT_EQ_INT(cluster_frame_write_transport(frame, sizeof(frame), 3, topic,
                                                 (uint8_t) strlen(topic), envelope, UINT32_MAX),
                   -1);
+
+    XrFrameTransport transport;
+    uint8_t payload[2 + sizeof(topic) - 1 + XR_CLUSTER_ENVELOPE_HEADER_SIZE] = {0};
+    payload[0] = 3;
+    payload[1] = (uint8_t) strlen(topic);
+    memcpy(payload + 2, topic, strlen(topic));
+    ASSERT_EQ_INT(cluster_frame_decode_transport(payload, 1, &transport), -1);
+    ASSERT_EQ_INT(cluster_frame_decode_transport(payload, 2, &transport), -1);
+    ASSERT_EQ_INT(
+        cluster_frame_decode_transport(payload, (uint32_t) sizeof(payload) - 1, &transport), -1);
+    ASSERT_EQ_INT(cluster_frame_decode_transport(payload, (uint32_t) sizeof(payload), &transport),
+                  0);
 }
 
 /*

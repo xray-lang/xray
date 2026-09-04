@@ -122,7 +122,7 @@ class = "runtime_leaf"
 abi = "none; constructs a bounded channel and registers a topic subscription"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through src/coro/xtopic_registry.c xr_topic_registry_subscribe on the VM and xrt_cluster_listen on AOT. The channel itself is shared; the subscription table is a trie on the VM and a linked list on AOT. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen()"
+provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through the single backend-neutral synchronized trie in src/coro/xtopic_registry.c on both VM and AOT. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen()"
 deletion_trigger = "when cluster.xr can construct a Channel and register a topic pattern directly, which needs the channel constructor and the topic table to be surfaces Xray source can name"
 
 [[leaf]]
@@ -172,7 +172,7 @@ class = "runtime_leaf"
 abi = "none; copies one validated buffer into matching local subscription channels"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray channel subsystem. The VM uses src/coro/xtopic_registry.c's synchronized trie projection and AOT uses stdlib/cluster/cluster_aot.c's synchronized subscription index. cluster.xr owns validation, publication order, fanout limit and result precedence"
+provider = "the Xray channel subsystem through src/coro/xtopic_registry.c's single synchronized trie projection shared by VM and AOT. cluster.xr owns validation, publication order, fanout limit and result precedence"
 deletion_trigger = "when cluster.xr can construct Channels and hold a synchronized topic index directly"
 
 [[leaf]]

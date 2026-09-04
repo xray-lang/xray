@@ -276,6 +276,23 @@ int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t
     return 0;
 }
 
+int cluster_frame_decode_transport(const uint8_t *payload, uint32_t len,
+                                   XrFrameTransport *transport) {
+    if (!payload || !transport || len < 2)
+        return -1;
+    uint8_t topic_length = payload[1];
+    if (topic_length == 0 || topic_length > 127 ||
+        len < 2u + (uint32_t) topic_length + XR_CLUSTER_ENVELOPE_HEADER_SIZE)
+        return -1;
+    transport->hop_limit = payload[0];
+    transport->topic_length = topic_length;
+    memcpy(transport->topic, payload + 2, topic_length);
+    transport->topic[topic_length] = '\0';
+    transport->envelope = payload + 2 + topic_length;
+    transport->envelope_length = len - 2 - topic_length;
+    return 0;
+}
+
 /* ========== Coroutine Monitor Encode/Decode ========== */
 
 /*

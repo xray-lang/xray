@@ -15,6 +15,7 @@
 
 #include "xtopic_registry.h"
 
+#include "xaot_coro.h"
 #include "xchannel.h"
 #include "xchannel_ops.h"
 #include "../base/xmutex.h"
@@ -47,6 +48,10 @@ struct XrTopicRegistry {
     XrTopicTrieNode *root;
     int64_t subscription_count;
     uint32_t delivery_fanout_limit;
+    XrVMRuntime *vm_isolate;
+    XrRuntimeCore *core;
+    XrRuntime *scheduler;
+    const XrAotValueOps *aot_values;
     XrAdaptiveMutex lock;
 };
 
@@ -277,8 +282,9 @@ static void topic_node_destroy(XrTopicTrieNode *node) {
     xr_free(node);
 }
 
-XrTopicRegistry *xr_topic_registry_new(uint32_t delivery_fanout_limit) {
-    if (delivery_fanout_limit == 0)
+static XrTopicRegistry *topic_registry_new(XrVMRuntime *vm_isolate, XrAotRuntime *aot_runtime,
+                                           uint32_t delivery_fanout_limit) {
+    if (delivery_fanout_limit == 0 || (!!vm_isolate == !!aot_runtime))
         return NULL;
     XrTopicRegistry *registry = (XrTopicRegistry *) xr_calloc(1, sizeof(*registry));
     if (!registry)
@@ -289,8 +295,31 @@ XrTopicRegistry *xr_topic_registry_new(uint32_t delivery_fanout_limit) {
         return NULL;
     }
     registry->delivery_fanout_limit = delivery_fanout_limit;
+    registry->vm_isolate = vm_isolate;
+    if (vm_isolate) {
+        registry->core = xr_isolate_get_runtime_core(vm_isolate);
+        registry->scheduler = xr_isolate_get_scheduler_runtime(vm_isolate);
+    } else {
+        registry->core = xr_aot_runtime_core(aot_runtime);
+        registry->scheduler = xr_aot_runtime_scheduler(aot_runtime);
+        registry->aot_values = xr_aot_runtime_value_ops(aot_runtime);
+    }
+    if (!registry->core || !registry->scheduler ||
+        (aot_runtime && (!registry->aot_values || !registry->aot_values->buffer_copy_transfer))) {
+        topic_node_destroy(registry->root);
+        xr_free(registry);
+        return NULL;
+    }
     xr_amutex_init(&registry->lock);
     return registry;
+}
+
+XrTopicRegistry *xr_topic_registry_new_vm(XrVMRuntime *isolate, uint32_t delivery_fanout_limit) {
+    return topic_registry_new(isolate, NULL, delivery_fanout_limit);
+}
+
+XrTopicRegistry *xr_topic_registry_new_aot(XrAotRuntime *runtime, uint32_t delivery_fanout_limit) {
+    return topic_registry_new(NULL, runtime, delivery_fanout_limit);
 }
 
 void xr_topic_registry_destroy(XrTopicRegistry *registry) {
@@ -305,14 +334,16 @@ void xr_topic_registry_destroy(XrTopicRegistry *registry) {
     xr_free(registry);
 }
 
-XrChannel *xr_topic_registry_subscribe(XrTopicRegistry *registry, XrVMRuntime *isolate,
-                                       const char *pattern, uint32_t capacity) {
-    if (!registry || !registry->root || !isolate || !topic_pattern_valid(pattern) || capacity == 0)
+XrChannel *xr_topic_registry_subscribe(XrTopicRegistry *registry, const char *pattern,
+                                       uint32_t capacity) {
+    if (!registry || !registry->root || !topic_pattern_valid(pattern) || capacity == 0)
         return NULL;
     XrTopicSubscription *sub = (XrTopicSubscription *) xr_calloc(1, sizeof(*sub));
     if (!sub)
         return NULL;
-    sub->channel = xr_channel_new_vm(isolate, capacity);
+    sub->channel = registry->vm_isolate
+                       ? xr_channel_new_vm(registry->vm_isolate, capacity)
+                       : xr_channel_new(registry->core, registry->scheduler, capacity);
     if (!sub->channel) {
         xr_free(sub);
         return NULL;
@@ -330,10 +361,9 @@ XrChannel *xr_topic_registry_subscribe(XrTopicRegistry *registry, XrVMRuntime *i
     return sub->channel;
 }
 
-XrTopicDelivery xr_topic_registry_deliver(XrTopicRegistry *registry, XrVMRuntime *isolate,
-                                          const char *topic, const uint8_t *payload,
-                                          uint32_t payload_length) {
-    if (!registry || !registry->root || !isolate || !topic || !payload)
+XrTopicDelivery xr_topic_registry_deliver(XrTopicRegistry *registry, const char *topic,
+                                          const uint8_t *payload, uint32_t payload_length) {
+    if (!registry || !registry->root || !topic || !payload)
         return XR_TOPIC_DELIVERY_UNAVAILABLE;
     enum {
         INLINE_TARGETS = 32
@@ -355,12 +385,16 @@ XrTopicDelivery xr_topic_registry_deliver(XrTopicRegistry *registry, XrVMRuntime
     uint32_t delivered = 0;
     uint32_t rejected = 0;
     for (uint32_t i = 0; i < targets.count; i++) {
-        XrValue buffer = xr_buffer_copy_from_bytes(isolate, payload, payload_length);
+        XrValue buffer =
+            registry->vm_isolate
+                ? xr_buffer_copy_from_bytes(registry->vm_isolate, payload, payload_length)
+                : registry->aot_values->buffer_copy_transfer(payload, payload_length);
         if (XR_IS_NULL(buffer)) {
             rejected++;
             continue;
         }
-        if (xr_chan_try_send_transfer(isolate, targets.items[i], buffer, XR_TRANSFER_MOVE))
+        if (xr_chan_try_send_transfer_core(registry->core, targets.items[i], buffer,
+                                           XR_TRANSFER_MOVE))
             delivered++;
         else
             rejected++;

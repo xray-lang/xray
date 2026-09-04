@@ -66,6 +66,14 @@ typedef struct {
     int64_t timestamp;
 } XrFrameHeartbeat;
 
+typedef struct {
+    uint8_t hop_limit;
+    uint8_t topic_length;
+    char topic[128];
+    const uint8_t *envelope;
+    uint32_t envelope_length;
+} XrFrameTransport;
+
 XR_FUNC int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload,
                                 uint32_t payload_len);
 XR_FUNC int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_limit,
@@ -89,6 +97,8 @@ XR_FUNC int cluster_frame_decode_handshake_done(const uint8_t *payload, uint32_t
                                                 XrFrameHandshakeDone *done);
 XR_FUNC int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len,
                                            int64_t *timestamp);
+XR_FUNC int cluster_frame_decode_transport(const uint8_t *payload, uint32_t len,
+                                           XrFrameTransport *transport);
 XR_FUNC int cluster_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t frame_type,
                                               const char *coro_name);
 XR_FUNC int cluster_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *coro_name,

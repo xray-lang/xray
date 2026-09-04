@@ -484,7 +484,7 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
     xr_amutex_init(&c->nodes_lock);
     xr_amutex_init(&c->dead_nodes_lock);
 
-    c->topics = xr_topic_registry_new(topic_delivery_fanout_max);
+    c->topics = xr_topic_registry_new_vm(X, topic_delivery_fanout_max);
     if (!c->topics) {
         if (c->tls_client_ctx)
             xr_tls_context_free(c->tls_client_ctx);
@@ -1279,25 +1279,10 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
         }
 
         case XR_FRAME_TRANSPORT_ENVELOPE: {
-            /*
-             * Wire format:
-             *   [hop 1B] [topic_len 1B] [topic ...] [value_data ...]
-             */
-            if (payload_len >= 2) {
-                uint8_t hop_limit = payload[0];
-                uint8_t topic_len = payload[1];
-                if (topic_len > 0 && 2 + topic_len < payload_len) {
-                    char topic[XR_TOPIC_PATTERN_MAX + 1];
-                    if (topic_len <= XR_TOPIC_PATTERN_MAX) {
-                        memcpy(topic, payload + 2, topic_len);
-                        topic[topic_len] = '\0';
-                        uint32_t val_offset = 2 + topic_len;
-                        uint32_t val_len = payload_len - val_offset;
-                        cluster_transport_handle_frame(c, node, topic, payload + val_offset,
-                                                       val_len, hop_limit);
-                    }
-                }
-            }
+            XrFrameTransport transport;
+            if (cluster_frame_decode_transport(payload, payload_len, &transport) == 0)
+                cluster_transport_handle_frame(c, node, transport.topic, transport.envelope,
+                                               transport.envelope_length, transport.hop_limit);
             break;
         }
 
@@ -1340,7 +1325,7 @@ static XrValue cluster_publish_local_primitive(XrVMRuntime *X, XrValue *args, in
     if (!cluster || !atomic_load(&cluster->running))
         return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
     XrString *topic = XR_TO_STRING(args[0]);
-    return xr_int((int64_t) xr_topic_registry_deliver(cluster->topics, X, topic->data, envelope,
+    return xr_int((int64_t) xr_topic_registry_deliver(cluster->topics, topic->data, envelope,
                                                       (uint32_t) envelope_len));
 }
 
@@ -1373,7 +1358,7 @@ static XrValue cluster_listen_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (!cluster)
         return xr_null();
     XrString *pattern_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = xr_topic_registry_subscribe(cluster->topics, X, pattern_str->data,
+    XrChannel *ch = xr_topic_registry_subscribe(cluster->topics, pattern_str->data,
                                                 (uint32_t) XR_TO_INT(args[1]));
     if (!ch)
         return xr_null();

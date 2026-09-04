@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 struct XrChannel;
+struct XrAotRuntime;
 struct XrVMRuntime;
 typedef struct XrTopicRegistry XrTopicRegistry;
 
@@ -37,13 +38,14 @@ typedef enum XrTopicDelivery {
 XR_FUNC bool xr_topic_name_valid(const char *topic);
 XR_FUNC bool xr_topic_pattern_matches(const char *pattern, const char *topic);
 
-XR_FUNC XrTopicRegistry *xr_topic_registry_new(uint32_t delivery_fanout_limit);
+XR_FUNC XrTopicRegistry *xr_topic_registry_new_vm(struct XrVMRuntime *isolate,
+                                                  uint32_t delivery_fanout_limit);
+XR_FUNC XrTopicRegistry *xr_topic_registry_new_aot(struct XrAotRuntime *runtime,
+                                                   uint32_t delivery_fanout_limit);
 XR_FUNC void xr_topic_registry_destroy(XrTopicRegistry *registry);
 XR_FUNC struct XrChannel *xr_topic_registry_subscribe(XrTopicRegistry *registry,
-                                                      struct XrVMRuntime *isolate,
                                                       const char *pattern, uint32_t capacity);
-XR_FUNC XrTopicDelivery xr_topic_registry_deliver(XrTopicRegistry *registry,
-                                                  struct XrVMRuntime *isolate, const char *topic,
+XR_FUNC XrTopicDelivery xr_topic_registry_deliver(XrTopicRegistry *registry, const char *topic,
                                                   const uint8_t *payload, uint32_t payload_length);
 XR_FUNC int64_t xr_topic_registry_count(XrTopicRegistry *registry);
 
