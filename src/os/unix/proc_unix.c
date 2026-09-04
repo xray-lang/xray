@@ -10,7 +10,12 @@
 
 #include "../os_proc.h"
 
+#include "../../base/xmalloc.h"
+#include "../../shared/xr_os_core.h"
+
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -19,6 +24,141 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+typedef struct XrProcCapturePipe {
+    int fd;
+    char *data;
+    size_t length;
+    size_t capacity;
+    bool open;
+} XrProcCapturePipe;
+
+static void proc_capture_pipe_close(XrProcCapturePipe *pipe) {
+    if (!pipe->open)
+        return;
+    close(pipe->fd);
+    pipe->open = false;
+}
+
+static void proc_capture_pipe_release(XrProcCapturePipe *pipe) {
+    proc_capture_pipe_close(pipe);
+    xr_free(pipe->data);
+    pipe->data = NULL;
+    pipe->length = 0;
+    pipe->capacity = 0;
+}
+
+static bool proc_capture_pipe_init(XrProcCapturePipe *pipe, int fd) {
+    *pipe = (XrProcCapturePipe) {
+        .fd = fd,
+        .capacity = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP,
+        .open = true,
+    };
+    pipe->data = (char *) xr_malloc(pipe->capacity);
+    if (!pipe->data) {
+        proc_capture_pipe_close(pipe);
+        return false;
+    }
+    pipe->data[0] = '\0';
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0)
+        (void) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    return true;
+}
+
+static bool proc_capture_pipe_append(XrProcCapturePipe *pipe, const char *data, size_t size) {
+    size_t next_capacity = 0;
+    if (!xr_os_core_exec_buffer_next_cap(pipe->length, pipe->capacity, size, &next_capacity))
+        return false;
+    if (next_capacity > pipe->capacity) {
+        if (!XR_REALLOC(pipe->data, next_capacity))
+            return false;
+        pipe->capacity = next_capacity;
+    }
+    return xr_os_core_exec_buffer_append_raw(pipe->data, &pipe->length, pipe->capacity, data, size);
+}
+
+static bool proc_capture_pipe_drain(XrProcCapturePipe *pipe) {
+    char buffer[4096];
+    for (;;) {
+        ssize_t count = read(pipe->fd, buffer, sizeof(buffer));
+        if (count > 0) {
+            if (!proc_capture_pipe_append(pipe, buffer, (size_t) count))
+                return false;
+            continue;
+        }
+        if (count == 0) {
+            proc_capture_pipe_close(pipe);
+            return true;
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return true;
+        proc_capture_pipe_close(pipe);
+        return false;
+    }
+}
+
+bool xr_proc_capture_pipes(int stdout_fd, int stderr_fd, char **stdout_data, char **stderr_data) {
+    if (!stdout_data || !stderr_data) {
+        close(stdout_fd);
+        close(stderr_fd);
+        return false;
+    }
+    *stdout_data = NULL;
+    *stderr_data = NULL;
+
+    XrProcCapturePipe pipes[2];
+    if (!proc_capture_pipe_init(&pipes[0], stdout_fd)) {
+        close(stderr_fd);
+        return false;
+    }
+    if (!proc_capture_pipe_init(&pipes[1], stderr_fd)) {
+        proc_capture_pipe_release(&pipes[0]);
+        return false;
+    }
+
+    while (pipes[0].open || pipes[1].open) {
+        struct pollfd descriptors[2];
+        nfds_t count = 0;
+        for (int i = 0; i < 2; i++) {
+            if (!pipes[i].open)
+                continue;
+            descriptors[count] = (struct pollfd) {
+                .fd = pipes[i].fd,
+                .events = POLLIN | POLLHUP | POLLERR,
+            };
+            count++;
+        }
+
+        int ready;
+        do {
+            ready = poll(descriptors, count, -1);
+        } while (ready < 0 && errno == EINTR);
+        if (ready < 0)
+            goto fail;
+
+        nfds_t position = 0;
+        for (int i = 0; i < 2; i++) {
+            if (!pipes[i].open)
+                continue;
+            short events = descriptors[position++].revents;
+            if ((events & (POLLIN | POLLHUP | POLLERR)) && !proc_capture_pipe_drain(&pipes[i]))
+                goto fail;
+        }
+    }
+
+    *stdout_data = pipes[0].data;
+    *stderr_data = pipes[1].data;
+    return true;
+
+fail:
+    proc_capture_pipe_release(&pipes[0]);
+    proc_capture_pipe_release(&pipes[1]);
+    return false;
+}
 
 #if defined(XR_OS_MACOS)
 #include <limits.h>

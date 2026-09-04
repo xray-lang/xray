@@ -24,6 +24,7 @@
 #include <string.h>
 #include <limits.h>
 #include "../../src/os/os_fs.h"
+#include "../../src/os/os_proc.h"
 #include "../../src/shared/xr_os_core.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 
@@ -37,8 +38,6 @@
 #include <tlhelp32.h>
 #else
 #include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <sys/wait.h>
@@ -80,8 +79,7 @@ static XrValue os_getenv(XrVMRuntime *X, XrValue *args, int argc) {
 #ifdef XR_OS_WINDOWS
     static XR_THREAD_LOCAL char windows_value[32768];
     SetLastError(ERROR_SUCCESS);
-    DWORD length =
-        GetEnvironmentVariableA(name, windows_value, (DWORD) sizeof(windows_value));
+    DWORD length = GetEnvironmentVariableA(name, windows_value, (DWORD) sizeof(windows_value));
     if (!(length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) &&
         length < sizeof(windows_value)) {
         windows_value[length] = '\0';
@@ -484,132 +482,6 @@ static XrValue os_clock(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Process Execution (P0) ========== */
 
-#ifndef XR_OS_WINDOWS
-typedef struct {
-    int fd;
-    char *buf;
-    size_t len;
-    size_t cap;
-    bool open;
-} XrExecPipe;
-
-static bool exec_pipe_init(XrExecPipe *pipe, int fd) {
-    pipe->fd = fd;
-    pipe->len = 0;
-    pipe->cap = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
-    pipe->open = true;
-    pipe->buf = (char *) xr_malloc(pipe->cap);
-    if (!pipe->buf)
-        return false;
-    pipe->buf[0] = '\0';
-
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0) {
-        (void) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    }
-    return true;
-}
-
-static void exec_pipe_close(XrExecPipe *pipe) {
-    if (pipe->open) {
-        close(pipe->fd);
-        pipe->open = false;
-    }
-}
-
-static void exec_pipe_free(XrExecPipe *pipe) {
-    exec_pipe_close(pipe);
-    xr_free(pipe->buf);
-    pipe->buf = NULL;
-    pipe->len = 0;
-    pipe->cap = 0;
-}
-
-static bool exec_pipe_append(XrExecPipe *pipe, const char *data, size_t n) {
-    size_t new_cap = 0;
-    if (!xr_os_core_exec_buffer_next_cap(pipe->len, pipe->cap, n, &new_cap))
-        return false;
-    if (new_cap > pipe->cap) {
-        if (!XR_REALLOC(pipe->buf, new_cap))
-            return false;
-        pipe->cap = new_cap;
-    }
-    return xr_os_core_exec_buffer_append_raw(pipe->buf, &pipe->len, pipe->cap, data, n);
-}
-
-static bool exec_pipe_drain(XrExecPipe *pipe) {
-    char tmp[4096];
-    for (;;) {
-        ssize_t n = read(pipe->fd, tmp, sizeof(tmp));
-        if (n > 0) {
-            if (!exec_pipe_append(pipe, tmp, (size_t) n))
-                return false;
-            continue;
-        }
-        if (n == 0) {
-            exec_pipe_close(pipe);
-            return true;
-        }
-        if (errno == EINTR)
-            continue;
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            return true;
-        exec_pipe_close(pipe);
-        return false;
-    }
-}
-
-static bool read_exec_pipes(int stdout_fd, int stderr_fd, char **stdout_buf, char **stderr_buf) {
-    XrExecPipe pipes[2];
-    if (!exec_pipe_init(&pipes[0], stdout_fd))
-        return false;
-    if (!exec_pipe_init(&pipes[1], stderr_fd)) {
-        exec_pipe_free(&pipes[0]);
-        return false;
-    }
-
-    while (pipes[0].open || pipes[1].open) {
-        struct pollfd pfds[2];
-        nfds_t nfds = 0;
-        for (int i = 0; i < 2; i++) {
-            if (!pipes[i].open)
-                continue;
-            pfds[nfds].fd = pipes[i].fd;
-            pfds[nfds].events = POLLIN | POLLHUP | POLLERR;
-            pfds[nfds].revents = 0;
-            nfds++;
-        }
-
-        int rc;
-        do {
-            rc = poll(pfds, nfds, -1);
-        } while (rc < 0 && errno == EINTR);
-        if (rc < 0)
-            goto fail;
-
-        nfds_t pos = 0;
-        for (int i = 0; i < 2; i++) {
-            if (!pipes[i].open)
-                continue;
-            short revents = pfds[pos++].revents;
-            if (revents & (POLLIN | POLLHUP | POLLERR)) {
-                if (!exec_pipe_drain(&pipes[i]))
-                    goto fail;
-            }
-        }
-    }
-
-    *stdout_buf = pipes[0].buf;
-    *stderr_buf = pipes[1].buf;
-    return true;
-
-fail:
-    exec_pipe_free(&pipes[0]);
-    exec_pipe_free(&pipes[1]);
-    return false;
-}
-#endif
-
 // exec(cmd) - Execute shell command, return ExecResult handle
 // (Json with fixed shape: stdout, stderr, exitCode).
 static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
@@ -710,7 +582,7 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
 
     char *stdout_buf = NULL;
     char *stderr_buf = NULL;
-    bool read_ok = read_exec_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
+    bool read_ok = xr_proc_capture_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
 
     int status = 0;
     pid_t waited;
