@@ -90,6 +90,10 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__joinTls") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "cluster.__acceptPeer") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "cluster.__acceptTls") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "cluster.__adoptPeer") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__stop") == 0)

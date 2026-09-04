@@ -297,9 +297,11 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http2", "__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes once; empty on EOF and null on transport failure", "h2_recv", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", "h2_close", "normal", "", "", "v", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, heartbeatTickMs: i64, phiMinSamples: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64, tombstoneRetentionMs: i64): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration and the health policy cluster.xr decides", "cluster_start_primitive", "normal", "", "xrt_cluster_start", "svsvsssvvvvvvvvv", "value", "", "cluster.__start", "", "runtime", "method", XR_CAP_CHANNEL, 16, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"cluster", "__joinConfig", "(): __ClusterJoinConfig?", "Snapshot the runtime-owned secret and TLS switch for the source-owned outbound join handshake", "cluster_join_config_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__handshakeConfig", "(): __ClusterHandshakeConfig?", "Snapshot runtime-owned authentication and TLS readiness for source-owned handshakes", "cluster_handshake_config_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__recentlyDeparted", "(name: string): bool", "Project whether a node name is present in the locked recent-departure registry", "cluster_recently_departed_fn", "normal", "", "", "s", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", "cluster_join_tls_fn", "yieldable", "", "", "vsv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__acceptPeer", "(deadlineMs: i64): NetConn?", "Accept one cluster listener socket under a source-selected absolute deadline", "cluster_accept_peer_fn", "yieldable", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", "cluster_accept_tls_fn", "yieldable", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64): bool", "Transfer an authenticated socket into the locked cluster node registry and start its transport providers", "cluster_adopt_peer_fn", "normal", "", "", "vssvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_CHANNEL, 5, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__nodes", "(): Array<string>?", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
@@ -356,9 +358,10 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
     {"cluster", "__ClusterSnapshot", "tls", "__ClusterTlsSnapshot", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterJoinConfig[] = {
-    {"cluster", "__ClusterJoinConfig", "secret", "string", true},
-    {"cluster", "__ClusterJoinConfig", "tlsEnabled", "bool", true},
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterHandshakeConfig[] = {
+    {"cluster", "__ClusterHandshakeConfig", "secret", "string", true},
+    {"cluster", "__ClusterHandshakeConfig", "tlsEnabled", "bool", true},
+    {"cluster", "__ClusterHandshakeConfig", "tlsServerReady", "bool", true},
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
@@ -386,7 +389,7 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"cluster", "__ClusterTlsSnapshot", "Private scalar TLS state read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterTlsSnapshot, 3, true},
     {"cluster", "__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
     {"cluster", "__ClusterSnapshot", "Private scalar snapshot read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterSnapshot, 10, true},
-    {"cluster", "__ClusterJoinConfig", "Private immutable configuration needed by the source-owned outbound join handshake", xr_stdlib_object_fields_cluster___ClusterJoinConfig, 2, true},
+    {"cluster", "__ClusterHandshakeConfig", "Private immutable configuration needed by source-owned cluster handshakes", xr_stdlib_object_fields_cluster___ClusterHandshakeConfig, 3, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},

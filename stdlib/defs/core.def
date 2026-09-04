@@ -2040,10 +2040,10 @@ module cluster {
     doc: "Private scalar snapshot read from the cluster runtime"
   }
 
-  object __ClusterJoinConfig {
-    fields: "const secret: string, const tlsEnabled: bool"
+  object __ClusterHandshakeConfig {
+    fields: "const secret: string, const tlsEnabled: bool, const tlsServerReady: bool"
     exact: true
-    doc: "Private immutable configuration needed by the source-owned outbound join handshake"
+    doc: "Private immutable configuration needed by source-owned cluster handshakes"
   }
 
   fn __start {
@@ -2059,10 +2059,10 @@ module cluster {
     caps: "channel"
   }
 
-  fn __joinConfig {
-    signature: "(): __ClusterJoinConfig?"
-    doc: "Snapshot the runtime-owned secret and TLS switch for the source-owned outbound join handshake"
-    vm: "cluster_join_config_fn"
+  fn __handshakeConfig {
+    signature: "(): __ClusterHandshakeConfig?"
+    doc: "Snapshot runtime-owned authentication and TLS readiness for source-owned handshakes"
+    vm: "cluster_handshake_config_fn"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2089,6 +2089,33 @@ module cluster {
     vm_binding: "yieldable"
     argc: 3
     arg_spec: "vsv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "coro,netpoll"
+  }
+
+  fn __acceptPeer {
+    signature: "(deadlineMs: i64): NetConn?"
+    doc: "Accept one cluster listener socket under a source-selected absolute deadline"
+    vm: "cluster_accept_peer_fn"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "coro,netpoll"
+    return_ownership: "fresh"
+  }
+
+  fn __acceptTls {
+    signature: "(conn: NetConn, deadlineMs: i64): i64"
+    doc: "Promote an accepted cluster socket with the cluster-specific TLS server context"
+    vm: "cluster_accept_tls_fn"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"

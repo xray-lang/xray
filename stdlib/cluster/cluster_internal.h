@@ -253,27 +253,10 @@ typedef struct XrCluster {
      *
      * heartbeat_running is flipped to false by the coroutine on exit so
      * cluster_runtime_stop can wait briefly before freeing the cluster
-     * state the coroutine still references. Lives in the same style as
-     * accept_coro_spawned / accept_running below.
+     * state the coroutine still references.
      */
     bool heartbeat_coro_spawned;
     _Atomic(bool) heartbeat_running;
-
-    /*
-     * Inbound-accept coroutine state.
-     *
-     *   accept_coro_spawned — true once cluster_runtime_start successfully
-     *                         spawned the accept coroutine. Prevents
-     *                         double-spawn and lets cluster_runtime_stop know
-     *                         whether to wait for it at teardown.
-     *   accept_running      — flipped to false by the coro on exit so
-     *                         cluster_runtime_stop can spin-wait briefly and
-     *                         avoid tearing down node state while the
-     *                         accept path is still inside
-     *                         cluster_node_accept.
-     */
-    bool accept_coro_spawned;
-    _Atomic(bool) accept_running;
 
     /*
      * Optional inter-node TLS wrap (see cluster_runtime_start).
@@ -284,8 +267,8 @@ typedef struct XrCluster {
      *                     Built at start_ex time with caller-supplied CA
      *                     bundle, optional client cert/key (for mTLS), and
      *                     optional verify_peer toggle.
-     *   tls_server_ctx  — used by cluster_spawn_inbound to wrap inbound fds
-     *                     with xr_tls_conn_new before the incremental server
+     *   tls_server_ctx  — used by the cluster accept TLS provider to promote
+     *                     an accepted NetConn before source starts the wire
      *                     handshake. NULL if the
      *                     operator did not supply a cert+key pair; in
      *                     that case tls_enabled + NULL tls_server_ctx

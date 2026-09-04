@@ -1381,6 +1381,7 @@ typedef struct {
     XrTlsConn *tls;  // owned by this state machine until attached or freed
     int fd;
     int64_t deadline_ms;  // absolute; every wait re-derives the remaining slice
+    bool server;
 } NetTlsHandshakeState;
 
 static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState *state,
@@ -1413,7 +1414,8 @@ static XrCFuncResult net_tls_handshake_continue(XrVMRuntime *X, int status, XrVa
 
 static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState *state,
                                             XrValue *result) {
-    int hs = xr_tls_conn_handshake_try(state->tls);
+    int hs = state->server ? xr_tls_conn_handshake_server_try(state->tls)
+                           : xr_tls_conn_handshake_try(state->tls);
     if (hs == 0) {
         XrNetConn *conn = unwrap_conn(state->handle);
         if (!conn || conn->closed)
@@ -1443,9 +1445,12 @@ static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState
  * forces module-wide discrimination that miscompiles suspended handle
  * results inside coroutine frames.
  */
-XrCFuncResult xr_net_tls_handshake_with_context(XrVMRuntime *X, XrValue *args, int nargs,
-                                                XrValue *result, XrTlsContext *context) {
-    if (nargs < 3 || !XR_IS_STRING(args[1]) || !XR_IS_INT(args[2])) {
+static XrCFuncResult net_tls_handshake_with_context(XrVMRuntime *X, XrValue *args, int nargs,
+                                                    XrValue *result, XrTlsContext *context,
+                                                    bool server) {
+    int deadline_arg = server ? 1 : 2;
+    if (nargs <= deadline_arg || (!server && !XR_IS_STRING(args[1])) ||
+        !XR_IS_INT(args[deadline_arg])) {
         *result = xr_int(XR_NETERR_INVALID);
         return XR_CFUNC_DONE;
     }
@@ -1471,7 +1476,13 @@ XrCFuncResult xr_net_tls_handshake_with_context(XrVMRuntime *X, XrValue *args, i
         *result = xr_int(XR_NETERR_TLS);
         return XR_CFUNC_DONE;
     }
-    xr_tls_conn_set_hostname(tls, XR_STRING_CHARS(XR_TO_STRING(args[1])));
+    if (!server && xr_tls_conn_set_hostname(tls, XR_STRING_CHARS(XR_TO_STRING(args[1]))) != 0) {
+        xr_tls_conn_close(tls);
+        xr_tls_conn_free(tls);
+        xr_net_conn_close(conn);
+        *result = xr_int(XR_NETERR_TLS);
+        return XR_CFUNC_DONE;
+    }
 
     NetTlsHandshakeState *state =
         (NetTlsHandshakeState *) xr_calloc(1, sizeof(NetTlsHandshakeState));
@@ -1485,10 +1496,21 @@ XrCFuncResult xr_net_tls_handshake_with_context(XrVMRuntime *X, XrValue *args, i
     state->handle = args[0];
     state->tls = tls;
     state->fd = conn->fd;
-    state->deadline_ms = (int64_t) XR_TO_INT(args[2]);
+    state->deadline_ms = (int64_t) XR_TO_INT(args[deadline_arg]);
+    state->server = server;
     if (state->deadline_ms < 0)
         state->deadline_ms = 0;
     return net_tls_handshake_step(X, state, result);
+}
+
+XrCFuncResult xr_net_tls_handshake_with_context(XrVMRuntime *X, XrValue *args, int nargs,
+                                                XrValue *result, XrTlsContext *context) {
+    return net_tls_handshake_with_context(X, args, nargs, result, context, false);
+}
+
+XrCFuncResult xr_net_tls_server_handshake_with_context(XrVMRuntime *X, XrValue *args, int nargs,
+                                                       XrValue *result, XrTlsContext *context) {
+    return net_tls_handshake_with_context(X, args, nargs, result, context, true);
 }
 
 static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, int nargs,

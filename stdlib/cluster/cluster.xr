@@ -122,6 +122,7 @@ const _DISCOVERY_LOOPBACK = false
 const _DISCOVERY_ANNOUNCEMENT_MAX_SIZE = 128
 const _CLUSTER_PROTOCOL_FLAGS = 0x01
 const _HANDSHAKE_FRAME_BODY_MAX = 513
+const _ACCEPT_POLL_MS = 500
 
 // Discovery is a source coroutine, so its identity and stop signal also live
 // in source. Tokens prevent a retiring loop from clearing a newer loop after a
@@ -129,6 +130,8 @@ const _HANDSHAKE_FRAME_BODY_MAX = 513
 const _discoveryNextToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
+const _acceptNextToken: Atomic<i64> = Atomic<i64>(0)
+const _acceptActiveToken: Atomic<i64> = Atomic<i64>(0)
 
 // ========== Wire protocol ===========
 
@@ -651,7 +654,7 @@ fn _readHandshakeFrame(conn: NetConn) -> ClusterFrame? {
     return decodeFrame(wire)
 }
 
-fn _mayPublishJoinedPeer(name: string) -> bool {
+fn _mayPublishPeer(name: string) -> bool {
     if (name == self() || __recentlyDeparted(name)) { return false }
     var connected = nodes()
     if (connected == null) { return false }
@@ -682,7 +685,7 @@ fn _joinPeer(host: string, port: i64) -> bool {
         return false
     }
 
-    var config = __joinConfig()
+    var config = __handshakeConfig()
     if (config == null) {
         net.close(live)
         return false
@@ -732,11 +735,113 @@ fn _joinPeer(host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    if (!_mayPublishJoinedPeer(ack!.name)) {
+    if (!_mayPublishPeer(ack!.name)) {
         net.close(live)
         return false
     }
     return __adoptPeer(move live, ack!.name, host, port, ack!.flags)
+}
+
+fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
+    var live = conn
+    var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
+    if (_acceptActiveToken.load() != token || !net.setDeadline(live, deadline)) {
+        net.close(live)
+        return
+    }
+
+    var config = __handshakeConfig()
+    if (config == null || (config!.tlsEnabled && !config!.tlsServerReady)) {
+        net.close(live)
+        return
+    }
+    if (config!.tlsEnabled && __acceptTls(live, deadline) != 0) {
+        // The TLS provider closes the failed handle.
+        return
+    }
+    if (_acceptActiveToken.load() != token) {
+        net.close(live)
+        return
+    }
+
+    var frame = _readHandshakeFrame(live)
+    if (frame == null || frame!.kind != FRAME_HANDSHAKE_REQ) {
+        net.close(live)
+        return
+    }
+    var request = decodeHandshakeRequest(frame!.payload)
+    if (request == null || !_mayPublishPeer(request!.name)) {
+        net.close(live)
+        return
+    }
+
+    var nonce = _handshakeNonce()
+    if (nonce == null) {
+        net.close(live)
+        return
+    }
+    var proof = computeHandshakeProof(config!.secret, request!.nonce)
+    if (proof == null) {
+        net.close(live)
+        return
+    }
+    var ackValue: ClusterHandshakeAck = {
+        name: self(), nonce: nonce!, proof: proof!, flags: _CLUSTER_PROTOCOL_FLAGS,
+    }
+    var ack = encodeHandshakeAck(ackValue)
+    if (ack == null || net.writeBytes(live, ack!) != len(ack!)) {
+        net.close(live)
+        return
+    }
+
+    var doneFrame = _readHandshakeFrame(live)
+    if (doneFrame == null || doneFrame!.kind != FRAME_HANDSHAKE_DONE) {
+        net.close(live)
+        return
+    }
+    var done = decodeHandshakeDone(doneFrame!.payload)
+    var expected = computeHandshakeProof(config!.secret, nonce!)
+    if (done == null || expected == null || !handshakeProofEqual(done!, expected!)) {
+        net.close(live)
+        return
+    }
+    if (_acceptActiveToken.load() != token || !_mayPublishPeer(request!.name)) {
+        net.close(live)
+        return
+    }
+    __adoptPeer(move live, request!.name, "", 0, request!.flags)
+}
+
+fn _releaseAcceptLoop(token: i64) {
+    var (_, released) = _acceptActiveToken.compareExchange(token, 0)
+}
+
+fn _acceptLoop(token: i64) {
+    defer { _releaseAcceptLoop(token) }
+    while (_acceptActiveToken.load() == token) {
+        var accepted = __acceptPeer(time.monotonic() + _ACCEPT_POLL_MS)
+        if (accepted == null) { continue }
+        var live: NetConn = accepted!
+        accepted = null
+        if (_acceptActiveToken.load() != token) {
+            net.close(live)
+            return
+        }
+        go _serveAcceptedPeer(move live, token)
+    }
+}
+
+fn _activateClusterSource(started: bool, secret: string) -> bool {
+    if (!started) { return false }
+    _discoveryHashBits.store(discoveryClusterHash(secret) as i64)
+    var config = __handshakeConfig()
+    if (config == null || (config!.tlsEnabled && !config!.tlsServerReady)) {
+        return true
+    }
+    var token = _acceptNextToken.fetchAdd(1) + 1
+    var (_, acquired) = _acceptActiveToken.compareExchange(0, token)
+    if (acquired) { go _acceptLoop(token) }
+    return true
 }
 
 fn _joinDiscoveredNode(host: string, port: i64) { _joinPeer(host, port) }
@@ -1181,8 +1286,7 @@ export fn start(config: ClusterConfig) -> bool {
         var started = __start(config.name, config.port, secret, false, "", "", "", false,
                               interval, timeout, missed, tick, PHI_MIN_SAMPLES, PHI_THRESHOLD,
                               TOPIC_DELIVERY_FANOUT_MAX, TOMBSTONE_RETENTION_MS)
-        if (started) { _discoveryHashBits.store(discoveryClusterHash(secret) as i64) }
-        return started
+        return _activateClusterSource(started, secret)
     }
     var tls = config.tls!
     var caFile = tls.caFile ?? ""
@@ -1210,8 +1314,7 @@ export fn start(config: ClusterConfig) -> bool {
         TOPIC_DELIVERY_FANOUT_MAX,
         TOMBSTONE_RETENTION_MS
     )
-    if (started) { _discoveryHashBits.store(discoveryClusterHash(secret) as i64) }
-    return started
+    return _activateClusterSource(started, secret)
 }
 
 // The address is parsed here and the leaf is handed a host and a port, so the
@@ -1226,6 +1329,7 @@ export fn join(addr: string) -> bool {
 
 export fn stop() {
     _discoveryActiveToken.store(0)
+    _acceptActiveToken.store(0)
     __stop()
 }
 

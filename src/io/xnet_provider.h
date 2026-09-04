@@ -24,4 +24,10 @@ XR_FUNC XrCFuncResult xr_net_tls_handshake_with_context(struct XrVMRuntime *X, X
                                                         int nargs, XrValue *result,
                                                         XrTlsContext *context);
 
+/* Server-side counterpart: no hostname/SNI input, same absolute-deadline and
+ * failure-closes-the-handle contract. */
+XR_FUNC XrCFuncResult xr_net_tls_server_handshake_with_context(struct XrVMRuntime *X, XrValue *args,
+                                                               int nargs, XrValue *result,
+                                                               XrTlsContext *context);
+
 #endif  // XR_IO_XNET_PROVIDER_H

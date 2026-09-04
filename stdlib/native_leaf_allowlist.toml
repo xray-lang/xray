@@ -87,12 +87,12 @@ deletion_trigger = "when cluster runtime state is exposed through scalar accesso
 
 [[leaf]]
 module = "cluster"
-symbol = "__ClusterJoinConfig"
+symbol = "__ClusterHandshakeConfig"
 class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills the immutable record from the runtime secret and TLS switch before cluster.xr performs the outbound handshake"
+provider = "declaration only (stdlib/defs/core.def). The VM fills the immutable record from runtime authentication and TLS readiness before cluster.xr performs either handshake direction"
 deletion_trigger = "when cluster runtime configuration is stored directly in module-level Xray state instead of the native cluster object"
 
 [[leaf]]
@@ -117,12 +117,12 @@ deletion_trigger = "when the cluster runtime's node tables and counters are reac
 
 [[leaf]]
 module = "cluster"
-symbol = "__joinConfig"
+symbol = "__handshakeConfig"
 class = "runtime_leaf"
-abi = "none; reads two immutable fields from the running cluster object"
+abi = "none; reads three immutable fields from the running cluster object"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the VM cluster runtime configuration (stdlib/cluster/cluster.c cluster_join_config_fn). It only snapshots the secret and TLS switch; cluster.xr owns every outbound handshake decision"
+provider = "the VM cluster runtime configuration (stdlib/cluster/cluster.c cluster_handshake_config_fn). It only snapshots the secret, TLS switch and server-context readiness; cluster.xr owns both handshake directions"
 deletion_trigger = "when the secret and TLS switch passed to cluster.start can live in module-level Xray state"
 
 [[leaf]]
@@ -144,6 +144,26 @@ ownership = "none"
 effect = "suspends"
 provider = "the generic non-blocking NetConn TLS provider (src/io/xnet_provider.c) parameterized by the cluster runtime's client context. cluster.xr chooses whether, when and under which absolute deadline it runs"
 deletion_trigger = "when a caller-supplied TLS context is an ordinary Xray value accepted by net.upgradeTLS"
+
+[[leaf]]
+module = "cluster"
+symbol = "__acceptPeer"
+class = "host_abi_leaf"
+abi = "accept(2) on the cluster listener plus scheduler netpoll readiness"
+ownership = "fresh"
+effect = "suspends"
+provider = "the cluster listener fd and generic NetConn representation (stdlib/cluster/cluster.c cluster_accept_peer_fn). cluster.xr selects the deadline, owns the accept loop and dispatches each connection"
+deletion_trigger = "when a runtime-owned listener fd can be borrowed as an ordinary NetListener value without transferring its lifetime"
+
+[[leaf]]
+module = "cluster"
+symbol = "__acceptTls"
+class = "host_abi_leaf"
+abi = "OpenSSL server handshake plus the scheduler netpoll wait ABI"
+ownership = "none"
+effect = "suspends"
+provider = "the generic non-blocking NetConn TLS provider (src/io/xnet_provider.c) parameterized by the cluster runtime's server context. cluster.xr chooses whether, when and under which absolute deadline it runs"
+deletion_trigger = "when a caller-supplied TLS server context is an ordinary Xray value accepted by net"
 
 [[leaf]]
 module = "cluster"

@@ -121,26 +121,29 @@ static const XaBuiltinObjectField g_gen_cluster___clustersnapshot_object_fields[
     {"tls", "__ClusterTlsSnapshot"},
 };
 
-// cluster.__ClusterJoinConfig object fields
-static const XaBuiltinObjectField g_gen_cluster___clusterjoinconfig_object_fields[] = {
+// cluster.__ClusterHandshakeConfig object fields
+static const XaBuiltinObjectField g_gen_cluster___clusterhandshakeconfig_object_fields[] = {
     {"secret", "string"},
     {"tlsEnabled", "bool"},
+    {"tlsServerReady", "bool"},
 };
 
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
     {"__ClusterTlsSnapshot", "Private scalar TLS state read from the cluster runtime", g_gen_cluster___clustertlssnapshot_object_fields, 3, true},
     {"__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", g_gen_cluster___clusternodesnapshot_object_fields, 16, true},
     {"__ClusterSnapshot", "Private scalar snapshot read from the cluster runtime", g_gen_cluster___clustersnapshot_object_fields, 10, true},
-    {"__ClusterJoinConfig", "Private immutable configuration needed by the source-owned outbound join handshake", g_gen_cluster___clusterjoinconfig_object_fields, 2, true},
+    {"__ClusterHandshakeConfig", "Private immutable configuration needed by source-owned cluster handshakes", g_gen_cluster___clusterhandshakeconfig_object_fields, 3, true},
 };
 #define GEN_CLUSTER_OBJECT_SHAPE_COUNT 4
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, heartbeatTickMs: i64, phiMinSamples: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64, tombstoneRetentionMs: i64): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration and the health policy cluster.xr decides", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__joinConfig", "(): __ClusterJoinConfig?", "Snapshot the runtime-owned secret and TLS switch for the source-owned outbound join handshake", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__handshakeConfig", "(): __ClusterHandshakeConfig?", "Snapshot runtime-owned authentication and TLS readiness for source-owned handshakes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__recentlyDeparted", "(name: string): bool", "Project whether a node name is present in the locked recent-departure registry", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__acceptPeer", "(deadlineMs: i64): NetConn?", "Accept one cluster listener socket under a source-selected absolute deadline", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64): bool", "Transfer an authenticated socket into the locked cluster node registry and start its transport providers", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__self", "(): string", "Get own node name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__nodes", "(): Array<string>?", "List cluster node names", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
@@ -153,7 +156,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__publishRemote", "(topic: string, envelope: move Buffer, hopLimit: i64): i64", "Broadcast one validated opaque service envelope to connected native transports", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 15
+#define GEN_CLUSTER_FUNCTION_COUNT 17
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
