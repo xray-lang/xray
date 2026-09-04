@@ -47,16 +47,14 @@ typedef struct XrSemanticFrozenBuiltin {
  * surface name; the two spellings denote one class, and nothing else may claim
  * either. */
 static const XrSemanticFrozenBuiltin xr_semantic_frozen_builtins[] = {
-    {"StringBuilder", XR_TID_STRINGBUILDER},   {"Task", XR_TID_COROUTINE},
-    {"WorkQueue", XR_TID_WORKQUEUE},           {"ResultGroup", XR_TID_RESULTGROUP},
-    {"CountdownLatch", XR_TID_COUNTDOWNLATCH}, {"Semaphore", XR_TID_SEMAPHORE},
-    {"EventCount", XR_TID_EVENTCOUNT},
+    {"StringBuilder", XR_TID_STRINGBUILDER},
+    {"Task", XR_TID_COROUTINE},
 };
 
 /* Resolve a live type to its frozen builtin id, or XR_TID_NULL when the type is
  * not a frozen builtin. A user class that reuses one of these names carries its
  * own class_ref and is deliberately not a match: builtin names are ordinary
- * identifiers, so `class Semaphore { ... }` is legal source that must not
+ * identifiers, so `class StringBuilder { ... }` is legal source that must not
  * inherit the runtime class's storage or suspension rules. */
 static inline uint32_t xr_semantic_frozen_builtin_type(const XrType *type) {
     for (size_t i = 0;
@@ -101,9 +99,7 @@ static const XrSemanticBuiltinYieldableMethod xr_semantic_builtin_yieldable_meth
     {XR_TID_CHANNEL, "send", 1, 1},           {XR_TID_CHANNEL, "sendTimeout", 2, 2},
     {XR_TID_CHANNEL, "recv", 0, 0},           {XR_TID_CHANNEL, "recvOr", 1, 1},
     {XR_TID_CHANNEL, "recvTimeout", 1, 1},    {XR_TID_COROUTINE, "awaitResult", 0, 0},
-    {XR_TID_COROUTINE, "awaitTimeout", 1, 1}, {XR_TID_WORKQUEUE, "pop", 0, 1},
-    {XR_TID_RESULTGROUP, "recv", 0, 0},       {XR_TID_COUNTDOWNLATCH, "wait", 0, 0},
-    {XR_TID_SEMAPHORE, "acquire", 0, 0},      {XR_TID_EVENTCOUNT, "wait", 1, 2},
+    {XR_TID_COROUTINE, "awaitTimeout", 1, 1},
 };
 
 /* The builtin id whose suspension rules a receiver follows.

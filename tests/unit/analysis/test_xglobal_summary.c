@@ -12971,11 +12971,11 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_NETPOLL), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_ATOMIC), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_WORK_QUEUE), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_RESULT_GROUP), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COUNTDOWN_LATCH), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SEMAPHORE), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_EVENT_COUNT), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_WORK_QUEUE), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_RESULT_GROUP), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COUNTDOWN_LATCH), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SEMAPHORE), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_EVENT_COUNT), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_GENERATOR), 1);
 
     XaotBundle bundle;
@@ -12983,7 +12983,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_SCOPE));
     ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_TASK));
-    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_WORK_QUEUE));
+    ASSERT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_WORK_QUEUE));
     ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_GENERATOR));
     xaot_bundle_free(&bundle);
 
@@ -13336,9 +13336,14 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
     teardown_parser_session();
 }
 
-TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
+TEST(global_evidence_composes_source_class_receiver_effects) {
     setup_parser_session();
-    const char *source = "class Barrier {\n"
+    const char *source = "class CountdownLatch {\n"
+                         "    constructor(parties: i64) {}\n"
+                         "    done() {}\n"
+                         "    wait() -> bool { Coro.yield(); return true }\n"
+                         "}\n"
+                         "class Barrier {\n"
                          "    _latch: CountdownLatch\n"
                          "    constructor(parties: i64) {\n"
                          "        this._latch = CountdownLatch(parties)\n"
@@ -13372,7 +13377,7 @@ TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
     const XgBodySummary *wait_body = evidence_find_body_by_name(&ev, "wait");
     ASSERT_NOT_NULL(wait_body);
     ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_SUSPEND) != 0);
-    ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
+    ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
 
     uint32_t wait_effects = 0;
     ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, wait_body, &wait_effects));
@@ -14242,7 +14247,7 @@ RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
-RUN_TEST(global_evidence_composes_field_receiver_runtime_wait_effects);
+RUN_TEST(global_evidence_composes_source_class_receiver_effects);
 RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);
 RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);

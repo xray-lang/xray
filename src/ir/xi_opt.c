@@ -1056,19 +1056,6 @@ static bool xi_opt_method_name_is(const XiValue *v, const char *name, SymbolId s
     return (SymbolId) (v->aux_int >> 1) == symbol;
 }
 
-static const XiValue *xi_identity_root_value(const XiValue *v) {
-    const XiValue *cur = v;
-    for (uint8_t depth = 0; depth < 8; depth++) {
-        if (!cur || cur->nargs != 1)
-            return cur;
-        const XiValue *src = cur->args[0];
-        if (!xi_identity_keeps_task_view(src, cur))
-            return cur;
-        cur = src;
-    }
-    return cur;
-}
-
 static XiValue *xi_task_array_unwrap_identity_depth(XiValue *v, uint8_t depth) {
     XiValue *cur = v;
     for (; depth < 8; depth++) {
@@ -1165,60 +1152,6 @@ static bool xi_task_array_use_is_shared_init(XiFunc *f, XiValue *user, uint16_t 
     if (root && root->op == XI_ARRAY_NEW)
         return xi_task_array_unique_shared_init(f, user->aux_int) == root;
     return false;
-}
-
-static bool xi_result_group_recv_uses_group(const XiValue *v, const XiValue *group) {
-    if (!v || !group || v->nargs < 1)
-        return false;
-    if (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
-        return false;
-    if (!xi_opt_method_name_is(v, "recv", SYMBOL_RECV))
-        return false;
-    if (!xi_value_type_is_result_group(v->args[0]))
-        return false;
-    return xi_identity_root_value(v->args[0]) == xi_identity_root_value(group);
-}
-
-static bool xi_func_has_result_group_recv_for_group(XiFunc *f, const XiValue *group) {
-    if (!f || !group)
-        return false;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (xi_result_group_recv_uses_group(blk->values[i], group))
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool xi_go_can_defer_fire_and_forget_result_group(XiFunc *f, const XiValue *go) {
-    if (!f || !go || go->op != XI_GO)
-        return false;
-    if ((go->flags & XI_FLAG_FIRE_AND_FORGET) == 0)
-        return false;
-    if ((go->aux_int & XI_GO_AUX_LINK_MASK) != 0)
-        return false;
-    for (uint16_t a = 1; a < go->nargs; a++) {
-        XiValue *arg = go->args[a];
-        if (xi_value_type_is_result_group(arg) && xi_func_has_result_group_recv_for_group(f, arg))
-            return true;
-    }
-    return false;
-}
-
-static bool xi_mark_fire_and_forget_result_group_go_deferred(XiFunc *f, XiValue *go,
-                                                             XiPassChange *chg) {
-    if (!xi_go_can_defer_fire_and_forget_result_group(f, go))
-        return false;
-    if ((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0)
-        return false;
-    go->aux_int |= XI_GO_AUX_DEFER_BATCH;
-    if (chg) {
-        chg->values_changed = true;
-        chg->n_added++;
-    }
-    return true;
 }
 
 static bool xi_await_all_task_array_pushes_go(XiFunc *f, XiValue *user, XiValue *arr) {
@@ -1643,8 +1576,6 @@ XR_FUNC XiPassChange xi_opt_mark_one_shot_await(XiFunc *f) {
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
             if (!v || v->op != XI_GO)
-                continue;
-            if (xi_mark_fire_and_forget_result_group_go_deferred(f, v, &chg))
                 continue;
             if (!xi_go_can_be_one_shot_awaited(v))
                 continue;

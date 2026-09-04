@@ -63,16 +63,6 @@ static uint32_t live_frozen_builtin_type(const XrType *type) {
         return XR_TID_STRINGBUILDER;
     if (xr_type_is_builtin_named_class(type, "Task"))
         return XR_TID_COROUTINE;
-    if (xr_type_is_builtin_named_class(type, "WorkQueue"))
-        return XR_TID_WORKQUEUE;
-    if (xr_type_is_builtin_named_class(type, "ResultGroup"))
-        return XR_TID_RESULTGROUP;
-    if (xr_type_is_builtin_named_class(type, "CountdownLatch"))
-        return XR_TID_COUNTDOWNLATCH;
-    if (xr_type_is_builtin_named_class(type, "Semaphore"))
-        return XR_TID_SEMAPHORE;
-    if (xr_type_is_builtin_named_class(type, "EventCount"))
-        return XR_TID_EVENTCOUNT;
     return XR_TID_NULL;
 }
 
@@ -135,11 +125,9 @@ static bool semantic_value_shape_is_exact(const XrSemanticPlan *plan, uint32_t f
 }
 
 static bool scalar_semantic_value_id(const XrTargetPlan *target_plan,
-                                     const XrSemanticPlan *semantic_plan,
-                                     const XiFunc *function, const XiValue *value,
-                                     uint32_t *out_semantic_function,
-                                     uint32_t *out_semantic_value, char *error,
-                                     size_t error_size) {
+                                     const XrSemanticPlan *semantic_plan, const XiFunc *function,
+                                     const XiValue *value, uint32_t *out_semantic_function,
+                                     uint32_t *out_semantic_value, char *error, size_t error_size) {
     if (out_semantic_function)
         *out_semantic_function = XR_SEMANTIC_INDEX_NONE;
     if (out_semantic_value)
@@ -155,9 +143,9 @@ static bool scalar_semantic_value_id(const XrTargetPlan *target_plan,
         uint32_t limit = (uint32_t) xr_semantic_plan_function_count(semantic_plan);
         while (root->parent_func && depth++ < limit)
             root = root->parent_func;
-        semantic_authority = !root->parent_func &&
-                             xi_program_semantic_plan_verify_detached_leaf_authority(
-                                 root, semantic_plan, error, error_size);
+        semantic_authority =
+            !root->parent_func && xi_program_semantic_plan_verify_detached_leaf_authority(
+                                      root, semantic_plan, error, error_size);
     }
     if (!semantic_plan || !semantic_authority ||
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
@@ -182,11 +170,9 @@ static bool scalar_semantic_value_id(const XrTargetPlan *target_plan,
     return true;
 }
 
-bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan,
-                                     const XiFunc *function, const XiValue *value,
-                                     uint32_t *out_semantic_function,
-                                     uint32_t *out_semantic_value, char *error,
-                                     size_t error_size) {
+bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan, const XiFunc *function,
+                                     const XiValue *value, uint32_t *out_semantic_function,
+                                     uint32_t *out_semantic_value, char *error, size_t error_size) {
     uint32_t partition = UINT32_MAX;
     const XrSemanticPlan *semantic_plan = function ? function->semantic_plan : NULL;
     if (!xr_target_plan_partition_for_semantic(target_plan, semantic_plan, &partition))
@@ -196,11 +182,11 @@ bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan,
                                     out_semantic_function, out_semantic_value, error, error_size);
 }
 
-bool xr_aot_scalar_program_semantic_value_id(
-    const XrTargetPlan *target_plan, uint32_t partition,
-    uint32_t target_function, const XiFunc *function, const XiValue *value,
-    uint32_t *out_semantic_function, uint32_t *out_semantic_value,
-    char *error, size_t error_size) {
+bool xr_aot_scalar_program_semantic_value_id(const XrTargetPlan *target_plan, uint32_t partition,
+                                             uint32_t target_function, const XiFunc *function,
+                                             const XiValue *value, uint32_t *out_semantic_function,
+                                             uint32_t *out_semantic_value, char *error,
+                                             size_t error_size) {
     const XrSemanticPlan *semantic =
         target_plan ? xr_target_plan_semantic_module(target_plan, partition) : NULL;
     uint32_t function_count = 0;
@@ -210,15 +196,14 @@ bool xr_aot_scalar_program_semantic_value_id(
     uint32_t bound_function = XR_SEMANTIC_INDEX_NONE;
     if (!semantic || !functions || target_function >= function_count ||
         functions[target_function].id != target_function ||
-        !xr_target_plan_function_semantic_binding(target_plan, target_function,
-                                                   &bound_semantic, &bound_function) ||
+        !xr_target_plan_function_semantic_binding(target_plan, target_function, &bound_semantic,
+                                                  &bound_function) ||
         bound_semantic != semantic || !function || function->semantic_plan != semantic ||
         function->semantic_plan_function_index != bound_function)
         return fail(error, error_size,
                     "program scalar value lacks an exact global function binding");
-    return scalar_semantic_value_id(target_plan, semantic, function, value,
-                                    out_semantic_function, out_semantic_value,
-                                    error, error_size);
+    return scalar_semantic_value_id(target_plan, semantic, function, value, out_semantic_function,
+                                    out_semantic_value, error, error_size);
 }
 
 static bool adapter_origin_matches(const XiValue *value) {

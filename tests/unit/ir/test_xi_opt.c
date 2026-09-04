@@ -38,8 +38,6 @@ static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
 static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 14, .frozen = true};
 static XrType stub_task = {
     .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
-static XrType stub_result_group = {
-    .kind = XR_KIND_INSTANCE, .id = 13, .frozen = true, .instance = {.class_name = "ResultGroup"}};
 static XrType stub_task_array = {
     .kind = XR_KIND_ARRAY,
     .id = 12,
@@ -1071,56 +1069,6 @@ TEST(mark_one_shot_sequential_await_skips_persistent_task_array) {
     assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
     assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0);
     assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) == 0);
-    xi_func_free(f);
-}
-
-TEST(mark_fire_and_forget_result_group_go_deferred) {
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *callee = xi_param(f, blk, 0, &stub_func);
-    XiValue *group = xi_param(f, blk, 1, &stub_result_group);
-    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_void, 2);
-    go->args[0] = callee;
-    go->args[1] = group;
-    go->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_FIRE_AND_FORGET;
-
-    XiValue *recv = xi_value_new(f, blk, XI_CALL_METHOD, &stub_int, 1);
-    recv->args[0] = group;
-    recv->aux = (void *) "recv";
-    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
-
-    XiPassChange chg = xi_opt_mark_one_shot_await(f);
-
-    (void) recv;
-    assert(chg.values_changed && "ResultGroup producer go should be deferred until recv");
-    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
-    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
-    xi_func_free(f);
-}
-
-TEST(mark_fire_and_forget_result_group_go_keeps_linked_go_immediate) {
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *callee = xi_param(f, blk, 0, &stub_func);
-    XiValue *group = xi_param(f, blk, 1, &stub_result_group);
-    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_void, 2);
-    go->args[0] = callee;
-    go->args[1] = group;
-    go->aux_int = 1;
-    go->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_FIRE_AND_FORGET;
-
-    XiValue *recv = xi_value_new(f, blk, XI_CALL_METHOD, &stub_int, 1);
-    recv->args[0] = group;
-    recv->aux = (void *) "recv";
-    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
-
-    XiPassChange chg = xi_opt_mark_one_shot_await(f);
-
-    (void) recv;
-    assert(!chg.values_changed && "linked fire-and-forget go has observable propagation state");
-    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
     xi_func_free(f);
 }
 
@@ -2849,8 +2797,6 @@ int main(void) {
     run_mark_one_shot_sequential_await_counted_task_array_loop();
     run_mark_one_shot_sequential_await_rejects_repeated_constant_index_loop();
     run_mark_one_shot_sequential_await_skips_persistent_task_array();
-    run_mark_fire_and_forget_result_group_go_deferred();
-    run_mark_fire_and_forget_result_group_go_keeps_linked_go_immediate();
 
     /* Dead code elimination */
     run_dce_removes_unused();

@@ -2833,16 +2833,6 @@ static uint32_t body_capabilities_for_builtin_constructor(const char *name) {
         return XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
     if (strcmp(name, "Atomic") == 0)
         return XG_CAP_ATOMIC | XG_CAP_OBJECTS;
-    if (strcmp(name, "WorkQueue") == 0)
-        return XG_CAP_WORK_QUEUE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "ResultGroup") == 0)
-        return XG_CAP_RESULT_GROUP | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "CountdownLatch") == 0)
-        return XG_CAP_COUNTDOWN_LATCH | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "Semaphore") == 0)
-        return XG_CAP_SEMAPHORE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "EventCount") == 0)
-        return XG_CAP_EVENT_COUNT | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
     return 0;
 }
 
@@ -8908,16 +8898,6 @@ static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNod
     if (class_name == hash_name32("Task"))
         return (method_name == hash_name32("awaitResult") && argc == 0) ||
                (method_name == hash_name32("awaitTimeout") && argc == 1);
-    if (class_name == hash_name32("WorkQueue"))
-        return method_name == hash_name32("pop") && (argc == 0 || argc == 1);
-    if (class_name == hash_name32("ResultGroup"))
-        return method_name == hash_name32("recv") && argc == 0;
-    if (class_name == hash_name32("CountdownLatch"))
-        return method_name == hash_name32("wait") && argc == 0;
-    if (class_name == hash_name32("Semaphore"))
-        return method_name == hash_name32("acquire") && argc == 0;
-    if (class_name == hash_name32("EventCount"))
-        return method_name == hash_name32("wait") && (argc == 1 || argc == 2);
     return false;
 }
 

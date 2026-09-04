@@ -51,7 +51,7 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
      * builtin's name. This function is the single gate for builtin identity —
      * it decides the member table (xa_builtin_get_type_info), the native
      * capability flags (xanalyzer_capability.c), and LSP completion — so a
-     * name-only match would let `class Semaphore { }` inherit the builtin's
+     * name-only match would let `class StringBuilder { }` inherit the builtin's
      * methods and its INTERIOR_MUTABLE | SYNC_SHAREABLE grant. */
     if (xr_type_is_builtin_named_class(type, "BigInt"))
         return XR_TID_BIGINT;
@@ -67,16 +67,6 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_COROUTINE;
     if (xr_type_is_builtin_named_class(type, "Atomic"))
         return XR_TID_ATOMIC;
-    if (xr_type_is_builtin_named_class(type, "WorkQueue"))
-        return XR_TID_WORKQUEUE;
-    if (xr_type_is_builtin_named_class(type, "ResultGroup"))
-        return XR_TID_RESULTGROUP;
-    if (xr_type_is_builtin_named_class(type, "CountdownLatch"))
-        return XR_TID_COUNTDOWNLATCH;
-    if (xr_type_is_builtin_named_class(type, "Semaphore"))
-        return XR_TID_SEMAPHORE;
-    if (xr_type_is_builtin_named_class(type, "EventCount"))
-        return XR_TID_EVENTCOUNT;
     if (xr_type_is_builtin_named_class(type, "Thread"))
         return XR_TID_THREAD;
     if (xr_type_is_builtin_named_type(type, "Iterator"))
@@ -120,12 +110,6 @@ const XaBuiltinType *xa_builtin_get_by_name(const char *name) {
 static bool xa_builtin_member_available_for_type(XrType *type, const char *member_name) {
     if (!type || !member_name)
         return false;
-    if (xr_type_is_named_class(type, "WorkQueue") && strcmp(member_name, "pushRange") == 0) {
-        XrType *elem = (type->instance.type_arg_count > 0 && type->instance.type_args)
-                           ? type->instance.type_args[0]
-                           : NULL;
-        return elem && elem->kind == XR_KIND_INT;
-    }
     return true;
 }
 
@@ -404,63 +388,9 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
         elem_type = container_type->container.element_type;
     } else if (container_type->kind == XR_KIND_CHANNEL) {
         elem_type = container_type->container.element_type;
-    } else if ((xr_type_is_builtin_named_class(container_type, "WorkQueue") ||
-                xr_type_is_builtin_named_class(container_type, "Atomic")) &&
+    } else if (xr_type_is_builtin_named_class(container_type, "Atomic") &&
                container_type->instance.type_arg_count > 0) {
         elem_type = container_type->instance.type_args[0];
-    }
-
-    if (xr_type_is_builtin_named_class(container_type, "WorkQueue")) {
-        if (sym == SYMBOL_PUSH)
-            return xr_type_new_bool(NULL);
-        if (sym == SYMBOL_POP) {
-            XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
-            if (t)
-                t->is_nullable = true;
-            return t;
-        }
-        if (strcmp(method_name, "tryPop") == 0) {
-            XrType *item = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
-            if (item)
-                item->is_nullable = true;
-            XrType *elems[2] = {item, xr_type_new_bool(NULL)};
-            return xr_type_new_tuple(X, elems, 2);
-        }
-        if (sym == SYMBOL_CLOSE)
-            return xr_type_new_unit(NULL);
-    }
-
-    if (xr_type_is_builtin_named_class(container_type, "ResultGroup")) {
-        if (strcmp(method_name, "add") == 0)
-            return xr_type_new_bool(NULL);
-        if (strcmp(method_name, "reset") == 0)
-            return xr_type_new_bool(NULL);
-        if (strcmp(method_name, "flush") == 0 || sym == SYMBOL_CLOSE)
-            return xr_type_new_unit(NULL);
-        if (strcmp(method_name, "recv") == 0) {
-            return xr_type_make_nullable(X, xr_type_new_int(NULL));
-        }
-        if (strcmp(method_name, "tryRecv") == 0) {
-            XrType *item = xr_type_make_nullable(X, xr_type_new_int(NULL));
-            XrType *elems[2] = {item, xr_type_new_bool(NULL)};
-            return xr_type_new_tuple(X, elems, 2);
-        }
-    }
-
-    if (xr_type_is_builtin_named_class(container_type, "Semaphore")) {
-        if (strcmp(method_name, "release") == 0)
-            return xr_type_new_int(NULL);
-        if (strcmp(method_name, "tryAcquire") == 0 || strcmp(method_name, "acquire") == 0)
-            return xr_type_new_bool(NULL);
-        if (sym == SYMBOL_CLOSE)
-            return xr_type_new_unit(NULL);
-    }
-
-    if (xr_type_is_builtin_named_class(container_type, "EventCount")) {
-        if (strcmp(method_name, "advance") == 0 || strcmp(method_name, "wait") == 0)
-            return xr_type_new_int(NULL);
-        if (sym == SYMBOL_CLOSE)
-            return xr_type_new_unit(NULL);
     }
 
     // Array methods

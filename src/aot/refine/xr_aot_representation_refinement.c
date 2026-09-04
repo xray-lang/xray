@@ -98,10 +98,8 @@ static uint32_t live_builtin_type(const XrType *type) {
         const char *name;
         uint32_t id;
     } builtins[] = {
-        {"StringBuilder", XR_TID_STRINGBUILDER},   {"Task", XR_TID_COROUTINE},
-        {"WorkQueue", XR_TID_WORKQUEUE},           {"ResultGroup", XR_TID_RESULTGROUP},
-        {"CountdownLatch", XR_TID_COUNTDOWNLATCH}, {"Semaphore", XR_TID_SEMAPHORE},
-        {"EventCount", XR_TID_EVENTCOUNT},
+        {"StringBuilder", XR_TID_STRINGBUILDER},
+        {"Task", XR_TID_COROUTINE},
     };
     for (size_t index = 0; index < sizeof(builtins) / sizeof(builtins[0]); index++)
         if (xr_type_is_builtin_named_class(type, builtins[index].name))

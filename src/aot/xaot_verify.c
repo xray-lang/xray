@@ -1343,12 +1343,7 @@ static const XiValue *verify_transfer_source_move(const XiValue *value) {
 
 static bool verify_transfer_type_is_sync_handle(const XrType *type) {
     return xi_type_is_channel(type) || xi_type_is_task(type) || xi_type_is_thread(type) ||
-           xi_type_is_named_instance(type, "Atomic") ||
-           xi_type_is_named_instance(type, "WorkQueue") ||
-           xi_type_is_named_instance(type, "ResultGroup") ||
-           xi_type_is_named_instance(type, "CountdownLatch") ||
-           xi_type_is_named_instance(type, "Semaphore") ||
-           xi_type_is_named_instance(type, "EventCount");
+           xi_type_is_named_instance(type, "Atomic");
 }
 
 static bool verify_transfer_type_is_shared_native_handle(const XrType *type) {

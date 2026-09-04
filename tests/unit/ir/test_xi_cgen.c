@@ -334,12 +334,7 @@ static bool test_aot_value_may_suspend(const XiValue *value) {
     if ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) && value->aux &&
         strcmp((const char *) value->aux, "sleep") == 0)
         return true;
-    return xi_value_is_blocking_task_method_call(value) ||
-           xi_value_is_blocking_work_queue_method_call(value) ||
-           xi_value_is_blocking_result_group_method_call(value) ||
-           xi_value_is_blocking_countdown_latch_method_call(value) ||
-           xi_value_is_blocking_semaphore_method_call(value) ||
-           xi_value_is_blocking_event_count_method_call(value);
+    return xi_value_is_blocking_task_method_call(value);
 }
 
 static uint32_t test_aot_value_runtime_capabilities(const XiValue *value) {
@@ -352,16 +347,6 @@ static uint32_t test_aot_value_runtime_capabilities(const XiValue *value) {
         return XG_CAP_TASK | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
     if (xi_value_type_is_atomic(value) || xi_value_type_is_atomic(receiver))
         return XG_CAP_ATOMIC | XG_CAP_OBJECTS;
-    if (xi_value_type_is_work_queue(value) || xi_value_type_is_work_queue(receiver))
-        return XG_CAP_WORK_QUEUE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (xi_value_type_is_result_group(value) || xi_value_type_is_result_group(receiver))
-        return XG_CAP_RESULT_GROUP | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (xi_value_type_is_countdown_latch(value) || xi_value_type_is_countdown_latch(receiver))
-        return XG_CAP_COUNTDOWN_LATCH | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (xi_value_type_is_semaphore(value) || xi_value_type_is_semaphore(receiver))
-        return XG_CAP_SEMAPHORE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (xi_value_type_is_event_count(value) || xi_value_type_is_event_count(receiver))
-        return XG_CAP_EVENT_COUNT | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
     return 0;
 }
 
@@ -992,16 +977,7 @@ static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cf
         return NULL;
     }
 
-    /* These cases exercise the concurrency primitives whose types are declared
-     * for the runtime rather than exported from a resolvable module. This
-     * analyzer runs without a module graph, so `import ... from sync` cannot
-     * resolve here even though it does in a real compilation; analyzing them
-     * as the sync module itself puts those declarations in scope. */
-    const char *analyzer_file =
-        (strstr(source, "WorkQueue<i64>") || strstr(source, "CountdownLatch") ||
-         strstr(source, "ResultGroup") || strstr(source, "Semaphore"))
-            ? "stdlib/sync/sync.xr"
-            : "test.xr";
+    const char *analyzer_file = "test.xr";
     xa_analyzer_analyze(analyzer, analyzer_file, program);
 
     cfg.run_emit = false; /* cgen tests need the IR tree, not bytecode */
@@ -12439,171 +12415,6 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
     xi_func_free(ir);
 }
 
-TEST(cgen_countdown_latch_methods_use_native_helpers) {
-    const char *src = "const latch: CountdownLatch = CountdownLatch(0)\n"
-                      "fn syncUse() -> i64 {\n"
-                      "    var ok = latch.reset(2)\n"
-                      "    var left = latch.done()\n"
-                      "    var ready = latch.tryWait()\n"
-                      "    latch.close()\n"
-                      "    return (ok ? left : 0) + (ready ? 1 : 0)\n"
-                      "}\n"
-                      "fn worker() -> i64 {\n"
-                      "    Coro.yield()\n"
-                      "    var ok = latch.reset(1)\n"
-                      "    var left = latch.done(1)\n"
-                      "    if (latch.tryWait()) {\n"
-                      "        return ok ? left : -1\n"
-                      "    }\n"
-                      "    return -2\n"
-                      "}\n"
-                      "fn main() {\n"
-                      "    print(syncUse())\n"
-                      "    var task = go worker()\n"
-                      "    latch.close()\n"
-                      "    print(await task)\n"
-                      "}\n"
-                      "main()\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT CountdownLatch methods should generate");
-    assert(contains(code, "xr_aot_countdown_latch_reset_bool_sync(") &&
-           "sync CountdownLatch.reset should use the native bool helper");
-    assert(contains(code, "xr_aot_countdown_latch_done_i64_sync(") &&
-           "sync CountdownLatch.done should use the native i64 helper");
-    assert(contains(code, "xr_aot_countdown_latch_try_wait_bool_sync(") &&
-           "sync CountdownLatch.tryWait should use the native bool helper");
-    assert(contains(code, "xr_aot_countdown_latch_close_void_sync(") &&
-           "sync CountdownLatch.close should use the native void helper");
-    assert(contains(code, "xr_aot_countdown_latch_reset_bool(ctx,") &&
-           "coroutine CountdownLatch.reset should use the native bool helper");
-    assert(contains(code, "xr_aot_countdown_latch_done_i64(ctx,") &&
-           "coroutine CountdownLatch.done should use the native i64 helper");
-    assert(contains(code, "xr_aot_countdown_latch_try_wait_bool(ctx,") &&
-           "coroutine CountdownLatch.tryWait should use the native bool helper");
-    assert(contains(code, "xr_aot_countdown_latch_close_void(ctx,") &&
-           "coroutine CountdownLatch.close should use the native void helper");
-    assert(!contains(code, "XrValue _latch_reset_") &&
-           "CountdownLatch.reset should not materialize an XrValue temp");
-    assert(!contains(code, "XrValue _latch_done_") &&
-           "CountdownLatch.done should not materialize an XrValue temp");
-    assert(!contains(code, "XrValue _latch_try_wait_") &&
-           "CountdownLatch.tryWait should not materialize an XrValue temp");
-    assert(!contains(code, "XrValue _latch_close_") &&
-           "CountdownLatch.close should not materialize a tagged Unit result");
-    assert(!contains(code, "XR_TO_INT(_latch_") &&
-           "CountdownLatch native helper results should not be immediately unboxed");
-    assert(!contains(code, "xr_aot_countdown_latch_close_sync(") &&
-           "sync CountdownLatch.close should not return tagged XrValue");
-
-    printf("  Generated CountdownLatch native method bridge %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_semaphore_methods_use_native_helpers) {
-    const char *src = "const sem: Semaphore = Semaphore(0)\n"
-                      "fn syncUse() -> i64 {\n"
-                      "    var released = sem.release(2)\n"
-                      "    var ok = sem.tryAcquire()\n"
-                      "    sem.close()\n"
-                      "    return released + (ok ? 1 : 0)\n"
-                      "}\n"
-                      "fn worker() -> i64 {\n"
-                      "    Coro.yield()\n"
-                      "    var released = sem.release()\n"
-                      "    var ok = sem.tryAcquire()\n"
-                      "    sem.close()\n"
-                      "    return released + (ok ? 1 : 0)\n"
-                      "}\n"
-                      "fn main() {\n"
-                      "    print(syncUse())\n"
-                      "    var task = go worker()\n"
-                      "    print(await task)\n"
-                      "}\n"
-                      "main()\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT Semaphore methods should generate");
-    assert(contains(code, "xr_aot_semaphore_release_i64_sync(") &&
-           "sync Semaphore.release should use the native i64 helper");
-    assert(contains(code, "xr_aot_semaphore_try_acquire_bool_sync(") &&
-           "sync Semaphore.tryAcquire should use the native bool helper");
-    assert(contains(code, "xr_aot_semaphore_close_void_sync(") &&
-           "sync Semaphore.close should use the native void helper");
-    assert(contains(code, "xr_aot_semaphore_release_i64(ctx,") &&
-           "coroutine Semaphore.release should use the native i64 helper");
-    assert(contains(code, "xr_aot_semaphore_try_acquire_bool(ctx,") &&
-           "coroutine Semaphore.tryAcquire should use the native bool helper");
-    assert(contains(code, "xr_aot_semaphore_close_void(ctx,") &&
-           "coroutine Semaphore.close should use the native void helper");
-    assert(!contains(code, "XrValue _sem_release_") &&
-           "Semaphore.release should not materialize an XrValue temp");
-    assert(!contains(code, "XrValue _sem_try_acquire_") &&
-           "Semaphore.tryAcquire should not materialize an XrValue temp");
-    assert(!contains(code, "XrValue _sem_close_") &&
-           "Semaphore.close should not materialize a tagged Unit result");
-    assert(!contains(code, "XR_TO_INT(_sem_release_") &&
-           "Semaphore native helper results should not be immediately unboxed");
-    assert(!contains(code, "xr_aot_semaphore_release_sync(") &&
-           "sync Semaphore.release should not return tagged XrValue");
-    assert(!contains(code, "xr_aot_semaphore_try_acquire_sync(") &&
-           "sync Semaphore.tryAcquire should not return tagged XrValue");
-
-    printf("  Generated Semaphore native method bridge %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
-    const char *src = "const sem: Semaphore = Semaphore(0)\n"
-                      "const latch: CountdownLatch = CountdownLatch(1)\n"
-                      "fn worker() -> i64 {\n"
-                      "    if (!sem.acquire()) {\n"
-                      "        return -1\n"
-                      "    }\n"
-                      "    latch.done()\n"
-                      "    return latch.wait() ? 1 : 0\n"
-                      "}\n"
-                      "fn main() {\n"
-                      "    var task = go worker()\n"
-                      "    sem.release()\n"
-                      "    print(await task)\n"
-                      "}\n"
-                      "main()\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT blocking sync methods should generate as coroutine calls");
-    assert(contains(code, "xr_aot_semaphore_acquire(ctx,") &&
-           "Semaphore.acquire should lower through the coroutine wait helper");
-    assert(contains(code, "xr_aot_countdown_latch_wait(ctx,") &&
-           "CountdownLatch.wait should lower through the coroutine wait helper");
-    assert(contains(code, "xr_aot_countdown_latch_done_i64(ctx,") &&
-           "CountdownLatch.done in the coroutine body should use the native i64 helper");
-    assert(contains(code, "xr_aot_semaphore_release_i64(ctx,") &&
-           "Semaphore.release in the coroutine main should use the native i64 helper");
-    assert(!contains(code, "unsupported AOT method") &&
-           "sync primitive direct calls must not fall through to unsupported method dispatch");
-
-    xr_free(code);
-    xi_func_free(ir);
-}
-
 TEST(cgen_runtime_managed_types_skip_arc) {
     XrType task_type = {.kind = XR_KIND_INSTANCE};
     XrType channel_type = {.kind = XR_KIND_CHANNEL};
@@ -14768,155 +14579,6 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
-    const char *src = "import { ResultGroup } from sync\n"
-                      "fn worker(group: ResultGroup, n: i64) {\n"
-                      "    group.add(n)\n"
-                      "    if (n == 3) {\n"
-                      "        group.close()\n"
-                      "    }\n"
-                      "}\n"
-                      "fn run() -> i64 {\n"
-                      "    const group: ResultGroup = ResultGroup(4)\n"
-                      "    var i = 0\n"
-                      "    while (i < 4) {\n"
-                      "        go worker(group, i)\n"
-                      "        i = i + 1\n"
-                      "    }\n"
-                      "    return group.recv() ?? -1\n"
-                      "}\n"
-                      "print(run())\n";
-
-    XiPipelineConfig cfg = xi_pipeline_aot_config();
-    XiFunc *ir = compile_to_ir_with_module_graph_config(src, cfg);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT ResultGroup fire-and-forget should generate");
-    /* `recv()` on a ResultGroup<int> takes the typed optional path: the payload
-     * and its presence flag are separate unboxed frame slots, so nothing is
-     * tagged across the suspend. */
-    const char *recv_call = strstr(code, "xr_aot_result_group_recv_i64_optional(ctx,");
-    assert(recv_call != NULL && "ResultGroup<i64>.recv should use the typed optional helper");
-    assert(!contains(code, "xr_aot_result_group_recv_value(") &&
-           "a typed ResultGroup recv must not fall back to the tagged helper");
-    assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
-           "ResultGroup fire-and-forget producers should use deferred batch submission");
-    assert(!contains(code, "xr_aot_spawn_child") &&
-           "deferred ResultGroup producers should not yield after each go");
-    assert(contains_between(code, recv_call, "xr_aot_submit_deferred_spawns(ctx);") &&
-           "ResultGroup recv should submit deferred fire-and-forget producers first");
-    assert(contains(code, ", 0, true, false, false, \"worker\"") &&
-           "fire-and-forget ResultGroup producers should stay task-less");
-    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
-           "deferred fire-and-forget producer loops should not poll before the blocking recv");
-    assert(contains(code, "xr_aot_result_group_add_bool_sync(") &&
-           "sync go ResultGroup producer should keep typed add helper dispatch");
-    assert(contains(code, "xr_aot_result_group_close_void_sync(") &&
-           "sync go ResultGroup producer should keep typed close helper dispatch");
-
-    printf("  Generated ResultGroup fire-and-forget deferred path %zu bytes of C code\n",
-           strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_coro_result_group_reset_uses_native_helper) {
-    const char *src = "import { ResultGroup } from sync\n"
-                      "fn run(n: i64) -> bool {\n"
-                      "    const group: ResultGroup = ResultGroup(n)\n"
-                      "    group.add(1)\n"
-                      "    group.add(2)\n"
-                      "    group.flush()\n"
-                      "    var first = group.recv() ?? -1\n"
-                      "    var ok = group.reset(n)\n"
-                      "    group.close()\n"
-                      "    return first == 3 && ok\n"
-                      "}\n"
-                      "print(run(2))\n";
-
-    XiFunc *ir = compile_to_ir_with_module_graph(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT ResultGroup reset should generate");
-    assert(contains(code, "xr_aot_result_group_add_bool(ctx,") &&
-           "ResultGroup.add in coroutine code should use the native bool AOT helper");
-    assert(contains(code, "xr_aot_result_group_reset_bool(ctx,") &&
-           "ResultGroup.reset in coroutine code should use the native bool AOT helper");
-    assert(contains(code, "xr_aot_result_group_flush_void(ctx,") &&
-           "ResultGroup.flush in coroutine code should use the native void AOT helper");
-    assert(contains(code, "xr_aot_result_group_close_void(ctx,") &&
-           "ResultGroup.close in coroutine code should use the native void AOT helper");
-    assert(!contains(code, "XR_TO_INT(xr_aot_result_group_add") &&
-           "ResultGroup.add should not box and immediately unbox a bool result");
-    assert(!contains(code, "XR_TO_INT(xr_aot_result_group_reset") &&
-           "ResultGroup.reset should not box and immediately unbox a bool result");
-    assert(!contains(code, "XrValue _rg_flush_") &&
-           "ResultGroup.flush should not materialize a tagged Unit result");
-    assert(!contains(code, "XrValue _rg_close_") &&
-           "ResultGroup.close should not materialize a tagged Unit result");
-
-    printf("  Generated ResultGroup reset helper path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
-    const char *src = "import { ResultGroup } from sync\n"
-                      "fn useGroup(group: ResultGroup, n: i64) -> i64 {\n"
-                      "    if (!group.add(n)) { return -1 }\n"
-                      "    group.flush()\n"
-                      "    if (!group.reset(1)) { return -2 }\n"
-                      "    group.close()\n"
-                      "    return 0\n"
-                      "}\n"
-                      "fn run() -> i64 {\n"
-                      "    const group: ResultGroup = ResultGroup(1)\n"
-                      "    return useGroup(group, 1)\n"
-                      "}\n"
-                      "print(run())\n";
-
-    XiFunc *ir = compile_to_ir_with_module_graph(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT ResultGroup sync helpers should generate");
-    const char *use_group = find_static_function_definition(code, "test_useGroup_");
-    assert(use_group != NULL && "useGroup function should be generated");
-    const char *use_group_end = next_static_after(use_group);
-    assert(use_group_end != NULL &&
-           "useGroup native body should be bounded by the next generated function");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_add_bool_sync(") == 1 &&
-           "ResultGroup.add should use the native bool sync AOT helper");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_reset_bool_sync(") == 1 &&
-           "ResultGroup.reset should use the native bool sync AOT helper");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_add_sync(") == 0 &&
-           "ResultGroup.add should not box a bool result before local use");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_reset_sync(") == 0 &&
-           "ResultGroup.reset should not box a bool result before local use");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_flush_void_sync(") == 1 &&
-           "ResultGroup.flush should use the native void sync AOT helper");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_close_void_sync(") == 1 &&
-           "ResultGroup.close should use the native void sync AOT helper");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_flush_sync(") == 0 &&
-           "ResultGroup.flush should not materialize a tagged Unit result");
-    assert(count_between(use_group, use_group_end, "xr_aot_result_group_close_sync(") == 0 &&
-           "ResultGroup.close should not materialize a tagged Unit result");
-    assert(count_between(use_group, use_group_end, "xrt_has_pending_error") == 0 &&
-           "ResultGroup sync helpers report status by return value, not the pending-error channel");
-
-    printf("  Generated ResultGroup sync no-error helper path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
 TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
     const char *src = "fn delayed(ch: Channel<i64>, n: i64) -> i64 {\n"
                       "    ch.recv()\n"
@@ -15052,194 +14714,6 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
            "Channel nonblocking methods must not fall back to dynamic method dispatch");
 
     printf("  Generated sync-go channel method helpers %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
-    const char *src = "const queue: WorkQueue<i64> = WorkQueue<i64>(1, 4)\n"
-                      "fn consumer() -> i64 {\n"
-                      "    var item = queue.pop(0)\n"
-                      "    return item ?? 0\n"
-                      "}\n"
-                      "var task = go consumer()\n"
-                      "assert(queue.push(7, 0))\n"
-                      "print(await task)\n"
-                      "queue.close()\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT WorkQueue pop should generate");
-    assert(contains(code, "xr_aot_work_queue_push_bool(ctx,") &&
-           "coroutine WorkQueue.push should use the native bool helper");
-    assert(contains(code, "xr_aot_work_queue_close_void(ctx,") &&
-           "coroutine WorkQueue.close should use the native void helper");
-    /* `?? 0` consumes the optional exactly like an explicit null test does, so
-     * WorkQueue<int>.pop keeps the typed has/value slot pair here too — nothing
-     * about the coalescing form justifies a tagged round trip. */
-    assert(contains(code, "xr_aot_work_queue_pop_i64_optional(ctx,") &&
-           "WorkQueue<i64>.pop feeding ?? must still use the typed optional bridge");
-    assert(!contains(code, "xr_aot_work_queue_pop_value(ctx,") &&
-           "a typed WorkQueue.pop must not write its result through XrValue*");
-    assert(contains(code, "S1:;\n    f->state = 1;") &&
-           "native WorkQueue.pop resume must restore state after jumping to the label");
-    assert(contains(code, "xr_aot_work_queue_pop_i64_optional_resume(ctx, &") &&
-           "native WorkQueue.pop resume must use the rebuilt frame value slot");
-    assert(!contains(code, "xr_aot_work_queue_pop(ctx,") &&
-           "typed optional WorkQueue.pop should not use the generic slot-ref bridge");
-    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v") &&
-           "go-created Task values kept across spawn continuation must be traced");
-    assert(!contains(code, "XrValue _wq_push_") &&
-           "coroutine WorkQueue.push should not materialize an XrValue temp");
-    assert(!contains(code, "XrValue _wq_close_") &&
-           "coroutine WorkQueue.close should not materialize a tagged Unit result");
-
-    printf("  Generated WorkQueue resume slot rebuild %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
-    const char *src = "const queue: WorkQueue<i64> = WorkQueue<i64>(1, 4)\n"
-                      "fn consumer() -> i64 {\n"
-                      "    var item = queue.pop(0)\n"
-                      "    if (item == null) { return -1 }\n"
-                      "    var value = item!\n"
-                      "    return value * 2\n"
-                      "}\n"
-                      "var task = go consumer()\n"
-                      "assert(queue.push(21, 0))\n"
-                      "print(await task)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "AOT WorkQueue i64 optional pop should generate");
-    TEST_REQUIRE(contains(code, "xr_aot_work_queue_push_bool(ctx,"),
-                 "coroutine WorkQueue.push should use the native bool helper");
-    TEST_REQUIRE(contains(code, "xr_aot_work_queue_pop_i64_optional(ctx,"),
-                 "WorkQueue<i64>.pop should use typed optional i64 AOT helper");
-    TEST_REQUIRE(contains(code, "xr_aot_work_queue_pop_i64_optional_resume(ctx,"),
-                 "WorkQueue<i64>.pop resume should use typed optional i64 AOT helper");
-    TEST_REQUIRE(contains(code, "_opt_has") && contains(code, "_opt_value"),
-                 "WorkQueue<i64>.pop should store nullable state as has/value slots");
-    TEST_REQUIRE(!contains(code, "_wq_pop_slot_"),
-                 "typed optional WorkQueue.pop should not materialize a generic slot ref");
-    TEST_REQUIRE(!contains(code, "xr_aot_work_queue_pop_value(ctx,"),
-                 "typed optional WorkQueue.pop should not write through XrValue*");
-    TEST_REQUIRE(!contains(code, "xr_aot_work_queue_pop_resume(ctx,"),
-                 "typed optional WorkQueue.pop should not use the generic resume bridge");
-    const char *consumer_fn = strstr(code, "test_consumer_");
-    const char *consumer_end = next_static_after(consumer_fn);
-    TEST_REQUIRE(consumer_fn != NULL && consumer_end != NULL,
-                 "consumer function should be generated for WorkQueue typed optional test");
-    TEST_REQUIRE(count_between(consumer_fn, consumer_end, "xrt_eq(") == 0 &&
-                     count_between(consumer_fn, consumer_end, "XR_TO_INT(") == 0,
-                 "typed optional WorkQueue.pop should lower null check and unwrap to has/value");
-    TEST_REQUIRE(!contains(code, "Attempted to unwrap a null value"),
-                 "guarded force unwrap should stay a no-op after the null guard");
-    TEST_REQUIRE(!contains(code, "XrValue _wq_push_"),
-                 "coroutine WorkQueue.push should not materialize an XrValue temp");
-
-    printf("  Generated WorkQueue typed optional i64 path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
-    const char *src = "import { ResultGroup } from sync\n"
-                      "fn consumer() -> i64 {\n"
-                      "    const group: ResultGroup = ResultGroup(1)\n"
-                      "    group.add(21)\n"
-                      "    var item = group.recv()\n"
-                      "    if (item == null) { return -1 }\n"
-                      "    var value = item!\n"
-                      "    return value * 2\n"
-                      "}\n"
-                      "var task = go consumer()\n"
-                      "print(await task)\n";
-
-    XiFunc *ir = compile_to_ir_with_module_graph(src);
-    TEST_REQUIRE(ir != NULL, "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "C code generation failed");
-    TEST_REQUIRE(!had_error, "AOT ResultGroup i64 optional recv should generate");
-    TEST_REQUIRE(contains(code, "xr_aot_result_group_recv_i64_optional(ctx,"),
-                 "ResultGroup.recv should use typed optional i64 AOT helper");
-    TEST_REQUIRE(contains(code, "xr_aot_result_group_recv_i64_optional_resume(ctx,"),
-                 "ResultGroup.recv resume should use typed optional i64 AOT helper");
-    TEST_REQUIRE(contains(code, "_opt_has") && contains(code, "_opt_value"),
-                 "ResultGroup.recv should store nullable state as has/value slots");
-    TEST_REQUIRE(!contains(code, "_rg_recv_slot_"),
-                 "typed optional ResultGroup.recv should not materialize a generic slot ref");
-    TEST_REQUIRE(!contains(code, "xr_aot_result_group_recv_value(ctx,"),
-                 "typed optional ResultGroup.recv should not write through XrValue*");
-    TEST_REQUIRE(!contains(code, "xrt_eq("),
-                 "typed optional ResultGroup.recv null check should not call xrt_eq");
-
-    printf("  Generated ResultGroup typed optional i64 path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_work_queue_native_methods_use_aot_helpers) {
-    const char *src = "const queue: WorkQueue<i64> = WorkQueue<i64>(4, 2)\n"
-                      "fn use_queue() -> i64 {\n"
-                      "    assert(queue.push(1, 0))\n"
-                      "    assertEqual(queue.pushRange(2, 2, 0), 2)\n"
-                      "    var (value, ok) = queue.tryPop(0)\n"
-                      "    if (!ok) { return -1 }\n"
-                      "    if (queue.isClosed) { return -2 }\n"
-                      "    queue.close()\n"
-                      "    return value! + len(queue) + queue.shardCount\n"
-                      "}\n"
-                      "print(use_queue())\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT WorkQueue native methods should generate");
-    assert(contains(code, "xr_aot_work_queue_push_bool_sync(") &&
-           "WorkQueue.push should use the native bool sync AOT bridge");
-    assert(contains(code, "xr_aot_work_queue_push_range_i64_sync(") &&
-           "WorkQueue.pushRange should use the native i64 sync AOT bridge");
-    assert(contains(code, "xr_aot_work_queue_close_void_sync(") &&
-           "WorkQueue.close should use the native void sync AOT bridge");
-    assert(contains(code, "xr_aot_work_queue_try_pop_sync(") &&
-           "WorkQueue.tryPop should use the sync AOT bridge outside suspendable code");
-    assert(contains(code, "xr_aot_work_queue_length(") &&
-           "len(WorkQueue) should read through the AOT helper");
-    assert(contains(code, "xr_aot_work_queue_shard_count(") &&
-           "WorkQueue.shardCount should read through the AOT helper");
-    assert(contains(code, "xr_aot_work_queue_is_closed(") &&
-           "WorkQueue.isClosed should read through the AOT helper");
-    assert(contains(code, "runtime_cfg.caps = ") && contains(code, "XR_AOT_CAP_WORK_QUEUE") &&
-           "sync WorkQueue main must create a work-queue-capable AOT runtime");
-    assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
-           "sync WorkQueue helpers must receive a runtime-backed global context");
-    assert(!contains(code, "xray_vm_new_full(") && "sync WorkQueue main must not use a VM isolate");
-    assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
-           "WorkQueue native methods must not fall back to dynamic method dispatch");
-    assert(!contains(code, "xr_aot_work_queue_push_sync(") &&
-           "sync WorkQueue.push should not return tagged XrValue");
-    assert(!contains(code, "xr_aot_work_queue_push_range_sync(") &&
-           "sync WorkQueue.pushRange should not return tagged XrValue");
-    assert(!contains(code, "xr_aot_work_queue_close_sync(") &&
-           "sync WorkQueue.close should not return tagged XrValue");
-
-    printf("  Generated WorkQueue native method helpers %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -15673,9 +15147,6 @@ int main(int argc, char **argv) {
     run_cgen_coro_frame_skips_dead_ssa_slots();
     run_cgen_coro_loop_tail_phi_uses_shared_suspend_plan();
     run_cgen_coro_wait_driven_loop_omits_redundant_poll();
-    run_cgen_countdown_latch_methods_use_native_helpers();
-    run_cgen_semaphore_methods_use_native_helpers();
-    run_cgen_sync_blocking_direct_methods_mark_aot_coroutines();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_owner_forward_clears_moved_frame_root();
@@ -15718,17 +15189,10 @@ int main(int argc, char **argv) {
     run_cgen_coro_await_all_reused_push_task_array_uses_one_shot();
     run_cgen_coro_await_all_into_reuses_result_array();
     run_cgen_coro_top_level_await_all_into_keeps_result_array_alive();
-    run_cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch();
-    run_cgen_coro_result_group_reset_uses_native_helper();
-    run_cgen_result_group_sync_methods_elide_dead_err_checks();
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
     run_cgen_coro_scope_exit_publishes_state_before_block();
     run_cgen_channel_fields_use_aot_helpers();
     run_cgen_sync_go_channel_try_methods_use_aot_helpers();
-    run_cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task();
-    run_cgen_coro_work_queue_pop_i64_optional_uses_typed_abi();
-    run_cgen_coro_result_group_recv_i64_optional_uses_typed_abi();
-    run_cgen_work_queue_native_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
     run_cgen_structural_field_named_like_builtin_property_uses_ordinal();
     run_cgen_json_decode_loop_keeps_per_iteration_retain();

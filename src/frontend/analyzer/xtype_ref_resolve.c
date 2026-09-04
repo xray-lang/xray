@@ -1419,19 +1419,6 @@ XR_FUNC XrType *xr_tref_resolve(XrVMRuntime *X, const XrTypeRef *tref) {
     return resolve_impl(X, tref);
 }
 
-static bool is_sync_runtime_class_name(const char *name) {
-    return name && (strcmp(name, "Semaphore") == 0 || strcmp(name, "CountdownLatch") == 0 ||
-                    strcmp(name, "EventCount") == 0 || strcmp(name, "WorkQueue") == 0 ||
-                    strcmp(name, "ResultGroup") == 0);
-}
-
-static const char *sync_runtime_import_class_name(const XaSymbolLinks *links) {
-    if (!links || !links->module_name || strcmp(links->module_name, "sync") != 0 ||
-        !is_sync_runtime_class_name(links->import_member_name))
-        return NULL;
-    return links->import_member_name;
-}
-
 /* Look up `name` as a declaration-backed type in analyzer scopes; on hit,
  * return the canonical XrType (carrying the inheritance chain for classes,
  * enum identity for enum values, or the interface singleton for interfaces).
@@ -1449,8 +1436,6 @@ static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
     if (sym->kind == XA_SYM_IMPORT) {
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         XrType *type = links ? links->type : NULL;
-        if (sync_runtime_import_class_name(links))
-            return sym;
         if (links && links->module_name && links->import_member_name) {
             XrHashMap *exports = resolve_graph_export_symbols(analyzer, links->module_name);
             XaSymbol *export_sym =
@@ -1479,10 +1464,6 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (!links)
         return NULL;
-
-    const char *sync_class = sync_runtime_import_class_name(links);
-    if (sync_class)
-        return xr_type_new_named_instance(analyzer->isolate, sync_class);
 
     if (sym->kind == XA_SYM_ENUM)
         return links->type;

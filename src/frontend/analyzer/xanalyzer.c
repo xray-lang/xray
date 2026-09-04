@@ -1861,7 +1861,7 @@ static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope
         links->declared_type = links->type;
         links->is_definitely_assigned = true;
         links->file_path = file;
-        if (strcmp(name, "WorkQueue") == 0 || strcmp(name, "Thread") == 0) {
+        if (strcmp(name, "Thread") == 0) {
             const char *type_param_names[] = {"T"};
             xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, 1);
         }

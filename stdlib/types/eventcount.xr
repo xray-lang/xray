@@ -1,8 +1,0 @@
-// Built-in EventCount type; implemented by the runtime.
-class EventCount {
-    epoch: i64
-    isClosed: bool
-    advance(step?: i64) -> i64
-    wait(lastEpoch: i64, workerHint?: i64) -> i64
-    close()
-}

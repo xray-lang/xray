@@ -6995,7 +6995,7 @@ static bool xa_call_is_fresh_constructor(XaInferContext *ctx, AstNode *value) {
             : (name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL);
     if (symbol)
         return symbol->kind == XA_SYM_CLASS;
-    /* A builtin class -- Atomic, Semaphore, CountdownLatch -- has no entry in
+    /* A builtin class such as Atomic has no entry in
      * the scope symbol table, so the lookup above cannot see it and the
      * absence of a symbol says nothing on its own. What does say something is
      * the type the call produced: a named instance whose declaration is the

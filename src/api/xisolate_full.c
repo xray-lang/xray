@@ -66,8 +66,8 @@ static bool isolate_config_is_valid(const XrVMConfig *params) {
     return true;
 }
 
-static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *script_file,
-                                            int argc, char **argv) {
+static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *script_file, int argc,
+                                            char **argv) {
     if (!isolate || !isolate->core_rt || !isolate->core || !isolate->core->processClass)
         return false;
 
@@ -212,21 +212,6 @@ static int isolate_init_full(XrVMRuntime *isolate) {
         if (isolate->core->jsonClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_JSON] =
                 xr_value_from_class(isolate->core->jsonClass);
-        if (isolate->core_rt->native_type_classes[XR_TWORKQUEUE])
-            isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TWORKQUEUE]);
-        if (isolate->core_rt->native_type_classes[XR_TRESULTGROUP])
-            isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]);
-        if (isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH])
-            isolate->vm.builtins[XR_GLOBAL_VAR_COUNTDOWNLATCH] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH]);
-        if (isolate->core_rt->native_type_classes[XR_TSEMAPHORE])
-            isolate->vm.builtins[XR_GLOBAL_VAR_SEMAPHORE] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TSEMAPHORE]);
-        if (isolate->core_rt->native_type_classes[XR_TEVENTCOUNT])
-            isolate->vm.builtins[XR_GLOBAL_VAR_EVENTCOUNT] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TEVENTCOUNT]);
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
@@ -350,8 +335,7 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
         (isolate->params.script_file || isolate->params.script_argc != 0 ||
          isolate->params.script_argv) &&
         !isolate_materialize_script_info(isolate, isolate->params.script_file,
-                                         isolate->params.script_argc,
-                                         isolate->params.script_argv))
+                                         isolate->params.script_argc, isolate->params.script_argv))
         init_result = -1;
     xr_exec_context_restore(previous);
     if (init_result != 0) {

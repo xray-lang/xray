@@ -180,9 +180,7 @@ static bool xa_type_has_len_query(XrType *type) {
                     XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
                     type->kind == XR_KIND_FIXED_ARRAY || type->kind == XR_KIND_CHANNEL ||
                     xr_type_is_builtin_named_class(type, "StringBuilder") ||
-                    xr_type_is_builtin_named_class(type, "Buffer") ||
-                    xr_type_is_builtin_named_class(type, "WorkQueue") ||
-                    xr_type_is_builtin_named_class(type, "ResultGroup"));
+                    xr_type_is_builtin_named_class(type, "Buffer"));
 }
 
 static void xa_report_span_member_error(XaInferContext *ctx, AstNode *node, XrType *type,
@@ -363,10 +361,9 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
      * concrete type arguments. A constructor always produces a non-null
      * member value; nullable widening belongs to the enclosing assignment or
      * return boundary, not to the constructor's semantic operation. */
-    XrType *enum_type =
-        ctx->expected_type->is_nullable
-            ? xr_type_non_nullable(ctx->analyzer->isolate, ctx->expected_type)
-            : xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
+    XrType *enum_type = ctx->expected_type->is_nullable
+                            ? xr_type_non_nullable(ctx->analyzer->isolate, ctx->expected_type)
+                            : xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
     if (enum_type && info && info->layout) {
         enum_type->enum_type.layout = info->layout;
         enum_type->enum_type.layout_id = info->layout->layout_id;
@@ -2682,7 +2679,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
             // Substitute generic type parameters with actual container types:
             //   Array<T>/Set<T>/Channel<T>: T -> element_type
-            //   Task<T>/WorkQueue<T>/Atomic<T>: T -> instance type argument
+            //   Task<T>/Atomic<T>: T -> instance type argument
             //   Map<K,V>: K -> key_type, V -> value_type
             if (fn_type) {
                 XrType *single_type_arg = NULL;
@@ -2691,7 +2688,6 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     obj_type->container.element_type) {
                     single_type_arg = obj_type->container.element_type;
                 } else if ((xr_type_is_builtin_named_class(obj_type, "Task") ||
-                            xr_type_is_builtin_named_class(obj_type, "WorkQueue") ||
                             xr_type_is_builtin_named_class(obj_type, "Atomic") ||
                             xr_type_is_builtin_named_class(obj_type, "Thread") ||
                             xr_type_is_builtin_named_class(obj_type, "CoroLocal")) &&

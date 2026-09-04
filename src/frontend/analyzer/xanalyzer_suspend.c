@@ -344,9 +344,8 @@ static bool sus_add_edge(XaSuspendRow *row, XaSymbol *callee, AstNode *site, boo
     return true;
 }
 
-/* Blocking concurrency-handle methods that park the current coroutine.  Kept in
- * sync with body_builtin_method_call_may_suspend / body_stdlib_call_may_suspend
- * in src/analysis/xglobal_producer.c. */
+/* Runtime-owned handle methods that park the current coroutine. Source-owned
+ * class methods are derived from their bodies through the ordinary call graph. */
 static bool sus_is_suspending_handle_method(const XrType *receiver, const char *method) {
     if (!receiver || !method)
         return false;
@@ -359,16 +358,6 @@ static bool sus_is_suspending_handle_method(const XrType *receiver, const char *
         return false;
     if (strcmp(cls, "Task") == 0)
         return strcmp(method, "awaitResult") == 0 || strcmp(method, "awaitTimeout") == 0;
-    if (strcmp(cls, "WorkQueue") == 0)
-        return strcmp(method, "pop") == 0;
-    if (strcmp(cls, "ResultGroup") == 0)
-        return strcmp(method, "recv") == 0;
-    if (strcmp(cls, "CountdownLatch") == 0)
-        return strcmp(method, "wait") == 0;
-    if (strcmp(cls, "Semaphore") == 0)
-        return strcmp(method, "acquire") == 0;
-    if (strcmp(cls, "EventCount") == 0)
-        return strcmp(method, "wait") == 0;
     return false;
 }
 

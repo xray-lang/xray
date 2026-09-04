@@ -238,8 +238,7 @@ static bool cg_type_is_i64_optional(const XrType *type) {
 static bool cg_value_is_i64_optional_blocking_result_root(const XiValue *v) {
     if (!v || !cg_type_is_i64_optional(v->type))
         return false;
-    return xi_value_is_blocking_work_queue_method_call(v) ||
-           xi_value_is_blocking_result_group_method_call(v);
+    return false;
 }
 
 static const XiValue *cg_i64_optional_blocking_result_root(XiCgenCtx *ctx, const XiValue *v) {

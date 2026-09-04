@@ -4379,10 +4379,6 @@ static void xicgen_len(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
         fprintf(out, "XR_TO_INT(xr_aot_chan_length(%s, ", xicgen_aot_context_expr(ctx, f));
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, "))");
-    } else if (xi_value_type_is_work_queue(v->args[0])) {
-        fprintf(out, "XR_TO_INT(xr_aot_work_queue_length(%s, ", xicgen_aot_context_expr(ctx, f));
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "))");
     } else if (xr_type_is_builtin_named_class(v->args[0]->type, "Buffer")) {
         fprintf(out, "xrt_buffer_length(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -4405,11 +4401,7 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     } else if (v->aux_int == XR_GLOBAL_VAR_JSON || v->aux_int == XR_GLOBAL_VAR_STRING) {
         fprintf(out, "XR_NULL_VAL /* builtin %s namespace */",
                 v->aux ? (const char *) v->aux : "native");
-    } else if (v->aux_int == XR_GLOBAL_VAR_ATOMIC || v->aux_int == XR_GLOBAL_VAR_WORKQUEUE ||
-               v->aux_int == XR_GLOBAL_VAR_RESULTGROUP ||
-               v->aux_int == XR_GLOBAL_VAR_COUNTDOWNLATCH ||
-               v->aux_int == XR_GLOBAL_VAR_SEMAPHORE || v->aux_int == XR_GLOBAL_VAR_EVENTCOUNT ||
-               v->aux_int == XR_GLOBAL_VAR_PANIC_INFO) {
+    } else if (v->aux_int == XR_GLOBAL_VAR_ATOMIC || v->aux_int == XR_GLOBAL_VAR_PANIC_INFO) {
         /* Class token only used as a constructor receiver; the constructor call is
          * lowered directly to an exception value (see xicgen_emit_panicinfo_constructor). */
         fprintf(out, "XR_NULL_VAL /* builtin native class token: %s */",
@@ -4460,35 +4452,9 @@ static bool xicgen_resolve_direct_class_ctor(const XiFunc *f, const XiValue *cal
     return false;
 }
 
-static bool xicgen_call_is_work_queue_constructor(const XiValue *callee) {
-    const XiValue *origin = cg_unwrap_identity_value(callee);
-    return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_WORKQUEUE;
-}
-
 static bool xicgen_call_is_atomic_constructor(const XiValue *callee) {
     const XiValue *origin = cg_unwrap_identity_value(callee);
     return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_ATOMIC;
-}
-
-static bool xicgen_call_is_result_group_constructor(const XiValue *callee) {
-    const XiValue *origin = cg_unwrap_identity_value(callee);
-    return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_RESULTGROUP;
-}
-
-static bool xicgen_call_is_countdown_latch_constructor(const XiValue *callee) {
-    const XiValue *origin = cg_unwrap_identity_value(callee);
-    return origin && origin->op == XI_GET_BUILTIN &&
-           origin->aux_int == XR_GLOBAL_VAR_COUNTDOWNLATCH;
-}
-
-static bool xicgen_call_is_semaphore_constructor(const XiValue *callee) {
-    const XiValue *origin = cg_unwrap_identity_value(callee);
-    return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_SEMAPHORE;
-}
-
-static bool xicgen_call_is_event_count_constructor(const XiValue *callee) {
-    const XiValue *origin = cg_unwrap_identity_value(callee);
-    return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_EVENTCOUNT;
 }
 
 typedef enum {
@@ -5832,61 +5798,6 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         }
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-
-    if (xicgen_call_is_work_queue_constructor(callee)) {
-        fprintf(out, "xr_aot_work_queue_new(%s, ", xicgen_aot_context_expr(ctx, f));
-        if (v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "0");
-        fprintf(out, ", ");
-        if (v->nargs >= 3)
-            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        else
-            fprintf(out, "0");
-        fprintf(out, ")");
-        return;
-    }
-
-    if (xicgen_call_is_result_group_constructor(callee)) {
-        fprintf(out, "xr_aot_result_group_new(%s, ", xicgen_aot_context_expr(ctx, f));
-        if (v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "0");
-        fprintf(out, ")");
-        return;
-    }
-
-    if (xicgen_call_is_countdown_latch_constructor(callee)) {
-        fprintf(out, "xr_aot_countdown_latch_new(%s, ", xicgen_aot_context_expr(ctx, f));
-        if (v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "0");
-        fprintf(out, ")");
-        return;
-    }
-
-    if (xicgen_call_is_semaphore_constructor(callee)) {
-        fprintf(out, "xr_aot_semaphore_new(%s, ", xicgen_aot_context_expr(ctx, f));
-        if (v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "0");
-        fprintf(out, ")");
-        return;
-    }
-
-    if (xicgen_call_is_event_count_constructor(callee)) {
-        fprintf(out, "xr_aot_event_count_new(%s, ", xicgen_aot_context_expr(ctx, f));
-        if (v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "0");
-        fprintf(out, ")");
         return;
     }
 
@@ -9722,27 +9633,6 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(XiCgenCtx *ctx, const X
         return ((strcmp(method, "toString") == 0 || strcmp(method, "clear") == 0) && nargs == 0) ||
                (strcmp(method, "append") == 0 && nargs == 1);
 
-    if (xi_value_type_is_result_group(v->args[0])) {
-        return (strcmp(method, "add") == 0 && nargs == 1) ||
-               (strcmp(method, "flush") == 0 && nargs == 0) ||
-               (strcmp(method, "reset") == 0 && nargs == 1) ||
-               (strcmp(method, "close") == 0 && nargs == 0);
-    }
-    if (xi_value_type_is_countdown_latch(v->args[0])) {
-        return (strcmp(method, "reset") == 0 && nargs == 1) ||
-               (strcmp(method, "done") == 0 && (nargs == 0 || nargs == 1)) ||
-               (strcmp(method, "tryWait") == 0 && nargs == 0) ||
-               (strcmp(method, "close") == 0 && nargs == 0);
-    }
-    if (xi_value_type_is_semaphore(v->args[0])) {
-        return (strcmp(method, "release") == 0 && (nargs == 0 || nargs == 1)) ||
-               (strcmp(method, "tryAcquire") == 0 && nargs == 0) ||
-               (strcmp(method, "close") == 0 && nargs == 0);
-    }
-    if (xi_value_type_is_event_count(v->args[0])) {
-        return (strcmp(method, "advance") == 0 && (nargs == 0 || nargs == 1)) ||
-               (strcmp(method, "close") == 0 && nargs == 0);
-    }
     return false;
 }
 
@@ -10282,271 +10172,6 @@ static bool xicgen_emit_channel_method(XiCgenCtx *ctx, FILE *out, const XiValue 
     return true;
 }
 
-static bool xicgen_emit_work_queue_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                          const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !xi_value_type_is_work_queue(v->args[0]))
-        return false;
-    bool is_push = strcmp(method, "push") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
-    bool is_push_range =
-        strcmp(method, "pushRange") == 0 && (nargs == 2 || nargs == 3) && v->nargs >= 3;
-    bool is_try_pop = strcmp(method, "tryPop") == 0 && (nargs == 0 || nargs == 1);
-    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
-    bool is_closed = strcmp(method, "isClosed") == 0 && nargs == 0;
-    if (!is_push && !is_push_range && !is_try_pop && !is_close && !is_closed)
-        return false;
-
-    if (is_push) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_work_queue_push_bool_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        if (nargs == 2 && v->nargs >= 3)
-            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        else
-            fprintf(out, "-1");
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_push_range) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_work_queue_push_range_i64_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        fprintf(out, ", ");
-        if (nargs == 3 && v->nargs >= 4)
-            emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
-        else
-            fprintf(out, "-1");
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_try_pop) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        /* Pack the runtime's (out-param value, ok) into an AOT-native tuple so
-         * the destructuring XI_TUPLE_GET reads it like every other AOT tuple. */
-        fprintf(out, "({ XrValue _wq_tpv_%u = XR_NULL_VAL; bool _wq_tpok_%u = ", v->id, v->id);
-        fprintf(out, "xr_aot_work_queue_try_pop_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        if (nargs == 1 && v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "-1");
-        fprintf(out,
-                ", &_wq_tpv_%u); xrt_tuple_make_consuming(2, (XrValue[]){"
-                "xr_aot_bridge_value_to_xrt(_wq_tpv_%u), XR_FROM_BOOL(_wq_tpok_%u)}); })",
-                v->id, v->id, v->id);
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_close) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ xr_aot_work_queue_close_void_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "); XR_NULL_VAL; })");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_closed) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_work_queue_is_closed_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    }
-    return true;
-}
-
-static bool xicgen_emit_result_group_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                            const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !xi_value_type_is_result_group(v->args[0]))
-        return false;
-    bool is_add = strcmp(method, "add") == 0 && nargs == 1 && v->nargs >= 2;
-    bool is_flush = strcmp(method, "flush") == 0 && nargs == 0;
-    bool is_reset = strcmp(method, "reset") == 0 && nargs == 1 && v->nargs >= 2;
-    bool is_try_recv = strcmp(method, "tryRecv") == 0 && nargs == 0;
-    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
-    if (!is_add && !is_flush && !is_reset && !is_try_recv && !is_close)
-        return false;
-
-    if (is_add) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_result_group_add_bool_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-        return true;
-    } else if (is_flush) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ xr_aot_result_group_flush_void_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "); XR_NULL_VAL; })");
-        emit_conversion_suffix(out, conv_suffix);
-        return true;
-    } else if (is_reset) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_result_group_reset_bool_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-        return true;
-    } else if (is_try_recv) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ XrValue _rg_trv_%u = XR_NULL_VAL; bool _rg_trok_%u = ", v->id, v->id);
-        fprintf(out, "xr_aot_result_group_try_recv_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out,
-                ", &_rg_trv_%u); xrt_tuple_make_consuming(2, (XrValue[]){_rg_trv_%u, "
-                "XR_FROM_BOOL(_rg_trok_%u)}); })",
-                v->id, v->id, v->id);
-        emit_conversion_suffix(out, conv_suffix);
-        return true;
-    } else if (is_close) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ xr_aot_result_group_close_void_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "); XR_NULL_VAL; })");
-        emit_conversion_suffix(out, conv_suffix);
-        return true;
-    }
-    return false;
-}
-
-static bool xicgen_emit_countdown_latch_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                               const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !xi_value_type_is_countdown_latch(v->args[0]))
-        return false;
-    bool is_reset = strcmp(method, "reset") == 0 && nargs == 1 && v->nargs >= 2;
-    bool is_done = strcmp(method, "done") == 0 && (nargs == 0 || nargs == 1);
-    bool is_try_wait = strcmp(method, "tryWait") == 0 && nargs == 0;
-    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
-    if (!is_reset && !is_done && !is_try_wait && !is_close)
-        return false;
-
-    if (is_reset) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_countdown_latch_reset_bool_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_done) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_countdown_latch_done_i64_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        if (nargs == 1 && v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "1");
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_try_wait) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_countdown_latch_try_wait_bool_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_close) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ xr_aot_countdown_latch_close_void_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "); XR_NULL_VAL; })");
-        emit_conversion_suffix(out, conv_suffix);
-    }
-    return true;
-}
-
-static bool xicgen_emit_semaphore_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                         const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !xi_value_type_is_semaphore(v->args[0]))
-        return false;
-    bool is_release = strcmp(method, "release") == 0 && (nargs == 0 || nargs == 1);
-    bool is_try_acquire = strcmp(method, "tryAcquire") == 0 && nargs == 0;
-    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
-    if (!is_release && !is_try_acquire && !is_close)
-        return false;
-
-    if (is_release) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_semaphore_release_i64_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        if (nargs == 1 && v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "1");
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_try_acquire) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_semaphore_try_acquire_bool_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_close) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ xr_aot_semaphore_close_void_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "); XR_NULL_VAL; })");
-        emit_conversion_suffix(out, conv_suffix);
-    }
-    return true;
-}
-
-static bool xicgen_emit_event_count_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                           const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !xi_value_type_is_event_count(v->args[0]))
-        return false;
-    bool is_advance = strcmp(method, "advance") == 0 && (nargs == 0 || nargs == 1);
-    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
-    if (!is_advance && !is_close)
-        return false;
-
-    if (is_advance) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_event_count_advance_i64_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        if (nargs == 1 && v->nargs >= 2)
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        else
-            fprintf(out, "1");
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-    } else if (is_close) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ xr_aot_event_count_close_void_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "); XR_NULL_VAL; })");
-        emit_conversion_suffix(out, conv_suffix);
-    }
-    return true;
-}
-
 static bool xicgen_receiver_is_builtin_global(const XiValue *receiver, int global_index) {
     const XiValue *origin = cg_unwrap_identity_value(receiver);
     return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == global_index;
@@ -11055,16 +10680,6 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     if (xicgen_emit_freestanding_enum_to_string_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_channel_method(ctx, out, v, method, nargs))
-        return;
-    if (xicgen_emit_work_queue_method(ctx, out, v, method, nargs))
-        return;
-    if (xicgen_emit_result_group_method(ctx, out, v, method, nargs))
-        return;
-    if (xicgen_emit_countdown_latch_method(ctx, out, v, method, nargs))
-        return;
-    if (xicgen_emit_semaphore_method(ctx, out, v, method, nargs))
-        return;
-    if (xicgen_emit_event_count_method(ctx, out, v, method, nargs))
         return;
     /* The receiver tests below must stay builtin-only. Each branch emits a
      * direct call into the runtime C helper for the named type, so a user
@@ -14038,82 +13653,6 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
             fprintf(out, "XR_TO_FLOAT(");
         fprintf(out, "%s(NULL, ", channel_helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-            cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, ")");
-        return;
-    }
-    const char *work_queue_helper =
-        xi_value_type_is_work_queue(v->args[0]) ? cg_work_queue_field_helper(field) : NULL;
-    if (work_queue_helper) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(");
-        else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(");
-        fprintf(out, "%s(NULL, ", work_queue_helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-            cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, ")");
-        return;
-    }
-    const char *result_group_helper =
-        xi_value_type_is_result_group(v->args[0]) ? cg_result_group_field_helper(field) : NULL;
-    if (result_group_helper) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(");
-        else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(");
-        fprintf(out, "%s(NULL, ", result_group_helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-            cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, ")");
-        return;
-    }
-    const char *countdown_latch_helper = xi_value_type_is_countdown_latch(v->args[0])
-                                             ? cg_countdown_latch_field_helper(field)
-                                             : NULL;
-    if (countdown_latch_helper) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(");
-        else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(");
-        fprintf(out, "%s(NULL, ", countdown_latch_helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-            cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, ")");
-        return;
-    }
-    const char *semaphore_helper =
-        xi_value_type_is_semaphore(v->args[0]) ? cg_semaphore_field_helper(field) : NULL;
-    if (semaphore_helper) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(");
-        else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(");
-        fprintf(out, "%s(NULL, ", semaphore_helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-            cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, ")");
-        return;
-    }
-    const char *event_count_helper =
-        xi_value_type_is_event_count(v->args[0]) ? cg_event_count_field_helper(field) : NULL;
-    if (event_count_helper) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(");
-        else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(");
-        fprintf(out, "%s(NULL, ", event_count_helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
         if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
