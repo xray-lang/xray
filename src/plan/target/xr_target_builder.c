@@ -33,6 +33,7 @@
 #include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../semantic/xr_semantic_allocation_shape.h"
+#include "../semantic/xr_semantic_array_index_shape.h"
 #include "../semantic/xr_semantic_array_type_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
@@ -5719,6 +5720,110 @@ static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE;
+    return true;
+}
+
+/* INDEX_GET borrows one element from its Array owner. Scalar elements were
+ * already claimed by the scalar family; this family owns the other exact
+ * machine case, a managed element stored in the tagged lane. The result gets
+ * its own SSA slot because it is a distinct value, but that slot is borrowed
+ * and therefore neither owns nor releases the Array's allocation. */
+static bool builder_add_array_index_result_storage(XrTargetPlanBuilder *builder, char *error,
+                                                   size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.used_types[value->semantic_type] = 1;
+        }
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        uint32_t operand_count = 0;
+        const XrSemanticOperandRecord *operands =
+            xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
+        uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        if (!xr_semantic_array_index_tagged_read_is_exact(builder->semantic_plan, operation, NULL,
+                                                          NULL))
+            continue;
+        if (!operation || !operands || operation->operand_begin >= operand_count ||
+            operation->result_value >= analysis.total_values ||
+            operation->result_type >= analysis.type_count ||
+            operation->function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
+            analysis.defined_values[operation->result_value] ||
+            !semantic_direct_local_array_type_is_exact(builder->semantic_plan,
+                                                       operands[operation->operand_begin].type,
+                                                       false, &array_storage) ||
+            array_storage != XR_TARGET_ARRAY_STORAGE_TAGGED) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "Array index result storage authority is incomplete");
+            break;
+        }
+        if (analysis.type_rep_kinds[operation->result_type] != XR_MACHINE_REP_COUNT &&
+            analysis.type_rep_kinds[operation->result_type] != XR_MACHINE_REP_DYN_VALUE) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "Array index result type has conflicting storage representations");
+            break;
+        }
+        XrTargetMachineRepRecord rep;
+        XrStableId slot_identity;
+        if (!make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile),
+                                             &rep) ||
+            !append_rep_intent(builder, &rep, error, error_size) ||
+            !make_slot_identity(builder->semantic_plan, operation->function,
+                                XR_TARGET_SLOT_TEMPORARY, operation->id, XR_SEMANTIC_INDEX_NONE,
+                                &slot_identity)) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "target cannot materialize borrowed Array index storage");
+            break;
+        }
+        XrTargetSlotIntent slot = {
+            .identity = slot_identity,
+            .function = operation->function,
+            .semantic_value = operation->result_value,
+            .semantic_operation = i,
+            .logical_slot = XR_SEMANTIC_INDEX_NONE,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .role = XR_TARGET_SLOT_TEMPORARY,
+            .root_kind = XR_TARGET_ROOT_DYNAMIC,
+            .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+            .debug_variable = XR_SEMANTIC_INDEX_NONE,
+        };
+        XrTargetValueIntent value = {
+            .semantic_value = operation->result_value,
+            .semantic_function = operation->function,
+            .semantic_type = operation->result_type,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .slot_identity = slot_identity,
+            .has_slot = true,
+        };
+        valid = append_slot_intent(builder, &slot, error, error_size) &&
+                append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0,
+                                     &rep, error, error_size) &&
+                append_value_intent(builder, &value, error, error_size);
+        if (valid) {
+            analysis.defined_values[operation->result_value] = 1;
+            analysis.used_types[operation->result_type] = 1;
+            analysis.value_types[operation->result_value] = operation->result_type;
+            analysis.value_functions[operation->result_value] = operation->function;
+            analysis.type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+        }
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE;
     return true;
 }
 
@@ -16247,6 +16352,7 @@ static const XrTargetFamily k_target_families[] = {
     {"array_hof_result_storage", builder_add_array_hof_result_storage},
     {"nullable_scalar_storage", builder_add_nullable_scalar_storage},
     {"array_member_result_storage", builder_add_array_member_result_storage},
+    {"array_index_result_storage", builder_add_array_index_result_storage},
     {"source_class_object_storage", builder_add_source_class_object_storage},
     {"source_class_instance_storage", builder_add_source_class_instance_storage},
     {"source_class_receiver_storage", builder_add_source_class_receiver_storage},

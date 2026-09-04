@@ -15,6 +15,7 @@
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_array_index_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
@@ -959,6 +960,40 @@ static XrSemanticPlan *build_tagged_string_array_copy_semantic(void) {
     bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "tagged String Array copy semantic failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_tagged_string_array_index_read_semantic(void) {
+    XiFunc *function = xi_func_new("target_tagged_string_array_index_read", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_param(function, entry, 0, &stub_target_string_array);
+    XiValue *index = xi_const_int(function, entry, 0, &stub_int);
+    XiValue *read = xi_value_new(function, entry, XI_INDEX_GET, &stub_exact_string, 2);
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(source && index && read && result);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = source;
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+    read->args[0] = source;
+    read->args[1] = index;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "tagged String Array index-read semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
     xi_func_free(function);
     return semantic;
@@ -7309,6 +7344,85 @@ static void test_tagged_string_array_copy_authority(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_tagged_array_index_read_authority(void) {
+    XrSemanticPlan *semantic = build_tagged_string_array_index_read_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "tagged Array index-read TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrSemanticOperationRecord *read = NULL;
+    uint32_t read_operation = XR_SEMANTIC_INDEX_NONE;
+    uint32_t array_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t index_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        XrSemanticOperationRecord *candidate = &semantic->operations[i];
+        uint32_t candidate_array = XR_SEMANTIC_INDEX_NONE;
+        uint32_t candidate_index = XR_SEMANTIC_INDEX_NONE;
+        if (!xr_semantic_array_index_tagged_read_is_exact(semantic, candidate, &candidate_array,
+                                                          &candidate_index))
+            continue;
+        REQUIRE(read == NULL);
+        read = candidate;
+        read_operation = i;
+        array_value = candidate_array;
+        index_value = candidate_index;
+    }
+    REQUIRE(read && read_operation != XR_SEMANTIC_INDEX_NONE &&
+            array_value != XR_SEMANTIC_INDEX_NONE && index_value != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetValueRepRecord *binding = xr_target_plan_value_rep(plan, read->result_value);
+    REQUIRE(binding && binding->slot < plan->slots_count &&
+            plan->machine_reps[binding->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[binding->register_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            plan->machine_reps[binding->register_rep].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[binding->slot].semantic_operation == read_operation &&
+            plan->slots[binding->slot].role == XR_TARGET_SLOT_TEMPORARY &&
+            plan->slots[binding->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[binding->slot].ownership == XR_TARGET_OWNERSHIP_BORROWED);
+
+    uint8_t saved_slot_ownership = plan->slots[binding->slot].ownership;
+    plan->slots[binding->slot].ownership = XR_TARGET_OWNERSHIP_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->slots[binding->slot].ownership = saved_slot_ownership;
+    uint8_t saved_rep_ownership = plan->machine_reps[binding->register_rep].ownership;
+    plan->machine_reps[binding->register_rep].ownership = XR_TARGET_OWNERSHIP_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[binding->register_rep].ownership = saved_rep_ownership;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    uint8_t saved_result_ownership = read->result_ownership;
+    read->result_ownership = XI_GEN_RESULT_OWNERSHIP_OWNED;
+    REQUIRE(!xr_semantic_array_index_read_is_exact(semantic, read, NULL, NULL));
+    error[0] = '\0';
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)) &&
+            strstr(error, "XR_SEM_0019") != NULL);
+    read->result_ownership = saved_result_ownership;
+    XrSemanticOperandRecord *receiver = &semantic->operands[read->operand_begin];
+    XrSemanticOperandRecord *index = receiver + 1;
+    uint32_t saved_result_type = read->result_type;
+    read->result_type = index->type;
+    REQUIRE(!xr_semantic_array_index_read_is_exact(semantic, read, NULL, NULL));
+    read->result_type = saved_result_type;
+    uint32_t saved_index_type = index->type;
+    index->type = read->result_type;
+    REQUIRE(!xr_semantic_array_index_read_is_exact(semantic, read, NULL, NULL));
+    index->type = saved_index_type;
+    uint8_t saved_receiver_flags = receiver->flags;
+    receiver->flags = XR_SEM_OPERAND_CALL_CONTRACT;
+    REQUIRE(!xr_semantic_array_index_read_is_exact(semantic, read, NULL, NULL));
+    receiver->flags = saved_receiver_flags;
+    REQUIRE(xr_semantic_array_index_tagged_read_is_exact(semantic, read, NULL, NULL) &&
+            xr_semantic_plan_verify(semantic, error, sizeof(error)) &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_shared_const_i64_array_layout_authority(void) {
     XrSemanticPlan *semantic = build_shared_const_i64_array_semantic();
     XrTargetProfile *profile = build_profile(0);
@@ -9831,6 +9945,11 @@ int main(int argc, char **argv) {
         puts("Tagged String Array copy TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "array-index-result-authority") == 0) {
+        test_tagged_array_index_read_authority();
+        puts("Array index result TargetPlan authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "shared-const-i64-array-layout-authority") == 0) {
         test_shared_const_i64_array_layout_authority();
         puts("Shared const Array<i64> layout authority tests passed");
@@ -9921,6 +10040,7 @@ int main(int argc, char **argv) {
     test_array_intrinsic_call_authority();
     test_array_hof_call_authority();
     test_tagged_string_array_copy_authority();
+    test_tagged_array_index_read_authority();
     test_shared_const_i64_array_layout_authority();
     test_array_reserve_call_authority();
     test_source_class_array_push_authority();

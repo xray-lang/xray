@@ -9,6 +9,7 @@
  */
 
 #include "xr_semantic_array_type_shape.h"
+#include "xr_semantic_array_index_shape.h"
 #include "../../shared/xr_bigint_literal_core.h"
 #include "xr_semantic_verify.h"
 #include "xr_semantic_allocation_shape.h"
@@ -2721,6 +2722,13 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             return false;
         if (!verify_array_intrinsic(plan, operation, error, error_size))
             return false;
+        if (operation->opcode == XI_INDEX_GET && operation->operand_count == 2 &&
+            operation->operand_begin < plan->operand_count &&
+            xr_semantic_array_type_row_is_exact(
+                xr_semantic_plan_type(plan, plan->operands[operation->operand_begin].type)) &&
+            !xr_semantic_array_index_read_is_exact(plan, operation, NULL, NULL))
+            return report(error, error_size, "XR_SEM_0019",
+                          "Array index read lacks exact element and borrow authority");
         if (!verify_native_module_scalar_call(plan, operation, error, error_size))
             return false;
         if (!verify_native_target_leaf_scalar_call(plan, operation, error, error_size))

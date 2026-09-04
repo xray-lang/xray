@@ -28,6 +28,7 @@
 #include "../semantic/xr_semantic_verify.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_allocation_shape.h"
+#include "../semantic/xr_semantic_array_index_shape.h"
 #include "../semantic/xr_semantic_array_type_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
@@ -1435,6 +1436,26 @@ static bool semantic_array_field_read_is_exact_verify(const XrSemanticPlan *sema
     return xr_semantic_tagged_array_field_read_is_exact(semantic, operation) &&
            operation->result_value == semantic_value && operation->result_type == semantic_type &&
            operation->function == semantic_function;
+}
+
+/* Reconstruct the target half of an Array element read independently. The
+ * semantic judgement proves Array<T> -> borrowed T; this wrapper additionally
+ * proves that this target stores T in the tagged Array lane and ties the row to
+ * the value binding currently under verification. */
+static bool semantic_array_index_tagged_read_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint32_t semantic_value, uint32_t semantic_type, uint32_t semantic_function) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    return xr_semantic_array_index_tagged_read_is_exact(semantic, operation, NULL, NULL) &&
+           operation->result_value == semantic_value && operation->result_type == semantic_type &&
+           operation->function == semantic_function && operands &&
+           operation->operand_begin < operand_count &&
+           semantic_direct_local_array_type_is_exact_verify(
+               semantic, operands[operation->operand_begin].type, false, &storage) &&
+           storage == XR_TARGET_ARRAY_STORAGE_TAGGED;
 }
 
 static const XrTargetValueRepRecord *verifier_value_rep(const XrTargetPlan *plan,
@@ -4056,6 +4077,9 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             semantic_array_field_read_is_exact_verify(semantic, operation, operation->result_value,
                                                       operation->result_type,
                                                       operation->function) ||
+            semantic_array_index_tagged_read_is_exact_verify(
+                semantic, operation, operation->result_value, operation->result_type,
+                operation->function) ||
             semantic_direct_local_tagged_ref_place_load_is_exact_verify(
                 plan, view, operation, operation->result_value, operation->result_type,
                 operation->function) ||
@@ -4244,6 +4268,8 @@ static bool verify_value_binding(
     bool exact_array_shared_read = semantic_array_shared_read_is_exact_verify(
         semantic, operation, semantic_value, semantic_type, semantic_function);
     bool exact_array_field_read = semantic_array_field_read_is_exact_verify(
+        semantic, operation, semantic_value, semantic_type, semantic_function);
+    bool exact_array_index_read = semantic_array_index_tagged_read_is_exact_verify(
         semantic, operation, semantic_value, semantic_type, semantic_function);
     bool exact_tagged_ref_place_load = semantic_direct_local_tagged_ref_place_load_is_exact_verify(
         plan, view, operation, semantic_value, semantic_type, semantic_function);
@@ -4449,10 +4475,10 @@ static bool verify_value_binding(
         operation_result_void || exact_heap_closure || exact_panic_catch || exact_dynamic_value ||
                 exact_array_allocation || exact_array_intrinsic || exact_array_hof_result ||
                 exact_container_copy || exact_array_fill || exact_string_shared_read ||
-                exact_array_shared_read || exact_array_field_read || exact_tagged_ref_place_load ||
-                exact_class_object || exact_class_instance || exact_class_receiver ||
-                exact_string_literal || exact_bigint_value || exact_string_concat ||
-                exact_string_convert || exact_direct_string_result ||
+                exact_array_shared_read || exact_array_field_read || exact_array_index_read ||
+                exact_tagged_ref_place_load || exact_class_object || exact_class_instance ||
+                exact_class_receiver || exact_string_literal || exact_bigint_value ||
+                exact_string_concat || exact_string_convert || exact_direct_string_result ||
                 exact_source_export_string_result || exact_stringbuilder ||
                 exact_stringbuilder_append || exact_stringbuilder_to_string ||
                 exact_stringbuilder_append_string || exact_stringbuilder_clear ||
@@ -4527,8 +4553,8 @@ static bool verify_value_binding(
     if (exact_heap_closure || exact_panic_catch || exact_dynamic_value || exact_array_allocation ||
         exact_class_object || exact_array_intrinsic || exact_array_hof_result ||
         exact_container_copy || exact_string_shared_read || exact_array_shared_read ||
-        exact_array_field_read || exact_tagged_ref_place_load || exact_array_fill ||
-        exact_class_instance || exact_class_receiver || exact_string_literal ||
+        exact_array_field_read || exact_array_index_read || exact_tagged_ref_place_load ||
+        exact_array_fill || exact_class_instance || exact_class_receiver || exact_string_literal ||
         exact_bigint_value || exact_string_concat || exact_string_convert ||
         exact_direct_string_result || exact_stringbuilder || exact_source_export_string_result ||
         exact_stringbuilder_append || exact_stringbuilder_to_string ||
@@ -4647,7 +4673,7 @@ static bool verify_value_binding(
              exact_native_module_namespace || exact_nullable_scalar ||
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              exact_adt_enum_borrowed || exact_string_shared_read || exact_array_shared_read ||
-             exact_array_field_read || exact_tagged_ref_place_load ||
+             exact_array_field_read || exact_array_index_read || exact_tagged_ref_place_load ||
              (exact_array_value_parameter && !array_parameter_callee_owns) ||
              exact_string_value_parameter_borrowed ||
              ((exact_stringbuilder_append || exact_stringbuilder_append_string ||
