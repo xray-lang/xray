@@ -15,15 +15,6 @@
 
 // ======== Builtin Type Members ========
 
-// Buffer methods
-static const XaBuiltinMember g_gen_buffer_members[] = {
-    {"asBytes", "(): Slice<u8>", "Borrow this buffer as a readonly Slice<u8> view", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"asMutBytes", "(): Slice<u8>", "Borrow this buffer as a mutable Slice<u8> view", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"borrowPtr", "(): MutPtr<u8>", "Borrow the underlying mutable pointer; requires unsafe at the call site", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"resize", "(n: i64): bool", "Resize this buffer; returns false on allocation failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_REF, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_BUFFER_MEMBER_COUNT 4
-
 // CoroLocal methods
 static const XaBuiltinMember g_gen_corolocal_members[] = {
     {"set", "(value: T): ()", "Set this typed coroutine-local slot for the current coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -249,7 +240,7 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 #define GEN_MATH_FUNCTION_COUNT 28
 
 static const XaBuiltinClass g_gen_mem_classes[] = {
-    {"Buffer", true},
+    {"__BufferStorage", true},
 };
 #define GEN_MEM_CLASS_COUNT 1
 
@@ -258,19 +249,19 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__prefetch", "(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cacheInvalidate", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cacheLineSize", "(): i64", "CPU cache line size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__alloc", "(n: i64): __BufferStorage", "Allocate n uninitialized bytes in a private managed storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__allocZeroed", "(n: i64): __BufferStorage", "Allocate n zero-initialized bytes in a private managed storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__bufferAsBytes", "(storage: __BufferStorage): const Slice<u8>", "Borrow a readonly byte view from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_BORROWED_PARAM_0},
+    {"__bufferBorrowPtr", "(storage: __BufferStorage): MutPtr<u8>", "Borrow the raw pointer from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__bufferResize", "(storage: __BufferStorage, n: i64): bool", "Resize a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageAlloc", "(bytes: i64, prot: i64): MutPtr<u8>", "Map zero-filled anonymous pages with explicit protection bits", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__move", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__set", "(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__compare", "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
@@ -397,19 +388,12 @@ static const XaBuiltinMember g_gen_os_functions[] = {
 };
 #define GEN_OS_FUNCTION_COUNT 24
 
-static const XaBuiltinClass g_gen_regex_classes[] = {
-    {"Regex", true},
-};
-#define GEN_REGEX_CLASS_COUNT 1
-
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
-    {"__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__regexParseFlags", "(flags: string): i64", "Parse flag spelling for the VM representation adapter", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_REGEX_FUNCTION_COUNT 4
+#define GEN_REGEX_FUNCTION_COUNT 2
 
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
@@ -466,7 +450,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_mem_classes, GEN_MEM_CLASS_COUNT},
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT, g_gen_net_classes, GEN_NET_CLASS_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_regex_classes, GEN_REGEX_CLASS_COUNT},
+    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},

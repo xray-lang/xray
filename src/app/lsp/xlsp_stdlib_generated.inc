@@ -396,8 +396,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_READ", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"Buffer", XLSP_SYM_CLASS, "type Buffer", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 22
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 23
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
@@ -520,10 +521,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
     {"replaceAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "", NULL, 0},
     {"split", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<string>", "", NULL, 0},
     {"escape", XLSP_SYM_FUNCTION, "fn(s: string): string", "", NULL, 0},
+    {"Regex", XLSP_SYM_CLASS, "type Regex", "Class type", NULL, 0},
     {"RegexMatch", XLSP_SYM_CLASS, "type RegexMatch", "Class type", NULL, 0},
     {"RegexError", XLSP_SYM_CLASS, "type RegexError", "Enum type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 15
+#define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 16
 
 // runtime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {

@@ -242,6 +242,22 @@ static inline XrValue xrt_mem_alloc_aligned(XrValue n, XrValue align) {
     return xrt_buffer_new(xrt_mem_int_arg(n), 0, (size_t) xrt_mem_int_arg(align));
 }
 
+static inline XrValue xrt_mem_buffer_length(XrValue storage) {
+    return XR_FROM_INT(xrt_buffer_length(storage));
+}
+
+static inline xr_span_t xrt_mem_buffer_as_bytes(XrValue storage) {
+    return xrt_buffer_as_bytes(storage);
+}
+
+static inline XrValue xrt_mem_buffer_borrow_ptr(XrValue storage) {
+    return xrt_buffer_borrow_ptr(storage);
+}
+
+static inline XrValue xrt_mem_buffer_resize(XrValue storage, XrValue n) {
+    return xrt_buffer_resize(storage, n);
+}
+
 #ifdef _WIN32
 static inline DWORD xrt_mem_page_prot_to_win(int64_t prot) {
     bool r = (prot & XRT_MEM_PROT_READ) != 0;

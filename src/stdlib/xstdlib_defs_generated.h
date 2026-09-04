@@ -198,8 +198,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"sys", "__pipeRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read one chunk from a pipe endpoint", "sys_pipe_read_yieldable", "yieldable", "", "xrt_sys_pipe_read", "vv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", "sys_pipe_write_yieldable", "yieldable", "", "xrt_sys_pipe_write", "vv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", "sys_pipe_close", "normal", "", "xrt_sys_pipe_close", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", "regex_compile", "normal", "", "", "sv", "value", "", "", "", "alloc", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"regex", "__regexParseFlags", "(flags: string): i64", "Parse flag spelling for the VM representation adapter", "regex_parse_flags", "normal", "", "", "s", "value", "", "", "", "pure", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"regex", "__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", "regex_unicode_prop_id", "normal", "", "", "s", "value", "", "", "", "pure", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"regex", "__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", "regex_unicode_has_prop", "normal", "", "", "vv", "value", "", "", "", "pure", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"os", "__platform", "(): string", "Host operating system name", "os_platform", "normal", "", "xrt_os_platform", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -256,19 +254,19 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"mem", "__fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", "mem_fence", "normal", "", "xrt_mem_fence", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__prefetch", "(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", "mem_prefetch", "normal", "", "xrt_mem_prefetch", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", "mem_cache_flush", "normal", "", "xrt_mem_cache_flush", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "__cacheInvalidate", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", "mem_cache_invalidate", "normal", "", "xrt_mem_cache_invalidate", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", "mem_nontemporal_store", "normal", "", "xrt_mem_nontemporal_store", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__cacheLineSize", "(): i64", "CPU cache line size in bytes", "mem_cache_line_size", "normal", "", "xrt_mem_cache_line_size", "", "value", "", "", "", "core", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", "mem_alloc", "normal", "", "xrt_mem_alloc", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", "mem_alloc_zeroed", "normal", "", "xrt_mem_alloc_zeroed", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__alloc", "(n: i64): __BufferStorage", "Allocate n uninitialized bytes in a private managed storage handle", "mem_alloc", "normal", "", "xrt_mem_alloc", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__allocZeroed", "(n: i64): __BufferStorage", "Allocate n zero-initialized bytes in a private managed storage handle", "mem_alloc_zeroed", "normal", "", "xrt_mem_alloc_zeroed", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", "mem_buffer_length", "normal", "", "xrt_mem_buffer_length", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__bufferAsBytes", "(storage: __BufferStorage): const Slice<u8>", "Borrow a readonly byte view from a private Buffer storage handle", "mem_buffer_as_bytes", "normal", "", "xrt_mem_buffer_as_bytes", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__bufferBorrowPtr", "(storage: __BufferStorage): MutPtr<u8>", "Borrow the raw pointer from a private Buffer storage handle", "mem_buffer_borrow_ptr", "normal", "", "xrt_mem_buffer_borrow_ptr", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__bufferResize", "(storage: __BufferStorage, n: i64): bool", "Resize a private Buffer storage handle", "mem_buffer_resize", "normal", "", "xrt_mem_buffer_resize", "vv", "value", "", "", "", "runtime", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__pageAlloc", "(bytes: i64, prot: i64): MutPtr<u8>", "Map zero-filled anonymous pages with explicit protection bits", "mem_page_alloc", "normal", "", "xrt_mem_page_alloc", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", "mem_page_protect", "normal", "", "xrt_mem_page_protect", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", "mem_page_free", "normal", "", "xrt_mem_page_free", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", "mem_copy", "normal", "", "xrt_mem_copy", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__move", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", "mem_move", "normal", "", "xrt_mem_move", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "__set", "(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", "mem_set", "normal", "", "xrt_mem_set", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "__compare", "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "Compare n bytes at a and b (memcmp: <0, 0, >0)", "mem_compare", "normal", "", "xrt_mem_compare", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", "mem_volatile_load", "normal", "", "xrt_mem_volatile_load", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", "mem_volatile_store", "normal", "", "xrt_mem_volatile_store", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__resolveAll", "(host: string): Array<string>", "Resolve every address for a host, RFC 8305 interleaved; empty on failure", "net_resolve_all_yieldable", "yieldable", "", "xrt_net_resolve_all", "s", "value", "", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -460,32 +458,23 @@ static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
 #define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
 
 static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
-    {"mem", "Buffer", "asBytes", "(): Slice<u8>", "Borrow this buffer as a readonly Slice<u8> view"},
-    {"mem", "Buffer", "asMutBytes", "(): Slice<u8>", "Borrow this buffer as a mutable Slice<u8> view"},
-    {"mem", "Buffer", "borrowPtr", "(): MutPtr<u8>", "Borrow the underlying mutable pointer; requires unsafe at the call site"},
-    {"mem", "Buffer", "resize", "(n: i64): bool", "Resize this buffer; returns false on allocation failure"},
     {"Coro", "CoroLocal", "set", "(value: T): ()", "Set this typed coroutine-local slot for the current coroutine"},
     {"Coro", "CoroLocal", "get", "(): T?", "Get this typed coroutine-local slot for the current coroutine"},
 };
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
-    {"mem", "Buffer", "objectClass", "memBufferClass", "&g_mem_buffer_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER"},
+    {"mem", "__BufferStorage", "objectClass", "memBufferClass", "xr_buffer_native_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER"},
     {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
     {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
 };
 #define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
 
 static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {
-    {"regex", "Regex", "objectClass", "regexClass", "XR_CLASS_BUILTIN", "XR_BK_REGEX"},
 };
 #define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_def_entries) / sizeof(xr_stdlib_class_def_entries[0])))
 
 static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {
-    {"mem", "Buffer", "asBytes", "mem_buffer_as_bytes", 0, "0"},
-    {"mem", "Buffer", "asMutBytes", "mem_buffer_as_mut_bytes", 0, "0"},
-    {"mem", "Buffer", "borrowPtr", "mem_buffer_borrow_ptr", 0, "0"},
-    {"mem", "Buffer", "resize", "mem_buffer_resize", 1, "0"},
     {"net", "NetConn", "fd", "conn_method_fd", 0, "0"},
     {"net", "NetConn", "close", "conn_method_close", 0, "0"},
     {"net", "NetConn", "isClosed", "conn_method_is_closed", 0, "0"},
@@ -498,9 +487,6 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
 #define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
 
 static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {
-    {"regex", "Regex", "pattern", "0"},
-    {"regex", "Regex", "flags", "0"},
-    {"regex", "Regex", "prog", "0"},
 };
 #define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_field_def_entries) / sizeof(xr_stdlib_class_field_def_entries[0])))
 

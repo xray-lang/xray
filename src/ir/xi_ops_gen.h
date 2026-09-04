@@ -186,7 +186,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 228 };
+enum { XI_GEN_OP_COUNT = 227 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -420,7 +420,6 @@ typedef struct {
     X(LEN, "xi.len", XI_GEN_CLASS_MEMORY_READ, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_TOP, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(GET_BUILTIN, "xi.get.builtin", XI_GEN_CLASS_MEMORY_READ, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_CONST, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(IMPORT_REF, "xi.import.ref", XI_GEN_CLASS_MEMORY_READ, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_TOP, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
-    X(REGEX_COMPILE, "xi.regex.compile", XI_GEN_CLASS_ALLOCATION, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_FRESH, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_HEAP, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(RETAIN, "xi.retain", XI_GEN_CLASS_OWNERSHIP, 1, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_RETAINS, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(RELEASE, "xi.release", XI_GEN_CLASS_OWNERSHIP, 1, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_RELEASES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(SOURCE_MOVE, "xi.source.move", XI_GEN_CLASS_OWNERSHIP, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -652,7 +651,6 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_LEN: return "LEN";
         case XI_GET_BUILTIN: return "GET_BUILTIN";
         case XI_IMPORT_REF: return "IMPORT_REF";
-        case XI_REGEX_COMPILE: return "REGEX_COMPILE";
         case XI_RETAIN: return "RETAIN";
         case XI_RELEASE: return "RELEASE";
         case XI_SOURCE_MOVE: return "SOURCE_MOVE";
@@ -887,7 +885,6 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_LEN: return 1;
         case XI_GET_BUILTIN: return 0;
         case XI_IMPORT_REF: return 0;
-        case XI_REGEX_COMPILE: return 2;
         case XI_RETAIN: return 1;
         case XI_RELEASE: return 1;
         case XI_SOURCE_MOVE: return 1;
@@ -1122,7 +1119,6 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_LEN: return XI_GEN_CLASS_MEMORY_READ;
         case XI_GET_BUILTIN: return XI_GEN_CLASS_MEMORY_READ;
         case XI_IMPORT_REF: return XI_GEN_CLASS_MEMORY_READ;
-        case XI_REGEX_COMPILE: return XI_GEN_CLASS_ALLOCATION;
         case XI_RETAIN: return XI_GEN_CLASS_OWNERSHIP;
         case XI_RELEASE: return XI_GEN_CLASS_OWNERSHIP;
         case XI_SOURCE_MOVE: return XI_GEN_CLASS_OWNERSHIP;
@@ -1357,7 +1353,6 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_LEN: return XI_GEN_RESULT_VALUE;
         case XI_GET_BUILTIN: return XI_GEN_RESULT_VALUE;
         case XI_IMPORT_REF: return XI_GEN_RESULT_VALUE;
-        case XI_REGEX_COMPILE: return XI_GEN_RESULT_VALUE;
         case XI_RETAIN: return XI_GEN_RESULT_VOID;
         case XI_RELEASE: return XI_GEN_RESULT_VOID;
         case XI_SOURCE_MOVE: return XI_GEN_RESULT_VALUE;
@@ -1592,7 +1587,6 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_LEN: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_GET_BUILTIN: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
         case XI_IMPORT_REF: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
-        case XI_REGEX_COMPILE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_RETAIN: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_RELEASE: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1827,7 +1821,6 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_LEN: return NULL;
         case XI_GET_BUILTIN: return NULL;
         case XI_IMPORT_REF: return NULL;
-        case XI_REGEX_COMPILE: return NULL;
         case XI_RETAIN: return NULL;
         case XI_RELEASE: return NULL;
         case XI_SOURCE_MOVE: return NULL;
@@ -2062,7 +2055,6 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_LEN: return XI_GEN_LOWERING_GENERATED;
         case XI_GET_BUILTIN: return XI_GEN_LOWERING_GENERATED;
         case XI_IMPORT_REF: return XI_GEN_LOWERING_GENERATED;
-        case XI_REGEX_COMPILE: return XI_GEN_LOWERING_GENERATED;
         case XI_RETAIN: return XI_GEN_LOWERING_GENERATED;
         case XI_RELEASE: return XI_GEN_LOWERING_GENERATED;
         case XI_SOURCE_MOVE: return XI_GEN_LOWERING_GENERATED;
@@ -2297,7 +2289,6 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_LEN: return XI_GEN_SPECULATION_NEVER;
         case XI_GET_BUILTIN: return XI_GEN_SPECULATION_NEVER;
         case XI_IMPORT_REF: return XI_GEN_SPECULATION_NEVER;
-        case XI_REGEX_COMPILE: return XI_GEN_SPECULATION_NEVER;
         case XI_RETAIN: return XI_GEN_SPECULATION_NEVER;
         case XI_RELEASE: return XI_GEN_SPECULATION_NEVER;
         case XI_SOURCE_MOVE: return XI_GEN_SPECULATION_NEVER;
@@ -2532,7 +2523,6 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_LEN: return XI_GEN_VN_NONE;
         case XI_GET_BUILTIN: return XI_GEN_VN_NONE;
         case XI_IMPORT_REF: return XI_GEN_VN_NONE;
-        case XI_REGEX_COMPILE: return XI_GEN_VN_NONE;
         case XI_RETAIN: return XI_GEN_VN_NONE;
         case XI_RELEASE: return XI_GEN_VN_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_VN_NONE;
@@ -2767,7 +2757,6 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_LEN: return XI_GEN_TBAA_TOP;
         case XI_GET_BUILTIN: return XI_GEN_TBAA_CONST;
         case XI_IMPORT_REF: return XI_GEN_TBAA_TOP;
-        case XI_REGEX_COMPILE: return XI_GEN_TBAA_FRESH;
         case XI_RETAIN: return XI_GEN_TBAA_NONE;
         case XI_RELEASE: return XI_GEN_TBAA_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_TBAA_NONE;
@@ -3002,7 +2991,6 @@ static inline uint8_t xi_generated_op_sync_order(uint16_t op) {
         case XI_LEN: return XI_GEN_SYNC_NONE;
         case XI_GET_BUILTIN: return XI_GEN_SYNC_NONE;
         case XI_IMPORT_REF: return XI_GEN_SYNC_NONE;
-        case XI_REGEX_COMPILE: return XI_GEN_SYNC_NONE;
         case XI_RETAIN: return XI_GEN_SYNC_NONE;
         case XI_RELEASE: return XI_GEN_SYNC_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_SYNC_NONE;
@@ -3237,7 +3225,6 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_LEN: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_GET_BUILTIN: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_IMPORT_REF: return XI_GEN_BACKEND_REWRITE_NONE;
-        case XI_REGEX_COMPILE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_RETAIN: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_RELEASE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -3472,7 +3459,6 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_LEN: return NULL;
         case XI_GET_BUILTIN: return NULL;
         case XI_IMPORT_REF: return NULL;
-        case XI_REGEX_COMPILE: return NULL;
         case XI_RETAIN: return NULL;
         case XI_RELEASE: return NULL;
         case XI_SOURCE_MOVE: return NULL;
@@ -3707,7 +3693,6 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_LEN: return XI_GEN_ESCAPE_USE_NONE;
         case XI_GET_BUILTIN: return XI_GEN_ESCAPE_USE_NONE;
         case XI_IMPORT_REF: return XI_GEN_ESCAPE_USE_NONE;
-        case XI_REGEX_COMPILE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_RETAIN: return XI_GEN_ESCAPE_USE_NONE;
         case XI_RELEASE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_ESCAPE_USE_NONE;
@@ -3942,7 +3927,6 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_LEN: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_GET_BUILTIN: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_IMPORT_REF: return XI_GEN_ESCAPE_ALLOC_NONE;
-        case XI_REGEX_COMPILE: return XI_GEN_ESCAPE_ALLOC_HEAP;
         case XI_RETAIN: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_RELEASE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -4177,7 +4161,6 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_LEN: return XI_GEN_OWN_USE_BORROW;
         case XI_GET_BUILTIN: return XI_GEN_OWN_USE_CONSUME;
         case XI_IMPORT_REF: return XI_GEN_OWN_USE_CONSUME;
-        case XI_REGEX_COMPILE: return XI_GEN_OWN_USE_CONSUME;
         case XI_RETAIN: return XI_GEN_OWN_USE_BORROW;
         case XI_RELEASE: return XI_GEN_OWN_USE_CONSUME;
         case XI_SOURCE_MOVE: return XI_GEN_OWN_USE_CONSUME;
@@ -4412,7 +4395,6 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_LEN: return XI_GEN_IC_SITE_NONE;
         case XI_GET_BUILTIN: return XI_GEN_IC_SITE_NONE;
         case XI_IMPORT_REF: return XI_GEN_IC_SITE_NONE;
-        case XI_REGEX_COMPILE: return XI_GEN_IC_SITE_NONE;
         case XI_RETAIN: return XI_GEN_IC_SITE_NONE;
         case XI_RELEASE: return XI_GEN_IC_SITE_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_IC_SITE_NONE;
@@ -4647,7 +4629,6 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_LEN: return XI_OP_COUNT;
         case XI_GET_BUILTIN: return XI_OP_COUNT;
         case XI_IMPORT_REF: return XI_OP_COUNT;
-        case XI_REGEX_COMPILE: return XI_OP_COUNT;
         case XI_RETAIN: return XI_OP_COUNT;
         case XI_RELEASE: return XI_OP_COUNT;
         case XI_SOURCE_MOVE: return XI_OP_COUNT;
@@ -4882,7 +4863,6 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_LEN: return 0;
         case XI_GET_BUILTIN: return 0;
         case XI_IMPORT_REF: return 0;
-        case XI_REGEX_COMPILE: return 0;
         case XI_RETAIN: return 0;
         case XI_RELEASE: return 0;
         case XI_SOURCE_MOVE: return 0;
@@ -5117,7 +5097,6 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_LEN: return XI_FLAG_READS_MEM;
         case XI_GET_BUILTIN: return XI_FLAG_READS_MEM;
         case XI_IMPORT_REF: return XI_FLAG_READS_MEM;
-        case XI_REGEX_COMPILE: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_RETAIN: return XI_FLAG_SIDE_EFFECT;
         case XI_RELEASE: return XI_FLAG_SIDE_EFFECT;
         case XI_SOURCE_MOVE: return XI_FLAG_SIDE_EFFECT;
@@ -5352,7 +5331,6 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_LEN: return XI_EFFECT_MEMORY_READ;
         case XI_GET_BUILTIN: return XI_EFFECT_MEMORY_READ;
         case XI_IMPORT_REF: return XI_EFFECT_MEMORY_READ;
-        case XI_REGEX_COMPILE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES;
         case XI_RETAIN: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_RETAINS;
         case XI_RELEASE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_RELEASES;
         case XI_SOURCE_MOVE: return XI_EFFECT_SIDE_EFFECT;

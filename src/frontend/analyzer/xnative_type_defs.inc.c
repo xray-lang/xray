@@ -24,8 +24,6 @@ static const char xr_native_def_map[] = "// Built-in Map<K, V> type — implemen
 
 static const char xr_native_def_panic_info[] = "// Built-in PanicInfo class — the runtime panic diagnostic payload.\n//\n// PanicInfo belongs to the panic channel only: the VM/AOT runtime constructs it\n// on faults (out-of-bounds, division by zero, non-exhaustive match, etc.) and\n// `catch panic (p: PanicInfo)` reads its fields. Business errors are enum values\n// (`throw <enum>`), never PanicInfo. Field layout matches xclass_system.h\n// PANIC_INFO_FIELD_* indices and the XrClass built by\n// xr_register_panic_info_class in xclass_system.c; the constructor and toString\n// bodies are PRIMITIVE on the C side. This declaration exists for analyzer / LSP\n// awareness so the fields are visible from any module.\nclass PanicInfo {\n    message: string\n    stack: Array<string>\n    cause: PanicInfo?\n    code: i64\n    data: JSON.Value\n    constructor(message: string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
 
-static const char xr_native_def_regex[] = "// Built-in Regex type. The automata live in stdlib/regex/regex.xr; the class\n// is only the handle, and it exists as a native class because the literal\n// syntax /pat/flags lowers to XI_REGEX_COMPILE with its result type pinned to\n// type_regex (src/ir/xi_lower_expr.c:11349).\n//\n// `prog` is the compiled program image, produced and memoised by regex.xr. It\n// is a plain GC-visible field rather than a native body because\n// XrNativeBodyDesc has no trace callback, so a native body cannot hold an\n// Xray value without the collector losing it. It starts empty and regex.xr\n// fills it by pushing: a class-typed parameter is a read capability, so the\n// field itself cannot be assigned from there, but its elements can.\nclass Regex {\n    pattern: string\n    flags: i64\n    prog: Array<i64>\n}\n";
-
 static const char xr_native_def_rune[] = "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar value.\nclass rune {\n    toUInt32() -> u32\n    toString() -> string\n    isLetter() -> bool\n    isNumber() -> bool\n    isAlphanumeric() -> bool\n    isWhitespace() -> bool\n}\n";
 
 static const char xr_native_def_set[] = "// Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c\nclass Set<T: Hashable> {\n    ref add(value: T)\n    contains(value: T) -> bool\n    ref delete(value: T) -> bool\n    ref clear()\n    values() -> Array<T>\n    forEach(fn: fn(value: T)) -> ()\n    union(other: Set<T>) -> Set<T>\n    intersection(other: Set<T>) -> Set<T>\n    difference(other: Set<T>) -> Set<T>\n    symmetricDifference(other: Set<T>) -> Set<T>\n    isSubset(other: Set<T>) -> bool\n    isSuperset(other: Set<T>) -> bool\n    toArray() -> Array<T>\n    // Iteration protocol — yields each element T (used by for-in).\n    iterator() -> Iterator<T>\n    toString() -> string\n}\n";
@@ -49,7 +47,6 @@ static const char xr_native_def_thread[] = "// sys.Thread.spawn is compiler-defi
     X("json", xr_native_def_json) \
     X("map", xr_native_def_map) \
     X("panic_info", xr_native_def_panic_info) \
-    X("regex", xr_native_def_regex) \
     X("rune", xr_native_def_rune) \
     X("set", xr_native_def_set) \
     X("string", xr_native_def_string) \

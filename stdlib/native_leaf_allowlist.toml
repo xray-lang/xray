@@ -531,7 +531,7 @@ abi = "malloc(3)"
 ownership = "fresh"
 effect = "nothrow"
 provider = "the system heap -- plain libc malloc, or mimalloc where the build selects it. The byte block always comes from the system heap; only the handle holding it is managed. VM stdlib/mem/mem.c enters runtime/object/xbuffer.c, whose native body destructor frees the block when the coroutine heap's refcount reaches zero; AOT src/aot/xrt_mem.h allocates an ARC cell marked XRT_ARC_KIND_BUFFER whose builtin destructor does the same"
-deletion_trigger = "when Xray can express an owned byte block with a destructor in its own type system, so a Buffer is an Xray type over a raw allocation rather than a native handle the runtime has to know how to destroy"
+deletion_trigger = "when the provider ABI can bind this allocation to a verified Xray drop target; the public Buffer type already remains source-owned and needs no user destructor syntax"
 
 [[leaf]]
 module = "mem"
@@ -541,7 +541,7 @@ abi = "posix_memalign(3); Win32 _aligned_malloc, or mi_malloc_aligned under mima
 ownership = "fresh"
 effect = "nothrow"
 provider = "the system heap through runtime/object/xbuffer.c xr_malloc_aligned on the VM and XRT_MALLOC's aligned form on AOT, with the same managed-handle arrangement as mem.__alloc"
-deletion_trigger = "same as mem.__alloc: when Xray can express an owned byte block with a destructor in its own type system. The alignment argument is one parameter of the same allocation and does not need a separate step"
+deletion_trigger = "same as mem.__alloc: when provider drop can target verified Xray code. The alignment argument is one parameter of the same allocation and does not need a separate step"
 
 [[leaf]]
 module = "mem"
@@ -551,7 +551,57 @@ abi = "calloc(3)"
 ownership = "fresh"
 effect = "nothrow"
 provider = "the system heap, with the same managed-handle arrangement as mem.__alloc. The zeroing is calloc's, which lets the allocator hand back pages the kernel already zeroed instead of writing them again"
-deletion_trigger = "when Xray can express an owned byte block with a destructor in its own type system, and can request zeroed pages rather than zeroing them itself -- writing the zeroes in Xray would lose calloc's ability to skip that write"
+deletion_trigger = "when provider drop can target verified Xray code and the allocator provider exposes zeroed allocation; writing zeroes in source would lose calloc's ability to skip that write"
+
+[[leaf]]
+module = "mem"
+symbol = "__BufferStorage"
+class = "alloc_leaf"
+abi = "none; private runtime object shape carrying an owned byte allocation and its reclamation hook"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and the XRT_ARC_KIND_BUFFER builtin destructor on AOT; mem.Buffer in mem.xr is the only public owner of this handle"
+deletion_trigger = "when opaque provider storage can bind its structural drop entry to verified Xray code; the public source class must remain independent of any user destructor hook"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferLength"
+class = "runtime_leaf"
+abi = "none; reads the length field of the private Buffer storage handle"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_length on AOT"
+deletion_trigger = "when Xray can declare the private provider-storage layout and its structural drop entry directly"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferAsBytes"
+class = "runtime_leaf"
+abi = "none; projects a readonly borrowed Slice<u8> over the private Buffer storage handle"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_as_bytes on AOT; mem.Buffer.asBytes in source owns the public operation"
+deletion_trigger = "when Xray can project a borrow from an opaque owned allocation without exposing the allocation handle publicly"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferBorrowPtr"
+class = "runtime_leaf"
+abi = "none; projects a borrowed MutPtr<u8> from the private Buffer storage handle"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_borrow_ptr on AOT; the analyzer retains the unsafe and owner-borrow rules"
+deletion_trigger = "when Xray can project a raw pointer borrow from an opaque owned allocation without exposing the allocation handle publicly"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferResize"
+class = "alloc_leaf"
+abi = "realloc(3), or allocate-copy-free for explicitly aligned storage"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_resize on AOT; mem.Buffer.resize in source owns size normalization and the public result"
+deletion_trigger = "when the provider ABI exposes fallible realloc and a verified Xray structural drop target"
 
 [[leaf]]
 module = "mem"

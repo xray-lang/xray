@@ -175,8 +175,6 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.__cacheFlush") == 0)
         return true;
-    if (strcmp(symbol, "mem.__cacheInvalidate") == 0)
-        return true;
     if (strcmp(symbol, "mem.__nontemporalStore") == 0)
         return true;
     if (strcmp(symbol, "mem.__cacheLineSize") == 0)
@@ -187,13 +185,7 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.__allocAligned") == 0)
         return true;
-    if (strcmp(symbol, "mem.__copy") == 0)
-        return true;
     if (strcmp(symbol, "mem.__move") == 0)
-        return true;
-    if (strcmp(symbol, "mem.__set") == 0)
-        return true;
-    if (strcmp(symbol, "mem.__compare") == 0)
         return true;
     if (strcmp(symbol, "mem.__volatileLoad") == 0)
         return true;

@@ -15,8 +15,9 @@ legacy_public_surface = [
   "view",
 ]
 intentional_semantic_changes = [
-  "mem publishes its capability surface from stdlib/mem/mem.xr; the private .def leaves it forwards to keep the same ABI, so every behaviour below is unchanged",
-  "what stays native is decided by expressibility, not by layer: the layout and pointer intrinsics (sizeOf, alignOf, offsetOf, ptr, mutPtr, load, store, slice, withSliceMut, assumeInitialized) take their result type from an explicit type argument that Xray cannot restate, Buffer and its methods have no internal spelling in the .def metadata, and pageAlloc declares two arities that select two AOT entry points",
+  "mem publishes Buffer and its capability surface from stdlib/mem/mem.xr; only the private provider storage, raw host operations, and compiler-owned layout/borrow intrinsics remain native",
+  "writable Buffer views use the existing scoped mem.withSliceMut(pointer, count, ref owner, callback) composition instead of a mutable Slice-returning method; no compatibility alias is retained",
+  "what stays native is decided by expressibility, not by layer: the layout and pointer intrinsics (sizeOf, alignOf, offsetOf, ptr, mutPtr, load, store, slice, withSliceMut, assumeInitialized) take their result type from an explicit type argument that Xray cannot restate, and provider-owned storage carries structural reclamation without a user destructor hook",
   "this contract remains a behaviour baseline lock: it pins results, not the language the results are computed in",
 ]
 known_legacy_bugs = [

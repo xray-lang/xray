@@ -5,11 +5,9 @@
 // its meaning can be stated in Xray, and stays in the .def when the compiler
 // owns its meaning.
 //
-// One group keeps public .def rows:
-//
-//   1. Buffer and its four methods, because a native class and its methods have
-//      no internal spelling in the .def metadata: renaming them cannot make
-//      them private, and Buffer additionally occupies a runtime core class slot.
+// Buffer itself is source-owned. Only its storage is a private runtime handle:
+// Xray has no user-visible destructor hook, so the handle owns reclamation while
+// this class owns the public shape, construction policy and every operation.
 //
 // The layout, pointer and borrow intrinsics — sizeOf, alignOf, offsetOf, ptr,
 // mutPtr, addr, slice, load, store, withSliceMut, assumeInitialized — have no
@@ -35,6 +33,36 @@ export const PROT_NONE: i64 = 0
 export const PROT_READ: i64 = 1
 export const PROT_WRITE: i64 = 2
 export const PROT_EXEC: i64 = 4
+
+export final class Buffer implements Lengthable {
+    private _storage: __BufferStorage
+
+    constructor(n: i64, zeroed: bool = false, align: i64 = 0) {
+        var size = _allocationSize(n)
+        if (align != 0) {
+            assert(_validAlignment(align),
+                   "Buffer alignment must be a power of two >= 8")
+            this._storage = __allocAligned(size, align)
+        } else if (zeroed) {
+            this._storage = __allocZeroed(size)
+        } else {
+            this._storage = __alloc(size)
+        }
+    }
+
+    operator len() -> i64 { return __bufferLength(this._storage) }
+
+    asBytes() -> const Slice<u8> from this { return __bufferAsBytes(this._storage) }
+
+    // Writable access is deliberately composed with the module's existing
+    // scoped intrinsic: withSliceMut(buffer.borrowPtr(), len(buffer),
+    // ref buffer, callback). No mutable Slice may escape this owner.
+    borrowPtr() -> MutPtr<u8> { return __bufferBorrowPtr(this._storage) }
+
+    ref resize(n: i64) -> bool {
+        return __bufferResize(this._storage, _allocationSize(n))
+    }
+}
 
 // Memory ordering fence. `ordering` mirrors the Ordering enum ordinals
 // (0 Relaxed .. 4 SeqCst).
@@ -78,11 +106,11 @@ fn _validAlignment(align: i64) -> bool {
     return align >= 8 && (align & (align - 1)) == 0
 }
 
-export fn alloc(n: i64) -> Buffer { return __alloc(_allocationSize(n)) }
-export fn allocZeroed(n: i64) -> Buffer { return __allocZeroed(_allocationSize(n)) }
+export fn alloc(n: i64) -> Buffer { return Buffer(n) }
+export fn allocZeroed(n: i64) -> Buffer { return Buffer(n, true) }
 export fn allocAligned(n: i64, align: i64) -> Buffer {
     assert(_validAlignment(align), "mem.allocAligned alignment must be a power of two >= 8")
-    return __allocAligned(_allocationSize(n), align)
+    return Buffer(n, false, align)
 }
 
 // Anonymous page lifetime. The public default belongs to this declaration;

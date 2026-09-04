@@ -1412,33 +1412,13 @@ module runtime {
 }
 
 module mem {
-  native_class Buffer {
+  native_class __BufferStorage {
     visibility: "internal"
     super_slot: "objectClass"
     core_slot: "memBufferClass"
     native_body_expr: "xr_buffer_native_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
     builtin_kind: "XR_BK_BUFFER"
-  }
-
-  class_method Buffer.asBytes {
-    vm: "mem_buffer_as_bytes"
-    argc: 0
-  }
-
-  class_method Buffer.asMutBytes {
-    vm: "mem_buffer_as_mut_bytes"
-    argc: 0
-  }
-
-  class_method Buffer.borrowPtr {
-    vm: "mem_buffer_borrow_ptr"
-    argc: 0
-  }
-
-  class_method Buffer.resize {
-    vm: "mem_buffer_resize"
-    argc: 1
   }
 
   fn __fence {
@@ -1503,8 +1483,8 @@ module mem {
   }
 
   fn __alloc {
-    signature: "(n: i64): Buffer"
-    doc: "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped"
+    signature: "(n: i64): __BufferStorage"
+    doc: "Allocate n uninitialized bytes in a private managed storage handle"
     vm: "mem_alloc"
     aot: "xrt_mem_alloc"
     argc: 1
@@ -1517,8 +1497,8 @@ module mem {
   }
 
   fn __allocZeroed {
-    signature: "(n: i64): Buffer"
-    doc: "Allocate n zero-initialized bytes as a managed Buffer"
+    signature: "(n: i64): __BufferStorage"
+    doc: "Allocate n zero-initialized bytes in a private managed storage handle"
     vm: "mem_alloc_zeroed"
     aot: "xrt_mem_alloc_zeroed"
     argc: 1
@@ -1531,8 +1511,8 @@ module mem {
   }
 
   fn __allocAligned {
-    signature: "(n: i64, align: i64): Buffer"
-    doc: "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))"
+    signature: "(n: i64, align: i64): __BufferStorage"
+    doc: "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))"
     vm: "mem_alloc_aligned"
     aot: "xrt_mem_alloc_aligned"
     argc: 2
@@ -1542,6 +1522,59 @@ module mem {
     layer: "core"
     allocation: "may_heap"
     return_ownership: "fresh"
+  }
+
+  fn __bufferLength {
+    signature: "(storage: __BufferStorage): i64"
+    doc: "Read the byte length from a private Buffer storage handle"
+    vm: "mem_buffer_length"
+    aot: "xrt_mem_buffer_length"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "no_heap"
+  }
+
+  fn __bufferAsBytes {
+    signature: "(storage: __BufferStorage): const Slice<u8>"
+    doc: "Borrow a readonly byte view from a private Buffer storage handle"
+    vm: "mem_buffer_as_bytes"
+    aot: "xrt_mem_buffer_as_bytes"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "no_heap"
+    return_ownership: "borrowed_param:0"
+  }
+
+  fn __bufferBorrowPtr {
+    signature: "(storage: __BufferStorage): MutPtr<u8>"
+    doc: "Borrow the raw pointer from a private Buffer storage handle"
+    vm: "mem_buffer_borrow_ptr"
+    aot: "xrt_mem_buffer_borrow_ptr"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "no_heap"
+  }
+
+  fn __bufferResize {
+    signature: "(storage: __BufferStorage, n: i64): bool"
+    doc: "Resize a private Buffer storage handle"
+    vm: "mem_buffer_resize"
+    aot: "xrt_mem_buffer_resize"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "may_heap"
   }
 
   fn __pageAlloc {
@@ -1616,35 +1649,6 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
-  }
-
-  type_method Buffer.asBytes {
-    signature: "(): Slice<u8>"
-    receiver: "Buffer"
-    doc: "Borrow this buffer as a readonly Slice<u8> view"
-    allocation: "no_heap"
-  }
-
-  type_method Buffer.asMutBytes {
-    signature: "(): Slice<u8>"
-    receiver: "Buffer"
-    doc: "Borrow this buffer as a mutable Slice<u8> view"
-    allocation: "no_heap"
-  }
-
-  type_method Buffer.borrowPtr {
-    signature: "(): MutPtr<u8>"
-    receiver: "Buffer"
-    doc: "Borrow the underlying mutable pointer; requires unsafe at the call site"
-    allocation: "no_heap"
-  }
-
-  type_method Buffer.resize {
-    signature: "(n: i64): bool"
-    receiver: "Buffer"
-    doc: "Resize this buffer; returns false on allocation failure"
-    allocation: "may_heap"
-    receiver_mode: "ref"
   }
 
 }

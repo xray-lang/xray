@@ -13,27 +13,23 @@
  * one or more XR_STDLIB_VM_BIND_CLASS_<CLASS> macros before including it.
  */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_BUFFER
-static void xr_stdlib_vm_register_buffer_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_buffer_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS___BUFFER_STORAGE
+static void xr_stdlib_vm_register___buffer_storage_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register___buffer_storage_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_buffer_class_generated: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_buffer_class_generated: super class not registered");
-    XR_DCHECK(core->memBufferClass == NULL, "xr_stdlib_vm_register_buffer_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Buffer", core->objectClass);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_buffer_class_generated: builder alloc failed");
-    xr_class_builder_set_native_body(builder, &g_mem_buffer_body_desc);
-    xr_class_builder_add_method(builder, "asBytes", mem_buffer_as_bytes, 0, 0);
-    xr_class_builder_add_method(builder, "asMutBytes", mem_buffer_as_mut_bytes, 0, 0);
-    xr_class_builder_add_method(builder, "borrowPtr", mem_buffer_borrow_ptr, 0, 0);
-    xr_class_builder_add_method(builder, "resize", mem_buffer_resize, 1, 0);
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register___buffer_storage_class_generated: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register___buffer_storage_class_generated: super class not registered");
+    XR_DCHECK(core->memBufferClass == NULL, "xr_stdlib_vm_register___buffer_storage_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "__BufferStorage", core->objectClass);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register___buffer_storage_class_generated: builder alloc failed");
+    xr_class_builder_set_native_body(builder, xr_buffer_native_body_desc());
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_buffer_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register___buffer_storage_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
     cls->builtin_kind = XR_BK_BUFFER;
     core->memBufferClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_BUFFER */
+#endif  /* XR_STDLIB_VM_BIND_CLASS___BUFFER_STORAGE */
 
 #ifdef XR_STDLIB_VM_BIND_CLASS_NET_CONN
 static void xr_stdlib_vm_register_net_conn_class_generated(XrVMRuntime *X) {
@@ -76,25 +72,5 @@ static void xr_stdlib_vm_register_net_listener_class_generated(XrVMRuntime *X) {
     core->netListenerClass = cls;
 }
 #endif  /* XR_STDLIB_VM_BIND_CLASS_NET_LISTENER */
-
-#ifdef XR_STDLIB_VM_BIND_CLASS_REGEX
-static void xr_stdlib_vm_register_regex_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_regex_class_generated: NULL isolate");
-    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_regex_class_generated: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "xr_stdlib_vm_register_regex_class_generated: super class not registered");
-    XR_DCHECK(core->regexClass == NULL, "xr_stdlib_vm_register_regex_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Regex", core->objectClass);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_regex_class_generated: builder alloc failed");
-    xr_class_builder_add_field(builder, "pattern", 0);
-    xr_class_builder_add_field(builder, "flags", 0);
-    xr_class_builder_add_field(builder, "prog", 0);
-    XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_regex_class_generated: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN;
-    cls->builtin_kind = XR_BK_REGEX;
-    core->regexClass = cls;
-}
-#endif  /* XR_STDLIB_VM_BIND_CLASS_REGEX */
 
 /* clang-format on */

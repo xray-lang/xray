@@ -1959,7 +1959,7 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
     }
 }
 
-static void xa_register_native_return_ownership(XaSymbolLinks *links,
+static void xa_register_native_return_ownership(XrVMRuntime *X, XaSymbolLinks *links,
                                                 XaBuiltinReturnOwnership ownership) {
     if (!links)
         return;
@@ -1985,6 +1985,38 @@ static void xa_register_native_return_ownership(XaSymbolLinks *links,
                 links->return_ownership.complete = true;
             }
             break;
+        }
+    }
+    /* A bodyless provider can lend a Slice from an opaque owner even though
+     * the owner's nominal type is not itself a contiguous collection.  The
+     * generated return_ownership contract is the authority for that
+     * relationship; publish the same fact through the ordinary view-origin
+     * channel so source wrappers can compose it just like a source function
+     * declared with `from parameter`.
+     *
+     * Mutable Slice returns intentionally stay out of this channel: Xray only
+     * permits borrowed Slice results to be const, while scoped mutable access
+     * is expressed by a callback API. */
+    XrType *type = links->type;
+    XrType *return_type = type && XR_TYPE_IS_FUNCTION(type) ? type->function.return_type : NULL;
+    if (return_type && XR_TYPE_IS_SLICE(return_type) && return_type->is_const) {
+        XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_STATIC, .param_ordinal = -1};
+        bool has_origin = ownership == XA_BUILTIN_RETURN_BORROWED_STATIC;
+        int param_index = xa_builtin_return_ownership_param_index(ownership);
+        if (param_index >= 0) {
+            origin.kind = XR_VIEW_ORIGIN_PARAM;
+            origin.param_ordinal = (int16_t) param_index;
+            has_origin = true;
+        }
+        if (has_origin && xr_type_function_set_view_origins(X, type, &origin, 1, false)) {
+            links->return_view.origins = (XrViewOrigin *) xr_malloc(sizeof(XrViewOrigin));
+            if (links->return_view.origins) {
+                links->return_view.origins[0] = origin;
+                links->return_view.origin_count = 1;
+                links->return_view.was_elided = false;
+                links->return_view.checked = true;
+                links->return_view.valid = true;
+            }
         }
     }
     /* Bodyless primitive contracts come exclusively from generated metadata;
@@ -2026,7 +2058,7 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
         links->file_path = file;
         links->module_name = mod->name;
         links->import_member_name = member->name;
-        xa_register_native_return_ownership(links, member->return_ownership);
+        xa_register_native_return_ownership(analyzer->isolate, links, member->return_ownership);
     }
 }
 

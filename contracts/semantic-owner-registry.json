@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "dfd6db4f2d5fd4e6313bdc2fde1f56dca4d9b621690fd31dc421280cb6e73e3f",
+  "canonical_fingerprint": "9743054ce3600d906852a7344b0908102084625ed37def7ea8c178fcfafdcfe2",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -1998,40 +1998,6 @@
           "consumer": "runtime",
           "path": "src/runtime/value/xvalue_truthy.c",
           "symbol": "xr_value_is_truthy"
-        }
-      ]
-    },
-    {
-      "owner": "stdlib.regex.compile-match",
-      "owner_id": "e4f44f1eb598dbb19530369822d76e8a",
-      "owner_id_hi": "0xe4f44f1eb598dbb1",
-      "owner_id_lo": "0x9530369822d76e8a",
-      "category": "shared-semantic-kernel",
-      "operations": [
-        "xi.regex.compile"
-      ],
-      "consumers": [
-        "semantic-plan",
-        "vm",
-        "runtime"
-      ],
-      "consumer_bits": "0x00000023",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        },
-        {
-          "consumer": "vm",
-          "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "xr_regex_compile_literal"
-        },
-        {
-          "consumer": "runtime",
-          "path": "stdlib/regex/xregex_binding.c",
-          "symbol": "xr_regex_compile_literal"
         }
       ]
     },
@@ -11848,42 +11814,6 @@
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "operation": "xi.regex.compile",
-      "operation_id": "11a866995d9a96f8e462e3c1569e3fb0",
-      "operation_id_hi": "0x11a866995d9a96f8",
-      "operation_id_lo": "0xe462e3c1569e3fb0",
-      "owner": "stdlib.regex.compile-match",
-      "owner_id": "e4f44f1eb598dbb19530369822d76e8a",
-      "owner_id_hi": "0xe4f44f1eb598dbb1",
-      "owner_id_lo": "0x9530369822d76e8a",
-      "observable_contract": "stdlib/regex/regex.xr",
-      "category": "shared-semantic-kernel",
-      "consumers": [
-        "semantic-plan",
-        "vm",
-        "runtime"
-      ],
-      "consumer_bits": "0x00000023",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        },
-        {
-          "consumer": "vm",
-          "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "xr_regex_compile_literal"
-        },
-        {
-          "consumer": "runtime",
-          "path": "stdlib/regex/xregex_binding.c",
-          "symbol": "xr_regex_compile_literal"
         }
       ]
     },

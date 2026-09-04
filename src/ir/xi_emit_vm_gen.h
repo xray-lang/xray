@@ -181,7 +181,6 @@
     X(FIXED_BYTES_CONST, xi_emit_fixed_bytes_const) \
     X(SCOPE_ENTER, xi_emit_scope_enter) \
     X(SCOPE_EXIT, xi_emit_scope_exit) \
-    X(REGEX_COMPILE, xi_emit_regex_compile) \
     X(TUPLE_NEW, xi_emit_tuple_new) \
     X(TUPLE_GET, xi_emit_tuple_get) \
     X(VARIANT_CONSTRUCT, xi_emit_variant_construct) \

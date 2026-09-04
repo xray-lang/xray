@@ -9803,7 +9803,7 @@ generic_constructor:;
      * is shared by explicit qualified construction and syntax canonicalized
      * to such a construction; the source class declaration remains the only
      * layout and constructor authority. */
-    if (!cls && !force_builtin_class && module_name && has_user_class_info)
+    if (!cls && module_name && has_user_class_info)
         cls = xi_lower_emit_import_ref(l, module_name, cname,
                                        class_links ? class_links->type : l->type_any,
                                        node ? (int) node->line : 0);

@@ -169,14 +169,11 @@ public = true
 layer = "L1"
 policy = "xray_semantic"
 semantic_source = "stdlib/mem/mem.xr"
-# Buffer is the one native class registered when its owning module loads rather
-# than up front by the prelude, so the loader has to be told to run its
-# generated registrar.
-load_time_classes = ["Buffer"]
-# The retained public rows are the ones whose meaning the compiler owns rather
-# than the source: Buffer plus its methods occupy a runtime core class slot and
-# have no public spelling in .def metadata. The layout, pointer and borrow
-# intrinsics are declared by
+# Buffer's public class and methods are source-owned. The private storage handle
+# is registered when the module loads because it carries the runtime destructor
+# that the language intentionally does not expose as a user hook.
+load_time_classes = ["__BufferStorage"]
+# Layout, pointer and borrow intrinsics are declared by
 # src/frontend/analyzer/xa_intrinsic_registry.def instead, because their result
 # type comes from an explicit type argument and they lower to backend ops
 # rather than to calls, so a .def row could only restate a signature nothing

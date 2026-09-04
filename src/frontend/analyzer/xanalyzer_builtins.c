@@ -997,6 +997,21 @@ const XaBuiltinEnum *xa_builtin_find_enum_by_name(const char *enum_name) {
     return NULL;
 }
 
+static const XaBuiltinClass *xa_builtin_find_class_by_name(const char *class_name) {
+    if (!class_name)
+        return NULL;
+    for (int i = 0; i < xa_builtin_get_module_count(); i++) {
+        const XaBuiltinModule *mod = xa_builtin_get_module_at(i);
+        if (!mod)
+            continue;
+        for (int j = 0; j < mod->class_count; j++) {
+            if (mod->classes[j].name && strcmp(mod->classes[j].name, class_name) == 0)
+                return &mod->classes[j];
+        }
+    }
+    return NULL;
+}
+
 XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
                                           const XaBuiltinObjectShape *object_shape) {
     if (!object_shape || object_shape->field_count < 0 ||
@@ -1290,6 +1305,15 @@ static size_t parse_type_find_top_pipe(const char *s, size_t len, size_t from) {
 static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_type_new_error(X);
+
+    size_t start = parse_type_skip_ws(s, len, 0);
+    size_t end = parse_type_trim_right(s, start, len);
+    s += start;
+    len = end - start;
+    if (len >= 6 && strncmp(s, "const ", 6) == 0) {
+        XrType *inner = parse_type_str(X, s + 6, len - 6);
+        return inner ? xr_type_make_const(X, inner) : xr_type_new_error(X);
+    }
 
     // Top-level union: T1 | T2 | ... . Mirrors the parser's union rule
     // in xr_parse_type_annotation, except we work on the cfunc-signature
@@ -1627,6 +1651,14 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                 type = xr_type_new_instance(X, NULL);
                 if (type)
                     type->instance.class_name = handle->name;
+            }
+            if (!type) {
+                const XaBuiltinClass *class_decl = xa_builtin_find_class_by_name(name_buf);
+                if (class_decl) {
+                    type = xr_type_new_instance(X, NULL);
+                    if (type)
+                        type->instance.class_name = class_decl->name;
+                }
             }
             if (!type) {
                 const XaBuiltinObjectShape *object_shape =

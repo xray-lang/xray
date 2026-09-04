@@ -5,14 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * mem.c - Raw-memory host leaves and Buffer ABI adapters
+ * mem.c - Raw-memory host leaves and private Buffer storage adapters
  *
  * KEY CONCEPT:
  *   Public policy lives in mem.xr. This file only binds allocator, page,
- *   overlap-move and machine-intrinsic leaves, plus the four native Buffer
- *   methods that the current runtime representation requires. Buffer storage,
- *   destruction and compiler materialization live in runtime/object/xbuffer.c
- *   so standard-library C is not a second semantic owner.
+ *   overlap-move and machine-intrinsic leaves. Buffer's public class and
+ *   methods live in mem.xr; this translation unit exposes only its private
+ *   storage operations. Storage destruction and compiler materialization live
+ *   in runtime/object/xbuffer.c.
  *
  *   Moved out per the 151 surface convergence:
  *   - Cycle-collector control + memory statistics -> `runtime` module
@@ -119,30 +119,23 @@ static XrValue mem_alloc_aligned(XrVMRuntime *isolate, XrValue *args, int argc) 
     return xr_buffer_new(isolate, n, false, a);
 }
 
-static XrValue mem_buffer_borrow_ptr(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+static XrValue mem_buffer_length(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
-    (void) args;
-    (void) argc;
-    return MEM_PTR_RESULT(xr_buffer_borrow_pointer(isolate, self));
+    return xr_int(argc >= 1 ? xr_buffer_length(args[0]) : -1);
 }
 
-static XrValue mem_buffer_as_bytes(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    return xr_buffer_byte_view(isolate, self, true);
+static XrValue mem_buffer_borrow_ptr(XrVMRuntime *isolate, XrValue *args, int argc) {
+    return MEM_PTR_RESULT(argc >= 1 ? xr_buffer_borrow_pointer(isolate, args[0]) : NULL);
 }
 
-static XrValue mem_buffer_as_mut_bytes(XrVMRuntime *isolate, XrValue self, XrValue *args,
-                                       int argc) {
-    (void) args;
-    (void) argc;
-    return xr_buffer_byte_view(isolate, self, false);
+static XrValue mem_buffer_as_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
+    return xr_buffer_byte_view(isolate, argc >= 1 ? args[0] : XR_NULL_VAL, true);
 }
 
-static XrValue mem_buffer_resize(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_INT(args[0]))
+static XrValue mem_buffer_resize(XrVMRuntime *isolate, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_INT(args[1]))
         return xr_bool(false);
-    return xr_bool(xr_buffer_resize(isolate, self, XR_TO_INT(args[0])));
+    return xr_bool(xr_buffer_resize(isolate, args[0], XR_TO_INT(args[1])));
 }
 
 static XrValue mem_page_alloc(XrVMRuntime *isolate, XrValue *args, int argc) {
@@ -216,9 +209,9 @@ static XrValue mem_nontemporal_store(XrVMRuntime *isolate, XrValue *args, int ar
     return mem_volatile_store(isolate, args, argc);
 }
 
-#define XR_STDLIB_VM_BIND_CLASS_BUFFER 1
+#define XR_STDLIB_VM_BIND_CLASS___BUFFER_STORAGE 1
 #include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_CLASS_BUFFER
+#undef XR_STDLIB_VM_BIND_CLASS___BUFFER_STORAGE
 
 #define XR_STDLIB_VM_BIND_MODULE_MEM 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
