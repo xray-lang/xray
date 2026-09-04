@@ -148,7 +148,7 @@ class = "runtime_leaf"
 abi = "none; transfers an opaque NetConn body into the synchronized cluster node registry and scheduler-owned reader and writer coroutines"
 ownership = "none"
 effect = "nothrow"
-provider = "the native NetConn representation, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it, together with source-owned reader and writer dispatchers"
+provider = "the native NetConn representation, sole peer-resource factory, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it, together with source-owned reader and writer dispatchers"
 deletion_trigger = "when the live cluster node registry, output queue and transport coroutine lifecycle are expressible as Xray-owned module state"
 
 [[leaf]]

@@ -35,44 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void cluster_node_close(XrClusterNode *node);
-
-/* ========== Node Lifecycle ========== */
-
-XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port,
-                                double expected_heartbeat_interval_ms,
-                                size_t output_queue_high_watermark) {
-    XrClusterNode *node = (XrClusterNode *) xr_calloc(1, sizeof(XrClusterNode));
-    if (!node)
-        return NULL;
-
-    atomic_store(&node->ref_count, 1);
-    atomic_store(&node->shutdown_started, false);
-    if (name) {
-        strncpy(node->name, name, XR_NODE_NAME_MAX);
-        node->name[XR_NODE_NAME_MAX] = '\0';
-    }
-    if (host) {
-        strncpy(node->host, host, sizeof(node->host) - 1);
-    }
-    node->port = port;
-    node->state = XR_NODE_IDLE;
-    node->conn = NULL;
-    node->last_heartbeat_sent = 0;
-    node->last_heartbeat_recv = 0;
-    node->missed_heartbeats = 0;
-    node->outq = xr_cluster_output_queue_new(output_queue_high_watermark);
-    if (!node->outq) {
-        xr_free(node);
-        return NULL;
-    }
-    atomic_store(&node->writer_running, false);
-    atomic_store(&node->writer_exited, false);
-    atomic_store(&node->reader_running, false);
-    xr_phi_detector_init(&node->phi, expected_heartbeat_interval_ms);
-    node->next = NULL;
-    return node;
-}
+/* ========== Peer Resource Provider ========== */
 
 void cluster_node_retain(XrClusterNode *node) {
     XR_DCHECK(node != NULL, "cluster node retain requires a node");
@@ -96,32 +59,21 @@ void cluster_node_shutdown(XrClusterNode *node) {
      *   2. Stop the output queue. Its provider closes the write end of the
      *      wakeup pair, so xr_socket_read on the read end returns 0 (EOF),
      *      wakes the coroutine, and lets the writer exit.
-     *   3. Close the peer socket. Any in-flight send fails cleanly;
+     *   3. Shut down the peer socket. Any in-flight send fails cleanly;
      *      the writer loop's early checks on node->conn bail out.
      *   4. The writer and reader each own a reference. The last release
      *      destroys the queue and node only after both coroutines have
      *      returned, so shutdown never waits on a worker that may be
      *      needed to run those coroutines.
-     *
-     * The bounded wait is 500ms total at 1ms granularity; in the
-     * common case the writer exits within the first or second poll.
-     * If we truly time out (pathological scheduler starvation) we
-     * proceed anyway — the kernel's fd close will eventually wake
-     * any stuck reader with EBADF.
      */
     atomic_store(&node->writer_running, false);
     xr_cluster_output_queue_stop(node->outq);
-    cluster_node_close(node);
-}
-
-static void cluster_node_destroy(XrClusterNode *node) {
-    XR_DCHECK(atomic_load(&node->shutdown_started), "cluster node destroyed before shutdown");
-    if (node->conn) {
-        xr_io_close(node->conn);
-        node->conn = NULL;
-    }
-    xr_cluster_output_queue_destroy(node->outq);
-    xr_free(node);
+    node->state = XR_NODE_CLOSING;
+    /* Keep XrIOConn allocated until the last reader/writer reference exits.
+     * shutdown(2) wakes concurrent socket I/O without letting the fd or the
+     * connection object be reused underneath an in-flight coroutine. */
+    if (node->conn && node->conn->fd >= 0)
+        (void) shutdown(node->conn->fd, XR_SHUT_RDWR);
 }
 
 void cluster_node_release(XrClusterNode *node) {
@@ -131,19 +83,14 @@ void cluster_node_release(XrClusterNode *node) {
     XR_DCHECK(previous > 0, "cluster node reference underflow");
     if (previous == 1) {
         cluster_node_shutdown(node);
-        cluster_node_destroy(node);
+        XR_DCHECK(atomic_load(&node->shutdown_started), "cluster node destroyed before shutdown");
+        if (node->conn) {
+            xr_io_close(node->conn);
+            node->conn = NULL;
+        }
+        xr_cluster_output_queue_destroy(node->outq);
+        xr_free(node);
     }
-}
-
-static void cluster_node_close(XrClusterNode *node) {
-    if (!node)
-        return;
-    node->state = XR_NODE_CLOSING;
-    /* Keep XrIOConn allocated until the last reader/writer reference exits.
-     * shutdown(2) wakes concurrent socket I/O without letting the fd or the
-     * connection object be reused underneath an in-flight coroutine. */
-    if (node->conn && node->conn->fd >= 0)
-        (void) shutdown(node->conn->fd, XR_SHUT_RDWR);
 }
 
 /* ========== Frame Send/Recv ========== */

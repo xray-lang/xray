@@ -132,9 +132,6 @@ typedef struct XrClusterNode {
     struct XrClusterNode *next;
 } XrClusterNode;
 
-XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port,
-                                double expected_heartbeat_interval_ms,
-                                size_t output_queue_high_watermark);
 void cluster_node_retain(XrClusterNode *node);
 void cluster_node_shutdown(XrClusterNode *node);
 void cluster_node_release(XrClusterNode *node);

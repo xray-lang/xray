@@ -380,13 +380,29 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
     }
 
-    XrClusterNode *node =
-        cluster_node_new(name->data, host->data, (uint16_t) port, (double) heartbeat_interval_ms,
-                         cluster->output_queue_high_watermark);
+    XrClusterNode *node = (XrClusterNode *) xr_calloc(1, sizeof(*node));
     if (!node) {
         xr_net_conn_close(handle);
         return xr_bool(false);
     }
+    atomic_store(&node->ref_count, 1);
+    atomic_store(&node->shutdown_started, false);
+    strncpy(node->name, name->data, XR_NODE_NAME_MAX);
+    node->name[XR_NODE_NAME_MAX] = '\0';
+    strncpy(node->host, host->data, sizeof(node->host) - 1);
+    node->port = (uint16_t) port;
+    node->state = XR_NODE_IDLE;
+    node->outq = xr_cluster_output_queue_new(cluster->output_queue_high_watermark);
+    if (!node->outq) {
+        xr_free(node);
+        xr_net_conn_close(handle);
+        return xr_bool(false);
+    }
+    atomic_store(&node->writer_running, false);
+    atomic_store(&node->writer_exited, false);
+    atomic_store(&node->reader_running, false);
+    xr_phi_detector_init(&node->phi, (double) heartbeat_interval_ms);
+
     node->conn = xr_io_conn_take_net_handle(handle, XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
     if (!node->conn) {
         cluster_node_release(node);
