@@ -3140,7 +3140,7 @@ TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
     TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan.bundle),
                  "native-direct mutation installed verified emission plans");
 
-    ref->member_name = "__connFd";
+    ref->member_name = "__writeBytes";
     char *mutated_code = NULL;
     size_t mutated_size = 0;
     FILE *stream = xr_open_memstream(&mutated_code, &mutated_size);
@@ -3150,7 +3150,7 @@ TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
                  "native-direct mutation output stream closed");
     TEST_REQUIRE(xi_cgen_has_error(ctx),
                  "live native member mutation cannot borrow the frozen call authority");
-    TEST_REQUIRE(!contains(mutated_code, "xrt_net_fd("),
+    TEST_REQUIRE(!contains(mutated_code, "xrt_net_write_bytes("),
                  "raw stdlib registry cannot bypass the verified native-direct view");
 
     xr_free(mutated_code);
