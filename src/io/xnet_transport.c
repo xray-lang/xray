@@ -24,6 +24,7 @@
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
 #include "xnet_transport.h"
+#include "xnet_handle.h"
 #include "xdns.h"
 #include "../coro/xworker.h"
 #include "../runtime/xisolate_internal.h"
@@ -303,6 +304,33 @@ XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_ms) {
     conn->timeout_ms = timeout_ms > 0 ? timeout_ms : 30000;
     conn->last_error = XR_NERR_OK;
     conn->X = X;
+    return conn;
+}
+
+XrIOConn *xr_io_conn_take_net_handle(XrNetConn *handle, int timeout_ms) {
+    if (!handle || handle->closed || handle->fd < 0 || handle->kind == XR_NETCONN_UDP)
+        return NULL;
+
+    XrIOConn *conn = (XrIOConn *) xr_calloc(1, sizeof(XrIOConn));
+    if (!conn)
+        return NULL;
+    conn->fd = handle->fd;
+    conn->tls = (XrTlsConn *) handle->tls_state;
+    conn->is_tls = handle->kind == XR_NETCONN_TLS;
+    conn->timeout_ms = timeout_ms > 0 ? timeout_ms : 30000;
+    conn->last_error = XR_NERR_OK;
+    conn->X = handle->isolate;
+
+    XrRuntime *runtime = handle->isolate && handle->isolate->vm.scheduler
+                             ? (XrRuntime *) handle->isolate->vm.scheduler
+                             : NULL;
+    conn->pd = runtime ? xr_fdmap_get(&runtime->netpoll, handle->fd) : NULL;
+
+    handle->fd = -1;
+    handle->tls_state = NULL;
+    handle->closed = true;
+    handle->last_error = XR_NETERR_CLOSED;
+    handle->last_errno = 0;
     return conn;
 }
 

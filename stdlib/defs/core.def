@@ -2040,6 +2040,12 @@ module cluster {
     doc: "Private scalar snapshot read from the cluster runtime"
   }
 
+  object __ClusterJoinConfig {
+    fields: "const secret: string, const tlsEnabled: bool"
+    exact: true
+    doc: "Private immutable configuration needed by the source-owned outbound join handshake"
+  }
+
   fn __start {
     signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, heartbeatTickMs: i64, phiMinSamples: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64, tombstoneRetentionMs: i64): bool"
     doc: "Start the backend-neutral cluster runtime from normalized scalar configuration and the health policy cluster.xr decides"
@@ -2053,18 +2059,52 @@ module cluster {
     caps: "channel"
   }
 
-  fn __join {
-    signature: "(host: string, port: i64): bool"
-    doc: "Join cluster at a host and port cluster.xr already parsed, without blocking the scheduler worker"
-    vm: "cluster_join"
-    vm_binding: "yieldable"
-    argc: 2
-    arg_spec: "sv"
-    aot: "xrt_cluster_join"
-    aot_direct: true
-    link_object: true
+  fn __joinConfig {
+    signature: "(): __ClusterJoinConfig?"
+    doc: "Snapshot the runtime-owned secret and TLS switch for the source-owned outbound join handshake"
+    vm: "cluster_join_config_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
     layer: "runtime"
-    caps: "channel"
+    return_ownership: "fresh"
+  }
+
+  fn __recentlyDeparted {
+    signature: "(name: string): bool"
+    doc: "Project whether a node name is present in the locked recent-departure registry"
+    vm: "cluster_recently_departed_fn"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __joinTls {
+    signature: "(conn: NetConn, hostname: string, deadlineMs: i64): i64"
+    doc: "Promote an outbound cluster socket with the cluster-specific TLS client context"
+    vm: "cluster_join_tls_fn"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: "vsv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "coro,netpoll"
+  }
+
+  fn __adoptPeer {
+    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64): bool"
+    doc: "Transfer an authenticated socket into the locked cluster node registry and start its transport providers"
+    vm: "cluster_adopt_peer_fn"
+    argc: 5
+    arg_spec: "vssvv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "coro,channel"
   }
 
   fn __self {

@@ -98,6 +98,13 @@ bool xr_net_conn_is_closed(const XrNetConn *c) {
     return !c || c->closed || c->fd < 0;
 }
 
+XrNetConn *xr_net_conn_from_value(XrValue value) {
+    if (!XR_IS_PTR(value) || XR_HEAP_TYPE(value) != XR_TINSTANCE)
+        return NULL;
+    XrNetConn *conn = (XrNetConn *) XR_VALUE_GCPTR(value);
+    return conn->klass && conn->klass->builtin_kind == XR_BK_NETCONN ? conn : NULL;
+}
+
 int xr_net_listener_fd(const XrNetListener *l) {
     return l ? l->fd : -1;
 }

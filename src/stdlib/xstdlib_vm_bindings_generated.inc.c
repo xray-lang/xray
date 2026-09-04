@@ -27,7 +27,13 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     (void) expected_count;
     XRS_EXPORT(module, isolate, "__start", cluster_start_primitive);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__join", cluster_join);
+    XRS_EXPORT(module, isolate, "__joinConfig", cluster_join_config_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__recentlyDeparted", cluster_recently_departed_fn);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__joinTls", cluster_join_tls_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__adoptPeer", cluster_adopt_peer_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__self", cluster_self);
     expected_count++;

@@ -351,9 +351,6 @@ int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
 
-// Start a netpoll-driven outgoing join without blocking the caller's worker.
-bool cluster_runtime_join_spawn(XrCluster *c, const char *host, uint16_t port);
-
 // Stop the cluster and close all connections
 void cluster_runtime_stop(XrCluster *c);
 

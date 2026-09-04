@@ -40,7 +40,7 @@
 import crypto
 import math
 import net
-import { NetError } from net
+import { DialOptions, NetError } from net
 import time
 
 // ========== Protocol constants ==========
@@ -120,6 +120,8 @@ export const DISCOVERY_INTERVAL_MS = 3000
 const _DISCOVERY_MULTICAST_TTL = 1
 const _DISCOVERY_LOOPBACK = false
 const _DISCOVERY_ANNOUNCEMENT_MAX_SIZE = 128
+const _CLUSTER_PROTOCOL_FLAGS = 0x01
+const _HANDSHAKE_FRAME_BODY_MAX = 513
 
 // Discovery is a source coroutine, so its identity and stop signal also live
 // in source. Tokens prevent a retiring loop from clearing a newer loop after a
@@ -603,7 +605,141 @@ fn _liveDiscoveryTombstoneNames(tombstones: ref Array<_DiscoveryTombstone>,
     return names
 }
 
-fn _joinDiscoveredNode(host: string, port: i64) { __join(host, port) }
+fn _hexNibble(c: rune) -> i64 {
+    var n = c.toUInt32()
+    if (n >= 48 && n <= 57) { return (n - 48) as i64 }
+    if (n >= 65 && n <= 70) { return (n - 55) as i64 }
+    if (n >= 97 && n <= 102) { return (n - 87) as i64 }
+    return -1
+}
+
+fn _handshakeNonce() -> Array<u8>? {
+    var hex = crypto.randomBytes(NONCE_SIZE)
+    if (len(hex) != NONCE_SIZE * 2) { return null }
+    var nonce = Array<u8>(NONCE_SIZE)
+    for (var i = 0; i < NONCE_SIZE; i++) {
+        var hi = _hexNibble(hex.runes().nth(i * 2))
+        var lo = _hexNibble(hex.runes().nth(i * 2 + 1))
+        if (hi < 0 || lo < 0) { return null }
+        nonce[i] = (((hi << 4) | lo) & 255) as u8
+    }
+    return nonce
+}
+
+fn _readExact(conn: NetConn, count: i64) -> Array<u8>? {
+    if (count <= 0) { return null }
+    var out: Array<u8> = []
+    while (len(out) < count) {
+        var remaining = count - len(out)
+        var chunk = Array<u8>(remaining)
+        var n = net.readInto(conn, ref chunk, remaining)
+        if (n <= 0) { return null }
+        _appendBytes(ref out, chunk)
+    }
+    return out
+}
+
+fn _readHandshakeFrame(conn: NetConn) -> ClusterFrame? {
+    var header = _readExact(conn, FRAME_HEADER_SIZE)
+    if (header == null) { return null }
+    var bodySize = _readU32(header!, 0)
+    if (bodySize < 1 || bodySize > _HANDSHAKE_FRAME_BODY_MAX) { return null }
+    var body = _readExact(conn, bodySize)
+    if (body == null) { return null }
+    var wire = header!
+    _appendBytes(ref wire, body!)
+    return decodeFrame(wire)
+}
+
+fn _mayPublishJoinedPeer(name: string) -> bool {
+    if (name == self() || __recentlyDeparted(name)) { return false }
+    var connected = nodes()
+    if (connected == null) { return false }
+    for (var i = 0; i < len(connected!); i++) {
+        if (connected![i] == name) { return false }
+    }
+    return true
+}
+
+// Fold dial's error into a nullable result before establishing the unique
+// local that is eventually transferred into the node registry.
+fn _dialJoinPeer(host: string, port: i64, timeoutMs: i64) -> NetConn? {
+    try {
+        return net.dial(host, port, DialOptions(timeoutMs, false))
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+fn _joinPeer(host: string, port: i64) -> bool {
+    var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
+    var pending = _dialJoinPeer(host, port, HANDSHAKE_TIMEOUT_MS)
+    if (pending == null) { return false }
+    var live: NetConn = pending!
+    pending = null
+    if (!net.setDeadline(live, deadline)) {
+        net.close(live)
+        return false
+    }
+
+    var config = __joinConfig()
+    if (config == null) {
+        net.close(live)
+        return false
+    }
+    if (config!.tlsEnabled && __joinTls(live, host, deadline) != 0) {
+        // The TLS provider consumes the failed socket, matching net.upgradeTLS.
+        return false
+    }
+
+    var nonce = _handshakeNonce()
+    if (nonce == null) {
+        net.close(live)
+        return false
+    }
+    var requestValue: ClusterHandshakeRequest = {
+        name: self(), nonce: nonce!, flags: _CLUSTER_PROTOCOL_FLAGS,
+    }
+    var request = encodeHandshakeRequest(requestValue)
+    if (request == null || net.writeBytes(live, request!) != len(request!)) {
+        net.close(live)
+        return false
+    }
+
+    var frame = _readHandshakeFrame(live)
+    if (frame == null || frame!.kind != FRAME_HANDSHAKE_ACK) {
+        net.close(live)
+        return false
+    }
+    var ack = decodeHandshakeAck(frame!.payload)
+    if (ack == null) {
+        net.close(live)
+        return false
+    }
+    var expected = computeHandshakeProof(config!.secret, nonce!)
+    if (expected == null || !handshakeProofEqual(expected!, ack!.proof)) {
+        net.close(live)
+        return false
+    }
+
+    var doneProof = computeHandshakeProof(config!.secret, ack!.nonce)
+    if (doneProof == null) {
+        net.close(live)
+        return false
+    }
+    var done = encodeHandshakeDone(doneProof!)
+    if (done == null || net.writeBytes(live, done!) != len(done!)) {
+        net.close(live)
+        return false
+    }
+    if (!_mayPublishJoinedPeer(ack!.name)) {
+        net.close(live)
+        return false
+    }
+    return __adoptPeer(move live, ack!.name, host, port, ack!.flags)
+}
+
+fn _joinDiscoveredNode(host: string, port: i64) { _joinPeer(host, port) }
 
 fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName: string,
                   expectedHash: u64, announcement: move Array<u8>, token: i64) {
@@ -1085,7 +1221,7 @@ export fn start(config: ClusterConfig) -> bool {
 // same false.
 export fn join(addr: string) -> bool {
     var parsed = parseAddress(addr)
-    return __join(parsed.host, parsed.port)
+    return _joinPeer(parsed.host, parsed.port)
 }
 
 export fn stop() {

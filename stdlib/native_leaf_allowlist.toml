@@ -87,6 +87,16 @@ deletion_trigger = "when cluster runtime state is exposed through scalar accesso
 
 [[leaf]]
 module = "cluster"
+symbol = "__ClusterJoinConfig"
+class = "native_record_shape_leaf"
+abi = "none; a record layout, not a call"
+ownership = "none"
+effect = "nothrow"
+provider = "declaration only (stdlib/defs/core.def). The VM fills the immutable record from the runtime secret and TLS switch before cluster.xr performs the outbound handshake"
+deletion_trigger = "when cluster runtime configuration is stored directly in module-level Xray state instead of the native cluster object"
+
+[[leaf]]
+module = "cluster"
 symbol = "__discoveryOpen"
 class = "host_abi_leaf"
 abi = "socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP"
@@ -107,13 +117,43 @@ deletion_trigger = "when the cluster runtime's node tables and counters are reac
 
 [[leaf]]
 module = "cluster"
-symbol = "__join"
+symbol = "__joinConfig"
+class = "runtime_leaf"
+abi = "none; reads two immutable fields from the running cluster object"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the VM cluster runtime configuration (stdlib/cluster/cluster.c cluster_join_config_fn). It only snapshots the secret and TLS switch; cluster.xr owns every outbound handshake decision"
+deletion_trigger = "when the secret and TLS switch passed to cluster.start can live in module-level Xray state"
+
+[[leaf]]
+module = "cluster"
+symbol = "__recentlyDeparted"
+class = "runtime_leaf"
+abi = "none; queries the synchronized tombstone registry at the current monotonic time"
+ownership = "none"
+effect = "nothrow"
+provider = "the locked runtime tombstone registry (stdlib/cluster/cluster.c cluster_recently_departed_fn). cluster.xr decides that a live tombstone refuses publication"
+deletion_trigger = "when the shared tombstone registry and its synchronization are representable as module-level Xray state"
+
+[[leaf]]
+module = "cluster"
+symbol = "__joinTls"
 class = "host_abi_leaf"
-abi = "getaddrinfo(3), socket(2), non-blocking connect(2), getsockopt(2) SO_ERROR, send/recv; OpenSSL SSL_do_handshake(3) when TLS is on; the platform CSPRNG for the handshake nonce"
+abi = "OpenSSL client handshake plus the scheduler netpoll wait ABI"
 ownership = "none"
 effect = "suspends"
-provider = "kernel connect(2) plus, on the VM, the Xray netpoll for the wait and OpenSSL for the handshake (stdlib/cluster/cluster.c cluster_join). AOT uses the blocking handshake and opaque reader/writer peer provider in src/io/xcluster_blocking.c, while both backends share the allocation-free handshake and connected-frame projections; it still uses two OS threads per node, no netpoll and no TLS. The leaf takes a host and a port, not an address: the grammar is parseAddress in cluster.xr, which both backends compile, and neither half parses one any more"
-deletion_trigger = "when cluster.xr can reach a peer over net.__connectFd and net.__tlsHandshake instead of the module's own socket path, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
+provider = "the generic non-blocking NetConn TLS provider (src/io/xnet_provider.c) parameterized by the cluster runtime's client context. cluster.xr chooses whether, when and under which absolute deadline it runs"
+deletion_trigger = "when a caller-supplied TLS context is an ordinary Xray value accepted by net.upgradeTLS"
+
+[[leaf]]
+module = "cluster"
+symbol = "__adoptPeer"
+class = "runtime_leaf"
+abi = "none; transfers an opaque NetConn body into the synchronized cluster node registry and scheduler-owned reader and writer coroutines"
+ownership = "none"
+effect = "nothrow"
+provider = "the native NetConn representation, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it"
+deletion_trigger = "when the live cluster node registry, output queue and transport coroutine lifecycle are expressible as Xray-owned module state"
 
 [[leaf]]
 module = "cluster"

@@ -35,6 +35,7 @@
 #include "../os/os_net.h"
 
 struct XrVMRuntime;
+struct XrNetConn;
 
 /* ========== I/O Connection Context ========== */
 
@@ -101,6 +102,11 @@ XR_FUNC int xr_io_listen(const char *addr, int port, int backlog);
  * automatically.
  */
 XR_FUNC XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_ms);
+
+/* Move a script-visible stream handle into the cluster transport wrapper.
+ * The handle is closed to further script I/O without closing its fd/TLS state;
+ * the returned XrIOConn becomes their sole owner. */
+XR_FUNC XrIOConn *xr_io_conn_take_net_handle(struct XrNetConn *handle, int timeout_ms);
 
 /* ========== Utility Functions ========== */
 

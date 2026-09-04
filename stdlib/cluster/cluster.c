@@ -17,6 +17,8 @@
 #include "../../stdlib/common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe
 #include "../../src/io/xnet_transport.h"
+#include "../../src/io/xnet_handle.h"
+#include "../../src/io/xnet_provider.h"
 #include "../../src/io/xcluster_discovery_provider.h"
 #include "../../src/runtime/object/xbuffer.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
@@ -29,7 +31,6 @@
 #include "../../src/coro/xsocket.h"
 #include "../../src/coro/xworker.h"
 #include "../../src/coro/xyieldable.h"
-#include "../../src/io/xdns.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/base/xhash.h"
@@ -672,6 +673,12 @@ bool cluster_node_add(XrCluster *c, XrClusterNode *node) {
         xr_amutex_unlock(&c->nodes_lock);
         return false;
     }
+    for (XrClusterNode *existing = c->nodes; existing; existing = existing->next) {
+        if (strcmp(existing->name, node->name) == 0) {
+            xr_amutex_unlock(&c->nodes_lock);
+            return false;
+        }
+    }
     node->next = c->nodes;
     c->nodes = node;
     c->node_count++;
@@ -700,352 +707,89 @@ bool cluster_node_remove(XrCluster *c, XrClusterNode *node) {
     return removed;
 }
 
-typedef enum XrJoinPhase {
-    XR_JOIN_CONNECT_START,
-    XR_JOIN_CONNECT_WAIT,
-    XR_JOIN_TLS,
-    XR_JOIN_WRITE_REQUEST,
-    XR_JOIN_READ_ACK_HEADER,
-    XR_JOIN_READ_ACK_PAYLOAD,
-    XR_JOIN_WRITE_DONE,
-} XrJoinPhase;
-
-typedef struct XrJoinContext {
-    XrCluster *cluster;
-    XrClusterNode *node;
-    bool coroutine_owned;
-    XrJoinPhase phase;
-    int64_t deadline_ms;
-    int fd;
-    XrSockAddr addresses[XR_DNS_MAX_ADDRS];
-    int address_count;
-    int address_index;
-    uint8_t header[XR_FRAME_HEADER_SIZE + 1];
-    size_t header_used;
-    uint8_t payload[512];
-    uint32_t payload_len;
-    uint32_t payload_used;
-    uint8_t frame_type;
-    uint8_t write_buf[512];
-    size_t write_len;
-    size_t write_used;
-    XrFrameHandshakeReq request;
-    XrFrameHandshakeAck ack;
-    XrFrameHandshakeDone done;
-} XrJoinContext;
-
-static void cluster_join_context_destroy(void *context) {
-    XrJoinContext *ctx = (XrJoinContext *) context;
-    if (!ctx)
-        return;
-    if (ctx->fd >= 0) {
-        xr_closesocket((xr_socket_t) ctx->fd);
-        ctx->fd = -1;
-    }
-    if (ctx->node) {
-        cluster_node_shutdown(ctx->node);
-        cluster_node_release(ctx->node);
-    }
-    xr_secure_wipe(&ctx->request, sizeof(ctx->request));
-    xr_secure_wipe(&ctx->ack, sizeof(ctx->ack));
-    xr_secure_wipe(&ctx->done, sizeof(ctx->done));
-    xr_secure_wipe(ctx->payload, sizeof(ctx->payload));
-    xr_secure_wipe(ctx->write_buf, sizeof(ctx->write_buf));
-    cluster_runtime_release(ctx->cluster);
-    xr_free(ctx);
-}
-
-static XrCFuncResult cluster_join_finish(XrJoinContext *ctx, bool success, XrValue *result) {
-    *result = xr_bool(success);
-    if (!ctx->coroutine_owned)
-        cluster_join_context_destroy(ctx);
-    return XR_CFUNC_DONE;
-}
-
-static bool cluster_join_adopt_fd(XrJoinContext *ctx) {
-    XrIOConn *conn = (XrIOConn *) xr_calloc(1, sizeof(*conn));
-    if (!conn)
-        return false;
-    conn->fd = ctx->fd;
-    conn->timeout_ms = XR_CLUSTER_HANDSHAKE_TIMEOUT_MS;
-    conn->last_error = XR_NERR_OK;
-    conn->X = ctx->cluster->isolate;
-    ctx->fd = -1;
-    ctx->node->conn = conn;
-    ctx->node->state = XR_NODE_HANDSHAKING;
-
-    if (ctx->cluster->tls_enabled) {
-        if (!ctx->cluster->tls_client_ctx)
-            return false;
-        conn->tls = xr_tls_conn_new(ctx->cluster->tls_client_ctx, conn->fd);
-        if (!conn->tls || xr_tls_conn_set_hostname(conn->tls, ctx->node->host) != 0)
-            return false;
-        ctx->phase = XR_JOIN_TLS;
-    } else {
-        ctx->phase = XR_JOIN_WRITE_REQUEST;
-    }
-    return true;
-}
-
-static int cluster_join_open_next(XrJoinContext *ctx) {
-    ctx->node->state = XR_NODE_CONNECTING;
-    while (ctx->address_index < ctx->address_count) {
-        XrSockAddr address = ctx->addresses[ctx->address_index++];
-        int fd = (int) socket(address.family, SOCK_STREAM, 0);
-        if (fd < 0)
-            continue;
-        xr_socket_set_nonblocking((xr_socket_t) fd);
-        xr_socket_set_nodelay((xr_socket_t) fd, true);
-
-        struct sockaddr *socket_address = NULL;
-        socklen_t socket_address_len = 0;
-        if (address.family == AF_INET) {
-            address.addr.v4.sin_port = htons(ctx->node->port);
-            socket_address = (struct sockaddr *) &address.addr.v4;
-            socket_address_len = sizeof(address.addr.v4);
-        } else if (address.family == AF_INET6) {
-            address.addr.v6.sin6_port = htons(ctx->node->port);
-            socket_address = (struct sockaddr *) &address.addr.v6;
-            socket_address_len = sizeof(address.addr.v6);
-        } else {
-            xr_closesocket((xr_socket_t) fd);
-            continue;
-        }
-
-        int connect_result = connect(fd, socket_address, socket_address_len);
-        if (connect_result == 0) {
-            ctx->fd = fd;
-            return cluster_join_adopt_fd(ctx) ? 0 : -1;
-        }
-        int error = xr_get_socket_error();
-        if (xr_socket_err_is_inprogress(error)) {
-            ctx->fd = fd;
-            ctx->phase = XR_JOIN_CONNECT_WAIT;
-            return 1;
-        }
-        xr_closesocket((xr_socket_t) fd);
-    }
-    return -1;
-}
-
-static bool cluster_join_prepare_request(XrJoinContext *ctx) {
-    if (ctx->write_len != 0)
-        return true;
-    uint8_t nonce[XR_NONCE_SIZE];
-    xr_random_bytes(nonce, sizeof(nonce));
-    int frame_len =
-        xr_cluster_handshake_client_start(ctx->cluster->self_name, 0x01, nonce, &ctx->request,
-                                          ctx->write_buf, sizeof(ctx->write_buf));
-    xr_secure_wipe(nonce, sizeof(nonce));
-    if (frame_len < 0)
-        return false;
-    ctx->write_len = (size_t) frame_len;
-    return true;
-}
-
-static void cluster_join_reset_read(XrJoinContext *ctx, XrJoinPhase phase) {
-    ctx->phase = phase;
-    ctx->header_used = 0;
-    ctx->payload_len = 0;
-    ctx->payload_used = 0;
-    ctx->frame_type = 0;
-}
-
-static XrCFuncResult cluster_join_drive(XrVMRuntime *X, XrJoinContext *ctx, XrValue *result);
-
-static XrCFuncResult cluster_join_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                           void *context, XrValue *result) {
-    (void) resume_value;
-    XrJoinContext *ctx = (XrJoinContext *) context;
-    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR)
-        return cluster_join_finish(ctx, false, result);
-    return cluster_join_drive(X, ctx, result);
-}
-
-static XrCFuncResult cluster_join_wait(XrVMRuntime *X, XrJoinContext *ctx, int events,
-                                       XrValue *result) {
-    int64_t remaining = ctx->deadline_ms - cluster_now_ms();
-    if (remaining <= 0)
-        return cluster_join_finish(ctx, false, result);
-    int fd = ctx->node && ctx->node->conn ? ctx->node->conn->fd : ctx->fd;
-    return xr_yield_for_io(X, fd, events, remaining, cluster_join_continue, ctx, result);
-}
-
-static bool cluster_join_verify_ack(XrJoinContext *ctx) {
-    int frame_len = xr_cluster_handshake_client_accept_ack(
-        ctx->cluster->secret, &ctx->request, ctx->payload, ctx->payload_len, &ctx->ack, &ctx->done,
-        ctx->write_buf, sizeof(ctx->write_buf));
-    if (frame_len < 0)
-        return false;
-    strncpy(ctx->node->name, ctx->ack.name, XR_NODE_NAME_MAX);
-    ctx->node->name[XR_NODE_NAME_MAX] = '\0';
-    ctx->node->flags = ctx->ack.flags;
-    ctx->write_len = (size_t) frame_len;
-    ctx->write_used = 0;
-    ctx->phase = XR_JOIN_WRITE_DONE;
-    return true;
-}
-
-static XrCFuncResult cluster_join_publish(XrJoinContext *ctx, XrValue *result) {
-    XrClusterNode *node = ctx->node;
-    node->state = XR_NODE_CONNECTED;
-    node->last_heartbeat_recv = cluster_now_ms();
-    if (xr_tombstone_registry_contains(ctx->cluster->tombstones, node->name, cluster_now_ms()) ||
-        !cluster_node_add(ctx->cluster, node))
-        return cluster_join_finish(ctx, false, result);
-    if (!cluster_node_start_io(ctx->cluster, node)) {
-        (void) cluster_node_remove(ctx->cluster, node);
-        cluster_node_shutdown(node);
-        cluster_node_release(node);
-        ctx->node = NULL;
-        return cluster_join_finish(ctx, false, result);
-    }
-    ctx->node = NULL;
-    return cluster_join_finish(ctx, true, result);
-}
-
-static XrCFuncResult cluster_join_drive(XrVMRuntime *X, XrJoinContext *ctx, XrValue *result) {
-    if (!ctx || !atomic_load(&ctx->cluster->running) || cluster_now_ms() >= ctx->deadline_ms)
-        return cluster_join_finish(ctx, false, result);
-
-    for (int operations = 0; operations < 32; operations++) {
-        if (ctx->phase == XR_JOIN_CONNECT_START) {
-            int open_result = cluster_join_open_next(ctx);
-            if (open_result < 0)
-                return cluster_join_finish(ctx, false, result);
-            if (open_result > 0)
-                return cluster_join_wait(X, ctx, XR_WAIT_WRITE, result);
-            continue;
-        }
-        if (ctx->phase == XR_JOIN_CONNECT_WAIT) {
-            int error = xr_socket_get_error((xr_socket_t) ctx->fd);
-            if (error != 0) {
-                xr_closesocket((xr_socket_t) ctx->fd);
-                ctx->fd = -1;
-                ctx->phase = XR_JOIN_CONNECT_START;
-                continue;
-            }
-            if (!cluster_join_adopt_fd(ctx))
-                return cluster_join_finish(ctx, false, result);
-            continue;
-        }
-        if (ctx->phase == XR_JOIN_TLS) {
-            int tls_result = xr_tls_conn_handshake_try(ctx->node->conn->tls);
-            if (tls_result == 1)
-                return cluster_join_wait(X, ctx, XR_WAIT_READ, result);
-            if (tls_result == 2)
-                return cluster_join_wait(X, ctx, XR_WAIT_WRITE, result);
-            if (tls_result != 0)
-                return cluster_join_finish(ctx, false, result);
-            ctx->node->conn->is_tls = true;
-            ctx->phase = XR_JOIN_WRITE_REQUEST;
-            continue;
-        }
-        if (ctx->phase == XR_JOIN_WRITE_REQUEST || ctx->phase == XR_JOIN_WRITE_DONE) {
-            if (ctx->phase == XR_JOIN_WRITE_REQUEST && !cluster_join_prepare_request(ctx))
-                return cluster_join_finish(ctx, false, result);
-            int wait_events = XR_WAIT_WRITE;
-            int written = cluster_conn_write_try(ctx->node->conn, ctx->write_buf + ctx->write_used,
-                                                 ctx->write_len - ctx->write_used, &wait_events);
-            if (written == -1)
-                return cluster_join_wait(X, ctx, wait_events, result);
-            if (written <= 0)
-                return cluster_join_finish(ctx, false, result);
-            ctx->write_used += (size_t) written;
-            if (ctx->write_used < ctx->write_len)
-                continue;
-            if (ctx->phase == XR_JOIN_WRITE_DONE)
-                return cluster_join_publish(ctx, result);
-            ctx->write_len = 0;
-            ctx->write_used = 0;
-            cluster_join_reset_read(ctx, XR_JOIN_READ_ACK_HEADER);
-            continue;
-        }
-
-        bool reading_header = ctx->phase == XR_JOIN_READ_ACK_HEADER;
-        uint8_t *target =
-            reading_header ? ctx->header + ctx->header_used : ctx->payload + ctx->payload_used;
-        size_t remaining = reading_header ? sizeof(ctx->header) - ctx->header_used
-                                          : (size_t) ctx->payload_len - ctx->payload_used;
-        int wait_events = XR_WAIT_READ;
-        int read_count = cluster_conn_read_try(ctx->node->conn, target, remaining, &wait_events);
-        if (read_count == -1)
-            return cluster_join_wait(X, ctx, wait_events, result);
-        if (read_count <= 0)
-            return cluster_join_finish(ctx, false, result);
-        if (reading_header) {
-            ctx->header_used += (size_t) read_count;
-            if (ctx->header_used < sizeof(ctx->header))
-                continue;
-            if (cluster_frame_read_header(ctx->header, sizeof(ctx->header), &ctx->frame_type,
-                                          &ctx->payload_len) != 0 ||
-                ctx->frame_type != XR_FRAME_HANDSHAKE_ACK ||
-                ctx->payload_len > sizeof(ctx->payload))
-                return cluster_join_finish(ctx, false, result);
-            ctx->phase = XR_JOIN_READ_ACK_PAYLOAD;
-            continue;
-        }
-        ctx->payload_used += (uint32_t) read_count;
-        if (ctx->payload_used < ctx->payload_len)
-            continue;
-        if (!cluster_join_verify_ack(ctx))
-            return cluster_join_finish(ctx, false, result);
-    }
-    return xr_yield(X, cluster_join_continue, ctx);
-}
-
-static XrJoinContext *cluster_join_context_new(XrCluster *cluster, const char *host, uint16_t port,
-                                               bool coroutine_owned) {
-    if (!cluster || !host || !host[0] || !port || !atomic_load(&cluster->running))
-        return NULL;
-    XrJoinContext *ctx = (XrJoinContext *) xr_calloc(1, sizeof(*ctx));
-    if (!ctx)
-        return NULL;
-    ctx->cluster = cluster;
-    ctx->coroutine_owned = coroutine_owned;
-    ctx->phase = XR_JOIN_CONNECT_START;
-    ctx->deadline_ms = cluster_now_ms() + XR_CLUSTER_HANDSHAKE_TIMEOUT_MS;
-    ctx->fd = -1;
-    ctx->node = cluster_node_new(NULL, host, port, (double) cluster->heartbeat_interval_ms);
-    if (!ctx->node) {
-        xr_free(ctx);
-        return NULL;
-    }
-    ctx->address_count =
-        xr_dns_resolve_all(cluster->isolate, host, ctx->addresses, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
-    if (ctx->address_count <= 0) {
-        cluster_node_release(ctx->node);
-        xr_free(ctx);
-        return NULL;
-    }
-    cluster_runtime_retain(cluster);
-    return ctx;
-}
-
-static XrCFuncResult cluster_join_entry(XrVMRuntime *X, void *context, XrValue *result) {
-    return cluster_join_drive(X, (XrJoinContext *) context, result);
-}
-
-bool cluster_runtime_join_spawn(XrCluster *cluster, const char *host, uint16_t port) {
-    XrJoinContext *ctx = cluster_join_context_new(cluster, host, port, true);
-    if (!ctx)
-        return false;
-    XrCoroutine *coro = xr_coro_create_native_yieldable(
-        cluster->isolate, cluster_join_entry, ctx, cluster_join_context_destroy, "cluster_join");
-    if (!coro) {
-        cluster_join_context_destroy(ctx);
-        return false;
-    }
-    xr_coro_spawn(cluster->isolate, coro);
-    return true;
-}
-
 /* ========== xray Function Bindings ========== */
 
 static bool cluster_binding_text_fits(const XrString *text, size_t max_length, bool allow_empty) {
     if (!text || (!allow_empty && text->length == 0) || text->length > max_length)
         return false;
     return memchr(text->data, '\0', text->length) == NULL;
+}
+
+static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster || argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_bool(true);
+    XrString *name = XR_TO_STRING(args[0]);
+    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false))
+        return xr_bool(true);
+    return xr_bool(
+        xr_tombstone_registry_contains(cluster->tombstones, name->data, cluster_now_ms()));
+}
+
+static XrCFuncResult cluster_join_tls_fn(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
+    XrCluster *cluster = (XrCluster *) X->cluster;
+#ifdef XR_ENABLE_TLS
+    return xr_net_tls_handshake_with_context(
+        X, args, argc, result, cluster && cluster->tls_enabled ? cluster->tls_client_ctx : NULL);
+#else
+    XrNetConn *conn = argc > 0 && args ? xr_net_conn_from_value(args[0]) : NULL;
+    if (conn)
+        xr_net_conn_close(conn);
+    *result = xr_int(XR_NETERR_TLS);
+    return XR_CFUNC_DONE;
+#endif
+}
+
+static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    XrNetConn *handle = argc > 0 ? xr_net_conn_from_value(args[0]) : NULL;
+    if (!cluster || argc < 5 || !handle || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
+        !XR_IS_INT(args[3]) || !XR_IS_INT(args[4]) || !atomic_load(&cluster->running)) {
+        if (handle)
+            xr_net_conn_close(handle);
+        return xr_bool(false);
+    }
+
+    XrString *name = XR_TO_STRING(args[1]);
+    XrString *host = XR_TO_STRING(args[2]);
+    int64_t port = XR_TO_INT(args[3]);
+    int64_t flags = XR_TO_INT(args[4]);
+    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false) ||
+        !cluster_binding_text_fits(host, XR_ADDRESS_HOST_MAX, false) || port <= 0 ||
+        port > UINT16_MAX || flags < 0 || (uint64_t) flags > UINT32_MAX) {
+        xr_net_conn_close(handle);
+        return xr_bool(false);
+    }
+
+    XrClusterNode *node = cluster_node_new(name->data, host->data, (uint16_t) port,
+                                           (double) cluster->heartbeat_interval_ms);
+    if (!node) {
+        xr_net_conn_close(handle);
+        return xr_bool(false);
+    }
+    node->conn = xr_io_conn_take_net_handle(handle, XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
+    if (!node->conn) {
+        cluster_node_release(node);
+        xr_net_conn_close(handle);
+        return xr_bool(false);
+    }
+    node->state = XR_NODE_CONNECTED;
+    node->flags = (uint32_t) flags;
+    node->last_heartbeat_recv = cluster_now_ms();
+
+    if (!cluster_node_add(cluster, node)) {
+        cluster_node_shutdown(node);
+        cluster_node_release(node);
+        return xr_bool(false);
+    }
+    if (!cluster_node_start_io(cluster, node)) {
+        if (cluster_node_remove(cluster, node)) {
+            cluster_node_shutdown(node);
+            cluster_node_release(node);
+        }
+        return xr_bool(false);
+    }
+    return xr_bool(true);
 }
 
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
@@ -1102,39 +846,6 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
                                    XR_TO_INT(args[12]), XR_TO_FLOAT(args[13]),
                                    (uint32_t) topic_fanout_max, XR_TO_INT(args[15]));
     return xr_bool(rc == 0);
-}
-
-/*
- * cluster.join(host, port) - netpoll-driven connect and mutual handshake.
- *
- * The address grammar is parseAddress in stdlib/cluster/cluster.xr and is not
- * repeated here. It used to be repeated twice: this function split on the last
- * colon and never stripped IPv6 brackets, so "[::1]:9000" reached getaddrinfo
- * as "[::1"; the AOT half stripped brackets but passed the port text straight
- * through, so "db:http" resolved as a service name and connected to port 80.
- * One grammar, one answer, and the leaf is handed a host and a port.
- */
-static XrCFuncResult cluster_join(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1])) {
-        *result = xr_bool(false);
-        return XR_CFUNC_DONE;
-    }
-
-    XrString *host = XR_TO_STRING(args[0]);
-    int64_t port_value = XR_TO_INT(args[1]);
-    if (!cluster_binding_text_fits(host, XR_ADDRESS_HOST_MAX, false) || port_value <= 0 ||
-        port_value > UINT16_MAX) {
-        *result = xr_bool(false);
-        return XR_CFUNC_DONE;
-    }
-
-    XrJoinContext *ctx = cluster_join_context_new(c, host->data, (uint16_t) port_value, false);
-    if (!ctx) {
-        *result = xr_bool(false);
-        return XR_CFUNC_DONE;
-    }
-    return cluster_join_drive(X, ctx, result);
 }
 
 // cluster.self() - returns node name
@@ -1294,6 +1005,21 @@ static XrValue cluster_listen_fn(XrVMRuntime *X, XrValue *args, int argc) {
 static XrObjectInstance *cluster_object_new(XrVMRuntime *X, const char *name) {
     XrClass *cls = xr_stdlib_record_class_get(X, "cluster", name);
     return cls ? xr_object_instance_new_with_class(NULL, cls) : NULL;
+}
+
+static XrValue cluster_join_config_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster || !atomic_load(&cluster->running))
+        return xr_null();
+    XrObjectInstance *config = cluster_object_new(X, "__ClusterJoinConfig");
+    if (!config)
+        return xr_null();
+    XrString *secret = xr_string_intern(X, cluster->secret, (uint32_t) strlen(cluster->secret), 0);
+    xr_object_instance_set_by_key(X, config, "secret", xr_string_value(secret));
+    xr_object_instance_set_by_key(X, config, "tlsEnabled", xr_bool(cluster->tls_enabled));
+    return xr_object_instance_value(config);
 }
 
 static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {

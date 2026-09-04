@@ -27,6 +27,7 @@
 #include "../module/xstdlib_runtime_cache.h"
 #include "xdns.h"
 #include "xnet_handle.h"
+#include "xnet_provider.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_builder.h"
 #include "../runtime/class/xclass_system.h"
@@ -1442,8 +1443,8 @@ static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState
  * forces module-wide discrimination that miscompiles suspended handle
  * results inside coroutine frames.
  */
-static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
-                                                 XrValue *result) {
+XrCFuncResult xr_net_tls_handshake_with_context(XrVMRuntime *X, XrValue *args, int nargs,
+                                                XrValue *result, XrTlsContext *context) {
     if (nargs < 3 || !XR_IS_STRING(args[1]) || !XR_IS_INT(args[2])) {
         *result = xr_int(XR_NETERR_INVALID);
         return XR_CFUNC_DONE;
@@ -1457,14 +1458,13 @@ static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, 
         return XR_CFUNC_DONE;
     }
 
-    XrTlsContext *ctx = get_tls_client_ctx();
-    if (!ctx) {
+    if (!context) {
         net_conn_set_error(conn, XR_NETERR_TLS, 0);
         xr_net_conn_close(conn);
         *result = xr_int(XR_NETERR_TLS);
         return XR_CFUNC_DONE;
     }
-    XrTlsConn *tls = xr_tls_conn_new(ctx, conn->fd);
+    XrTlsConn *tls = xr_tls_conn_new(context, conn->fd);
     if (!tls) {
         net_conn_set_error(conn, XR_NETERR_TLS, 0);
         xr_net_conn_close(conn);
@@ -1489,6 +1489,11 @@ static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, 
     if (state->deadline_ms < 0)
         state->deadline_ms = 0;
     return net_tls_handshake_step(X, state, result);
+}
+
+static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
+                                                 XrValue *result) {
+    return xr_net_tls_handshake_with_context(X, args, nargs, result, get_tls_client_ctx());
 }
 
 #endif  // XR_ENABLE_TLS

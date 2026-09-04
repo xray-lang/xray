@@ -42,8 +42,6 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "crypto.__fillRandomBytes";
     if (strcmp(symbol, "cluster.__start") == 0)
         return "cluster.__start";
-    if (strcmp(symbol, "cluster.__join") == 0)
-        return "cluster.__join";
     if (strcmp(symbol, "cluster.__stop") == 0)
         return "cluster.__stop";
     if (strcmp(symbol, "cluster.__publishLocal") == 0)
@@ -90,8 +88,10 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "cluster.__start") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__join") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
+    if (strcmp(symbol, "cluster.__joinTls") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "cluster.__adoptPeer") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__stop") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__publishLocal") == 0)

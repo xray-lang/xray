@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "../runtime/mem/xobj_header.h"
+#include "../runtime/value/xvalue.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -121,6 +122,10 @@ XR_FUNC XrNetConnKind xr_net_conn_kind(const XrNetConn *c);
 XR_FUNC bool xr_net_conn_is_tls(const XrNetConn *c);
 XR_FUNC void *xr_net_conn_tls_state(const XrNetConn *c);
 XR_FUNC bool xr_net_conn_is_closed(const XrNetConn *c);
+
+/* Validate and unwrap the opaque script value without exposing its layout to
+ * module-specific providers. */
+XR_FUNC XrNetConn *xr_net_conn_from_value(XrValue value);
 
 XR_FUNC int xr_net_listener_fd(const XrNetListener *l);
 XR_FUNC int xr_net_listener_port(const XrNetListener *l);
