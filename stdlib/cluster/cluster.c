@@ -280,19 +280,11 @@ bool cluster_node_remove(XrCluster *c, XrClusterNode *node) {
 
 /* ========== xray Function Bindings ========== */
 
-static bool cluster_binding_text_fits(const XrString *text, size_t max_length, bool allow_empty) {
-    if (!text || (!allow_empty && text->length == 0) || text->length > max_length)
-        return false;
-    return memchr(text->data, '\0', text->length) == NULL;
-}
-
 static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *cluster = (XrCluster *) X->cluster;
     if (!cluster || argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(true);
     XrString *name = XR_TO_STRING(args[0]);
-    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false))
-        return xr_bool(true);
     return xr_bool(xr_tombstone_registry_contains(cluster->tombstones, name->data,
                                                   (int64_t) xr_time_monotonic_ms()));
 }
@@ -377,15 +369,6 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     int64_t port = XR_TO_INT(args[3]);
     int64_t flags = XR_TO_INT(args[4]);
     int64_t heartbeat_interval_ms = XR_TO_INT(args[5]);
-    bool inbound = host->length == 0 && port == 0;
-    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false) ||
-        !cluster_binding_text_fits(host, XR_ADDRESS_HOST_MAX, inbound) ||
-        (!inbound && (port <= 0 || port > UINT16_MAX)) || flags < 0 ||
-        (uint64_t) flags > UINT32_MAX || heartbeat_interval_ms <= 0) {
-        xr_net_conn_close(handle);
-        return xr_bool(false);
-    }
-
     XrClusterNode *node = (XrClusterNode *) xr_calloc(1, sizeof(*node));
     if (!node) {
         xr_net_conn_close(handle);
@@ -450,14 +433,6 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         !XR_IS_INT(args[9]))
         return xr_bool(false);
 
-    /* The port range is cluster.xr's rule, checked before this leaf is reached.
-     * What remains here is the machine fact that the diagnostic field is
-     * sixteen bits wide. */
-    XrString *name = XR_TO_STRING(args[0]);
-    XrString *secret_text = XR_TO_STRING(args[2]);
-    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false) ||
-        !cluster_binding_text_fits(secret_text, XR_CLUSTER_SECRET_MAX, true))
-        return xr_bool(false);
     XrClusterTlsOptions tls_opts;
     memset(&tls_opts, 0, sizeof(tls_opts));
     const XrClusterTlsOptions *tls_ptr = NULL;
@@ -465,10 +440,6 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         XrString *ca_text = XR_TO_STRING(args[4]);
         XrString *cert_text = XR_TO_STRING(args[5]);
         XrString *key_text = XR_TO_STRING(args[6]);
-        if (!cluster_binding_text_fits(ca_text, SIZE_MAX, true) ||
-            !cluster_binding_text_fits(cert_text, SIZE_MAX, true) ||
-            !cluster_binding_text_fits(key_text, SIZE_MAX, true))
-            return xr_bool(false);
         const char *ca_file = ca_text->data;
         const char *cert_file = cert_text->data;
         const char *key_file = key_text->data;
@@ -803,8 +774,6 @@ static XrValue cluster_register_node_monitor_fn(XrVMRuntime *X, XrValue *args, i
         return xr_bool(false);
 
     XrString *name = XR_TO_STRING(args[0]);
-    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false))
-        return xr_bool(false);
     XrCluster *cluster = (XrCluster *) X->cluster;
     return xr_bool(cluster && xr_monitor_registry_add_node(cluster->monitors, name->data,
                                                            xr_value_to_channel(args[1])));
@@ -817,9 +786,6 @@ static XrValue cluster_register_coro_monitor_fn(XrVMRuntime *X, XrValue *args, i
 
     XrString *node = XR_TO_STRING(args[0]);
     XrString *coro = XR_TO_STRING(args[1]);
-    if (!cluster_binding_text_fits(node, XR_NODE_NAME_MAX, false) ||
-        !cluster_binding_text_fits(coro, XR_CORO_NAME_MAX, false))
-        return xr_bool(false);
     return xr_bool(cluster_monitor_register_remote((XrCluster *) X->cluster, node->data, coro->data,
                                                    xr_value_to_channel(args[2])));
 }
