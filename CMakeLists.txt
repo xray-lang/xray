@@ -1324,7 +1324,6 @@ file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
 # Core modules (required): prelude (built-in type registry), time, math, log,
 # gc, regex, path, datetime, encoding, base64, url
 file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
-    "stdlib/prelude/*.c"
     "stdlib/_probe/*.c"
     "stdlib/time/*.c"
     "stdlib/math/*.c"

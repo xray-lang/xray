@@ -488,7 +488,7 @@ def check_error_model_policy(root: Path) -> list[str]:
 
     high_risk_sources = (
         root / "src/base/xglobal_indices.h",
-        root / "stdlib/prelude/prelude.c",
+        root / "src/module/xprelude_runtime.c",
         root / "src/frontend/analyzer/xanalyzer.c",
         root / "src/api/xisolate_runtime.c",
         root / "src/coro/xaot_coro.c",

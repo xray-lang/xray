@@ -34,7 +34,7 @@
 #include "../frontend/parser/xast.h"
 #include "../runtime/class/xtype_registry.h"
 #include "../module/xmodule.h"
-#include "../../stdlib/prelude/prelude.h"
+#include "../module/xprelude_runtime.h"
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/mem/xcycle_detector.h"

@@ -124,7 +124,7 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text(
             encoding="utf-8"
         )
-        prelude_source = (ROOT / "stdlib/prelude/prelude.c").read_text(encoding="utf-8")
+        prelude_source = (ROOT / "src/module/xprelude_runtime.c").read_text(encoding="utf-8")
         coroutine_defs = (ROOT / "stdlib/types/coroutine.xr").read_text(encoding="utf-8")
         api_inventory = (ROOT / "scripts/gen_api_inventory.py").read_text(encoding="utf-8")
 

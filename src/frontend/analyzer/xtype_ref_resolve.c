@@ -30,7 +30,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../base/xhash.h"
-#include "../../../stdlib/prelude/prelude.h"
+#include "../../module/xprelude_runtime.h"
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>

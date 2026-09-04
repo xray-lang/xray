@@ -146,7 +146,8 @@ PRODUCTION_EXCEPT_NON_PUBLIC = {"prelude"}
 # xtype_ref_resolve.c, xanalyzer_builtin_interfaces.c, xanalyzer_builtins.c and
 # xlsp_keywords.c -- so it has to exist before any `.xr` can be parsed at all,
 # and a file resolved at run time cannot feed a table built at C compile time.
-# The module exports nothing (stdlib/prelude/prelude.c: "No exports yet"),
+# The module exports nothing; its registry installation lives in
+# src/module/xprelude_runtime.c,
 # while check_stdlib_boundary.py requires an `xray_semantic` module's `.xr` to
 # export at least one item, so the two requirements are mutually exclusive.
 # Re-declaring its enums in Xray would mint a second nominal identity for each

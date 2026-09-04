@@ -5,27 +5,25 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * prelude.c - Prelude module loader and process-wide type registry.
+ * xprelude_runtime.c - Compiler/runtime prelude registry installation
  *
  * KEY CONCEPT:
- *   The prelude module owns a single static table built from
+ *   The compiler/runtime boundary owns a single static table built from
  *   builtin_symbols.def. The same const table is shared by every isolate
  *   in the process; per-isolate state is only a pointer back to it
  *   (isolate->prelude_symbols). The loader is therefore idempotent and
  *   has no per-isolate teardown work — the pointer field becomes dangling
  *   only after the isolate is gone, by which point nobody can read it.
  *
- *   The registered XrModule that the loader returns is currently empty
- *   (no exports). Subsequent phases populate it with type markers and
- *   common builtin functions; lexer/parser changes for the unified
- *   IDENT-based type-name path live in those phases too.
+ *   The prelude module itself has no exports. An explicit import resolves
+ *   through the generic module path, while this file installs the implicit
+ *   registry state required before any source module can be analyzed.
  */
 
-#include "prelude.h"
+#include "xprelude_runtime.h"
 
-#include "../../src/base/xchecks.h"
-#include "../../src/module/xmodule.h"
-#include "../../src/runtime/xisolate_api.h"
+#include "../base/xchecks.h"
+#include "../runtime/xisolate_api.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -41,7 +39,7 @@
 static const XrPreludeTypeEntry g_prelude_types[] = {
 #define XR_BUILTIN_PRELUDE_TYPE(name, arity, native_type, prelude_kind)                            \
     {(name), XR_PRELUDE_KIND_##prelude_kind, (native_type)},
-#include "builtin_symbols.def"
+#include "../../stdlib/prelude/builtin_symbols.def"
     /* Sentinel to keep the array non-empty under strict C rules. Not
      * counted in type_count and therefore never visited by lookups. */
     {NULL, 0, 0},
@@ -58,7 +56,7 @@ static const XrPreludeSymbols g_prelude_symbols = {
 /* ========== Native-type registration forwards ==========
  *
  * Every stdlib module that owns a native XrClass exports a small
- * register function. We declare them here so prelude.c does not need
+ * register function. We declare them here so the registry does not need
  * to drag in the full stdlib/{log,datetime,regex,net} headers.
  */
 struct XrVMRuntime;
@@ -73,13 +71,13 @@ extern void xr_netconn_register_class(XrVMRuntime *isolate);
 extern void xr_netlistener_register_class(XrVMRuntime *isolate);
 #endif
 
-#include "../../src/base/xglobal_indices.h"
-#include "../../src/runtime/class/xclass_system.h"
-#include "../../src/runtime/class/xclass.h"
-#include "../../src/runtime/class/xenum.h"
-#include "../../src/runtime/core/xr_runtime_core.h"
-#include "../../src/runtime/value/xvalue.h"
-#include "../../src/base/xmalloc.h"
+#include "../base/xglobal_indices.h"
+#include "../base/xmalloc.h"
+#include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_system.h"
+#include "../runtime/class/xenum.h"
+#include "../runtime/core/xr_runtime_core.h"
+#include "../runtime/value/xvalue.h"
 
 static void bind_builtin_value(XrVMRuntime *X, int global_index, XrValue value) {
     if (!X || (size_t) global_index >= (size_t) XR_USER_GLOBALS_START)
@@ -159,7 +157,7 @@ static const XrPreludeEnumVariantRow g_prelude_enum_variants[] = {
 #define XR_PRELUDE_PAYLOAD_IS_SET_NONE false
 #define XR_PRELUDE_PAYLOAD_IS_SET_TYPE_PARAM_0 true
 #define XR_PRELUDE_PAYLOAD_IS_SET_ERROR true
-#include "builtin_symbols.def"
+#include "../../stdlib/prelude/builtin_symbols.def"
 };
 
 /* Registration exists only to bind canonical enum types into VM builtin slots,
@@ -172,7 +170,7 @@ static const XrPreludeEnumRow g_prelude_enum_rows[] = {
      (int) (sizeof((const XrPreludeEnumVariantRow[]) {evariants}) /                                \
             sizeof(XrPreludeEnumVariantRow))},
 #define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XR_PRELUDE_PAYLOAD_IS_SET_##payload},
-#include "builtin_symbols.def"
+#include "../../stdlib/prelude/builtin_symbols.def"
 };
 
 #undef XR_PRELUDE_PAYLOAD_IS_SET_NONE

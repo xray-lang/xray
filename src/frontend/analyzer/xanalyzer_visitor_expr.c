@@ -24,7 +24,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
-#include "../../../stdlib/prelude/prelude.h"
+#include "../../module/xprelude_runtime.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../shared/xr_accessor_name.h"
 #include <limits.h>
@@ -4021,7 +4021,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
      * resolve its type arguments explicitly, contextually, or from a value
      * argument; an erased success type is never constructed.
      *
-     * A user class of the same name shadows the builtin (prelude.h documents
+     * A user class of the same name shadows the builtin (xprelude_runtime.h documents
      * the Rust prelude rule), so it has to be resolved through the ordinary
      * class path below. Bypassing that would type `StringBuilder(3)` as the
      * builtin even where `class StringBuilder { }` is in scope, and every

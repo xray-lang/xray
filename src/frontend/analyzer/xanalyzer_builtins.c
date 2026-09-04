@@ -15,7 +15,7 @@
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../base/xmalloc.h"
-#include "../../../stdlib/prelude/prelude.h"
+#include "../../module/xprelude_runtime.h"
 #include <string.h>
 
 // Builtin type table populated at startup from .xr declarations.

@@ -14,7 +14,7 @@
 
 #include "xray_vm.h"
 #include "../../../src/runtime/xisolate_internal.h"
-#include "../../../stdlib/prelude/prelude.h"
+#include "../../../src/module/xprelude_runtime.h"
 
 /* ========== Helpers ========== */
 

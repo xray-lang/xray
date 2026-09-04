@@ -79,15 +79,14 @@ name = "prelude"
 public = false
 layer = "L1"
 # The only module with neither an Xray source nor native entries: everything it
-# stands for is installed into the isolate by xr_prelude_install, and the module
-# exists so that an explicit `import prelude` resolves to a no-op instead of an
-# error. It is loadable for that reason alone, which nothing else can imply.
+# stands for is installed into the isolate by xr_prelude_install in the module
+# runtime. The module exists so that an explicit `import prelude` resolves to a
+# no-op instead of an error. It is loadable for that reason alone, which nothing
+# else can imply.
 sourceless_loadable = true
 policy = "native_primitive"
 semantic_source = "stdlib/prelude/builtin_symbols.def"
 public_native = []
-private_native_sources = ["stdlib/prelude/*.c"]
-private_native_reason = "Bootstrap types, operators, and implicit prelude installation"
 perf_suite = "stdlib/prelude"
 
 [[module]]

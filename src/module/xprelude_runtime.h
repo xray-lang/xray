@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * prelude.h - Prelude module: process-wide type marker registry
+ * xprelude_runtime.h - Compiler/runtime prelude registry
  *
  * KEY CONCEPT:
  *   Prelude is the single source of truth for which "built-in" type names
@@ -26,10 +26,10 @@
  *     isolates with zero per-isolate cost.
  */
 
-#ifndef XR_STDLIB_PRELUDE_H
-#define XR_STDLIB_PRELUDE_H
+#ifndef XR_MODULE_XPRELUDE_RUNTIME_H
+#define XR_MODULE_XPRELUDE_RUNTIME_H
 
-#include "../../src/runtime/xisolate_internal.h"
+#include "../runtime/xisolate_internal.h"
 
 /*
  * Prelude marker kind. Selects the syntactic and constructor path the
@@ -111,4 +111,4 @@ XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols 
  */
 XR_FUNC void xr_prelude_register_all_native_types(XrVMRuntime *isolate);
 
-#endif  // XR_STDLIB_PRELUDE_H
+#endif  // XR_MODULE_XPRELUDE_RUNTIME_H
