@@ -69,6 +69,12 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
         re.compile(r"\bsys\.sleepMs\s*\("),
     ),
     RemovedForm(
+        "SYS_CPU_COUNT_CALL",
+        "sys.cpuCount() removed; use the canonical os.cpuCount() host-topology query",
+        "293",
+        re.compile(r"\bsys\.cpuCount\s*\("),
+    ),
+    RemovedForm(
         "LOAD_LE_UNCHECKED",
         ".loadLEUnchecked removed unchecked little-endian load",
         "173",

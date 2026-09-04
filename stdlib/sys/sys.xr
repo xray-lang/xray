@@ -154,8 +154,6 @@ export class OsOnce {
     }
 }
 
-export fn cpuCount() -> i64 { return __cpuCount() }
-
 export fn threadYield() { __threadYield() }
 
 export fn pinToCpu(cpu: i64) -> bool {

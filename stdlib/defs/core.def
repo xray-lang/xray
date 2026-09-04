@@ -467,19 +467,6 @@ module crypto {
 }
 
 module sys {
-  fn __cpuCount {
-    signature: "(): i64"
-    doc: "Return the number of CPUs available to OS-thread work"
-    vm: "sys_cpu_count"
-    aot: "xrt_sys_cpu_count"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-  }
-
   fn __threadYield {
     signature: "(): ()"
     doc: "Yield the current OS thread to another runnable OS thread"

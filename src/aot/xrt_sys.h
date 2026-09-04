@@ -1027,16 +1027,16 @@ static inline XrValue xrt_sys_once_new(void) {
     return xrt_sys_once_box(once);
 }
 
-static inline XrValue xrt_sys_cpu_count(void) {
+static inline int64_t xrt_sys_available_cpu_count(void) {
 #if defined(XR_OS_WINDOWS)
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    return XR_FROM_INT(si.dwNumberOfProcessors > 0 ? (int64_t) si.dwNumberOfProcessors : 1);
+    return si.dwNumberOfProcessors > 0 ? (int64_t) si.dwNumberOfProcessors : 1;
 #elif defined(_SC_NPROCESSORS_ONLN)
     long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return XR_FROM_INT(n > 0 ? (int64_t) n : 1);
+    return n > 0 ? (int64_t) n : 1;
 #else
-    return XR_FROM_INT(1);
+    return 1;
 #endif
 }
 
@@ -1057,13 +1057,11 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
     if (cpu < 0)
         return XR_FROM_BOOL(false);
 #if defined(XR_OS_WINDOWS)
-    XrValue count_value = xrt_sys_cpu_count();
-    int64_t count = count_value.tag == XR_TAG_I64 && count_value.i > 0 ? count_value.i : 1;
+    int64_t count = xrt_sys_available_cpu_count();
     DWORD_PTR mask = ((DWORD_PTR) 1) << ((unsigned int) cpu % (unsigned int) count);
     return XR_FROM_BOOL(SetThreadAffinityMask(GetCurrentThread(), mask) != 0);
 #elif defined(XR_OS_LINUX) && defined(CPU_ZERO) && defined(CPU_SET)
-    XrValue count_value = xrt_sys_cpu_count();
-    int64_t count = count_value.tag == XR_TAG_I64 && count_value.i > 0 ? count_value.i : 1;
+    int64_t count = xrt_sys_available_cpu_count();
     cpu_set_t set;
     CPU_ZERO(&set);
     CPU_SET((int) ((unsigned int) cpu % (unsigned int) count), &set);

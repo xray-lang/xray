@@ -2817,9 +2817,11 @@ static void test_immutable_owned_snapshot(void) {
      * Old operation registry digest:
      * 3593ec2325d8c2037b519b897ec010dce84407adae1068593b4eea6877989692.
      * Old semantic digest:
-     * 57dd0bc1ba04a29a4b2bcccd26d8f8f317f17dc5e63b39ef0ad38a668991e005. */
+     * 57dd0bc1ba04a29a4b2bcccd26d8f8f317f17dc5e63b39ef0ad38a668991e005.
+     * Removing the duplicate sys CPU-count leaf changed the whole-registry
+     * component from 2223c318a41b2ca38ded4084ec06aae6a6477dc5e111528fff8e809a6a377e89. */
     REQUIRE(strcmp(semantic_hex,
-                   "2223c318a41b2ca38ded4084ec06aae6a6477dc5e111528fff8e809a6a377e89") == 0);
+                   "2b1b3a5a9f329c399a46d0b4dde3ba866377b32ad9d30d183f55f57bf5414e31") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -4169,10 +4171,10 @@ static void test_native_module_scalar_call_authority(void) {
     REQUIRE(xr_semantic_plan_verify(nullary, error, sizeof(error)));
     xr_semantic_plan_free(nullary);
 
-    /* `sys.cpuCount` proves the family is not one module's private arrangement:
+    /* `os.__cpuCount` proves the family is not one module's private arrangement:
      * a second module path reaches the same authority through the same rows. */
     XrSemanticPlan *other_module = build_native_module_scalar_call_plan(
-        "sys", NULL, "cpuCount", 0, NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0),
+        "os", NULL, "__cpuCount", 0, NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0),
         &stub_i64);
     REQUIRE(native_module_call_operation(other_module)->intrinsic_kind ==
             XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);

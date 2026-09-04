@@ -1210,16 +1210,6 @@ deletion_trigger = "when the module-static arena's counter is readable from Xray
 
 [[leaf]]
 module = "sys"
-symbol = "__cpuCount"
-class = "host_abi_leaf"
-abi = "sched_getaffinity(2) or sysconf(3); Win32 GetActiveProcessorCount"
-ownership = "none"
-effect = "nothrow"
-provider = "the host OS thread API through src/os/os_thread.h"
-deletion_trigger = "none while the host CPU topology remains an operating-system fact"
-
-[[leaf]]
-module = "sys"
 symbol = "__threadYield"
 class = "host_abi_leaf"
 abi = "sched_yield(2); Win32 SwitchToThread"

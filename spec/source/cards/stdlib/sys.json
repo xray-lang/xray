@@ -1,5 +1,5 @@
 {
   "module": "sys",
   "summary": "OS-thread-domain system primitives",
-  "lead": "Low-level OS-thread primitives: `sys.Thread.spawn(...)`, `ThreadOptions`, `ThreadLocal<T>`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, CPU/thread helpers, and signal hooks. `sys.Thread.spawn` is compiler-defined; it returns the prelude `Thread<T>` handle with `join`, `detach`, and `done`. Coroutine-friendly delays belong to `time.sleep(ms)`."
+  "lead": "Low-level OS-thread primitives: `sys.Thread.spawn(...)`, `ThreadOptions`, `ThreadLocal<T>`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, thread yield/affinity helpers, and signal hooks. `sys.Thread.spawn` is compiler-defined; it returns the prelude `Thread<T>` handle with `join`, `detach`, and `done`. Host CPU topology belongs to `os.cpuCount()` and coroutine-friendly delays belong to `time.sleep(ms)`."
 }

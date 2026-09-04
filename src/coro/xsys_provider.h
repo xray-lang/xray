@@ -17,7 +17,6 @@
 
 struct XrVMRuntime;
 
-XR_FUNC XrValue xr_sys_provider_cpu_count(struct XrVMRuntime *isolate, XrValue *args, int argc);
 XR_FUNC XrValue xr_sys_provider_thread_yield(struct XrVMRuntime *isolate, XrValue *args, int argc);
 XR_FUNC XrValue xr_sys_provider_pin_to_cpu(struct XrVMRuntime *isolate, XrValue *args, int argc);
 XR_FUNC XrValue xr_sys_provider_thread_local_id(struct XrVMRuntime *isolate, XrValue *args,

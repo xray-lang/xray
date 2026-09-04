@@ -620,7 +620,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
 
 // sys module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
-    {"cpuCount", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: i64): bool", "", NULL, 0},
     {"OsMutex", XLSP_SYM_CLASS, "type OsMutex", "Class type", NULL, 0},
@@ -635,7 +634,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"ThreadLocal", XLSP_SYM_CLASS, "type ThreadLocal", "Class type", NULL, 0},
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 14
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 13
 
 // text module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {

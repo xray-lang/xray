@@ -1,9 +1,8 @@
 // sys OS-thread utilities: deterministic, single-threaded coverage for the
-// public surface backed by os_thread.h.
+// yield and affinity surface backed by os_thread.h.
 import sys
 import time
 
-print(sys.cpuCount() >= 1)
 sys.threadYield()
 time.sleep(0)
 print(sys.pinToCpu(-1))

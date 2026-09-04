@@ -12,10 +12,6 @@
 #include "../../src/coro/xsys_provider.h"
 #include "../../src/vm/xvm.h"
 
-static XrValue sys_cpu_count(XrVMRuntime *isolate, XrValue *args, int argc) {
-    return xr_sys_provider_cpu_count(isolate, args, argc);
-}
-
 static XrValue sys_thread_yield(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_sys_provider_thread_yield(isolate, args, argc);
 }

@@ -284,7 +284,6 @@ static const XaBuiltinMember g_gen_runtime_functions[] = {
 
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {
-    {"__cpuCount", "(): i64", "Return the number of CPUs available to OS-thread work", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pinToCpu", "(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__threadLocalId", "(): i64", "Return a stable token for the current OS thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -302,7 +301,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_SYS_FUNCTION_COUNT 17
+#define GEN_SYS_FUNCTION_COUNT 16
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {
