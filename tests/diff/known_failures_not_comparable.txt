@@ -471,7 +471,6 @@ tests/diff/cases/semantics/stdlib/path_module.xr  # XR_TARGET_1000 product Targe
 tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/stdlib/path_string_ops.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/stdlib/pointer_provenance_lifetime_shared_core.xr  # XR_TARGET_1001 semantic scalar type has no exact machine representation
-tests/diff/cases/semantics/stdlib/prelude_contract_direct.xr  # front-end Comparison: cannot compare non-nullable type <case> with null (at post-monomorphization ...
 tests/diff/cases/semantics/stdlib/probe_module_shapes.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
 tests/diff/cases/semantics/stdlib/process_schema_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE

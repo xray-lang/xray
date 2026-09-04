@@ -1,0 +1,6 @@
+// Prelude names are installed implicitly by the language core. There is no
+// loadable module and no compatibility import.
+import prelude
+
+var values: Array<i64> = [1, 2, 3]
+print(len(values))

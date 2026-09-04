@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   Prelude is the single source of truth for which "built-in" type names
- *   (Array, Map, Json, BigInt, ...) the parser should recognise without
- *   the user writing `import prelude`. The lexer treats every such name
+ *   (Array, Map, Json, BigInt, ...) the parser recognises implicitly. Prelude
+ *   is language-core state and is deliberately not importable. The lexer treats every such name
  *   as a plain identifier; the parser's type-context branch consults the
  *   per-isolate prelude symbol table (populated by xr_prelude_install
  *   during isolate init) to decide whether a name maps to a generic
@@ -81,7 +81,7 @@ XR_FUNC void xr_prelude_install(XrVMRuntime *isolate);
 /*
  * Accessor used by the frontend (parser type-context branch) to retrieve
  * the table without depending on stdlib internals. Returns NULL when the
- * isolate has not loaded the prelude (e.g. minimal-runtime isolates that
+ * isolate has not installed the prelude (e.g. minimal-runtime isolates that
  * skipped full VM setup).
  */
 XR_FUNC const XrPreludeSymbols *xr_prelude_get_symbols(XrVMRuntime *isolate);

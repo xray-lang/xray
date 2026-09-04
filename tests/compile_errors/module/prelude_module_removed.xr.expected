@@ -1,0 +1,4 @@
+# Prelude is language-core state, not a module. Module resolution reports this
+# before it has a source position, hence `--> ?`.
+--> ?
+module 'prelude' not found

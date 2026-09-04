@@ -175,8 +175,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // runtime-owned native classes and the canonical builtin enums are isolate
     // state that every module load already assumes is in place. Built-in type
     // names (Array, Map, Json, BigInt, ...) resolve from here, so user code
-    // never writes `import prelude` -- and when it does, the module system
-    // resolves it to a no-op module through the same generic path as any other.
+    // never imports it. `prelude` is deliberately absent from the module graph.
     xr_prelude_install(isolate);
 
     // Module system

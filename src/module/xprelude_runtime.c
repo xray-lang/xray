@@ -15,9 +15,9 @@
  *   has no per-isolate teardown work — the pointer field becomes dangling
  *   only after the isolate is gone, by which point nobody can read it.
  *
- *   The prelude module itself has no exports. An explicit import resolves
- *   through the generic module path, while this file installs the implicit
- *   registry state required before any source module can be analyzed.
+ *   Prelude is language-core state, not a module. This file installs the
+ *   implicit registry required before any source module can be analyzed;
+ *   an explicit `import prelude` is rejected like any unknown module.
  */
 
 #include "xprelude_runtime.h"
@@ -246,9 +246,8 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
  * Everything the prelude stands for is isolate state, not module state: the
  * symbol table pointer, the runtime-owned native XrClasses and the canonical
  * builtin enums. Installing it is therefore a step of isolate setup rather
- * than something a module load has to trigger, which is why the `prelude`
- * module itself exports nothing and only exists so an explicit import
- * resolves.
+ * than something a module load has to trigger. There is no loadable `prelude`
+ * module or compatibility import.
  */
 void xr_prelude_install(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_prelude_install: NULL isolate");

@@ -1321,8 +1321,9 @@ file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
 
 # Standard Library (Native modules) - modular conditional compilation
-# Core modules (required): prelude (built-in type registry), time, math, log,
-# gc, regex, path, datetime, encoding, base64, url
+# Core standard-library modules: time, math, log, regex, path, datetime,
+# encoding, base64, and url. The implicit language-core registry is compiled
+# from stdlib/prelude/builtin_symbols.def, but it is not a loadable module.
 file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/_probe/*.c"
     "stdlib/time/*.c"
@@ -1450,14 +1451,10 @@ if(NOT XR_STDLIB_FULL)
             "stdlib/ws/[^/]+\\.xr$")
     endif()
 endif()
-# Loadable modules with no .xr source of their own. They belong in the
-# descriptor table for the same reason the sourced ones do, but they cannot be
-# discovered from the source list, and naming a binder that this build did not
-# compile would not link -- so the build states them where it states the rest of
-# its module selection.
-#   prelude - installed into the isolate itself; the module is an import no-op
-#   test_yield - scheduler test stubs, present only in test-module builds
-set(XRAY_STDLIB_SOURCELESS_MODULES prelude)
+# Loadable test modules with no .xr source of their own cannot be discovered
+# from the source list. Production has no sourceless modules: implicit
+# language-core installation is isolate setup, not an import target.
+set(XRAY_STDLIB_SOURCELESS_MODULES "")
 if(XR_BUILD_TEST_MODULES)
     list(APPEND XRAY_STDLIB_SOURCELESS_MODULES test_yield)
 endif()

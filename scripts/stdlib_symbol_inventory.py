@@ -137,47 +137,6 @@ LEAF_RECORD_KEYS = {
     "deletion_trigger",
 }
 
-# A non-public module is test-only unless it is the prelude, which is
-# unimportable because the language installs it implicitly, not because it is
-# a test fixture.
-PRODUCTION_EXCEPT_NON_PUBLIC = {"prelude"}
-
-# Modules whose semantic source is the compiler's own declaration input rather
-# than a module body, so asking them for an `.xr` source asks for something
-# that cannot exist.
-#
-# The prelude is the only one. `stdlib/prelude/builtin_symbols.def` is expanded
-# by the C preprocessor into the compiler, runtime registry and LSP translation
-# units, so it has to exist before any `.xr` can be parsed at all, and a file
-# resolved at run time cannot feed a table built at C compile time.
-# The module exports nothing; its registry installation lives in
-# src/module/xprelude_runtime.c,
-# while check_stdlib_boundary.py requires an `xray_semantic` module's `.xr` to
-# export at least one item, so the two requirements are mutually exclusive.
-# Re-declaring its enums in Xray would mint a second nominal identity for each
-# -- blockers/a-stdlib-enum-identity-blocks-type-migration.md -- which is a
-# silent wrong answer rather than progress.
-#
-# The exception covers only "must have an `.xr` source" and "must not declare a
-# whole-module native policy". Every other property is still counted, so the
-# prelude's handwritten C semantic owners and its module-specific C loader stay
-# on the ledger.
-COMPILER_OWNED_SEMANTIC_SOURCE = {"prelude"}
-
-
-def has_compiler_owned_semantic_source(module: "ModuleRow", xray_owned_symbols: int) -> bool:
-    """Whether the exception above applies to this module right now.
-
-    Re-checked rather than asserted: the exception holds only while the module
-    still has the shape its reason describes, so a module that grows a public
-    Xray symbol or a `.xr` semantic source loses it automatically.
-    """
-    return (
-        module.name in COMPILER_OWNED_SEMANTIC_SOURCE
-        and module.semantic_source.endswith(".def")
-        and xray_owned_symbols == 0
-    )
-
 # Function-like C constructs that the definition scanner must not mistake for
 # a definition when they start a line.
 C_CONTROL_KEYWORDS = {"if", "for", "while", "switch", "return", "sizeof", "else", "do"}
@@ -785,11 +744,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
     for module in manifest.modules:
         name = str(module["name"])
         public = bool(module.get("public", False))
-        audience = (
-            "production"
-            if public or name in PRODUCTION_EXCEPT_NON_PUBLIC
-            else "test-only"
-        )
+        audience = "production" if public else "test-only"
         policy = str(module.get("policy", ""))
         semantic_source = str(module.get("semantic_source", ""))
         loader_declarations = [
@@ -1150,7 +1105,6 @@ QUEUE_ORDER = (
     "establish-xray-source",
     "needs-generic-loader",
     "native-leaf-only",
-    "compiler-owned-language-core",
     "test-only",
 )
 
@@ -1183,13 +1137,6 @@ def classify_queue(modules: list[ModuleRow], rows: list[SymbolRow]) -> None:
         if mrow.audience == "test-only":
             mrow.queue = "test-only"
             mrow.queue_reason = "not part of the production standard-library surface"
-            continue
-        if has_compiler_owned_semantic_source(mrow, mrow.xray_body_symbols):
-            mrow.queue = "compiler-owned-language-core"
-            mrow.queue_reason = (
-                f"{mrow.semantic_source} defines implicit language symbols before the source "
-                "module graph exists; an ordinary .xr module cannot own this contract"
-            )
             continue
         if not mrow.semantic_source.endswith(".xr"):
             mrow.queue = "establish-xray-source"
@@ -1313,7 +1260,6 @@ def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]
             1
             for m in production
             if m.policy in {"native_primitive", "native_library"}
-            and not has_compiler_owned_semantic_source(m, m.xray_body_symbols)
         ),
         "public_native_symbols": sum(len(m.public_native) for m in production),
         "module_specific_c_loaders": sum(
@@ -1326,7 +1272,6 @@ def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]
             1
             for m in production
             if not m.semantic_source.endswith(".xr")
-            and not has_compiler_owned_semantic_source(m, m.xray_body_symbols)
         ),
         "modules_entering_module_graph": sum(
             1 for m in modules if m.enters_module_graph

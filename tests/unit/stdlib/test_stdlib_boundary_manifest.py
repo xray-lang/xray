@@ -58,6 +58,26 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertEqual(loadable_modules(ROOT), set(manifest.by_name))
         self.assertEqual([], check_manifest(ROOT))
 
+    def test_prelude_is_implicit_language_core_not_an_import_target(self) -> None:
+        manifest = load_manifest(ROOT)
+        self.assertNotIn("prelude", manifest.by_name)
+        self.assertNotIn("prelude", loadable_modules(ROOT))
+
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        runner = (ROOT / "src/app/mcp/xmcp_tools_run.c").read_text(encoding="utf-8")
+        self.assertNotIn("XRAY_STDLIB_SOURCELESS_MODULES prelude", cmake)
+        run_allowlist = runner.split("RUN_ALLOWED_MODULES[] = {", 1)[1].split("};", 1)[0]
+        self.assertNotIn('"prelude"', run_allowlist)
+
+        registry = (ROOT / "stdlib/prelude/builtin_symbols.def").read_text(
+            encoding="utf-8"
+        )
+        runtime = (ROOT / "src/module/xprelude_runtime.c").read_text(encoding="utf-8")
+        self.assertIn('XR_BUILTIN_PRELUDE_TYPE("Array"', registry)
+        self.assertIn('XR_BUILTIN_PRELUDE_TYPE("Map"', registry)
+        self.assertIn('XR_BUILTIN_ENUM("Ordering"', registry)
+        self.assertIn("void xr_prelude_install", runtime)
+
     def test_source_only_module_declares_no_native_entries(self) -> None:
         manifest = load_manifest(ROOT)
         for name in ("base64", "cluster", "compress", "csv"):

@@ -5,9 +5,9 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_prelude_init.c - Verifies the prelude module is auto-loaded into
- *                       every full-runtime isolate and exposes a stable
- *                       symbol-table accessor used by the parser.
+ * test_prelude_init.c - Verifies the implicit language-core prelude is
+ *                       installed into every full-runtime isolate and exposes
+ *                       the stable symbol-table accessor used by the parser.
  */
 
 #include "../test_framework.h"
@@ -29,7 +29,7 @@ TEST(prelude_field_populated_after_full_init) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
 
-    /* Auto-load path in xisolate_full.c::isolate_init_full() must have
+    /* Isolate initialization in xisolate_full.c::isolate_init_full() must have
      * wired the registry pointer. */
     ASSERT_NOT_NULL(iso->prelude_symbols);
 

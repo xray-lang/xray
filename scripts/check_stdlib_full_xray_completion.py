@@ -39,7 +39,6 @@ from stdlib_symbol_inventory import (  # noqa: E402
     QUEUE_ORDER,
     SymbolRow,
     build_rows,
-    has_compiler_owned_semantic_source,
     is_semantic_c_owner,
     leaf_is_approved,
     summarize,
@@ -625,17 +624,6 @@ def drift_note(gate_subject: str, derived: int, counts: dict[str, Any], key: str
     return []
 
 
-def compiler_owned_exception_note(module: ModuleRow, xray_owned: dict[str, int]) -> str | None:
-    """State the exception for one module, or answer None when it does not hold."""
-    if not has_compiler_owned_semantic_source(module, xray_owned.get(module.name, 0)):
-        return None
-    return (
-        f"{module.name}: semantic source {module.semantic_source} is the compiler's built-in "
-        f"symbol registry, expanded at C compile time and exporting nothing, so this gate has "
-        f"no question to ask it; every other gate still counts it"
-    )
-
-
 def gate_source_coverage(
     root: Path, modules: list[ModuleRow], rows: list[SymbolRow], counts: dict[str, Any]
 ) -> GateResult:
@@ -654,10 +642,6 @@ def gate_source_coverage(
 
     for module in sorted(modules, key=lambda m: m.name):
         if module.audience != "production":
-            continue
-        exception = compiler_owned_exception_note(module, xray_owned)
-        if exception:
-            notes.append(exception)
             continue
         source = module.semantic_source
         if not source.endswith(".xr"):
@@ -712,18 +696,9 @@ def gate_no_whole_module_native_policy(
     all, which is the coarsest form of the defect the other gates count symbol
     by symbol.
     """
-    xray_owned: dict[str, int] = {}
-    for row in rows:
-        if row.xray_body:
-            xray_owned[row.module] = xray_owned.get(row.module, 0) + 1
-    notes: list[str] = []
     offenders: list[str] = []
     for m in sorted(modules, key=lambda m: m.name):
         if m.audience != "production" or m.policy not in {"native_primitive", "native_library"}:
-            continue
-        exception = compiler_owned_exception_note(m, xray_owned)
-        if exception:
-            notes.append(exception)
             continue
         offenders.append(
             f"{m.name}: policy {m.policy} (layer {m.layer or '<none>'}, "
@@ -733,7 +708,7 @@ def gate_no_whole_module_native_policy(
         "stdlib_no_whole_module_native_policy",
         "production modules declared native_primitive or native_library",
         offenders,
-        notes,
+        [],
         singular="production module declared native_primitive or native_library",
     )
     result.notes.extend(

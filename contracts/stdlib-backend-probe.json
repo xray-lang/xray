@@ -39,12 +39,12 @@
     "first_refusal": null
   },
   "counts": {
-    "modules": 33,
+    "modules": 32,
     "probes_missing": 0,
-    "vm_ok": 26,
+    "vm_ok": 25,
     "vm_failed": 7,
     "aot_ok": 1,
-    "aot_failed": 32,
+    "aot_failed": 31,
     "generated_c_compared": 1,
     "generated_c_identical": 1,
     "generated_c_divergent": 0
@@ -75,13 +75,12 @@
       ]
     },
     "XR_TARGET_1003": {
-      "count": 7,
+      "count": 6,
       "modules": [
         "compress",
         "crypto",
         "math",
         "mem",
-        "prelude",
         "regex",
         "runtime"
       ]
@@ -918,49 +917,6 @@
       "first_refusal": {
         "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
         "code": "XR_TARGET_1000",
-        "stage": "target_plan"
-      }
-    },
-    {
-      "module": "prelude",
-      "probe": "tests/stdlib/contracts/prelude/probes/current.xr",
-      "probe_present": true,
-      "vm": {
-        "argv": [
-          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
-          "run",
-          "tests/stdlib/contracts/prelude/probes/current.xr"
-        ],
-        "returncode": 0,
-        "timed_out": false,
-        "stdout": "{\"case\":\"core-container-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"string-core-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
-        "stderr": "",
-        "stdout_truncated": false,
-        "stderr_truncated": false
-      },
-      "aot": {
-        "argv": [
-          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
-          "build",
-          "--native",
-          "-c",
-          "-o",
-          "<probe-workspace>/prelude/prelude.c",
-          "tests/stdlib/contracts/prelude/probes/current.xr"
-        ],
-        "returncode": 1,
-        "timed_out": false,
-        "stdout": "[xi-native] Building: tests/stdlib/contracts/prelude/probes/current.xr\n",
-        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=77 function=0 opcode=117 selector=slice intrinsic=0 immediate=32 result=value:82,type:4,ownership:0,alias:-1 operands=3 receiver=value:79,type:4,role:2,flags:1 argument=value:80,type:2,role:3,flags:1 receiver-type=type-v3:2:0:0:0:0:0:0:0:0:255:0:\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
-        "stdout_truncated": false,
-        "stderr_truncated": false
-      },
-      "c_bytes": null,
-      "c_sha256": "",
-      "generated_c": null,
-      "first_refusal": {
-        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=77 function=0 opcode=117 selector=slice intrinsic=0 immediate=32 result=value:82,type:4,ownership:0,alias:-1 operands=3 receiver=value:79,type:4,role:2,flags:1 argument=value:80,type:2,role:3,flags:1 receiver-type=type-v3:2:0:0:0:0:0:0:0:0:255:0:",
-        "code": "XR_TARGET_1003",
         "stage": "target_plan"
       }
     },

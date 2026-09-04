@@ -34,12 +34,11 @@
  * and dlopen-based packages are off the table because the MCP runner runs in
  * the same process as the server and cannot give them up cleanly on timeout.
  *
- * `prelude` is included so an explicit `import prelude` in user code
- * succeeds; the isolate's bootstrap import (issued by isolate_init_full()
- * before the allowlist is configured) is not subject to filtering. */
+ * The implicit language core is installed before this allowlist is configured;
+ * it is isolate state, not a module users can import. */
 static const char *const RUN_ALLOWED_MODULES[] = {
-    "prelude", "math", "json", "string", "regex", "encoding", "base64", "url",        "datetime",
-    "time",    "log",  "csv",  "toml",   "xml",   "yaml",     "types",  "test_yield",
+    "math", "json", "string", "regex", "encoding", "base64", "url",   "datetime",
+    "time", "log",  "csv",    "toml",  "xml",      "yaml",   "types", "test_yield",
 };
 #define RUN_ALLOWED_MODULES_COUNT (sizeof(RUN_ALLOWED_MODULES) / sizeof(RUN_ALLOWED_MODULES[0]))
 
@@ -152,8 +151,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     if (!xr_module_identity_authority_valid(&authority)) {
         XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
         return xmcp_make_text_structured_result(
-            "Error: 'moduleId' must be an explicit valid memory-module identity", structured,
-            true);
+            "Error: 'moduleId' must be an explicit valid memory-module identity", structured, true);
     }
 
     /* Resolve quotas. Negative / zero / oversized values fall back to the
@@ -194,9 +192,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
                                                 true);
     }
 
-    /* Sandbox configuration. Order matters: the allowlist applies to user
-     * imports issued by xr_isolate_dostring(); the isolate's own prelude
-     * bootstrap already ran during xray_vm_new_full() and is not affected. */
+    /* Sandbox configuration. The allowlist applies only to user imports;
+     * implicit language-core installation already ran in xray_vm_new_full(). */
     xr_isolate_set_stdout(iso, capture.file);
     xr_isolate_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
     xr_isolate_set_deadline_ms(iso, timeout_ms);

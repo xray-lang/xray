@@ -396,11 +396,10 @@ XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer) {
 }
 
 XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name) {
-    static const char *modules[] = {"prelude",  "time", "math",     "path",   "base64", "regex",
-                                    "mem",      "sync", "parallel", "simd",   "sys",    "url",
-                                    "datetime", "log",  "encoding", "_probe", "io",     "os",
-                                    "json",     "net",  "http",     "crypto", "csv",    "toml",
-                                    "yaml",     "xml",  "compress", "ws"};
+    static const char *modules[] = {
+        "time", "math", "path",     "base64", "regex",    "mem",    "sync", "parallel", "simd",
+        "sys",  "url",  "datetime", "log",    "encoding", "_probe", "io",   "os",       "json",
+        "net",  "http", "crypto",   "csv",    "toml",     "yaml",   "xml",  "compress", "ws"};
     if (!module_name)
         return false;
     for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
@@ -416,9 +415,8 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
     /* `codegen` is admissible because its whole surface is compiler barriers
      * (opaque / compilerFence) that lower to inline expressions over <stdint.h>
      * with no runtime, libc, or allocation dependency. */
-    return strcmp(module_name, "prelude") == 0 || strcmp(module_name, "math") == 0 ||
-           strcmp(module_name, "mem") == 0 || strcmp(module_name, "simd") == 0 ||
-           strcmp(module_name, "codegen") == 0;
+    return strcmp(module_name, "math") == 0 || strcmp(module_name, "mem") == 0 ||
+           strcmp(module_name, "simd") == 0 || strcmp(module_name, "codegen") == 0;
 }
 
 static bool xa_freestanding_math_member_allowed(const char *member_name) {
@@ -3229,7 +3227,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                  import->module_name ? import->module_name : "?");
         xa_freestanding_report_unavailable(
             ctx, node, feature,
-            "only prelude, math, mem, simd, and codegen are in the freestanding allowlist");
+            "only math, mem, simd, and codegen are in the freestanding allowlist");
     }
 
     // For whole module import: import math or import math as m
