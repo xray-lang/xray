@@ -52,24 +52,14 @@ benchmark_runner = importlib.util.module_from_spec(_BENCHMARK_RUNNER_SPEC)
 _BENCHMARK_RUNNER_SPEC.loader.exec_module(benchmark_runner)
 
 
-def regex_native_field_ownership_errors(source: str) -> list[str]:
-    """Validate the transfer boundary used by the native Regex handles."""
+def regex_native_handle_ownership_errors(source: str) -> list[str]:
+    """Validate the transfer boundary used by the native Regex handle."""
     errors: list[str] = []
     required_before_store = (
         (
             "borrowed pattern retain",
             "    xr_rc_retain_value(pattern);\n",
             "    xr_instance_set_field_fast(inst, XR_REGEX_FIELD_PATTERN, pattern);\n",
-        ),
-        (
-            "borrowed match text retain",
-            "    xr_rc_retain_value(args[2]);\n",
-            "    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_TEXT, args[2]);\n",
-        ),
-        (
-            "borrowed match groups retain",
-            "    xr_rc_retain_value(args[3]);\n",
-            "    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_GROUPS, args[3]);\n",
         ),
     )
     for label, retain, store in required_before_store:
@@ -218,20 +208,16 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertEqual([], check_semantic_owners(ROOT))
         self.assertEqual([], check_fastpaths(ROOT))
 
-    def test_regex_native_fields_have_one_exact_owner(self) -> None:
+    def test_regex_native_handle_has_one_exact_owner(self) -> None:
         path = ROOT / "stdlib/regex/xregex_binding.c"
         source = path.read_text(encoding="utf-8")
-        self.assertEqual([], regex_native_field_ownership_errors(source))
-        mutations = {
-            "pattern": "    xr_rc_retain_value(pattern);\n",
-            "text": "    xr_rc_retain_value(args[2]);\n",
-            "groups": "    xr_rc_retain_value(args[3]);\n",
-        }
+        self.assertEqual([], regex_native_handle_ownership_errors(source))
+        mutations = {"pattern": "    xr_rc_retain_value(pattern);\n"}
         for label, retain in mutations.items():
             with self.subTest(label=label):
                 self.assertIn(retain, source)
                 self.assertNotEqual(
-                    [], regex_native_field_ownership_errors(source.replace(retain, "", 1))
+                    [], regex_native_handle_ownership_errors(source.replace(retain, "", 1))
                 )
         prog_creation = "    XrArray *prog = xr_array_new(xr_current_coro(isolate));\n"
         self.assertIn(prog_creation, source)
@@ -240,7 +226,18 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             prog_creation + "    xr_rc_retain_value(xr_value_from_array(prog));\n",
             1,
         )
-        self.assertNotEqual([], regex_native_field_ownership_errors(extra_owner))
+        self.assertNotEqual([], regex_native_handle_ownership_errors(extra_owner))
+
+    def test_regex_match_shape_is_source_owned(self) -> None:
+        source = (ROOT / "stdlib/regex/regex.xr").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/regex/xregex_binding.c").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        self.assertIn("export final class RegexMatch {", source)
+        for field in ("start: i64", "end: i64", "text: string", "groups: Array<string>"):
+            self.assertIn(field, source)
+        for legacy_owner in ("XR_REGEX_MATCH_FIELD_", "regex_match_new", "__regexMatchNew"):
+            self.assertNotIn(legacy_owner, binding)
+            self.assertNotIn(legacy_owner, definitions)
 
     def test_exact_aot_runtime_adapters_do_not_allow_module_helper_families(self) -> None:
         manifest = load_manifest(ROOT)
