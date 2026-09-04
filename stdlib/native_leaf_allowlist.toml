@@ -741,26 +741,6 @@ deletion_trigger = "when Xray can mark a store as one the optimiser may not elid
 
 [[leaf]]
 module = "net"
-symbol = "__NetError"
-class = "native_record_shape_leaf"
-abi = "private zero-payload enum with stable ordinal order Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory"
-ownership = "fresh"
-effect = "nothrow"
-provider = "generated stdlib enum metadata used only by the bidirectional VM/AOT pump error channel; net.xr maps every variant to the source-owned public NetError"
-deletion_trigger = "when __copyBidirectional returns a private scalar status or the two source pumps replace the native implementation"
-
-[[leaf]]
-module = "net"
-symbol = "__CopyBidirectionalResult"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def, exact shape {aToB: i64, bToA: i64}). VM builds it via xr_stdlib_record_class_get(X, \"net\", \"__CopyBidirectionalResult\"); AOT materialises it from the native XrtI64PairResult struct in the coroutine code generator"
-deletion_trigger = "when net.__copyBidirectional is deleted, or when a .def entry can declare its return as a type net.xr owns, so the byte-count pair stops needing a native record shape to travel through"
-
-[[leaf]]
-module = "net"
 symbol = "__accept"
 class = "host_abi_leaf"
 abi = "accept(2) -- on the Linux io_uring path with SOCK_NONBLOCK, i.e. accept4(2) semantics -- plus fcntl(2) F_SETFL and setsockopt(2) TCP_NODELAY on the accepted descriptor"
@@ -788,16 +768,6 @@ ownership = "fresh"
 effect = "suspends"
 provider = "kernel connect(2); the writability wait is the Xray netpoll on the VM and select(2) on the non-coroutine AOT path. The address differs: VM resolves through src/io/xdns.c, AOT through its own inet_pton(3) wrapper in src/aot/xrt_net.h"
 deletion_trigger = "when Xray source can issue the connect(2) call itself and await writability through the netpoll; the SO_ERROR round trip is the connect verdict and cannot be split off first"
-
-[[leaf]]
-module = "net"
-symbol = "__copyBidirectional"
-class = "host_abi_leaf"
-abi = "read(2)/write(2) through the xr_socket_recv/xr_socket_send shims, shutdown(2) SHUT_WR on each half-close and shutdown(2) SHUT_RDWR at the end; the AOT pump additionally uses select(2)"
-ownership = "fresh"
-effect = "suspends, __NetError.Timeout, __NetError.Closed, __NetError.Reset, __NetError.Refused, __NetError.Dns, __NetError.Tls, __NetError.Io, __NetError.Invalid, __NetError.Cancelled, __NetError.OutOfMemory"
-provider = "kernel read/write/shutdown. The pump differs completely: the VM spawns two native coroutines driven by the netpoll (stdlib/net/net.c), while AOT runs a single blocking select(2) loop on the runtime async thread pool and refuses any TLS connection outright (divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md)"
-deletion_trigger = "when net.xr can spawn two coroutines over __readInto/__writeBytes and express the half-close rule itself, which needs the AOT side to stop declining TLS connections so both backends run the same program"
 
 [[leaf]]
 module = "net"

@@ -22,14 +22,11 @@
 
 /* How a shim returns its result. */
 typedef enum {
-    CG_AOT_RET_VALUE,           /* tagged XrValue, converted to the call's rep */
-    CG_AOT_RET_I64,             /* unboxed int64_t, converted to the call's rep */
-    CG_AOT_RET_ENUM_I64,        /* enum ordinal; boxed only at a tagged boundary */
-    CG_AOT_RET_STR_BORROWED,    /* (const char *data, int64_t *out_len) slice into an
-                                 * input/static buffer; copied into an AOT string */
-    CG_AOT_RET_I64_PAIR_RESULT, /* XrtI64PairResult, materialized as a typed
-                                 * two-int structural object; error_index names a generated
-                                 * native enum variant */
+    CG_AOT_RET_VALUE,        /* tagged XrValue, converted to the call's rep */
+    CG_AOT_RET_I64,          /* unboxed int64_t, converted to the call's rep */
+    CG_AOT_RET_ENUM_I64,     /* enum ordinal; boxed only at a tagged boundary */
+    CG_AOT_RET_STR_BORROWED, /* (const char *data, int64_t *out_len) slice into an
+                              * input/static buffer; copied into an AOT string */
 } CgAotRetKind;
 
 #define CG_AOT_STDLIB_VARIADIC UINT16_MAX
@@ -52,8 +49,7 @@ typedef struct CgAotStdlibMethod {
     const char *arg_spec; /* owned: static literal (generated table) */
     CgAotRetKind ret_kind;
     const char *extern_decl; /* owned: static literal; forward decl emitted into generated C */
-    /* `enum_*` describes either the enum returned by CG_AOT_RET_ENUM_I64 or
-     * the error enum carried by CG_AOT_RET_I64_PAIR_RESULT. */
+    /* `enum_*` describes the enum returned by CG_AOT_RET_ENUM_I64. */
     uint32_t enum_layout_id;
     const char *enum_name;            /* owned: static literal; generated enum name */
     const char *const *variant_names; /* owned: static generated literal table */
@@ -471,157 +467,6 @@ static bool cg_aot_stdlib_method_is_variadic_strings(const CgAotStdlibMethod *m)
     return m && m->argc == CG_AOT_STDLIB_VARIADIC && m->arg_spec && strcmp(m->arg_spec, "*") == 0;
 }
 
-static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                        const XiValue *v, const CgAotStdlibMethod *m,
-                                        uint16_t call_argc, uint16_t arg_base) {
-    const XrAggregateLayout *layout = cg_value_struct_layout(ctx, f, v);
-    if (!layout)
-        layout = cg_type_struct_layout(v ? v->type : NULL);
-    const XrType *object_type = v ? v->type : NULL;
-    bool layout_ok = layout && layout->field_count == 2 &&
-                     layout->fields[0].native_type == XR_NATIVE_I64 &&
-                     layout->fields[1].native_type == XR_NATIVE_I64;
-    bool object_ok = object_type && XR_TYPE_IS_STRUCT_OBJECT(object_type) &&
-                     object_type->object.field_count == 2 && object_type->object.field_names &&
-                     object_type->object.field_types && object_type->object.field_types[0] &&
-                     object_type->object.field_types[1] &&
-                     XR_TYPE_IS_INT(object_type->object.field_types[0]) &&
-                     XR_TYPE_IS_INT(object_type->object.field_types[1]);
-    if (!ctx || !out || !v || !m || (!layout_ok && !object_ok) || !m->enum_name ||
-        !m->variant_names || m->variant_count == 0) {
-        fprintf(stderr,
-                "[xi_cgen] ERROR: invalid i64-pair result contract for %s.%s "
-                "(layout=%p fields=%u error-enum=%s variants=%u)\n",
-                m && m->module ? m->module : "?", m && m->method ? m->method : "?",
-                (const void *) layout,
-                layout ? (unsigned) layout->field_count
-                       : (XR_TYPE_HAS_OBJECT_SHAPE(object_type)
-                              ? (unsigned) object_type->object.field_count
-                              : 0),
-                m && m->enum_name ? m->enum_name : "?", m ? (unsigned) m->variant_count : 0);
-        if (ctx)
-            ctx->error = true;
-        emit_codegen_abort_expr(out);
-        return true;
-    }
-
-    unsigned id = v->id;
-    int first_layout_ordinal = 0;
-    int second_layout_ordinal = 1;
-    const char *first_name = object_ok ? object_type->object.field_names[0] : NULL;
-    const char *second_name = object_ok ? object_type->object.field_names[1] : NULL;
-    if (layout && layout->field_names && first_name && second_name) {
-        first_layout_ordinal = -1;
-        second_layout_ordinal = -1;
-        for (uint16_t i = 0; i < layout->field_count; i++) {
-            if (layout->field_names[i] && strcmp(layout->field_names[i], first_name) == 0)
-                first_layout_ordinal = (int) i;
-            if (layout->field_names[i] && strcmp(layout->field_names[i], second_name) == 0)
-                second_layout_ordinal = (int) i;
-        }
-        if (first_layout_ordinal < 0 || second_layout_ordinal < 0) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: i64-pair layout lost semantic field names\n");
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-    }
-    char field0[128];
-    char field1[128];
-    if (layout) {
-        cg_struct_field_c_name(layout, first_layout_ordinal, field0, sizeof(field0));
-        cg_struct_field_c_name(layout, second_layout_ordinal, field1, sizeof(field1));
-    }
-
-    fprintf(out, "XrtI64PairResult _arp%u = %s(", id, m->shim);
-    cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
-    fprintf(out,
-            "); if (_arp%u.error_index >= 0) { uint32_t _are%u = "
-            "(uint32_t)_arp%u.error_index; if (_are%u >= UINT32_C(%u)) "
-            "{ fputs(\"invalid direct stdlib error ordinal\\n\", stderr); abort(); } "
-            "xrt_pending_error = "
-            "xrt_enum_box_new(UINT32_C(%u), ",
-            id, id, id, id, (unsigned) m->variant_count, (unsigned) m->enum_layout_id);
-    emit_c_string_literal(out, m->enum_name);
-    fprintf(out, ", ");
-    fprintf(out, "((const char *const[]){");
-    for (uint16_t i = 0; i < m->variant_count; i++) {
-        if (i > 0)
-            fprintf(out, ", ");
-        emit_c_string_literal(out, m->variant_names[i]);
-    }
-    fprintf(out, "})[_are%u], _are%u); } ", id, id);
-
-    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
-    if (layout && plan && cg_value_rep_is_struct_aggregate(plan->rep) && plan->rep.c_type) {
-        fprintf(out, "(%s){ .%s = _arp%u.first, .%s = _arp%u.second }; })", plan->rep.c_type,
-                field0, id, field1, id);
-        return true;
-    }
-
-    fprintf(out, "XrValue _arr%u = ", id);
-    if (object_ok) {
-        /* Store each pair half into the slot its field name sorts to under the
-         * canonical order the evidence table and the structural field-table
-         * verifier use, so a verified field read on the result lands on the
-         * value it named. The declared order is (first, second); the shape
-         * interner sorts the names, which may swap the two slots. */
-        const char *const *decl_names = (const char *const *) object_type->object.field_names;
-        uint64_t key_first = xg_object_stable_name_key(decl_names[0]);
-        uint64_t key_second = xg_object_stable_name_key(decl_names[1]);
-        bool first_leads =
-            key_first < key_second ||
-            (key_first == key_second && xg_name_id(decl_names[0]) <= xg_name_id(decl_names[1]));
-        int slot_first = first_leads ? 0 : 1;
-        int slot_second = first_leads ? 1 : 0;
-        int shape_id =
-            cg_intern_object_shape_type_domain(ctx, object_type, XR_OBJECT_DOMAIN_STRUCT);
-        if (shape_id < 0) {
-            ctx->error = true;
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-        fprintf(out,
-                "xrt_object_new_shape(&_xobj_shape_%d); "
-                "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.first)); "
-                "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.second)); _arr%u; })",
-                shape_id, id, slot_first, id, id, slot_second, id, id);
-        return true;
-    }
-    int shape_id = cg_intern_object_shape_parts(ctx, 2, (const char *const *) layout->field_names,
-                                                NULL, XR_OBJECT_DOMAIN_STRUCT);
-    if (shape_id < 0) {
-        ctx->error = true;
-        emit_codegen_abort_expr(out);
-        return true;
-    }
-    int first_shape_ordinal = 0;
-    int second_shape_ordinal = 1;
-    if (object_ok) {
-        const CgObjectShape *shape = &ctx->object_shapes[shape_id];
-        first_shape_ordinal = -1;
-        second_shape_ordinal = -1;
-        for (int64_t i = 0; i < shape->field_count; i++) {
-            if (strcmp(shape->field_names[i], first_name) == 0)
-                first_shape_ordinal = (int) i;
-            if (strcmp(shape->field_names[i], second_name) == 0)
-                second_shape_ordinal = (int) i;
-        }
-        if (first_shape_ordinal < 0 || second_shape_ordinal < 0) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: i64-pair shape lost semantic field names\n");
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-    }
-    fprintf(out,
-            "xrt_object_new_shape(&_xobj_shape_%d); "
-            "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.first)); "
-            "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.second)); _arr%u; })",
-            shape_id, id, first_shape_ordinal, id, id, second_shape_ordinal, id, id);
-    return true;
-}
-
 static bool cg_emit_aot_stdlib_direct_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v, const CgAotStdlibMethod *m,
                                            uint16_t call_argc, uint16_t arg_base) {
@@ -680,9 +525,6 @@ static bool cg_emit_aot_stdlib_direct_call(XiCgenCtx *ctx, FILE *out, const XiFu
     fprintf(out, "({ ");
     if (m->extern_decl && m->extern_decl[0])
         fprintf(out, "%s ", m->extern_decl);
-
-    if (m->ret_kind == CG_AOT_RET_I64_PAIR_RESULT)
-        return cg_emit_aot_i64_pair_result(ctx, out, f, v, m, call_argc, arg_base);
 
     if (m->ret_kind == CG_AOT_RET_STR_BORROWED) {
         /* The shim returns a borrowed (data, *out_len) slice; copy it into a

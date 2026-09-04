@@ -274,8 +274,6 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeBytes", net_write_bytes_yieldable);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__copyBidirectional", net_copy_bidirectional_yieldable);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__shutdownRead", net_shutdown_read);
     expected_count++;
     XRS_EXPORT(module, isolate, "__shutdownWrite", net_shutdown_write);

@@ -74,8 +74,6 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__writeBytes") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "net.__copyBidirectional") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__close") == 0)
         return XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__udpSendTo") == 0)

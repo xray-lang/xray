@@ -7,19 +7,6 @@
 
 /* clang-format off */
 
-static const char *const g_aot_stdlib_net___copyBidirectional_enum_variants[] = {
-    "Timeout",
-    "Closed",
-    "Reset",
-    "Refused",
-    "Dns",
-    "Tls",
-    "Io",
-    "Invalid",
-    "Cancelled",
-    "OutOfMemory",
-};
-
 static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"time", "__realtimeNanos", 0, "xrt_time_realtime_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"time", "__monotonicNanos", 0, "xrt_time_monotonic_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -119,7 +106,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__accept", 1, "xrt_net_accept", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__readInto", 3, "xrt_net_read_into", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__writeBytes", 2, "xrt_net_write_bytes", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"net", "__copyBidirectional", 2, "xrt_net_copy_bidirectional", "vv", CG_AOT_RET_I64_PAIR_RESULT, NULL, UINT32_C(3040362961), "__NetError", g_aot_stdlib_net___copyBidirectional_enum_variants, 10},
     {"net", "__shutdownRead", 1, "xrt_net_shutdown_read", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__shutdownWrite", 1, "xrt_net_shutdown_write", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__shutdown", 1, "xrt_net_shutdown", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

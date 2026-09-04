@@ -722,7 +722,7 @@ def parse_def_metadata(
             aot_kind = str(props.get("aot_kind", "method" if aot_direct else ""))
             ret = str(props.get("ret", "value"))
             aot_enum = str(props.get("aot_enum", ""))
-            if ret not in {"value", "i64", "enum_i64", "str_borrowed", "i64_pair_result"}:
+            if ret not in {"value", "i64", "enum_i64", "str_borrowed"}:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported ret kind for "
                     f"{current_module}.{current_name}: {ret}"
@@ -735,15 +735,15 @@ def parse_def_metadata(
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_kind requires aot_direct: true"
                 )
-            if ret in {"enum_i64", "i64_pair_result"} and (not aot_direct or not aot_enum):
+            if ret == "enum_i64" and (not aot_direct or not aot_enum):
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} {ret} "
                     "requires aot_direct: true and aot_enum"
                 )
-            if aot_enum and ret not in {"enum_i64", "i64_pair_result"}:
+            if aot_enum and ret != "enum_i64":
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_enum "
-                    "requires ret: enum_i64 or i64_pair_result"
+                    "requires ret: enum_i64"
                 )
             argc_raw = str(props["argc"])
             arg_spec = str(props.get("arg_spec", ""))
@@ -1451,8 +1451,6 @@ def ret_expr(entry: StdlibEntry) -> str:
         return "CG_AOT_RET_ENUM_I64"
     if entry.ret == "str_borrowed":
         return "CG_AOT_RET_STR_BORROWED"
-    if entry.ret == "i64_pair_result":
-        return "CG_AOT_RET_I64_PAIR_RESULT"
     raise SystemExit(f"unsupported ret kind for {entry.symbol}: {entry.ret}")
 
 

@@ -276,7 +276,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__accept", "(listener: NetListener): NetConn?", "Accept a new connection", "net_accept_handle_yieldable", "yieldable", "", "xrt_net_accept", "v", "value", "", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__readInto", "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", "net_read_into_yieldable", "yieldable", "", "xrt_net_read_into", "vvv", "value", "", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__writeBytes", "(conn: NetConn, data: Array<u8>): i64", "Write the whole buffer; returns bytes written, -1 when nothing was sent", "net_write_bytes_yieldable", "yieldable", "", "xrt_net_write_bytes", "vv", "value", "", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"net", "__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", "net_copy_bidirectional_yieldable", "yieldable", "", "xrt_net_copy_bidirectional", "vv", "i64_pair_result", "__NetError", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", "net_shutdown_read", "normal", "", "xrt_net_shutdown_read", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", "net_shutdown_write", "normal", "", "xrt_net_shutdown_write", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__shutdown", "(conn: NetConn): bool", "Shut down both directions", "net_shutdown_conn", "normal", "", "xrt_net_shutdown", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -339,11 +338,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlo
     {"Coro", "CoroDeadlock", "reason", "string", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_net___CopyBidirectionalResult[] = {
-    {"net", "__CopyBidirectionalResult", "aToB", "i64", true},
-    {"net", "__CopyBidirectionalResult", "bToA", "i64", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterTlsSnapshot[] = {
     {"cluster", "__ClusterTlsSnapshot", "enabled", "bool", true},
     {"cluster", "__ClusterTlsSnapshot", "clientReady", "bool", true},
@@ -386,7 +380,6 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
-    {"net", "__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_object_fields_net___CopyBidirectionalResult, 2, true},
     {"cluster", "__ClusterTlsSnapshot", "Private scalar TLS state read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterTlsSnapshot, 3, true},
     {"cluster", "__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
     {"cluster", "__ClusterSnapshot", "Private scalar snapshot read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterSnapshot, 10, true},
@@ -411,24 +404,10 @@ static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroMetric_variants
     {"Reductions", NULL, 0},
 };
 
-static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net___NetError_variants[] = {
-    {"Timeout", NULL, 0},
-    {"Closed", NULL, 0},
-    {"Reset", NULL, 0},
-    {"Refused", NULL, 0},
-    {"Dns", NULL, 0},
-    {"Tls", NULL, 0},
-    {"Io", NULL, 0},
-    {"Invalid", NULL, 0},
-    {"Cancelled", NULL, 0},
-    {"OutOfMemory", NULL, 0},
-};
-
 static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
     {"Coro", "CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", xr_stdlib_enum_Coro_CoroState_variants, 5, UINT32_C(2882116571)},
     {"Coro", "CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroGroupKey_variants, 2, UINT32_C(2434143071)},
     {"Coro", "CoroMetric", "Metric used to rank coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroMetric_variants, 2, UINT32_C(4039818693)},
-    {"net", "__NetError", "Private transport error from the bidirectional native pump", xr_stdlib_enum_net___NetError_variants, 10, UINT32_C(3040362961)},
 };
 #define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))
 

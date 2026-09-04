@@ -1688,17 +1688,6 @@ module Coro {
 }
 
 module net {
-  enum __NetError {
-    variants: "Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory"
-    doc: "Private transport error from the bidirectional native pump"
-  }
-
-  object __CopyBidirectionalResult {
-    fields: "const aToB: i64, const bToA: i64"
-    exact: true
-    doc: "Byte counts copied in each direction by copyBidirectional"
-  }
-
   native_class NetConn {
     visibility: "internal"
     core_slot: "netConnClass"
@@ -1863,24 +1852,6 @@ module net {
     link_object: false
     layer: "runtime"
     caps: "coro,netpoll"
-  }
-
-  fn __copyBidirectional {
-    signature: "(a: NetConn, b: NetConn): __CopyBidirectionalResult"
-    doc: "Copy two TCP/TLS streams in both directions"
-    vm: "net_copy_bidirectional_yieldable"
-    vm_binding: "yieldable"
-    aot: "xrt_net_copy_bidirectional"
-    argc: 2
-    arg_spec: "vv"
-    ret: "i64_pair_result"
-    aot_enum: "__NetError"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-    effect: "__NetError.Timeout, __NetError.Closed, __NetError.Reset, __NetError.Refused, __NetError.Dns, __NetError.Tls, __NetError.Io, __NetError.Invalid, __NetError.Cancelled, __NetError.OutOfMemory"
-    return_ownership: "fresh"
   }
 
   fn __shutdownRead {

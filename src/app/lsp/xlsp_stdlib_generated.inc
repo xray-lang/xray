@@ -438,10 +438,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"DialOptions", XLSP_SYM_CLASS, "type DialOptions", "Class type", NULL, 0},
     {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult", "Class type", NULL, 0},
     {"UdpFrom", XLSP_SYM_CLASS, "type UdpFrom", "Class type", NULL, 0},
-    {"__CopyBidirectionalResult", XLSP_SYM_CLASS, "type __CopyBidirectionalResult = { aToB: i64, bToA: i64 }", "Byte counts copied in each direction by copyBidirectional", NULL, 0},
-    {"__NetError", XLSP_SYM_CLASS, "enum __NetError", "Private transport error from the bidirectional native pump", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 35
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 33
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {

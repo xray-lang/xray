@@ -131,38 +131,6 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_EQ_INT(object_shape_type->object.field_count, 2);
 
-    XrClass *record_class = xr_stdlib_record_class_get(iso, "net", "__CopyBidirectionalResult");
-    ASSERT_NOT_NULL(record_class);
-    int a_to_b_index = xr_class_lookup_field_by_name(iso, record_class, "aToB");
-    int b_to_a_index = xr_class_lookup_field_by_name(iso, record_class, "bToA");
-    int expected_a_to_b =
-        xg_object_stable_name_key("bToA") < xg_object_stable_name_key("aToB") ? 1 : 0;
-    ASSERT_EQ_INT(a_to_b_index, expected_a_to_b);
-    ASSERT_EQ_INT(b_to_a_index, 1 - expected_a_to_b);
-
-    const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "__NetError");
-    ASSERT_NOT_NULL(enum_decl);
-    ASSERT_EQ_INT(enum_decl->variant_count, 10);
-    ASSERT_TRUE(enum_decl->layout_id != 0);
-    ASSERT_TRUE(strcmp(enum_decl->variants[0].name, "Timeout") == 0);
-    ASSERT_TRUE(strcmp(enum_decl->variants[9].name, "OutOfMemory") == 0);
-
-    XaEnumInfo *enum_info = NULL;
-    XrType *enum_type = xa_builtin_enum_decl_type(iso, enum_decl, &enum_info);
-    ASSERT_NOT_NULL(enum_type);
-    ASSERT_EQ_INT(enum_type->kind, XR_KIND_ENUM);
-    ASSERT_NOT_NULL(enum_info);
-    ASSERT_EQ_INT(enum_info->variant_count, 10);
-    ASSERT_EQ_INT(enum_type->enum_type.layout_id, enum_decl->layout_id);
-
-    XrEnumType *runtime_enum = xr_stdlib_enum_type_get(iso, "net", "__NetError");
-    ASSERT_NOT_NULL(runtime_enum);
-    ASSERT_TRUE(runtime_enum == xr_stdlib_enum_type_get(iso, "net", "__NetError"));
-    ASSERT_NOT_NULL(runtime_enum->layout);
-    ASSERT_EQ_INT(runtime_enum->layout->layout_id, enum_decl->layout_id);
-    ASSERT_EQ_INT(runtime_enum->members[0].ctor->layout_id, enum_decl->layout_id);
-    xa_enum_info_free(enum_info);
-
     const XaBuiltinMember *connect_fd = find_module_member("net", "__connectFd");
     ASSERT_NOT_NULL(connect_fd);
     ASSERT_TRUE(connect_fd->is_internal);

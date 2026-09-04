@@ -268,53 +268,11 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
 };
 #define GEN_MEM_FUNCTION_COUNT 18
 
-// net.__CopyBidirectionalResult object fields
-static const XaBuiltinObjectField g_gen_net___copybidirectionalresult_object_fields[] = {
-    {"aToB", "i64"},
-    {"bToA", "i64"},
-};
-
-static const XaBuiltinObjectShape g_gen_net_object_shapes[] = {
-    {"__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", g_gen_net___copybidirectionalresult_object_fields, 2, true},
-};
-#define GEN_NET_OBJECT_SHAPE_COUNT 1
-
-static const XaBuiltinEnumVariant g_gen_net___neterror_variants[] = {
-    {"Timeout", NULL, 0},
-    {"Closed", NULL, 0},
-    {"Reset", NULL, 0},
-    {"Refused", NULL, 0},
-    {"Dns", NULL, 0},
-    {"Tls", NULL, 0},
-    {"Io", NULL, 0},
-    {"Invalid", NULL, 0},
-    {"Cancelled", NULL, 0},
-    {"OutOfMemory", NULL, 0},
-};
-
-static const XaBuiltinEnum g_gen_net_enums[] = {
-    {"__NetError", "Private transport error from the bidirectional native pump", g_gen_net___neterror_variants, 10, UINT32_C(3040362961)},
-};
-#define GEN_NET_ENUM_COUNT 1
-
 static const XaBuiltinClass g_gen_net_classes[] = {
     {"NetConn", true},
     {"NetListener", true},
 };
 #define GEN_NET_CLASS_COUNT 2
-
-static const char *g_gen_net___copybidirectional_8_errors[] = {
-    "__NetError.Timeout",
-    "__NetError.Closed",
-    "__NetError.Reset",
-    "__NetError.Refused",
-    "__NetError.Dns",
-    "__NetError.Tls",
-    "__NetError.Io",
-    "__NetError.Invalid",
-    "__NetError.Cancelled",
-    "__NetError.OutOfMemory",
-};
 
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
@@ -326,7 +284,6 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__readInto", "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeBytes", "(conn: NetConn, data: Array<u8>): i64", "Write the whole buffer; returns bytes written, -1 when nothing was sent", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdown", "(conn: NetConn): bool", "Shut down both directions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -346,7 +303,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_NET_FUNCTION_COUNT 27
+#define GEN_NET_FUNCTION_COUNT 26
 
 // os.__ExecResult handle fields
 static const XaBuiltinHandleField g_gen_os___execresult_fields[] = {
@@ -448,7 +405,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_mem_classes, GEN_MEM_CLASS_COUNT},
-    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT, g_gen_net_classes, GEN_NET_CLASS_COUNT},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_net_classes, GEN_NET_CLASS_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},

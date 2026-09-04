@@ -53,19 +53,6 @@ fn _classify(code: i64) -> NetError {
     return NetError.Io
 }
 
-fn _classifyNative(error: __NetError) -> NetError {
-    if (error == __NetError.Timeout) { return NetError.Timeout }
-    if (error == __NetError.Closed) { return NetError.Closed }
-    if (error == __NetError.Reset) { return NetError.Reset }
-    if (error == __NetError.Refused) { return NetError.Refused }
-    if (error == __NetError.Dns) { return NetError.Dns }
-    if (error == __NetError.Tls) { return NetError.Tls }
-    if (error == __NetError.Invalid) { return NetError.Invalid }
-    if (error == __NetError.Cancelled) { return NetError.Cancelled }
-    if (error == __NetError.OutOfMemory) { return NetError.OutOfMemory }
-    return NetError.Io
-}
-
 export final class IpAddress {
     value: string
 
@@ -94,14 +81,9 @@ export final class DialOptions {
     }
 }
 
-export final class CopyBidirectionalResult {
+export struct CopyBidirectionalResult {
     aToB: i64
     bToA: i64
-
-    constructor(aToB: i64, bToA: i64) {
-        this.aToB = aToB
-        this.bToA = bToA
-    }
 }
 
 // Sender identity attached to a received datagram.
@@ -275,13 +257,16 @@ fn _clampCopyBuffer(size: i64) -> i64 {
 // Pump src to dst until EOF or error; returns bytes copied. readInto sets
 // buffer.length to the chunk size, so writeBytes sends exactly the received
 // bytes without any per-iteration slicing or copying.
-fn _pump(src: NetConn, dst: NetConn, bufferSize: i64) -> i64 {
+fn _pump(src: NetConn, dst: NetConn, bufferSize: i64, halfCloseOnEof: bool) -> i64 {
     var buffer = Array<u8>(bufferSize)
     var total = 0
     while (true) {
         var n = __readInto(src, buffer, bufferSize)
         if (n < 0) { return total }
-        if (n == 0) { return total }
+        if (n == 0) {
+            if (halfCloseOnEof) { __shutdownWrite(dst) }
+            return total
+        }
         var sent = __writeBytes(dst, buffer)
         if (sent < n) { return total + (sent > 0 ? sent : 0) }
         total = total + n
@@ -292,21 +277,30 @@ fn _pump(src: NetConn, dst: NetConn, bufferSize: i64) -> i64 {
 // Copy src to dst until EOF. Returns bytes copied; a mid-stream error stops
 // the pump and the reason stays queryable via lastError on either handle.
 export fn copy(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER) -> i64 {
-    return _pump(src, dst, _clampCopyBuffer(bufferSize))
+    return _pump(src, dst, _clampCopyBuffer(bufferSize), false)
 }
 
-// Full-duplex relay. The two direction pumps run as native coroutines: the
-// analyzer accepts spawning them from Xray, but the AOT cross-execution
-// transfer planner has no verified plan yet for handing the same two handles
-// to two child tasks, so the pair-pump stays a native primitive until that
-// plan lands.
+fn _pumpAndHalfClose(src: NetConn, dst: NetConn) -> i64 {
+    return _pump(src, dst, _DEFAULT_COPY_BUFFER, true)
+}
+
+// Full-duplex relay is source-owned structured concurrency: each direction
+// runs the ordinary source pump, and EOF half-closes the peer write side so
+// request/response protocols can drain without closing either handle.
 export fn copyBidirectional(a: NetConn, b: NetConn) -> CopyBidirectionalResult {
-    try {
-        var raw = __copyBidirectional(a, b)
-        return CopyBidirectionalResult(raw.aToB, raw.bToA)
-    } catch (error: __NetError) {
-        throw _classifyNative(error)
+    if (a.isClosed() || b.isClosed()) { throw NetError.Closed }
+    if (a.fd() == b.fd()) { throw NetError.Invalid }
+    const left = a
+    const right = b
+    var first = 0
+    var second = 0
+    scope {
+        var aToB = go _pumpAndHalfClose(left, right)
+        var bToA = go _pumpAndHalfClose(right, left)
+        first = await aToB
+        second = await bToA
     }
+    return CopyBidirectionalResult{aToB: first, bToA: second}
 }
 
 // ========== UDP ==========

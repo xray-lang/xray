@@ -5810,17 +5810,12 @@ body_unique_pending_object_return_literal(const XgPendingBody *body) {
 }
 
 /* A native primitive can hand back an exact structural object even though it
- * has no .xr body to scan: net.__copyBidirectional yields the two-field
- * __CopyBidirectionalResult through the i64_pair_result adapter. Such a shape
- * never reaches the evidence table through the object-literal or type-alias
- * routes, so a field read on the call result would have no proven receiver
- * shape and the AOT backend would reject the whole module. Register the shape
- * here from the analyzed return type, in the canonical field order the
- * structural field-table verifier and the backend shape interner require. The
- * i64_pair_result materializer stores each pair half into the matching
- * canonical slot, so a field read resolves to the slot its value was written
- * to, and this row's stable shape key matches the one the backend interns for
- * the materialized object. The row is keyed by the type's stable identity so
+ * has no .xr body to scan. Such a shape never reaches the evidence table
+ * through the object-literal or type-alias routes, so a field read on the call
+ * result would have no proven receiver shape and the AOT backend would reject
+ * the whole module. Register the shape from the analyzed return type in the
+ * canonical field order required by the structural field-table verifier and
+ * backend shape interner. The row is keyed by the type's stable identity so
  * repeated calls share one shape. */
 static XgObjectShapeId body_add_native_return_object_shape(XgBodyCollect *bc, const XrType *type,
                                                            uint32_t source_span_id) {
@@ -5842,9 +5837,7 @@ static XgObjectShapeId body_add_native_return_object_shape(XgBodyCollect *bc, co
     {
         /* Canonical field order (stable name key, then name id) is what the AOT
          * structural field-table verifier and the backend shape interner both
-         * demand, and it is the order the i64_pair_result materializer writes
-         * each value into, so a later field read resolves to the slot its value
-         * was stored in. */
+         * demand. */
         typedef struct {
             const XrType *field_type;
             uint64_t stable_name_key;
