@@ -50,3 +50,12 @@ export fn localOffsetAt(timestamp: i64) -> i64 {
 export fn localOffset() -> i64 {
     return __utcOffsetAt(now() / MILLIS_PER_SECOND)
 }
+
+// Suspend the current coroutine for at least the requested number of
+// milliseconds. Validation and the public contract live here; the runtime
+// leaf only owns timer-wheel integration and resumption.
+export fn sleep(ms: i64) {
+    if (ms <= 0) { return }
+    const bounded = ms > 86400000 ? 86400000 : ms
+    __sleep(bounded)
+}

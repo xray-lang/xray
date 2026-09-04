@@ -1,20 +1,274 @@
-// sync — coroutine-aware synchronisation primitives.
+// sync — source-owned synchronization and coordination primitives.
 //
-// Every primitive here is a pure-Xray class composing the builtin
-// coroutine-aware `Semaphore`/`CountdownLatch` plus the non-suspendable
-// `Atomic` spinlock. There is no per-primitive native heap type and no AOT
-// cgen specialisation: the closure/defer/generic machinery the compiler
-// already provides gives VM/AOT parity for free (task 147 §0.8–§0.12).
-//
-// Design notes:
-//   * `Semaphore.acquire()` parks the coroutine instead of busy-waiting, so a
-//     contended lock never stalls a scheduler worker.
-//   * `defer`-based release runs at scope exit and must stay non-suspendable,
-//     so any reader-count bookkeeping uses an `Atomic<bool>` spinlock (whose
-//     `release`/`store` never yield), never a `Semaphore`, inside a `defer`.
-//   * Constructing a `Semaphore`/`CountdownLatch` only allocates and binds the
-//     scheduler (it never yields), so these constructors stay synchronous and
-//     are legal to call from ordinary (non-coroutine) AOT contexts.
+// Atomic operations are the only runtime primitive. Queueing, batching,
+// closure execution, close behavior, waiting and retry policy are expressed in
+// Xray so VM and AOT compile the same implementation.
+
+import time
+
+class _SpinLock {
+    private _held: Atomic<bool>
+
+    constructor() { this._held = Atomic<bool>(false) }
+
+    lock() {
+        while (true) {
+            var (_, acquired) = this._held.compareExchange(
+                false, true, Ordering.AcquireRelease)
+            if (acquired) { return }
+            time.sleep(1)
+        }
+    }
+
+    unlock() { this._held.store(false, Ordering.Release) }
+}
+
+export class Semaphore {
+    private _available: Atomic<i64>
+    private _closed: Atomic<bool>
+
+    constructor(permits: i64) {
+        this._available = Atomic<i64>(permits > 0 ? permits : 0)
+        this._closed = Atomic<bool>(false)
+    }
+
+    available: i64 { fn() { return this._available.load(Ordering.Acquire) } }
+    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+
+    release(count: i64 = 1) -> i64 {
+        if (count <= 0 || this.isClosed) { return this.available }
+        return this._available.fetchAdd(count, Ordering.AcquireRelease) + count
+    }
+
+    tryAcquire() -> bool {
+        while (!this.isClosed) {
+            var current = this._available.load(Ordering.Acquire)
+            if (current <= 0) { return false }
+            var (_, acquired) = this._available.compareExchange(
+                current, current - 1, Ordering.AcquireRelease)
+            if (acquired) { return true }
+        }
+        return false
+    }
+
+    acquire() -> bool {
+        while (!this.isClosed) {
+            if (this.tryAcquire()) { return true }
+            time.sleep(1)
+        }
+        return false
+    }
+
+    close() { this._closed.store(true, Ordering.Release) }
+}
+
+export class CountdownLatch {
+    private _remaining: Atomic<i64>
+    private _closed: Atomic<bool>
+
+    constructor(count: i64) {
+        this._remaining = Atomic<i64>(count > 0 ? count : 0)
+        this._closed = Atomic<bool>(false)
+    }
+
+    remaining: i64 { fn() { return this._remaining.load(Ordering.Acquire) } }
+    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+
+    reset(count: i64) -> bool {
+        if (count < 0 || this.isClosed || this.remaining != 0) { return false }
+        this._remaining.store(count, Ordering.Release)
+        return true
+    }
+
+    done(count: i64 = 1) -> i64 {
+        if (count <= 0 || this.isClosed) { return this.remaining }
+        while (true) {
+            var current = this.remaining
+            if (current == 0) { return 0 }
+            var next = current - count
+            if (next < 0) { next = 0 }
+            var (_, changed) = this._remaining.compareExchange(
+                current, next, Ordering.AcquireRelease)
+            if (changed) { return next }
+        }
+    }
+
+    tryWait() -> bool { return this.remaining == 0 && !this.isClosed }
+
+    wait() -> bool {
+        while (!this.isClosed) {
+            if (this.remaining == 0) { return true }
+            time.sleep(1)
+        }
+        return false
+    }
+
+    close() { this._closed.store(true, Ordering.Release) }
+}
+
+export class EventCount {
+    private _epoch: Atomic<i64>
+    private _closed: Atomic<bool>
+
+    constructor(epoch: i64) {
+        this._epoch = Atomic<i64>(epoch)
+        this._closed = Atomic<bool>(false)
+    }
+
+    epoch: i64 { fn() { return this._epoch.load(Ordering.Acquire) } }
+    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+
+    advance(step: i64 = 1) -> i64 {
+        if (step <= 0 || this.isClosed) { return this.epoch }
+        return this._epoch.fetchAdd(step, Ordering.AcquireRelease) + step
+    }
+
+    wait(lastEpoch: i64, workerHint: i64 = -1) -> i64 {
+        while (!this.isClosed && this.epoch == lastEpoch) { time.sleep(1) }
+        return this.epoch
+    }
+
+    close() { this._closed.store(true, Ordering.Release) }
+}
+
+export class WorkQueue<T> {
+    private _lock: _SpinLock
+    private _items: Array<T>
+    private _shards: i64
+    private _closed: Atomic<bool>
+
+    constructor(shards: i64 = 1, capacity: i64 = 256) {
+        this._lock = _SpinLock()
+        this._items = Array<T>(capacity > 0 ? capacity : 1)
+        this._shards = shards > 0 ? shards : 1
+        this._closed = Atomic<bool>(false)
+    }
+
+    length: i64 { fn() { return len(this._items) } }
+    shardCount: i64 { fn() { return this._shards } }
+    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+
+    push(value: T, shard: i64 = -1) -> bool {
+        if (this.isClosed) { return false }
+        this._lock.lock()
+        defer { this._lock.unlock() }
+        if (this.isClosed) { return false }
+        this._items.push(value)
+        return true
+    }
+
+    pushRange(start: i64, count: i64, shardStart: i64 = -1) -> i64 {
+        var accepted = 0
+        for (var offset = 0; offset < count; offset++) {
+            if (!this.push((start + offset) as T, shardStart + offset)) { break }
+            accepted = accepted + 1
+        }
+        return accepted
+    }
+
+    tryPop(workerId: i64 = -1) -> (T?, bool) {
+        this._lock.lock()
+        defer { this._lock.unlock() }
+        var value = this._items.shift()
+        return (value, value != null)
+    }
+
+    pop(workerId: i64 = -1) -> T? {
+        while (true) {
+            var (value, found) = this.tryPop(workerId)
+            if (found) { return value }
+            if (this.isClosed) { return null }
+            time.sleep(1)
+        }
+        return null
+    }
+
+    close() { this._closed.store(true, Ordering.Release) }
+}
+
+export class ResultGroup {
+    private _lock: _SpinLock
+    private _batchSize: i64
+    private _sum: i64
+    private _count: i64
+    private _ready: Array<i64>
+    private _pending: Atomic<i64>
+    private _closed: Atomic<bool>
+
+    constructor(batchSize: i64 = 1) {
+        this._lock = _SpinLock()
+        this._batchSize = batchSize > 0 ? batchSize : 1
+        this._sum = 0
+        this._count = 0
+        this._ready = []
+        this._pending = Atomic<i64>(0)
+        this._closed = Atomic<bool>(false)
+    }
+
+    readyCount: i64 { fn() { return len(this._ready) } }
+    pendingCount: i64 { fn() { return this._pending.load(Ordering.Acquire) } }
+    batchSize: i64 { fn() { return this._batchSize } }
+    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+
+    add(value: i64) -> bool {
+        if (this.isClosed) { return false }
+        this._lock.lock()
+        defer { this._lock.unlock() }
+        if (this.isClosed) { return false }
+        this._sum = this._sum + value
+        this._count = this._count + 1
+        this._pending.fetchAdd(1, Ordering.AcquireRelease)
+        if (this._count >= this._batchSize) { this._flushLocked() }
+        return true
+    }
+
+    private _flushLocked() {
+        if (this._count == 0) { return }
+        this._ready.push(this._sum)
+        this._sum = 0
+        this._count = 0
+    }
+
+    flush() {
+        this._lock.lock()
+        defer { this._lock.unlock() }
+        this._flushLocked()
+    }
+
+    reset(count: i64) -> bool {
+        if (count <= 0 || this.pendingCount != 0 || this.isClosed) { return false }
+        this._lock.lock()
+        defer { this._lock.unlock() }
+        this._batchSize = count
+        return true
+    }
+
+    tryRecv() -> (i64?, bool) {
+        this._lock.lock()
+        defer { this._lock.unlock() }
+        var value = this._ready.shift()
+        if (value == null) { return (null, false) }
+        this._pending.fetchSub(this._batchSize, Ordering.AcquireRelease)
+        return (value, true)
+    }
+
+    recv() -> i64? {
+        while (true) {
+            var (value, found) = this.tryRecv()
+            if (found) { return value }
+            if (this.isClosed) { return null }
+            time.sleep(1)
+        }
+        return null
+    }
+
+    close() {
+        this._lock.lock()
+        this._flushLocked()
+        this._closed.store(true, Ordering.Release)
+        this._lock.unlock()
+    }
+}
 
 // CachePadded<T> — cache-line aligned wrapper for counters/flags that should
 // not share a line with adjacent values.
@@ -204,11 +458,8 @@ export class Condvar {
     }
 }
 
-// fence — standalone memory fence in Ordering-enum form (task 147 §6.5).
-// Pure-Xray alias over the mem.fence(int) intrinsic: the enum's backing value
-// maps 1:1 onto the C11 memory_order ladder (0 Relaxed .. 4 SeqCst). Prelude
-// enums are value-lowered at runtime, so `as int` is the conversion (not
-// `.value`, which needs an enum instance).
+// fence — standalone memory fence in Ordering-enum form. The enum's backing
+// value maps directly onto the runtime's memory-order ladder.
 import mem
 export fn fence(order: Ordering) {
     mem.fence(order as i64)

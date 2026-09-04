@@ -1494,6 +1494,46 @@ deletion_trigger = "when the module-static arena's counter is readable from Xray
 
 [[leaf]]
 module = "sys"
+symbol = "__cpuCount"
+class = "host_abi_leaf"
+abi = "sched_getaffinity(2) or sysconf(3); Win32 GetActiveProcessorCount"
+ownership = "none"
+effect = "nothrow"
+provider = "the host OS thread API through src/os/os_thread.h"
+deletion_trigger = "none while the host CPU topology remains an operating-system fact"
+
+[[leaf]]
+module = "sys"
+symbol = "__threadYield"
+class = "host_abi_leaf"
+abi = "sched_yield(2); Win32 SwitchToThread"
+ownership = "none"
+effect = "nothrow"
+provider = "the host OS scheduler through src/os/os_thread.h"
+deletion_trigger = "none while yielding an OS thread remains a host operation"
+
+[[leaf]]
+module = "sys"
+symbol = "__sleepMs"
+class = "host_abi_leaf"
+abi = "nanosleep(2); Win32 Sleep"
+ownership = "none"
+effect = "nothrow"
+provider = "the host OS thread API through src/os/os_thread.h"
+deletion_trigger = "when OS-thread blocking sleep is removed from the public sys surface"
+
+[[leaf]]
+module = "sys"
+symbol = "__pinToCpu"
+class = "host_abi_leaf"
+abi = "pthread_setaffinity_np(3); Win32 SetThreadAffinityMask"
+ownership = "none"
+effect = "nothrow"
+provider = "the host OS affinity API through src/os/os_thread.h"
+deletion_trigger = "none while thread affinity remains an operating-system capability"
+
+[[leaf]]
+module = "sys"
 symbol = "__dylibClose"
 class = "host_abi_leaf"
 abi = "dlclose(3); Win32 FreeLibrary"
@@ -1541,16 +1581,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "the kernel installs the handler, but delivery is the Xray runtime's. The VM spawns a dedicated C-function coroutine that polls the pending bits on the timer wheel every 10 ms and calls the closure; AOT stores the closure in a global slot whose pending bits are only consumed inside threadYield, sleepMs and pinToCpu, so an AOT program that calls none of those may never run the handler"
 deletion_trigger = "when signal delivery is a scheduler surface both backends share -- a channel or an awaitable the runtime posts to -- so sys.xr can receive signals instead of registering a C-side callback"
-
-[[leaf]]
-module = "sys"
-symbol = "__osMutexNew"
-class = "host_abi_leaf"
-abi = "pthread_mutex_init(3); Win32 InitializeSRWLock"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the pthreads implementation in libc. VM stdlib/sys/sys.c builds an instance whose native body calls src/os/unix/thread_unix.c xr_mutex_init; AOT src/aot/xrt_sys.h allocates a refcounted cell and calls pthread_mutex_init directly. Same entry point, different host objects"
-deletion_trigger = "when the runtime offers an OS mutex as a typed handle Xray source can hold, so the initialisation and the object it lives in are not decided inside one native call"
 
 [[leaf]]
 module = "sys"
@@ -1658,6 +1688,16 @@ deletion_trigger = "when the thread-local registry is one surface both backends 
 #
 # All four leaves read a clock. `time.__utcOffsetAt` is the only leaf in the
 # whole allowlist whose VM and AOT halves call the same function.
+
+[[leaf]]
+module = "time"
+symbol = "__sleep"
+class = "runtime_leaf"
+abi = "Xray scheduler timer-wheel suspension and coroutine resumption"
+ownership = "none"
+effect = "suspends"
+provider = "the runtime timer wheel; time.xr owns validation and maximum-duration policy"
+deletion_trigger = "none while source-level sleep requires scheduler integration"
 
 [[leaf]]
 module = "time"

@@ -55,7 +55,7 @@ module time {
     visibility: "internal"
   }
 
-  fn sleep {
+  fn __sleep {
     signature: "(ms: i64): ()"
     doc: "Sleep for milliseconds"
     vm: "xr_time_sleep"
@@ -66,6 +66,7 @@ module time {
     link_object: false
     layer: "runtime"
     caps: "coro,timer"
+    visibility: "internal"
   }
 }
 
@@ -467,191 +468,7 @@ module crypto {
 }
 
 module sys {
-  native_class OsMutex {
-    super_slot: "objectClass"
-    core_slot: "sysMutexClass"
-    native_body: "g_sys_mutex_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSMUTEX"
-  }
-
-  native_class OsRwLock {
-    super_slot: "objectClass"
-    core_slot: "sysRwLockClass"
-    native_body: "g_sys_rwlock_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSRWLOCK"
-  }
-
-  native_class OsCondvar {
-    super_slot: "objectClass"
-    core_slot: "sysCondvarClass"
-    native_body: "g_sys_condvar_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSCONDVAR"
-  }
-
-  native_class OsBarrier {
-    super_slot: "objectClass"
-    core_slot: "sysBarrierClass"
-    native_body: "g_sys_barrier_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSBARRIER"
-  }
-
-  native_class OsOnce {
-    super_slot: "objectClass"
-    core_slot: "sysOnceClass"
-    native_body: "g_sys_once_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSONCE"
-  }
-
-  class_method OsMutex.lock {
-    vm: "sys_mutex_lock"
-    argc: 0
-  }
-
-  class_method OsMutex.unlock {
-    vm: "sys_mutex_unlock"
-    argc: 0
-  }
-
-  class_method OsMutex.tryLock {
-    vm: "sys_mutex_try_lock"
-    argc: 0
-  }
-
-  class_method OsRwLock.rdlock {
-    vm: "sys_rwlock_rdlock"
-    argc: 0
-  }
-
-  class_method OsRwLock.rdunlock {
-    vm: "sys_rwlock_rdunlock"
-    argc: 0
-  }
-
-  class_method OsRwLock.wrlock {
-    vm: "sys_rwlock_wrlock"
-    argc: 0
-  }
-
-  class_method OsRwLock.wrunlock {
-    vm: "sys_rwlock_wrunlock"
-    argc: 0
-  }
-
-  class_method OsCondvar.wait {
-    vm: "sys_condvar_wait"
-    argc: 1
-  }
-
-  class_method OsCondvar.waitFor {
-    vm: "sys_condvar_wait_for"
-    argc: 2
-  }
-
-  class_method OsCondvar.signal {
-    vm: "sys_condvar_signal"
-    argc: 0
-  }
-
-  class_method OsCondvar.broadcast {
-    vm: "sys_condvar_broadcast"
-    argc: 0
-  }
-
-  class_method OsBarrier.wait {
-    vm: "sys_barrier_wait"
-    argc: 0
-  }
-
-  class_method OsOnce.call {
-    vm: "sys_once_call"
-    argc: 1
-  }
-
-  fn OsMutex {
-    signature: "(): OsMutex"
-    doc: "Create an OS-domain mutex"
-    vm: "sys_mutex_new"
-    aot: "xrt_sys_mutex_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __osMutexNew {
-    signature: "(): OsMutex"
-    doc: "Create an OS-domain mutex for sys module internals"
-    vm: "sys_mutex_new"
-    aot: "xrt_sys_mutex_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-    return_ownership: "fresh"
-  }
-
-  fn OsRwLock {
-    signature: "(): OsRwLock"
-    doc: "Create an OS-domain read-write lock"
-    vm: "sys_rwlock_new"
-    aot: "xrt_sys_rwlock_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn OsCondvar {
-    signature: "(): OsCondvar"
-    doc: "Create an OS-domain condition variable"
-    vm: "sys_condvar_new"
-    aot: "xrt_sys_condvar_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn OsBarrier {
-    signature: "(parties: i64): OsBarrier"
-    doc: "Create a reusable OS-domain barrier"
-    vm: "sys_barrier_new"
-    aot: "xrt_sys_barrier_new"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn OsOnce {
-    signature: "(): OsOnce"
-    doc: "Create an OS-domain once gate"
-    vm: "sys_once_new"
-    aot: "xrt_sys_once_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn cpuCount {
+  fn __cpuCount {
     signature: "(): i64"
     doc: "Return the number of CPUs available to OS-thread work"
     vm: "sys_cpu_count"
@@ -661,9 +478,10 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
-  fn threadYield {
+  fn __threadYield {
     signature: "(): ()"
     doc: "Yield the current OS thread to another runnable OS thread"
     vm: "sys_thread_yield"
@@ -673,9 +491,10 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
-  fn sleepMs {
+  fn __sleepMs {
     signature: "(ms: i64): ()"
     doc: "Block the current OS thread for at least ms milliseconds"
     vm: "sys_sleep_ms"
@@ -685,9 +504,10 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
-  fn pinToCpu {
+  fn __pinToCpu {
     signature: "(cpu: i64): bool"
     doc: "Best-effort pin of the current OS thread to a CPU index"
     vm: "sys_pin_to_cpu"
@@ -697,6 +517,7 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
   fn __threadLocalId {
@@ -898,84 +719,6 @@ module sys {
     link_object: false
     layer: "system"
     visibility: "internal"
-  }
-
-  type_method OsMutex.lock {
-    signature: "(): ()"
-    receiver: "OsMutex"
-    doc: "Lock the mutex"
-  }
-
-  type_method OsMutex.unlock {
-    signature: "(): ()"
-    receiver: "OsMutex"
-    doc: "Unlock the mutex"
-  }
-
-  type_method OsMutex.tryLock {
-    signature: "(): bool"
-    receiver: "OsMutex"
-    doc: "Try to lock the mutex"
-  }
-
-  type_method OsRwLock.rdlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Acquire the read side of the read-write lock"
-  }
-
-  type_method OsRwLock.rdunlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Release the read side of the read-write lock"
-  }
-
-  type_method OsRwLock.wrlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Acquire the write side of the read-write lock"
-  }
-
-  type_method OsRwLock.wrunlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Release the write side of the read-write lock"
-  }
-
-  type_method OsCondvar.wait {
-    signature: "(m: OsMutex): ()"
-    receiver: "OsCondvar"
-    doc: "Wait on the condition variable with an already-locked mutex"
-  }
-
-  type_method OsCondvar.waitFor {
-    signature: "(m: OsMutex, timeoutNs: i64): bool"
-    receiver: "OsCondvar"
-    doc: "Wait on the condition variable until signalled or timeout elapses"
-  }
-
-  type_method OsCondvar.signal {
-    signature: "(): ()"
-    receiver: "OsCondvar"
-    doc: "Wake one waiter"
-  }
-
-  type_method OsCondvar.broadcast {
-    signature: "(): ()"
-    receiver: "OsCondvar"
-    doc: "Wake all waiters"
-  }
-
-  type_method OsBarrier.wait {
-    signature: "(): bool"
-    receiver: "OsBarrier"
-    doc: "Wait until all parties have arrived"
-  }
-
-  type_method OsOnce.call {
-    signature: "(body: fn(): ()): ()"
-    receiver: "OsOnce"
-    doc: "Run the closure exactly once"
   }
 }
 

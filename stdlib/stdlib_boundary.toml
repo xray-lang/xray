@@ -96,7 +96,7 @@ public = true
 layer = "L1"
 policy = "xray_semantic"
 semantic_source = "stdlib/time/time.xr"
-public_native = ["sleep"]
+public_native = []
 private_native_sources = ["stdlib/time/*.c"]
 private_native_reason = "Host clock reads and the yieldable timer suspension consumed by time.xr"
 perf_suite = "stdlib/time"
@@ -215,20 +215,7 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/sync/sync.xr"
-public_native = ["CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"]
-manual_public_native = ["CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"]
-# The scheduler owns these classes; the module publishes the already-registered
-# VM builtin type under its own name. Declared here so the generic loader binds
-# them from a manifest row instead of a hand-written factory.
-native_type_exports = [
-  { name = "CountdownLatch", builtin_type = "XR_TCOUNTDOWNLATCH" },
-  { name = "EventCount", builtin_type = "XR_TEVENTCOUNT" },
-  { name = "ResultGroup", builtin_type = "XR_TRESULTGROUP" },
-  { name = "Semaphore", builtin_type = "XR_TSEMAPHORE" },
-  { name = "WorkQueue", builtin_type = "XR_TWORKQUEUE" },
-]
-private_native_sources = ["stdlib/sync/sync.c"]
-private_native_reason = "Typed scheduler-backed synchronization primitive classes consumed by Xray composition"
+public_native = []
 def_migration_complete = true
 perf_suite = "stdlib/sync"
 
@@ -248,7 +235,7 @@ public = true
 layer = "L2"
 policy = "xray_semantic"
 semantic_source = "stdlib/sys/sys.xr"
-public_native = ["OsBarrier", "OsBarrier.wait", "OsCondvar", "OsCondvar.broadcast", "OsCondvar.signal", "OsCondvar.wait", "OsCondvar.waitFor", "OsMutex", "OsMutex.lock", "OsMutex.tryLock", "OsMutex.unlock", "OsOnce", "OsOnce.call", "OsRwLock", "OsRwLock.rdlock", "OsRwLock.rdunlock", "OsRwLock.wrlock", "OsRwLock.wrunlock", "cpuCount", "pinToCpu", "sleepMs", "threadYield"]
+public_native = []
 private_native_sources = ["stdlib/sys/sys.c"]
 private_native_reason = "OS thread, process, pipe, signal, and dynamic-loader thin boundary"
 perf_suite = "stdlib/sys"

@@ -1,10 +1,172 @@
-// sys process handles.
+// sys process handles and OS-thread synchronization.
 //
 // The C layer exposes only private double-underscore helpers. This script
 // layer keeps the public surface typed and small: Process, Pipe, Dylib, and
 // portable signal names. ProcessOptions grows only through general process
 // capability fields; stdio redirection reuses Pipe rather than splitting
-// reader/writer endpoint classes prematurely.
+// reader/writer endpoint classes prematurely. Synchronization policy is
+// source-owned and built from atomic runtime primitives; native code is kept
+// only for direct host ABI operations.
+
+import time
+
+enum _SysError {
+    InvalidBarrierParties
+}
+
+fn _spinAcquire(flag: Atomic<bool>) {
+    while (true) {
+        var (_, acquired) = flag.compareExchange(false, true, Ordering.AcquireRelease)
+        if (acquired) { return }
+        __threadYield()
+    }
+}
+
+export class OsMutex {
+    private _locked: Atomic<bool>
+
+    constructor() {
+        this._locked = Atomic<bool>(false)
+    }
+
+    lock() { _spinAcquire(this._locked) }
+
+    unlock() { this._locked.store(false, Ordering.Release) }
+
+    tryLock() -> bool {
+        var (_, acquired) = this._locked.compareExchange(false, true, Ordering.AcquireRelease)
+        return acquired
+    }
+}
+
+// A negative state denotes a writer; non-negative values count readers.
+export class OsRwLock {
+    private _state: Atomic<i64>
+
+    constructor() {
+        this._state = Atomic<i64>(0)
+    }
+
+    rdlock() {
+        while (true) {
+            var current = this._state.load(Ordering.Acquire)
+            if (current >= 0) {
+                var (_, acquired) = this._state.compareExchange(
+                    current, current + 1, Ordering.AcquireRelease)
+                if (acquired) { return }
+            }
+            __threadYield()
+        }
+    }
+
+    rdunlock() { this._state.fetchSub(1, Ordering.Release) }
+
+    wrlock() {
+        while (true) {
+            var (_, acquired) = this._state.compareExchange(0, -1, Ordering.AcquireRelease)
+            if (acquired) { return }
+            __threadYield()
+        }
+    }
+
+    wrunlock() { this._state.store(0, Ordering.Release) }
+}
+
+// Waiters observe an epoch. Unlocking around the wait remains source policy;
+// the only host interaction is yielding the current OS thread.
+export class OsCondvar {
+    private _epoch: Atomic<i64>
+
+    constructor() {
+        this._epoch = Atomic<i64>(0)
+    }
+
+    wait(mutex: OsMutex) {
+        const observed = this._epoch.load(Ordering.Acquire)
+        mutex.unlock()
+        while (this._epoch.load(Ordering.Acquire) == observed) { __threadYield() }
+        mutex.lock()
+    }
+
+    waitFor(mutex: OsMutex, timeoutNs: i64) -> bool {
+        if (timeoutNs <= 0) { return false }
+        const observed = this._epoch.load(Ordering.Acquire)
+        const deadline = time.nanos() + timeoutNs
+        mutex.unlock()
+        while (this._epoch.load(Ordering.Acquire) == observed) {
+            if (time.nanos() >= deadline) {
+                mutex.lock()
+                return false
+            }
+            __threadYield()
+        }
+        mutex.lock()
+        return true
+    }
+
+    signal() { this._epoch.fetchAdd(1, Ordering.Release) }
+
+    broadcast() { this._epoch.fetchAdd(1, Ordering.Release) }
+}
+
+export class OsBarrier {
+    private _parties: i64
+    private _arrived: Atomic<i64>
+    private _generation: Atomic<i64>
+
+    constructor(parties: i64) {
+        if (parties <= 0) { throw _SysError.InvalidBarrierParties }
+        this._parties = parties
+        this._arrived = Atomic<i64>(0)
+        this._generation = Atomic<i64>(0)
+    }
+
+    wait() -> bool {
+        const generation = this._generation.load(Ordering.Acquire)
+        const position = this._arrived.fetchAdd(1, Ordering.AcquireRelease) + 1
+        if (position == this._parties) {
+            this._arrived.store(0, Ordering.Release)
+            this._generation.fetchAdd(1, Ordering.AcquireRelease)
+            return true
+        }
+        while (this._generation.load(Ordering.Acquire) == generation) { __threadYield() }
+        return true
+    }
+}
+
+export class OsOnce {
+    private _gate: Atomic<bool>
+    private _done: Atomic<bool>
+
+    constructor() {
+        this._gate = Atomic<bool>(false)
+        this._done = Atomic<bool>(false)
+    }
+
+    call(body: fn()) {
+        if (this._done.load(Ordering.Acquire)) { return }
+        _spinAcquire(this._gate)
+        defer { this._gate.store(false, Ordering.Release) }
+        if (!this._done.load(Ordering.Acquire)) {
+            body()
+            this._done.store(true, Ordering.Release)
+        }
+    }
+}
+
+export fn cpuCount() -> i64 { return __cpuCount() }
+
+export fn threadYield() { __threadYield() }
+
+export fn sleepMs(ms: i64) {
+    if (ms <= 0) { return }
+    __sleepMs(ms)
+}
+
+export fn pinToCpu(cpu: i64) -> bool {
+    if (cpu < 0) { return false }
+    return __pinToCpu(cpu)
+}
 
 export enum Signal {
     TERM,
@@ -195,7 +357,7 @@ export class ThreadLocal<T> {
     _init: fn() -> T
 
     constructor(init: fn() -> T) {
-        this._lock = __osMutexNew()
+        this._lock = OsMutex()
         this._values = #{}
         this._initializing = #{}
         this._init = init

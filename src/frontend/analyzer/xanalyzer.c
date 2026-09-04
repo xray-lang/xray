@@ -1810,10 +1810,6 @@ static bool xa_path_is_stdlib_module(const char *file, const char *module_name) 
     return xa_path_has_suffix(file, suffix);
 }
 
-static bool xa_path_is_sync_stdlib_module(const char *file) {
-    return xa_path_is_stdlib_module(file, "sync");
-}
-
 char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer)
         return NULL;
@@ -1963,16 +1959,6 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
     }
 }
 
-static void xa_register_sync_native_class_symbols(XaAnalyzer *analyzer, const char *file,
-                                                  XaScope *scope) {
-    if (!xa_path_is_sync_stdlib_module(file))
-        return;
-    static const char *names[] = {"Semaphore", "CountdownLatch", "EventCount", "WorkQueue",
-                                  "ResultGroup"};
-    for (int i = 0; i < (int) (sizeof(names) / sizeof(names[0])); i++)
-        xa_register_native_class_symbol(analyzer, scope, file, names[i], true);
-}
-
 static void xa_register_native_return_ownership(XaSymbolLinks *links,
                                                 XaBuiltinReturnOwnership ownership) {
     if (!links)
@@ -2091,7 +2077,6 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     // own top-level scopes so private names cannot collide across modules.
     analyzer->current_file = file;
     analyzer->current_scope = file_scope;
-    xa_register_sync_native_class_symbols(analyzer, file, file_scope);
     xa_register_stdlib_native_module_types(analyzer, file, file_scope);
     xa_register_stdlib_native_module_functions(analyzer, file, file_scope);
 
