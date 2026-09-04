@@ -6423,7 +6423,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
 | `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
-| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`cpuCount()`、`sleepMs()`、`threadYield()`、`pinToCpu()`、`onSignal()` |
+| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`cpuCount()`、`threadYield()`、`pinToCpu()`、`onSignal()`；协程友好延时统一使用 `time.sleep(ms)` |
 
 ### 15.10 并行
 

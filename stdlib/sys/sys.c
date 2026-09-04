@@ -20,10 +20,6 @@ static XrValue sys_thread_yield(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_sys_provider_thread_yield(isolate, args, argc);
 }
 
-static XrValue sys_sleep_ms(XrVMRuntime *isolate, XrValue *args, int argc) {
-    return xr_sys_provider_sleep_ms(isolate, args, argc);
-}
-
 static XrValue sys_pin_to_cpu(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_sys_provider_pin_to_cpu(isolate, args, argc);
 }

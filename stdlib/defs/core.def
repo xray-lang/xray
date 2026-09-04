@@ -493,19 +493,6 @@ module sys {
     visibility: "internal"
   }
 
-  fn __sleepMs {
-    signature: "(ms: i64): ()"
-    doc: "Block the current OS thread for at least ms milliseconds"
-    vm: "sys_sleep_ms"
-    aot: "xrt_sys_sleep_ms"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-  }
-
   fn __pinToCpu {
     signature: "(cpu: i64): bool"
     doc: "Best-effort pin of the current OS thread to a CPU index"

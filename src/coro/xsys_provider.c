@@ -25,7 +25,7 @@
 #include <stdint.h>
 #include <string.h>
 
-// These four helpers expose only direct OS-thread operations. Validation and
+// These three helpers expose only direct OS-thread operations. Validation and
 // the public API contract are owned by sys.xr.
 XrValue xr_sys_provider_cpu_count(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
@@ -39,14 +39,6 @@ XrValue xr_sys_provider_thread_yield(XrVMRuntime *isolate, XrValue *args, int ar
     (void) args;
     (void) argc;
     xr_thread_yield();
-    return xr_null();
-}
-
-XrValue xr_sys_provider_sleep_ms(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    int64_t ms = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
-    if (ms > 0)
-        xr_thread_sleep_ms((unsigned int) ms);
     return xr_null();
 }
 

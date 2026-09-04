@@ -375,8 +375,6 @@ XR_FUNC bool xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *mod
     expected_count++;
     XRS_EXPORT(module, isolate, "__threadYield", sys_thread_yield);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__sleepMs", sys_sleep_ms);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__pinToCpu", sys_pin_to_cpu);
     expected_count++;
     XRS_EXPORT(module, isolate, "__threadLocalId", sys_thread_local_id);

@@ -6453,7 +6453,7 @@ Decimal text parsing is owned by exact scalar static namespaces: `i64.parse(s)` 
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
 | `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
-| `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `cpuCount()`, `sleepMs()`, `threadYield()`, `pinToCpu()`, and `onSignal()` |
+| `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `cpuCount()`, `threadYield()`, `pinToCpu()`, and `onSignal()`; use `time.sleep(ms)` for coroutine-friendly delays |
 
 ### 15.10 Parallelism
 

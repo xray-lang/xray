@@ -1052,25 +1052,6 @@ static inline XrValue xrt_sys_thread_yield(void) {
     return XR_NULL_VAL;
 }
 
-static inline XrValue xrt_sys_sleep_ms(XrValue ms_value) {
-    int64_t ms = xrt_sys_int_arg(ms_value);
-    if (ms <= 0) {
-        xrt_sys_signal_poll();
-        return XR_NULL_VAL;
-    }
-#if defined(XR_OS_WINDOWS)
-    Sleep((DWORD) ms);
-#else
-    struct timespec req;
-    req.tv_sec = (time_t) (ms / 1000);
-    req.tv_nsec = (long) (ms % 1000) * 1000000L;
-    while (nanosleep(&req, &req) == -1 && errno == EINTR) {
-    }
-#endif
-    xrt_sys_signal_poll();
-    return XR_NULL_VAL;
-}
-
 static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
     int64_t cpu = xrt_sys_int_arg(cpu_value);
     if (cpu < 0)

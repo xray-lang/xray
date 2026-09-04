@@ -18,7 +18,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"crypto", "__timingSafeEqualBytes", 2, "xrt_crypto_timing_safe_equal_bytes", "vv", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__cpuCount", 0, "xrt_sys_cpu_count", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__threadYield", 0, "xrt_sys_thread_yield", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "__sleepMs", 1, "xrt_sys_sleep_ms", "v", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__pinToCpu", 1, "xrt_sys_pin_to_cpu", "v", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__threadLocalId", 0, "xrt_sys_thread_local_id", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__threadLocalAlive", 1, "xrt_sys_thread_local_alive", "v", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

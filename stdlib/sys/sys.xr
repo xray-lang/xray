@@ -158,11 +158,6 @@ export fn cpuCount() -> i64 { return __cpuCount() }
 
 export fn threadYield() { __threadYield() }
 
-export fn sleepMs(ms: i64) {
-    if (ms <= 0) { return }
-    __sleepMs(ms)
-}
-
 export fn pinToCpu(cpu: i64) -> bool {
     if (cpu < 0) { return false }
     return __pinToCpu(cpu)

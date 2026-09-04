@@ -11,8 +11,12 @@ fn tick() -> i64 {
     return 1
 }
 
+const release = Atomic<bool>(false)
+
 const thread = sys.Thread.spawn(fn() -> i64 {
-    sys.sleepMs(40)
+    while (!release.load(Ordering.Acquire)) {
+        sys.threadYield()
+    }
     return 7
 })
 
@@ -21,4 +25,5 @@ Coro.yield()
 
 var ticker = go tick()
 print(await ticker)
+release.store(true, Ordering.Release)
 print(await waiter)

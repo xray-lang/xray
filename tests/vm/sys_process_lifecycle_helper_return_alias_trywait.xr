@@ -1,4 +1,5 @@
 import sys
+import time
 import { Process } from sys
 
 fn passProcess(p: Process) -> Process {
@@ -15,9 +16,10 @@ fn run() {
         if (passProcess(spawned!).tryWait() != null) {
             break
         }
-        sys.sleepMs(1)
+        time.sleep(1)
     }
     print(true)
 }
 
-run()
+var task = go run()
+await task

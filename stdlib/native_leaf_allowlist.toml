@@ -1230,16 +1230,6 @@ deletion_trigger = "none while yielding an OS thread remains a host operation"
 
 [[leaf]]
 module = "sys"
-symbol = "__sleepMs"
-class = "host_abi_leaf"
-abi = "nanosleep(2); Win32 Sleep"
-ownership = "none"
-effect = "nothrow"
-provider = "the host OS thread API through src/os/os_thread.h"
-deletion_trigger = "when OS-thread blocking sleep is removed from the public sys surface"
-
-[[leaf]]
-module = "sys"
 symbol = "__pinToCpu"
 class = "host_abi_leaf"
 abi = "pthread_setaffinity_np(3); Win32 SetThreadAffinityMask"
@@ -1295,7 +1285,7 @@ class = "host_abi_leaf"
 abi = "sigaction(2) with sigemptyset(3), restricted to SIGTERM and SIGINT; Win32 signal(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "the kernel installs the handler, but delivery is the Xray runtime's. The VM spawns a dedicated C-function coroutine that polls the pending bits on the timer wheel every 10 ms and calls the closure; AOT stores the closure in a global slot whose pending bits are only consumed inside threadYield, sleepMs and pinToCpu, so an AOT program that calls none of those may never run the handler"
+provider = "the kernel installs the handler, but delivery is the Xray runtime's. The VM spawns a dedicated C-function coroutine that polls the pending bits on the timer wheel every 10 ms and calls the closure; AOT stores the closure in a global slot whose pending bits are consumed only inside threadYield, so an AOT program that never yields the OS thread may never run the handler"
 deletion_trigger = "when signal delivery is a scheduler surface both backends share -- a channel or an awaitable the runtime posts to -- so sys.xr can receive signals instead of registering a C-side callback"
 
 [[leaf]]

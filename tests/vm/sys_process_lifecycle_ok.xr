@@ -1,4 +1,5 @@
 import sys
+import time
 
 var p = sys.Process.spawn("sh", ["-c", "exit 0"])
 if (p != null) {
@@ -29,7 +30,7 @@ if (polled != null) {
         if (polled!.tryWait() != null) {
             break
         }
-        sys.sleepMs(1)
+        time.sleep(1)
     }
     print(true)
 } else {

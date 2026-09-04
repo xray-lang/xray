@@ -63,6 +63,12 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
         re.compile(r"\.asMutBytes\s*\("),
     ),
     RemovedForm(
+        "SYS_SLEEP_MS_CALL",
+        "sys.sleepMs(...) removed; use coroutine-friendly time.sleep(...) delays",
+        "293",
+        re.compile(r"\bsys\.sleepMs\s*\("),
+    ),
+    RemovedForm(
         "LOAD_LE_UNCHECKED",
         ".loadLEUnchecked removed unchecked little-endian load",
         "173",
