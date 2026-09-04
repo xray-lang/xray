@@ -1642,7 +1642,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0,  448, 58, 12, 24, 108, 28, 40, 24, 12,  48,  58,  112,
-        32, 178, 58, 20, 4,  20,  44, 12, 48, 144, 132, 216, 340,
+        32, 182, 58, 20, 4,  20,  44, 12, 48, 144, 132, 216, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {

@@ -15580,7 +15580,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
     int tagged_rep = find_rep_kind_ownership(materialized, XR_MACHINE_REP_DYN_VALUE,
                                              XR_TARGET_OWNERSHIP_BORROWED);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(builder->profile);
-    if (void_rep < 0 || tagged_rep < 0 || !machine)
+    if (void_rep < 0 || !machine)
         return fail(error, error_size, "XR_TARGET_1003",
                     "call error-channel representation is missing");
     uint32_t next_argument = 0;
@@ -15799,7 +15799,8 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             if (array_intrinsic || native_direct || array_fill || array_hof || iterator_rune_nth ||
                 array_member_tagged_store) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
-                    !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
+                    !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+                    (native_direct && tagged_rep < 0))
                     return fail(error, error_size, "XR_TARGET_1003",
                                 native_direct ? "native direct argument lacks exact caller storage"
                                 : iterator_rune_nth

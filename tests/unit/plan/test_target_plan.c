@@ -2831,6 +2831,9 @@ static void test_native_direct_ref_authority(void) {
     plan->calls[0].calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE;
     expect_verify_failure(plan, "XR_TARGET_1003");
     plan->calls[0] = saved;
+    plan->calls[0].runtime_capabilities ^= XR_CAP_NETPOLL;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->calls[0] = saved;
     XrTargetCallArgumentRecord saved_argument = plan->call_arguments[0];
     plan->call_arguments[0].flags = XR_TARGET_CALL_ARGUMENT_ADDRESSABLE;
     expect_verify_failure(plan, "XR_TARGET_1003");

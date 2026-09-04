@@ -2726,7 +2726,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "289c7f36c628dda06a6966ac161533b9") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "cc8e2a98134cfc569c694665f37f59c9") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(
@@ -2751,7 +2751,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "26e2cdbc317ba35ed028d4e17ef0c2f1") == 0);
+    REQUIRE(strcmp(loan_id_hex, "e4bc2bcbf1f1453262117fc387430e87") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -2821,7 +2821,7 @@ static void test_immutable_owned_snapshot(void) {
      * Removing the duplicate sys CPU-count leaf changed the whole-registry
      * component from 2223c318a41b2ca38ded4084ec06aae6a6477dc5e111528fff8e809a6a377e89. */
     REQUIRE(strcmp(semantic_hex,
-                   "2b1b3a5a9f329c399a46d0b4dde3ba866377b32ad9d30d183f55f57bf5414e31") == 0);
+                   "78eefd2e88569c5704e3e713fdb82f95754dba837725cfc7eb59296370c0f5fe") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3670,7 +3670,7 @@ static void test_direct_local_call_target_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "1a83b11d84ce29a9ca1125882a24c0b3") == 0);
+    REQUIRE(strcmp(target_id_hex, "b716ea5c9c513739b4a3784055f45d36") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -3757,7 +3757,7 @@ static void test_indirect_callable_state_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":kind=4") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "34f727d3e71dafd918568c130fd761da") == 0);
+    REQUIRE(strcmp(target_id_hex, "fb4157dd64ce2b354ea1349e880e8d9d") == 0);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -3898,9 +3898,9 @@ static void test_source_export_call_target_authority(void) {
      * dependency fingerprint and the target that embeds it.
      * Previous dependency_id: 9f8c98c148e046642c7b0aefef7549a4.
      * Previous target_id:     62dd0c02696c9089a81fc8e1b4527e0b. */
-    REQUIRE(strcmp(dependency_id, "99b7dd1966f1a3b1f3131bbe92e4ad61") == 0);
-    REQUIRE(strcmp(export_id, "f35f821c8f5e599b1f09d350122c434a") == 0);
-    REQUIRE(strcmp(target_id, "58183f5a5809f88471bbef9da83eaaa7") == 0);
+    REQUIRE(strcmp(dependency_id, "657ac4bb60f288bd78fddff0c0a422ed") == 0);
+    REQUIRE(strcmp(export_id, "e6c5f7ae334037299a1f5f282751a948") == 0);
+    REQUIRE(strcmp(target_id, "5c0816e3d1531ed5eccd1d6f7e7184c5") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -4940,7 +4940,7 @@ static void test_shared_direct_call_target_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "73273aea63ab9e7211f2fbbb0ef6198d") == 0);
+    REQUIRE(strcmp(target_id_hex, "d82bc974ffe5d9eaeb790d5291e797a3") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
