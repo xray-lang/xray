@@ -4749,13 +4749,16 @@ static void test_source_instance_method_local_authority(void) {
     plan->entity_count = saved_entity_count;
     xr_semantic_plan_free(plan);
 
-    XrSemanticPlan *open = build_source_instance_method_local_plan(false, false, true, NULL, NULL);
-    REQUIRE(open != NULL && open->source_class_count == 1 && open->call_target_count == 1);
-    REQUIRE((open->source_classes[0].flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0);
-    REQUIRE(open->call_targets[0].kind ==
+    (void) build_source_instance_method_local_plan(false, false, false, NULL, "XR_SEM_0019");
+    XrSemanticPlan *sealed = build_source_instance_method_local_plan(false, true, true, NULL, NULL);
+    REQUIRE(sealed != NULL && sealed->source_class_count == 1 && sealed->call_target_count == 1);
+    REQUIRE((sealed->source_classes[0].flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0);
+    REQUIRE(sealed->call_targets[0].kind ==
             XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE);
-    xr_semantic_plan_free(open);
-    (void) build_source_instance_method_local_plan(false, true, false, NULL, NULL);
+    char module_set_error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify_module_set(sealed, NULL, 0, module_set_error,
+                                               sizeof(module_set_error)));
+    xr_semantic_plan_free(sealed);
 }
 
 static void test_source_instance_method_open_authority(void) {
