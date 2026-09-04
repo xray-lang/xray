@@ -3792,7 +3792,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     const char *star_source = "export * from \"./effect_export_module\"\n";
     const char *callback_source = "export enum CallbackErr { Foreign, Local }\n"
                                   "export fn failForeignCallback() { throw CallbackErr.Foreign }\n";
-    const char *entry_source = "import { failSelective, applyImported } from "
+    const char *entry_source = "import { failSelective, applyImported, ImportedErr } from "
                                "\"./effect_export_module\"\n"
                                "import { importedScalar, importedAlloc } from "
                                "\"./effect_export_module\"\n"
@@ -3829,7 +3829,9 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                                "fn viaImportedHigherOrderNamespaceCallback() { "
                                "effects.applyImported(callbacks.failForeignCallback) }\n"
                                "fn viaImportedNoAlloc() { importedScalar(1) }\n"
-                               "fn viaImportedAlloc() { importedAlloc() }\n";
+                               "fn viaImportedAlloc() { importedAlloc() }\n"
+                               "try { failSelective() } catch (e: ImportedErr) { }\n"
+                               "try { failForeignCallback() } catch (e: CallbackErr) { }\n";
 
     char tmpdir[] = "/tmp/xray_effect_reexport_XXXXXX";
     ASSERT(xr_test_mkdtemp(tmpdir) != NULL);
@@ -3993,6 +3995,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
 
     xa_analyzer_analyze(a, specs[4].source_path, entry_program);
     ASSERT(!analyzer_diag_contains(a, "error"));
+    ASSERT(!analyzer_diag_contains(a, "undefined type 'ImportedErr'"));
+    ASSERT(!analyzer_diag_contains(a, "undefined type 'CallbackErr'"));
 
     const XaEffectSummary *selective = analyzer_function_effect_summary(a, "viaSelective");
     const XaEffectSummary *ns = analyzer_function_effect_summary(a, "viaNamespace");

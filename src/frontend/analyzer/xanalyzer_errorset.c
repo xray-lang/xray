@@ -5015,7 +5015,7 @@ static void publish_program_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *p
         return;
 
     XaScope *saved_scope = ctx->analyzer->current_scope;
-    ctx->analyzer->current_scope = ctx->analyzer->global_scope;
+    /* Top-level executable statements resolve from their file scope, not the root scope. */
     XaEffectSummary sink;
     xa_effect_summary_init(&sink);
     ctx->current_summary = &sink;
