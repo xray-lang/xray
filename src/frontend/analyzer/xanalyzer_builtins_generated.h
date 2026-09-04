@@ -121,18 +121,31 @@ static const XaBuiltinObjectField g_gen_cluster___clusteroutboundevent_object_fi
     {"status", "i64"},
 };
 
+// cluster.__ClusterHealthPeerSnapshot object fields
+static const XaBuiltinObjectField g_gen_cluster___clusterhealthpeersnapshot_object_fields[] = {
+    {"peerGeneration", "i64"},
+    {"lastReceivedAtMs", "i64"},
+    {"missedHeartbeats", "i64"},
+    {"samples", "i64"},
+    {"mean", "f64"},
+    {"variance", "f64"},
+    {"detectorLastHeartbeatMs", "i64"},
+};
+
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
     {"__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", g_gen_cluster___clusternodesnapshot_object_fields, 16, true},
     {"__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", g_gen_cluster___clusterruntimesnapshot_object_fields, 3, true},
     {"__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", g_gen_cluster___clusterinboundframe_object_fields, 4, true},
     {"__ClusterOutboundEvent", "Private projection of one slow-consumer or terminal writer event", g_gen_cluster___clusteroutboundevent_object_fields, 2, true},
+    {"__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's failure detector state", g_gen_cluster___clusterhealthpeersnapshot_object_fields, 7, true},
 };
-#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 4
+#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 5
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool", "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__healthTick", "(heartbeatWire: Array<u8>, heartbeatSentAtMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64): bool", "Enqueue one source-encoded heartbeat and project its health tick onto the locked peer registry", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__healthSnapshot", "(heartbeatWire: Array<u8>, heartbeatSentAtMs: i64): Array<__ClusterHealthPeerSnapshot>?", "Enqueue one source-encoded heartbeat and snapshot locked peer detector storage", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool, markedAtMs: i64): bool", "Compare and apply one source-owned health decision to the locked peer generation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__trackListener", "(listener: NetListener): bool", "Borrow the source-owned listener so native stop can wake its pending accept", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__recentlyDeparted", "(name: string): bool", "Project whether a node name is present in the locked recent-departure registry", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -156,7 +169,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__publishRemote", "(wire: Array<u8>): i64", "Broadcast one source-encoded transport frame to connected native transports", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 24
+#define GEN_CLUSTER_FUNCTION_COUNT 25
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {

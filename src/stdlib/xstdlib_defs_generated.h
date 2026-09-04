@@ -297,7 +297,8 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http2", "__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes once; empty on EOF and null on transport failure", "h2_recv", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", "h2_close", "normal", "", "", "v", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool", "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration", "cluster_start_primitive", "normal", "", "", "svsvsssvvv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 10, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__healthTick", "(heartbeatWire: Array<u8>, heartbeatSentAtMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64): bool", "Enqueue one source-encoded heartbeat and project its health tick onto the locked peer registry", "cluster_health_tick_fn", "normal", "", "", "vvvvvv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 6, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__healthSnapshot", "(heartbeatWire: Array<u8>, heartbeatSentAtMs: i64): Array<__ClusterHealthPeerSnapshot>?", "Enqueue one source-encoded heartbeat and snapshot locked peer detector storage", "cluster_health_snapshot_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool, markedAtMs: i64): bool", "Compare and apply one source-owned health decision to the locked peer generation", "cluster_health_apply_fn", "normal", "", "", "vvvvvv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 6, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__trackListener", "(listener: NetListener): bool", "Borrow the source-owned listener so native stop can wake its pending accept", "cluster_track_listener_fn", "normal", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_NETPOLL, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__recentlyDeparted", "(name: string): bool", "Project whether a node name is present in the locked recent-departure registry", "cluster_recently_departed_fn", "normal", "", "", "s", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", "cluster_join_tls_fn", "yieldable", "", "", "vsv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
@@ -364,6 +365,16 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
     {"cluster", "__ClusterOutboundEvent", "status", "i64", true},
 };
 
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot[] = {
+    {"cluster", "__ClusterHealthPeerSnapshot", "peerGeneration", "i64", true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "lastReceivedAtMs", "i64", true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "missedHeartbeats", "i64", true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "samples", "i64", true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "mean", "f64", true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "variance", "f64", true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "detectorLastHeartbeatMs", "i64", true},
+};
+
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
     {"Coro", "CoroStats", "active", "i64", true},
     {"Coro", "CoroStats", "blocked", "i64", true},
@@ -390,6 +401,7 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"cluster", "__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot, 3, true},
     {"cluster", "__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", xr_stdlib_object_fields_cluster___ClusterInboundFrame, 4, true},
     {"cluster", "__ClusterOutboundEvent", "Private projection of one slow-consumer or terminal writer event", xr_stdlib_object_fields_cluster___ClusterOutboundEvent, 2, true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's failure detector state", xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot, 7, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},

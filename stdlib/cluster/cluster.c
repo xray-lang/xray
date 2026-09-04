@@ -37,6 +37,8 @@
 
 /* ========== xray Function Bindings ========== */
 
+static XrObjectInstance *cluster_object_new(XrVMRuntime *X, const char *name);
+
 static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *cluster = (XrCluster *) X->cluster;
     if (!cluster || argc < 1 || !XR_IS_STRING(args[0]))
@@ -46,20 +48,97 @@ static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int a
                                                   (int64_t) xr_time_monotonic_ms()));
 }
 
-static XrValue cluster_health_tick_fn(XrVMRuntime *X, XrValue *args, int argc) {
+static XrValue cluster_health_snapshot_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *cluster = (XrCluster *) X->cluster;
-    if (!cluster || !atomic_load(&cluster->running) || argc < 6 || !XR_IS_ARRAY(args[0]) ||
-        !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) || !XR_IS_INT(args[3]) || !XR_IS_INT(args[4]) ||
-        !XR_IS_FLOAT(args[5]))
-        return xr_bool(false);
+    if (!cluster || !atomic_load(&cluster->running) || argc < 2 || !XR_IS_ARRAY(args[0]) ||
+        !XR_IS_INT(args[1]))
+        return xr_null();
     XrArray *heartbeat_wire = XR_TO_ARRAY(args[0]);
     if (heartbeat_wire->elem_type != XR_ELEM_U8 || heartbeat_wire->length <= 0 ||
         !heartbeat_wire->data)
+        return xr_null();
+
+    XrArray *snapshots = xr_array_new(NULL);
+    if (!snapshots)
+        return xr_null();
+    int64_t sent_at_ms = XR_TO_INT(args[1]);
+    xr_amutex_lock(&cluster->nodes_lock);
+    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
+        if (node->state != XR_NODE_CONNECTED)
+            continue;
+        if (node->conn &&
+            xr_cluster_output_queue_push_copy(node->outq, (const uint8_t *) heartbeat_wire->data,
+                                              (uint32_t) heartbeat_wire->length) == 0)
+            node->last_heartbeat_sent = sent_at_ms;
+
+        XrObjectInstance *snapshot = cluster_object_new(X, "__ClusterHealthPeerSnapshot");
+        if (!snapshot) {
+            xr_amutex_unlock(&cluster->nodes_lock);
+            return xr_null();
+        }
+        xr_object_instance_set_by_key(X, snapshot, "peerGeneration",
+                                      xr_int((int64_t) node->generation_token));
+        xr_object_instance_set_by_key(X, snapshot, "lastReceivedAtMs",
+                                      xr_int(node->last_heartbeat_recv));
+        xr_object_instance_set_by_key(X, snapshot, "missedHeartbeats",
+                                      xr_int((int64_t) node->missed_heartbeats));
+        xr_object_instance_set_by_key(X, snapshot, "samples",
+                                      xr_int((int64_t) node->phi.sample_count));
+        xr_object_instance_set_by_key(X, snapshot, "mean", xr_float(node->phi.mean));
+        xr_object_instance_set_by_key(X, snapshot, "variance", xr_float(node->phi.variance));
+        xr_object_instance_set_by_key(X, snapshot, "detectorLastHeartbeatMs",
+                                      xr_int(node->phi.last_heartbeat_ts));
+        xr_array_push(snapshots, xr_object_instance_value(snapshot));
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    return xr_value_from_array(snapshots);
+}
+
+static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 6 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
+        !XR_IS_INT(args[3]) || !XR_IS_BOOL(args[4]) || !XR_IS_INT(args[5]))
         return xr_bool(false);
-    cluster_health_tick(cluster, (const uint8_t *) heartbeat_wire->data,
-                        (uint32_t) heartbeat_wire->length, XR_TO_INT(args[1]), XR_TO_INT(args[2]),
-                        XR_TO_INT(args[3]), XR_TO_INT(args[4]), XR_TO_FLOAT(args[5]));
-    return xr_bool(true);
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    int64_t expected_missed = XR_TO_INT(args[2]);
+    int64_t next_missed = XR_TO_INT(args[3]);
+    if (!cluster || expected_missed < 0 || expected_missed > UINT32_MAX || next_missed < 0 ||
+        next_missed > UINT32_MAX)
+        return xr_bool(false);
+
+    uint64_t generation = (uint64_t) XR_TO_INT(args[0]);
+    int64_t expected_last_received = XR_TO_INT(args[1]);
+    bool disconnect = XR_TO_BOOL(args[4]);
+    XrClusterNode *detached = NULL;
+    bool applied = false;
+    xr_amutex_lock(&cluster->nodes_lock);
+    XrClusterNode **cursor = &cluster->nodes;
+    while (*cursor) {
+        XrClusterNode *node = *cursor;
+        if (node->generation_token == generation && node->state == XR_NODE_CONNECTED &&
+            node->last_heartbeat_recv == expected_last_received &&
+            node->missed_heartbeats == (uint32_t) expected_missed) {
+            if (disconnect) {
+                *cursor = node->next;
+                node->next = NULL;
+                cluster->node_count--;
+                detached = node;
+            } else {
+                node->missed_heartbeats = (uint32_t) next_missed;
+            }
+            applied = true;
+            break;
+        }
+        cursor = &node->next;
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+
+    if (detached) {
+        (void) xr_tombstone_registry_add(cluster->tombstones, detached->name, XR_TO_INT(args[5]));
+        xr_monitor_registry_notify_node(cluster->monitors, cluster->isolate, detached->name);
+        cluster_node_shutdown(detached);
+        cluster_node_release(detached);
+    }
+    return xr_bool(applied);
 }
 
 static XrValue cluster_track_listener_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -567,9 +646,9 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
                 xr_object_instance_set_by_key(X, nj, "slow",
                                               xr_bool(xr_cluster_output_queue_is_full(node->outq)));
 
-                // Phi accrual failure-detector score. Higher = more
-                // likely dead. Threshold for "kill" is set by
-                // cluster policy in cluster_health.c.
+                // Phi accrual failure-detector score. The source health loop
+                // is the sole authority that turns this diagnostic into a
+                // peer-removal decision.
                 int64_t now = (int64_t) xr_time_monotonic_ms();
                 double phi = xr_phi_detector_value(&node->phi, now);
                 xr_object_instance_set_by_key(X, nj, "phi", xr_float(phi));

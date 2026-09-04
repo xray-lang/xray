@@ -998,18 +998,47 @@ fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: stri
 }
 
 fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
-               maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64) {
+               maxMissedHeartbeats: i64) {
     while (_runtimeActiveToken.load() == token) {
         time.sleep(tickMs)
         if (_runtimeActiveToken.load() != token) { return }
         var sentAtMs = time.monotonic()
         var heartbeat = encodeHeartbeat(FRAME_HEARTBEAT_PING, sentAtMs)
-        if (heartbeat == null ||
-            !__healthTick(heartbeat!, sentAtMs, heartbeatTimeoutMs, maxMissedHeartbeats,
-                          phiMinSamples, phiThreshold)) {
+        if (heartbeat == null) {
             var (_, released) = _runtimeActiveToken.compareExchange(token, 0)
             _clearSourceState()
             return
+        }
+        var peers = __healthSnapshot(heartbeat!, sentAtMs)
+        if (peers == null) {
+            var (_, released) = _runtimeActiveToken.compareExchange(token, 0)
+            _clearSourceState()
+            return
+        }
+        for (var i = 0; i < len(peers!); i++) {
+            var peer = peers![i]
+            var elapsedMs = sentAtMs - peer.lastReceivedAtMs
+            var phi = 0.0
+            if (peer.detectorLastHeartbeatMs != 0 && peer.samples >= 2) {
+                var detectorElapsed = (sentAtMs - peer.detectorLastHeartbeatMs) as f64
+                if (detectorElapsed < 0.0) { detectorElapsed = 0.0 }
+                var detectorStddev = math.sqrt(peer.variance)
+                if (detectorStddev < 1.0) { detectorStddev = 1.0 }
+                var y = (detectorElapsed - peer.mean) / detectorStddev
+                var later = 1.0 / (1.0 + math.exp(1.7155 * y))
+                if (later < 0.000000000000001) { later = 0.000000000000001 }
+                phi = -math.log10(later)
+            }
+            var expiredDuringWarmup = peer.samples < PHI_MIN_SAMPLES &&
+                                      elapsedMs > heartbeatTimeoutMs
+            var dead = heartbeatIsDead(phi, peer.samples, elapsedMs, peer.missedHeartbeats,
+                                       heartbeatTimeoutMs, maxMissedHeartbeats)
+            if (dead || expiredDuringWarmup) {
+                var nextMissed = expiredDuringWarmup ? peer.missedHeartbeats + 1
+                                                     : peer.missedHeartbeats
+                __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs,
+                                      peer.missedHeartbeats, nextMissed, dead, sentAtMs)
+            }
         }
     }
 }
@@ -1037,8 +1066,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
         _clearSourceState()
         return false
     }
-    go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats,
-                   PHI_MIN_SAMPLES, PHI_THRESHOLD)
+    go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats)
     if (state.tlsEnabled && !state.tlsServerReady) {
         net.close(listener)
         return true

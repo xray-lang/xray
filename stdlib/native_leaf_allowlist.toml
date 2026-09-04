@@ -303,13 +303,23 @@ deletion_trigger = "when TLS contexts and the synchronized registries are ordina
 
 [[leaf]]
 module = "cluster"
-symbol = "__healthTick"
+symbol = "__healthSnapshot"
 class = "runtime_leaf"
-abi = "none; iterates the locked peer registry and enqueues one source-encoded heartbeat frame"
+abi = "none; iterates the locked peer registry, enqueues one source-encoded heartbeat frame and returns scalar detector storage"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the VM cluster peer registry, output queues and stored phi samples. cluster.xr constructs the heartbeat wire and owns detector math, cadence, thresholds, missed-heartbeat policy and removal decisions"
+deletion_trigger = "when peer transport state and output queues are Xray-owned values"
+
+[[leaf]]
+module = "cluster"
+symbol = "__applyHealthDecision"
+class = "runtime_leaf"
+abi = "none; compare-and-apply against one locked peer generation and its observed health state"
 ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster peer registry, output queues, phi detector and tombstone/monitor registries. cluster.xr constructs the heartbeat wire, passes every health threshold, owns the loop generation, cadence and stop decision, and this leaf projects exactly one tick"
-deletion_trigger = "when peer transport state, health observations and synchronized tombstone/monitor registries are Xray-owned values"
+provider = "the VM cluster peer registry plus synchronized tombstone and monitor registries. cluster.xr supplies the exact observed generation and state, next counter, removal decision and timestamp; stale decisions are rejected"
+deletion_trigger = "when peer transport state and synchronized tombstone and monitor registries are Xray-owned values"
 
 [[leaf]]
 module = "cluster"

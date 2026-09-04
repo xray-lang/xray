@@ -27,7 +27,9 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     (void) expected_count;
     XRS_EXPORT(module, isolate, "__start", cluster_start_primitive);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__healthTick", cluster_health_tick_fn);
+    XRS_EXPORT(module, isolate, "__healthSnapshot", cluster_health_snapshot_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__applyHealthDecision", cluster_health_apply_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__trackListener", cluster_track_listener_fn);
     expected_count++;

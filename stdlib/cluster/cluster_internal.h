@@ -245,13 +245,6 @@ static inline bool cluster_node_remove(XrCluster *cluster, XrClusterNode *node) 
     return removed;
 }
 
-/* ========== Health & Robustness ========== */
-
-void cluster_health_tick(XrCluster *cluster, const uint8_t *heartbeat_wire,
-                         uint32_t heartbeat_wire_length, int64_t heartbeat_sent_at_ms,
-                         int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
-                         int64_t phi_min_samples, double phi_threshold);
-
 /* ========== Topic Pub/Sub ========== */
 
 #define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)

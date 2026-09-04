@@ -78,7 +78,9 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "cluster.__start") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__healthTick") == 0)
+    if (strcmp(symbol, "cluster.__healthSnapshot") == 0)
+        return XAOT_STDLIB_CAP_CHANNEL;
+    if (strcmp(symbol, "cluster.__applyHealthDecision") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__trackListener") == 0)
         return XAOT_STDLIB_CAP_NETPOLL;
