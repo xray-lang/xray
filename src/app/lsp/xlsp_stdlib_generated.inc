@@ -58,7 +58,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"shouldJoinDiscoveredNode", XLSP_SYM_FUNCTION, "fn(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool", "", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"validCoroutineName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
-    {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
+    {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): Endpoint", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"topicMatches", XLSP_SYM_FUNCTION, "fn(pattern: string, topic: string): bool", "", NULL, 0},
@@ -116,9 +116,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"PhiDetector", XLSP_SYM_CLASS, "type PhiDetector", "Class type", NULL, 0},
     {"ClusterDelivery", XLSP_SYM_CLASS, "type ClusterDelivery", "Enum type", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
-    {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 86
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 85
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

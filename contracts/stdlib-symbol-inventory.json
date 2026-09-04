@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "base": "b8abcc33a975a0350e261f87dc7784f238013e14",
+  "base": "4cde93473571fa6fb1a847e62aaf4e4ae12f736b",
   "counts": {
     "modules": 33,
     "production_modules": 31,
     "test_only_modules": 2,
-    "symbols": 1632,
-    "production_symbols": 1606,
-    "xray_body_symbols": 1441,
+    "symbols": 1629,
+    "production_symbols": 1603,
+    "xray_body_symbols": 1438,
     "handwritten_c_semantic_owner": 0,
     "native_leaf_symbols": 161,
     "production_native_leaf_symbols": 161,
@@ -683,8 +683,8 @@
       "c_sources": [],
       "c_function_count": 0,
       "enters_module_graph": true,
-      "symbol_count": 158,
-      "xray_body_symbols": 158,
+      "symbol_count": 155,
+      "xray_body_symbols": 155,
       "handwritten_c_symbols": 0,
       "native_leaf_symbols": 0,
       "queue": "native-leaf-only",
@@ -12805,6 +12805,15 @@
     },
     {
       "module": "cluster",
+      "symbol": "ClusterConfig.heartbeatIntervalMs",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "ClusterConfig.heartbeatTimeoutMs",
       "kind": "field",
       "audience": "production",
@@ -13147,6 +13156,15 @@
     },
     {
       "module": "cluster",
+      "symbol": "ClusterNodeInfo.endpoint",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "ClusterNodeInfo.framesReceived",
       "kind": "field",
       "audience": "production",
@@ -13202,15 +13220,6 @@
     {
       "module": "cluster",
       "symbol": "ClusterNodeInfo.phi",
-      "kind": "field",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
-      "symbol": "ClusterNodeInfo.port",
       "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -13572,42 +13581,6 @@
       "module": "cluster",
       "symbol": "NONCE_SIZE",
       "kind": "const",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
-      "symbol": "NodeAddress.NodeAddress",
-      "kind": "type",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
-      "symbol": "NodeAddress.constructor",
-      "kind": "method",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
-      "symbol": "NodeAddress.host",
-      "kind": "field",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
-      "symbol": "NodeAddress.port",
-      "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
       "xray_body": true,

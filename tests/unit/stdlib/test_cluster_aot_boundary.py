@@ -104,6 +104,37 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertNotIn("XrTlsContext *ctx", tls_conn)
         self.assertIn("SSL_VERIFY_FAIL_IF_NO_PEER_CERT", tls_provider)
 
+    def test_generation_fences_cover_every_long_lived_source_path(self) -> None:
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+
+        self.assertIn("fn _closeTopicSubscriptions(runtimeToken: i64)", cluster_xr)
+        self.assertIn("fn _dispatchInboundFrame(runtimeToken: i64,", cluster_xr)
+        self.assertIn("fn _deliverTopicForRuntime(runtimeToken: i64,", cluster_xr)
+        self.assertIn("fn _broadcastPeersForRuntime(runtimeToken: i64,", cluster_xr)
+        self.assertIn("type _DiscoveryGeneration = {", cluster_xr)
+        self.assertIn("socket: NetConn?", cluster_xr)
+        self.assertIn("fn _installDiscoverySocket(runtimeToken: i64,", cluster_xr)
+        self.assertIn("_stopDiscovery(retiredToken)", cluster_xr)
+        self.assertNotIn("const _discoveryActiveToken", cluster_xr)
+
+    def test_public_status_surface_contains_only_observable_facts(self) -> None:
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+
+        self.assertNotIn("export enum ClusterNodeState", cluster_xr)
+        self.assertNotIn("export type ClusterTlsStatus", cluster_xr)
+        self.assertNotIn("running: bool", cluster_xr)
+        self.assertIn("endpoint: Endpoint?", cluster_xr)
+        self.assertNotIn("export class NodeAddress", cluster_xr)
+        self.assertIn("export fn parseAddress(addr: string) -> Endpoint", cluster_xr)
+        self.assertIn("Endpoint(host, port), ack!.flags", cluster_xr)
+        self.assertIn(
+            "_adoptReservedPeer(move conn, token, request!.name, null, request!.flags)",
+            cluster_xr,
+        )
+        self.assertIn("if (port <= 0 || port > 65535)", cluster_xr)
+        self.assertIn("if (tlsEnabled && len(certFile) == 0) { return false }", cluster_xr)
+        self.assertIn("certFile, keyFile, caFile, !insecure)", cluster_xr)
+
 
 if __name__ == "__main__":
     unittest.main()

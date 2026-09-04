@@ -43,7 +43,7 @@ import crypto
 import math
 import mem
 import net
-import { DialOptions, NetError, TlsClientContext, TlsServerContext, UdpFrom } from net
+import { DialOptions, Endpoint, NetError, TlsClientContext, TlsServerContext, UdpFrom } from net
 import time
 
 // ========== Protocol constants ==========
@@ -151,6 +151,7 @@ type _SourceListener = {
 type _DiscoveryGeneration = {
     runtimeToken: i64,
     discoveryToken: i64,
+    socket: NetConn?,
 }
 
 type _ClusterTlsResources = {
@@ -219,8 +220,7 @@ type _PeerDirectoryEntry = {
     runtimeToken: i64,
     generation: i64,
     name: string,
-    host: string,
-    port: i64,
+    endpoint: Endpoint?,
     flags: i64,
     state: i64,
 }
@@ -408,8 +408,8 @@ fn _peerNameConflict(name: string) -> bool {
     return found
 }
 
-fn _reservePeer(runtimeToken: i64, name: string, host: string,
-                port: i64, flags: i64) -> _PeerReservation? {
+fn _reservePeer(runtimeToken: i64, name: string, endpoint: Endpoint?,
+                flags: i64) -> _PeerReservation? {
     var reservation: _PeerReservation? = null
     _lockRuntimeDecision()
     if (_runtimeActiveToken.load() == runtimeToken && !_recentlyDeparted(name)) {
@@ -428,8 +428,7 @@ fn _reservePeer(runtimeToken: i64, name: string, host: string,
                     runtimeToken: runtimeToken,
                     generation: generation,
                     name: name,
-                    host: host,
-                    port: port,
+                    endpoint: endpoint,
                     flags: flags,
                     state: _PEER_RESERVED,
                 })
@@ -1576,12 +1575,12 @@ fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
     }
 }
 
-fn _broadcastPeers(excludedGeneration: i64, wire: Array<u8>) -> _DeliveryStats? {
-    var token = _runtimeActiveToken.load()
+fn _broadcastPeersForRuntime(runtimeToken: i64, excludedGeneration: i64,
+                             wire: Array<u8>) -> _DeliveryStats? {
     var result: _DeliveryStats? = null
-    if (token != 0) {
-        var peers = _peerDirectorySnapshot(token)
-        if (_runtimeActiveToken.load() == token) {
+    if (runtimeToken != 0) {
+        var peers = _peerDirectorySnapshot(runtimeToken)
+        if (_runtimeActiveToken.load() == runtimeToken) {
             var stats: _DeliveryStats = { accepted: 0, full: 0, stopped: 0 }
             for (var i = 0; i < len(peers); i++) {
                 var generation = peers[i].generation
@@ -1595,14 +1594,15 @@ fn _broadcastPeers(excludedGeneration: i64, wire: Array<u8>) -> _DeliveryStats? 
                     stats.stopped = stats.stopped + 1
                 } else { stats.stopped = stats.stopped + 1 }
             }
-            if (_runtimeActiveToken.load() == token) { result = stats }
+            if (_runtimeActiveToken.load() == runtimeToken) { result = stats }
         }
     }
     return result
 }
 
-fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
+fn _dispatchInboundFrame(runtimeToken: i64, peerGeneration: i64, receivedAtMs: i64,
                          wire: Array<u8>) -> bool {
+    if (_runtimeActiveToken.load() != runtimeToken) { return false }
     var frame = decodeFrame(wire)
     if (frame == null) { return false }
     if (frame!.kind == FRAME_HEARTBEAT_PING) {
@@ -1623,11 +1623,13 @@ fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
     if (frame!.kind == FRAME_TRANSPORT_ENVELOPE) {
         var transport = decodeTransportFrame(wire)
         if (transport == null) { return false }
-        _deliverTopic(transport!.topic, transport!.envelope)
+        _deliverTopicForRuntime(runtimeToken, transport!.topic, transport!.envelope)
         if (transport!.hopLimit > 0) {
             var forward = encodeTransportFrame(transport!.hopLimit - 1, transport!.topic,
                                                transport!.envelope)
-            if (forward != null) { _broadcastPeers(peerGeneration, forward!) }
+            if (forward != null) {
+                _broadcastPeersForRuntime(runtimeToken, peerGeneration, forward!)
+            }
         }
         return true
     }
@@ -1680,7 +1682,7 @@ fn _peerReadLoop(runtimeToken: i64, peerGeneration: i64, conn: NetConn) {
     while (_peerTransportCurrent(runtimeToken, peerGeneration)) {
         var wire = _readPeerFrame(runtimeToken, peerGeneration, conn)
         if (wire == null ||
-            !_dispatchInboundFrame(peerGeneration, time.monotonic(), wire!)) {
+            !_dispatchInboundFrame(runtimeToken, peerGeneration, time.monotonic(), wire!)) {
             _disconnectPeer(peerGeneration)
             return
         }
@@ -2127,6 +2129,7 @@ fn _claimDiscovery(runtimeToken: i64, discoveryToken: i64) -> bool {
         _discoveryGeneration = {
             runtimeToken: runtimeToken,
             discoveryToken: discoveryToken,
+            socket: null,
         }
     }
     _discoveryStateLock.store(false)
@@ -2143,23 +2146,46 @@ fn _discoveryIsActive(runtimeToken: i64, discoveryToken: i64) -> bool {
     return active
 }
 
+fn _installDiscoverySocket(runtimeToken: i64, discoveryToken: i64,
+                           socket: NetConn) -> bool {
+    _lockDiscoveryState()
+    var installed = _discoveryGeneration != null &&
+                    _discoveryGeneration!.runtimeToken == runtimeToken &&
+                    _discoveryGeneration!.discoveryToken == discoveryToken &&
+                    _discoveryGeneration!.socket == null &&
+                    _runtimeActiveToken.load() == runtimeToken
+    if (installed) {
+        var generation = _discoveryGeneration!
+        generation.socket = socket
+        _discoveryGeneration = generation
+    }
+    _discoveryStateLock.store(false)
+    return installed
+}
+
 fn _releaseDiscovery(runtimeToken: i64, discoveryToken: i64) {
     _lockDiscoveryState()
+    var socket: NetConn? = null
     if (_discoveryGeneration != null &&
         _discoveryGeneration!.runtimeToken == runtimeToken &&
         _discoveryGeneration!.discoveryToken == discoveryToken) {
+        socket = _discoveryGeneration!.socket
         _discoveryGeneration = null
     }
     _discoveryStateLock.store(false)
+    if (socket != null) { net.close(socket!) }
 }
 
 fn _stopDiscovery(runtimeToken: i64) {
     _lockDiscoveryState()
+    var socket: NetConn? = null
     if (_discoveryGeneration != null &&
         _discoveryGeneration!.runtimeToken == runtimeToken) {
+        socket = _discoveryGeneration!.socket
         _discoveryGeneration = null
     }
     _discoveryStateLock.store(false)
+    if (socket != null) { net.close(socket!) }
 }
 
 fn _hexNibble(c: rune) -> i64 {
@@ -2215,8 +2241,8 @@ fn _mayPublishPeer(runtimeToken: i64, name: string) -> bool {
 }
 
 fn _adoptReservedPeer(conn: move NetConn, runtimeToken: i64, name: string,
-                      host: string, port: i64, flags: i64) -> bool {
-    var reservation = _reservePeer(runtimeToken, name, host, port, flags)
+                      address: Endpoint?, flags: i64) -> bool {
+    var reservation = _reservePeer(runtimeToken, name, address, flags)
     if (reservation == null) {
         net.close(conn)
         return false
@@ -2338,7 +2364,8 @@ fn _joinPeerForRuntime(runtimeToken: i64, host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    return _adoptReservedPeer(move live, runtimeToken, ack!.name, host, port, ack!.flags)
+    return _adoptReservedPeer(
+        move live, runtimeToken, ack!.name, Endpoint(host, port), ack!.flags)
 }
 
 fn _joinPeer(host: string, port: i64) -> bool {
@@ -2418,7 +2445,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    _adoptReservedPeer(move conn, token, request!.name, "", 0, request!.flags)
+    _adoptReservedPeer(move conn, token, request!.name, null, request!.flags)
 }
 
 // Keep the affine connection inside a single-iteration frame. A loop-carried
@@ -2571,10 +2598,7 @@ fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
                   discoveryToken: i64) {
     var live = socket
     var wire = announcement
-    defer {
-        net.close(live)
-        _releaseDiscovery(runtimeToken, discoveryToken)
-    }
+    defer { _releaseDiscovery(runtimeToken, discoveryToken) }
 
     var nextAnnouncementMs = 0
     while (_discoveryIsActive(runtimeToken, discoveryToken)) {
@@ -2621,25 +2645,23 @@ fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
 
 // ========== Configuration ==========
 
+// Every TLS-enabled node accepts peers as well as joining them, so it must have
+// one complete identity. Client-only half-nodes are not admitted.
 export type ClusterTlsOptions = {
     enabled: bool,
     caFile: string?,
-    // Every TLS-enabled node accepts peers as well as joining them, so it must
-    // have one complete identity. Client-only half-nodes are not admitted.
     certFile: string?,
     keyFile: string?,
     insecure: bool,
 }
 
+// Omitting a heartbeat field takes the source-owned constant above, so the
+// defaults have one owner while callers may still choose a faster detector.
 export type ClusterConfig = {
     name: string,
     port: i64,
     secret: string?,
     tls: ClusterTlsOptions?,
-    // The heartbeat schedule, when this node wants one of its own. Omitting a
-    // field leaves it null and takes the constant above, so the defaults still
-    // have exactly one owner and a caller who needs a faster detector no longer
-    // has to be told the numbers are not negotiable.
     heartbeatIntervalMs: i64?,
     heartbeatTimeoutMs: i64?,
     maxMissedHeartbeats: i64?,
@@ -2657,12 +2679,12 @@ export enum ClusterDelivery {
     Disconnected,
 }
 
+// An outbound peer has the address used to join it. A directly accepted peer
+// has no trustworthy advertised endpoint. The optional endpoint keeps partial
+// addresses unrepresentable instead of coupling two independent optionals.
 export type ClusterNodeInfo = {
     name: string,
-    // An outbound peer has the address used to join it. A directly accepted
-    // peer has no trustworthy advertised endpoint, so both fields are null.
-    host: string?,
-    port: i64?,
+    endpoint: Endpoint?,
     framesSent: i64,
     framesReceived: i64,
     bytesSent: i64,
@@ -2693,16 +2715,6 @@ export enum AddressError {
     MissingPort { address: string },
     InvalidHost { host: string },
     InvalidPort { port: string }
-}
-
-export class NodeAddress {
-    host: string
-    port: i64
-
-    constructor(host: string, port: i64) {
-        this.host = host
-        this.port = port
-    }
 }
 
 // ========== Naming rules ==========
@@ -2781,7 +2793,7 @@ fn _stripIpv6Brackets(host: string) -> string {
 // AOT half stripped brackets but handed the port text straight to
 // getaddrinfo(3), which resolves service names -- so "db:http" refused on one
 // backend and connected to port 80 on the other.
-export fn parseAddress(addr: string) -> NodeAddress {
+export fn parseAddress(addr: string) -> Endpoint {
     var colon = addr.lastIndexOf(":")
     if (colon <= 0 || colon + 1 >= len(addr)) { throw AddressError.MissingPort { address: addr } }
     var rawHost = addr.slice(0, colon)
@@ -2793,7 +2805,7 @@ export fn parseAddress(addr: string) -> NodeAddress {
     var rawPort = addr.slice(colon + 1)
     var port = _parsePort(rawPort)
     if (port <= 0) { throw AddressError.InvalidPort { port: rawPort } }
-    return NodeAddress(host, port)
+    return Endpoint(host, port)
 }
 
 // ========== Topic language ==========
@@ -2932,13 +2944,13 @@ fn _offerTopic(target: Channel<Buffer>, envelope: Array<u8>) -> i64 {
     }
 }
 
-fn _deliverTopic(topic: string, envelope: Array<u8>) -> _DeliveryStats? {
-    var token = _runtimeActiveToken.load()
-    if (token == 0) { return null }
+fn _deliverTopicForRuntime(runtimeToken: i64, topic: string,
+                           envelope: Array<u8>) -> _DeliveryStats? {
+    if (runtimeToken == 0) { return null }
     var full = 0
     var stopped = 0
-    var targets = _topicTargets(topic, token, ref full, ref stopped)
-    if (_runtimeActiveToken.load() != token) { return null }
+    var targets = _topicTargets(topic, runtimeToken, ref full, ref stopped)
+    if (_runtimeActiveToken.load() != runtimeToken) { return null }
 
     var accepted = 0
     for (var i = 0; i < len(targets); i++) {
@@ -2952,6 +2964,7 @@ fn _deliverTopic(topic: string, envelope: Array<u8>) -> _DeliveryStats? {
         full: full,
         stopped: stopped,
     }
+    if (_runtimeActiveToken.load() != runtimeToken) { return null }
     return stats
 }
 
@@ -3036,7 +3049,7 @@ export fn discover() -> bool {
     }
     var live: NetConn = socket!
     socket = null
-    if (!_discoveryIsActive(runtimeToken, token)) {
+    if (!_installDiscoverySocket(runtimeToken, token, live)) {
         net.close(live)
         _releaseDiscovery(runtimeToken, token)
         return false
@@ -3077,8 +3090,7 @@ export fn info() -> ClusterInfo? {
                     : 0.0
         var publicNode: ClusterNodeInfo = {
             name: metadata!.name,
-            host: len(metadata!.host) > 0 ? metadata!.host : null,
-            port: metadata!.port > 0 ? metadata!.port : null,
+            endpoint: metadata!.endpoint,
             framesSent: node.framesSent,
             framesReceived: node.framesReceived,
             bytesSent: node.bytesSent,
@@ -3208,7 +3220,7 @@ export fn start(config: ClusterConfig) -> bool {
         try {
             var client = TlsClientContext.create(caFile, certFile, keyFile, !insecure)
             var server = TlsServerContext.create(
-                certFile, keyFile, caFile, !insecure && len(caFile) > 0)
+                certFile, keyFile, caFile, !insecure)
             tlsResources = {
                 runtimeToken: runtimeToken,
                 client: client,
@@ -3222,7 +3234,7 @@ export fn start(config: ClusterConfig) -> bool {
     var listener = _clusterListener(config.port)
     if (listener == null) { return false }
     var port = net.port(listener!)
-    if (port < 0 || port > 65535) {
+    if (port <= 0 || port > 65535) {
         net.close(listener!)
         return false
     }
@@ -3313,9 +3325,13 @@ export fn send(topic: string, envelope: move Buffer,
     if (len(envelopeBytes) < ENVELOPE_HEADER_SIZE) {
         return ClusterDelivery.InvalidEnvelope
     }
+    var runtimeToken = _runtimeActiveToken.load()
+    if (runtimeToken == 0) { return ClusterDelivery.Unavailable }
     var remoteWire = encodeTransportFrame(hopLimit, topic, envelopeBytes)
-    var local = _deliveryFromStats(_deliverTopic(topic, envelopeBytes))
+    var local = _deliveryFromStats(
+        _deliverTopicForRuntime(runtimeToken, topic, envelopeBytes))
     var remote = remoteWire == null ? ClusterDelivery.InvalidEnvelope
-                                    : _deliveryFromStats(_broadcastPeers(0, remoteWire!))
+                                    : _deliveryFromStats(
+                                        _broadcastPeersForRuntime(runtimeToken, 0, remoteWire!))
     return _combinePublicationDelivery(local, remote)
 }
