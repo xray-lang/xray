@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * stdlib_cache.c - Per-isolate stdlib cache: create / get / free
+ * xstdlib_runtime_cache.c - Per-isolate cache for generated stdlib carriers
  *
  * The cache pointer lives as an opaque `void *` on XrVMRuntime so that
  * the core header never needs to include stdlib types. This translation
@@ -13,17 +13,17 @@
  * concrete XrStdlibCache struct, keeping the coupling local.
  */
 
-#include "stdlib_cache.h"
+#include "xstdlib_runtime_cache.h"
 
 #include <string.h>
 
-#include "../src/base/xhash.h"
-#include "../src/base/xmalloc.h"
-#include "../src/runtime/class/xinstance.h"
-#include "../src/runtime/class/xenum.h"
-#include "../src/runtime/xisolate_internal.h"
-#include "../src/shared/xobject_shape.h"
-#include "../src/stdlib/xstdlib_defs_generated.h"
+#include "../base/xhash.h"
+#include "../base/xmalloc.h"
+#include "../runtime/class/xinstance.h"
+#include "../runtime/class/xenum.h"
+#include "../runtime/xisolate_internal.h"
+#include "../shared/xobject_shape.h"
+#include "../stdlib/xstdlib_defs_generated.h"
 
 typedef struct XrStdlibNativeEnumCacheEntry {
     const XrStdlibEnumDefEntry *decl;

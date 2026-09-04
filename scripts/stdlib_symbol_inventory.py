@@ -339,11 +339,7 @@ def c_without_comments(text: str) -> str:
 
 
 def c_functions(root: Path) -> dict[str, list[tuple[str, str]]]:
-    """Map a module directory to the (function, source file) pairs it defines.
-
-    `stdlib_cache.c` sits directly under `stdlib/` and belongs to no module; it
-    is reported under the synthetic `_stdlib` owner so the C side still closes.
-    """
+    """Map a module directory to the (function, source file) pairs it defines."""
     out: dict[str, list[tuple[str, str]]] = {}
     for path in sorted((root / "stdlib").rglob("*.c")):
         owner = path.parent.name if path.parent != root / "stdlib" else "_stdlib"

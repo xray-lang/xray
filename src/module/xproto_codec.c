@@ -15,7 +15,7 @@
 
 #include "xproto_codec.h"
 #include "xmodule.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "xstdlib_runtime_cache.h"
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../base/xlog.h"

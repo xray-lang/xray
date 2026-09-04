@@ -15,7 +15,7 @@
 
 #include "io.h"
 #include "../common.h"
-#include "../stdlib_cache.h"
+#include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"

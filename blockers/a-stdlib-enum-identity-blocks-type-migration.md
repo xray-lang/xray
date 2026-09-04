@@ -54,7 +54,7 @@ everywhere it is inspected by name.
 ## The C side cannot construct an Xray-declared enum at all
 
 There is one path for C to build a standard-library enum value:
-`xr_stdlib_enum_type_get` in `stdlib/stdlib_cache.c`, which consults only the
+`xr_stdlib_enum_type_get` in `src/module/xstdlib_runtime_cache.c`, which consults only the
 table generated from the definition file. An enum declared in `.xr` has no
 entry there, so C could not produce a value even if the identity matched.
 

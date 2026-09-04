@@ -24,7 +24,7 @@
 #include "../common.h"
 #include "io.h"
 #include "tls.h"
-#include "../stdlib_cache.h"
+#include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/io/xdns.h"
 #include "../../src/io/xnet_handle.h"
 #include "../../src/runtime/class/xclass.h"

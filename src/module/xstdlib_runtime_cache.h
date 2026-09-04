@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * stdlib_cache.h - Per-isolate cache shared across stdlib modules
+ * xstdlib_runtime_cache.h - Per-isolate cache for generated stdlib carriers
  *
  * KEY CONCEPT:
  *   Several stdlib bindings need to memoise values that are cheap to build
@@ -13,7 +13,7 @@
  *   instances that reference symbol IDs drawn from the isolate's symbol
  *   table). Storing the cache on XrVMRuntime itself would leak stdlib types
  *   into the core header; instead we attach an opaque pointer to the
- *   isolate and keep the concrete fields private to stdlib.
+ *   isolate and keep the concrete fields private to the module runtime.
  *
  * WHY THIS DESIGN:
  *   Previously, io.c used a single process-global static which silently
@@ -32,14 +32,14 @@
  *   xr_stdlib_cache_free() during isolate shutdown.
  */
 
-#ifndef XR_STDLIB_CACHE_H
-#define XR_STDLIB_CACHE_H
+#ifndef XR_STDLIB_RUNTIME_CACHE_H
+#define XR_STDLIB_RUNTIME_CACHE_H
 
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "../src/base/xdefs.h"
-#include "../src/runtime/value/xvalue.h"
+#include "../base/xdefs.h"
+#include "../runtime/value/xvalue.h"
 
 struct XrClass;
 struct XrEnumType;
@@ -111,7 +111,7 @@ typedef struct XrStdlibCache {
 
     // Per-isolate log state (default logger, mutex, async queue).
     // The concrete struct lives privately in log.c; the cache only holds
-    // an opaque pointer and a destructor so stdlib_cache.h does not depend
+    // an opaque pointer and a destructor so this header does not depend
     // on log.h.  Set by log_state_get() on first use.
     void *log_state;
     void (*log_state_cleanup)(void *);
@@ -145,4 +145,4 @@ XR_FUNC struct XrClass *xr_stdlib_record_class_get(struct XrVMRuntime *isolate, 
 // call with a NULL isolate or with the cache already freed.
 XR_FUNC void xr_stdlib_cache_free(struct XrVMRuntime *isolate);
 
-#endif  // XR_STDLIB_CACHE_H
+#endif  // XR_STDLIB_RUNTIME_CACHE_H

@@ -166,13 +166,13 @@ struct XrVMRuntime {
     void *cluster;  // XrCluster* (stdlib/cluster), NULL if not started
 
     /* ========== stdlib per-isolate cache ========== */
-    // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
+    // Opaque pointer owned by module/xstdlib_runtime_cache.h. Holds memoised
     // values that reference per-isolate symbol IDs (e.g. the dynamic-
     // layout XrClass built once by io.stat() and the interned error-map
     // keys shared by json/yaml/toml/xml/csv parsers). Kept as `void *`
     // here so stdlib types don't leak into the core header; cast via
-    // the accessor functions in `stdlib/stdlib_cache.h`.
-    void *stdlib_cache;  // XrStdlibCache* (stdlib/stdlib_cache.h), lazily allocated
+    // the accessor functions in `module/xstdlib_runtime_cache.h`.
+    void *stdlib_cache;  // XrStdlibCache*, lazily allocated
 
     /* ========== Prelude type marker registry ==========
      * Pointer to the process-wide constant XrPreludeSymbols table built

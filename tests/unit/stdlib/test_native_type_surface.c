@@ -21,7 +21,7 @@
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/shared/xobject_shape.h"
 #include "../../../src/stdlib/xstdlib_metadata.h"
-#include "../../../stdlib/stdlib_cache.h"
+#include "../../../src/module/xstdlib_runtime_cache.h"
 
 static const XrModuleIdentityAuthority k_native_surface_memory_authority = {
     .kind = XR_MODULE_IDENTITY_MEMORY,

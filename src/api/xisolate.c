@@ -28,7 +28,7 @@
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
 #include "../coro/xthread_obj.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../module/xstdlib_runtime_cache.h"
 #include "../os/os_time.h"
 #include <stdio.h>
 #include <stdlib.h>

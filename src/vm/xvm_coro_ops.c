@@ -30,7 +30,7 @@
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../module/xstdlib_runtime_cache.h"
 
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xiterator.h"

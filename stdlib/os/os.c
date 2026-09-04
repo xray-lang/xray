@@ -25,7 +25,7 @@
 #include <limits.h>
 #include "../../src/os/os_fs.h"
 #include "../../src/shared/xr_os_core.h"
-#include "../stdlib_cache.h"
+#include "../../src/module/xstdlib_runtime_cache.h"
 
 #include <signal.h>
 #include <time.h>

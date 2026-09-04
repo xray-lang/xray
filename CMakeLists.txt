@@ -1325,7 +1325,6 @@ file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
 # gc, regex, path, datetime, encoding, base64, url
 file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/prelude/*.c"
-    "stdlib/stdlib_cache.c"
     "stdlib/_probe/*.c"
     "stdlib/time/*.c"
     "stdlib/math/*.c"
@@ -1351,7 +1350,6 @@ if(XR_STDLIB_FULL)
     # Full stdlib includes every built-in module. Group switches apply only to
     # modular builds, so "full" has one exact, fail-closed meaning.
     file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
-    list(APPEND STDLIB_ALL_SRC "stdlib/stdlib_cache.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
     if(NOT XR_BUILD_TEST_MODULES)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")

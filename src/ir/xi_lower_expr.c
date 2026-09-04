@@ -49,7 +49,7 @@
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../shared/xr_array_core.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../module/xstdlib_runtime_cache.h"
 #include "../shared/xr_elem_type.h"
 #include "../base/xnumber_parse_error.h"
 #include "../base/xconstants.h"

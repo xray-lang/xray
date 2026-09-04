@@ -48,7 +48,7 @@
 #include "../src/runtime/object/xjson.h"
 #include "../src/runtime/xisolate_internal.h"
 
-#include "stdlib_cache.h"
+#include "../src/module/xstdlib_runtime_cache.h"
 
 // ========== Recommended default max nesting depth ==========
 

@@ -28,7 +28,7 @@
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
 #include "runtime/value/xstruct_layout.h"
-#include "../../../stdlib/stdlib_cache.h"
+#include "../../../src/module/xstdlib_runtime_cache.h"
 #include "xray_vm.h"
 
 #include <string.h>

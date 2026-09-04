@@ -18,7 +18,7 @@
 #include "../crypto/crypto.h"  // xr_secure_wipe
 #include "../../stdlib/net/io.h"
 #include "../../stdlib/mem/mem.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"

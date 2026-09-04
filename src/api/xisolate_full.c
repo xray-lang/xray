@@ -44,7 +44,7 @@
 #include "../coro/xscope_transfer.h"
 
 #include "../base/xmalloc.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../module/xstdlib_runtime_cache.h"
 #include "../base/xglobal_indices.h"
 #include "../frontend/analyzer/xanalyzer_native_types.h"
 #include "../toolchain/xcompiler_session.h"
