@@ -475,6 +475,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: i64): i64", "", NULL, 0},
     {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): CopyBidirectionalResult", "", NULL, 0},
     {"udpBind", XLSP_SYM_FUNCTION, "fn(port: i64, address?: string): NetConn", "", NULL, 0},
+    {"udpMulticastBind", XLSP_SYM_FUNCTION, "fn(group: string, port: i64, ttl?: i64, loopback?: bool): NetConn", "", NULL, 0},
     {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs?: i64): i64", "", NULL, 0},
     {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, buffer: ref Array<u8>, timeoutMs?: i64): UdpFrom?", "", NULL, 0},
     {"NetError", XLSP_SYM_CLASS, "type NetError", "Enum type", NULL, 0},
@@ -484,7 +485,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult", "Class type", NULL, 0},
     {"UdpFrom", XLSP_SYM_CLASS, "type UdpFrom", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 36
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 37
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {

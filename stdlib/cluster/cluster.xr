@@ -2082,8 +2082,14 @@ export fn discover() -> bool {
     var (_, acquired) = _discoveryActiveToken.compareExchange(0, token)
     if (!acquired) { return false }
 
-    var socket = __discoveryOpen(DISCOVERY_MULTICAST_GROUP, DISCOVERY_MULTICAST_PORT,
-                                 _DISCOVERY_MULTICAST_TTL, _DISCOVERY_LOOPBACK)
+    var socket: NetConn? = null
+    try {
+        socket = net.udpMulticastBind(DISCOVERY_MULTICAST_GROUP, DISCOVERY_MULTICAST_PORT,
+                                      _DISCOVERY_MULTICAST_TTL, _DISCOVERY_LOOPBACK)
+    } catch (e: NetError) {
+        _releaseDiscovery(token)
+        return false
+    }
     if (socket == null) {
         _releaseDiscovery(token)
         return false

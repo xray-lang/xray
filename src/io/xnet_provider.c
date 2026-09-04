@@ -1577,6 +1577,61 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
     return make_udp_handle(X, fd);
 }
 
+/*
+ * net.__udpMulticastBind(group, port, ttl, loopback) -> NetConn | null
+ *
+ * The Xray wrapper validates the IPv4 multicast address and scalar ranges.
+ * This leaf owns only the socket/bind/setsockopt host ABI projection.
+ */
+static XrValue net_udp_multicast_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
+    if (nargs < 4 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) ||
+        !XR_IS_INT(args[2]) || !XR_IS_BOOL(args[3]))
+        return XR_NULL_VAL;
+
+    const char *group = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+    int port_num = (int) XR_TO_INT(args[1]);
+    int ttl_value = (int) XR_TO_INT(args[2]);
+    bool loopback = XR_TO_BOOL(args[3]) != 0;
+    if (port_num <= 0 || port_num > 65535 || ttl_value < 0 || ttl_value > 255)
+        return XR_NULL_VAL;
+
+    struct in_addr group_address;
+    if (inet_pton(AF_INET, group, &group_address) != 1)
+        return XR_NULL_VAL;
+
+    net_platform_init();
+    xr_socket_t fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd == XR_INVALID_SOCKET)
+        return XR_NULL_VAL;
+
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons((uint16_t) port_num);
+    struct ip_mreq membership;
+    membership.imr_multiaddr = group_address;
+    membership.imr_interface.s_addr = htonl(INADDR_ANY);
+    unsigned char ttl = (unsigned char) ttl_value;
+    unsigned char loop = loopback ? 1u : 0u;
+
+    if (xr_socket_set_reuseaddr(fd, true) != 0 || xr_socket_set_reuseport(fd, true) != 0 ||
+        bind(fd, (struct sockaddr *) &address, sizeof(address)) != 0 ||
+        setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char *) &membership,
+                   sizeof(membership)) != 0 ||
+        setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, (const char *) &ttl, sizeof(ttl)) != 0 ||
+        setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (const char *) &loop, sizeof(loop)) != 0 ||
+        xr_socket_set_nonblocking(fd) != 0) {
+        xr_closesocket(fd);
+        return XR_NULL_VAL;
+    }
+
+    XrValue handle = make_udp_handle(X, (int) fd);
+    if (XR_IS_NULL(handle))
+        xr_closesocket(fd);
+    return handle;
+}
+
 typedef struct {
     int fd;
     XrNetConn *conn;

@@ -1901,6 +1901,18 @@ module net {
     return_ownership: "fresh"
   }
 
+  fn __udpMulticastBind {
+    signature: "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?"
+    doc: "Open an IPv4 multicast UDP socket after source-side address and option validation"
+    vm: "net_udp_multicast_bind_handle"
+    argc: 4
+    arg_spec: "svvv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
   fn __udpSendTo {
     signature: "(conn: NetConn, data: Array<u8>, addr: string, port: i64, deadlineMs: i64): i64"
     doc: "Send one datagram to a literal address under an absolute deadline; bytes sent or -1 with a stored code"
@@ -2234,18 +2246,6 @@ module cluster {
     caps: "channel"
     effect: "nothrow"
     allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __discoveryOpen {
-    signature: "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?"
-    doc: "Open one IPv4 multicast UDP handle for the source-owned discovery loop"
-    vm: "xr_cluster_discovery_socket_open"
-    argc: 4
-    arg_spec: "svvv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
     return_ownership: "fresh"
   }
 

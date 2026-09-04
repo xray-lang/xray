@@ -18,7 +18,6 @@
 #include "../../src/io/xnet_transport.h"
 #include "../../src/io/xnet_handle.h"
 #include "../../src/io/xnet_provider.h"
-#include "../../src/io/xcluster_discovery_provider.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"

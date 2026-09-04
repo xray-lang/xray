@@ -1,6 +1,7 @@
 // Test net module - API existence and non-I/O functionality
 
 import net
+import { NetError } from net
 
 // @test module exports exist
 @test
@@ -42,8 +43,22 @@ fn test_net_tls_apis() {
 @test
 fn test_net_udp_apis() {
     assert(typeName(net.udpBind) == "function")
+    assert(typeName(net.udpMulticastBind) == "function")
     assert(typeName(net.sendTo) == "function")
     assert(typeName(net.recvFrom) == "function")
+}
+
+// @test multicast group policy is source-owned
+@test
+fn test_net_multicast_rejects_unicast_group() {
+    var invalid = false
+    try {
+        var conn = net.udpMulticastBind("127.0.0.1", 47200)
+        net.close(conn)
+    } catch (e: NetError) {
+        invalid = e == NetError.Invalid
+    }
+    assert(invalid)
 }
 
 // @test DNS lookup - multiple calls consistent

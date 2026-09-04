@@ -329,6 +329,42 @@ export fn udpBind(port: i64, address: string = "") -> NetConn {
     return conn!
 }
 
+fn _parseIpv4Octet(part: string) -> i64? {
+    if (len(part) == 0 || len(part) > 3) { return null }
+    const bytes: Slice<u8> = part.bytes()
+    var value = 0
+    for (var i = 0; i < len(bytes); i++) {
+        var digit = bytes[i] as i64
+        if (digit < 48 || digit > 57) { return null }
+        value = value * 10 + digit - 48
+    }
+    if (value > 255) { return null }
+    return value
+}
+
+fn _validIpv4MulticastGroup(group: string) -> bool {
+    var parts = group.split(".")
+    if (len(parts) != 4) { return false }
+    var first = _parseIpv4Octet(parts[0])
+    if (first == null || first! < 224 || first! > 239) { return false }
+    for (var i = 1; i < 4; i++) {
+        if (_parseIpv4Octet(parts[i]) == null) { return false }
+    }
+    return true
+}
+
+// Open one IPv4 multicast datagram socket. Group syntax and option ranges are
+// source-owned; the leaf below only performs the portable socket operations.
+export fn udpMulticastBind(group: string, port: i64, ttl: i64 = 1,
+                           loopback: bool = false) -> NetConn {
+    if (!_validIpv4MulticastGroup(group) || port <= 0 || port > 65535 || ttl < 0 || ttl > 255) {
+        throw NetError.Invalid
+    }
+    var conn = __udpMulticastBind(group, port, ttl, loopback)
+    if (conn == null) { throw NetError.Io }
+    return conn!
+}
+
 fn _deadlineFromTimeout(timeoutMs: i64) -> i64 {
     if (timeoutMs < 0) { return 0 }
     return time.monotonic() + timeoutMs

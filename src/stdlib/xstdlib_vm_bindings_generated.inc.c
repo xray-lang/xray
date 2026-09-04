@@ -55,8 +55,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__detachPeer", cluster_detach_peer_fn);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__discoveryOpen", xr_cluster_discovery_socket_open);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__runtimeSnapshot", cluster_runtime_snapshot_fn);
@@ -311,6 +309,8 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
     expected_count++;
 #endif  /* XR_ENABLE_TLS */
     XRS_EXPORT(module, isolate, "__udpBind", net_udp_bind_handle);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__udpMulticastBind", net_udp_multicast_bind_handle);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__udpSendTo", net_udp_send_to_yieldable);
     expected_count++;
