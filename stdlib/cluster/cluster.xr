@@ -14,14 +14,13 @@
 //   handshake version, the hop limit and the heartbeat schedule.
 //
 // WHAT DOES NOT
-//   Sockets, multicast, TLS, the netpoll, OS threads, the channel subsystem,
-//   and the frame codec that runs inside a reader loop with no Xray stack
-//   above it. Those are private native leaves; stdlib/native_leaf_allowlist.toml
-//   records what each one crosses and what would let it be deleted.
+//   Sockets, multicast, TLS, the netpoll, OS threads and the channel subsystem.
+//   Those are private native leaves; all protocol bytes, authentication rules,
+//   failure-detector math and discovery admission policy live below in Xray.
 //
 // WIRE FORMAT
-//   Normative. stdlib/cluster/cluster_proto.c encodes it for both backends and
-//   tests/unit/stdlib/test_cluster_proto.c holds it to the byte.
+//   Normative. src/io/xcluster_wire.c is the native reader-loop projection and
+//   tests/unit/stdlib/test_cluster_proto.c holds that projection to the byte.
 //
 //     frame     := u32be(1 + len(payload)) u8(type) payload
 //     transport := u8(hopLimit) u8(len(topic)) topic envelope
@@ -37,6 +36,9 @@
 //   them, which is why the leaves no longer check them. proof is
 //   HMAC-SHA256(secret, nonce): the primitive is a crypto leaf, the
 //   construction is the line above.
+
+import crypto
+import math
 
 // ========== Protocol constants ==========
 
@@ -93,6 +95,438 @@ export const SUBSCRIPTION_CAPACITY_MAX = 1048576
 export const HEARTBEAT_INTERVAL_MS = 5000
 export const HEARTBEAT_TIMEOUT_MS = 15000
 export const MAX_MISSED_HEARTBEATS = 3
+
+// The phi detector has one policy threshold and one bounded observation
+// window. Neither value is a transport concern.
+export const PHI_THRESHOLD = 8.0
+export const PHI_WINDOW_SIZE = 100
+
+// LAN discovery only announces candidates. Authentication still happens on
+// the TCP connection, so the datagram contains a non-secret cluster selector.
+export const DISCOVERY_MAGIC = 0x58524459
+export const DISCOVERY_VERSION = 2
+export const DISCOVERY_MULTICAST_GROUP = "239.42.42.42"
+export const DISCOVERY_MULTICAST_PORT = 47200
+export const DISCOVERY_INTERVAL_MS = 3000
+
+// ========== Wire protocol ===========
+
+export type ClusterFrame = {
+    kind: i64,
+    payload: Array<u8>,
+}
+
+export type ClusterTransportFrame = {
+    hopLimit: i64,
+    topic: string,
+    envelope: Array<u8>,
+}
+
+export type ClusterHandshakeRequest = {
+    name: string,
+    nonce: Array<u8>,
+    flags: i64,
+}
+
+export type ClusterHandshakeAck = {
+    name: string,
+    nonce: Array<u8>,
+    proof: Array<u8>,
+    flags: i64,
+}
+
+export type ClusterCoroExit = {
+    name: string,
+    reason: string,
+}
+
+export type ClusterDiscoveryAnnouncement = {
+    name: string,
+    port: i64,
+    clusterHash: u64,
+}
+
+fn _bytes(text: string) -> Array<u8> {
+    var view: const Slice<u8> = text.bytes()
+    var out = Array<u8>(len(view))
+    for (var i = 0; i < len(view); i++) { out[i] = view[i] }
+    return out
+}
+
+fn _copyBytes(src: Array<u8>, start: i64, end: i64) -> Array<u8>? {
+    if (start < 0 || end < start || end > len(src)) { return null }
+    var out = Array<u8>(end - start)
+    for (var i = start; i < end; i++) { out[i - start] = src[i] }
+    return out
+}
+
+fn _text(src: Array<u8>, start: i64, end: i64) -> string? {
+    var bytes = _copyBytes(src, start, end)
+    if (bytes == null) { return null }
+    try {
+        return string.fromUtf8(bytes![:])
+    } catch (e: Utf8Error) {
+        return null
+    }
+}
+
+fn _appendBytes(out: ref Array<u8>, src: Array<u8>) {
+    for (var i = 0; i < len(src); i++) { out.push(src[i]) }
+}
+
+fn _writeU16(out: ref Array<u8>, value: i64) {
+    out.push(((value >> 8) & 255) as u8)
+    out.push((value & 255) as u8)
+}
+
+fn _writeU32(out: ref Array<u8>, value: i64) {
+    out.push(((value >> 24) & 255) as u8)
+    out.push(((value >> 16) & 255) as u8)
+    out.push(((value >> 8) & 255) as u8)
+    out.push((value & 255) as u8)
+}
+
+fn _writeU64(out: ref Array<u8>, value: u64) {
+    for (var i = 7; i >= 0; i--) {
+        out.push(((value >> ((i * 8) as u64)) & (255 as u64)) as u8)
+    }
+}
+
+fn _readU16(src: Array<u8>, pos: i64) -> i64 {
+    return ((src[pos] as i64) << 8) | (src[pos + 1] as i64)
+}
+
+fn _readU32(src: Array<u8>, pos: i64) -> i64 {
+    return ((src[pos] as i64) << 24) | ((src[pos + 1] as i64) << 16) |
+           ((src[pos + 2] as i64) << 8) | (src[pos + 3] as i64)
+}
+
+fn _readU64(src: Array<u8>, pos: i64) -> u64 {
+    var value: u64 = 0
+    for (var i = 0; i < 8; i++) {
+        value = (value << (8 as u64)) | (src[pos + i] as u64)
+    }
+    return value
+}
+
+fn _validFrameKind(kind: i64) -> bool {
+    return kind >= FRAME_HANDSHAKE_REQ && kind <= FRAME_CORO_EXIT
+}
+
+fn _validFlags(flags: i64) -> bool { return flags >= 0 && flags <= 4294967295 }
+
+// A complete frame encoder/decoder, not a header helper. Exact length checks
+// make trailing bytes a protocol error instead of silently accepting two
+// concatenated frames as one.
+export fn encodeFrame(kind: i64, payload: Array<u8>) -> Array<u8>? {
+    if (!_validFrameKind(kind) || len(payload) + 1 > FRAME_MAX_PAYLOAD) { return null }
+    var out: Array<u8> = []
+    _writeU32(ref out, len(payload) + 1)
+    out.push(kind as u8)
+    _appendBytes(ref out, payload)
+    return out
+}
+
+export fn decodeFrame(data: Array<u8>) -> ClusterFrame? {
+    if (len(data) < FRAME_HEADER_SIZE + 1) { return null }
+    var total = _readU32(data, 0)
+    if (total < 1 || total > FRAME_MAX_PAYLOAD || total + FRAME_HEADER_SIZE != len(data)) {
+        return null
+    }
+    var kind = data[FRAME_HEADER_SIZE] as i64
+    if (!_validFrameKind(kind)) { return null }
+    var payload = _copyBytes(data, FRAME_HEADER_SIZE + 1, len(data))
+    if (payload == null) { return null }
+    var frame: ClusterFrame = { kind: kind, payload: payload! }
+    return frame
+}
+
+export fn encodeTransportFrame(hopLimit: i64, topic: string,
+                               envelope: Array<u8>) -> Array<u8>? {
+    if (hopLimit < 0 || hopLimit > TOPIC_MAX_HOP_LIMIT || !validTopicName(topic) ||
+        len(envelope) < ENVELOPE_HEADER_SIZE) { return null }
+    var topicBytes = _bytes(topic)
+    var payload: Array<u8> = []
+    payload.push(hopLimit as u8)
+    payload.push(len(topicBytes) as u8)
+    _appendBytes(ref payload, topicBytes)
+    _appendBytes(ref payload, envelope)
+    return encodeFrame(FRAME_TRANSPORT_ENVELOPE, payload)
+}
+
+export fn decodeTransportFrame(data: Array<u8>) -> ClusterTransportFrame? {
+    var frame = decodeFrame(data)
+    if (frame == null || frame!.kind != FRAME_TRANSPORT_ENVELOPE) { return null }
+    var payload = frame!.payload
+    if (len(payload) < 2) { return null }
+    var topicLen = payload[1] as i64
+    if (topicLen <= 0 || 2 + topicLen + ENVELOPE_HEADER_SIZE > len(payload)) { return null }
+    var topic = _text(payload, 2, 2 + topicLen)
+    if (topic == null || !validTopicName(topic!)) { return null }
+    var envelope = _copyBytes(payload, 2 + topicLen, len(payload))
+    if (envelope == null) { return null }
+    var result: ClusterTransportFrame = {
+        hopLimit: payload[0] as i64,
+        topic: topic!,
+        envelope: envelope!,
+    }
+    return result
+}
+
+export fn encodeHandshakeRequest(request: ClusterHandshakeRequest) -> Array<u8>? {
+    var name = _bytes(request.name)
+    if (!validNodeName(request.name) || len(request.nonce) != NONCE_SIZE ||
+        !_validFlags(request.flags)) { return null }
+    var payload: Array<u8> = []
+    payload.push(HANDSHAKE_VERSION as u8)
+    payload.push(len(name) as u8)
+    _appendBytes(ref payload, name)
+    _appendBytes(ref payload, request.nonce)
+    _writeU32(ref payload, request.flags)
+    return encodeFrame(FRAME_HANDSHAKE_REQ, payload)
+}
+
+export fn decodeHandshakeRequest(payload: Array<u8>) -> ClusterHandshakeRequest? {
+    if (len(payload) < 2 + NONCE_SIZE + 4 || payload[0] as i64 != HANDSHAKE_VERSION) {
+        return null
+    }
+    var nameLen = payload[1] as i64
+    if (2 + nameLen + NONCE_SIZE + 4 != len(payload)) { return null }
+    var name = _text(payload, 2, 2 + nameLen)
+    var nonce = _copyBytes(payload, 2 + nameLen, 2 + nameLen + NONCE_SIZE)
+    if (name == null || !validNodeName(name!) || nonce == null) { return null }
+    var result: ClusterHandshakeRequest = {
+        name: name!, nonce: nonce!, flags: _readU32(payload, len(payload) - 4),
+    }
+    return result
+}
+
+export fn encodeHandshakeAck(ack: ClusterHandshakeAck) -> Array<u8>? {
+    var name = _bytes(ack.name)
+    if (!validNodeName(ack.name) || len(ack.nonce) != NONCE_SIZE ||
+        len(ack.proof) != PROOF_SIZE || !_validFlags(ack.flags)) { return null }
+    var payload: Array<u8> = []
+    payload.push(HANDSHAKE_VERSION as u8)
+    payload.push(len(name) as u8)
+    _appendBytes(ref payload, name)
+    _appendBytes(ref payload, ack.nonce)
+    _appendBytes(ref payload, ack.proof)
+    _writeU32(ref payload, ack.flags)
+    return encodeFrame(FRAME_HANDSHAKE_ACK, payload)
+}
+
+export fn decodeHandshakeAck(payload: Array<u8>) -> ClusterHandshakeAck? {
+    if (len(payload) < 2 + NONCE_SIZE + PROOF_SIZE + 4 ||
+        payload[0] as i64 != HANDSHAKE_VERSION) { return null }
+    var nameLen = payload[1] as i64
+    if (2 + nameLen + NONCE_SIZE + PROOF_SIZE + 4 != len(payload)) { return null }
+    var name = _text(payload, 2, 2 + nameLen)
+    var nonce = _copyBytes(payload, 2 + nameLen, 2 + nameLen + NONCE_SIZE)
+    var proof = _copyBytes(payload, 2 + nameLen + NONCE_SIZE,
+                           2 + nameLen + NONCE_SIZE + PROOF_SIZE)
+    if (name == null || !validNodeName(name!) || nonce == null || proof == null) { return null }
+    var result: ClusterHandshakeAck = {
+        name: name!, nonce: nonce!, proof: proof!, flags: _readU32(payload, len(payload) - 4),
+    }
+    return result
+}
+
+export fn encodeHandshakeDone(proof: Array<u8>) -> Array<u8>? {
+    if (len(proof) != PROOF_SIZE) { return null }
+    return encodeFrame(FRAME_HANDSHAKE_DONE, proof)
+}
+
+export fn decodeHandshakeDone(payload: Array<u8>) -> Array<u8>? {
+    if (len(payload) != PROOF_SIZE) { return null }
+    return _copyBytes(payload, 0, len(payload))
+}
+
+export fn encodeHeartbeat(kind: i64, timestampMs: i64) -> Array<u8>? {
+    if (kind != FRAME_HEARTBEAT_PING && kind != FRAME_HEARTBEAT_PONG) { return null }
+    var payload: Array<u8> = []
+    _writeU64(ref payload, timestampMs as u64)
+    return encodeFrame(kind, payload)
+}
+
+export fn decodeHeartbeat(payload: Array<u8>) -> i64? {
+    if (len(payload) != 8) { return null }
+    return _readU64(payload, 0) as i64
+}
+
+export fn encodeCoroMonitor(kind: i64, name: string) -> Array<u8>? {
+    if ((kind != FRAME_CORO_MONITOR && kind != FRAME_CORO_DEMONITOR) ||
+        !_validName(name, CORO_NAME_MAX)) { return null }
+    var nameBytes = _bytes(name)
+    var payload: Array<u8> = [len(nameBytes) as u8]
+    _appendBytes(ref payload, nameBytes)
+    return encodeFrame(kind, payload)
+}
+
+export fn decodeCoroMonitor(payload: Array<u8>) -> string? {
+    if (len(payload) < 1 || payload[0] as i64 + 1 != len(payload)) { return null }
+    var name = _text(payload, 1, len(payload))
+    if (name == null || !_validName(name!, CORO_NAME_MAX)) { return null }
+    return name
+}
+
+export fn encodeCoroExit(value: ClusterCoroExit) -> Array<u8>? {
+    var name = _bytes(value.name)
+    var reason = _bytes(value.reason)
+    if (!_validName(value.name, CORO_NAME_MAX) || len(reason) > 255) { return null }
+    var payload: Array<u8> = [len(name) as u8]
+    _appendBytes(ref payload, name)
+    payload.push(len(reason) as u8)
+    _appendBytes(ref payload, reason)
+    return encodeFrame(FRAME_CORO_EXIT, payload)
+}
+
+export fn decodeCoroExit(payload: Array<u8>) -> ClusterCoroExit? {
+    if (len(payload) < 2) { return null }
+    var nameLen = payload[0] as i64
+    if (1 + nameLen >= len(payload)) { return null }
+    var reasonLen = payload[1 + nameLen] as i64
+    if (2 + nameLen + reasonLen != len(payload)) { return null }
+    var name = _text(payload, 1, 1 + nameLen)
+    var reason = _text(payload, 2 + nameLen, len(payload))
+    if (name == null || !_validName(name!, CORO_NAME_MAX) || reason == null) { return null }
+    var result: ClusterCoroExit = { name: name!, reason: reason! }
+    return result
+}
+
+// HMAC-SHA256 is provided by crypto.xr; cluster owns the proof construction
+// and fixed sizes. No native cluster authentication policy remains.
+export fn computeHandshakeProof(secret: string, nonce: Array<u8>) -> Array<u8>? {
+    if (len(nonce) != NONCE_SIZE) { return null }
+    return crypto.hmacBytes("sha256", _bytes(secret), nonce)
+}
+
+export fn handshakeProofEqual(left: Array<u8>, right: Array<u8>) -> bool {
+    if (len(left) != PROOF_SIZE || len(right) != PROOF_SIZE) { return false }
+    return crypto.timingSafeEqualBytes(left, right)
+}
+
+// ========== Failure detection ===========
+
+export final class PhiDetector {
+    intervals: Array<f64>
+    sampleCount: i64
+    writeIndex: i64
+    mean: f64
+    variance: f64
+    sum: f64
+    sumSquares: f64
+    lastHeartbeatMs: i64
+
+    constructor(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS) {
+        this.intervals = Array<f64>(PHI_WINDOW_SIZE)
+        this.sampleCount = 0
+        this.writeIndex = 0
+        this.mean = expectedIntervalMs as f64
+        this.variance = 100.0
+        this.sum = 0.0
+        this.sumSquares = 0.0
+        this.lastHeartbeatMs = 0
+    }
+
+    ref record(nowMs: i64) {
+        if (this.lastHeartbeatMs > 0) {
+            var interval = (nowMs - this.lastHeartbeatMs) as f64
+            if (interval < 0.0) { interval = 0.0 }
+            if (this.sampleCount >= PHI_WINDOW_SIZE) {
+                var old = this.intervals[this.writeIndex]
+                this.sum = this.sum - old
+                this.sumSquares = this.sumSquares - old * old
+            } else {
+                this.sampleCount = this.sampleCount + 1
+            }
+            this.intervals[this.writeIndex] = interval
+            this.writeIndex = (this.writeIndex + 1) % PHI_WINDOW_SIZE
+            this.sum = this.sum + interval
+            this.sumSquares = this.sumSquares + interval * interval
+            this.mean = this.sum / (this.sampleCount as f64)
+            this.variance = this.sumSquares / (this.sampleCount as f64) - this.mean * this.mean
+            if (this.variance < 1.0) { this.variance = 1.0 }
+        }
+        this.lastHeartbeatMs = nowMs
+    }
+
+    value(nowMs: i64) -> f64 {
+        if (this.lastHeartbeatMs == 0 || this.sampleCount < 2) { return 0.0 }
+        var elapsed = (nowMs - this.lastHeartbeatMs) as f64
+        if (elapsed < 0.0) { elapsed = 0.0 }
+        var stddev = math.sqrt(this.variance)
+        if (stddev < 1.0) { stddev = 1.0 }
+        var y = (elapsed - this.mean) / stddev
+        var later = 1.0 / (1.0 + math.exp(1.7155 * y))
+        if (later < 0.000000000000001) { later = 0.000000000000001 }
+        return -math.log10(later)
+    }
+}
+
+// During detector warm-up the fixed timeout is deliberately conservative;
+// once three samples exist, phi alone decides liveness.
+export fn heartbeatIsDead(phi: f64, samples: i64, elapsedMs: i64,
+                          missedHeartbeats: i64, timeoutMs: i64,
+                          maxMissedHeartbeats: i64) -> bool {
+    if (samples >= 3) { return phi > PHI_THRESHOLD }
+    if (elapsedMs <= timeoutMs) { return false }
+    return missedHeartbeats + 1 >= maxMissedHeartbeats
+}
+
+// ========== Discovery policy ===========
+
+export fn discoveryClusterHash(secret: string) -> u64 {
+    if (len(secret) == 0) { return 0 }
+    var hash: u64 = 14695981039346656037
+    var bytes: const Slice<u8> = secret.bytes()
+    for (var i = 0; i < len(bytes); i++) {
+        hash = (hash ^ (bytes[i] as u64)) * (1099511628211 as u64)
+    }
+    return hash
+}
+
+export fn encodeDiscoveryAnnouncement(value: ClusterDiscoveryAnnouncement) -> Array<u8>? {
+    if (!validNodeName(value.name) || value.port <= 0 || value.port > 65535) { return null }
+    var name = _bytes(value.name)
+    var out: Array<u8> = []
+    _writeU32(ref out, DISCOVERY_MAGIC)
+    out.push(DISCOVERY_VERSION as u8)
+    out.push(len(name) as u8)
+    _appendBytes(ref out, name)
+    _writeU16(ref out, value.port)
+    _writeU64(ref out, value.clusterHash)
+    return out
+}
+
+export fn decodeDiscoveryAnnouncement(data: Array<u8>) -> ClusterDiscoveryAnnouncement? {
+    if (len(data) < 16 || _readU32(data, 0) != DISCOVERY_MAGIC ||
+        data[4] as i64 != DISCOVERY_VERSION) { return null }
+    var nameLen = data[5] as i64
+    if (6 + nameLen + 2 + 8 != len(data)) { return null }
+    var name = _text(data, 6, 6 + nameLen)
+    var port = _readU16(data, 6 + nameLen)
+    if (name == null || !validNodeName(name!) || port <= 0) { return null }
+    var result: ClusterDiscoveryAnnouncement = {
+        name: name!, port: port, clusterHash: _readU64(data, 8 + nameLen),
+    }
+    return result
+}
+
+export fn shouldJoinDiscoveredNode(selfName: string, connectedNames: Array<string>,
+                                   tombstones: Array<string>,
+                                   announcement: ClusterDiscoveryAnnouncement,
+                                   expectedClusterHash: u64) -> bool {
+    if (announcement.clusterHash != expectedClusterHash || announcement.name == selfName) {
+        return false
+    }
+    for (var i = 0; i < len(tombstones); i++) {
+        if (tombstones[i] == announcement.name) { return false }
+    }
+    for (var i = 0; i < len(connectedNames); i++) {
+        if (connectedNames[i] == announcement.name) { return false }
+    }
+    return true
+}
 
 // ========== Configuration ==========
 
@@ -439,7 +873,7 @@ export fn start(config: ClusterConfig) -> bool {
     if (!_fitsCString(secret, SHARED_SECRET_MAX_BYTES, true)) { return false }
     if (config.tls == null) {
         return __start(config.name, config.port, secret, false, "", "", "", false, interval,
-                       timeout, missed)
+                       timeout, missed, PHI_THRESHOLD)
     }
     var tls = config.tls!
     var caFile = tls.caFile ?? ""
@@ -460,7 +894,8 @@ export fn start(config: ClusterConfig) -> bool {
         tls.insecure,
         interval,
         timeout,
-        missed
+        missed,
+        PHI_THRESHOLD
     )
 }
 

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * cluster_proto.c - Cluster protocol frame encoding/decoding
+ * xcluster_wire.c - Cluster reader-loop wire projection
  *
  * KEY CONCEPT:
  *   All frames use big-endian length-prefixed format.
@@ -13,7 +13,9 @@
  *   Decode functions parse from a payload buffer (after header).
  */
 
-#include "cluster_internal.h"
+#include "xcluster_wire.h"
+#include "../base/xutf8.h"
+#include <stdbool.h>
 #include <string.h>
 
 /* ========== Byte Helpers ========== */
@@ -50,10 +52,23 @@ static inline int64_t get_i64(const uint8_t *p) {
     return (int64_t) get_u64(p);
 }
 
+static bool printable_ascii(const uint8_t *text, size_t length) {
+    if (length == 0)
+        return false;
+    for (size_t i = 0; i < length; i++) {
+        if (text[i] < 0x20 || text[i] > 0x7E)
+            return false;
+    }
+    return true;
+}
+
 /* ========== Raw Frame Write ========== */
 
 int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload,
                         uint32_t payload_len) {
+    if (!buf || frame_type < XR_FRAME_HANDSHAKE_REQ || frame_type > XR_FRAME_CORO_EXIT ||
+        payload_len > XR_FRAME_MAX_PAYLOAD - 1u || (payload_len > 0 && !payload))
+        return -1;
     uint32_t total_payload = 1 + payload_len;  // type + payload
     put_u32(buf, total_payload);
     buf[4] = frame_type;
@@ -93,12 +108,14 @@ int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_lim
 
 int cluster_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_type,
                               uint32_t *payload_len) {
-    if (data_len < 5)
+    if (!data || !frame_type || !payload_len || data_len < 5)
         return -1;
     uint32_t total = get_u32(data);
     if (total < 1 || total > XR_FRAME_MAX_PAYLOAD)
         return -1;
     *frame_type = data[4];
+    if (*frame_type < XR_FRAME_HANDSHAKE_REQ || *frame_type > XR_FRAME_CORO_EXIT)
+        return -1;
     *payload_len = total - 1;  // exclude type byte
     return 0;
 }
@@ -111,7 +128,13 @@ int cluster_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *fra
  */
 int cluster_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
                                        const XrFrameHandshakeReq *req) {
-    uint8_t name_len = (uint8_t) strlen(req->name);
+    if (!buf || !req)
+        return -1;
+    size_t name_len_wide = strlen(req->name);
+    if (name_len_wide == 0 || name_len_wide > XR_NODE_NAME_MAX ||
+        !printable_ascii((const uint8_t *) req->name, name_len_wide))
+        return -1;
+    uint8_t name_len = (uint8_t) name_len_wide;
     uint32_t payload_len = 1 + 1 + name_len + XR_NONCE_SIZE + 4;
     uint32_t frame_size = 4 + 1 + payload_len;
     if (buf_size < frame_size)
@@ -132,14 +155,16 @@ int cluster_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
 
 int cluster_frame_decode_handshake_req(const uint8_t *payload, uint32_t len,
                                        XrFrameHandshakeReq *req) {
-    if (len < 1 + 1 + XR_NONCE_SIZE + 4)
+    if (!payload || !req || len < 1 + 1 + XR_NONCE_SIZE + 4)
         return -1;
     const uint8_t *p = payload;
     req->version = *p++;
     uint8_t name_len = *p++;
-    if (name_len > XR_NODE_NAME_MAX)
+    if (req->version != XR_CLUSTER_HANDSHAKE_VERSION || name_len > XR_NODE_NAME_MAX)
         return -1;
-    if ((uint32_t) (2 + name_len + XR_NONCE_SIZE + 4) > len)
+    if ((uint32_t) (2 + name_len + XR_NONCE_SIZE + 4) != len)
+        return -1;
+    if (!printable_ascii(p, name_len))
         return -1;
     memcpy(req->name, p, name_len);
     req->name[name_len] = '\0';
@@ -156,7 +181,13 @@ int cluster_frame_decode_handshake_req(const uint8_t *payload, uint32_t len,
  */
 int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
                                        const XrFrameHandshakeAck *ack) {
-    uint8_t name_len = (uint8_t) strlen(ack->name);
+    if (!buf || !ack)
+        return -1;
+    size_t name_len_wide = strlen(ack->name);
+    if (name_len_wide == 0 || name_len_wide > XR_NODE_NAME_MAX ||
+        !printable_ascii((const uint8_t *) ack->name, name_len_wide))
+        return -1;
+    uint8_t name_len = (uint8_t) name_len_wide;
     uint32_t payload_len = 1 + 1 + name_len + XR_NONCE_SIZE + XR_PROOF_SIZE + 4;
     uint32_t frame_size = 4 + 1 + payload_len;
     if (buf_size < frame_size)
@@ -179,14 +210,16 @@ int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
 
 int cluster_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len,
                                        XrFrameHandshakeAck *ack) {
-    if (len < 1 + 1 + XR_NONCE_SIZE + XR_PROOF_SIZE + 4)
+    if (!payload || !ack || len < 1 + 1 + XR_NONCE_SIZE + XR_PROOF_SIZE + 4)
         return -1;
     const uint8_t *p = payload;
     ack->version = *p++;
     uint8_t name_len = *p++;
-    if (name_len > XR_NODE_NAME_MAX)
+    if (ack->version != XR_CLUSTER_HANDSHAKE_VERSION || name_len > XR_NODE_NAME_MAX)
         return -1;
-    if ((uint32_t) (2 + name_len + XR_NONCE_SIZE + XR_PROOF_SIZE + 4) > len)
+    if ((uint32_t) (2 + name_len + XR_NONCE_SIZE + XR_PROOF_SIZE + 4) != len)
+        return -1;
+    if (!printable_ascii(p, name_len))
         return -1;
     memcpy(ack->name, p, name_len);
     ack->name[name_len] = '\0';
@@ -204,6 +237,8 @@ int cluster_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len,
  */
 int cluster_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
                                         const XrFrameHandshakeDone *done) {
+    if (!buf || !done)
+        return -1;
     uint32_t frame_size = 4 + 1 + XR_PROOF_SIZE;
     if (buf_size < frame_size)
         return -1;
@@ -212,7 +247,7 @@ int cluster_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
 
 int cluster_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
                                         XrFrameHandshakeDone *done) {
-    if (len < XR_PROOF_SIZE)
+    if (!payload || !done || len != XR_PROOF_SIZE)
         return -1;
     memcpy(done->proof, payload, XR_PROOF_SIZE);
     return 0;
@@ -224,6 +259,8 @@ int cluster_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
  * HEARTBEAT payload: [timestamp 8B]
  */
 int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, int64_t timestamp) {
+    if (!buf || (type != XR_FRAME_HEARTBEAT_PING && type != XR_FRAME_HEARTBEAT_PONG))
+        return -1;
     uint32_t frame_size = 4 + 1 + 8;
     if (buf_size < frame_size)
         return -1;
@@ -233,7 +270,7 @@ int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, 
 }
 
 int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t *timestamp) {
-    if (len < 8)
+    if (!payload || !timestamp || len != 8)
         return -1;
     *timestamp = get_i64(payload);
     return 0;
@@ -246,9 +283,14 @@ int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t
  */
 int cluster_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t frame_type,
                                       const char *coro_name) {
-    uint8_t name_len = (uint8_t) strlen(coro_name);
-    if (name_len > XR_CORO_NAME_MAX)
+    if (!buf || !coro_name ||
+        (frame_type != XR_FRAME_CORO_MONITOR && frame_type != XR_FRAME_CORO_DEMONITOR))
         return -1;
+    size_t name_len_wide = strlen(coro_name);
+    if (name_len_wide == 0 || name_len_wide > XR_CORO_NAME_MAX ||
+        !printable_ascii((const uint8_t *) coro_name, name_len_wide))
+        return -1;
+    uint8_t name_len = (uint8_t) name_len_wide;
     uint32_t payload_len = 1 + name_len;
     uint32_t frame_size = 4 + 1 + payload_len;
     if (buf_size < frame_size)
@@ -262,12 +304,14 @@ int cluster_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t fra
 
 int cluster_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len, char *coro_name,
                                       size_t name_size) {
-    if (len < 1)
+    if (!payload || !coro_name || len < 1)
         return -1;
     uint8_t name_len = payload[0];
     if (name_len > XR_CORO_NAME_MAX || (size_t) (name_len + 1) > name_size)
         return -1;
-    if (len < (uint32_t) (1 + name_len))
+    if (len != (uint32_t) (1 + name_len))
+        return -1;
+    if (!printable_ascii(payload + 1, name_len))
         return -1;
     memcpy(coro_name, payload + 1, name_len);
     coro_name[name_len] = '\0';
@@ -279,10 +323,15 @@ int cluster_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len, char
  */
 int cluster_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *coro_name,
                                    const char *reason) {
-    uint8_t name_len = (uint8_t) strlen(coro_name);
-    uint8_t reason_len = (uint8_t) strlen(reason);
-    if (name_len > XR_CORO_NAME_MAX)
+    if (!buf || !coro_name || !reason)
         return -1;
+    size_t name_len_wide = strlen(coro_name);
+    size_t reason_len_wide = strlen(reason);
+    if (name_len_wide == 0 || name_len_wide > XR_CORO_NAME_MAX || reason_len_wide > 255u ||
+        !printable_ascii((const uint8_t *) coro_name, name_len_wide))
+        return -1;
+    uint8_t name_len = (uint8_t) name_len_wide;
+    uint8_t reason_len = (uint8_t) reason_len_wide;
     uint32_t payload_len = 1 + name_len + 1 + reason_len;
     uint32_t frame_size = 4 + 1 + payload_len;
     if (buf_size < frame_size)
@@ -298,20 +347,24 @@ int cluster_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *co
 
 int cluster_frame_decode_coro_exit(const uint8_t *payload, uint32_t len, char *coro_name,
                                    size_t name_size, char *reason, size_t reason_size) {
-    if (len < 2)
+    if (!payload || !coro_name || !reason || len < 2)
         return -1;
     uint8_t name_len = payload[0];
     if (name_len > XR_CORO_NAME_MAX || (size_t) (name_len + 1) > name_size)
         return -1;
     if (len < (uint32_t) (2 + name_len))
         return -1;
+    if (!printable_ascii(payload + 1, name_len))
+        return -1;
     memcpy(coro_name, payload + 1, name_len);
     coro_name[name_len] = '\0';
 
     uint8_t reason_len = payload[1 + name_len];
-    if (len < (uint32_t) (2 + name_len + reason_len))
+    if (len != (uint32_t) (2 + name_len + reason_len))
         return -1;
     if ((size_t) (reason_len + 1) > reason_size)
+        return -1;
+    if (!xr_utf8_validate((const char *) payload + 2 + name_len, reason_len))
         return -1;
     memcpy(reason, payload + 2 + name_len, reason_len);
     reason[reason_len] = '\0';

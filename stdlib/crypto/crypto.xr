@@ -330,7 +330,7 @@ fn blockSizeOf(algo: string) -> i64 {
 // HMAC as RFC 2104 defines it: the key is reduced by the hash when it is longer
 // than a block and zero-extended when it is shorter, then the message is hashed
 // under the inner pad and that digest under the outer pad.
-fn hmacBytes(algo: string, key: Array<u8>, msg: Array<u8>) -> Array<u8>? {
+export fn hmacBytes(algo: string, key: Array<u8>, msg: Array<u8>) -> Array<u8>? {
     var blockSize = blockSizeOf(algo)
     var k = key
     if (len(k) > blockSize) {
@@ -407,6 +407,12 @@ export fn uuid() -> string {
 // why the leaf is handed both buffers rather than a length check up front.
 export fn timingSafeEqual(a: string, b: string) -> bool {
     return __timingSafeEqualBytes(toArray(a.bytes()), toArray(b.bytes()))
+}
+
+// Byte-oriented protocols must not round-trip binary proofs through text.
+// The constant-time primitive remains private; this is its typed Xray surface.
+export fn timingSafeEqualBytes(a: Array<u8>, b: Array<u8>) -> bool {
+    return __timingSafeEqualBytes(a, b)
 }
 
 // ── AES-256 ──

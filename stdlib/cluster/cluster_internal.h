@@ -23,6 +23,9 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../../src/coro/xchannel.h"
+#include "../../src/coro/xphi_detector.h"
+#include "../../src/io/xcluster_wire.h"
+#include "../../src/io/xcluster_auth.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/io/xnet_transport.h"
@@ -99,85 +102,8 @@ typedef enum XrClusterDelivery {
 
 /* ========== Cluster Wire Protocol ========== */
 
-typedef enum {
-    XR_FRAME_HANDSHAKE_REQ = 0x01,
-    XR_FRAME_HANDSHAKE_ACK = 0x02,
-    XR_FRAME_HANDSHAKE_DONE = 0x03,
-    XR_FRAME_HANDSHAKE_ERR = 0x04,
-    XR_FRAME_HEARTBEAT_PING = 0x05,
-    XR_FRAME_HEARTBEAT_PONG = 0x06,
-    XR_FRAME_TRANSPORT_ENVELOPE = 0x07,
-    XR_FRAME_CORO_MONITOR = 0x08,
-    XR_FRAME_CORO_DEMONITOR = 0x09,
-    XR_FRAME_CORO_EXIT = 0x0A,
-} XrFrameType;
-
-#define XR_FRAME_HEADER_SIZE 4
-#define XR_FRAME_MAX_PAYLOAD (16 * 1024 * 1024)
-#define XR_CLUSTER_ENVELOPE_HEADER_SIZE 64
-#define XR_NONCE_SIZE 16
-#define XR_PROOF_SIZE 32
-#define XR_CLUSTER_HANDSHAKE_VERSION 6
-#define XR_CLUSTER_HANDSHAKE_TIMEOUT_MS 5000
-#define XR_TOPIC_DEFAULT_HOP_LIMIT 3
-#define XR_NODE_NAME_MAX 63
-#define XR_CORO_NAME_MAX 127
 #define XR_ADDRESS_HOST_MAX 255
 #define XR_CLUSTER_SECRET_MAX 63
-
-typedef struct {
-    uint8_t version;
-    char name[XR_NODE_NAME_MAX + 1];
-    uint8_t nonce[XR_NONCE_SIZE];
-    uint32_t flags;
-} XrFrameHandshakeReq;
-
-typedef struct {
-    uint8_t version;
-    char name[XR_NODE_NAME_MAX + 1];
-    uint8_t nonce[XR_NONCE_SIZE];
-    uint8_t proof[XR_PROOF_SIZE];
-    uint32_t flags;
-} XrFrameHandshakeAck;
-
-typedef struct {
-    uint8_t proof[XR_PROOF_SIZE];
-} XrFrameHandshakeDone;
-
-typedef struct {
-    int64_t timestamp;
-} XrFrameHeartbeat;
-
-int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload,
-                        uint32_t payload_len);
-int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_limit,
-                                  const char *topic, uint8_t topic_len, const uint8_t *envelope,
-                                  uint32_t envelope_len);
-int cluster_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
-                                       const XrFrameHandshakeReq *req);
-int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
-                                       const XrFrameHandshakeAck *ack);
-int cluster_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
-                                        const XrFrameHandshakeDone *done);
-int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, int64_t timestamp);
-int cluster_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_type,
-                              uint32_t *payload_len);
-int cluster_frame_decode_handshake_req(const uint8_t *payload, uint32_t len,
-                                       XrFrameHandshakeReq *req);
-int cluster_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len,
-                                       XrFrameHandshakeAck *ack);
-int cluster_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
-                                        XrFrameHandshakeDone *done);
-int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t *timestamp);
-int cluster_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t frame_type,
-                                      const char *coro_name);
-int cluster_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *coro_name,
-                                   const char *reason);
-int cluster_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len, char *coro_name,
-                                      size_t name_size);
-int cluster_frame_decode_coro_exit(const uint8_t *payload, uint32_t len, char *coro_name,
-                                   size_t name_size, char *reason, size_t reason_size);
-
 typedef struct XrFrameBuf {
     uint8_t stack[4096];
     uint8_t *data;
@@ -241,19 +167,6 @@ typedef struct XrNodeMetrics {
     int64_t last_rtt_ms;
 } XrNodeMetrics;
 
-#define XR_PHI_WINDOW_SIZE 100
-
-typedef struct XrPhiDetector {
-    double intervals[XR_PHI_WINDOW_SIZE];
-    int sample_count;
-    int write_idx;
-    double mean;
-    double variance;
-    double sum;
-    double sum_sq;
-    int64_t last_heartbeat_ts;
-} XrPhiDetector;
-
 typedef struct XrClusterNode {
     _Atomic(uint32_t) ref_count;
     _Atomic(bool) shutdown_started;
@@ -280,7 +193,8 @@ typedef struct XrClusterNode {
     struct XrClusterNode *next;
 } XrClusterNode;
 
-XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port);
+XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port,
+                                double expected_heartbeat_interval_ms);
 void cluster_node_retain(XrClusterNode *node);
 void cluster_node_shutdown(XrClusterNode *node);
 void cluster_node_release(XrClusterNode *node);
@@ -292,13 +206,8 @@ int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, co
                                       uint32_t envelope_len);
 int cluster_conn_read_try(XrIOConn *conn, uint8_t *data, size_t len, int *wait_events);
 int cluster_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t len, int *wait_events);
-void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out);
-bool cluster_proof_equal(const uint8_t *a, const uint8_t *b);
 int cluster_node_send_ping(XrClusterNode *node);
 bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node);
-void cluster_phi_init(XrPhiDetector *det);
-void cluster_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
-double cluster_phi_value(XrPhiDetector *det, int64_t now_ms);
 bool cluster_node_is_slow(XrClusterNode *node);
 int64_t cluster_now_ms(void);
 
@@ -349,6 +258,7 @@ typedef struct XrCluster {
     int64_t heartbeat_interval_ms;
     int64_t heartbeat_timeout_ms;
     int64_t max_missed_heartbeats;
+    double phi_threshold;
 
     // Dead node tombstones prevent immediate rejoin of recently departed nodes.
     struct {
@@ -471,7 +381,7 @@ typedef struct XrClusterTlsOptions {
 int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
                           const char *secret, const XrClusterTlsOptions *tls,
                           int64_t heartbeat_interval_ms, int64_t heartbeat_timeout_ms,
-                          int64_t max_missed_heartbeats);
+                          int64_t max_missed_heartbeats, double phi_threshold);
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
 

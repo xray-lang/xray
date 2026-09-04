@@ -79,6 +79,7 @@ struct XrAotClusterState {
     int64_t heartbeat_interval_ms;
     int64_t heartbeat_timeout_ms;
     int64_t max_missed_heartbeats;
+    double phi_threshold;
     xr_socket_t listen_socket;
     _Atomic(bool) running;
     xr_thread_t accept_thread;
@@ -425,8 +426,7 @@ static bool aot_cluster_server_handshake(XrAotClusterState *cluster, xr_socket_t
     XrFrameHandshakeReq request = {0};
     if (!aot_cluster_read_frame(socket, &type, &payload, &payload_length) ||
         type != XR_FRAME_HANDSHAKE_REQ ||
-        cluster_frame_decode_handshake_req(payload, payload_length, &request) != 0 ||
-        request.version != XR_CLUSTER_HANDSHAKE_VERSION) {
+        cluster_frame_decode_handshake_req(payload, payload_length, &request) != 0) {
         xr_free(payload);
         return false;
     }
@@ -436,7 +436,7 @@ static bool aot_cluster_server_handshake(XrAotClusterState *cluster, xr_socket_t
     ack.version = XR_CLUSTER_HANDSHAKE_VERSION;
     strncpy(ack.name, cluster->self_name, XR_NODE_NAME_MAX);
     xr_random_bytes(ack.nonce, XR_NONCE_SIZE);
-    cluster_compute_proof(cluster->secret, request.nonce, ack.proof);
+    xr_cluster_auth_compute_proof(cluster->secret, request.nonce, ack.proof);
     ack.flags = 0x01;
     uint8_t frame[512];
     int frame_length = cluster_frame_encode_handshake_ack(frame, sizeof(frame), &ack);
@@ -454,8 +454,8 @@ static bool aot_cluster_server_handshake(XrAotClusterState *cluster, xr_socket_t
     }
     xr_free(payload);
     uint8_t expected[XR_PROOF_SIZE];
-    cluster_compute_proof(cluster->secret, ack.nonce, expected);
-    bool accepted = cluster_proof_equal(done.proof, expected);
+    xr_cluster_auth_compute_proof(cluster->secret, ack.nonce, expected);
+    bool accepted = xr_cluster_auth_proof_equal(done.proof, expected);
     memset(expected, 0, sizeof(expected));
     if (accepted) {
         strncpy(peer_name, request.name, XR_NODE_NAME_MAX);
@@ -574,21 +574,20 @@ static bool aot_cluster_client_handshake(XrAotClusterState *cluster, xr_socket_t
     XrFrameHandshakeAck ack = {0};
     if (!aot_cluster_read_frame(socket, &type, &payload, &payload_length) ||
         type != XR_FRAME_HANDSHAKE_ACK ||
-        cluster_frame_decode_handshake_ack(payload, payload_length, &ack) != 0 ||
-        ack.version != XR_CLUSTER_HANDSHAKE_VERSION) {
+        cluster_frame_decode_handshake_ack(payload, payload_length, &ack) != 0) {
         xr_free(payload);
         return false;
     }
     xr_free(payload);
     uint8_t expected[XR_PROOF_SIZE];
-    cluster_compute_proof(cluster->secret, request.nonce, expected);
-    bool accepted = cluster_proof_equal(ack.proof, expected);
+    xr_cluster_auth_compute_proof(cluster->secret, request.nonce, expected);
+    bool accepted = xr_cluster_auth_proof_equal(ack.proof, expected);
     memset(expected, 0, sizeof(expected));
     if (!accepted)
         return false;
 
     XrFrameHandshakeDone done = {0};
-    cluster_compute_proof(cluster->secret, ack.nonce, done.proof);
+    xr_cluster_auth_compute_proof(cluster->secret, ack.nonce, done.proof);
     frame_length = cluster_frame_encode_handshake_done(frame, sizeof(frame), &done);
     if (frame_length <= 0 || !aot_cluster_write_all(socket, frame, (size_t) frame_length))
         return false;
@@ -660,7 +659,8 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
                           const char *ca_file, int64_t ca_file_len, const char *cert_file,
                           int64_t cert_file_len, const char *key_file, int64_t key_file_len,
                           XrValue insecure, XrValue heartbeat_interval_ms,
-                          XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats) {
+                          XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats,
+                          XrValue phi_threshold) {
     (void) ca_file;
     (void) ca_file_len;
     (void) cert_file;
@@ -671,7 +671,8 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
     XrAotRuntime *runtime = xr_aot_runtime_current();
     /* Shape checks on the tagged arguments only. Which port numbers a node may
      * bind is decided in cluster.xr's start(). */
-    if (!runtime || !XR_IS_INT(port_value) || !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled))
+    if (!runtime || !XR_IS_INT(port_value) || !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled) ||
+        !XR_IS_FLOAT(phi_threshold))
         return XR_FALSE_VAL;
     int64_t port = XR_TO_INT(port_value);
     XrAotClusterState *cluster = (XrAotClusterState *) xr_calloc(1, sizeof(*cluster));
@@ -684,6 +685,7 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
         XR_IS_INT(heartbeat_timeout_ms) ? XR_TO_INT(heartbeat_timeout_ms) : 0;
     cluster->max_missed_heartbeats =
         XR_IS_INT(max_missed_heartbeats) ? XR_TO_INT(max_missed_heartbeats) : 0;
+    cluster->phi_threshold = XR_TO_FLOAT(phi_threshold);
     if (!aot_cluster_copy_text(cluster->self_name, sizeof(cluster->self_name), name, name_len,
                                false) ||
         !aot_cluster_copy_text(cluster->secret, sizeof(cluster->secret), secret, secret_len,

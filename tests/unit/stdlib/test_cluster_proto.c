@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   The WIRE FORMAT block at the top of stdlib/cluster/cluster.xr is the
- *   normative statement of the cluster line format. stdlib/cluster/cluster_proto.c
- *   is the single implementation both backends share. These cases pin the
+ *   normative statement of the cluster line format. src/io/xcluster_wire.c is
+ *   the native reader-loop projection both backends share. These cases pin the
  *   produced bytes directly rather than only round-tripping through the
  *   matching decoder, so an encoder bug and a mirrored decoder bug cannot
  *   cancel each other out.
@@ -18,6 +18,7 @@
 
 #include "../test_framework.h"
 #include "../../../stdlib/cluster/cluster_internal.h"
+#include "../../../src/io/xdiscovery_announcement.h"
 /* XR_CLUSTER_TOPIC_PATTERN_MAX lives here; cluster_internal.h does not pull it in. */
 #include "../../../stdlib/cluster/cluster_topic_core.h"
 
@@ -398,17 +399,20 @@ TEST(cluster_frame_decoders_reject_truncated_payloads) {
     uint8_t payload[256];
     memset(payload, 0, sizeof(payload));
 
-    /* hsReq minimum: version + name_len + nonce[16] + flags[4]. */
+    /* The shortest handshake carries a one-byte printable node name. */
     const uint32_t req_min = 1u + 1u + XR_NONCE_SIZE + 4u;
     XrFrameHandshakeReq req;
-    ASSERT_EQ_INT(cluster_frame_decode_handshake_req(payload, req_min - 1u, &req), -1);
-    ASSERT_EQ_INT(cluster_frame_decode_handshake_req(payload, req_min, &req), 0);
+    payload[0] = XR_CLUSTER_HANDSHAKE_VERSION;
+    payload[1] = 1;
+    payload[2] = 'a';
+    ASSERT_EQ_INT(cluster_frame_decode_handshake_req(payload, req_min, &req), -1);
+    ASSERT_EQ_INT(cluster_frame_decode_handshake_req(payload, req_min + 1u, &req), 0);
 
     /* hsAck minimum adds proof[32]. */
     const uint32_t ack_min = 1u + 1u + XR_NONCE_SIZE + XR_PROOF_SIZE + 4u;
     XrFrameHandshakeAck ack;
-    ASSERT_EQ_INT(cluster_frame_decode_handshake_ack(payload, ack_min - 1u, &ack), -1);
-    ASSERT_EQ_INT(cluster_frame_decode_handshake_ack(payload, ack_min, &ack), 0);
+    ASSERT_EQ_INT(cluster_frame_decode_handshake_ack(payload, ack_min, &ack), -1);
+    ASSERT_EQ_INT(cluster_frame_decode_handshake_ack(payload, ack_min + 1u, &ack), 0);
 
     XrFrameHandshakeDone done;
     ASSERT_EQ_INT(cluster_frame_decode_handshake_done(payload, XR_PROOF_SIZE - 1u, &done), -1);
@@ -421,11 +425,14 @@ TEST(cluster_frame_decoders_reject_truncated_payloads) {
     char name_out[XR_CORO_NAME_MAX + 1];
     char reason_out[XR_CORO_NAME_MAX + 1];
     ASSERT_EQ_INT(cluster_frame_decode_coro_monitor(payload, 0, name_out, sizeof(name_out)), -1);
-    ASSERT_EQ_INT(cluster_frame_decode_coro_monitor(payload, 1, name_out, sizeof(name_out)), 0);
+    payload[0] = 1;
+    payload[1] = 'a';
+    ASSERT_EQ_INT(cluster_frame_decode_coro_monitor(payload, 2, name_out, sizeof(name_out)), 0);
     ASSERT_EQ_INT(cluster_frame_decode_coro_exit(payload, 1, name_out, sizeof(name_out), reason_out,
                                                  sizeof(reason_out)),
                   -1);
-    ASSERT_EQ_INT(cluster_frame_decode_coro_exit(payload, 2, name_out, sizeof(name_out), reason_out,
+    payload[2] = 0;
+    ASSERT_EQ_INT(cluster_frame_decode_coro_exit(payload, 3, name_out, sizeof(name_out), reason_out,
                                                  sizeof(reason_out)),
                   0);
 
@@ -438,8 +445,9 @@ TEST(cluster_frame_decoders_reject_truncated_payloads) {
     ASSERT_EQ_INT(cluster_frame_decode_handshake_ack(payload, (uint32_t) sizeof(payload), &ack),
                   -1);
     payload[1] = XR_NODE_NAME_MAX;
-    ASSERT_EQ_INT(cluster_frame_decode_handshake_req(payload, (uint32_t) sizeof(payload), &req), 0);
-    ASSERT_EQ_INT(cluster_frame_decode_handshake_ack(payload, (uint32_t) sizeof(payload), &ack), 0);
+    memset(payload + 2, 'a', XR_NODE_NAME_MAX);
+    ASSERT_EQ_INT(cluster_frame_decode_handshake_req(payload, req_min + XR_NODE_NAME_MAX, &req), 0);
+    ASSERT_EQ_INT(cluster_frame_decode_handshake_ack(payload, ack_min + XR_NODE_NAME_MAX, &ack), 0);
 
     /* A name that fits the limit but overruns the frame is still rejected. */
     payload[1] = 10;
@@ -459,17 +467,85 @@ TEST(cluster_frame_decoders_reject_truncated_payloads) {
         -1);
     ASSERT_EQ_INT(cluster_frame_decode_coro_exit(payload, 9, name_out, 5, reason_out, 3), -1);
     ASSERT_EQ_INT(cluster_frame_decode_coro_exit(payload, 9, name_out, 5, reason_out, 4), 0);
+
+    /* Every fixed-shape decoder rejects trailing bytes rather than treating
+     * them as a second, invisible message. */
+    memset(payload, 0, sizeof(payload));
+    ASSERT_EQ_INT(cluster_frame_decode_handshake_done(payload, XR_PROOF_SIZE + 1u, &done), -1);
+    ASSERT_EQ_INT(cluster_frame_decode_heartbeat(payload, 9, &timestamp), -1);
+
+    ASSERT_EQ_INT(cluster_frame_read_header(NULL, 0, NULL, NULL), -1);
+    ASSERT_EQ_INT(cluster_frame_decode_heartbeat(NULL, 8, &timestamp), -1);
+    ASSERT_EQ_INT(
+        cluster_frame_encode_heartbeat(payload, sizeof(payload), XR_FRAME_HANDSHAKE_REQ, timestamp),
+        -1);
+
+    payload[0] = 1;
+    payload[1] = 'a';
+    payload[2] = 1;
+    payload[3] = 0xFF;
+    ASSERT_EQ_INT(cluster_frame_decode_coro_exit(payload, 4, name_out, sizeof(name_out), reason_out,
+                                                 sizeof(reason_out)),
+                  -1);
+}
+
+TEST(cluster_discovery_announcement_is_byte_exact) {
+    uint8_t packet[XR_DISCOVERY_ANNOUNCEMENT_MAX_SIZE] = {0};
+    const uint64_t cluster_hash = UINT64_C(0x0102030405060708);
+    int wrote =
+        xr_discovery_announcement_encode(packet, sizeof(packet), "node-a", 47201, cluster_hash);
+    ASSERT_EQ_INT(wrote, 22);
+    ASSERT_EQ_INT(packet[0], 0x58);
+    ASSERT_EQ_INT(packet[1], 0x52);
+    ASSERT_EQ_INT(packet[2], 0x44);
+    ASSERT_EQ_INT(packet[3], 0x59);
+    ASSERT_EQ_INT(packet[4], 2);
+    ASSERT_EQ_INT(packet[5], 6);
+    ASSERT_EQ_INT(memcmp(packet + 6, "node-a", 6), 0);
+    ASSERT_EQ_INT(packet[12], 0xB8);
+    ASSERT_EQ_INT(packet[13], 0x61);
+    for (int i = 0; i < 8; i++)
+        ASSERT_EQ_INT(packet[14 + i], i + 1);
+
+    char name[XR_NODE_NAME_MAX + 1] = {0};
+    uint16_t port = 0;
+    uint64_t decoded_hash = 0;
+    ASSERT_EQ_INT(xr_discovery_announcement_decode(packet, (size_t) wrote, name, sizeof(name),
+                                                   &port, &decoded_hash),
+                  0);
+    ASSERT_STR_EQ(name, "node-a");
+    ASSERT_EQ_INT(port, 47201);
+    ASSERT_TRUE(decoded_hash == cluster_hash);
+    ASSERT_EQ_INT(xr_discovery_announcement_decode(packet, (size_t) wrote + 1u, name, sizeof(name),
+                                                   &port, &decoded_hash),
+                  -1);
+}
+
+TEST(cluster_phi_projection_uses_bounded_history) {
+    XrPhiDetector detector;
+    xr_phi_detector_init(&detector, 5000.0);
+    xr_phi_detector_record(&detector, 1000);
+    xr_phi_detector_record(&detector, 6000);
+    xr_phi_detector_record(&detector, 11000);
+    ASSERT_EQ_INT(detector.sample_count, 2);
+    ASSERT_TRUE(xr_phi_detector_value(&detector, 11000) < 0.001);
+    double one_interval_late = xr_phi_detector_value(&detector, 16000);
+    ASSERT_TRUE(one_interval_late > 0.30 && one_interval_late < 0.31);
+
+    for (int i = 0; i < XR_PHI_WINDOW_SIZE + 20; i++)
+        xr_phi_detector_record(&detector, 16000 + (int64_t) i * 5000);
+    ASSERT_EQ_INT(detector.sample_count, XR_PHI_WINDOW_SIZE);
 }
 
 /*
  * WHY THIS CASE EXISTS:
  *   stdlib/cluster/cluster.xr is the normative statement of the cluster wire
  *   format and is compiled by both the VM and the AOT backend;
- *   stdlib/cluster/cluster_internal.h and cluster_topic_core.h are the C
- *   implementation of the same numbers. Nothing in the build makes one derive
- *   from the other, so the two can drift silently. The literals below are
- *   transcribed from the `export const` block of cluster.xr on purpose — they
- *   are not spelled with the C macros — which makes this case the one
+ *   xcluster_wire.h, cluster_internal.h and cluster_topic_core.h are the native
+ *   reader-loop projection of the same numbers. Nothing in the build makes one
+ *   derive from the other, so the two can drift silently. The literals below
+ *   are transcribed from the `export const` block of cluster.xr on purpose —
+ *   they are not spelled with the C macros — which makes this case the one
  *   mechanical link between the two statements. Editing either side alone
  *   turns this case red.
  */
@@ -517,6 +593,8 @@ RUN_TEST(cluster_handshake_done_round_trips);
 RUN_TEST(cluster_heartbeat_round_trips);
 RUN_TEST(cluster_coro_frames_round_trip);
 RUN_TEST(cluster_frame_decoders_reject_truncated_payloads);
+RUN_TEST(cluster_discovery_announcement_is_byte_exact);
+RUN_TEST(cluster_phi_projection_uses_bounded_history);
 RUN_TEST(cluster_wire_constants_match_the_xray_surface);
 
 TEST_MAIN_END()

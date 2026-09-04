@@ -21,7 +21,7 @@
  *   announces from different clusters without revealing the secret.
  *
  * BYTE ORDER: big-endian (network byte order), matching the cluster
- * TCP protocol in cluster_proto.c. Consistency across all wire formats
+ * TCP protocol in cluster.xr. Consistency across all wire formats
  * keeps the codebase simple and avoids LE/BE mixup bugs.
  */
 
@@ -31,20 +31,13 @@
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/coro/xyieldable.h"
+#include "../../src/io/xdiscovery_announcement.h"
 #include "../../src/os/os_time.h"
 
 #include "../../src/os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
-// Multicast defaults. These are discovery implementation details; the
-// authenticated cluster protocol continues over TCP after auto-join.
-#define XR_DISCOVERY_MCAST_GROUP "239.42.42.42"
-#define XR_DISCOVERY_MCAST_PORT 47200
-#define XR_DISCOVERY_INTERVAL_MS 3000
-#define XR_DISCOVERY_MAGIC 0x58524459
-#define XR_DISCOVERY_VERSION 2
 
 struct XrClusterDiscovery {
     int mcast_fd;
@@ -58,90 +51,6 @@ struct XrClusterDiscovery {
     uint8_t announce[128];
     int announce_len;
 };
-
-/* ========== Announce Packet ========== */
-
-#define ANNOUNCE_MAX_SIZE 128
-
-static int build_announce(uint8_t *buf, size_t buf_size, const char *name, uint16_t port,
-                          uint64_t cluster_hash) {
-    uint8_t name_len = (uint8_t) strlen(name);
-    size_t total = 4 + 1 + 1 + name_len + 2 + 8;
-    if (total > buf_size)
-        return -1;
-
-    uint8_t *p = buf;
-
-    // magic (BE)
-    uint32_t magic = htonl(XR_DISCOVERY_MAGIC);
-    memcpy(p, &magic, 4);
-    p += 4;
-
-    // version
-    *p++ = XR_DISCOVERY_VERSION;
-
-    // name
-    *p++ = name_len;
-    memcpy(p, name, name_len);
-    p += name_len;
-
-    // port (BE)
-    uint16_t port_be = htons(port);
-    memcpy(p, &port_be, 2);
-    p += 2;
-
-    // cluster_hash (BE)
-    uint64_t hash_be;
-    for (int i = 0; i < 8; i++)
-        ((uint8_t *) &hash_be)[i] = (uint8_t) (cluster_hash >> (56 - i * 8));
-    memcpy(p, &hash_be, 8);
-    p += 8;
-
-    return (int) (p - buf);
-}
-
-static int parse_announce(const uint8_t *buf, size_t len, char *name_out, size_t name_cap,
-                          uint16_t *port_out, uint64_t *hash_out) {
-    if (len < 4 + 1 + 1 + 0 + 2 + 8)
-        return -1;
-    const uint8_t *p = buf;
-
-    // magic (BE)
-    uint32_t magic_be;
-    memcpy(&magic_be, p, 4);
-    p += 4;
-    if (ntohl(magic_be) != XR_DISCOVERY_MAGIC)
-        return -1;
-
-    // version
-    uint8_t ver = *p++;
-    if (ver != XR_DISCOVERY_VERSION)
-        return -1;
-
-    // name
-    uint8_t name_len = *p++;
-    if (name_len == 0 || (size_t) (4 + 1 + 1 + name_len + 2 + 8) > len)
-        return -1;
-    if (name_len >= name_cap)
-        return -1;
-    memcpy(name_out, p, name_len);
-    name_out[name_len] = '\0';
-    p += name_len;
-
-    // port (BE)
-    uint16_t port_be;
-    memcpy(&port_be, p, 2);
-    p += 2;
-    *port_out = ntohs(port_be);
-
-    // cluster_hash (BE)
-    uint64_t h = 0;
-    for (int i = 0; i < 8; i++)
-        h = (h << 8) | p[i];
-    *hash_out = h;
-
-    return 0;
-}
 
 /* ========== Multicast Socket Setup ========== */
 
@@ -255,7 +164,7 @@ static void discovery_context_destroy(void *context) {
 static void discovery_drain(XrClusterDiscovery *disc) {
     XrCluster *c = disc->cluster;
     for (;;) {
-        uint8_t recv_buf[ANNOUNCE_MAX_SIZE];
+        uint8_t recv_buf[XR_DISCOVERY_ANNOUNCEMENT_MAX_SIZE];
         struct sockaddr_in sender;
         socklen_t sender_len = sizeof(sender);
         ssize_t n = recvfrom(disc->mcast_fd, recv_buf, sizeof(recv_buf), 0,
@@ -266,8 +175,8 @@ static void discovery_drain(XrClusterDiscovery *disc) {
         char peer_name[XR_NODE_NAME_MAX + 1];
         uint16_t peer_port;
         uint64_t peer_hash;
-        if (parse_announce(recv_buf, (size_t) n, peer_name, sizeof(peer_name), &peer_port,
-                           &peer_hash) != 0 ||
+        if (xr_discovery_announcement_decode(recv_buf, (size_t) n, peer_name, sizeof(peer_name),
+                                             &peer_port, &peer_hash) != 0 ||
             peer_hash != disc->cluster_hash || !should_connect(c, peer_name))
             continue;
 
@@ -334,8 +243,8 @@ int cluster_discovery_start(XrCluster *c) {
     // Compute cluster hash from secret
     size_t slen = strlen(c->secret);
     disc->cluster_hash = (slen > 0) ? xr_hash_bytes64(c->secret, slen) : 0;
-    disc->announce_len = build_announce(disc->announce, sizeof(disc->announce), c->self_name,
-                                        c->listen_port, disc->cluster_hash);
+    disc->announce_len = xr_discovery_announcement_encode(
+        disc->announce, sizeof(disc->announce), c->self_name, c->listen_port, disc->cluster_hash);
     if (disc->announce_len < 0) {
         xr_free(disc);
         return -1;

@@ -176,14 +176,15 @@ static XrCFuncResult cluster_inbound_complete(XrInboundContext *ctx) {
         return XR_CFUNC_DONE;
 
     uint8_t expected_proof[XR_PROOF_SIZE];
-    cluster_compute_proof(ctx->cluster->secret, ctx->ack.nonce, expected_proof);
-    bool proof_ok = cluster_proof_equal(done.proof, expected_proof);
+    xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->ack.nonce, expected_proof);
+    bool proof_ok = xr_cluster_auth_proof_equal(done.proof, expected_proof);
     xr_secure_wipe(expected_proof, sizeof(expected_proof));
     xr_secure_wipe(&done, sizeof(done));
     if (!proof_ok)
         return XR_CFUNC_DONE;
 
-    XrClusterNode *node = cluster_node_new(ctx->request.name, NULL, 0);
+    XrClusterNode *node =
+        cluster_node_new(ctx->request.name, NULL, 0, (double) ctx->cluster->heartbeat_interval_ms);
     if (!node)
         return XR_CFUNC_DONE;
     node->conn = ctx->conn;
@@ -277,16 +278,14 @@ static XrCFuncResult cluster_inbound_drive(XrVMRuntime *X, XrInboundContext *ctx
         if (ctx->phase == XR_INBOUND_READ_DONE_PAYLOAD)
             return cluster_inbound_complete(ctx);
 
-        if (cluster_frame_decode_handshake_req(ctx->payload, ctx->payload_len, &ctx->request) !=
-                0 ||
-            ctx->request.version != XR_CLUSTER_HANDSHAKE_VERSION)
+        if (cluster_frame_decode_handshake_req(ctx->payload, ctx->payload_len, &ctx->request) != 0)
             return XR_CFUNC_DONE;
 
         memset(&ctx->ack, 0, sizeof(ctx->ack));
         ctx->ack.version = XR_CLUSTER_HANDSHAKE_VERSION;
         strncpy(ctx->ack.name, ctx->cluster->self_name, XR_NODE_NAME_MAX);
         xr_random_bytes(ctx->ack.nonce, XR_NONCE_SIZE);
-        cluster_compute_proof(ctx->cluster->secret, ctx->request.nonce, ctx->ack.proof);
+        xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->request.nonce, ctx->ack.proof);
         ctx->ack.flags = 0x01;
         int frame_len =
             cluster_frame_encode_handshake_ack(ctx->write_buf, sizeof(ctx->write_buf), &ctx->ack);
@@ -443,7 +442,8 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
 
 int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
                           const XrClusterTlsOptions *tls, int64_t heartbeat_interval_ms,
-                          int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats) {
+                          int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
+                          double phi_threshold) {
     if (X->cluster)
         return -1;  // already running
     if (!name)
@@ -498,13 +498,13 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
         return -1;
     }
 
-    /* The schedule is cluster.xr's, not this file's: HEARTBEAT_INTERVAL_MS,
-     * HEARTBEAT_TIMEOUT_MS and MAX_MISSED_HEARTBEATS are declared there and
-     * passed down, so the numbers have one owner instead of a default here and
-     * a constant there that can drift. */
+    /* The health policy is cluster.xr's, not this file's: the schedule and phi
+     * threshold are passed down so the numbers have one owner instead of a
+     * default here and a constant there that can drift. */
     c->heartbeat_interval_ms = heartbeat_interval_ms;
     c->heartbeat_timeout_ms = heartbeat_timeout_ms;
     c->max_missed_heartbeats = max_missed_heartbeats;
+    c->phi_threshold = phi_threshold;
     // Dynamic tombstone array
     c->tombstone_cap = 16;
     c->tombstones = xr_calloc((size_t) c->tombstone_cap, sizeof(c->tombstones[0]));
@@ -914,12 +914,11 @@ static XrCFuncResult cluster_join_wait(XrVMRuntime *X, XrJoinContext *ctx, int e
 }
 
 static bool cluster_join_verify_ack(XrJoinContext *ctx) {
-    if (cluster_frame_decode_handshake_ack(ctx->payload, ctx->payload_len, &ctx->ack) != 0 ||
-        ctx->ack.version != XR_CLUSTER_HANDSHAKE_VERSION)
+    if (cluster_frame_decode_handshake_ack(ctx->payload, ctx->payload_len, &ctx->ack) != 0)
         return false;
     uint8_t expected_proof[XR_PROOF_SIZE];
-    cluster_compute_proof(ctx->cluster->secret, ctx->request.nonce, expected_proof);
-    bool valid = cluster_proof_equal(ctx->ack.proof, expected_proof);
+    xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->request.nonce, expected_proof);
+    bool valid = xr_cluster_auth_proof_equal(ctx->ack.proof, expected_proof);
     xr_secure_wipe(expected_proof, sizeof(expected_proof));
     if (!valid)
         return false;
@@ -927,7 +926,7 @@ static bool cluster_join_verify_ack(XrJoinContext *ctx) {
     strncpy(ctx->node->name, ctx->ack.name, XR_NODE_NAME_MAX);
     ctx->node->name[XR_NODE_NAME_MAX] = '\0';
     ctx->node->flags = ctx->ack.flags;
-    cluster_compute_proof(ctx->cluster->secret, ctx->ack.nonce, ctx->done.proof);
+    xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->ack.nonce, ctx->done.proof);
     int frame_len =
         cluster_frame_encode_handshake_done(ctx->write_buf, sizeof(ctx->write_buf), &ctx->done);
     if (frame_len < 0)
@@ -1057,7 +1056,7 @@ static XrJoinContext *cluster_join_context_new(XrCluster *cluster, const char *h
     ctx->phase = XR_JOIN_CONNECT_START;
     ctx->deadline_ms = cluster_now_ms() + XR_CLUSTER_HANDSHAKE_TIMEOUT_MS;
     ctx->fd = -1;
-    ctx->node = cluster_node_new(NULL, host, port);
+    ctx->node = cluster_node_new(NULL, host, port, (double) cluster->heartbeat_interval_ms);
     if (!ctx->node) {
         xr_free(ctx);
         return NULL;
@@ -1102,10 +1101,10 @@ static bool cluster_binding_text_fits(const XrString *text, size_t max_length, b
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 11 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (argc < 12 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
         !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]) ||
-        !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]))
+        !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]) || !XR_IS_FLOAT(args[11]))
         return xr_bool(false);
 
     /* The port range is cluster.xr's rule, checked in start() before this leaf
@@ -1142,7 +1141,7 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
     }
 
     int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]),
-                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]));
+                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_FLOAT(args[11]));
     return xr_bool(rc == 0);
 }
 
@@ -1257,7 +1256,7 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
             int64_t now_hb = cluster_now_ms();
             node->last_heartbeat_recv = now_hb;
             node->missed_heartbeats = 0;
-            cluster_phi_record_heartbeat(&node->phi, now_hb);
+            xr_phi_detector_record(&node->phi, now_hb);
             break;
         }
 
@@ -1270,7 +1269,7 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
             }
             node->last_heartbeat_recv = now_pong;
             node->missed_heartbeats = 0;
-            cluster_phi_record_heartbeat(&node->phi, now_pong);
+            xr_phi_detector_record(&node->phi, now_pong);
             break;
         }
 
@@ -1438,7 +1437,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 // likely dead. Threshold for "kill" is set by
                 // cluster policy in cluster_health.c.
                 int64_t now = cluster_now_ms();
-                double phi = cluster_phi_value(&node->phi, now);
+                double phi = xr_phi_detector_value(&node->phi, now);
                 xr_object_instance_set_by_key(X, nj, "phi", xr_float(phi));
                 xr_object_instance_set_by_key(X, nj, "missedHeartbeats",
                                               xr_int((int64_t) node->missed_heartbeats));

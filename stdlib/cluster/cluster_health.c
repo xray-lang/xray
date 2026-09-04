@@ -17,9 +17,6 @@
 
 /* ========== Health & Robustness ========== */
 
-// Phi threshold: 8.0 is recommended by Akka (low false-positive rate)
-#define XR_PHI_THRESHOLD 8.0
-
 void cluster_health_check_heartbeats(XrCluster *c) {
     if (!c)
         return;
@@ -51,8 +48,8 @@ void cluster_health_check_heartbeats(XrCluster *c) {
         if (node->state == XR_NODE_CONNECTED) {
             // Use Phi Accrual detector if enough samples, else fallback
             if (node->phi.sample_count >= 3) {
-                double phi = cluster_phi_value(&node->phi, now);
-                if (phi > XR_PHI_THRESHOLD)
+                double phi = xr_phi_detector_value(&node->phi, now);
+                if (phi > c->phi_threshold)
                     is_dead = true;
             } else {
                 // Fallback to simple timeout for first few heartbeats

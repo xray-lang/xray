@@ -31,6 +31,29 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
+    {"encodeFrame", XLSP_SYM_FUNCTION, "fn(kind: i64, payload: Array<u8>): Array<u8>?", "", NULL, 0},
+    {"decodeFrame", XLSP_SYM_FUNCTION, "fn(data: Array<u8>): ClusterFrame?", "", NULL, 0},
+    {"encodeTransportFrame", XLSP_SYM_FUNCTION, "fn(hopLimit: i64, topic: string, envelope: Array<u8>): Array<u8>?", "", NULL, 0},
+    {"decodeTransportFrame", XLSP_SYM_FUNCTION, "fn(data: Array<u8>): ClusterTransportFrame?", "", NULL, 0},
+    {"encodeHandshakeRequest", XLSP_SYM_FUNCTION, "fn(request: ClusterHandshakeRequest): Array<u8>?", "", NULL, 0},
+    {"decodeHandshakeRequest", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): ClusterHandshakeRequest?", "", NULL, 0},
+    {"encodeHandshakeAck", XLSP_SYM_FUNCTION, "fn(ack: ClusterHandshakeAck): Array<u8>?", "", NULL, 0},
+    {"decodeHandshakeAck", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): ClusterHandshakeAck?", "", NULL, 0},
+    {"encodeHandshakeDone", XLSP_SYM_FUNCTION, "fn(proof: Array<u8>): Array<u8>?", "", NULL, 0},
+    {"decodeHandshakeDone", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): Array<u8>?", "", NULL, 0},
+    {"encodeHeartbeat", XLSP_SYM_FUNCTION, "fn(kind: i64, timestampMs: i64): Array<u8>?", "", NULL, 0},
+    {"decodeHeartbeat", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): i64?", "", NULL, 0},
+    {"encodeCoroMonitor", XLSP_SYM_FUNCTION, "fn(kind: i64, name: string): Array<u8>?", "", NULL, 0},
+    {"decodeCoroMonitor", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): string?", "", NULL, 0},
+    {"encodeCoroExit", XLSP_SYM_FUNCTION, "fn(value: ClusterCoroExit): Array<u8>?", "", NULL, 0},
+    {"decodeCoroExit", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): ClusterCoroExit?", "", NULL, 0},
+    {"computeHandshakeProof", XLSP_SYM_FUNCTION, "fn(secret: string, nonce: Array<u8>): Array<u8>?", "", NULL, 0},
+    {"handshakeProofEqual", XLSP_SYM_FUNCTION, "fn(left: Array<u8>, right: Array<u8>): bool", "", NULL, 0},
+    {"heartbeatIsDead", XLSP_SYM_FUNCTION, "fn(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool", "", NULL, 0},
+    {"discoveryClusterHash", XLSP_SYM_FUNCTION, "fn(secret: string): u64", "", NULL, 0},
+    {"encodeDiscoveryAnnouncement", XLSP_SYM_FUNCTION, "fn(value: ClusterDiscoveryAnnouncement): Array<u8>?", "", NULL, 0},
+    {"decodeDiscoveryAnnouncement", XLSP_SYM_FUNCTION, "fn(data: Array<u8>): ClusterDiscoveryAnnouncement?", "", NULL, 0},
+    {"shouldJoinDiscoveredNode", XLSP_SYM_FUNCTION, "fn(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool", "", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"validCoroutineName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
@@ -75,6 +98,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"HEARTBEAT_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"HEARTBEAT_TIMEOUT_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"MAX_MISSED_HEARTBEATS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"PHI_THRESHOLD", XLSP_SYM_CONSTANT, "unknown", "", NULL, 0},
+    {"PHI_WINDOW_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"DISCOVERY_MAGIC", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"DISCOVERY_VERSION", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"DISCOVERY_MULTICAST_GROUP", XLSP_SYM_CONSTANT, "string", "", NULL, 0},
+    {"DISCOVERY_MULTICAST_PORT", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"DISCOVERY_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"PhiDetector", XLSP_SYM_CLASS, "type PhiDetector", "Class type", NULL, 0},
     {"ClusterDelivery", XLSP_SYM_CLASS, "type ClusterDelivery", "Enum type", NULL, 0},
     {"ClusterNodeState", XLSP_SYM_CLASS, "type ClusterNodeState", "Enum type", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
@@ -83,7 +114,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, state: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Private scalar snapshot for one remote cluster node", NULL, 0},
     {"__ClusterSnapshot", XLSP_SYM_CLASS, "type __ClusterSnapshot = { self: string, port: i64, running: bool, nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: __ClusterTlsSnapshot }", "Private scalar snapshot read from the cluster runtime", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 51
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 82
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
@@ -113,14 +144,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
     {"sha1", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
     {"sha256", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
     {"sha512", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"hmacBytes", XLSP_SYM_FUNCTION, "fn(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?", "", NULL, 0},
     {"hmac", XLSP_SYM_FUNCTION, "fn(algo: string, key: string, data: string): string?", "", NULL, 0},
     {"randomBytes", XLSP_SYM_FUNCTION, "fn(n: i64): string", "", NULL, 0},
     {"uuid", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
     {"timingSafeEqual", XLSP_SYM_FUNCTION, "fn(a: string, b: string): bool", "", NULL, 0},
+    {"timingSafeEqualBytes", XLSP_SYM_FUNCTION, "fn(a: Array<u8>, b: Array<u8>): bool", "", NULL, 0},
     {"encrypt", XLSP_SYM_FUNCTION, "fn(key: string, plaintext: string): string", "", NULL, 0},
     {"decrypt", XLSP_SYM_FUNCTION, "fn(key: string, ciphertext: string): string?", "", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT 10
+#define GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT 12
 
 // csv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {

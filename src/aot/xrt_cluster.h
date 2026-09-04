@@ -26,7 +26,8 @@ XR_FUNC XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue po
                                   const char *ca_file, int64_t ca_file_len, const char *cert_file,
                                   int64_t cert_file_len, const char *key_file, int64_t key_file_len,
                                   XrValue insecure, XrValue heartbeat_interval_ms,
-                                  XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats);
+                                  XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats,
+                                  XrValue phi_threshold);
 XR_FUNC XrValue xrt_cluster_join(const char *host, int64_t host_len, XrValue port);
 XR_FUNC XrValue xrt_cluster_stop(void);
 XR_FUNC int64_t xrt_cluster_send(const char *topic, int64_t topic_len, XrValue envelope,

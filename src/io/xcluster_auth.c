@@ -5,20 +5,21 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * cluster_auth.c - Backend-neutral cluster authentication kernel
+ * xcluster_auth.c - Native handshake proof projection
  *
  * KEY CONCEPT:
  *   Every transport backend uses the same HMAC proof and constant-time
  *   comparison. Authentication never depends on a VM value representation.
  */
 
-#include "cluster_internal.h"
-#include "../crypto/crypto.h"
-#include "../../src/base/xchecks.h"
+#include "xcluster_auth.h"
+#include "xcluster_wire.h"
+#include "../base/xchecks.h"
+#include "../shared/xr_crypto_core.h"
 
 #include <string.h>
 
-void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out) {
+void xr_cluster_auth_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out) {
     XR_DCHECK(secret != NULL, "cluster proof requires a secret");
     XR_DCHECK(nonce != NULL, "cluster proof requires a nonce");
     XR_DCHECK(proof_out != NULL, "cluster proof requires an output buffer");
@@ -27,7 +28,7 @@ void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *pr
     xr_hmac_sha256((const uint8_t *) secret, strlen(secret), nonce, XR_NONCE_SIZE, proof_out);
 }
 
-bool cluster_proof_equal(const uint8_t *a, const uint8_t *b) {
+bool xr_cluster_auth_proof_equal(const uint8_t *a, const uint8_t *b) {
     if (!a || !b)
         return false;
     uint8_t diff = 0;

@@ -27,7 +27,6 @@
 #include "../../src/os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 static void cluster_node_close(XrClusterNode *node);
 
@@ -193,65 +192,10 @@ static XrOutFrame *cluster_outq_pop_all(XrOutputQueue *q) {
     return batch;
 }
 
-/* ========== Phi Accrual Failure Detector ========== */
-
-void cluster_phi_init(XrPhiDetector *det) {
-    memset(det, 0, sizeof(XrPhiDetector));
-    det->mean = 5000.0;  // assume 5s heartbeat interval initially
-    det->variance = 100.0;
-    det->sum = 0.0;
-    det->sum_sq = 0.0;
-}
-
-void cluster_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms) {
-    if (det->last_heartbeat_ts > 0) {
-        double interval = (double) (now_ms - det->last_heartbeat_ts);
-
-        // O(1) incremental update: subtract old sample if ring buffer full
-        if (det->sample_count >= XR_PHI_WINDOW_SIZE) {
-            double old_val = det->intervals[det->write_idx];
-            det->sum -= old_val;
-            det->sum_sq -= old_val * old_val;
-        } else {
-            det->sample_count++;
-        }
-
-        det->intervals[det->write_idx] = interval;
-        det->write_idx = (det->write_idx + 1) % XR_PHI_WINDOW_SIZE;
-
-        det->sum += interval;
-        det->sum_sq += interval * interval;
-
-        det->mean = det->sum / det->sample_count;
-        det->variance = (det->sum_sq / det->sample_count) - (det->mean * det->mean);
-        if (det->variance < 1.0)
-            det->variance = 1.0;  // avoid zero from fp drift
-    }
-    det->last_heartbeat_ts = now_ms;
-}
-
-double cluster_phi_value(XrPhiDetector *det, int64_t now_ms) {
-    if (det->last_heartbeat_ts == 0 || det->sample_count < 2)
-        return 0.0;
-
-    double elapsed = (double) (now_ms - det->last_heartbeat_ts);
-    double stddev = sqrt(det->variance);
-    if (stddev < 1.0)
-        stddev = 1.0;
-
-    // phi = -log10(1 - CDF(elapsed))
-    // Using normal distribution CDF approximation
-    double y = (elapsed - det->mean) / stddev;
-    // Logistic approximation to normal CDF: 1 / (1 + exp(-1.7155 * y))
-    double p_later = 1.0 / (1.0 + exp(1.7155 * y));
-    if (p_later < 1e-15)
-        p_later = 1e-15;
-    return -log10(p_later);
-}
-
 /* ========== Node Lifecycle ========== */
 
-XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port) {
+XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port,
+                                double expected_heartbeat_interval_ms) {
     XrClusterNode *node = (XrClusterNode *) xr_calloc(1, sizeof(XrClusterNode));
     if (!node)
         return NULL;
@@ -275,7 +219,7 @@ XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t por
     atomic_store(&node->writer_running, false);
     atomic_store(&node->writer_exited, false);
     atomic_store(&node->reader_running, false);
-    cluster_phi_init(&node->phi);
+    xr_phi_detector_init(&node->phi, expected_heartbeat_interval_ms);
     node->next = NULL;
     return node;
 }
