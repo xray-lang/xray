@@ -83,11 +83,14 @@ fn sliceExample() {
 
 fn bufferExample() {
     var buffer = mem.allocZeroed(4)
-    var view: Slice<u8> = buffer.asMutBytes()
-    view[0] = 7
-    view[1] = 9
-
-    print("buffer view: ${view[0]}, ${view[1]}, len ${len(buffer)}")
+    unsafe {
+        mem.withSliceMut<u8>(buffer.borrowPtr(), len(buffer), ref buffer,
+            fn(view: ref Slice<u8>) {
+                view[0] = 7
+                view[1] = 9
+                print("buffer view: ${view[0]}, ${view[1]}, len ${len(view)}")
+            })
+    }
 }
 
 // === Run the examples ===

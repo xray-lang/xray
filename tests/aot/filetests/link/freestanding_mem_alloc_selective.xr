@@ -3,9 +3,13 @@ import { allocZeroed } from mem
 
 fn xray_alloc_selective_score(n: i64) -> i64 {
     var b = allocZeroed(n)
-    var view: Slice<u8> = b.asMutBytes()
-    if (n > 0) {
-        view[0] = 5
+    unsafe {
+        mem.withSliceMut<u8>(b.borrowPtr(), len(b), ref b,
+            fn(view: ref Slice<u8>) {
+                if (len(view) > 0) {
+                    view[0] = 5
+                }
+            })
     }
     return len(b)
 }

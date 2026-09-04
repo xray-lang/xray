@@ -21,15 +21,17 @@ fn run() {
         print(pp[15])
     }
 {
-        var ro: Slice<u8> = p.asBytes()
+        var ro: const Slice<u8> = p.asBytes()
         print(len(ro))
         print(ro[0])
     }
 {
-        var rw: Slice<u8> = p.asMutBytes()
-        rw[0] = 43
-        print(rw[0])
         unsafe {
+            mem.withSliceMut<u8>(p.borrowPtr(), len(p), ref p,
+                fn(rw: ref Slice<u8>) {
+                    rw[0] = 43
+                    print(rw[0])
+                })
             print(pp[0])
         }
     }

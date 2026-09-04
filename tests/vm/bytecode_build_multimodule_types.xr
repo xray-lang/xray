@@ -3,6 +3,7 @@ import {
     encodePayload,
     payloadView
 } from "./modules/bytecode_build_multimodule_payload"
+import { Buffer } from mem
 
 fn encodeOne(payload: Array<u8>) -> Buffer {
     var envelope = ByteEnvelope(77, 1, 2, 9, 3, 1000000, 1, 11, payload)
@@ -11,7 +12,7 @@ fn encodeOne(payload: Array<u8>) -> Buffer {
 
 fn inspect(payload: Array<u8>) -> i64 {
     var encoded = encodeOne(payload)
-    var bytes: Slice<u8> = encoded.asBytes()
+    var bytes: const Slice<u8> = encoded.asBytes()
     return len(bytes) + (bytes[0] as i64) + (bytes[len(bytes) - 1] as i64)
 }
 

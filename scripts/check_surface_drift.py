@@ -57,6 +57,12 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
         re.compile(r"\bmem\.free\s*\("),
     ),
     RemovedForm(
+        "BUFFER_AS_MUT_BYTES_CALL",
+        "Buffer.asMutBytes() removed; use scoped mem.withSliceMut(...) access",
+        "293",
+        re.compile(r"\.asMutBytes\s*\("),
+    ),
+    RemovedForm(
         "LOAD_LE_UNCHECKED",
         ".loadLEUnchecked removed unchecked little-endian load",
         "173",
@@ -70,7 +76,7 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
     ),
     RemovedForm(
         "BUFFER_DIRECT_INDEX",
-        "direct [] index on a mem.alloc* Buffer; use .asBytes()/.asMutBytes()",
+        "direct [] index on a mem.alloc* Buffer; use .asBytes() or scoped mem.withSliceMut(...) access",
         "157",
         re.compile(r"\bmem\.alloc\w*\s*\([^()]*\)\s*\["),
     ),

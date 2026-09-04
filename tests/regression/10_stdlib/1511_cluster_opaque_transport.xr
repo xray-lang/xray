@@ -1,6 +1,7 @@
 import cluster
 import mem
 import { ClusterConfig, ClusterDelivery } from cluster
+import { Buffer } from mem
 
 type DeliveryBoundary = ClusterDelivery | i64
 
@@ -10,10 +11,12 @@ fn erase_delivery(value: ClusterDelivery) -> DeliveryBoundary {
 
 fn envelope(seed: u8) -> Buffer {
     var out = mem.allocZeroed(64)
-    {
-        var bytes: Slice<u8> = out.asMutBytes()
-        bytes[0] = seed
-        bytes[63] = seed + 1
+    unsafe {
+        mem.withSliceMut<u8>(out.borrowPtr(), len(out), ref out,
+            fn(bytes: ref Slice<u8>) {
+                bytes[0] = seed
+                bytes[63] = seed + 1
+            })
     }
     return out
 }
@@ -55,8 +58,8 @@ fn test_cluster_transports_only_opaque_envelopes() {
     var inbox: Channel<Buffer> = cluster.listen("service.>", 64)!
     var payload = envelope(41)
     assert(cluster.send("service.echo", move payload) == ClusterDelivery.Accepted)
-    var received = receive_buffer(inbox)
-    var bytes: Slice<u8> = received.asBytes()
+    var received: Buffer = receive_buffer(inbox)
+    var bytes: const Slice<u8> = received.asBytes()
     assertEqual(len(bytes), 64)
     assertEqual(bytes[0], 41)
     assertEqual(bytes[63], 42)
