@@ -72,7 +72,7 @@ static XrCFuncResult cluster_heartbeat_continue(XrVMRuntime *X, int status, XrVa
     cluster_health_send_heartbeats(c);
     cluster_health_check_heartbeats(c);
 
-    int sleep_ms = c->heartbeat_interval_ms / 2;
+    int64_t sleep_ms = c->heartbeat_interval_ms / 2;
     if (sleep_ms < 500)
         sleep_ms = 500;
     return xr_yield_for_timeout(X, sleep_ms, cluster_heartbeat_continue, c, result);
@@ -83,7 +83,7 @@ static XrCFuncResult cluster_heartbeat_entry(XrVMRuntime *X, void *context, XrVa
     if (!c || !atomic_load(&c->running))
         return XR_CFUNC_DONE;
     atomic_store(&c->heartbeat_running, true);
-    int sleep_ms = c->heartbeat_interval_ms / 2;
+    int64_t sleep_ms = c->heartbeat_interval_ms / 2;
     if (sleep_ms < 500)
         sleep_ms = 500;
     return xr_yield_for_timeout(X, sleep_ms, cluster_heartbeat_continue, c, result);
@@ -442,12 +442,14 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
 }
 
 int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
-                          const XrClusterTlsOptions *tls, int heartbeat_interval_ms,
-                          int heartbeat_timeout_ms, int max_missed_heartbeats) {
+                          const XrClusterTlsOptions *tls, int64_t heartbeat_interval_ms,
+                          int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats) {
     if (X->cluster)
         return -1;  // already running
     if (!name)
         return -1;  // name required
+    if (secret && strlen(secret) > XR_CLUSTER_SECRET_MAX)
+        return -1;
 
     /* What counts as a legal node name is decided by validNodeName in
      * stdlib/cluster/cluster.xr, which both backends compile, so it is not
@@ -1091,6 +1093,12 @@ bool cluster_runtime_join_spawn(XrCluster *cluster, const char *host, uint16_t p
 
 /* ========== xray Function Bindings ========== */
 
+static bool cluster_binding_text_fits(const XrString *text, size_t max_length, bool allow_empty) {
+    if (!text || (!allow_empty && text->length == 0) || text->length > max_length)
+        return false;
+    return memchr(text->data, '\0', text->length) == NULL;
+}
+
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
@@ -1104,16 +1112,27 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
      * is reached. What is left here is the machine fact that the listener field
      * is sixteen bits wide. */
     XrString *name = XR_TO_STRING(args[0]);
+    XrString *secret_text = XR_TO_STRING(args[2]);
+    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false) ||
+        !cluster_binding_text_fits(secret_text, XR_CLUSTER_SECRET_MAX, true))
+        return xr_bool(false);
     uint16_t port = (uint16_t) XR_TO_INT(args[1]);
-    const char *secret = XR_TO_STRING(args[2])->data;
+    const char *secret = secret_text->data;
 
     XrClusterTlsOptions tls_opts;
     memset(&tls_opts, 0, sizeof(tls_opts));
     const XrClusterTlsOptions *tls_ptr = NULL;
     if (XR_TO_BOOL(args[3])) {
-        const char *ca_file = XR_TO_STRING(args[4])->data;
-        const char *cert_file = XR_TO_STRING(args[5])->data;
-        const char *key_file = XR_TO_STRING(args[6])->data;
+        XrString *ca_text = XR_TO_STRING(args[4]);
+        XrString *cert_text = XR_TO_STRING(args[5]);
+        XrString *key_text = XR_TO_STRING(args[6]);
+        if (!cluster_binding_text_fits(ca_text, SIZE_MAX, true) ||
+            !cluster_binding_text_fits(cert_text, SIZE_MAX, true) ||
+            !cluster_binding_text_fits(key_text, SIZE_MAX, true))
+            return xr_bool(false);
+        const char *ca_file = ca_text->data;
+        const char *cert_file = cert_text->data;
+        const char *key_file = key_text->data;
         tls_opts.enabled = true;
         tls_opts.ca_file = ca_file[0] ? ca_file : NULL;
         tls_opts.cert_file = cert_file[0] ? cert_file : NULL;
@@ -1122,8 +1141,8 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         tls_ptr = &tls_opts;
     }
 
-    int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr, (int) XR_TO_INT(args[8]),
-                                   (int) XR_TO_INT(args[9]), (int) XR_TO_INT(args[10]));
+    int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]),
+                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]));
     return xr_bool(rc == 0);
 }
 
@@ -1146,7 +1165,8 @@ static XrCFuncResult cluster_join(XrVMRuntime *X, XrValue *args, int argc, XrVal
 
     XrString *host = XR_TO_STRING(args[0]);
     int64_t port_value = XR_TO_INT(args[1]);
-    if (host->length == 0 || host->length >= 256 || port_value <= 0 || port_value > UINT16_MAX) {
+    if (!cluster_binding_text_fits(host, XR_ADDRESS_HOST_MAX, false) || port_value <= 0 ||
+        port_value > UINT16_MAX) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
@@ -1478,30 +1498,28 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_object_instance_value(info);
 }
 
-// Extended cluster.monitor: 1 arg = node monitor, 2 args = remote coro monitor
-static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) {
+static XrValue cluster_monitor_node_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
-    if (argc == 1) {
-        // Node-level monitor: cluster.monitor("node_name")
-        XrString *name_str = XR_TO_STRING(args[0]);
-        XrChannel *ch = cluster_monitor_node(X, name_str->data);
-        if (!ch)
-            return xr_null();
-        return xr_value_from_channel(ch);
-    }
-
-    // Remote coroutine monitor: cluster.monitor("node_name", "coro_name")
-    if (!XR_IS_STRING(args[1]))
+    XrString *name = XR_TO_STRING(args[0]);
+    if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false))
         return xr_null();
-    XrString *node_str = XR_TO_STRING(args[0]);
-    XrString *coro_str = XR_TO_STRING(args[1]);
+    XrChannel *ch = cluster_monitor_node(X, name->data);
+    return ch ? xr_value_from_channel(ch) : xr_null();
+}
 
-    XrChannel *ch = cluster_monitor_coro(X, node_str->data, coro_str->data);
-    if (!ch)
+static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return xr_null();
-    return xr_value_from_channel(ch);
+
+    XrString *node = XR_TO_STRING(args[0]);
+    XrString *coro = XR_TO_STRING(args[1]);
+    if (!cluster_binding_text_fits(node, XR_NODE_NAME_MAX, false) ||
+        !cluster_binding_text_fits(coro, XR_CORO_NAME_MAX, false))
+        return xr_null();
+    XrChannel *ch = cluster_monitor_coro(X, node->data, coro->data);
+    return ch ? xr_value_from_channel(ch) : xr_null();
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_CLUSTER 1

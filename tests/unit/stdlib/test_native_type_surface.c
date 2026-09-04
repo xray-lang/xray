@@ -212,18 +212,31 @@ TEST(native_module_object_and_enum_metadata) {
     const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
     const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
     const XaBuiltinMember *cluster_info_primitive = find_module_member("cluster", "__info");
+    const XaBuiltinMember *cluster_monitor_node = find_module_member("cluster", "__monitorNode");
+    const XaBuiltinMember *cluster_monitor_coro =
+        find_module_member("cluster", "__monitorCoroutine");
     ASSERT_NULL(cluster_start_signature);
     ASSERT_NOT_NULL(cluster_start_primitive);
     ASSERT_TRUE(cluster_start_primitive->is_internal);
     ASSERT_NULL(cluster_info_signature);
     ASSERT_NOT_NULL(cluster_info_primitive);
     ASSERT_TRUE(cluster_info_primitive->is_internal);
+    ASSERT_NOT_NULL(cluster_monitor_node);
+    ASSERT_TRUE(cluster_monitor_node->is_internal);
+    ASSERT_NOT_NULL(cluster_monitor_coro);
+    ASSERT_TRUE(cluster_monitor_coro->is_internal);
     XrType *cluster_start_fn =
         xa_builtin_parse_full_signature(iso, cluster_start_primitive->signature);
     XrType *cluster_info_fn =
         xa_builtin_parse_full_signature(iso, cluster_info_primitive->signature);
+    XrType *cluster_monitor_node_fn =
+        xa_builtin_parse_full_signature(iso, cluster_monitor_node->signature);
+    XrType *cluster_monitor_coro_fn =
+        xa_builtin_parse_full_signature(iso, cluster_monitor_coro->signature);
     ASSERT_NOT_NULL(cluster_start_fn);
     ASSERT_NOT_NULL(cluster_info_fn);
+    ASSERT_NOT_NULL(cluster_monitor_node_fn);
+    ASSERT_NOT_NULL(cluster_monitor_coro_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(cluster_start_fn->function.param_count, 11);
     ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRING);
@@ -232,6 +245,10 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
+    ASSERT_EQ_INT(cluster_monitor_node_fn->function.param_count, 1);
+    ASSERT_TRUE(cluster_monitor_node_fn->function.return_type->is_nullable);
+    ASSERT_EQ_INT(cluster_monitor_coro_fn->function.param_count, 2);
+    ASSERT_TRUE(cluster_monitor_coro_fn->function.return_type->is_nullable);
 
     /* Whole-input buffering and path metadata projections are io.xr policy.
      * The native registry retains only the descriptor read and stat leaves. */

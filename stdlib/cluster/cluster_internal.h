@@ -122,6 +122,8 @@ typedef enum {
 #define XR_TOPIC_DEFAULT_HOP_LIMIT 3
 #define XR_NODE_NAME_MAX 63
 #define XR_CORO_NAME_MAX 127
+#define XR_ADDRESS_HOST_MAX 255
+#define XR_CLUSTER_SECRET_MAX 63
 
 typedef struct {
     uint8_t version;
@@ -256,7 +258,7 @@ typedef struct XrClusterNode {
     _Atomic(uint32_t) ref_count;
     _Atomic(bool) shutdown_started;
     char name[XR_NODE_NAME_MAX + 1];
-    char host[256];
+    char host[XR_ADDRESS_HOST_MAX + 1];
     uint16_t port;
     XrNodeState state;
     XrIOConn *conn;
@@ -315,7 +317,7 @@ typedef struct XrCluster {
     _Atomic(bool) stop_started;
     char self_name[XR_NODE_NAME_MAX + 1];
     uint16_t listen_port;
-    char secret[64];
+    char secret[XR_CLUSTER_SECRET_MAX + 1];
     int listen_fd;
     struct XrVMRuntime *isolate;
 
@@ -344,9 +346,9 @@ typedef struct XrCluster {
     XrAdaptiveMutex topics_lock;
 
     // Heartbeat configuration
-    int heartbeat_interval_ms;  // default 5000
-    int heartbeat_timeout_ms;   // default 15000 (3x interval)
-    int max_missed_heartbeats;  // default 3
+    int64_t heartbeat_interval_ms;
+    int64_t heartbeat_timeout_ms;
+    int64_t max_missed_heartbeats;
 
     // Dead node tombstones prevent immediate rejoin of recently departed nodes.
     struct {
@@ -468,8 +470,8 @@ typedef struct XrClusterTlsOptions {
  */
 int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
                           const char *secret, const XrClusterTlsOptions *tls,
-                          int heartbeat_interval_ms, int heartbeat_timeout_ms,
-                          int max_missed_heartbeats);
+                          int64_t heartbeat_interval_ms, int64_t heartbeat_timeout_ms,
+                          int64_t max_missed_heartbeats);
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
 

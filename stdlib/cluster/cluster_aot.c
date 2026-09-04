@@ -68,7 +68,7 @@ struct XrAotClusterState {
     XrRuntimeCore *core;
     const XrAotValueOps *values;
     char self_name[XR_NODE_NAME_MAX + 1];
-    char secret[64];
+    char secret[XR_CLUSTER_SECRET_MAX + 1];
     uint16_t listen_port;
     /* The heartbeat schedule cluster.xr decided for this node. The AOT adapter
      * accepts the schedule but has no heartbeat coroutine to run it yet; only
@@ -724,7 +724,7 @@ XrValue xrt_cluster_join(const char *host_text, int64_t host_len, XrValue port_v
     XrAotRuntime *runtime = NULL;
     XrAotClusterState *cluster = aot_cluster_acquire(&runtime);
     int64_t port = XR_IS_INT(port_value) ? XR_TO_INT(port_value) : -1;
-    char host[256];
+    char host[XR_ADDRESS_HOST_MAX + 1];
     if (!cluster)
         return XR_FALSE_VAL;
     if (port < 0 || port > UINT16_MAX ||

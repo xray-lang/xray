@@ -127,13 +127,23 @@ deletion_trigger = "when cluster.xr can construct a Channel and register a topic
 
 [[leaf]]
 module = "cluster"
-symbol = "__monitor"
+symbol = "__monitorNode"
 class = "runtime_leaf"
-abi = "none; constructs a channel and registers with the coroutine registry, or enqueues a monitor frame toward a remote node"
+abi = "none; constructs a bounded channel and registers one normalized node-down target"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the Xray channel subsystem plus the coroutine registry (src/coro/xcoro_registry.h xr_coro_monitor), driven by stdlib/cluster/cluster_monitor.c. The remote-coroutine branch enqueues a frame that a writer coroutine later sends. There is no AOT binding"
-deletion_trigger = "when the coroutine registry is a surface Xray source can name, so a monitor registration is an ordinary call rather than a native leaf"
+provider = "the Xray channel subsystem and the cluster runtime's node-monitor registry, driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates the node target and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding"
+deletion_trigger = "when the cluster monitor registry and Channel constructor are surfaces Xray source can name"
+
+[[leaf]]
+module = "cluster"
+symbol = "__monitorCoroutine"
+class = "runtime_leaf"
+abi = "none; constructs a bounded channel, registers one normalized remote-coroutine target and enqueues its monitor frame"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the Xray channel subsystem plus the coroutine registry (src/coro/xcoro_registry.h xr_coro_monitor), driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates both names and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding"
+deletion_trigger = "when the coroutine registry, cluster writer queue and Channel constructor are surfaces Xray source can name"
 
 [[leaf]]
 module = "cluster"

@@ -32,15 +32,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
+    {"validCoroutineName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"topicMatches", XLSP_SYM_FUNCTION, "fn(pattern: string, topic: string): bool", "", NULL, 0},
     {"self", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
     {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>?", "", NULL, 0},
-    {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
+    {"discover", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "", NULL, 0},
-    {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coroName?: string?): Channel<string>", "", NULL, 0},
+    {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coroName?: string?): Channel<string>?", "", NULL, 0},
     {"start", XLSP_SYM_FUNCTION, "fn(config: ClusterConfig): bool", "", NULL, 0},
     {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "", NULL, 0},
     {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
@@ -53,6 +54,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"NODE_NAME_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"CORO_NAME_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"ADDRESS_HOST_MAX_BYTES", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"SHARED_SECRET_MAX_BYTES", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"FRAME_HEADER_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"FRAME_MAX_PAYLOAD", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"NONCE_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
@@ -80,7 +83,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, state: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Private scalar snapshot for one remote cluster node", NULL, 0},
     {"__ClusterSnapshot", XLSP_SYM_CLASS, "type __ClusterSnapshot = { self: string, port: i64, running: bool, nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: __ClusterTlsSnapshot }", "Private scalar snapshot read from the cluster runtime", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 48
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 51
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

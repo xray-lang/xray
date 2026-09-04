@@ -134,14 +134,15 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__join", "(host: string, port: i64): bool", "Join cluster at a host and port cluster.xr already parsed, without blocking the scheduler worker", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__self", "(): string", "Get own node name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__nodes", "(): Array<string>?", "List cluster node names", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__discover", "(): ()", "Start LAN auto-discovery", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__monitorNode", "(name: string): Channel<string>?", "Register a node-down monitor for one normalized node target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__monitorCoroutine", "(nodeName: string, coroutineName: string): Channel<string>?", "Register a remote-coroutine monitor for normalized node and coroutine names", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__discover", "(): bool", "Start LAN auto-discovery", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__info", "(): __ClusterSnapshot?", "Read one private scalar cluster runtime snapshot", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__send", "(topic: string, envelope: move Buffer, hopLimit: i64): i64", "Hand one canonical opaque service envelope to the transport and return a private delivery code", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 10
+#define GEN_CLUSTER_FUNCTION_COUNT 11
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {

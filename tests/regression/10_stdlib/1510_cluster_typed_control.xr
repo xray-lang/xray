@@ -1,5 +1,39 @@
 import cluster
-import { ClusterConfig, ClusterInfo } from cluster
+import { ClusterConfig, ClusterInfo, ClusterTlsOptions } from cluster
+
+@test
+fn test_xray_owned_admission_policy() {
+    assert(cluster.validNodeName("node-a"))
+    assert(!cluster.validNodeName("bad\nnode"))
+    assert(cluster.validCoroutineName("worker-1"))
+    assert(!cluster.validCoroutineName("bad\nworker"))
+    assert(cluster.validTopicName("service.echo"))
+    assert(!cluster.validTopicName("service bad"))
+    assert(!cluster.validTopicPattern("service.\tbad"))
+
+    var longSecret: ClusterConfig = {
+        name: "invalid-secret",
+        port: 0,
+        secret: "0123456789012345678901234567890123456789012345678901234567890123",
+        tls: null
+    }
+    assert(!cluster.start(longSecret))
+
+    var incompleteTls: ClusterTlsOptions = {
+        enabled: true,
+        caFile: null,
+        certFile: "server.crt",
+        keyFile: null,
+        insecure: false
+    }
+    var incompleteTlsConfig: ClusterConfig = {
+        name: "invalid-tls",
+        port: 0,
+        secret: null,
+        tls: incompleteTls
+    }
+    assert(!cluster.start(incompleteTlsConfig))
+}
 
 @test
 fn test_typed_start_and_info() {

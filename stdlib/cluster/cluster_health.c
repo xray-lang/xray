@@ -59,7 +59,7 @@ void cluster_health_check_heartbeats(XrCluster *c) {
                 int64_t elapsed = now - node->last_heartbeat_recv;
                 if (elapsed > c->heartbeat_timeout_ms) {
                     node->missed_heartbeats++;
-                    if ((int) node->missed_heartbeats >= c->max_missed_heartbeats) {
+                    if ((int64_t) node->missed_heartbeats >= c->max_missed_heartbeats) {
                         is_dead = true;
                     }
                 }

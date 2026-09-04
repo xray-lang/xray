@@ -59,7 +59,7 @@
  */
 XrChannel *cluster_monitor_node(XrVMRuntime *X, const char *node_name) {
     XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !node_name)
+    if (!c || !node_name || node_name[0] == '\0' || strlen(node_name) > XR_NODE_NAME_MAX)
         return NULL;
 
     XrNodeMonitor *m = (XrNodeMonitor *) xr_calloc(1, sizeof(XrNodeMonitor));
@@ -133,7 +133,8 @@ void cluster_monitor_fire(XrCluster *c, const char *node_name) {
 
 XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const char *coro_name) {
     XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !node_name || !coro_name)
+    if (!c || !node_name || !coro_name || node_name[0] == '\0' || coro_name[0] == '\0' ||
+        strlen(node_name) > XR_NODE_NAME_MAX || strlen(coro_name) > XR_CORO_NAME_MAX)
         return NULL;
 
     // Find the target node
@@ -155,6 +156,7 @@ XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const cha
     // Register in remote_coro_monitors list
     XrRemoteCoroMonitor *mon = (XrRemoteCoroMonitor *) xr_calloc(1, sizeof(XrRemoteCoroMonitor));
     if (!mon) {
+        xr_channel_close(ch);
         cluster_node_release(node);
         return NULL;
     }
