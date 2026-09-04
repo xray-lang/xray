@@ -65,6 +65,46 @@ int main(void) {
     parameter.kind = XR_KIND_ARRAY;
     REQUIRE(!xr_semantic_null_inhabits_parameter(&null_type, &parameter));
 
+    XrSemanticTypeRecord tagged_null = {
+        .kind = XR_KIND_NULL,
+        .builtin_type = XR_TID_NULL,
+        .source_class = XR_SEMANTIC_INDEX_NONE,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .canonical_key = "type-v3:4:0:0:0:0:0:0:0:0:255:0:",
+    };
+    XrSemanticTypeRecord exact_i64 = {
+        .id = {.bytes = {7}},
+        .kind = XR_KIND_INT,
+        .builtin_type = XR_TID_NULL,
+        .source_class = XR_SEMANTIC_INDEX_NONE,
+        .scalar_rep = XR_NATIVE_I64,
+        .canonical_key = "type-v3:0:0:0:0:0:0:0:0:0:0:0:",
+    };
+    XrSemanticTypeRecord nullable_i64 = exact_i64;
+    nullable_i64.id.bytes[0] = 8;
+    nullable_i64.flags = XR_SEM_TYPE_NULLABLE;
+    nullable_i64.canonical_key = "type-v3:0:0:0:1:0:0:0:0:0:0:0:";
+    REQUIRE(xr_semantic_null_inhabits_nullable_scalar_parameter(&tagged_null, &nullable_i64));
+    REQUIRE(xr_semantic_type_is_nullable_scalar_widening(&exact_i64, &nullable_i64));
+    REQUIRE(xr_semantic_parameter_leaf_type_admits_argument(&nullable_i64, &tagged_null,
+                                                            XR_PARAM_READ));
+    REQUIRE(
+        xr_semantic_parameter_leaf_type_admits_argument(&nullable_i64, &exact_i64, XR_PARAM_READ));
+
+    XrSemanticTypeRecord malformed_nullable_i64 = nullable_i64;
+    malformed_nullable_i64.scalar_rep = XR_NATIVE_I32;
+    REQUIRE(!xr_semantic_null_inhabits_nullable_scalar_parameter(&tagged_null,
+                                                                 &malformed_nullable_i64));
+    REQUIRE(!xr_semantic_type_is_nullable_scalar_widening(&exact_i64, &malformed_nullable_i64));
+    malformed_nullable_i64 = nullable_i64;
+    malformed_nullable_i64.canonical_key = "type-v3:0:0:0:1:0:0:0:0:0:1:0:";
+    REQUIRE(!xr_semantic_type_is_nullable_scalar_widening(&exact_i64, &malformed_nullable_i64));
+    malformed_nullable_i64 = nullable_i64;
+    malformed_nullable_i64.flags |= XR_SEM_TYPE_REFERENCE_CAPABLE;
+    REQUIRE(!xr_semantic_null_inhabits_nullable_scalar_parameter(&tagged_null,
+                                                                 &malformed_nullable_i64));
+    REQUIRE(!xr_semantic_type_is_nullable_scalar_widening(&exact_i64, &malformed_nullable_i64));
+
     XrSemanticTypeRecord const_slice = {
         .id = {.bytes = {1}},
         .kind = XR_KIND_SLICE,

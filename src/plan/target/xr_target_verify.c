@@ -7665,9 +7665,10 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                 uint8_t ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
                                         ? XR_TARGET_CALL_CONSUME
                                         : XR_TARGET_CALL_READ;
-                bool imported_storage = imported_class_construction && caller_value &&
-                                        operand_type && parameter_type &&
-                                        xr_stable_id_equal(operand_type->id, parameter_type->id);
+                bool imported_storage =
+                    imported_class_construction && caller_value && operand_type && parameter_type &&
+                    xr_semantic_parameter_type_admits_argument(dependency, parameter_type,
+                                                               operand_type, parameter->mode);
                 valid =
                     parameter && caller_value &&
                     (imported_storage || (argument_scalar == 1 && callee_value)) &&

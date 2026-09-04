@@ -197,16 +197,18 @@ Caller and callee rows come from two plans, so an argument is admitted by the
 canonical type key rather than by one shared stable id. Beyond an exact key
 match and membership of a union parameter, the caller may hand a definite value
 to a parameter that only widens it to the nullable form of the same type, which
-is the language's own rule. An explicit null argument is likewise admitted only
-when the frozen parameter is nullable, reference-capable, neither a value type
-nor unknown. The widening is offered only where null is already one of the
-values the representation encodes, so a reference-capable type is admitted and
-a nullable scalar, which carries a separate discriminant, is not: admitting one
-here would drop the adapter its call needs. Every remaining field of the two
-keys must match, so a difference in constness, value semantics, element, name
-or declaring class stays inadmissible. Semantic module-set verification and
-target planning consume this one canonical admission rule independently of any
-builder cache or planner result.
+is the language's own rule. A reference-capable value already carries null in
+its representation. The separately bounded native `i64`, `f64`, and `bool`
+family instead crosses into a nullable parameter through the tagged carrier
+that holds its discriminant and payload. An explicit null argument is admitted
+only for one of those exact nullable scalar rows or for a nullable,
+reference-capable non-value row. This semantic admission does not claim machine
+representation equality: a downstream call family must bind the tagged scalar
+boundary explicitly or remain unavailable. Every remaining field of the two
+keys must match, so a difference in constness, value semantics, scalar width,
+element, name or declaring class stays inadmissible. Semantic module-set
+verification and target planning consume this one canonical admission rule
+independently of any builder cache or planner result.
 Schema 17 also freezes one `INDIRECT_CALLABLE` row for an ordinary `XI_CALL`
 whose callee operand has an exact frozen function type but whose runtime
 function-value producer is open. The row records only that function-type stable
@@ -584,7 +586,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_ids.h cbf2be1b8af3a9a96d91f8908bfd9
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h 23e070e3dfa6bd4c1d68151429ddfd27e50190f177fdb65072866632fffbc70f
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
-anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h b69c09a68349ea8bc126bdd5e72d23b06fd1848b43b1dddff77346c6c2cc2801
+anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h 5f318f550148e43df5229fdfe277e7046ee5692d7a05512a11eb306f39b77c1b
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af16c555c1a8145aea90fb7f1b50cd599420590f2cfbb96980f2
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h 2b0db2abc1652ec45f6a8090ad973cd60bafe039eb4f64c7d0e38674fd388dce
 anchor-sha256: src/plan/semantic/xr_semantic_string_utf8_shape.h aa8a342b9578e749c5e812dc9d193220ac63d849e15085130a4279ead5c24056

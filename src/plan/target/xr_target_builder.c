@@ -15802,6 +15802,9 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
                 (intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
                  intent->source_dependency != XR_SEMANTIC_INDEX_NONE);
+            bool imported_constructor_callee =
+                intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                intent->source_dependency != XR_SEMANTIC_INDEX_NONE;
             const XrSemanticPlan *callee_semantic =
                 external_source_callee &&
                         intent->source_dependency < builder->semantic_dependency_count
@@ -15845,6 +15848,10 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 semantic_operand
                     ? xr_semantic_plan_type(builder->semantic_plan, semantic_operand->type)
                     : NULL;
+            bool imported_constructor_storage =
+                imported_constructor_callee && parameter && operand_type && parameter_type &&
+                xr_semantic_parameter_type_admits_argument(callee_semantic, parameter_type,
+                                                           operand_type, parameter->mode);
             bool adt_enum_borrow_boundary =
                 xr_semantic_adt_enum_type_is_exact(parameter_type) && caller && callee &&
                 caller->register_rep < materialized->machine_rep_count &&
@@ -15999,6 +16006,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             }
             if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                 !parameter || !caller || caller->slot == XR_SEMANTIC_INDEX_NONE ||
+                (imported_constructor_callee && !imported_constructor_storage) ||
                 (!external_source_callee &&
                  (!callee || callee->slot == XR_SEMANTIC_INDEX_NONE ||
                   ((caller->register_rep != callee->register_rep ||

@@ -228,14 +228,17 @@ roots, or general product activation.
    are read off the declaration's single recorded constructor, whose parameters
    after the receiver must match the operands one for one and in order, with
    argument ordinal zero binding parameter ordinal one because the construction
-   supplies the receiver rather than passing it. Only a parameter carrying no
-   owning reference is admitted. One flag is deliberately not required to match
-   the generated default: the annotation an optimizer writes on an all-constant
-   call states nothing about effects, ownership or contract. Builder, Target
-   verifier, and AOT representation oracle re-derive both the storage and the
-   dispatch through that one judgement. These rows grant no class body, field
-   table, method table, root map, root slot, cleanup, or member lookup
-   authority.
+   supplies the receiver rather than passing it. Cross-plan type admission is
+   the shared semantic judgement: exact types, union members, read-only const
+   erasure, nullable references, and the exact tagged nullable-scalar boundary
+   are accepted; every unrelated shape remains unavailable. Only a parameter
+   carrying no owning reference is admitted. One flag is deliberately not
+   required to match the generated default: the annotation an optimizer writes
+   on an all-constant call states nothing about effects, ownership or contract.
+   Builder, Target verifier, and AOT representation oracle re-derive both the
+   ordered arguments, storage, and dispatch through that one judgement. These
+   rows grant no class body, field table, method table, root map, root slot,
+   cleanup, or member lookup authority.
    Source-class-receiver storage covers the instance a constructor is entered
    with. It is the one value of the construction family whose own type row
    cannot name what it is, because the frontend types the receiver as a bare
@@ -475,10 +478,10 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_profile.h 8653f30d2ed073fd75d3a
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.c 31918070b7e530780073a8ca0010d2b62f78afbfcdf4d610c41bf27e4da4a5d1
 anchor-sha256: src/plan/target/xr_target_profile.h cc34ac187a3bc33cbf326e81d233a195227adfceeee6f80b8473175c5947a067
 anchor-sha256: src/plan/target/xr_target_profile.c 92c9a3f4a96329a25aa662a763e11bc5eb0fa0083d0bf0e69caac23442e82ea2
-anchor-sha256: src/plan/target/xr_target_plan.h cf877d71195a9519fa4e362868ea135bf31a87286cd9f8f46e4147458e1fc02c
+anchor-sha256: src/plan/target/xr_target_plan.h c64114debd03439d4674d8d4e24cbf1f7fc727aec14ce37990177cac6f7cb578
 anchor-sha256: src/plan/target/xr_target_plan.c 81051eadeaacfba20da1ba84f994504d1927e825217a13ca517c675b16d22201
-anchor-sha256: src/plan/target/xr_target_builder.c deae7e8f10a24ca89027b42c58fcc36a08893c52376f6927ac509c5c09e58e78
-anchor-sha256: src/plan/target/xr_target_verify.c 53a2301655005d735e97746935259451c92206c3fa7a2014bacf30b127d01f63
+anchor-sha256: src/plan/target/xr_target_builder.c adaac601e0252dd071ad34a988281b8a2ec865eb8be133048b17fc7588f9112e
+anchor-sha256: src/plan/target/xr_target_verify.c 8c10f4dd09d27e51ea0a6fc54dd99ccaac3b5976b30e9cf206c64ed4498924b0
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 97413cd1fd368e8a61f9ae14c75c321b3b956b8313da7519bae361af4c24a894
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 5e81f18c79504cd7876910b0ad0d88b270fd19fbc6de7a44d5daa2bf47263692
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 47203f0c178dc46872e6d6ec8c680a8e0cbd0f5e4670e7a4380f030b2d61a043
@@ -488,7 +491,7 @@ anchor-sha256: src/runtime/xr_runtime_api.c 3cbd014aa9037a69efc4eacc2bbe70e723d6
 anchor-sha256: src/app/cli/xcmd_run.c 4bbdfcfe6426abc90b411dd271bb849297a930e3c6364692225d8ba08e1c2f98
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c 8f49967764ef5f395341bdffe9374b64d87147c189cc1fec9ec162e015624767
+anchor-sha256: tests/unit/plan/test_target_plan.c 11c7b264486ae45ef682b141433799d98e4f6f7c3a4afd836914a736b3b1d302
 anchor-sha256: tests/unit/plan/test_xtp_format.c d79a4cc2dfef07eac9de9399691bc7535c644a3aaa2e8c190be35235f1dc40b4
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 57201fe01683630e4960c911f739acfada9b33c8342f2aa2709b700f51ff7b7b

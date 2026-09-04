@@ -110,6 +110,12 @@ static XrType stub_nullable_int = {
     .frozen = true,
     .is_nullable = true,
 };
+static XrType stub_null = {
+    .kind = XR_KIND_NULL,
+    .id = 9,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION,
     .id = 6,
@@ -5253,25 +5259,29 @@ build_imported_source_class_constructor_semantic(XrSemanticPlan **dependency_out
     dependency_root->children[0] = constructor;
     dependency_root->nchildren = dependency_root->children_cap = 1;
     constructor->parent_func = dependency_root;
-    constructor->nparams = 4;
-    constructor->min_params = 3;
-    constructor->params = (XiValue **) xr_calloc(4, sizeof(*constructor->params));
+    constructor->nparams = 6;
+    constructor->min_params = 5;
+    constructor->params = (XiValue **) xr_calloc(6, sizeof(*constructor->params));
     REQUIRE(constructor->params);
     constructor->params[0] =
         xi_param(constructor, constructor_entry, 0, &stub_imported_constructor_instance);
     constructor->params[1] = xi_param(constructor, constructor_entry, 1, &stub_int);
     constructor->params[2] = xi_param(constructor, constructor_entry, 2, &stub_exact_string);
-    constructor->params[3] = xi_param(constructor, constructor_entry, 3, &stub_exact_string);
+    constructor->params[3] = xi_param(constructor, constructor_entry, 3, &stub_nullable_int);
+    constructor->params[4] = xi_param(constructor, constructor_entry, 4, &stub_nullable_int);
+    constructor->params[5] = xi_param(constructor, constructor_entry, 5, &stub_exact_string);
     REQUIRE(constructor->params[0] && constructor->params[1] && constructor->params[2] &&
-            constructor->params[3]);
+            constructor->params[3] && constructor->params[4] && constructor->params[5]);
     constructor->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
         constructor, (uint32_t) sizeof(*constructor->arc_borrow_sig));
     REQUIRE(constructor->arc_borrow_sig);
-    constructor->arc_borrow_sig->nparams = 4;
+    constructor->arc_borrow_sig->nparams = 6;
     constructor->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
     constructor->arc_borrow_sig->param_own[1] = XI_OWN_NONE;
     constructor->arc_borrow_sig->param_own[2] = XI_OWN_OWNED;
-    constructor->arc_borrow_sig->param_own[3] = XI_OWN_BORROWED;
+    constructor->arc_borrow_sig->param_own[3] = XI_OWN_NONE;
+    constructor->arc_borrow_sig->param_own[4] = XI_OWN_NONE;
+    constructor->arc_borrow_sig->param_own[5] = XI_OWN_BORROWED;
     constructor->arc_borrow_sig->valid = true;
     xi_block_set_return(constructor_entry, NULL);
 
@@ -5384,22 +5394,26 @@ build_imported_source_class_constructor_semantic(XrSemanticPlan **dependency_out
     XiValue *code = xi_const_int(caller, caller_entry, 41, &stub_int);
     XiValue *message =
         xi_const_str(caller, caller_entry, "imported-constructor", &stub_exact_string);
+    XiValue *optional_code = xi_const_null(caller, caller_entry, &stub_null);
+    XiValue *optional_line = xi_const_int(caller, caller_entry, 73, &stub_int);
     XiValue *call =
-        xi_value_new(caller, caller_entry, XI_CALL, &stub_imported_constructor_instance, 3);
-    REQUIRE(callee && code && message && call);
+        xi_value_new(caller, caller_entry, XI_CALL, &stub_imported_constructor_instance, 5);
+    REQUIRE(callee && code && message && optional_code && optional_line && call);
     callee->aux_int = 0;
     call->args[0] = callee;
     call->args[1] = code;
     call->args[2] = message;
+    call->args[3] = optional_code;
+    call->args[4] = optional_line;
     XiCallPlan *call_plan =
         (XiCallPlan *) xi_func_arena_alloc(caller, (uint32_t) sizeof(*call_plan));
     XiCallArgPlan *argument_plans =
-        (XiCallArgPlan *) xi_func_arena_alloc(caller, 2u * (uint32_t) sizeof(*argument_plans));
+        (XiCallArgPlan *) xi_func_arena_alloc(caller, 4u * (uint32_t) sizeof(*argument_plans));
     REQUIRE(call_plan && argument_plans);
     memset(call_plan, 0, sizeof(*call_plan));
-    memset(argument_plans, 0, 2u * sizeof(*argument_plans));
+    memset(argument_plans, 0, 4u * sizeof(*argument_plans));
     call_plan->args = argument_plans;
-    call_plan->nargs = 2;
+    call_plan->nargs = 4;
     call_plan->verified = true;
     call->call_plan = call_plan;
     call->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
@@ -5466,6 +5480,43 @@ static void test_imported_source_class_constructor_authority(void) {
             constructor != XR_SEMANTIC_INDEX_NONE &&
             xr_stable_id_equal(semantic_target->callee_function,
                                dependency->functions[constructor].id));
+    const XrSemanticParameterRecord *nullable_parameter = xr_semantic_plan_parameter(
+        dependency, dependency->functions[constructor].parameter_begin + 3u);
+    const XrSemanticOperandRecord *null_argument =
+        &semantic->operands[operation->operand_begin + 3u];
+    const XrSemanticTypeRecord *nullable_parameter_type =
+        nullable_parameter ? xr_semantic_plan_type(dependency, nullable_parameter->type) : NULL;
+    const XrSemanticTypeRecord *null_argument_type =
+        xr_semantic_plan_type(semantic, null_argument->type);
+    REQUIRE(nullable_parameter && nullable_parameter_type && null_argument_type &&
+            nullable_parameter_type->kind == XR_KIND_INT &&
+            (nullable_parameter_type->flags & XR_SEM_TYPE_NULLABLE) != 0 &&
+            null_argument_type->kind == XR_KIND_NULL &&
+            xr_semantic_parameter_type_admits_argument(
+                dependency, nullable_parameter_type, null_argument_type, nullable_parameter->mode));
+    uint8_t saved_nullable_flags = nullable_parameter_type->flags;
+    ((XrSemanticTypeRecord *) nullable_parameter_type)->flags &= (uint8_t) ~XR_SEM_TYPE_NULLABLE;
+    REQUIRE(!xr_semantic_parameter_type_admits_argument(
+        dependency, nullable_parameter_type, null_argument_type, nullable_parameter->mode));
+    ((XrSemanticTypeRecord *) nullable_parameter_type)->flags = saved_nullable_flags;
+    const XrSemanticParameterRecord *widened_parameter = xr_semantic_plan_parameter(
+        dependency, dependency->functions[constructor].parameter_begin + 4u);
+    const XrSemanticOperandRecord *scalar_argument =
+        &semantic->operands[operation->operand_begin + 4u];
+    const XrSemanticTypeRecord *widened_parameter_type =
+        widened_parameter ? xr_semantic_plan_type(dependency, widened_parameter->type) : NULL;
+    const XrSemanticTypeRecord *scalar_argument_type =
+        xr_semantic_plan_type(semantic, scalar_argument->type);
+    REQUIRE(widened_parameter && widened_parameter_type && scalar_argument_type &&
+            scalar_argument_type->kind == XR_KIND_INT &&
+            (scalar_argument_type->flags & XR_SEM_TYPE_NULLABLE) == 0 &&
+            xr_semantic_parameter_type_admits_argument(
+                dependency, widened_parameter_type, scalar_argument_type, widened_parameter->mode));
+    saved_nullable_flags = widened_parameter_type->flags;
+    ((XrSemanticTypeRecord *) widened_parameter_type)->flags &= (uint8_t) ~XR_SEM_TYPE_NULLABLE;
+    REQUIRE(!xr_semantic_parameter_type_admits_argument(
+        dependency, widened_parameter_type, scalar_argument_type, widened_parameter->mode));
+    ((XrSemanticTypeRecord *) widened_parameter_type)->flags = saved_nullable_flags;
 
     const XrSemanticPlan *dependencies[] = {dependency};
     XrTargetProfile *profile = build_profile(0);
@@ -5476,13 +5527,13 @@ static void test_imported_source_class_constructor_authority(void) {
         fprintf(stderr, "imported source class Target fixture failed: %s\n", error);
     REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)) &&
             plan->semantic_dependency_count == 1 && plan->calls_count == 1 &&
-            plan->call_arguments_count == 2 &&
+            plan->call_arguments_count == 4 &&
             (plan->completed_family_mask & XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE) != 0);
     XrTargetCallRecord *call = &plan->calls[0];
     REQUIRE(call->semantic_call_target == 0 &&
             call->semantic_operation == semantic_target->operation &&
             call->source_dependency == 0 && call->source_export == 0 &&
-            call->callee_function == XR_SEMANTIC_INDEX_NONE && call->argument_count == 2 &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE && call->argument_count == 4 &&
             call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && call->flags == 0 &&
             call->calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR &&
             call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
@@ -5494,11 +5545,15 @@ static void test_imported_source_class_constructor_authority(void) {
             plan->machine_reps[result->register_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
             plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
             plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
-    REQUIRE(plan->machine_reps[plan->call_arguments[0].register_rep].kind == XR_MACHINE_REP_I64 &&
-            plan->machine_reps[plan->call_arguments[1].register_rep].kind ==
-                XR_MACHINE_REP_DYN_VALUE &&
-            plan->call_arguments[0].callee_slot == XR_SEMANTIC_INDEX_NONE &&
-            plan->call_arguments[1].callee_slot == XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(
+        plan->machine_reps[plan->call_arguments[0].register_rep].kind == XR_MACHINE_REP_I64 &&
+        plan->machine_reps[plan->call_arguments[1].register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+        plan->machine_reps[plan->call_arguments[2].register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+        plan->machine_reps[plan->call_arguments[3].register_rep].kind == XR_MACHINE_REP_I64 &&
+        plan->call_arguments[0].callee_slot == XR_SEMANTIC_INDEX_NONE &&
+        plan->call_arguments[1].callee_slot == XR_SEMANTIC_INDEX_NONE &&
+        plan->call_arguments[2].callee_slot == XR_SEMANTIC_INDEX_NONE &&
+        plan->call_arguments[3].callee_slot == XR_SEMANTIC_INDEX_NONE);
 
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic refinement_diag = {0};
@@ -5548,11 +5603,11 @@ static void test_imported_source_class_constructor_authority(void) {
     xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
     expect_verify_failure(plan, "XR_TARGET_1003");
     *call = saved_call;
-    XrTargetCallArgumentRecord saved_argument = plan->call_arguments[1];
-    plan->call_arguments[1].callee_parameter = XR_SEMANTIC_INDEX_NONE;
+    XrTargetCallArgumentRecord saved_argument = plan->call_arguments[2];
+    plan->call_arguments[2].callee_parameter = XR_SEMANTIC_INDEX_NONE;
     xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
     expect_verify_failure(plan, "XR_TARGET_1003");
-    plan->call_arguments[1] = saved_argument;
+    plan->call_arguments[2] = saved_argument;
     xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 

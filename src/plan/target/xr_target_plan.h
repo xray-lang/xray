@@ -375,7 +375,9 @@ typedef enum XrTargetCallConvention {
  * parameter row exists.
  * SOURCE_CLASS_CONSTRUCTOR names the construction of a declared class through
  * its own class object, taken from the SemanticPlan call target of the same
- * name; it names no callee function and carries no argument, and it never
+ * name. It names no target-local callee function, but its ordered argument rows
+ * pair every supplied value with the declared constructor parameter; an
+ * imported class keeps the dependency/export identities on the call. It never
  * suspends. ADT_ENUM_CONSTRUCTOR names one payload-bearing member of an exact
  * source enum through its frozen enum namespace; its ordered payload recipe is
  * projected by CEmissionPlan rather than reconstructed by CGen.
