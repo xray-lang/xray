@@ -21,6 +21,7 @@
 #define XR_SEMANTIC_CLASS_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_local_call_target_shape.h"
 #include "xr_semantic_type_admission_shape.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
@@ -663,8 +664,11 @@ xr_semantic_class_shared_store_shape_is_exact(const XrSemanticPlan *plan,
            stored->lifetime == 0 && stored->escape == 0 && stored->flags == 0;
 }
 
-/* The single function a direct-local call target names for `operation`, or NULL
- * when the plan names none or more than one.
+/* The single function a local call target names for `operation`, or NULL when
+ * the plan names none or more than one. A source instance method is local by
+ * the same authority as a plain direct call once its receiver has resolved one
+ * body; the target kind preserves the source spelling but does not change the
+ * result ABI.
  *
  * The operation is given as a record rather than an index because every caller
  * in this header holds one, and the index it needs is recovered by the same
@@ -693,7 +697,8 @@ xr_semantic_class_direct_local_callee(const XrSemanticPlan *plan,
     for (uint32_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
         if (!target || target->operation != operation_index ||
-            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            !xr_semantic_call_target_names_local_function(
+                target, operation, (uint32_t) xr_semantic_plan_function_count(plan)))
             continue;
         if (callee)
             return NULL;
@@ -1159,7 +1164,7 @@ xr_semantic_class_instance_result_source_class(const XrSemanticPlan *plan,
                                                const XrSemanticOperationRecord *operation) {
     const XrSemanticFunctionRecord *callee = xr_semantic_class_direct_local_callee(plan, operation);
     if (!plan || !operation || !callee ||
-        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        !xr_semantic_local_call_result_opcode_is_exact(operation) ||
         operation->result_type != callee->return_type ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
@@ -1212,7 +1217,7 @@ xr_semantic_class_instance_value_is_exact(const XrSemanticPlan *plan,
     uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
     if (!operation)
         return false;
-    if (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) {
+    if (xr_semantic_local_call_result_opcode_is_exact(operation)) {
         source_class = xr_semantic_class_construction_source_class(plan, operation);
         if (source_class == XR_SEMANTIC_INDEX_NONE)
             source_class = xr_semantic_class_instance_result_source_class(plan, operation);

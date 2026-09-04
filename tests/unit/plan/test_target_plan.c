@@ -531,10 +531,12 @@ build_native_profile_with_provider_count(XrRuntimeTargetAuthority *authority,
 
 static void set_single_parameter_ownership(XiFunc *function, XiOwnership ownership);
 
-static XrSemanticPlan *build_source_instance_method_semantic(void) {
+static XrSemanticPlan *build_source_instance_method_semantic(bool owned_instance_result) {
     XiFunc *root = xi_func_new("target_source_instance_root", &stub_unit);
-    XiFunc *callee = xi_func_new("wait", &stub_unit);
-    XiFunc *caller = xi_func_new("run", &stub_unit);
+    XiFunc *callee =
+        xi_func_new("wait", owned_instance_result ? &stub_target_source_instance : &stub_unit);
+    XiFunc *caller =
+        xi_func_new("run", owned_instance_result ? &stub_target_source_instance : &stub_unit);
     REQUIRE(root != NULL && callee != NULL && caller != NULL);
     XiBlock *root_entry = xi_block_new(root);
     XiBlock *callee_entry = xi_block_new(callee);
@@ -566,10 +568,49 @@ static XrSemanticPlan *build_source_instance_method_semantic(void) {
     caller_this->transfer_mode = XR_TRANSFER_SHARE;
     set_single_parameter_ownership(callee, XI_OWN_BORROWED);
     set_single_parameter_ownership(caller, XI_OWN_OWNED);
-    xi_block_set_return(callee_entry, NULL);
+    XiClassMethod methods[2] = {{.name = "wait"}, {.name = "run"}};
+    uint16_t child_indices[2] = {0, 1};
+    XiClassData source_class = {
+        .class_info = &stub_target_source_class_info,
+        .class_name = "FinalTargetWorker",
+        .methods = methods,
+        .nmethod = 2,
+        .child_idx = child_indices,
+        .ninst = 2,
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    XiValue *callee_result = NULL;
+    if (owned_instance_result) {
+        root->is_module_initializer = true;
+        XiValue *class_object = xi_value_new(root, root_entry, XI_CLASS_CREATE, &stub_unknown, 0);
+        XiValue *class_store = xi_value_new(root, root_entry, XI_SET_SHARED, &stub_unit, 1);
+        REQUIRE(class_object != NULL && class_store != NULL);
+        class_object->aux = &source_class;
+        class_store->args[0] = class_object;
+        class_store->aux_int = 0;
+        root->nshared = 1;
+
+        XiValue *class_load = xi_value_new(callee, callee_entry, XI_GET_SHARED, &stub_unknown, 0);
+        callee_result =
+            xi_value_new(callee, callee_entry, XI_CALL, &stub_target_source_instance, 1);
+        REQUIRE(class_load != NULL && callee_result != NULL);
+        class_load->aux_int = 0;
+        callee_result->args[0] = class_load;
+        callee_result->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
+        callee_result->call_return_ownership = (XiReturnOwnership) {
+            .kind = XI_RETURN_OWNERSHIP_OWNED,
+            .param_index = -1,
+            .complete = true,
+        };
+        callee->arc_return_ownership = callee_result->call_return_ownership;
+    }
+    xi_block_set_return(callee_entry, callee_result);
     XiValue *moved =
         xi_value_new(caller, caller_entry, XI_SOURCE_MOVE, &stub_target_source_instance, 1);
-    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
+    XiValue *call =
+        xi_value_new(caller, caller_entry, XI_CALL_METHOD,
+                     owned_instance_result ? &stub_target_source_instance : &stub_unit, 1);
     REQUIRE(moved != NULL && call != NULL);
     moved->args[0] = caller_this;
     moved->move_evidence_id = 1;
@@ -597,6 +638,14 @@ static XrSemanticPlan *build_source_instance_method_semantic(void) {
         .verified = true,
     };
     call->call_plan = &call_plan;
+    if (owned_instance_result) {
+        call->call_return_ownership = (XiReturnOwnership) {
+            .kind = XI_RETURN_OWNERSHIP_OWNED,
+            .param_index = -1,
+            .complete = true,
+        };
+        caller->arc_return_ownership = call->call_return_ownership;
+    }
     xi_block_set_return(caller_entry, call);
     xi_block_set_return(root_entry, NULL);
     root->stage = callee->stage = caller->stage = XI_STAGE_OPTIMIZED;
@@ -605,18 +654,6 @@ static XrSemanticPlan *build_source_instance_method_semantic(void) {
     REQUIRE(module != NULL);
     REQUIRE(xi_module_set_identity(module, "memory-module-v1:id=25:target-source-instance-v1"));
     root->module = module;
-    XiClassMethod methods[2] = {{.name = "wait"}, {.name = "run"}};
-    uint16_t child_indices[2] = {0, 1};
-    XiClassData source_class = {
-        .class_info = &stub_target_source_class_info,
-        .class_name = "FinalTargetWorker",
-        .methods = methods,
-        .nmethod = 2,
-        .child_idx = child_indices,
-        .ninst = 2,
-        .explicit_final = true,
-        .needs_runtime_type = true,
-    };
     module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
     REQUIRE(module->classes != NULL);
     module->classes[0] = &source_class;
@@ -624,8 +661,12 @@ static XrSemanticPlan *build_source_instance_method_semantic(void) {
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
-    REQUIRE(semantic != NULL && semantic->call_target_count == 1 &&
-            semantic->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
+    REQUIRE(semantic != NULL && semantic->call_target_count == (owned_instance_result ? 2u : 1u));
+    uint32_t local_method_targets = 0;
+    for (uint32_t i = 0; i < semantic->call_target_count; i++)
+        if (semantic->call_targets[i].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL)
+            local_method_targets++;
+    REQUIRE(local_method_targets == 1);
     root->module = NULL;
     xi_func_free(root);
     module->init = NULL;
@@ -6408,7 +6449,7 @@ static void test_direct_local_raw_pointer_call_authority(void) {
 }
 
 static void test_source_instance_move_receiver_authority(void) {
-    XrSemanticPlan *semantic = build_source_instance_method_semantic();
+    XrSemanticPlan *semantic = build_source_instance_method_semantic(false);
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -6471,6 +6512,63 @@ static void test_source_instance_move_receiver_authority(void) {
     argument->ownership = XR_TARGET_CALL_CONSUME;
     expect_verify_failure(plan, "XR_TARGET_1003");
     argument->ownership = saved_argument_ownership;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_source_instance_method_result_authority(void) {
+    XrSemanticPlan *semantic = build_source_instance_method_semantic(true);
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    const XrSemanticCallTargetRecord *target = NULL;
+    for (uint32_t i = 0; i < semantic->call_target_count; i++)
+        if (semantic->call_targets[i].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) {
+            REQUIRE(target == NULL);
+            target = &semantic->call_targets[i];
+        }
+    XrSemanticOperationRecord *call = target ? &semantic->operations[target->operation] : NULL;
+    REQUIRE(call != NULL && call->opcode == XI_CALL_METHOD &&
+            xr_semantic_class_instance_result_source_class(semantic, call) !=
+                XR_SEMANTIC_INDEX_NONE);
+
+    uint16_t saved_opcode = call->opcode;
+    call->opcode = XI_CALL_METHOD_DIRECT;
+    REQUIRE(xr_semantic_class_instance_result_source_class(semantic, call) ==
+            XR_SEMANTIC_INDEX_NONE);
+    call->opcode = saved_opcode;
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XI_GEN_RESULT_OWNERSHIP_BORROWED;
+    REQUIRE(xr_semantic_class_instance_result_source_class(semantic, call) ==
+            XR_SEMANTIC_INDEX_NONE);
+    call->result_ownership = saved_ownership;
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-instance method result TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)));
+    XrTargetCallRecord *method = NULL;
+    for (uint32_t i = 0; i < plan->calls_count; i++)
+        if (plan->calls[i].semantic_operation == target->operation) {
+            REQUIRE(method == NULL);
+            method = &plan->calls[i];
+        }
+    const XrTargetValueRepRecord *result = xr_target_plan_value_rep(plan, call->result_value);
+    REQUIRE(method != NULL &&
+            method->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
+            method->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
+            method->result_mode == XR_TARGET_CALL_VALUE &&
+            method->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result != NULL &&
+            result->slot < plan->slots_count &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+    uint8_t saved_result_ownership = method->result_ownership;
+    method->result_ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    method->result_ownership = saved_result_ownership;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
@@ -10252,6 +10350,11 @@ int main(int argc, char **argv) {
         puts("Source-instance move receiver authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "source-instance-method-result-authority") == 0) {
+        test_source_instance_method_result_authority();
+        puts("Source-instance method result authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "direct-local-source-class-array-ref-authority") == 0) {
         test_direct_local_source_class_array_ref_authority();
         puts("Direct-local source-class Array ref authority tests passed");
@@ -10457,6 +10560,7 @@ int main(int argc, char **argv) {
     test_direct_local_forwarded_source_class_ref_authority();
     test_direct_local_managed_aggregate_lifecycle_authority();
     test_source_instance_move_receiver_authority();
+    test_source_instance_method_result_authority();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();
     test_direct_local_value_aggregate_result_storage();
