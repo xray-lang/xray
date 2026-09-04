@@ -32,8 +32,6 @@ XR_FUNC XrValue xr_sys_provider_dylib_close(struct XrVMRuntime *isolate, XrValue
 XR_FUNC XrValue xr_sys_provider_dylib_last_error(struct XrVMRuntime *isolate, XrValue *args,
                                                  int argc);
 XR_FUNC XrValue xr_sys_provider_process_spawn(struct XrVMRuntime *isolate, XrValue *args, int argc);
-XR_FUNC XrCFuncResult xr_sys_provider_process_wait(struct XrVMRuntime *isolate, XrValue *args,
-                                                   int argc, XrValue *result);
 XR_FUNC XrValue xr_sys_provider_process_try_wait(struct XrVMRuntime *isolate, XrValue *args,
                                                  int argc);
 XR_FUNC XrValue xr_sys_provider_process_kill(struct XrVMRuntime *isolate, XrValue *args, int argc);

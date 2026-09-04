@@ -1387,7 +1387,7 @@ deletion_trigger = "when the module-static arena's counter is readable from Xray
 # ============================================================================
 #
 # As with os, the AOT halves are freestanding `static inline` helpers in
-# `src/aot/xrt_sys.h` that do not link `src/os/`. Four leaves here park the
+# `src/aot/xrt_sys.h` that do not link `src/os/`. Two leaves here park the
 # coroutine on the VM and block the OS thread on AOT; that is recorded per
 # leaf, because a leaf with two concurrency behaviours cannot be reduced to one
 # Xray body until they agree.
@@ -1551,16 +1551,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "the kernel. VM stdlib/sys/sys.c -> src/os/unix/proc_unix.c xr_proc_try_wait; AOT src/aot/xrt_sys.h carries its own copy"
 deletion_trigger = "when Xray source can issue the waitpid(2) call itself; the non-blocking poll is already the minimal form of this boundary"
-
-[[leaf]]
-module = "sys"
-symbol = "__processWait"
-class = "host_abi_leaf"
-abi = "waitpid(2); the VM normally passes WNOHANG and polls, while AOT blocks in a plain waitpid. Win32 _cwait"
-ownership = "none"
-effect = "suspends"
-provider = "the kernel wait, plus the Xray scheduler on the VM: stdlib/sys/sys.c loops over xr_proc_try_wait and yields for 1 ms, falling back to a blocking wait only where it cannot yield. AOT src/aot/xrt_sys.h blocks the worker for the child's lifetime -- divergence 4 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md"
-deletion_trigger = "when child exit is an awaitable the scheduler posts to on both backends, so sys.xr can write the wait as a suspension over __processTryWait instead of the C side choosing between polling and blocking"
 
 [[leaf]]
 module = "sys"

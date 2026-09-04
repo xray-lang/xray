@@ -440,8 +440,6 @@ XR_FUNC bool xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *mod
     expected_count++;
     XRS_EXPORT(module, isolate, "__processSpawn", sys_process_spawn);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__processWait", sys_process_wait_yieldable);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__processTryWait", sys_process_try_wait);
     expected_count++;
     XRS_EXPORT(module, isolate, "__processKill", sys_process_kill);

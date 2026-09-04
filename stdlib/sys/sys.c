@@ -60,11 +60,6 @@ static XrValue sys_process_spawn(XrVMRuntime *isolate, XrValue *args, int argc) 
     return xr_sys_provider_process_spawn(isolate, args, argc);
 }
 
-static XrCFuncResult sys_process_wait_yieldable(XrVMRuntime *isolate, XrValue *args, int argc,
-                                                XrValue *result) {
-    return xr_sys_provider_process_wait(isolate, args, argc, result);
-}
-
 static XrValue sys_process_try_wait(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_sys_provider_process_try_wait(isolate, args, argc);
 }

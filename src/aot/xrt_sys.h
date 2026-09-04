@@ -31,7 +31,6 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <process.h>
 #define XRT_SYS_PROCESS_KILLED_EXIT_CODE ((unsigned int) 0xE0000001u)
 #else
 #include <dlfcn.h>
@@ -1545,32 +1544,6 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
         return XR_FROM_INT(detached_pid);
     }
     return XR_FROM_INT((int64_t) pid);
-#endif
-}
-
-static inline XrValue xrt_sys_process_wait(XrValue id_value) {
-    int64_t id = xrt_sys_int_arg(id_value);
-    if (id <= 0)
-        return XR_FROM_INT(-1);
-
-#if defined(XR_OS_WINDOWS)
-    int status = -1;
-    if (_cwait(&status, (intptr_t) id, _WAIT_CHILD) == -1)
-        return XR_FROM_INT(-1);
-    if ((unsigned int) status == XRT_SYS_PROCESS_KILLED_EXIT_CODE)
-        return XR_FROM_INT(-1);
-    return XR_FROM_INT((int64_t) status);
-#else
-    int status = 0;
-    pid_t r;
-    do {
-        r = waitpid((pid_t) id, &status, 0);
-    } while (r < 0 && errno == EINTR);
-    if (r < 0)
-        return XR_FROM_INT(-1);
-    if (WIFEXITED(status))
-        return XR_FROM_INT((int64_t) WEXITSTATUS(status));
-    return XR_FROM_INT(-1);
 #endif
 }
 

@@ -277,9 +277,12 @@ export class Process {
 
     ref wait() -> i64 {
         if (!this._open) { return -1 }
-        var code = __processWait(this._id)
-        this._open = false
-        return code
+        while (true) {
+            var code = this.tryWait()
+            if (code != null) { return code! }
+            time.sleep(1)
+        }
+        return -1
     }
 
     ref tryWait() -> i64? {

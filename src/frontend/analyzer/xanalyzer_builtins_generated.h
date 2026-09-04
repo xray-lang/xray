@@ -420,7 +420,6 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__dylibClose", "(handle: i64): bool", "Close a dynamic library handle token", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__dylibLastError", "(): string", "Return the platform dynamic-loader error message for the current thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64", "Spawn a process and return an opaque process handle token, or -1 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__processWait", "(id: i64): i64", "Wait for a process handle token and return its exit code, or -1 on failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__processTryWait", "(id: i64): i64?", "Poll a process handle token; return null while running, exit code when finished, or -1 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__processKill", "(id: i64, signal: i64): bool", "Send a portable process signal to a process handle token", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pipeOpen", "(): Array<i64>?", "Create an anonymous pipe and return read/write endpoint tokens", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
@@ -428,7 +427,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_SYS_FUNCTION_COUNT 19
+#define GEN_SYS_FUNCTION_COUNT 18
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {

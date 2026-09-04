@@ -41,7 +41,7 @@ contract change.
 ## Digest anchors
 
 anchor-sha256: src/os/win/proc_win.c 9b80d5863a693d820cc384395255e2561d9f8ec05d3cb0ff892ad793d342962d
-anchor-sha256: src/aot/xrt_sys.h f75d6891e3a9b3b9be952237b233889cd07babbe6901b051d299fd759f8e1c13
+anchor-sha256: src/aot/xrt_sys.h 98bb64c88ae42a291311c6f5b4a63649999ec00d7f81f46880ac1810c0b9bfad
 anchor-sha256: src/aot/xrt_os.h 4303f51ec1ab02f808d9b9e8519c6b68264dac6bb321d6c37b3e94cf90a32a11
 anchor-sha256: src/app/toolchain/xtc_process.h 767193396e0e59c7d35a2121f0a9fcd225987f039aa0d305a5b98d8ef28fd6dc
 anchor-sha256: src/app/toolchain/xtc_process.c a9fc712a024d642f2f90ed2ebd959fdd08845f26a3fba0fa020d51e3179b2d41
