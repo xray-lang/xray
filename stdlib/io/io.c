@@ -15,6 +15,7 @@
 
 #include "io.h"
 #include "../common.h"
+#include "../../src/io/xfile_provider.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/class/xinstance.h"
@@ -65,7 +66,6 @@
 
 struct XrCoroutine;
 extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
-static void io_release_array(XrArray *arr);
 
 /* ========== File descriptor handles ==========
  *
@@ -83,87 +83,14 @@ static void io_release_array(XrArray *arr);
 #define XR_IO_STD_OUT 1
 #define XR_IO_STD_ERR 2
 
-#ifdef XR_OS_WINDOWS
-typedef int io_fd_ssize_t;
-#define io_fd_open _open
-#define io_fd_read _read
-#define io_fd_write _write
-#define io_fd_close _close
-#define IO_FD_OPEN_FLAGS (_O_BINARY | _O_NOINHERIT)
-#define IO_FD_CREATE_MODE (_S_IREAD | _S_IWRITE)
-#else
-typedef ssize_t io_fd_ssize_t;
-#define io_fd_open open
-#define io_fd_read read
-#define io_fd_write write
-#define io_fd_close close
-#define IO_FD_OPEN_FLAGS O_CLOEXEC
-#define IO_FD_CREATE_MODE 0644
-#endif
-
-// One open for both directions; `flags` carries the whole difference. An open
-// must never hand back 0, 1 or 2, because a file landing on one of those would
-// make a later write to "stdout" reach that file instead -- only reachable when
-// the process starts with a standard stream already closed, which is why a
-// failed lift refuses the open rather than returning the low descriptor. The
-// mode argument is ignored by open(2) unless O_CREAT is among the flags.
-static int XR_IO_CORE_ACQUIRE_HANDLE("xray_file_descriptor")
-    io_fd_open_checked(const char *path, int flags) {
-    if (!path || path[0] == '\0')
-        return -1;
-    int fd = io_fd_open(path, flags, IO_FD_CREATE_MODE);
-    if (fd < 0 || fd > XR_IO_STD_ERR)
-        return fd;
-#ifdef XR_OS_WINDOWS
-    int lifted = _dup(fd);
-    if (lifted >= 0 && lifted <= XR_IO_STD_ERR) {
-        _close(lifted);
-        lifted = -1;
-    }
-#else
-    int lifted = fcntl(fd, F_DUPFD_CLOEXEC, XR_IO_STD_ERR + 1);
-#endif
-    io_fd_close(fd);
-    return lifted;
-}
-
-static bool io_prepare_binary_stdin(void) {
-#ifdef XR_OS_WINDOWS
-    return _setmode(_fileno(stdin), _O_BINARY) != -1;
-#else
-    return true;
-#endif
-}
-
 /* ========== File Read/Write ========== */
-
-static XrValue io_stream_read_bytes(XrVMRuntime *X, FILE *stream, int64_t max_bytes) {
-    if (!stream || max_bytes < 0 || max_bytes > INT32_MAX)
-        return xr_null();
-    XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) max_bytes);
-    if (!arr)
-        return xr_null();
-    if (max_bytes == 0)
-        return xr_value_from_array(arr);
-    size_t count = fread(arr->data, 1, (size_t) max_bytes, stream);
-    if (count == 0 && ferror(stream)) {
-        io_release_array(arr);
-        return xr_null();
-    }
-    arr->length = (int32_t) count;
-    return xr_value_from_array(arr);
-}
-
-static bool io_file_close_handle(int handle XR_IO_CORE_RELEASE_HANDLE("xray_file_descriptor")) {
-    return io_fd_close(handle) == 0;
-}
 
 static XrValue io_fileOpen(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_int(-1);
     const char *path = xrs_path_arg(args[0], NULL);
-    return xr_int((int64_t) io_fd_open_checked(path, O_RDONLY | IO_FD_OPEN_FLAGS));
+    return xr_int((int64_t) xr_file_open_read(path));
 }
 
 static XrValue io_fileOpenWrite(XrVMRuntime *X, XrValue *args, int argc) {
@@ -171,8 +98,7 @@ static XrValue io_fileOpenWrite(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_int(-1);
     const char *path = xrs_path_arg(args[0], NULL);
-    int flags = O_WRONLY | O_CREAT | IO_FD_OPEN_FLAGS | (XR_IS_TRUE(args[1]) ? O_APPEND : O_TRUNC);
-    return xr_int((int64_t) io_fd_open_checked(path, flags));
+    return xr_int((int64_t) xr_file_open_write(path, XR_IS_TRUE(args[1])));
 }
 
 static XrValue io_fileRead(XrVMRuntime *X, XrValue *args, int argc) {
@@ -182,22 +108,14 @@ static XrValue io_fileRead(XrVMRuntime *X, XrValue *args, int argc) {
     int64_t max_bytes = XR_TO_INT(args[1]);
     if (handle < 0 || max_bytes < 0 || max_bytes > INT32_MAX)
         return xr_null();
-    if (handle == XR_IO_STD_IN) {
-        if (!io_prepare_binary_stdin())
-            return xr_null();
-        return io_stream_read_bytes(X, stdin, max_bytes);
-    }
     XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) max_bytes);
     if (!arr)
         return xr_null();
     if (max_bytes == 0)
         return xr_value_from_array(arr);
-    io_fd_ssize_t count;
-    do {
-        count = io_fd_read((int) handle, arr->data, (size_t) max_bytes);
-    } while (count < 0 && errno == EINTR);
+    int64_t count = xr_file_read_once(handle, arr->data, (size_t) max_bytes);
     if (count < 0) {
-        io_release_array(arr);
+        xr_rc_release_value(xr_current_coro_heap(), xr_value_from_array(arr));
         return xr_null();
     }
     arr->length = (int32_t) count;
@@ -211,7 +129,7 @@ static XrValue io_fileClose(XrVMRuntime *X, XrValue *args, int argc) {
     int64_t handle = XR_TO_INT(args[0]);
     if (handle <= XR_IO_STD_ERR)
         return xr_bool(false);  // the standard streams are not the caller's to close
-    return xr_bool(io_file_close_handle((int) handle));
+    return xr_bool(xr_file_close((int) handle));
 }
 
 // Only the standard streams carry C-runtime buffering; a plain descriptor has
@@ -230,116 +148,6 @@ static XrValue io_fileFlush(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(true);
 }
 
-/* ========== io_uring async file writes (Linux) ==========
- *
- * Regular files are always "ready" for epoll/kqueue, so readiness pollers cannot
- * make a write async. io_uring can: it submits one write SQE and parks the
- * coroutine until the CQE. The write leaves use that path on Linux when io_uring
- * is active and a coroutine is running; all other configurations issue one
- * synchronous write.
- */
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-
-/* One write submitted through io_uring. This owns neither the descriptor nor
- * the buffer: __fileWrite reports what a single write accepted and the retry
- * loop that turns a short write into a complete one lives in io.xr. */
-typedef struct {
-    XrPollDesc *pd;
-} IoWriteOnceState;
-
-static XrCFuncResult io_write_once_complete(XrVMRuntime *X, int status, XrValue resume_value,
-                                            void *ctx, XrValue *result) {
-    (void) status;
-    (void) resume_value;
-    IoWriteOnceState *st = (IoWriteOnceState *) ctx;
-    XrUringXferKind kind;
-    long n = xr_netpoll_uring_xfer_result(st->pd, XR_POLL_WRITE, &kind);
-    bool ok = (kind == XR_URING_XFER_DATA && n >= 0);
-    if (st->pd)
-        xr_netpoll_close(&((XrRuntime *) X->vm.scheduler)->netpoll, st->pd);
-    xr_free(st);
-    *result = xr_int(ok ? (int64_t) n : -1);
-    return XR_CFUNC_DONE;
-}
-
-// Returns true (and sets *out) when the submission was taken; false when the
-// caller should fall back to the synchronous write(2) path.
-static bool io_write_once_try_uring(XrVMRuntime *X, int fd, const char *data, size_t len,
-                                    XrValue *result, XrCFuncResult *out) {
-    XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
-    if (!rt || !xr_current_coro(X) || !xr_netpoll_uring_active(&rt->netpoll))
-        return false;
-    XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
-    if (!pd)
-        return false;
-    IoWriteOnceState *st = (IoWriteOnceState *) xr_calloc(1, sizeof(IoWriteOnceState));
-    if (!st) {
-        xr_netpoll_close(&rt->netpoll, pd);
-        return false;
-    }
-    st->pd = pd;
-    // Offset -1 means "use the descriptor's own file position". An explicit
-    // offset would ignore O_APPEND and rewrite from the same place on every
-    // call, which is exactly what a sequential drain must not do.
-    XrUringReq req = {
-        .kind = XR_URING_OP_FILE_WRITE,
-        .buf = (void *) data,
-        .len = (unsigned) (len > UINT_MAX ? UINT_MAX : len),
-        .offset = (uint64_t) -1,
-    };
-    XrCFuncResult cr;
-    if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, io_write_once_complete, st, result,
-                              &cr)) {
-        *out = cr;
-        return true;
-    }
-    xr_netpoll_close(&rt->netpoll, pd);  // SQ exhausted — let the caller write directly
-    xr_free(st);
-    return false;
-}
-#endif  // XR_OS_LINUX && XR_HAS_IO_URING
-
-/* One write, reported as the number of bytes the stream accepted. `offset` is
- * an index into the caller's buffer, never a file offset: the file position is
- * the descriptor's own, so an appending handle keeps appending. */
-static XrCFuncResult io_write_once(XrVMRuntime *X, int64_t handle, const char *data, size_t len,
-                                   int64_t offset, XrValue *result) {
-    (void) X;
-    *result = xr_int(-1);
-    if (handle < 0 || offset < 0 || (!data && len != 0))
-        return XR_CFUNC_DONE;
-    if ((uint64_t) offset >= (uint64_t) len) {
-        *result = xr_int(0);
-        return XR_CFUNC_DONE;
-    }
-    const char *from = data + offset;
-    size_t remaining = len - (size_t) offset;
-
-    if (handle == XR_IO_STD_OUT || handle == XR_IO_STD_ERR) {
-        FILE *stream = (handle == XR_IO_STD_OUT) ? stdout : stderr;
-        size_t n = fwrite(from, 1, remaining, stream);
-        *result = (n == 0 && ferror(stream)) ? xr_int(-1) : xr_int((int64_t) n);
-        return XR_CFUNC_DONE;
-    }
-    if (handle == XR_IO_STD_IN)
-        return XR_CFUNC_DONE;  // stdin is not writable
-
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    do {
-        XrCFuncResult out;
-        if (io_write_once_try_uring(X, (int) handle, from, remaining, result, &out))
-            return out;
-    } while (0);
-#endif
-
-    io_fd_ssize_t n;
-    do {
-        n = io_fd_write((int) handle, from, remaining);
-    } while (n < 0 && errno == EINTR);
-    *result = xr_int(n < 0 ? -1 : (int64_t) n);
-    return XR_CFUNC_DONE;
-}
-
 static XrCFuncResult io_fileWrite(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     *result = xr_int(-1);
     if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[2]))
@@ -349,8 +157,8 @@ static XrCFuncResult io_fileWrite(XrVMRuntime *X, XrValue *args, int argc, XrVal
     XrArray *arr = xr_value_to_array(args[1]);
     if (!arr || arr->elem_type != XR_ELEM_U8)
         return XR_CFUNC_DONE;
-    return io_write_once(X, XR_TO_INT(args[0]), (const char *) arr->data, (size_t) arr->length,
-                         XR_TO_INT(args[2]), result);
+    return xr_file_write_once(X, XR_TO_INT(args[0]), (const char *) arr->data, (size_t) arr->length,
+                              XR_TO_INT(args[2]), result);
 }
 
 static XrCFuncResult io_fileWriteStr(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
@@ -361,7 +169,7 @@ static XrCFuncResult io_fileWriteStr(XrVMRuntime *X, XrValue *args, int argc, Xr
     const char *data = xrs_string_arg(args[1], &len);
     if (!data)
         return XR_CFUNC_DONE;
-    return io_write_once(X, XR_TO_INT(args[0]), data, len, XR_TO_INT(args[2]), result);
+    return xr_file_write_once(X, XR_TO_INT(args[0]), data, len, XR_TO_INT(args[2]), result);
 }
 
 /* ========== File Operations ========== */
@@ -425,69 +233,6 @@ static XrValue io_mkdir(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(xr_fs_mkdir(path, 0755) == 0);
 }
 
-static bool io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
-                                  void *visit_ctx) {
-    (void) ctx;
-    if (!path || !visit)
-        return false;
-#ifdef XR_OS_WINDOWS
-    size_t len = strlen(path);
-    char *pattern = (char *) xr_malloc(len + 4);
-    if (!pattern)
-        return false;
-    memcpy(pattern, path, len);
-    pattern[len++] = '\\';
-    pattern[len++] = '*';
-    pattern[len] = '\0';
-
-    WIN32_FIND_DATAA entry;
-    HANDLE dir = FindFirstFileA(pattern, &entry);
-    xr_free(pattern);
-    if (dir == INVALID_HANDLE_VALUE)
-        return false;
-    bool ok = true;
-    do {
-        if (!visit(visit_ctx, entry.cFileName)) {
-            ok = false;
-            break;
-        }
-    } while (FindNextFileA(dir, &entry));
-    FindClose(dir);
-#else
-    DIR *dir = opendir(path);
-    if (!dir)
-        return false;
-    bool ok = true;
-    for (;;) {
-        struct dirent *entry = readdir(dir);
-        if (!entry)
-            break;
-        if (!visit(visit_ctx, entry->d_name)) {
-            ok = false;
-            break;
-        }
-    }
-    closedir(dir);
-#endif
-    return ok;
-}
-
-typedef struct IoReadDirEmitCtx {
-    XrVMRuntime *X;
-    XrArray *arr;
-} IoReadDirEmitCtx;
-
-static bool io_read_dir_emit(void *ctx, const char *path) {
-    IoReadDirEmitCtx *emit = (IoReadDirEmitCtx *) ctx;
-    xr_array_push(emit->arr, xrs_string_value_c(emit->X, path));
-    return true;
-}
-
-static void io_release_array(XrArray *arr) {
-    if (arr)
-        xr_rc_release_value(xr_current_coro_heap(), xr_value_from_array(arr));
-}
-
 // readDir(path) - Read directory contents
 static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
@@ -500,11 +245,14 @@ static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (!arr)
         return xr_null();
 
-    IoReadDirEmitCtx emit = {.X = X, .arr = arr};
-    if (!io_dir_for_each_entry(NULL, path, io_read_dir_emit, &emit)) {
-        io_release_array(arr);
+    XrFileDirEntries entries;
+    if (!xr_file_dir_entries_read(path, &entries)) {
+        xr_rc_release_value(xr_current_coro_heap(), xr_value_from_array(arr));
         return xr_null();
     }
+    for (size_t i = 0; i < entries.count; i++)
+        xr_array_push(arr, xrs_string_value_c(X, entries.names[i]));
+    xr_file_dir_entries_release(&entries);
 
     return xr_value_from_array(arr);
 }
@@ -533,23 +281,6 @@ static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     return xr_bool(xr_fs_chdir(path) == 0);
-}
-
-// copyFile(src, dst) - Copy file
-// Lazily construct the stat() result class chain for the given isolate
-// and stash it in the per-isolate stdlib cache. Returns NULL on OOM.
-static XrClass *io_get_stat_class(XrVMRuntime *X) {
-    XrStdlibCache *cache = xr_stdlib_cache_get(X);
-    if (!cache)
-        return NULL;
-    if (cache->io_stat_class)
-        return cache->io_stat_class;
-
-    XrClass *cls = xr_stdlib_record_class_get(X, "io", "__FileStat");
-    if (!cls)
-        return NULL;
-    cache->io_stat_class = cls;
-    return cls;
 }
 
 // stat(path) - Get file stat info
@@ -588,7 +319,13 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
 
     extern XrValue xr_object_instance_value(XrObjectInstance * json);
 
-    XrClass *stat_cls = io_get_stat_class(X);
+    XrStdlibCache *cache = xr_stdlib_cache_get(X);
+    XrClass *stat_cls = cache ? cache->io_stat_class : NULL;
+    if (!stat_cls) {
+        stat_cls = xr_stdlib_record_class_get(X, "io", "__FileStat");
+        if (cache)
+            cache->io_stat_class = stat_cls;
+    }
     if (!stat_cls)
         return xr_null();
     XrObjectInstance *obj = xr_object_instance_new_with_class(xr_current_coro(X), stat_cls);
@@ -723,20 +460,13 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
  * own decisions and live in its Xray body, so both platforms are handed the
  * same root instead of each consulting the environment its own way.
  */
-static bool io_temp_template(const char *root, char *out, size_t cap) {
-    if (!root || root[0] == '\0')
-        return false;
-    int written = snprintf(out, cap, "%s/xray_XXXXXX", root);
-    return written > 0 && (size_t) written < cap;
-}
-
 static XrValue io_make_temp_dir(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     size_t root_len = 0;
     const char *root = xrs_string_arg(args[0], &root_len);
     char tpl[XR_PATH_MAX];
-    if (!io_temp_template(root, tpl, sizeof(tpl)))
+    if (!xr_file_temp_template(root, tpl, sizeof(tpl)))
         return xr_null();
 
 #ifdef XR_OS_WINDOWS
@@ -760,7 +490,7 @@ static XrValue io_make_temp_file(XrVMRuntime *X, XrValue *args, int argc) {
     size_t root_len = 0;
     const char *root = xrs_string_arg(args[0], &root_len);
     char tpl[XR_PATH_MAX];
-    if (!io_temp_template(root, tpl, sizeof(tpl)))
+    if (!xr_file_temp_template(root, tpl, sizeof(tpl)))
         return xr_null();
 
 #ifdef XR_OS_WINDOWS
