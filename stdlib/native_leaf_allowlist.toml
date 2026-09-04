@@ -102,7 +102,7 @@ class = "runtime_leaf"
 abi = "none; reads cluster runtime state under its own mutexes and atomics"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_info_fn): the node tables under nodes_lock/dead_nodes_lock, relaxed atomic counters, and whether the TLS contexts are non-NULL. It does not call OpenSSL. There is no AOT binding"
+provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_info_fn): the node table under nodes_lock, the synchronized tombstone registry, relaxed atomic counters, and whether the TLS contexts are non-NULL. It does not call OpenSSL. There is no AOT binding"
 deletion_trigger = "when the cluster runtime's node tables and counters are reachable from cluster.xr through smaller accessor leaves; this leaf currently returns only private __Cluster*Snapshot records and cluster.xr alone maps them into the public ClusterInfo graph"
 
 [[leaf]]
@@ -127,23 +127,23 @@ deletion_trigger = "when cluster.xr can construct a Channel and register a topic
 
 [[leaf]]
 module = "cluster"
-symbol = "__monitorNode"
+symbol = "__registerNodeMonitor"
 class = "runtime_leaf"
-abi = "none; constructs a bounded channel and registers one normalized node-down target"
-ownership = "fresh"
+abi = "none; registers one source-constructed channel for a normalized node-down target"
+ownership = "none"
 effect = "nothrow"
-provider = "the Xray channel subsystem and the cluster runtime's node-monitor registry, driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates the node target and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding"
-deletion_trigger = "when the cluster monitor registry and Channel constructor are surfaces Xray source can name"
+provider = "the locked channel index in src/coro/xmonitor_registry.c. cluster.xr constructs the channel, chooses its capacity and validates the target. There is no AOT binding"
+deletion_trigger = "when a synchronized map of channel values is directly expressible in Xray source"
 
 [[leaf]]
 module = "cluster"
-symbol = "__monitorCoroutine"
+symbol = "__registerCoroutineMonitor"
 class = "runtime_leaf"
-abi = "none; constructs a bounded channel, registers one normalized remote-coroutine target and enqueues its monitor frame"
-ownership = "fresh"
+abi = "none on registration; stores a source-constructed channel and enqueues one CORO_MONITOR frame through the selected peer's output queue"
+ownership = "none"
 effect = "nothrow"
-provider = "the Xray channel subsystem plus the coroutine registry (src/coro/xcoro_registry.h xr_coro_monitor), driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates both names and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding"
-deletion_trigger = "when the coroutine registry, cluster writer queue and Channel constructor are surfaces Xray source can name"
+provider = "the locked channel index in src/coro/xmonitor_registry.c plus the cluster writer queue in stdlib/cluster/cluster_monitor.c. cluster.xr constructs the channel, chooses its capacity and validates both names. There is no AOT binding"
+deletion_trigger = "when cluster.xr can retain the channel in a synchronized map and enqueue a peer control frame directly"
 
 [[leaf]]
 module = "cluster"
@@ -192,7 +192,7 @@ class = "runtime_leaf"
 abi = "socket(2), setsockopt(2) SO_REUSEADDR and IPV6_V6ONLY, bind(2), listen(2) for the node listener; OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray scheduler, which the leaf asks to publish the heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT (stdlib/cluster/cluster_aot.c xrt_cluster_start) discards all six TLS arguments and returns false outright when tlsEnabled is set, and runs its accept loop on an OS thread instead. The node name, port range, health policy and topic delivery fanout limit are cluster.xr's and are passed down as normalized scalars"
+provider = "the Xray scheduler, which the leaf asks to publish the heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT (stdlib/cluster/cluster_aot.c xrt_cluster_start) discards all six TLS arguments and returns false outright when tlsEnabled is set, and runs its accept loop on an OS thread instead. The node name, port range, heartbeat cadence and thresholds, topic fanout limit, and tombstone retention are cluster.xr's and are passed down as normalized scalars"
 deletion_trigger = "when cluster.xr can publish its own coroutines and build its own listener over net's leaves, and the AOT half stops declining TLS so both backends start the same node"
 
 [[leaf]]

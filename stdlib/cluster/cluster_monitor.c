@@ -5,320 +5,89 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * cluster_monitor.c - Node and remote coroutine monitoring
+ * cluster_monitor.c - Native transport projection for coroutine monitoring
  *
- * KEY CONCEPT:
- *   CSP-style monitoring: watchers receive notifications via Channels
- *   when a node disconnects or a remote coroutine exits.
+ * Xray constructs notification channels and owns target admission. The
+ * synchronized monitor registry and scheduler wait live in src/coro; this file
+ * only connects those providers to cluster transport frames.
  */
 
 #include "cluster_internal.h"
-#include "../../src/coro/xchannel.h"
-#include "../../src/coro/xblock.h"
-#include "../../src/coro/xcoro_registry.h"
-#include "../../src/coro/xcoroutine.h"
-#include "../../src/coro/xyieldable.h"
-#include "../../src/runtime/xisolate_internal.h"
+
+#include "../../src/coro/xcoro_monitor_forward.h"
+#include "../../src/coro/xmonitor_registry.h"
 #include "../../src/runtime/object/xstring.h"
 
-#include <stdlib.h>
 #include <string.h>
 
-/* ========== Node Monitor (CSP-style) ========== */
+typedef struct XrClusterCoroForward {
+    XrClusterNode *node;
+    char coroutine_name[XR_CORO_NAME_MAX + 1];
+} XrClusterCoroForward;
 
-/*
- * Register a node-down monitor and return the notification channel.
- *
- * Delivery policy — AT-MOST-ONCE (buffered(8), drop on overflow):
- *
- *   - The returned channel has a fixed capacity of 8. Each
- *     cluster_monitor_fire invocation pushes ONE message (the
- *     dead node's name) via try_send. If the channel is full at
- *     that instant, the notification is DROPPED silently.
- *
- *   - This matters under "flap" scenarios: if the same peer goes
- *     down, rejoins, and dies again 9+ times before the script
- *     drained the channel, the 10th death event is lost. In
- *     practice applications drain the channel in a tight loop from
- *     a dedicated supervisor coroutine, so the window for overflow
- *     is narrow and losing "yet another" identical notification is
- *     acceptable.
- *
- *   - Applications that cannot tolerate drops should EITHER
- *     (a) drain the channel synchronously inside their supervisor
- *     loop so the buffer never fills, OR
- *     (b) combine the monitor with cluster_info() so the current
- *     dead set can be queried on each notification and any missed
- *     deaths are recovered.
- *
- * Capacity 8 was chosen to be large enough that a supervisor
- * running at normal scheduling cadence never loses notifications,
- * while small enough that a wedged supervisor cannot accumulate
- * unbounded memory. Callers that need a larger buffer can subscribe
- * to cluster_info() metrics instead.
- */
-XrChannel *cluster_monitor_node(XrVMRuntime *X, const char *node_name) {
-    XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !node_name || node_name[0] == '\0' || strlen(node_name) > XR_NODE_NAME_MAX)
-        return NULL;
-
-    XrNodeMonitor *m = (XrNodeMonitor *) xr_calloc(1, sizeof(XrNodeMonitor));
-    if (!m)
-        return NULL;
-
-    strncpy(m->node_name, node_name, XR_NODE_NAME_MAX);
-    m->node_name[XR_NODE_NAME_MAX] = '\0';
-
-    // Buffered(8) channel for notifications — see comment above for
-    // the drop-on-overflow policy rationale.
-    XrChannel *ch = xr_channel_new_vm(X, 8);
-    if (!ch) {
-        xr_free(m);
-        return NULL;
-    }
-    m->notify_ch = ch;
-
-    xr_amutex_lock(&c->monitors_lock);
-    m->next = c->monitors;
-    c->monitors = m;
-    c->monitor_count++;
-    xr_amutex_unlock(&c->monitors_lock);
-
-    return ch;
+static bool cluster_monitor_send_exit(XrClusterNode *node, const char *coroutine_name,
+                                      const char *reason) {
+    if (!node || node->state != XR_NODE_CONNECTED)
+        return false;
+    uint8_t frame[256];
+    int length = cluster_frame_encode_coro_exit(frame, sizeof(frame), coroutine_name, reason);
+    return length > 0 && cluster_node_enqueue(node, frame, (uint32_t) length) == 0;
 }
 
-void cluster_monitor_fire(XrCluster *c, const char *node_name) {
-    if (!c || !node_name)
+static void cluster_monitor_forward_destroy(void *context) {
+    XrClusterCoroForward *forward = (XrClusterCoroForward *) context;
+    if (!forward)
         return;
-
-/*
- * Collect matching notify_ch pointers under the lock, deliver outside.
- * Rationale: xr_channel_try_send wakes waiters that may run user
- * callbacks (e.g. a supervisor that calls cluster.monitor on another
- * node), which would recursively grab monitors_lock.
- *
- * 64 notifications per disconnect is way more than any realistic
- * monitor set; overflow is dropped, matching the at-most-once spirit.
- */
-#define XR_MON_FIRE_MAX 64
-    struct XrChannel *targets[XR_MON_FIRE_MAX];
-    int target_count = 0;
-
-    xr_amutex_lock(&c->monitors_lock);
-    XrNodeMonitor *m = c->monitors;
-    while (m && target_count < XR_MON_FIRE_MAX) {
-        // Match specific name or wildcard "*"
-        if (strcmp(m->node_name, "*") == 0 || strcmp(m->node_name, node_name) == 0) {
-            if (m->notify_ch && !xr_channel_is_closed(m->notify_ch)) {
-                targets[target_count++] = m->notify_ch;
-            }
-        }
-        m = m->next;
-    }
-    xr_amutex_unlock(&c->monitors_lock);
-
-    // Intern the node_name once, reuse across deliveries
-    XrString *str = xr_string_intern(c->isolate, node_name, (uint32_t) strlen(node_name), 0);
-    if (!str)
-        return;
-    XrValue name_val = xr_string_value(str);
-
-    for (int i = 0; i < target_count; i++) {
-        xr_channel_try_send(targets[i], name_val);
-    }
-#undef XR_MON_FIRE_MAX
+    cluster_node_release(forward->node);
+    xr_free(forward);
 }
 
-/* ========== Remote Coroutine Monitor ========== */
+static void cluster_monitor_forward_exit(void *context, XrValue reason_value) {
+    XrClusterCoroForward *forward = (XrClusterCoroForward *) context;
+    if (!forward)
+        return;
+    const char *reason = XR_IS_STRING(reason_value) ? XR_TO_STRING(reason_value)->data : "normal";
+    (void) cluster_monitor_send_exit(forward->node, forward->coroutine_name, reason);
+}
 
-XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const char *coro_name) {
-    XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !node_name || !coro_name || node_name[0] == '\0' || coro_name[0] == '\0' ||
-        strlen(node_name) > XR_NODE_NAME_MAX || strlen(coro_name) > XR_CORO_NAME_MAX)
-        return NULL;
-
-    // Find the target node
-    XrClusterNode *node = cluster_node_find(c, node_name);
+bool cluster_monitor_register_remote(XrCluster *cluster, const char *node_name,
+                                     const char *coroutine_name, XrChannel *channel) {
+    if (!cluster || !node_name || !coroutine_name || !channel)
+        return false;
+    XrClusterNode *node = cluster_node_find(cluster, node_name);
     if (!node)
-        return NULL;
-    if (node->state != XR_NODE_CONNECTED) {
+        return false;
+    if (node->state != XR_NODE_CONNECTED ||
+        !xr_monitor_registry_add_remote(cluster->monitors, node_name, coroutine_name, channel)) {
         cluster_node_release(node);
-        return NULL;
+        return false;
     }
 
-    // Create notification channel
-    XrChannel *ch = xr_channel_new_vm(X, 1);
-    if (!ch) {
-        cluster_node_release(node);
-        return NULL;
-    }
-
-    // Register in remote_coro_monitors list
-    XrRemoteCoroMonitor *mon = (XrRemoteCoroMonitor *) xr_calloc(1, sizeof(XrRemoteCoroMonitor));
-    if (!mon) {
-        xr_channel_close(ch);
-        cluster_node_release(node);
-        return NULL;
-    }
-    strncpy(mon->node_name, node_name, XR_NODE_NAME_MAX);
-    strncpy(mon->coro_name, coro_name, XR_CORO_NAME_MAX);
-    mon->notify_ch = ch;
-
-    xr_amutex_lock(&c->monitors_lock);
-    mon->next = c->remote_coro_monitors;
-    c->remote_coro_monitors = mon;
-    xr_amutex_unlock(&c->monitors_lock);
-
-    // Send CORO_MONITOR frame to remote node
-    uint8_t buf[256];
-    int len = cluster_frame_encode_coro_monitor(buf, sizeof(buf), XR_FRAME_CORO_MONITOR, coro_name);
-    if (len > 0) {
-        cluster_node_enqueue(node, buf, (uint32_t) len);
-    }
-
+    uint8_t frame[256];
+    int length = cluster_frame_encode_coro_monitor(frame, sizeof(frame), XR_FRAME_CORO_MONITOR,
+                                                   coroutine_name);
+    bool queued = length > 0 && cluster_node_enqueue(node, frame, (uint32_t) length) == 0;
+    if (!queued)
+        (void) xr_monitor_registry_remove_remote(cluster->monitors, node_name, coroutine_name,
+                                                 channel);
     cluster_node_release(node);
-    return ch;
+    return queued;
 }
 
-/* ========== CORO_MONITOR Forwarding ========== */
-
-// Forwarding coroutine context: waits on local monitor channel,
-// then sends CORO_EXIT frame to the remote node.
-typedef struct {
-    XrChannel *mon_ch;    // local monitor channel
-    XrClusterNode *node;  // remote node to notify
-    char coro_name[128];  // coroutine name
-    XrValue reason;
-} XrCoroMonitorFwd;
-
-static void coro_monitor_fwd_destroy(void *context) {
-    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) context;
-    if (!ctx)
+void cluster_monitor_handle_coro_request(XrCluster *cluster, XrClusterNode *node,
+                                         const char *coroutine_name) {
+    if (!cluster || !cluster->isolate || !node || !coroutine_name)
         return;
-    cluster_node_release(ctx->node);
-    xr_free(ctx);
-}
-
-static XrCFuncResult coro_monitor_fwd_complete(XrCoroMonitorFwd *ctx) {
-    const char *reason = "normal";
-    if (XR_IS_STRING(ctx->reason))
-        reason = XR_TO_STRING(ctx->reason)->data;
-
-    if (ctx->node && ctx->node->state == XR_NODE_CONNECTED) {
-        uint8_t buf[256];
-        int len = cluster_frame_encode_coro_exit(buf, sizeof(buf), ctx->coro_name, reason);
-        if (len > 0)
-            cluster_node_enqueue(ctx->node, buf, (uint32_t) len);
-    }
-    return XR_CFUNC_DONE;
-}
-
-static XrCFuncResult coro_monitor_fwd_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                               void *context, XrValue *result) {
-    (void) resume_value;
-    (void) result;
-    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) context;
-    if (!ctx || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR)
-        return XR_CFUNC_DONE;
-
-    XrCoroutine *coro = xr_current_coro(X);
-    XrCoroBlockResult resumed =
-        xr_coro_chan_recv_resume(coro, xr_slot_xvalue_ptr(&ctx->reason), xr_slot_none());
-    if (resumed.kind == XR_CORO_BLOCK_READY)
-        return coro_monitor_fwd_complete(ctx);
-    if (resumed.kind == XR_CORO_BLOCK_CLOSED)
-        return XR_CFUNC_DONE;
-    return XR_CFUNC_ERROR;
-}
-
-static XrCFuncResult coro_monitor_fwd_entry(XrVMRuntime *X, void *context, XrValue *result) {
-    (void) result;
-    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) context;
-    if (!ctx)
-        return XR_CFUNC_DONE;
-
-    bool ok = false;
-    ctx->reason = xr_channel_try_recv(ctx->mon_ch, &ok);
-    if (ok)
-        return coro_monitor_fwd_complete(ctx);
-    if (xr_channel_is_closed(ctx->mon_ch))
-        return XR_CFUNC_DONE;
-    if (!xr_yield_set_continuation(X, coro_monitor_fwd_continue, ctx))
-        return XR_CFUNC_ERROR;
-
-    XrCoroutine *coro = xr_current_coro(X);
-    XrChanResult recv =
-        xr_channel_recv_slot(ctx->mon_ch, &ctx->reason, coro, -1, xr_slot_xvalue_ptr(&ctx->reason),
-                             xr_slot_none(), false);
-    if (recv == XR_CHAN_BLOCK)
-        return XR_CFUNC_BLOCKED;
-    if (recv == XR_CHAN_OK)
-        return coro_monitor_fwd_complete(ctx);
-    return recv == XR_CHAN_CLOSED ? XR_CFUNC_DONE : XR_CFUNC_ERROR;
-}
-
-void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node, const char *coro_name) {
-    // Remote node wants to monitor a local coroutine.
-    // Register a local monitor; on exit, send CORO_EXIT frame back.
-    if (!c || !c->isolate)
-        return;
-
-    XrCoroState *sched = (XrCoroState *) c->isolate->vm.coro_state;
-    if (!sched || !sched->coro_registry)
-        return;
-
-    // Use the local registry monitor mechanism
-    XrChannel *mon_ch = xr_coro_monitor(c->isolate, sched->coro_registry, coro_name);
-    if (!mon_ch) {
-        // Could not set up monitor — send immediate CORO_EXIT with "noproc"
-        uint8_t buf[256];
-        int len = cluster_frame_encode_coro_exit(buf, sizeof(buf), coro_name, "noproc");
-        if (len > 0) {
-            cluster_node_enqueue(node, buf, (uint32_t) len);
-        }
+    XrClusterCoroForward *forward = (XrClusterCoroForward *) xr_calloc(1, sizeof(*forward));
+    if (!forward) {
+        (void) cluster_monitor_send_exit(node, coroutine_name, "noproc");
         return;
     }
-
-    // Create a forwarding coroutine that blocks on mon_ch and sends
-    // CORO_EXIT frame when the monitored coroutine terminates.
-    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) xr_malloc(sizeof(XrCoroMonitorFwd));
-    if (!ctx)
-        return;
-    ctx->mon_ch = mon_ch;
-    ctx->node = node;
-    ctx->reason = xr_null();
+    forward->node = node;
     cluster_node_retain(node);
-    strncpy(ctx->coro_name, coro_name, sizeof(ctx->coro_name) - 1);
-    ctx->coro_name[sizeof(ctx->coro_name) - 1] = '\0';
-
-    XrCoroutine *fwd = xr_coro_create_native_yieldable(
-        c->isolate, coro_monitor_fwd_entry, ctx, coro_monitor_fwd_destroy, "cluster_coro_fwd");
-    if (fwd) {
-        xr_coro_spawn(c->isolate, fwd);
-    }
-}
-
-void cluster_monitor_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason) {
-    // Received CORO_EXIT from remote node — notify local monitors
-    if (!c || !c->isolate)
-        return;
-
-    xr_amutex_lock(&c->monitors_lock);
-    XrRemoteCoroMonitor **pp = &c->remote_coro_monitors;
-    while (*pp) {
-        XrRemoteCoroMonitor *mon = *pp;
-        if (strcmp(mon->coro_name, coro_name) == 0) {
-            // Send reason to local channel
-            XrString *s = xr_string_new(c->isolate, reason, strlen(reason));
-            XrValue val = s ? xr_string_value(s) : xr_null();
-            xr_channel_try_send(mon->notify_ch, val);
-
-            // Remove from list
-            *pp = mon->next;
-            xr_free(mon);
-        } else {
-            pp = &mon->next;
-        }
-    }
-    xr_amutex_unlock(&c->monitors_lock);
+    strncpy(forward->coroutine_name, coroutine_name, XR_CORO_NAME_MAX);
+    forward->coroutine_name[XR_CORO_NAME_MAX] = '\0';
+    if (!xr_coro_monitor_forward(cluster->isolate, coroutine_name, cluster_monitor_forward_exit,
+                                 forward, cluster_monitor_forward_destroy))
+        (void) cluster_monitor_send_exit(node, coroutine_name, "noproc");
 }

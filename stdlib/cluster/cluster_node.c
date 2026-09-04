@@ -526,7 +526,8 @@ static void cluster_reader_finish(XrReaderContext *ctx) {
         return;
     ctx->finished = true;
     if (atomic_load(&ctx->cluster->running))
-        cluster_monitor_fire(ctx->cluster, ctx->node->name);
+        xr_monitor_registry_notify_node(ctx->cluster->monitors, ctx->cluster->isolate,
+                                        ctx->node->name);
     if (cluster_node_remove(ctx->cluster, ctx->node)) {
         cluster_node_shutdown(ctx->node);
         cluster_node_release(ctx->node);

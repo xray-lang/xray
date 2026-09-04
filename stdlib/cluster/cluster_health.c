@@ -5,166 +5,83 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * cluster_health.c - Health monitoring and dead-node tombstones
+ * cluster_health.c - Locked transport projection of Xray health policy
  *
- * KEY CONCEPT:
- *   Implements heartbeat checking (Phi Accrual) and dead node tombstones.
+ * cluster.xr owns cadence, warm-up, threshold, retry and tombstone retention
+ * policy. This provider projects one tick onto native node state and sockets.
  */
 
 #include "cluster_internal.h"
 
+#include "../../src/coro/xmonitor_registry.h"
+#include "../../src/coro/xtombstone_registry.h"
+
 #include <string.h>
 
-/* ========== Health & Robustness ========== */
-
-void cluster_health_check_heartbeats(XrCluster *c) {
-    if (!c)
+void cluster_health_tick(XrCluster *cluster) {
+    if (!cluster)
         return;
-
+    enum {
+        INLINE_CANDIDATES = 64
+    };
+    XrClusterNode *inline_candidates[INLINE_CANDIDATES];
+    XrClusterNode **candidates = inline_candidates;
+    uint32_t candidate_count = 0;
+    uint32_t candidate_capacity = INLINE_CANDIDATES;
     int64_t now = cluster_now_ms();
 
-    /*
-     * Collect dead nodes into a growing buffer, then act on them after
-     * releasing nodes_lock. Earlier revisions used a fixed 64-entry
-     * stack array (to_remove[64]) which silently dropped kills when a
-     * large simultaneous network partition sent > 64 nodes past the
-     * phi threshold at once — a nasty "some-but-not-all" failure mode
-     * in big deployments. Growing on demand keeps the common case
-     * allocation-free (inline 64-slot stack buffer) and the cold path
-     * correct up to whatever number the OS can actually hold.
-     */
-    enum {
-        XR_HB_INLINE = 64
-    };
-    XrClusterNode *inline_slots[XR_HB_INLINE];
-    XrClusterNode **to_remove = inline_slots;
-    int remove_count = 0;
-    int remove_cap = XR_HB_INLINE;
+    xr_amutex_lock(&cluster->nodes_lock);
+    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
+        if (node->state != XR_NODE_CONNECTED)
+            continue;
+        if (node->conn)
+            (void) cluster_node_send_ping(node);
 
-    xr_amutex_lock(&c->nodes_lock);
-    XrClusterNode *node = c->nodes;
-    while (node) {
-        bool is_dead = false;
-        if (node->state == XR_NODE_CONNECTED) {
-            // Use Phi Accrual detector if enough samples, else fallback
-            if (node->phi.sample_count >= 3) {
-                double phi = xr_phi_detector_value(&node->phi, now);
-                if (phi > c->phi_threshold)
-                    is_dead = true;
-            } else {
-                // Fallback to simple timeout for first few heartbeats
-                int64_t elapsed = now - node->last_heartbeat_recv;
-                if (elapsed > c->heartbeat_timeout_ms) {
-                    node->missed_heartbeats++;
-                    if ((int64_t) node->missed_heartbeats >= c->max_missed_heartbeats) {
-                        is_dead = true;
-                    }
-                }
-            }
+        bool dead = false;
+        if (node->phi.sample_count >= cluster->phi_min_samples) {
+            dead = xr_phi_detector_value(&node->phi, now) > cluster->phi_threshold;
+        } else if (now - node->last_heartbeat_recv > cluster->heartbeat_timeout_ms) {
+            node->missed_heartbeats++;
+            dead = (int64_t) node->missed_heartbeats >= cluster->max_missed_heartbeats;
         }
-        if (is_dead) {
-            if (remove_count >= remove_cap) {
-                int new_cap = remove_cap * 2;
-                XrClusterNode **grown;
-                if (to_remove == inline_slots) {
-                    grown = (XrClusterNode **) xr_malloc((size_t) new_cap * sizeof(*grown));
-                    if (grown) {
-                        memcpy(grown, to_remove, (size_t) remove_count * sizeof(*grown));
-                    }
+        if (!dead)
+            continue;
+
+        if (candidate_count == candidate_capacity) {
+            uint32_t new_capacity =
+                candidate_capacity <= UINT32_MAX / 2 ? candidate_capacity * 2 : UINT32_MAX;
+            XrClusterNode **grown = NULL;
+            if (new_capacity > candidate_capacity &&
+                (size_t) new_capacity <= SIZE_MAX / sizeof(*grown)) {
+                if (candidates == inline_candidates) {
+                    grown = (XrClusterNode **) xr_malloc((size_t) new_capacity * sizeof(*grown));
+                    if (grown)
+                        memcpy(grown, candidates, (size_t) candidate_count * sizeof(*grown));
                 } else {
-                    grown =
-                        (XrClusterNode **) xr_realloc(to_remove, (size_t) new_cap * sizeof(*grown));
+                    grown = (XrClusterNode **) xr_realloc(candidates,
+                                                          (size_t) new_capacity * sizeof(*grown));
                 }
-                if (!grown) {
-                    /* OOM: stop collecting further victims this tick.
-                     * They will be caught on the next heartbeat sweep.
-                     * Intentionally non-fatal — health checking must
-                     * never abort the cluster. */
-                    break;
-                }
-                to_remove = grown;
-                remove_cap = new_cap;
             }
-            cluster_node_retain(node);
-            to_remove[remove_count++] = node;
+            if (!grown)
+                break;
+            candidates = grown;
+            candidate_capacity = new_capacity;
         }
-        node = node->next;
+        cluster_node_retain(node);
+        candidates[candidate_count++] = node;
     }
-    xr_amutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&cluster->nodes_lock);
 
-    for (int i = 0; i < remove_count; i++) {
-        XrClusterNode *dead = to_remove[i];
-        cluster_health_mark_dead(c, dead->name);
-        cluster_monitor_fire(c, dead->name);
-        if (cluster_node_remove(c, dead)) {
+    for (uint32_t i = 0; i < candidate_count; i++) {
+        XrClusterNode *dead = candidates[i];
+        (void) xr_tombstone_registry_add(cluster->tombstones, dead->name, now);
+        xr_monitor_registry_notify_node(cluster->monitors, cluster->isolate, dead->name);
+        if (cluster_node_remove(cluster, dead)) {
             cluster_node_shutdown(dead);
-            cluster_node_release(dead);  // list ownership
+            cluster_node_release(dead);
         }
-        cluster_node_release(dead);  // sweep snapshot
+        cluster_node_release(dead);
     }
-
-    if (to_remove != inline_slots)
-        xr_free(to_remove);
-}
-
-void cluster_health_send_heartbeats(XrCluster *c) {
-    if (!c)
-        return;
-
-    xr_amutex_lock(&c->nodes_lock);
-    XrClusterNode *node = c->nodes;
-    while (node) {
-        if (node->state == XR_NODE_CONNECTED && node->conn) {
-            cluster_node_send_ping(node);
-        }
-        node = node->next;
-    }
-    xr_amutex_unlock(&c->nodes_lock);
-}
-
-/* ========== Tombstone Management ========== */
-
-void cluster_health_mark_dead(XrCluster *c, const char *name) {
-    if (!c || !name)
-        return;
-
-    xr_amutex_lock(&c->dead_nodes_lock);
-    // Grow dynamic array if needed
-    if (c->tombstone_count >= c->tombstone_cap) {
-        int new_cap = c->tombstone_cap * 2;
-        void *new_arr = xr_realloc(c->tombstones, (size_t) new_cap * sizeof(c->tombstones[0]));
-        if (new_arr) {
-            c->tombstones = new_arr;
-            c->tombstone_cap = new_cap;
-        } else {
-            // Fallback: sweep oldest entry to make room
-            if (c->tombstone_count > 0) {
-                memmove(&c->tombstones[0], &c->tombstones[1],
-                        (size_t) (c->tombstone_count - 1) * sizeof(c->tombstones[0]));
-                c->tombstone_count--;
-            }
-        }
-    }
-    if (c->tombstone_count < c->tombstone_cap) {
-        strncpy(c->tombstones[c->tombstone_count].name, name, XR_NODE_NAME_MAX);
-        c->tombstones[c->tombstone_count].name[XR_NODE_NAME_MAX] = '\0';
-        c->tombstones[c->tombstone_count].time = cluster_now_ms();
-        c->tombstone_count++;
-    }
-    xr_amutex_unlock(&c->dead_nodes_lock);
-}
-
-bool cluster_health_is_dead(XrCluster *c, const char *name) {
-    if (!c || !name)
-        return false;
-
-    xr_amutex_lock(&c->dead_nodes_lock);
-    for (int i = 0; i < c->tombstone_count; i++) {
-        if (strcmp(c->tombstones[i].name, name) == 0) {
-            xr_amutex_unlock(&c->dead_nodes_lock);
-            return true;
-        }
-    }
-    xr_amutex_unlock(&c->dead_nodes_lock);
-    return false;
+    if (candidates != inline_candidates)
+        xr_free(candidates);
 }

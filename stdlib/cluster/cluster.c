@@ -44,14 +44,10 @@
 /* ========== Heartbeat Coroutine ========== */
 
 /*
- * Drive cluster_health_send_heartbeats + cluster_health_check_heartbeats at a
- * steady cadence. Runs as a native coroutine on the normal worker
- * pool so the cluster stays on one scheduling model end-to-end — no
- * more stray pthread with its own sleep granularity.
- *
- * Ticks at heartbeat_interval_ms / 2 (capped at 500ms min) so that
- * phi-accrual has at least two samples per interval and stop-latency
- * is bounded.
+ * Drive one native projection of the Xray-owned health policy at the cadence
+ * already selected by cluster.xr. Runs as a native coroutine on the normal
+ * worker pool so the cluster stays on one scheduling model end-to-end. The
+ * provider does not derive a second cadence from the heartbeat interval.
  */
 static void cluster_heartbeat_context_destroy(void *context) {
     XrCluster *c = (XrCluster *) context;
@@ -69,13 +65,8 @@ static XrCFuncResult cluster_heartbeat_continue(XrVMRuntime *X, int status, XrVa
         status == XR_RESUME_ERROR)
         return XR_CFUNC_DONE;
 
-    cluster_health_send_heartbeats(c);
-    cluster_health_check_heartbeats(c);
-
-    int64_t sleep_ms = c->heartbeat_interval_ms / 2;
-    if (sleep_ms < 500)
-        sleep_ms = 500;
-    return xr_yield_for_timeout(X, sleep_ms, cluster_heartbeat_continue, c, result);
+    cluster_health_tick(c);
+    return xr_yield_for_timeout(X, c->heartbeat_tick_ms, cluster_heartbeat_continue, c, result);
 }
 
 static XrCFuncResult cluster_heartbeat_entry(XrVMRuntime *X, void *context, XrValue *result) {
@@ -83,10 +74,7 @@ static XrCFuncResult cluster_heartbeat_entry(XrVMRuntime *X, void *context, XrVa
     if (!c || !atomic_load(&c->running))
         return XR_CFUNC_DONE;
     atomic_store(&c->heartbeat_running, true);
-    int64_t sleep_ms = c->heartbeat_interval_ms / 2;
-    if (sleep_ms < 500)
-        sleep_ms = 500;
-    return xr_yield_for_timeout(X, sleep_ms, cluster_heartbeat_continue, c, result);
+    return xr_yield_for_timeout(X, c->heartbeat_tick_ms, cluster_heartbeat_continue, c, result);
 }
 
 /* ========== Accept Loop ==========
@@ -193,7 +181,8 @@ static XrCFuncResult cluster_inbound_complete(XrInboundContext *ctx) {
     node->last_heartbeat_recv = cluster_now_ms();
     ctx->conn = NULL;
 
-    if (cluster_health_is_dead(ctx->cluster, node->name) || !cluster_node_add(ctx->cluster, node)) {
+    if (xr_tombstone_registry_contains(ctx->cluster->tombstones, node->name, cluster_now_ms()) ||
+        !cluster_node_add(ctx->cluster, node)) {
         cluster_node_shutdown(node);
         cluster_node_release(node);
         return XR_CFUNC_DONE;
@@ -443,7 +432,8 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
 int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
                           const XrClusterTlsOptions *tls, int64_t heartbeat_interval_ms,
                           int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
-                          double phi_threshold, uint32_t topic_delivery_fanout_max) {
+                          int64_t heartbeat_tick_ms, int64_t phi_min_samples, double phi_threshold,
+                          uint32_t topic_delivery_fanout_max, int64_t tombstone_retention_ms) {
     if (X->cluster)
         return -1;  // already running
     if (!name)
@@ -482,14 +472,18 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
     }
 
     xr_amutex_init(&c->nodes_lock);
-    xr_amutex_init(&c->dead_nodes_lock);
 
     c->topics = xr_topic_registry_new_vm(X, topic_delivery_fanout_max);
-    if (!c->topics) {
+    c->monitors = xr_monitor_registry_new();
+    c->tombstones = xr_tombstone_registry_new(16, tombstone_retention_ms);
+    if (!c->topics || !c->monitors || !c->tombstones) {
         if (c->tls_client_ctx)
             xr_tls_context_free(c->tls_client_ctx);
         if (c->tls_server_ctx)
             xr_tls_context_free(c->tls_server_ctx);
+        xr_topic_registry_destroy(c->topics);
+        xr_monitor_registry_destroy(c->monitors);
+        xr_tombstone_registry_destroy(c->tombstones);
         xr_secure_wipe(c->secret, sizeof(c->secret));
         xr_free(c);
         return -1;
@@ -501,14 +495,9 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
     c->heartbeat_interval_ms = heartbeat_interval_ms;
     c->heartbeat_timeout_ms = heartbeat_timeout_ms;
     c->max_missed_heartbeats = max_missed_heartbeats;
+    c->heartbeat_tick_ms = heartbeat_tick_ms;
+    c->phi_min_samples = phi_min_samples;
     c->phi_threshold = phi_threshold;
-    // Dynamic tombstone array
-    c->tombstone_cap = 16;
-    c->tombstones = xr_calloc((size_t) c->tombstone_cap, sizeof(c->tombstones[0]));
-    c->tombstone_count = 0;
-    c->monitors = NULL;
-    c->monitor_count = 0;
-    xr_amutex_init(&c->monitors_lock);
 
     // Start listening
     c->listen_fd = xr_io_listen(NULL, port, 128);
@@ -520,6 +509,8 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
         if (c->tls_server_ctx)
             xr_tls_context_free(c->tls_server_ctx);
         xr_topic_registry_destroy(c->topics);
+        xr_monitor_registry_destroy(c->monitors);
+        xr_tombstone_registry_destroy(c->tombstones);
         xr_secure_wipe(c->secret, sizeof(c->secret));
         xr_free(c);
         return -1;
@@ -586,27 +577,9 @@ static void cluster_runtime_destroy(XrCluster *c) {
     cluster_discovery_stop(c);
     xr_topic_registry_destroy(c->topics);
     c->topics = NULL;
-
-    xr_amutex_lock(&c->monitors_lock);
-    XrNodeMonitor *mon = c->monitors;
-    while (mon) {
-        XrNodeMonitor *next = mon->next;
-        xr_free(mon);
-        mon = next;
-    }
+    xr_monitor_registry_destroy(c->monitors);
     c->monitors = NULL;
-    c->monitor_count = 0;
-    xr_amutex_unlock(&c->monitors_lock);
-
-    XrRemoteCoroMonitor *rm = c->remote_coro_monitors;
-    while (rm) {
-        XrRemoteCoroMonitor *next = rm->next;
-        xr_free(rm);
-        rm = next;
-    }
-    c->remote_coro_monitors = NULL;
-
-    xr_free(c->tombstones);
+    xr_tombstone_registry_destroy(c->tombstones);
     c->tombstones = NULL;
 
     if (c->tls_client_ctx)
@@ -940,7 +913,8 @@ static XrCFuncResult cluster_join_publish(XrJoinContext *ctx, XrValue *result) {
     XrClusterNode *node = ctx->node;
     node->state = XR_NODE_CONNECTED;
     node->last_heartbeat_recv = cluster_now_ms();
-    if (cluster_health_is_dead(ctx->cluster, node->name) || !cluster_node_add(ctx->cluster, node))
+    if (xr_tombstone_registry_contains(ctx->cluster->tombstones, node->name, cluster_now_ms()) ||
+        !cluster_node_add(ctx->cluster, node))
         return cluster_join_finish(ctx, false, result);
     if (!cluster_node_start_io(ctx->cluster, node)) {
         (void) cluster_node_remove(ctx->cluster, node);
@@ -1100,11 +1074,12 @@ static bool cluster_binding_text_fits(const XrString *text, size_t max_length, b
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 13 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (argc < 16 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
         !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]) ||
-        !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]) || !XR_IS_FLOAT(args[11]) ||
-        !XR_IS_INT(args[12]))
+        !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]) || !XR_IS_INT(args[11]) ||
+        !XR_IS_INT(args[12]) || !XR_IS_FLOAT(args[13]) || !XR_IS_INT(args[14]) ||
+        !XR_IS_INT(args[15]))
         return xr_bool(false);
 
     /* The port range is cluster.xr's rule, checked in start() before this leaf
@@ -1140,13 +1115,15 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         tls_ptr = &tls_opts;
     }
 
-    int64_t fanout_max = XR_TO_INT(args[12]);
-    if (fanout_max <= 0 || fanout_max > UINT32_MAX)
+    int64_t topic_fanout_max = XR_TO_INT(args[14]);
+    if (XR_TO_INT(args[11]) <= 0 || XR_TO_INT(args[12]) <= 0 || topic_fanout_max <= 0 ||
+        topic_fanout_max > UINT32_MAX || XR_TO_INT(args[15]) <= 0)
         return xr_bool(false);
 
     int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]),
-                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_FLOAT(args[11]),
-                                   (uint32_t) fanout_max);
+                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_INT(args[11]),
+                                   XR_TO_INT(args[12]), XR_TO_FLOAT(args[13]),
+                                   (uint32_t) topic_fanout_max, XR_TO_INT(args[15]));
     return xr_bool(rc == 0);
 }
 
@@ -1300,7 +1277,8 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
             char reason[128];
             if (cluster_frame_decode_coro_exit(payload, payload_len, coro_name, sizeof(coro_name),
                                                reason, sizeof(reason)) == 0) {
-                cluster_monitor_handle_coro_exit(c, coro_name, reason);
+                xr_monitor_registry_notify_remote(c->monitors, c->isolate, node->name, coro_name,
+                                                  reason);
             }
             break;
         }
@@ -1472,14 +1450,12 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     /*
      * Tombstone snapshot — number of nodes in the recently-dead
      * table. A non-zero value across successive calls means we have
-     * peers that left the cluster within the past
-     * XR_TOMBSTONE_WINDOW_MS (see cluster_health.c) and will be
-     * refused if they try to rejoin. Useful for correlating "split
-     * brain" scenarios.
+     * peers that left the cluster within the source-selected retention window
+     * and will be refused if they try to rejoin. Useful for correlating split
+     * brain scenarios.
      */
-    xr_amutex_lock(&c->dead_nodes_lock);
-    xr_object_instance_set_by_key(X, info, "deadNodes", xr_int(c->tombstone_count));
-    xr_amutex_unlock(&c->dead_nodes_lock);
+    xr_object_instance_set_by_key(
+        X, info, "deadNodes", xr_int(xr_tombstone_registry_count(c->tombstones, cluster_now_ms())));
 
     /*
      * Expose the operator-configurable heartbeat knobs so ops can
@@ -1508,28 +1484,30 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_object_instance_value(info);
 }
 
-static XrValue cluster_monitor_node_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0]))
-        return xr_null();
+static XrValue cluster_register_node_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_STRING(args[0]) || !xr_value_is_channel(args[1]))
+        return xr_bool(false);
 
     XrString *name = XR_TO_STRING(args[0]);
     if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false))
-        return xr_null();
-    XrChannel *ch = cluster_monitor_node(X, name->data);
-    return ch ? xr_value_from_channel(ch) : xr_null();
+        return xr_bool(false);
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    return xr_bool(cluster && xr_monitor_registry_add_node(cluster->monitors, name->data,
+                                                           xr_value_to_channel(args[1])));
 }
 
-static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
-        return xr_null();
+static XrValue cluster_register_coro_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) ||
+        !xr_value_is_channel(args[2]))
+        return xr_bool(false);
 
     XrString *node = XR_TO_STRING(args[0]);
     XrString *coro = XR_TO_STRING(args[1]);
     if (!cluster_binding_text_fits(node, XR_NODE_NAME_MAX, false) ||
         !cluster_binding_text_fits(coro, XR_CORO_NAME_MAX, false))
-        return xr_null();
-    XrChannel *ch = cluster_monitor_coro(X, node->data, coro->data);
-    return ch ? xr_value_from_channel(ch) : xr_null();
+        return xr_bool(false);
+    return xr_bool(cluster_monitor_register_remote((XrCluster *) X->cluster, node->data, coro->data,
+                                                   xr_value_to_channel(args[2])));
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_CLUSTER 1

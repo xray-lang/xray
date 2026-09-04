@@ -2041,11 +2041,11 @@ module cluster {
   }
 
   fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64): bool"
+    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, heartbeatTickMs: i64, phiMinSamples: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64, tombstoneRetentionMs: i64): bool"
     doc: "Start the backend-neutral cluster runtime from normalized scalar configuration and the health policy cluster.xr decides"
     vm: "cluster_start_primitive"
-    argc: 13
-    arg_spec: "svsvsssvvvvvv"
+    argc: 16
+    arg_spec: "svsvsssvvvvvvvvv"
     aot: "xrt_cluster_start"
     aot_direct: true
     link_object: true
@@ -2091,28 +2091,26 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn __monitorNode {
-    signature: "(name: string): Channel<string>?"
-    doc: "Register a node-down monitor for one normalized node target"
-    vm: "cluster_monitor_node_fn"
-    argc: 1
-    arg_spec: "s"
+  fn __registerNodeMonitor {
+    signature: "(name: string, notifications: Channel<string>): bool"
+    doc: "Register one source-constructed notification channel for a normalized node target"
+    vm: "cluster_register_node_monitor_fn"
+    argc: 2
+    arg_spec: "sv"
     aot_direct: false
     link_object: false
     layer: "runtime"
-    return_ownership: "fresh"
   }
 
-  fn __monitorCoroutine {
-    signature: "(nodeName: string, coroutineName: string): Channel<string>?"
-    doc: "Register a remote-coroutine monitor for normalized node and coroutine names"
-    vm: "cluster_monitor_coro_fn"
-    argc: 2
-    arg_spec: "ss"
+  fn __registerCoroutineMonitor {
+    signature: "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool"
+    doc: "Register one source-constructed channel and enqueue its normalized remote monitor request"
+    vm: "cluster_register_coro_monitor_fn"
+    argc: 3
+    arg_spec: "ssv"
     aot_direct: false
     link_object: false
     layer: "runtime"
-    return_ownership: "fresh"
   }
 
   fn __discover {

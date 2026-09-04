@@ -50,6 +50,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"computeHandshakeProof", XLSP_SYM_FUNCTION, "fn(secret: string, nonce: Array<u8>): Array<u8>?", "", NULL, 0},
     {"handshakeProofEqual", XLSP_SYM_FUNCTION, "fn(left: Array<u8>, right: Array<u8>): bool", "", NULL, 0},
     {"heartbeatIsDead", XLSP_SYM_FUNCTION, "fn(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool", "", NULL, 0},
+    {"heartbeatTickInterval", XLSP_SYM_FUNCTION, "fn(intervalMs: i64): i64", "", NULL, 0},
+    {"tombstoneIsLive", XLSP_SYM_FUNCTION, "fn(markedAtMs: i64, nowMs: i64): bool", "", NULL, 0},
     {"discoveryClusterHash", XLSP_SYM_FUNCTION, "fn(secret: string): u64", "", NULL, 0},
     {"encodeDiscoveryAnnouncement", XLSP_SYM_FUNCTION, "fn(value: ClusterDiscoveryAnnouncement): Array<u8>?", "", NULL, 0},
     {"decodeDiscoveryAnnouncement", XLSP_SYM_FUNCTION, "fn(data: Array<u8>): ClusterDiscoveryAnnouncement?", "", NULL, 0},
@@ -96,11 +98,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"ENVELOPE_HEADER_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"SUBSCRIPTION_CAPACITY_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"TOPIC_DELIVERY_FANOUT_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"NODE_MONITOR_CAPACITY", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"COROUTINE_MONITOR_CAPACITY", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"HEARTBEAT_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"HEARTBEAT_TIMEOUT_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"MAX_MISSED_HEARTBEATS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"HEARTBEAT_TICK_MIN_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"TOMBSTONE_RETENTION_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"PHI_THRESHOLD", XLSP_SYM_CONSTANT, "unknown", "", NULL, 0},
     {"PHI_WINDOW_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"PHI_MIN_SAMPLES", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"DISCOVERY_MAGIC", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"DISCOVERY_VERSION", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"DISCOVERY_MULTICAST_GROUP", XLSP_SYM_CONSTANT, "string", "", NULL, 0},
@@ -115,7 +122,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, state: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Private scalar snapshot for one remote cluster node", NULL, 0},
     {"__ClusterSnapshot", XLSP_SYM_CLASS, "type __ClusterSnapshot = { self: string, port: i64, running: bool, nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: __ClusterTlsSnapshot }", "Private scalar snapshot read from the cluster runtime", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 83
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 90
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

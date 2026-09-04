@@ -619,6 +619,24 @@ TEST(cluster_topic_projection_matches_the_xray_surface) {
     ASSERT_FALSE(xr_topic_pattern_matches("events.>.tail", "events.user.tail"));
 }
 
+TEST(cluster_tombstone_projection_expires_and_refreshes) {
+    XrTombstoneRegistry *registry = xr_tombstone_registry_new(2, 1000);
+    ASSERT_NOT_NULL(registry);
+
+    ASSERT_TRUE(xr_tombstone_registry_add(registry, "node-a", 100));
+    ASSERT_TRUE(xr_tombstone_registry_contains(registry, "node-a", 1099));
+    ASSERT_EQ_INT(xr_tombstone_registry_count(registry, 1099), 1);
+    ASSERT_FALSE(xr_tombstone_registry_contains(registry, "node-a", 1100));
+    ASSERT_EQ_INT(xr_tombstone_registry_count(registry, 1100), 0);
+
+    ASSERT_TRUE(xr_tombstone_registry_add(registry, "node-a", 2000));
+    ASSERT_TRUE(xr_tombstone_registry_add(registry, "node-a", 2500));
+    ASSERT_EQ_INT(xr_tombstone_registry_count(registry, 3499), 1);
+    ASSERT_FALSE(xr_tombstone_registry_contains(registry, "node-a", 3500));
+
+    xr_tombstone_registry_destroy(registry);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Cluster transport protocol");
@@ -635,5 +653,6 @@ RUN_TEST(cluster_discovery_announcement_is_byte_exact);
 RUN_TEST(cluster_phi_projection_uses_bounded_history);
 RUN_TEST(cluster_wire_constants_match_the_xray_surface);
 RUN_TEST(cluster_topic_projection_matches_the_xray_surface);
+RUN_TEST(cluster_tombstone_projection_expires_and_refreshes);
 
 TEST_MAIN_END()

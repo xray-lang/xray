@@ -23,7 +23,9 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../../src/coro/xchannel.h"
+#include "../../src/coro/xmonitor_registry.h"
 #include "../../src/coro/xphi_detector.h"
+#include "../../src/coro/xtombstone_registry.h"
 #include "../../src/coro/xtopic_registry.h"
 #include "../../src/io/xcluster_wire.h"
 #include "../../src/io/xcluster_auth.h"
@@ -212,10 +214,6 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node);
 bool cluster_node_is_slow(XrClusterNode *node);
 int64_t cluster_now_ms(void);
 
-/* ========== Forward Declarations ========== */
-
-typedef struct XrRemoteCoroMonitor XrRemoteCoroMonitor;
-
 /* ========== Cluster State ========== */
 
 typedef struct XrCluster {
@@ -239,21 +237,12 @@ typedef struct XrCluster {
     int64_t heartbeat_interval_ms;
     int64_t heartbeat_timeout_ms;
     int64_t max_missed_heartbeats;
+    int64_t heartbeat_tick_ms;
+    int64_t phi_min_samples;
     double phi_threshold;
 
-    // Dead node tombstones prevent immediate rejoin of recently departed nodes.
-    struct {
-        char name[XR_NODE_NAME_MAX + 1];
-        int64_t time;
-    } *tombstones;  // dynamic array
-    int tombstone_count;
-    int tombstone_cap;
-    XrAdaptiveMutex dead_nodes_lock;
-
-    // Node monitors (CSP-style: Channel receives notification on disconnect)
-    struct XrNodeMonitor *monitors;
-    int monitor_count;
-    XrAdaptiveMutex monitors_lock;
+    XrTombstoneRegistry *tombstones;
+    XrMonitorRegistry *monitors;
 
     // Running state
     _Atomic(bool) running;
@@ -285,9 +274,6 @@ typedef struct XrCluster {
      */
     bool accept_coro_spawned;
     _Atomic(bool) accept_running;
-
-    // Remote coroutine monitors (linked list)
-    XrRemoteCoroMonitor *remote_coro_monitors;
 
     // LAN auto-discovery (NULL if not enabled)
     XrClusterDiscovery *discovery;
@@ -362,8 +348,9 @@ typedef struct XrClusterTlsOptions {
 int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
                           const char *secret, const XrClusterTlsOptions *tls,
                           int64_t heartbeat_interval_ms, int64_t heartbeat_timeout_ms,
-                          int64_t max_missed_heartbeats, double phi_threshold,
-                          uint32_t topic_delivery_fanout_max);
+                          int64_t max_missed_heartbeats, int64_t heartbeat_tick_ms,
+                          int64_t phi_min_samples, double phi_threshold,
+                          uint32_t topic_delivery_fanout_max, int64_t tombstone_retention_ms);
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
 
@@ -399,30 +386,7 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
 
 /* ========== Health & Robustness ========== */
 
-// Check all nodes for heartbeat timeout, disconnect dead ones
-void cluster_health_check_heartbeats(XrCluster *c);
-
-// Send heartbeat pings to all connected nodes
-void cluster_health_send_heartbeats(XrCluster *c);
-
-// Dead node tombstone management
-void cluster_health_mark_dead(XrCluster *c, const char *name);
-bool cluster_health_is_dead(XrCluster *c, const char *name);
-
-/* ========== Node Monitor (CSP-style fault detection) ========== */
-
-typedef struct XrNodeMonitor {
-    char node_name[XR_NODE_NAME_MAX + 1];  // "*" = monitor all nodes
-    struct XrChannel *notify_ch;           // Receives node name string on disconnect
-    struct XrNodeMonitor *next;
-} XrNodeMonitor;
-
-// Monitor a specific node. Returns a Channel that receives the node name
-// as a string when that node disconnects. Use "*" to monitor all nodes.
-struct XrChannel *cluster_monitor_node(struct XrVMRuntime *X, const char *node_name);
-
-// Fire monitors for a disconnected node (called internally)
-void cluster_monitor_fire(XrCluster *c, const char *node_name);
+void cluster_health_tick(XrCluster *cluster);
 
 /* ========== Topic Pub/Sub ========== */
 
@@ -453,26 +417,11 @@ void cluster_transport_handle_frame(XrCluster *c, struct XrClusterNode *from, co
 
 /* ========== Remote Coroutine Monitoring ========== */
 
-// Remote monitor entry: tracks which remote coroutine we're monitoring
-typedef struct XrRemoteCoroMonitor {
-    char node_name[64];           // Remote node name
-    char coro_name[128];          // Remote coroutine name
-    struct XrChannel *notify_ch;  // Local channel for exit notification
-    struct XrRemoteCoroMonitor *next;
-} XrRemoteCoroMonitor;
+bool cluster_monitor_register_remote(XrCluster *cluster, const char *node_name,
+                                     const char *coroutine_name, struct XrChannel *channel);
 
-// Monitor a coroutine on a remote node. Returns a Channel that receives
-// exit reason string when the remote coroutine terminates.
-// cluster.monitor("node_name", "coro_name")
-struct XrChannel *cluster_monitor_coro(struct XrVMRuntime *X, const char *node_name,
-                                       const char *coro_name);
-
-// Handle incoming CORO_EXIT frame from a remote node
-void cluster_monitor_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason);
-
-// Handle incoming CORO_MONITOR request from a remote node
-void cluster_monitor_handle_coro_request(XrCluster *c, struct XrClusterNode *node,
-                                         const char *coro_name);
+void cluster_monitor_handle_coro_request(XrCluster *cluster, struct XrClusterNode *node,
+                                         const char *coroutine_name);
 
 /* ========== LAN Discovery ========== */
 

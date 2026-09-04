@@ -90,17 +90,22 @@ export const ENVELOPE_HEADER_SIZE = 64
 // upper bound is what the channel subsystem will allocate.
 export const SUBSCRIPTION_CAPACITY_MAX = 1048576
 export const TOPIC_DELIVERY_FANOUT_MAX = 256
+export const NODE_MONITOR_CAPACITY = 8
+export const COROUTINE_MONITOR_CAPACITY = 1
 
 // The heartbeat schedule. These are the values a node runs with; the leaf is
 // told them rather than holding a second copy.
 export const HEARTBEAT_INTERVAL_MS = 5000
 export const HEARTBEAT_TIMEOUT_MS = 15000
 export const MAX_MISSED_HEARTBEATS = 3
+export const HEARTBEAT_TICK_MIN_MS = 500
+export const TOMBSTONE_RETENTION_MS = 60000
 
 // The phi detector has one policy threshold and one bounded observation
 // window. Neither value is a transport concern.
 export const PHI_THRESHOLD = 8.0
 export const PHI_WINDOW_SIZE = 100
+export const PHI_MIN_SAMPLES = 3
 
 // LAN discovery only announces candidates. Authentication still happens on
 // the TCP connection, so the datagram contains a non-secret cluster selector.
@@ -469,9 +474,19 @@ export final class PhiDetector {
 export fn heartbeatIsDead(phi: f64, samples: i64, elapsedMs: i64,
                           missedHeartbeats: i64, timeoutMs: i64,
                           maxMissedHeartbeats: i64) -> bool {
-    if (samples >= 3) { return phi > PHI_THRESHOLD }
+    if (samples >= PHI_MIN_SAMPLES) { return phi > PHI_THRESHOLD }
     if (elapsedMs <= timeoutMs) { return false }
     return missedHeartbeats + 1 >= maxMissedHeartbeats
+}
+
+export fn heartbeatTickInterval(intervalMs: i64) -> i64 {
+    var tick = intervalMs / 2
+    return tick < HEARTBEAT_TICK_MIN_MS ? HEARTBEAT_TICK_MIN_MS : tick
+}
+
+export fn tombstoneIsLive(markedAtMs: i64, nowMs: i64) -> bool {
+    if (nowMs < markedAtMs) { return true }
+    return nowMs - markedAtMs < TOMBSTONE_RETENTION_MS
 }
 
 // ========== Discovery policy ===========
@@ -846,10 +861,20 @@ export fn info() -> ClusterInfo? {
 export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
     if (coroName == null) {
         if (name != "*" && !validNodeName(name)) { return null }
-        return __monitorNode(name)
+        var notifications = Channel<string>(NODE_MONITOR_CAPACITY)
+        if (!__registerNodeMonitor(name, notifications)) {
+            notifications.close()
+            return null
+        }
+        return notifications
     }
     if (!validNodeName(name) || !validCoroutineName(coroName!)) { return null }
-    return __monitorCoroutine(name, coroName!)
+    var notifications = Channel<string>(COROUTINE_MONITOR_CAPACITY)
+    if (!__registerCoroutineMonitor(name, coroName!, notifications)) {
+        notifications.close()
+        return null
+    }
+    return notifications
 }
 
 // ========== Lifecycle ==========
@@ -870,11 +895,13 @@ export fn start(config: ClusterConfig) -> bool {
     // tuning choice: a detector needs at least one interval to elapse before it
     // may call a peer late, and at least one missed beat before it kills it.
     if (interval <= 0 || timeout < interval || missed <= 0) { return false }
+    var tick = heartbeatTickInterval(interval)
     var secret = config.secret ?? ""
     if (!_fitsCString(secret, SHARED_SECRET_MAX_BYTES, true)) { return false }
     if (config.tls == null) {
         return __start(config.name, config.port, secret, false, "", "", "", false, interval,
-                       timeout, missed, PHI_THRESHOLD, TOPIC_DELIVERY_FANOUT_MAX)
+                       timeout, missed, tick, PHI_MIN_SAMPLES, PHI_THRESHOLD,
+                       TOPIC_DELIVERY_FANOUT_MAX, TOMBSTONE_RETENTION_MS)
     }
     var tls = config.tls!
     var caFile = tls.caFile ?? ""
@@ -896,8 +923,11 @@ export fn start(config: ClusterConfig) -> bool {
         interval,
         timeout,
         missed,
+        tick,
+        PHI_MIN_SAMPLES,
         PHI_THRESHOLD,
-        TOPIC_DELIVERY_FANOUT_MAX
+        TOPIC_DELIVERY_FANOUT_MAX,
+        TOMBSTONE_RETENTION_MS
     )
 }
 

@@ -122,7 +122,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__udpFromHost", 1, "xrt_net_udp_from_host", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpFromPort", 1, "xrt_net_udp_from_port", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"http2", "__supported", 0, "xrt_http_h2_supported", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"cluster", "__start", 13, "xrt_cluster_start", "svsvsssvvvvvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__start", 16, "xrt_cluster_start", "svsvsssvvvvvvvvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__join", 2, "xrt_cluster_join", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__stop", 0, "xrt_cluster_stop", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__publishLocal", 2, "xrt_cluster_publish_local", "sv", CG_AOT_RET_I64, NULL, UINT32_C(0), NULL, NULL, 0},
