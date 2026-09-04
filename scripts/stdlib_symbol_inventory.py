@@ -147,10 +147,9 @@ PRODUCTION_EXCEPT_NON_PUBLIC = {"prelude"}
 # that cannot exist.
 #
 # The prelude is the only one. `stdlib/prelude/builtin_symbols.def` is expanded
-# by the C preprocessor into eight compiler translation units -- xanalyzer.c,
-# xtype_ref_resolve.c, xanalyzer_builtin_interfaces.c, xanalyzer_builtins.c and
-# xlsp_keywords.c -- so it has to exist before any `.xr` can be parsed at all,
-# and a file resolved at run time cannot feed a table built at C compile time.
+# by the C preprocessor into the compiler, runtime registry and LSP translation
+# units, so it has to exist before any `.xr` can be parsed at all, and a file
+# resolved at run time cannot feed a table built at C compile time.
 # The module exports nothing; its registry installation lives in
 # src/module/xprelude_runtime.c,
 # while check_stdlib_boundary.py requires an `xray_semantic` module's `.xr` to
@@ -1151,6 +1150,7 @@ QUEUE_ORDER = (
     "establish-xray-source",
     "needs-generic-loader",
     "native-leaf-only",
+    "compiler-owned-language-core",
     "test-only",
 )
 
@@ -1183,6 +1183,13 @@ def classify_queue(modules: list[ModuleRow], rows: list[SymbolRow]) -> None:
         if mrow.audience == "test-only":
             mrow.queue = "test-only"
             mrow.queue_reason = "not part of the production standard-library surface"
+            continue
+        if has_compiler_owned_semantic_source(mrow, mrow.xray_body_symbols):
+            mrow.queue = "compiler-owned-language-core"
+            mrow.queue_reason = (
+                f"{mrow.semantic_source} defines implicit language symbols before the source "
+                "module graph exists; an ordinary .xr module cannot own this contract"
+            )
             continue
         if not mrow.semantic_source.endswith(".xr"):
             mrow.queue = "establish-xray-source"

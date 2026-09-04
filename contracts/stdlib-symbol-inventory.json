@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "base": "4cde93473571fa6fb1a847e62aaf4e4ae12f736b",
+  "base": "81c178f2050952ccf1f434bf1cada69fc785ef0d",
   "counts": {
     "modules": 33,
     "production_modules": 31,
@@ -22,9 +22,10 @@
     "def_symbols_without_manifest_module": 0,
     "queue": {
       "deepen-existing-xray": 0,
-      "establish-xray-source": 1,
+      "establish-xray-source": 0,
       "needs-generic-loader": 0,
       "native-leaf-only": 30,
+      "compiler-owned-language-core": 1,
       "test-only": 2
     }
   },
@@ -45,8 +46,8 @@
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 0,
       "native_leaf_symbols": 0,
-      "queue": "establish-xray-source",
-      "queue_reason": "native_primitive module declares stdlib/prelude/builtin_symbols.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
+      "queue": "compiler-owned-language-core",
+      "queue_reason": "stdlib/prelude/builtin_symbols.def defines implicit language symbols before the source module graph exists; an ordinary .xr module cannot own this contract",
       "probe": {}
     },
     {

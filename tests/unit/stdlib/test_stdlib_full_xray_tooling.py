@@ -248,6 +248,28 @@ class StrictProbeReaderTest(unittest.TestCase):
 
 
 class InventoryTraceTest(unittest.TestCase):
+    def test_prelude_registry_is_compiler_core_not_source_migration_work(self) -> None:
+        modules, rows, defects = inventory.build_rows(ROOT)
+        self.assertEqual([], defects)
+        prelude = next(module for module in modules if module.name == "prelude")
+        self.assertEqual("stdlib/prelude/builtin_symbols.def", prelude.semantic_source)
+        self.assertEqual("compiler-owned-language-core", prelude.queue)
+        self.assertIn("before the source module graph exists", prelude.queue_reason)
+        self.assertFalse(prelude.enters_module_graph)
+        self.assertEqual([], [row for row in rows if row.module == "prelude"])
+
+    def test_prelude_compiler_core_exception_is_fail_closed(self) -> None:
+        prelude = inventory.ModuleRow(
+            name="prelude",
+            layer="L1",
+            policy="native_primitive",
+            audience="production",
+            semantic_source="stdlib/prelude/builtin_symbols.def",
+            xray_body_symbols=1,
+        )
+        inventory.classify_queue([prelude], [])
+        self.assertEqual("establish-xray-source", prelude.queue)
+
     def test_coro_schema_separates_xray_types_from_compiler_intrinsics(self) -> None:
         _modules, rows, defects = inventory.build_rows(ROOT)
         self.assertFalse(any("Coro" in item for item in defects))
