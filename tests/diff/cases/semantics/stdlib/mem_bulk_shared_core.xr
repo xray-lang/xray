@@ -1,7 +1,6 @@
-// mem.copy/move/set/compare + mem.cacheLineSize (task 147 §7.4/§7.5). libc
-// memcpy/memmove/memset/memcmp are the shared semantics; VM decodes raw
-// pointers from address-ints, AOT uses the native .ptr — both must agree.
-// MutPtr args flow into Ptr params via mut->const coercion.
+// mem.copy/move/set/compare + mem.cacheLineSize. Copy/fill/compare and all
+// count validation are Xray-owned; only overlap-tolerant move remains a host
+// primitive. MutPtr args flow into Ptr params via mut->const coercion.
 import mem
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -29,6 +28,12 @@ print(mem.compare(src, dst, 8))
 // diverge dst[0], compare non-zero
 unsafe { dst[0] = 9 }
 print(mem.compare(src, dst, 8) != 0)
+
+// Non-positive ranges are uniformly empty and never dereference their pointers.
+mem.copy(MutPtr<u8>.null(), Ptr<u8>.null(), -1)
+mem.move(MutPtr<u8>.null(), Ptr<u8>.null(), 0)
+mem.set(MutPtr<u8>.null(), 255, -1)
+print(mem.compare(Ptr<u8>.null(), Ptr<u8>.null(), -1))
 
 // move (overlapping): dst = [5,1,1,1,1,1,1,1]; copy [0..4) to [2..6)
 mem.set(dst, 1, 8)

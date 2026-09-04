@@ -12017,10 +12017,7 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_panic",
         "xrt_abort",
         "xrt_type_no_index",
-        "xrt_mem_copy",
         "xrt_mem_move",
-        "xrt_mem_set",
-        "xrt_mem_compare",
         /* Static cleanup depth is header-inline thread-local state, not a
          * runtime dispatch or dynamic registration stack. */
         "xrt_cleanup_enter",

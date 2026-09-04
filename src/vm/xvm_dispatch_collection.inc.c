@@ -1008,7 +1008,7 @@ vmcase(OP_LEN) {
         R(a) = xr_int((xr_Integer) xr_range_length(range));
         vmbreak;
     }
-    int64_t buffer_length = xr_mem_buffer_length(value);
+    int64_t buffer_length = xr_buffer_length(value);
     if (buffer_length >= 0) {
         R(a) = xr_int((xr_Integer) buffer_length);
         vmbreak;
@@ -2621,7 +2621,7 @@ vmcase(OP_BUFFER_MATERIALIZE) {
         }
         uint16_t layout_id = xr_struct_layout_register(&isolate->vm, layout);
         uint8_t *dst = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + (uint16_t) raw_slot * 16u;
-        if (!xr_mem_buffer_materialize(R(b), dst, size, align, layout)) {
+        if (!xr_buffer_materialize(R(b), dst, size, align, layout)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                              "mem.assumeInitialized<T>() Buffer size/alignment evidence mismatch");
         }
@@ -2632,7 +2632,7 @@ vmcase(OP_BUFFER_MATERIALIZE) {
          * max_align_t even though it supports _Alignas. */
         _Alignas(16) uint8_t bytes[16] = {0};
         if (size > sizeof(bytes) || !xr_ffi_type_is_memory_scalar(code) ||
-            !xr_mem_buffer_materialize(R(b), bytes, size, align, NULL)) {
+            !xr_buffer_materialize(R(b), bytes, size, align, NULL)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                              "mem.assumeInitialized<T>() scalar layout evidence mismatch");
         }

@@ -1457,7 +1457,7 @@ module mem {
     visibility: "internal"
     super_slot: "objectClass"
     core_slot: "memBufferClass"
-    native_body: "g_mem_buffer_body_desc"
+    native_body_expr: "xr_buffer_native_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
     builtin_kind: "XR_BK_BUFFER"
   }
@@ -1512,18 +1512,6 @@ module mem {
     doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_flush"
     aot: "xrt_mem_cache_flush"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn __cacheInvalidate {
-    signature: "(ptr: Ptr<u8>, n: i64): ()"
-    doc: "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available"
-    vm: "mem_cache_invalidate"
-    aot: "xrt_mem_cache_invalidate"
     argc: 2
     arg_spec: "vv"
     aot_direct: true
@@ -1634,19 +1622,6 @@ module mem {
     layer: "core"
   }
 
-  fn __copy {
-    signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
-    doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
-    allocation: "no_heap"
-    vm: "mem_copy"
-    aot: "xrt_mem_copy"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
   fn __move {
     signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (may overlap; memmove)"
@@ -1658,31 +1633,6 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "no_heap"
-  }
-
-  fn __set {
-    signature: "(dst: MutPtr<u8>, u8: i64, n: i64): ()"
-    doc: "Fill n bytes at dst with byte (memset)"
-    vm: "mem_set"
-    aot: "xrt_mem_set"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-    allocation: "no_heap"
-  }
-
-  fn __compare {
-    signature: "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64"
-    doc: "Compare n bytes at a and b (memcmp: <0, 0, >0)"
-    vm: "mem_compare"
-    aot: "xrt_mem_compare"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
   }
 
   fn __volatileLoad {

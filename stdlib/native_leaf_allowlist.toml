@@ -530,7 +530,7 @@ class = "alloc_leaf"
 abi = "malloc(3)"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the system heap -- plain libc malloc, or mimalloc where the build selects it. The byte block always comes from the system heap; only the handle holding it is managed. VM stdlib/mem/mem.c allocates an XrObjectInstance whose native body destructor frees the block when the coroutine heap's refcount reaches zero; AOT src/aot/xrt_mem.h allocates an ARC cell marked XRT_ARC_KIND_BUFFER whose builtin destructor does the same"
+provider = "the system heap -- plain libc malloc, or mimalloc where the build selects it. The byte block always comes from the system heap; only the handle holding it is managed. VM stdlib/mem/mem.c enters runtime/object/xbuffer.c, whose native body destructor frees the block when the coroutine heap's refcount reaches zero; AOT src/aot/xrt_mem.h allocates an ARC cell marked XRT_ARC_KIND_BUFFER whose builtin destructor does the same"
 deletion_trigger = "when Xray can express an owned byte block with a destructor in its own type system, so a Buffer is an Xray type over a raw allocation rather than a native handle the runtime has to know how to destroy"
 
 [[leaf]]
@@ -540,7 +540,7 @@ class = "alloc_leaf"
 abi = "posix_memalign(3); Win32 _aligned_malloc, or mi_malloc_aligned under mimalloc"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the system heap through xr_malloc_aligned on the VM and XRT_MALLOC's aligned form on AOT, with the same managed-handle arrangement as mem.__alloc"
+provider = "the system heap through runtime/object/xbuffer.c xr_malloc_aligned on the VM and XRT_MALLOC's aligned form on AOT, with the same managed-handle arrangement as mem.__alloc"
 deletion_trigger = "same as mem.__alloc: when Xray can express an owned byte block with a destructor in its own type system. The alignment argument is one parameter of the same allocation and does not need a separate step"
 
 [[leaf]]
@@ -565,16 +565,6 @@ deletion_trigger = "when Xray can express a cache-maintenance instruction with i
 
 [[leaf]]
 module = "mem"
-symbol = "__cacheInvalidate"
-class = "machine_intrinsic_leaf"
-abi = "the same x86 clflush plus seq_cst fence as mem.__cacheFlush; on other architectures only the fence"
-ownership = "none"
-effect = "nothrow"
-provider = "the compiler and the hardware on AOT, nothing on the VM. AOT routes both this leaf and mem.__cacheFlush through the identical xrt_mem_cache_maintain_range with identical arguments, so the two are indistinguishable in the generated code"
-deletion_trigger = "when the two directions are actually distinct operations -- today they generate the same instructions, so this leaf can be deleted as soon as a caller is shown not to need a separate name for it, ahead of any language capability"
-
-[[leaf]]
-module = "mem"
 symbol = "__cacheLineSize"
 class = "build_identity_leaf"
 abi = "none; a compile-time constant, not sysconf(3) _SC_LEVEL1_DCACHE_LINESIZE and not sysctlbyname(3) hw.cachelinesize"
@@ -582,26 +572,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "the preprocessor. The VM returns XR_CACHE_LINE from src/base/xplatform.h, which is literally 64; AOT returns the literal 64. The two agree and both are wrong on Apple Silicon, whose line is 128 bytes"
 deletion_trigger = "when the compiler exposes the target's cache line size to Xray source as a constant -- at which point the wrong value becomes a build-configuration question rather than a leaf. If it is ever made a runtime query instead, it becomes a host_abi_leaf and this record has to be rewritten"
-
-[[leaf]]
-module = "mem"
-symbol = "__compare"
-class = "host_abi_leaf"
-abi = "memcmp(3)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/mem/mem.c mem_compare; AOT src/aot/xrt_mem.h xrt_mem_compare. Two call sites, one entry point"
-deletion_trigger = "when Xray can express a byte-range comparison the compiler lowers to the same optimised routine; an Xray loop would be correct but would give up libc's vectorised implementation"
-
-[[leaf]]
-module = "mem"
-symbol = "__copy"
-class = "host_abi_leaf"
-abi = "memcpy(3)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/mem/mem.c mem_copy; AOT src/aot/xrt_mem.h xrt_mem_copy. Two call sites, one entry point"
-deletion_trigger = "when Xray can express a non-overlapping byte-range copy the compiler lowers to memcpy -- the non-overlap precondition also has to be statable, since it is what separates this leaf from mem.__move"
 
 [[leaf]]
 module = "mem"
@@ -672,16 +642,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "the compiler on AOT (src/aot/xrt_mem.h), and nothing on the VM, where stdlib/mem/mem.c discards both arguments. Outside GCC and Clang the AOT path is also a no-op"
 deletion_trigger = "when Xray can express a prefetch hint. This is the one leaf here whose VM/AOT difference is genuinely unobservable -- a prefetch has no semantics beyond timing -- so it needs no reconciliation first"
-
-[[leaf]]
-module = "mem"
-symbol = "__set"
-class = "host_abi_leaf"
-abi = "memset(3)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/mem/mem.c mem_set; AOT src/aot/xrt_mem.h xrt_mem_set. Two call sites, one entry point"
-deletion_trigger = "when Xray can express a byte-range fill the compiler lowers to memset; an Xray loop would be correct but would give up libc's vectorised implementation"
 
 [[leaf]]
 module = "mem"

@@ -38,7 +38,7 @@
 
 #include "cluster_internal.h"
 #include "cluster_topic_core.h"
-#include "../mem/mem.h"
+#include "../../src/runtime/object/xbuffer.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xchannel_ops.h"
 #include "../../src/runtime/xisolate_internal.h"
@@ -433,7 +433,7 @@ XrClusterDelivery cluster_transport_deliver_local(XrCluster *c, const char *topi
     int delivered = 0;
     int rejected = 0;
     for (int i = 0; i < e.count; i++) {
-        XrValue buffer = xr_mem_buffer_copy_from_bytes(c->isolate, envelope, envelope_len);
+        XrValue buffer = xr_buffer_copy_from_bytes(c->isolate, envelope, envelope_len);
         if (XR_IS_NULL(buffer)) {
             rejected++;
             continue;

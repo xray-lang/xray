@@ -17,7 +17,7 @@
 #include "../../stdlib/common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe
 #include "../../stdlib/net/io.h"
-#include "../../stdlib/mem/mem.h"
+#include "../../src/runtime/object/xbuffer.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"
@@ -1312,7 +1312,7 @@ static XrValue cluster_send_primitive(XrVMRuntime *X, XrValue *args, int argc) {
 
     const uint8_t *envelope = NULL;
     size_t envelope_len = 0;
-    if (!xr_mem_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
+    if (!xr_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
         return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
 
     XrString *topic = XR_TO_STRING(args[0]);

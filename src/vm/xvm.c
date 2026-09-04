@@ -87,7 +87,7 @@
 #include "../base/xarena.h"
 #include "../os/os_time.h"
 #include "../runtime/object/xstringbuilder.h"
-#include "../../stdlib/mem/mem.h"
+#include "../runtime/object/xbuffer.h"
 
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xjson_serde.h"

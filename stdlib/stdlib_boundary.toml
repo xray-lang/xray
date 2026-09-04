@@ -184,7 +184,7 @@ load_time_classes = ["Buffer"]
 # reads.
 public_native = []
 private_native_sources = ["stdlib/mem/mem.c"]
-private_native_reason = "Private fence, cache, allocation, page, address and bulk-byte leaves consumed by mem.xr"
+private_native_reason = "Private allocator, page, overlap-move and machine-intrinsic leaves consumed by mem.xr"
 perf_suite = "stdlib/mem"
 
 [[module]]
