@@ -1073,6 +1073,13 @@ fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: stri
                       heartbeatIntervalMs)) {}
 }
 
+fn _stopFailedHealthGeneration(token: i64) {
+    var (_, active) = _runtimeActiveToken.compareExchange(token, 0)
+    if (!active) { return }
+    __stop()
+    _clearSourceState()
+}
+
 fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
                maxMissedHeartbeats: i64) {
     while (_runtimeActiveToken.load() == token) {
@@ -1081,14 +1088,12 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
         var sentAtMs = time.monotonic()
         var heartbeat = encodeHeartbeat(FRAME_HEARTBEAT_PING, sentAtMs)
         if (heartbeat == null) {
-            var (_, released) = _runtimeActiveToken.compareExchange(token, 0)
-            _clearSourceState()
+            _stopFailedHealthGeneration(token)
             return
         }
         var peers = __healthSnapshot(heartbeat!, sentAtMs)
         if (peers == null) {
-            var (_, released) = _runtimeActiveToken.compareExchange(token, 0)
-            _clearSourceState()
+            _stopFailedHealthGeneration(token)
             return
         }
         for (var i = 0; i < len(peers!); i++) {
