@@ -8048,8 +8048,9 @@ static bool oracle_direct_local_callee_use(const VerifyAuthority *ctx, uint32_t 
 /* A private native member is also resolution authority at its CALL edge.  Its
  * IMPORT_REF selects one registry member; C emission invokes that member's ABI
  * directly and never consumes the callable as a runtime value. */
-static bool oracle_native_direct_callee_use(const VerifyAuthority *ctx, uint32_t operation_index,
-                                            uint16_t operand_index, uint32_t source_value) {
+static bool oracle_native_module_scalar_callee_use(const VerifyAuthority *ctx,
+                                                   uint32_t operation_index, uint16_t operand_index,
+                                                   uint32_t source_value) {
     const XrSemanticOperationRecord *operation =
         ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
     uint32_t operand_count = 0;
@@ -8072,6 +8073,76 @@ static bool oracle_native_direct_callee_use(const VerifyAuthority *ctx, uint32_t
            call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR;
 }
 
+static bool oracle_native_direct_candidate(const VerifyAuthority *ctx, uint32_t operation_index) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t call_index = ctx && operation_index < ctx->operation_count
+                              ? ctx->call_by_operation[operation_index]
+                              : XR_SEMANTIC_INDEX_NONE;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        ctx ? xr_target_plan_calls(ctx->target_plan, &call_count) : NULL;
+    const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
+    const XrSemanticCallTargetRecord *target =
+        call && call->semantic_call_target != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_call_target(ctx->semantic, call->semantic_call_target)
+            : NULL;
+    return operation && call && target && operation->opcode == XI_CALL &&
+           target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT && target->operation == operation_index;
+}
+
+/* A grounded native-direct IMPORT_REF is a resolution token only.  Its exact
+ * member identity, capability set and invocation ABI are all consumed from the
+ * verified TargetPlan call row; the callable never acquires runtime storage. */
+static bool oracle_native_direct_callee_use(const VerifyAuthority *ctx, uint32_t operation_index,
+                                            uint16_t operand_index, uint32_t source_value) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    uint32_t call_index = ctx && operation_index < ctx->operation_count
+                              ? ctx->call_by_operation[operation_index]
+                              : XR_SEMANTIC_INDEX_NONE;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        ctx ? xr_target_plan_calls(ctx->target_plan, &call_count) : NULL;
+    const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
+    const XrSemanticCallTargetRecord *target =
+        call && call->semantic_call_target != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_call_target(ctx->semantic, call->semantic_call_target)
+            : NULL;
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId native_identity = {{0}};
+    XrStableId expected_identity = {{0}};
+    return ctx && operation && operands && call && target && operand_index == 0 &&
+           operation->operand_count != 0 && operation->operand_begin < operand_count &&
+           operands[operation->operand_begin].value == source_value &&
+           target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT &&
+           target->operation == operation_index && target->function == XR_SEMANTIC_INDEX_NONE &&
+           target->dependency == XR_SEMANTIC_INDEX_NONE &&
+           target->source_export == XR_SEMANTIC_INDEX_NONE &&
+           target->callable_type == XR_SEMANTIC_INDEX_NONE &&
+           xr_semantic_native_direct_call_shape_is_exact(ctx->semantic, operation, &entry,
+                                                         &native_identity) &&
+           entry && operation->operand_count == (uint16_t) (entry->argc + 1u) &&
+           aot_pair_identity("xray-target-native-direct-v1", target->id, native_identity,
+                             entry->runtime_capabilities, &expected_identity) &&
+           xr_stable_id_equal(call->identity, expected_identity) && call->id == call_index &&
+           call->semantic_operation == operation_index &&
+           call->caller_function == operation->function &&
+           call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+           call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+           call->source_export == XR_SEMANTIC_INDEX_NONE &&
+           aot_stable_id_is_zero(call->source_export_identity) &&
+           aot_stable_id_is_zero(call->source_callee_identity) &&
+           xr_stable_id_equal(call->native_callee_identity, native_identity) &&
+           call->runtime_capabilities == entry->runtime_capabilities &&
+           call->argument_count == entry->argc && call->adapter_count == 0 && call->flags == 0 &&
+           call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT &&
+           call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT;
+}
+
 /* Exact source and private-native callees are resolution authority, not
  * runtime arguments. Their identity is consumed by the verified call row, so
  * representation refinement must not invent an adapter for the callee edge. */
@@ -8084,6 +8155,8 @@ static bool oracle_resolution_only_direct_callee_use(const VerifyAuthority *ctx,
                  binding->slot == XR_SEMANTIC_INDEX_NONE &&
                  oracle_direct_local_callee_use(ctx, operation_index, operand_index, source_value);
     return local ||
+           oracle_native_module_scalar_callee_use(ctx, operation_index, operand_index,
+                                                  source_value) ||
            oracle_native_direct_callee_use(ctx, operation_index, operand_index, source_value);
 }
 
@@ -9326,6 +9399,95 @@ static bool verify_index_set_i64_identity_use_is_exact(const VerifyAuthority *ct
            register_rep->kind == XR_MACHINE_REP_I64 && memory_rep->kind == XR_MACHINE_REP_I64;
 }
 
+/* Every generated native-direct provider argument uses the `v` ABI carrier.
+ * The caller representation remains the value's frozen source storage, while
+ * the callee side is always the dynamic tagged machine row.  This distinction
+ * is observable for mixed managed/scalar signatures: it is the authority for
+ * the scalar box adapter and prevents the managed value from being treated as
+ * an addressable language-level ref. */
+static bool oracle_native_direct_argument_storage(const VerifyAuthority *ctx,
+                                                  uint32_t operation_index, uint16_t operand_index,
+                                                  uint32_t source_value, XrRep *out_storage) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    uint32_t call_index = ctx && operation_index < ctx->operation_count
+                              ? ctx->call_by_operation[operation_index]
+                              : XR_SEMANTIC_INDEX_NONE;
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    const XrTargetCallRecord *calls =
+        ctx ? xr_target_plan_calls(ctx->target_plan, &call_count) : NULL;
+    const XrTargetCallArgumentRecord *arguments =
+        ctx ? xr_target_plan_call_arguments(ctx->target_plan, &argument_count) : NULL;
+    const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
+    const XrSemanticCallTargetRecord *target =
+        call && call->semantic_call_target != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_call_target(ctx->semantic, call->semantic_call_target)
+            : NULL;
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId native_identity = {{0}};
+    XrStableId expected_call = {{0}};
+    if (!ctx || !operation || !operands || !calls || !arguments || !call || !target ||
+        !out_storage || operand_index == 0 || operand_index >= operation->operand_count ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        target->kind != XR_SEM_CALL_TARGET_NATIVE_DIRECT || target->operation != operation_index ||
+        !xr_semantic_native_direct_call_shape_is_exact(ctx->semantic, operation, &entry,
+                                                       &native_identity) ||
+        !entry || operation->operand_count != (uint16_t) (entry->argc + 1u) ||
+        !aot_pair_identity("xray-target-native-direct-v1", target->id, native_identity,
+                           entry->runtime_capabilities, &expected_call) ||
+        !xr_stable_id_equal(call->identity, expected_call) || call->id != call_index ||
+        call->semantic_operation != operation_index ||
+        call->caller_function != operation->function ||
+        call->runtime_capabilities != entry->runtime_capabilities ||
+        !xr_stable_id_equal(call->native_callee_identity, native_identity) ||
+        call->argument_count != entry->argc || call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin || call->adapter_count != 0 ||
+        call->flags != 0 || call->target_kind != XR_TARGET_CALL_TARGET_NATIVE_DIRECT ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT)
+        return false;
+
+    uint16_t ordinal = (uint16_t) (operand_index - 1u);
+    uint32_t semantic_operand = operation->operand_begin + operand_index;
+    const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+    const XrTargetCallArgumentRecord *argument = &arguments[call->argument_begin + ordinal];
+    const XrTargetValueRepRecord *caller = verify_target_value_rep(ctx, source_value);
+    const XrTargetMachineRepRecord *callee_register =
+        xr_target_plan_machine_rep(ctx->target_plan, argument->callee_register_rep);
+    const XrTargetMachineRepRecord *callee_memory =
+        xr_target_plan_machine_rep(ctx->target_plan, argument->callee_memory_rep);
+    XrStableId expected_argument = {{0}};
+    if (!caller || operand->value != source_value || operand->role != XR_SEM_OPERAND_ARGUMENT ||
+        operand->parameter != (int16_t) ordinal || operand->parameter_mode != XR_PARAM_READ ||
+        operand->access != XR_CALL_ARG_PLAIN || operand->origin != XI_PLACE_ORIGIN_NONE ||
+        operand->lifetime != XI_PLACE_LIFETIME_NONE || operand->escape != XI_PLACE_ESCAPE_NONE ||
+        operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+        operand->transfer_mode != XR_TRANSFER_SHARE ||
+        operand->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        !aot_pair_identity("xray-target-native-direct-argument-v1", target->id, native_identity,
+                           ordinal, &expected_argument) ||
+        !xr_stable_id_equal(argument->identity, expected_argument) ||
+        argument->call != call_index || argument->semantic_operand != semantic_operand ||
+        argument->semantic_value != source_value ||
+        argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+        argument->caller_slot != caller->slot || argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+        argument->register_rep != caller->register_rep ||
+        argument->memory_rep != caller->memory_rep || !callee_register || !callee_memory ||
+        callee_register->kind != XR_MACHINE_REP_DYN_VALUE ||
+        callee_memory->kind != XR_MACHINE_REP_DYN_VALUE || argument->ordinal != ordinal ||
+        argument->mode != XR_TARGET_CALL_VALUE || argument->ownership != XR_TARGET_CALL_READ ||
+        argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != 0 ||
+        argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        argument->reserved8[0] != 0 || argument->reserved8[1] != 0 || argument->reserved8[2] != 0)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    return true;
+}
+
 static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_index,
                                uint16_t operand_index, uint32_t source_value, XrRep *out_storage) {
     const XrSemanticOperationRecord *operation =
@@ -9677,6 +9839,12 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             return oracle_machine_storage(ctx, operation->result_value, out_storage, &ignored_kind);
         case XI_CALL:
         case XI_TAIL_CALL: {
+            if (oracle_native_direct_candidate(ctx, operation_index)) {
+                if (operation->opcode != XI_CALL || operand_index == 0)
+                    return false;
+                return oracle_native_direct_argument_storage(ctx, operation_index, operand_index,
+                                                             source_value, out_storage);
+            }
             XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_call_use_status(
                 ctx->semantic, ctx->target_plan, operation_index, operand_index, source_value);
             if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)

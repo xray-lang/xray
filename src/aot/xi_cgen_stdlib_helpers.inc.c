@@ -60,6 +60,20 @@ typedef struct CgAotStdlibMethod {
     uint16_t variant_count;
 } CgAotStdlibMethod;
 
+typedef enum CgNativeDirectEmissionStatus {
+    CG_NATIVE_DIRECT_EMISSION_UNCOVERED = 0,
+    CG_NATIVE_DIRECT_EMISSION_EXACT,
+    CG_NATIVE_DIRECT_EMISSION_INVALID,
+} CgNativeDirectEmissionStatus;
+
+typedef struct CgNativeDirectEmissionView {
+    const XrStdlibDefEntry *entry;
+    const CgAotStdlibMethod *method;
+    const XrSemanticOperationRecord *operation;
+    const XrTargetCallRecord *call;
+    const XrTargetCallArgumentRecord *arguments;
+} CgNativeDirectEmissionView;
+
 #include "xstdlib_aot_methods_generated.inc.c"
 
 static const CgAotStdlibMethod *cg_aot_stdlib_generated_method_at(int index) {
@@ -70,6 +84,160 @@ static const CgAotStdlibMethod *cg_aot_stdlib_generated_method_at(int index) {
 
 static const CgAotStdlibMethod *cg_aot_stdlib_method_at(int index) {
     return cg_aot_stdlib_generated_method_at(index);
+}
+
+static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, const char *method,
+                                                          uint16_t argc);
+
+/* Rebind one live Xi call to the immutable SemanticPlan/TargetPlan authority
+ * before exposing the generated shim row to emission.  The generated registry
+ * is implementation data, not authorization: it may classify a candidate so
+ * malformed native-direct sites fail closed, but it can never select a shim on
+ * its own. */
+static CgNativeDirectEmissionStatus
+cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+                               CgNativeDirectEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || value->op != XI_CALL || value->nargs < 1 || !value->args)
+        return CG_NATIVE_DIRECT_EMISSION_UNCOVERED;
+
+    const XiValue *callee = cg_unwrap_identity_value(value->args[0]);
+    const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
+                                 ? (const XiImportRef *) callee->aux
+                                 : cg_import_ref_for_value(ctx, function, callee);
+    uint16_t argc = (uint16_t) (value->nargs - 1u);
+    const XrStdlibDefEntry *candidate =
+        ref && ref->module_path && ref->member_name
+            ? xr_stdlib_metadata_exact_native_direct_call(ref->module_path, ref->member_name, argc)
+            : NULL;
+    if (!candidate)
+        return CG_NATIVE_DIRECT_EMISSION_UNCOVERED;
+
+    const CgValueEmissionRegistryEntry *authority = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        if (ctx->value_emission_registry[i].semantic_plan != function->semantic_plan)
+            continue;
+        if (authority)
+            goto invalid;
+        authority = &ctx->value_emission_registry[i];
+    }
+    if (!authority || !authority->semantic_plan || !authority->target_plan ||
+        !xr_target_plan_is_verified(authority->target_plan) ||
+        !xr_target_plan_fingerprint_is_intact(authority->target_plan))
+        goto invalid;
+
+    const XrSemanticOperationRecord *operation =
+        cg_semantic_operation_for_value(ctx, function, value);
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId native_identity = {{0}};
+    if (!operation || operation->function != function->semantic_plan_function_index ||
+        !xr_semantic_native_direct_call_shape_is_exact(authority->semantic_plan, operation, &entry,
+                                                       &native_identity) ||
+        entry != candidate)
+        goto invalid;
+
+    uint32_t semantic_operand_count = 0;
+    const XrSemanticOperandRecord *semantic_operands =
+        xr_semantic_plan_operands(authority->semantic_plan, &semantic_operand_count);
+    if (!semantic_operands || operation->operand_count != (uint16_t) (argc + 1u) ||
+        operation->operand_begin > semantic_operand_count ||
+        operation->operand_count > semantic_operand_count - operation->operand_begin)
+        goto invalid;
+
+    uint32_t live_callee = XR_SEMANTIC_INDEX_NONE;
+    if (!cg_value_semantic_id(ctx, function, value->args[0], &live_callee) ||
+        live_callee != semantic_operands[operation->operand_begin].value)
+        goto invalid;
+
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(authority->target_plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(authority->target_plan, &argument_count);
+    const XrTargetCallRecord *call = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(authority->semantic_plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        if (xr_semantic_plan_operation(authority->semantic_plan, i) != operation)
+            continue;
+        if (operation_index != XR_SEMANTIC_INDEX_NONE)
+            goto invalid;
+        operation_index = i;
+    }
+    if (operation_index == XR_SEMANTIC_INDEX_NONE)
+        goto invalid;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            goto invalid;
+        call = &calls[i];
+    }
+    const XrSemanticCallTargetRecord *target =
+        call && call->semantic_call_target != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_call_target(authority->semantic_plan, call->semantic_call_target)
+            : NULL;
+    if (!call || !target || target->kind != XR_SEM_CALL_TARGET_NATIVE_DIRECT ||
+        target->operation != operation_index || call->id >= call_count ||
+        &calls[call->id] != call || call->semantic_operation != operation_index ||
+        call->caller_function != operation->function ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(call->native_callee_identity, native_identity) ||
+        call->runtime_capabilities != entry->runtime_capabilities ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT ||
+        call->target_kind != XR_TARGET_CALL_TARGET_NATIVE_DIRECT || call->argument_count != argc ||
+        call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin || call->adapter_count != 0 ||
+        call->flags != 0)
+        goto invalid;
+
+    for (uint16_t ordinal = 0; ordinal < argc; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;
+        const XrSemanticOperandRecord *operand = &semantic_operands[semantic_operand];
+        const XrTargetCallArgumentRecord *argument = &arguments[call->argument_begin + ordinal];
+        uint32_t live_argument = XR_SEMANTIC_INDEX_NONE;
+        const XrTargetMachineRepRecord *callee_register =
+            xr_target_plan_machine_rep(authority->target_plan, argument->callee_register_rep);
+        const XrTargetMachineRepRecord *callee_memory =
+            xr_target_plan_machine_rep(authority->target_plan, argument->callee_memory_rep);
+        if (!cg_value_semantic_id(ctx, function, value->args[ordinal + 1u], &live_argument) ||
+            live_argument != operand->value || argument->call != call->id ||
+            argument->semantic_operand != semantic_operand ||
+            argument->semantic_value != operand->value ||
+            argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE || argument->ordinal != ordinal ||
+            argument->mode != XR_TARGET_CALL_VALUE || argument->ownership != XR_TARGET_CALL_READ ||
+            argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != 0 ||
+            argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE || !callee_register ||
+            !callee_memory || callee_register->kind != XR_MACHINE_REP_DYN_VALUE ||
+            callee_memory->kind != XR_MACHINE_REP_DYN_VALUE)
+            goto invalid;
+    }
+
+    const CgAotStdlibMethod *method =
+        cg_find_aot_stdlib_method(entry->module, entry->name, entry->argc);
+    if (!method || method->ret_kind != CG_AOT_RET_VALUE || method->argc != entry->argc ||
+        strcmp(method->module, entry->module) != 0 || strcmp(method->method, entry->name) != 0 ||
+        strcmp(method->shim, entry->aot) != 0 || strcmp(method->arg_spec, entry->arg_spec) != 0)
+        goto invalid;
+
+    if (out) {
+        out->entry = entry;
+        out->method = method;
+        out->operation = operation;
+        out->call = call;
+        out->arguments = argc != 0 ? arguments + call->argument_begin : NULL;
+    }
+    return CG_NATIVE_DIRECT_EMISSION_EXACT;
+
+invalid:
+    if (ctx)
+        (void) cg_value_emission_fail(ctx, "native-direct C emission authority is incomplete");
+    return CG_NATIVE_DIRECT_EMISSION_INVALID;
 }
 
 static int cg_aot_stdlib_method_count(void) {
@@ -442,8 +610,7 @@ static void cg_emit_aot_stdlib_args(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
                                     uint16_t arg_base) {
     (void) f;
     const char *spec_cursor = m->arg_spec ? m->arg_spec : "";
-    const char *provider_cursor =
-        m->source_provider_arg_spec ? m->source_provider_arg_spec : "";
+    const char *provider_cursor = m->source_provider_arg_spec ? m->source_provider_arg_spec : "";
     for (uint16_t a = 0; a < call_argc; a++) {
         const XiValue *arg = v->args[arg_base + a];
         char spec = *spec_cursor;
@@ -641,6 +808,16 @@ static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFu
         return cg_emit_runtime_control_call(ctx, out, f, v, ref->member_name, call_argc);
     if (strcmp(ref->module_path, "test_yield") == 0)
         return cg_emit_test_yield_sync_call(ctx, out, f, v, ref->member_name, call_argc, 1);
+
+    CgNativeDirectEmissionView native_direct = {0};
+    CgNativeDirectEmissionStatus native_direct_status =
+        cg_native_direct_emission_view(ctx, f, v, &native_direct);
+    if (native_direct_status == CG_NATIVE_DIRECT_EMISSION_INVALID) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (native_direct_status == CG_NATIVE_DIRECT_EMISSION_EXACT)
+        return cg_emit_aot_stdlib_direct_call(ctx, out, f, v, native_direct.method, call_argc, 1);
 
     const CgAotStdlibMethod *m =
         cg_find_aot_stdlib_method(ref->module_path, ref->member_name, call_argc);

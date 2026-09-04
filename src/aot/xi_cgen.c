@@ -63,6 +63,7 @@
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
+#include "../plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../plan/target/xr_target_capability.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_escape.h"
@@ -95,6 +96,7 @@
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../stdlib/xstdlib_defs_generated.h"
+#include "../stdlib/xstdlib_metadata.h"
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
@@ -15817,6 +15819,11 @@ static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
                                  : NULL;
     if (!ref || !ref->module_path || !ref->member_name)
         return false;
+    CgNativeDirectEmissionView native_direct = {0};
+    CgNativeDirectEmissionStatus native_direct_status =
+        cg_native_direct_emission_view(ctx, f, call, &native_direct);
+    if (native_direct_status != CG_NATIVE_DIRECT_EMISSION_UNCOVERED)
+        return native_direct_status == CG_NATIVE_DIRECT_EMISSION_EXACT;
     return cg_find_aot_stdlib_method(ref->module_path, ref->member_name,
                                      (uint16_t) (call->nargs - 1)) != NULL;
 }

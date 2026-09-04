@@ -2989,6 +2989,167 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     xi_func_free(ir);
 }
 
+static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
+    static XrClassInfo net_conn_class = {
+        .name = "NetConn",
+        .xg_class_id = 1901,
+    };
+    static XrType int_type = {
+        .kind = XR_KIND_INT,
+        .id = 1903,
+        .scalar_rep = XR_NATIVE_I64,
+        .frozen = true,
+    };
+    static XrType bool_type = {
+        .kind = XR_KIND_BOOL,
+        .id = 1904,
+        .frozen = true,
+    };
+    static XrType net_conn_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 1905,
+        .frozen = true,
+        .instance =
+            {
+                .class_name = "NetConn",
+                .class_ref = &net_conn_class,
+            },
+    };
+    static XrFunctionParam native_parameters[] = {
+        {.type = &net_conn_type, .mode = XR_PARAM_READ},
+        {.type = &int_type, .mode = XR_PARAM_READ},
+    };
+    static XrType native_function = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 1906,
+        .frozen = true,
+        .function =
+            {
+                .params = native_parameters,
+                .param_count = 2,
+                .min_params = 2,
+                .return_type = &bool_type,
+                .throw_effect = XR_FN_EFFECT_NO_THROW,
+            },
+    };
+
+    XiFunc *function = xi_func_new("native_direct_managed_scalar", &bool_type);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    if (!function || !entry)
+        return NULL;
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    XiValue *connection = function->params ? xi_param(function, entry, 0, &net_conn_type) : NULL;
+    XiValue *direction = xi_const_int(function, entry, 2, &int_type);
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(function, sizeof(*ref));
+    XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &native_function, 0);
+    XiValue *call = xi_value_new(function, entry, XI_CALL, &bool_type, 3);
+    XiCallPlan *call_plan =
+        (XiCallPlan *) xi_func_arena_alloc(function, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan =
+        (XiCallArgPlan *) xi_func_arena_alloc(function, 2u * (uint32_t) sizeof(*argument_plan));
+    if (!function->params || !connection || !direction || !ref || !callee || !call || !call_plan ||
+        !argument_plan) {
+        xi_func_free(function);
+        return NULL;
+    }
+    function->params[0] = connection;
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    if (!function->arc_borrow_sig) {
+        xi_func_free(function);
+        return NULL;
+    }
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+    *ref = (XiImportRef) {
+        .module_path = "net",
+        .member_name = "__shutdownDirection",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    callee->aux = ref;
+    call->args[0] = callee;
+    call->args[1] = connection;
+    call->args[2] = direction;
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, 2u * sizeof(*argument_plan));
+    for (uint16_t i = 0; i < 2; i++) {
+        argument_plan[i].param_mode = XR_PARAM_READ;
+        argument_plan[i].access = XR_CALL_ARG_PLAIN;
+        argument_plan[i].origin_var_id = XI_NO_VAR_ID;
+    }
+    call_plan->args = argument_plan;
+    call_plan->nargs = 2;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
+    xi_block_set_return(entry, call);
+    function->stage = XI_STAGE_OPTIMIZED;
+    if (out_ref)
+        *out_ref = ref;
+    return function;
+}
+
+TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
+    XiImportRef *ref = NULL;
+    XiFunc *ir = native_direct_managed_scalar_fixture(&ref);
+    TEST_REQUIRE(ir != NULL && ref != NULL, "native-direct managed/scalar fixture allocated");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "native_direct_view", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "verified native-direct managed/scalar call should generate");
+    TEST_REQUIRE(contains(code, "xrt_net_shutdown_direction("),
+                 "verified native-direct view selects the frozen provider symbol");
+    TEST_REQUIRE(contains(code, "xr_box_i64("),
+                 "native-direct scalar argument crosses the provider ABI as tagged storage");
+    xr_free(code);
+    xi_func_free(ir);
+
+    ir = native_direct_managed_scalar_fixture(&ref);
+    TEST_REQUIRE(ir != NULL && ref != NULL && test_prepare_backend_ir(ir),
+                 "native-direct mutation fixture reached Backend with frozen plans");
+    XiModule *module = xi_module_new("native-direct-view.xr", "native_direct_view_mutation", ir);
+    TEST_REQUIRE(
+        module != NULL &&
+            xi_module_set_identity(module, "memory-module-v1:id=18:native-direct-view-mutation-v1"),
+        "native-direct mutation fixture module has stable identity");
+    ir->module = module;
+    XiModule *modules[] = {module};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry emission_registry;
+    TEST_REQUIRE(ctx != NULL, "native-direct mutation CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan.bundle),
+                 "native-direct mutation installed verified emission plans");
+
+    ref->member_name = "__connFd";
+    char *mutated_code = NULL;
+    size_t mutated_size = 0;
+    FILE *stream = xr_open_memstream(&mutated_code, &mutated_size);
+    TEST_REQUIRE(stream != NULL, "native-direct mutation output stream allocated");
+    xi_cgen_program(ctx, stream, module);
+    TEST_REQUIRE(xr_close_memstream(stream, &mutated_code, &mutated_size) == 0,
+                 "native-direct mutation output stream closed");
+    TEST_REQUIRE(xi_cgen_has_error(ctx),
+                 "live native member mutation cannot borrow the frozen call authority");
+    TEST_REQUIRE(!contains(mutated_code, "xrt_net_fd("),
+                 "raw stdlib registry cannot bypass the verified native-direct view");
+
+    xr_free(mutated_code);
+    xi_cgen_ctx_free(ctx);
+    test_c_emission_registry_free(&emission_registry);
+    test_aot_plan_free(&plan);
+    module->init = NULL;
+    xi_module_free(module);
+    xi_func_free(ir);
+}
+
 TEST(cgen_native_target_leaf_consumes_numeric_target_authority) {
     XrType int_type = {
         .kind = XR_KIND_INT,
@@ -14931,6 +15092,7 @@ int main(int argc, char **argv) {
     run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
     run_cgen_panicinfo_constructor_token_emits_no_local();
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
+    run_cgen_native_direct_uses_verified_call_and_argument_view();
     run_cgen_native_target_leaf_consumes_numeric_target_authority();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
     run_cgen_string_runes_consumes_immutable_emission_recipe();
