@@ -40,6 +40,11 @@ enum {
     XG_DENSE_ENUM_MEMBER_MAX = 256
 };
 
+_Static_assert((int) XA_TARGET_NAMESPACE_TARGET == (int) XG_TARGET_NAMESPACE_TARGET,
+               "target namespace identity drifted between analyzer and Xglobal");
+_Static_assert((int) XA_TARGET_QUERY_POINTER_BITS == (int) XG_TARGET_QUERY_POINTER_BITS,
+               "target query identity drifted between analyzer and Xglobal");
+
 #define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000005)
 
 typedef struct XgClassNameRow {
@@ -231,6 +236,7 @@ typedef struct XgBodyCollect {
     uint32_t callsite_count;
     uint32_t key_access_count;
     uint32_t interface_object_use_count;
+    uint32_t target_query_count;
     uint32_t sequence_access_count;
     uint32_t capacity_op_count;
     uint32_t bulk_op_count;
@@ -9920,6 +9926,68 @@ static void body_add_enum_metadata_use(XgBodyCollect *bc, const AstNode *node) {
     }
 }
 
+static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
+                                  bool *out_is_target_query) {
+    const MemberAccessNode *member;
+    const AstNode *receiver;
+    XaSymbol *symbol;
+    XaSymbolLinks *links;
+    XaTargetQueryFact fact;
+    XrType *result_type;
+    XgTargetQuerySummary row;
+    uint32_t source_node_id;
+
+    if (out_is_target_query)
+        *out_is_target_query = false;
+    if (!bc || !bc->producer || !bc->evidence || !node || node->type != AST_MEMBER_ACCESS)
+        return false;
+    member = &node->as.member_access;
+    receiver = member->object;
+    if (!bc->producer->analyzer) {
+        bool lexical_target_query =
+            receiver && receiver->type == AST_VARIABLE && receiver->as.variable.name &&
+            member->name && strcmp(receiver->as.variable.name, "target") == 0 &&
+            strcmp(member->name, "pointerBits") == 0;
+        return !lexical_target_query;
+    }
+    bool has_fact = xa_analyzer_get_target_query(bc->producer->analyzer, node, &fact);
+    if (!receiver || receiver->type != AST_VARIABLE || receiver->as.variable.symbol_id == 0)
+        return true;
+    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope,
+                                   receiver->as.variable.symbol_id);
+    links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
+    if (!symbol || !symbol->is_builtin || symbol->kind != XA_SYM_MODULE || !links ||
+        links->target_namespace_id != XA_TARGET_NAMESPACE_TARGET)
+        return !has_fact;
+    if (out_is_target_query)
+        *out_is_target_query = true;
+    result_type = xa_analyzer_get_node_type(bc->producer->analyzer, node);
+    if (!has_fact || fact.namespace_id != XA_TARGET_NAMESPACE_TARGET ||
+        fact.query_id != XA_TARGET_QUERY_POINTER_BITS || fact.result_native_type != XR_NATIVE_U16 ||
+        fact.complete != 1 || !result_type || result_type->kind != XR_KIND_INT ||
+        result_type->is_nullable || result_type->scalar_rep != XR_NATIVE_U16)
+        return false;
+
+    source_node_id = producer_source_node_id(bc->module_id, node);
+    if (source_node_id == 0 || bc->owner_func_id == XG_NO_ID)
+        return false;
+    memset(&row, 0, sizeof(row));
+    row.owner_func_id = bc->owner_func_id;
+    row.source_node_id = source_node_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.body_ordinal = ++bc->target_query_count;
+    row.result_type_key = xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16);
+    row.namespace_id = XG_TARGET_NAMESPACE_TARGET;
+    row.query_kind = XG_TARGET_QUERY_POINTER_BITS;
+    row.result_native_type = XR_NATIVE_U16;
+    row.contract_complete = 1;
+    if (row.result_type_key == 0 || !xg_global_evidence_add_target_query(bc->evidence, &row))
+        return false;
+    bc->effect_bits |= XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY;
+    bc->capability_bits |= XG_CAP_PROFILE_POINTER_WIDTH;
+    return true;
+}
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -10310,6 +10378,13 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         }
         case AST_MEMBER_ACCESS: {
+            bool is_target_query = false;
+            if (!body_add_target_query(bc, node, &is_target_query)) {
+                bc->producer->failed = true;
+                break;
+            }
+            if (is_target_query)
+                break;
             const char *stdlib_module =
                 body_stdlib_module_for_expr(bc, node->as.member_access.object);
             if (!body_member_access_is_scalar_builtin(bc, &node->as.member_access) &&

@@ -68,11 +68,13 @@ static XrValidatedProgram *build_boundary_program(void) {
     };
     XrCoreIrKey aggregate_argument = test_key("boundary:value:aggregate-argument");
     XrCoreIrKey variant_argument = test_key("boundary:value:variant-argument");
+    XrCoreIrKey u16_argument = test_key("boundary:value:u16-argument");
     XrCoreIrValueInput arguments[] = {
         {.key = aggregate_argument, .type_id = TEST_AGGREGATE_TYPE},
         {.key = variant_argument, .type_id = TEST_VARIANT_TYPE},
+        {.key = u16_argument, .type_id = XR_CORE_TYPE_U16},
     };
-    XrCoreIrKey return_operands[] = {variant_argument};
+    XrCoreIrKey return_operands[] = {u16_argument};
     XrCoreIrInstructionInput instruction = {
         .operation_id = XR_CORE_OP_CORE_RETURN,
         .result_type_id = XR_CORE_TYPE_VOID,
@@ -84,16 +86,16 @@ static XrValidatedProgram *build_boundary_program(void) {
     XrCoreIrBlockInput block = {
         .key = block_key,
         .arguments = arguments,
-        .argument_count = 2u,
+        .argument_count = 3u,
         .instructions = &instruction,
         .instruction_count = 1u,
     };
-    uint16_t parameters[] = {TEST_AGGREGATE_TYPE, TEST_VARIANT_TYPE};
+    uint16_t parameters[] = {TEST_AGGREGATE_TYPE, TEST_VARIANT_TYPE, XR_CORE_TYPE_U16};
     XrCoreIrFunctionInput function = {
         .key = test_key("boundary:function:entry"),
         .parameter_types = parameters,
-        .parameter_count = 2u,
-        .result_type_id = TEST_VARIANT_TYPE,
+        .parameter_count = 3u,
+        .result_type_id = XR_CORE_TYPE_U16,
         .effect_mask = 1u,
         .entry_block = block_key,
         .blocks = &block,
@@ -133,31 +135,10 @@ static XrValidatedProgram *build_boundary_program(void) {
     return program;
 }
 
-static void provider_entry(void) {
-}
-
 static void build_provider_bindings(const XrTargetProfile *profile,
                                     TestProviderBindings *bindings) {
+    (void) profile;
     memset(bindings, 0, sizeof(*bindings));
-    bindings->count = xr_target_profile_provider_count(profile);
-    REQUIRE(bindings->count > 0u);
-    for (size_t provider_index = 0; provider_index < bindings->count; ++provider_index) {
-        const XrTargetProviderContract *contract =
-            xr_target_profile_provider(profile, provider_index);
-        XrProviderBinding *provider = &bindings->providers[provider_index];
-        REQUIRE(contract != NULL);
-        provider->contract_id = contract->contract_id;
-        REQUIRE(xr_target_provider_contract_fingerprint(
-                    contract, &provider->contract_fingerprint) == XR_RUNTIME_ABI_OK);
-        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
-        provider->operations = bindings->operations[provider_index];
-        provider->operation_count = contract->operation_count;
-        for (uint16_t operation = 0; operation < contract->operation_count; ++operation) {
-            XrProviderOperationBinding *binding = &bindings->operations[provider_index][operation];
-            binding->operation_id = contract->operations[operation].stable_id;
-            binding->entry = provider_entry;
-        }
-    }
 }
 
 static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile *profile) {
@@ -167,7 +148,7 @@ static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile 
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = program,
         .profile = profile,
-        .providers = bindings.providers,
+        .providers = bindings.count ? bindings.providers : NULL,
         .provider_count = bindings.count,
         .generation = 1u,
     };
@@ -242,39 +223,53 @@ static void test_profile_bound_layouts(bool ilp32) {
     REQUIRE(xr_execution_materialize_boundary_call(instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL,
                                                    0u, NULL, &call,
                                                    &diagnostic) == XR_BOUNDARY_MATERIALIZATION_OK);
-    REQUIRE(call->argument_count == 2u);
-    REQUIRE(call->argument_size == 48u && call->argument_alignment == 8u);
+    REQUIRE(call->argument_count == 3u);
+    REQUIRE(call->argument_size == 56u && call->argument_alignment == 8u);
     REQUIRE(call->arguments[0].offset == 0u && call->arguments[0].size == 24u);
     REQUIRE(call->arguments[1].offset == 24u && call->arguments[1].size == 24u);
-    REQUIRE(call->result.type_id == call->arguments[1].type_id);
-    REQUIRE(call->result.size == 24u && call->result.alignment == 8u);
+    REQUIRE(call->arguments[2].type_id == XR_CORE_TYPE_U16);
+    REQUIRE(call->arguments[2].offset == 48u && call->arguments[2].size == 2u);
+    REQUIRE(call->result.type_id == XR_CORE_TYPE_U16);
+    REQUIRE(call->result.size == 2u && call->result.alignment == 2u);
 
     XrBoundaryTypeLayout *aggregate = NULL;
     XrBoundaryTypeLayout *variant = NULL;
+    XrBoundaryTypeLayout *u16 = NULL;
     REQUIRE(xr_execution_materialize_boundary_type(instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL,
                                                    call->arguments[0].type_id, NULL, &aggregate,
                                                    &diagnostic) == XR_BOUNDARY_MATERIALIZATION_OK);
     REQUIRE(xr_execution_materialize_boundary_type(instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL,
                                                    call->arguments[1].type_id, NULL, &variant,
                                                    &diagnostic) == XR_BOUNDARY_MATERIALIZATION_OK);
+    REQUIRE(xr_execution_materialize_boundary_type(instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL,
+                                                   XR_CORE_TYPE_U16, NULL, &u16,
+                                                   &diagnostic) == XR_BOUNDARY_MATERIALIZATION_OK);
     require_aggregate_layout(aggregate);
     require_variant_layout(variant);
+    REQUIRE(u16->layout_kind == XR_BOUNDARY_TYPE_LAYOUT_SCALAR);
+    REQUIRE(u16->cleanup_kind == XR_BOUNDARY_CLEANUP_TRIVIAL);
+    REQUIRE(u16->size == 2u && u16->alignment == 2u);
+    require_fingerprint(u16->id,
+                        ilp32 ? "de62d2eb7d4724e873c56c11670c07756b87a9e7b2bbb1f25be90752b35c9682"
+                              : "c898f2f92f770c9faf0b6fbcd340e3a9542990345b8c16de5dfe89cdb196ed00");
     REQUIRE(xr_fingerprint_equal(aggregate->id, call->arguments[0].type_layout_id));
     REQUIRE(xr_fingerprint_equal(variant->id, call->arguments[1].type_layout_id));
-    REQUIRE(xr_fingerprint_equal(variant->id, call->result.type_layout_id));
+    REQUIRE(xr_fingerprint_equal(u16->id, call->arguments[2].type_layout_id));
+    REQUIRE(xr_fingerprint_equal(u16->id, call->result.type_layout_id));
     uint16_t aggregate_type_id = aggregate->type_id;
 
     require_fingerprint(aggregate->id,
-                        ilp32 ? "a0cff35b98af2d8abb6eb75cf2900bca72db1f640e02af20d3d6d208a8d48c05"
-                              : "f2008e7689fe6f09df971d67d3e3a96a798600f7a4703530f49378a5e0c9b287");
+                        ilp32 ? "b534ef6061b960e6fb65ac71008c633282bf6a5486f1f07ddca8aca7741bd5af"
+                              : "88c167086df6a691f341746f12ad8ce7ca494fdbf2065e17811927beeca8a3e0");
     require_fingerprint(variant->id,
-                        ilp32 ? "f6819069b70ba22487148399e55d9ffc6729b7535fafcb7e2167070d85ad5f16"
-                              : "5dd2fc3b60dcda8be867fd59fa60ce3ebde50c410e5c607f6340745e393b9484");
+                        ilp32 ? "f5e649569edff711a0995d00746aa8ffb5f589dc4609b50d7adbc8db5d8f7ecb"
+                              : "7e61fa47b659734d2b9c026a05bddedde53b094ffe4afa670e59c337763b3c81");
     require_fingerprint(call->id,
-                        ilp32 ? "a522c9afcba774699734c2c3ebc3f26056772755959654dc7cb6acf8ec719e59"
-                              : "58d80184603d231d4168f6e148788ec163ee55a59afe38fcf19fd296bc1f20b6");
+                        ilp32 ? "d88d26796de8b39499fb048cb1af12a122f67ca18bd979c304a633afed9cd7bb"
+                              : "48276f1a9f39ef693bbd37c6f6c2a9837cfa59432ab6aa4f8d54ca22f9a9f3c6");
 
     XrBoundaryTypeLayoutId public_id = aggregate->id;
+    xr_boundary_type_layout_free(u16);
     xr_boundary_type_layout_free(variant);
     xr_boundary_type_layout_free(aggregate);
     xr_boundary_call_layout_free(call);
@@ -311,6 +306,23 @@ static void test_profile_bound_layouts(bool ilp32) {
             XR_BOUNDARY_MATERIALIZATION_UNSUPPORTED);
     REQUIRE(rejected == NULL);
     REQUIRE(diagnostic.kind == XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_TYPE);
+
+    const uint16_t nonmaterialized_target_enums[] = {
+        XR_CORE_TYPE_TARGET_OS,
+        XR_CORE_TYPE_TARGET_ARCH,
+        XR_CORE_TYPE_TARGET_ABI,
+        XR_CORE_TYPE_TARGET_ENDIAN,
+    };
+    for (size_t index = 0u;
+         index < sizeof(nonmaterialized_target_enums) / sizeof(nonmaterialized_target_enums[0]);
+         ++index) {
+        REQUIRE(xr_execution_materialize_boundary_type(
+                    instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL,
+                    nonmaterialized_target_enums[index], NULL, &rejected,
+                    &diagnostic) == XR_BOUNDARY_MATERIALIZATION_UNSUPPORTED);
+        REQUIRE(rejected == NULL);
+        REQUIRE(diagnostic.kind == XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_TYPE);
+    }
 
     REQUIRE(xr_execution_materialize_boundary_type(
                 instance, XR_MATERIALIZED_BOUNDARY_INVALID, aggregate_type_id, NULL, &rejected,

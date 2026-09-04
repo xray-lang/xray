@@ -927,6 +927,19 @@
       }
     },
     {
+      "id": "target-pointer-width-32",
+      "operation": "core.target.pointer_width",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "pointer_width": 32
+      },
+      "expect": {
+        "value": "32"
+      }
+    },
+    {
       "id": "target-pointer-width-missing",
       "operation": "core.target.pointer_width",
       "kind": "scalar",

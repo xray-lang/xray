@@ -63,38 +63,10 @@ static ImportedCallableFixture g_active_fixture;
 
 static void destroy_imported_callable_fixture(ImportedCallableFixture *fixture);
 
-static void imported_callable_provider_entry(void) {
-}
-
 static bool imported_callable_build_provider_bindings(
     const XrTargetProfile *profile, ImportedCallableProviderBindings *bindings) {
+    (void) profile;
     memset(bindings, 0, sizeof(*bindings));
-    bindings->count = xr_target_profile_provider_count(profile);
-    if (bindings->count == 0u || bindings->count > XR_RUNTIME_ABI_MAX_PROVIDERS)
-        return false;
-    for (size_t provider_index = 0; provider_index < bindings->count; ++provider_index) {
-        const XrTargetProviderContract *contract =
-            xr_target_profile_provider(profile, provider_index);
-        if (!contract)
-            return false;
-        XrProviderBinding *provider = &bindings->providers[provider_index];
-        provider->contract_id = contract->contract_id;
-        if (xr_target_provider_contract_fingerprint(contract, &provider->contract_fingerprint) !=
-            XR_RUNTIME_ABI_OK)
-            return false;
-        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
-        provider->operations = bindings->operations[provider_index];
-        provider->operation_count = contract->operation_count;
-        if (provider->operation_count > XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS)
-            return false;
-        for (uint16_t operation_index = 0u; operation_index < contract->operation_count;
-             ++operation_index) {
-            XrProviderOperationBinding *operation =
-                &bindings->operations[provider_index][operation_index];
-            operation->operation_id = contract->operations[operation_index].stable_id;
-            operation->entry = imported_callable_provider_entry;
-        }
-    }
     return true;
 }
 
@@ -783,7 +755,7 @@ TEST(test_imported_callable_multi_target_program) {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = validated,
         .profile = profile,
-        .providers = bindings.providers,
+        .providers = bindings.count ? bindings.providers : NULL,
         .provider_count = bindings.count,
         .generation = 1u,
     };

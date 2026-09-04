@@ -562,7 +562,7 @@ static XrValidatedProgram *build_control_program(void) {
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_TARGET_POINTER_WIDTH,
          .result = true_width,
-         .result_type_id = XR_CORE_TYPE_U32,
+         .result_type_id = XR_CORE_TYPE_U16,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_BRANCH,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -581,7 +581,7 @@ static XrValidatedProgram *build_control_program(void) {
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_TARGET_POINTER_WIDTH,
          .result = false_width,
-         .result_type_id = XR_CORE_TYPE_U32,
+         .result_type_id = XR_CORE_TYPE_U16,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_BRANCH,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -591,7 +591,7 @@ static XrValidatedProgram *build_control_program(void) {
          .successors = merge_successor,
          .successor_count = 1},
     };
-    XrCoreIrValueInput merge_argument = {.key = merge_arg, .type_id = XR_CORE_TYPE_U32};
+    XrCoreIrValueInput merge_argument = {.key = merge_arg, .type_id = XR_CORE_TYPE_U16};
     XrCoreIrInstructionInput merge_instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -626,7 +626,7 @@ static XrValidatedProgram *build_control_program(void) {
     };
     XrCoreIrFunctionInput function = {
         .key = fixture_key("control:function"),
-        .result_type_id = XR_CORE_TYPE_U32,
+        .result_type_id = XR_CORE_TYPE_U16,
         .effect_mask = 9u,
         .capability_mask = 1u,
         .entry_block = entry_key,
@@ -903,33 +903,10 @@ static XrValidatedProgram *build_error_program(void) {
     return validate_fixture(NULL, 0, &function, 1);
 }
 
-static void provider_entry(void) {
-}
-
 static void build_provider_bindings(const XrTargetProfile *profile,
                                     TestProviderBindings *bindings) {
+    (void) profile;
     memset(bindings, 0, sizeof(*bindings));
-    bindings->count = xr_target_profile_provider_count(profile);
-    REQUIRE(bindings->count > 0);
-    for (size_t provider_index = 0; provider_index < bindings->count; ++provider_index) {
-        const XrTargetProviderContract *contract =
-            xr_target_profile_provider(profile, provider_index);
-        REQUIRE(contract != NULL);
-        XrProviderBinding *provider = &bindings->providers[provider_index];
-        provider->contract_id = contract->contract_id;
-        REQUIRE(xr_target_provider_contract_fingerprint(
-                    contract, &provider->contract_fingerprint) == XR_RUNTIME_ABI_OK);
-        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
-        provider->operations = bindings->operations[provider_index];
-        provider->operation_count = contract->operation_count;
-        for (uint16_t operation_index = 0; operation_index < contract->operation_count;
-             ++operation_index) {
-            XrProviderOperationBinding *operation =
-                &bindings->operations[provider_index][operation_index];
-            operation->operation_id = contract->operations[operation_index].stable_id;
-            operation->entry = provider_entry;
-        }
-    }
 }
 
 static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile *profile,
@@ -938,7 +915,7 @@ static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile 
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = program,
         .profile = profile,
-        .providers = bindings->providers,
+        .providers = bindings->count ? bindings->providers : NULL,
         .provider_count = bindings->count,
         .generation = generation,
     };
@@ -963,6 +940,9 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
             break;
         case XR_REFERENCE_VALUE_U32:
             REQUIRE(reference.as.u32 == vm.as.u32);
+            break;
+        case XR_REFERENCE_VALUE_U16:
+            REQUIRE(reference.as.u16 == vm.as.u16);
             break;
         case XR_REFERENCE_VALUE_ERROR:
             REQUIRE(reference.as.error == vm.as.error);
@@ -993,7 +973,7 @@ static void compare_outcomes(XrReferenceOutcome reference, XrVmOutcome vm) {
 }
 
 static XrVmOutcome execute_differential(XrValidatedProgram *program, XrInstance *instance,
-                                        uint32_t pointer_width,
+                                        uint16_t pointer_width,
                                         const XrReferenceValue *reference_arguments,
                                         const XrVmValue *vm_arguments, uint32_t argument_count) {
     XrVmCodeOptions baseline_options = xr_vm_code_default_options();
@@ -1058,6 +1038,8 @@ static void run_program(XrValidatedProgram *program, bool ilp32,
             REQUIRE(result.value.as.i64 == (int64_t) expected_value);
         else if (expected_value_kind == XR_VM_VALUE_U32)
             REQUIRE(result.value.as.u32 == (uint32_t) expected_value);
+        else if (expected_value_kind == XR_VM_VALUE_U16)
+            REQUIRE(result.value.as.u16 == (uint16_t) expected_value);
     } else if (expected_kind == XR_VM_OUTCOME_ERROR) {
         REQUIRE(result.error_value.kind == XR_VM_VALUE_ERROR);
         REQUIRE(result.error_value.as.error == (uint32_t) expected_value);
@@ -1189,8 +1171,8 @@ static void test_operation_semantics(void) {
     run_program(affine, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
 
     XrValidatedProgram *control = build_control_program();
-    run_program(control, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U32, 64u);
-    run_program(control, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U32, 32u);
+    run_program(control, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U16, 64u);
+    run_program(control, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U16, 32u);
 
     XrValidatedProgram *call = build_call_program();
     run_program(call, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
@@ -1318,7 +1300,7 @@ static void test_concurrent_execution_and_drain(void) {
     REQUIRE(atomic_load_explicit(&race.returned, memory_order_acquire) >= 100u);
     REQUIRE(atomic_load_explicit(&race.stale, memory_order_acquire) >= VM_RACE_THREADS);
     REQUIRE(atomic_load_explicit(&race.invalid, memory_order_acquire) == 0u);
-    REQUIRE(xr_execution_instance_pin_count(instance) == 0u);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
     REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) == XR_EXECUTION_OK);
     xr_vm_code_free(code);
     REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) == XR_EXECUTION_OK);
@@ -1385,7 +1367,9 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
     REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) == XR_EXECUTION_OK);
     REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) == XR_EXECUTION_OK);
     XrInstance *successor = NULL;
-    REQUIRE(xr_execution_instance_create_successor(instance, bindings.providers, bindings.count,
+    REQUIRE(xr_execution_instance_create_successor(instance,
+                                                   bindings.count ? bindings.providers : NULL,
+                                                   bindings.count,
                                                    &successor,
                                                    &execution_diagnostic) == XR_EXECUTION_OK);
     REQUIRE(!xr_vm_code_matches_instance(code, successor));

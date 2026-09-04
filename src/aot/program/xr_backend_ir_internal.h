@@ -19,6 +19,7 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_BOOL_U8,
     XR_BACKEND_VALUE_I64,
     XR_BACKEND_VALUE_U32,
+    XR_BACKEND_VALUE_U16,
     XR_BACKEND_VALUE_ERROR_U32,
     XR_BACKEND_VALUE_PANIC_U32,
     XR_BACKEND_VALUE_AGGREGATE,
@@ -95,7 +96,7 @@ struct XrBackendIR {
     XrBackendFunction *functions;
     uint32_t function_count;
     uint32_t entry_function;
-    uint32_t pointer_width;
+    uint16_t pointer_width;
     size_t instruction_count;
     bool verified;
 };

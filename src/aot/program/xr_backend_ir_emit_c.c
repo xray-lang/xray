@@ -96,6 +96,8 @@ static const char *type_c_name(uint16_t type_id, char storage[32]) {
         case XR_CORE_TYPE_ERROR:
         case XR_CORE_TYPE_PANIC_INFO:
             return "uint32_t";
+        case XR_CORE_TYPE_U16:
+            return "uint16_t";
         case XR_CORE_TYPE_VOID:
             return "void";
         default:
@@ -104,7 +106,6 @@ static const char *type_c_name(uint16_t type_id, char storage[32]) {
             (void) snprintf(storage, 32u, "XrAotType%u", type_id);
             return storage;
     }
-    return NULL;
 }
 
 static uint32_t outcome_value_kind(uint16_t type_id) {
@@ -119,6 +120,8 @@ static uint32_t outcome_value_kind(uint16_t type_id) {
             return 3u;
         case XR_CORE_TYPE_ERROR:
             return 4u;
+        case XR_CORE_TYPE_U16:
+            return 6u;
         default:
             return type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? 5u : UINT32_MAX;
     }
@@ -224,6 +227,8 @@ static const char *outcome_field(uint16_t type_id) {
             return "i64";
         case XR_CORE_TYPE_U32:
             return "u32";
+        case XR_CORE_TYPE_U16:
+            return "u16";
         case XR_CORE_TYPE_ERROR:
             return "error";
         default:
@@ -326,6 +331,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
                              "    uint8_t boolean;\n"
                              "    int64_t i64;\n"
                              "    uint32_t u32;\n"
+                             "    uint16_t u16;\n"
                              "} XrAotOutcome;\n\n"
                              "static XrAotOutcome xr_aot_make(uint32_t kind, uint32_t value_kind, "
                              "uint32_t trap) {\n"
@@ -1141,7 +1147,7 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  "        return xr_aot_make(3, 0, 0);\n",
                                  instruction->operands[0]);
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
-            return append_format(buffer, "        v%u = UINT32_C(%u);\n", instruction->result_id,
+            return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
                                  ir->pointer_width);
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             uint32_t target_id = instruction->immediate.function_id;
@@ -1413,6 +1419,10 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
             break;
         case XR_CORE_TYPE_U32:
             if (!append_text(buffer, "        exit_code = (int)(result.u32 & UINT32_C(255));\n"))
+                return false;
+            break;
+        case XR_CORE_TYPE_U16:
+            if (!append_text(buffer, "        exit_code = (int)(result.u16 & UINT16_C(255));\n"))
                 return false;
             break;
         case XR_CORE_TYPE_ERROR:

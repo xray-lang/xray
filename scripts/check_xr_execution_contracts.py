@@ -22,14 +22,17 @@ COVERAGE = Path("contracts/canonical-program/execution-binding-coverage.json")
 EXPECTED_COVERAGE = {
     "schema": "xray-execution-binding-coverage/1",
     "profile_schema_version": 5,
-    "execution_binding_schema_version": 1,
+    "boundary_abi_schema_version": 3,
+    "execution_binding_schema_version": 2,
     "profile_partitions": [
         {"name": "target-semantics", "identity": "XrTargetSemanticsId", "status": "COMPLETE"},
         {"name": "boundary-abi", "identity": "XrBoundaryAbiId", "status": "ACTIVE_COPY_VALUE"},
         {"name": "runtime-kernel", "identity": "XrRuntimeKernelId", "status": "WALKING_SKELETON"},
         {"name": "provider-contract-set", "identity": "XrProviderContractSetId", "status": "COMPLETE"},
     ],
-    "boundary_value_types": ["void", "bool", "i64", "u32", "error", "aggregate", "variant"],
+    "boundary_value_types": [
+        "void", "bool", "i64", "u32", "u16", "error", "aggregate", "variant"
+    ],
     "active_boundary_contracts": [
         "call-frame-v1",
         "declaration-order-natural-aggregate",
@@ -40,10 +43,15 @@ EXPECTED_COVERAGE = {
         "explicit-cleanup-actions",
     ],
     "provider_admission": [
+        "program-required-provider-subset",
+        "program-required-operation-subset",
         "stable-contract-id",
         "exact-contract-fingerprint",
         "ordered-operation-id",
         "non-null-operation-entry",
+        "typed-i64-trampoline",
+        "exact-i64-call-abi",
+        "extra-binding-rejected",
         "thread-safety",
         "reentrancy",
         "callback-safety",
@@ -51,7 +59,8 @@ EXPECTED_COVERAGE = {
     "generation_states": ["ACTIVE", "DRAINING", "RETIRED"],
     "generation_transitions": [
         "ACTIVE->DRAINING",
-        "DRAINING+pins=0->RETIRED",
+        "lease-ticket-active->consumed-once",
+        "DRAINING+leases=0->RETIRED",
         "RETIRED(g)->ACTIVE(g+1)",
     ],
     "foreign_profile_matrix": [
@@ -105,15 +114,46 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     for token in ("XrTargetSemanticsId", "XrBoundaryAbiId", "XrRuntimeKernelId",
                   "XrProviderContractSetId"):
         require(token in profile_header, f"missing profile partition identity {token}")
-    for token in ("XrExecutionId", "XrInstance", "contract_fingerprint",
+    for token in ("#define XR_BOUNDARY_ABI_SCHEMA_VERSION UINT32_C(3)",
+                  "#define XR_BOUNDARY_ABI_VALUE_COUNT UINT8_C(6)"):
+        require(token in profile_header, f"boundary ABI u16 contract omits {token}")
+    for token in ("xray-boundary-abi-v3", "boundary->values[5]",
+                  "XR_CORE_TYPE_U16", "layout->u16"):
+        require(token in profile_source, f"boundary ABI u16 row omits {token}")
+    for token in ("XrExecutionId", "XrInstance", "XrExecutionLease", "contract_fingerprint",
                   "XR_INSTANCE_ACTIVE", "XR_INSTANCE_DRAINING", "XR_INSTANCE_RETIRED"):
         require(token in execution_header, f"missing execution contract token {token}")
+    require("#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(2)" in execution_header,
+            "execution header schema version is not synchronized with coverage")
+    for token in ("XrProviderCallStatus", "XR_PROVIDER_CALL_OK", "int64_t argument",
+                  "int64_t *result_out", "XR_EXECUTION_DIAGNOSTIC_PROVIDER_ABI"):
+        require(token in execution_header, f"typed provider trampoline omits {token}")
     for token in ("XrBoundaryTypeLayout", "XrBoundaryCallLayout",
                   "XrBoundaryMaterializationBudget", "XR_BOUNDARY_CALL_FRAME_V1"):
         require(token in profile_header + boundary_header,
                 f"missing materialized boundary token {token}")
     require("xr_target_provider_contract_fingerprint" in execution_source,
             "provider admission does not compare the exact provider contract")
+    for token in ("xr_validated_program_provider_requirement_count",
+                  "xr_validated_program_provider_requirement", "find_profile_provider",
+                  "find_profile_operation", "provider_operation_uses_scalar_i64_trampoline",
+                  "XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER",
+                  "XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE"):
+        require(token in execution_source, f"program-required provider subset omits {token}")
+    for token in ("xr_execution_instance_acquire", "xr_execution_lease_release",
+                  "xr_execution_lease_program", "xr_execution_lease_profile",
+                  "xr_execution_lease_provider_operation"):
+        require(token in execution_source, f"generation lease contract omits {token}")
+    for token in ("uint64_t ticket", "lease_tickets", "lease_ticket_is_active_locked",
+                  "next_lease_ticket"):
+        require(token in execution_header + execution_source,
+                f"release-once lease ticket contract omits {token}")
+    require("xr_execution_instance_program" not in execution_header and
+            "xr_execution_instance_profile" not in execution_header,
+            "generation-bound program/profile remain accessible without a lease")
+    require("xr_execution_instance_acquire" in boundary_source and
+            "xr_execution_lease_release" in boundary_source,
+            "boundary materialization does not hold an exact generation lease")
     require("xr_program_validate" not in execution_source,
             "execution binding must consume XrValidatedProgram, not re-run admission")
 
@@ -161,6 +201,37 @@ def self_test(root: Path) -> None:
         pass
     else:
         raise GateError("missing exact provider fingerprint was accepted")
+
+    mutated = execution.replace("lease_ticket_is_active_locked",
+                                "lease_ticket_validation_removed")
+    require(mutated != execution, "lease ticket mutation did not apply")
+    try:
+        validate(root, {EXECUTION_SOURCE: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("missing release-once lease ticket validation was accepted")
+
+    mutated = execution.replace("provider_operation_uses_scalar_i64_trampoline",
+                                "provider_operation_abi_check_removed")
+    require(mutated != execution, "provider ABI mutation did not apply")
+    try:
+        validate(root, {EXECUTION_SOURCE: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("missing typed provider ABI admission was accepted")
+
+    boundary = (root / BOUNDARY_SOURCE).read_text(encoding="utf-8")
+    mutated = boundary.replace("xr_execution_instance_acquire",
+                               "missing_generation_lease")
+    require(mutated != boundary, "generation lease mutation did not apply")
+    try:
+        validate(root, {BOUNDARY_SOURCE: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("unleased boundary materialization was accepted")
 
 
 def main() -> int:

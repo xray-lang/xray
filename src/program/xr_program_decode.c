@@ -123,7 +123,7 @@ static bool section_done(Reader *section, Reader *artifact) {
 }
 
 static bool encoded_type_id_is_valid(uint64_t type_id, uint64_t dynamic_count) {
-    return type_id <= XR_CORE_TYPE_PANIC_INFO ||
+    return type_id < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT ||
            (type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
             type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < dynamic_count);
 }
@@ -133,15 +133,17 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
                          uint64_t *interface_reference_count_out) {
     Reader section = section_reader(artifact, view);
     uint64_t count = take_uvar(&section);
-    if (count < 6u || count > XR_PROGRAM_LIMIT_TYPES ||
-        count - 6u > UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
+    if (count < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT || count > XR_PROGRAM_LIMIT_TYPES ||
+        count - XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT >
+            UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
         !count_records(&section, count)) {
         section.status = section.status == XR_PROGRAM_DECODE_OK
                              ? XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT
                              : section.status;
         return section_done(&section, artifact);
     }
-    for (uint64_t id = 0; id < 6u && section.status == XR_PROGRAM_DECODE_OK; ++id) {
+    for (uint64_t id = 0;
+         id < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT && section.status == XR_PROGRAM_DECODE_OK; ++id) {
         uint64_t type_id = take_uvar(&section);
         uint64_t kind = take_uvar(&section);
         uint64_t ownership = take_uvar(&section);
@@ -156,7 +158,7 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             copy_contract != (uint64_t) expected_copy)
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
     }
-    uint64_t dynamic_count = count - 6u;
+    uint64_t dynamic_count = count - XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT;
     uint64_t signature_reference_count = 0u;
     uint64_t interface_reference_count = 0u;
     uint8_t previous_key[XR_CORE_IR_KEY_SIZE] = {0};
@@ -631,6 +633,62 @@ static bool decode_empty_section(Reader *artifact, const XrProgramSectionView *v
     return section_done(&section, artifact);
 }
 
+static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
+    uint8_t combined = 0u;
+    for (size_t index = 0; index < size; ++index)
+        combined |= bytes[index];
+    return combined == 0u;
+}
+
+static bool decode_imports(Reader *artifact, const XrProgramSectionView *view,
+                           uint64_t *provider_count_out) {
+    Reader section = section_reader(artifact, view);
+    uint64_t provider_count = take_uvar(&section);
+    if (provider_count > XR_PROGRAM_LIMIT_PROVIDER_CONTRACTS ||
+        !count_records(&section, provider_count)) {
+        section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+        return section_done(&section, artifact);
+    }
+    uint8_t previous_contract[XR_STABLE_ID_BYTES] = {0};
+    for (uint64_t provider = 0;
+         provider < provider_count && section.status == XR_PROGRAM_DECODE_OK; ++provider) {
+        uint8_t contract[XR_STABLE_ID_BYTES] = {0};
+        take_bytes(&section, contract, sizeof(contract));
+        if (bytes_are_zero(contract, sizeof(contract)) ||
+            (provider != 0u && memcmp(previous_contract, contract, sizeof(contract)) >= 0)) {
+            section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            break;
+        }
+        memcpy(previous_contract, contract, sizeof(contract));
+        uint64_t operation_count = take_uvar(&section);
+        if (operation_count == 0u) {
+            section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            break;
+        }
+        if (operation_count > XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT ||
+            !count_records(&section, operation_count)) {
+            section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+            break;
+        }
+        uint8_t previous_operation[XR_STABLE_ID_BYTES] = {0};
+        for (uint64_t operation = 0;
+             operation < operation_count && section.status == XR_PROGRAM_DECODE_OK; ++operation) {
+            uint8_t operation_id[XR_STABLE_ID_BYTES] = {0};
+            take_bytes(&section, operation_id, sizeof(operation_id));
+            if (bytes_are_zero(operation_id, sizeof(operation_id)) ||
+                (operation != 0u &&
+                 memcmp(previous_operation, operation_id, sizeof(operation_id)) >= 0)) {
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                break;
+            }
+            memcpy(previous_operation, operation_id, sizeof(operation_id));
+        }
+    }
+    if (provider_count_out && section.status == XR_PROGRAM_DECODE_OK)
+        *provider_count_out = provider_count;
+    return section_done(&section, artifact);
+}
+
 XrProgramDecodeBudget xr_program_decode_default_budget(void) {
     XrProgramDecodeBudget budget = {
         .max_bytes = XR_PROGRAM_LIMIT_ARTIFACT_BYTES,
@@ -752,7 +810,7 @@ XrProgramDecodeStatus xr_program_decode_structure(const uint8_t *bytes, size_t s
                           &function_count) ||
         !decode_code(&reader, &view.sections[3], function_count, constant_count,
                      dynamic_type_count) ||
-        !decode_empty_section(&reader, &view.sections[4]) ||
+        !decode_imports(&reader, &view.sections[4], &view.provider_requirement_count) ||
         !decode_empty_section(&reader, &view.sections[5]) ||
         !decode_semantic_metadata(&reader, &view.sections[6], function_count, signature_count,
                                   dynamic_type_count, &interface_count))

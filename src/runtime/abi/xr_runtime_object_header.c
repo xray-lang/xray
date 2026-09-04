@@ -220,20 +220,20 @@ XrRuntimeAbiStatus xr_runtime_object_header_abi_materialize(
     candidate.object_kinds.entry_count =
         (uint16_t) (sizeof(canonical_object_kinds) /
                     sizeof(canonical_object_kinds[0]));
-    candidate.object_kinds.encoding_width = facts->uint16_size;
+    candidate.object_kinds.encoding_width = (uint8_t) facts->uint16_size;
     memcpy(candidate.object_kinds.entries, canonical_object_kinds,
            sizeof(canonical_object_kinds));
 
     candidate.flags.valid_mask = XR_RUNTIME_OBJECT_FLAG_VALID_MASK;
     candidate.flags.reserved_zero_mask = UINT16_MAX;
     candidate.flags.entry_count = 0;
-    candidate.flags.encoding_width = facts->uint16_size;
+    candidate.flags.encoding_width = (uint8_t) facts->uint16_size;
 
     candidate.layout_id.invalid_encoding = XR_RUNTIME_OBJECT_HEADER_INVALID_INDEX;
-    candidate.layout_id.encoding_width = facts->uint32_size;
+    candidate.layout_id.encoding_width = (uint8_t) facts->uint32_size;
     candidate.layout_id.semantics = XR_RUNTIME_INDEX_VERIFIED_TABLE;
     candidate.domain_id.invalid_encoding = XR_RUNTIME_OBJECT_HEADER_INVALID_INDEX;
-    candidate.domain_id.encoding_width = facts->uint32_size;
+    candidate.domain_id.encoding_width = (uint8_t) facts->uint32_size;
     candidate.domain_id.semantics = XR_RUNTIME_INDEX_VERIFIED_TABLE;
 
     XrFingerprint validation;

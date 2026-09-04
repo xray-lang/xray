@@ -26,6 +26,7 @@ typedef enum XrProgramXiProjectionKind {
     XR_PROGRAM_XI_PROJECTION_PLACE_LOAD = 14,
     XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 15,
     XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,
+    XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,
 } XrProgramXiProjectionKind;
 
 typedef enum XrProgramXiSemanticProjectionKind {

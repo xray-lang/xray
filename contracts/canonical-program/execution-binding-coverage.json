@@ -1,7 +1,8 @@
 {
   "schema": "xray-execution-binding-coverage/1",
   "profile_schema_version": 5,
-  "execution_binding_schema_version": 1,
+  "boundary_abi_schema_version": 3,
+  "execution_binding_schema_version": 2,
   "profile_partitions": [
     {
       "name": "target-semantics",
@@ -29,6 +30,7 @@
     "bool",
     "i64",
     "u32",
+    "u16",
     "error",
     "aggregate",
     "variant"
@@ -43,10 +45,15 @@
     "explicit-cleanup-actions"
   ],
   "provider_admission": [
+    "program-required-provider-subset",
+    "program-required-operation-subset",
     "stable-contract-id",
     "exact-contract-fingerprint",
     "ordered-operation-id",
     "non-null-operation-entry",
+    "typed-i64-trampoline",
+    "exact-i64-call-abi",
+    "extra-binding-rejected",
     "thread-safety",
     "reentrancy",
     "callback-safety"
@@ -58,7 +65,8 @@
   ],
   "generation_transitions": [
     "ACTIVE->DRAINING",
-    "DRAINING+pins=0->RETIRED",
+    "lease-ticket-active->consumed-once",
+    "DRAINING+leases=0->RETIRED",
     "RETIRED(g)->ACTIVE(g+1)"
   ],
   "foreign_profile_matrix": [

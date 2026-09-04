@@ -25,6 +25,7 @@
 #include "xa_memory_effect_db.h"
 #include "xa_alloc_effect.h"
 #include "xa_intrinsic_registry.h"
+#include "xa_target_query.h"
 #include "xa_ownership.h"
 #include "../../shared/xr_core_intrinsic.h"
 #include "../../runtime/value/xtype.h"
@@ -249,6 +250,7 @@ struct XaSymbolLinks {
     XaAllocEffectId alloc_effect_id;  // Canonical allocation summary (0 = not inferred yet)
     XaIntrinsicId intrinsic_id;       // canonical source-semantic identity, never name-derived
     XrCoreBuiltinId core_builtin_id;  // stable compiler-owned global builtin identity
+    uint8_t target_namespace_id;      // XaTargetNamespaceId; compiler-created namespaces only
     /* Stable publication snapshot.  alloc_effect_id is local to one analyzer
      * database; these fields survive symbol cloning/import metadata and are
      * the cross-module contract surface. */

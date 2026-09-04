@@ -1946,11 +1946,43 @@ static XaSymbol *xa_interface_lookup_inherited_member_depth(XaInferContext *ctx,
     return match;
 }
 
+static XrType *xa_target_query_member_type(XaInferContext *ctx, AstNode *node) {
+    MemberAccessNode *member = node ? &node->as.member_access : NULL;
+    AstNode *receiver = member ? member->object : NULL;
+    if (!ctx || !ctx->analyzer || !member || !receiver || receiver->type != AST_VARIABLE ||
+        receiver->as.variable.symbol_id == 0 || !member->name)
+        return NULL;
+    XaSymbol *symbol = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
+                                             receiver->as.variable.symbol_id);
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(ctx->analyzer, symbol) : NULL;
+    if (!symbol || !symbol->is_builtin || symbol->kind != XA_SYM_MODULE || !links ||
+        links->target_namespace_id != XA_TARGET_NAMESPACE_TARGET ||
+        strcmp(member->name, "pointerBits") != 0)
+        return NULL;
+
+    XrType *result = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U16);
+    XaTargetQueryFact fact = {
+        .namespace_id = XA_TARGET_NAMESPACE_TARGET,
+        .query_id = XA_TARGET_QUERY_POINTER_BITS,
+        .result_native_type = XR_NATIVE_U16,
+        .complete = 1,
+    };
+    if (!result || !xa_analyzer_set_target_query(ctx->analyzer, node, &fact)) {
+        XrLocation location = {
+            .file = ctx->file_path, .line = (uint32_t) node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_OUT_OF_MEMORY,
+                                   "target query fact publication failed", &location);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    return result;
+}
+
 XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
 
     MemberAccessNode *ma = &node->as.member_access;
+    xa_analyzer_clear_target_query(ctx->analyzer, node);
 
     /* JSON.UnknownFields is a compiler-owned enum namespace. It deliberately
      * has no runtime class or source declaration, so recognize its two values
@@ -2023,6 +2055,10 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return expected_enum_member;
 
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
+
+    XrType *target_query_type = xa_target_query_member_type(ctx, node);
+    if (target_query_type)
+        return target_query_type;
 
     // A diagnosed receiver failure is recovery poison, not an unresolved type.
     // Propagate it without emitting a secondary member-access diagnostic.

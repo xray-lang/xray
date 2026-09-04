@@ -789,6 +789,13 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->xg_implementor_ownership = 0;
     v->xg_implementor_copy_contract = 0;
     v->xg_type_contract_complete = 0;
+    v->xg_target_query_use_id = 0;
+    v->xg_target_source_node_id = 0;
+    v->xg_target_body_ordinal = 0;
+    v->xg_target_namespace_id = 0;
+    v->xg_target_query_kind = 0;
+    v->xg_target_result_native_type = 0;
+    v->xg_target_query_complete = 0;
     v->xg_json_codec_id = 0;
     v->xg_object_access_id = 0;
     v->xg_object_merge_id = 0;

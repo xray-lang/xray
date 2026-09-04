@@ -189,6 +189,167 @@ static bool build_analyzed_global_evidence_from_source(const char *source, XgGlo
     return ok;
 }
 
+TEST(global_evidence_publishes_exact_target_pointer_bits_query) {
+    setup_parser_session();
+    XgGlobalEvidence evidence = {0};
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
+        "var bits: u16 = target.pointerBits\n", &evidence, &analyzer, &ast));
+    ASSERT_EQ_UINT(evidence.ntarget_queries, 1);
+    const XgTargetQuerySummary *query = &evidence.target_queries[0];
+    ASSERT_TRUE(query->use_id != XG_NO_ID);
+    ASSERT_TRUE(query->owner_func_id != XG_NO_ID);
+    ASSERT_TRUE(query->source_node_id != 0);
+    ASSERT_EQ_UINT(query->namespace_id, XG_TARGET_NAMESPACE_TARGET);
+    ASSERT_EQ_UINT(query->query_kind, XG_TARGET_QUERY_POINTER_BITS);
+    ASSERT_EQ_UINT(query->result_native_type, XR_NATIVE_U16);
+    ASSERT_EQ_UINT(query->contract_complete, 1);
+    ASSERT_EQ_UINT(query->result_type_key,
+                   xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16));
+    ASSERT_EQ_PTR(xg_global_evidence_find_target_query(&evidence, query->use_id), query);
+    ASSERT_EQ_PTR(xg_global_evidence_find_target_query_at(
+                      &evidence, query->owner_func_id, query->source_node_id,
+                      XG_TARGET_QUERY_POINTER_BITS),
+                  query);
+    const XgBodySummary *owner = NULL;
+    for (uint32_t index = 0; index < evidence.nbodies; ++index) {
+        if (evidence.bodies[index].func_id == query->owner_func_id) {
+            ASSERT_NULL(owner);
+            owner = &evidence.bodies[index];
+        }
+    }
+    ASSERT_NOT_NULL(owner);
+    ASSERT_EQ_UINT(owner->effect_bits & (XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY),
+                   XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY);
+    ASSERT_EQ_UINT(owner->capability_bits & XG_CAP_PROFILE_POINTER_WIDTH,
+                   XG_CAP_PROFILE_POINTER_WIDTH);
+
+    xg_global_evidence_free(&evidence);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_closes_target_query_contract_over_interface_witnesses) {
+    setup_parser_session();
+    XgGlobalEvidence evidence = {0};
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
+        "interface PointerWidth { width() -> u16 }\n"
+        "class NativePointerWidth implements PointerWidth {\n"
+        "  width() -> u16 { return target.pointerBits }\n"
+        "}\n",
+        &evidence, &analyzer, &ast));
+    ASSERT_EQ_UINT(evidence.ntarget_queries, 1);
+    ASSERT_EQ_UINT(evidence.ninterface_methods, 1);
+    const XgInterfaceMethodSummary *method = &evidence.interface_methods[0];
+    ASSERT_EQ_UINT(method->contract_complete, 1);
+    ASSERT_EQ_UINT(method->effect_bits, XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY);
+    ASSERT_EQ_UINT(method->capability_bits, XG_CAP_PROFILE_POINTER_WIDTH);
+
+    xg_global_evidence_free(&evidence);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_rejects_ambiguous_target_query_identity) {
+    XgGlobalEvidence evidence = {0};
+    XgTargetQuerySummary first = {0};
+    first.use_id = 7;
+    first.owner_func_id = 3;
+    first.source_node_id = 11;
+    first.source_span_id = 5;
+    first.body_ordinal = 1;
+    first.result_type_key = xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16);
+    first.namespace_id = XG_TARGET_NAMESPACE_TARGET;
+    first.query_kind = XG_TARGET_QUERY_POINTER_BITS;
+    first.result_native_type = XR_NATIVE_U16;
+    first.contract_complete = 1;
+    ASSERT_NOT_NULL(xg_global_evidence_add_target_query(&evidence, &first));
+
+    XgTargetQuerySummary duplicate_use = first;
+    duplicate_use.source_node_id = 12;
+    duplicate_use.body_ordinal = 2;
+    ASSERT_NULL(xg_global_evidence_add_target_query(&evidence, &duplicate_use));
+
+    XgTargetQuerySummary duplicate_occurrence = first;
+    duplicate_occurrence.use_id = 8;
+    duplicate_occurrence.body_ordinal = 2;
+    ASSERT_NULL(xg_global_evidence_add_target_query(&evidence, &duplicate_occurrence));
+
+    XgTargetQuerySummary duplicate_ordinal = first;
+    duplicate_ordinal.use_id = 9;
+    duplicate_ordinal.source_node_id = 14;
+    ASSERT_NULL(xg_global_evidence_add_target_query(&evidence, &duplicate_ordinal));
+
+    XgTargetQuerySummary automatic = first;
+    automatic.use_id = XG_NO_ID;
+    automatic.source_node_id = 13;
+    automatic.body_ordinal = 3;
+    const XgTargetQuerySummary *automatic_row =
+        xg_global_evidence_add_target_query(&evidence, &automatic);
+    ASSERT_NOT_NULL(automatic_row);
+    ASSERT_EQ_UINT(automatic_row->use_id, 8);
+    ASSERT_EQ_UINT(evidence.ntarget_queries, 2);
+
+    xg_global_evidence_free(&evidence);
+}
+
+TEST(global_evidence_rejects_missing_target_query_fact_and_ignores_shadow) {
+    setup_parser_session();
+    const char *source = "var bits: u16 = target.pointerBits\n";
+    XgGlobalEvidence analyzerless = {0};
+    ASSERT_FALSE(build_global_evidence_from_source(source, &analyzerless));
+    xg_global_evidence_free(&analyzerless);
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "target-query-missing.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {0};
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
+    AstNode *decl = ast->as.program.statements[0];
+    AstNode *member = decl && decl->type == AST_VAR_DECL ? decl->as.var_decl.initializer : NULL;
+    ASSERT_NOT_NULL(member);
+    xa_analyzer_clear_target_query(analyzer, member);
+    XgGlobalEvidence rejected = {0};
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &rejected, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&rejected);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+
+    XgGlobalEvidence shadow = {0};
+    XaAnalyzer *shadow_analyzer = NULL;
+    AstNode *shadow_ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
+        "fn read() -> i64 {\n"
+        "    var target = {pointerBits: 7}\n"
+        "    return target.pointerBits\n"
+        "}\n",
+        &shadow, &shadow_analyzer, &shadow_ast));
+    ASSERT_EQ_UINT(shadow.ntarget_queries, 0);
+    xg_global_evidence_free(&shadow);
+    xa_analyzer_free(shadow_analyzer);
+    xr_program_destroy(shadow_ast);
+    teardown_parser_session();
+}
+
 static XaAnalyzer *build_analyzed_global_evidence_from_graph(XrModuleGraph *graph,
                                                               XgGlobalEvidence *out) {
     XaAnalyzer *analyzer;
@@ -975,7 +1136,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=52 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=53 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1349,15 +1510,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=52 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=52 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=52 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=52 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=53 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=53 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=53 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=53 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=52 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=52 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=52 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=52 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -8167,8 +8328,8 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     graph.entry_index = 0;
 
     XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
     const XgBodySummary *use_body = evidence_find_body_by_name(&ev, "use");
     const XgBodySummary *push_body = evidence_find_body_by_name(&ev, "push");
     ASSERT_NOT_NULL(use_body);
@@ -14400,6 +14561,10 @@ TEST(address_plan_rejects_owner_pointer_field_escape) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_module_summary_requires_typed_identity);
+RUN_TEST(global_evidence_publishes_exact_target_pointer_bits_query);
+RUN_TEST(global_evidence_rejects_ambiguous_target_query_identity);
+RUN_TEST(global_evidence_rejects_missing_target_query_fact_and_ignores_shadow);
+RUN_TEST(global_evidence_closes_target_query_contract_over_interface_witnesses);
 RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_decl_kind_capabilities_are_disjoint);
 RUN_TEST(global_evidence_verifier_rejects_param_storage_key_without_vector);

@@ -99,6 +99,16 @@ static void register_builtin_module(XaAnalyzer *analyzer, const char *name) {
     }
 }
 
+static void register_target_query_namespace(XaAnalyzer *analyzer) {
+    register_builtin_module(analyzer, "target");
+    XaSymbol *symbol = xa_scope_lookup(analyzer->global_scope, "target");
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(analyzer, symbol) : NULL;
+    XR_DCHECK(symbol && symbol->is_builtin && links,
+              "register_target_query_namespace: builtin binding missing");
+    if (links)
+        links->target_namespace_id = XA_TARGET_NAMESPACE_TARGET;
+}
+
 // Register a builtin variable symbol in analyzer scope
 static void register_builtin_var(XaAnalyzer *analyzer, const char *name, XrType *type,
                                  bool is_const) {
@@ -372,6 +382,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_module_types_in_prelude(analyzer, "Coro");
     register_builtin_module(analyzer, "CoroPool");
     register_builtin_module(analyzer, "Channel");
+    register_target_query_namespace(analyzer);
 
     register_inheritable_builtin_class(analyzer, "PanicInfo");
 
@@ -2405,6 +2416,23 @@ bool xa_analyzer_get_function_expr_effect(XaAnalyzer *analyzer, const struct Ast
 void xa_analyzer_clear_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node) {
     if (analyzer && analyzer->node_table && node)
         xa_node_table_clear_function_expr_effect((XaNodeTable *) analyzer->node_table, node);
+}
+
+bool xa_analyzer_set_target_query(XaAnalyzer *analyzer, const struct AstNode *node,
+                                  const XaTargetQueryFact *fact) {
+    return analyzer && analyzer->node_table && node && fact &&
+           xa_node_table_set_target_query((XaNodeTable *) analyzer->node_table, node, fact);
+}
+
+bool xa_analyzer_get_target_query(XaAnalyzer *analyzer, const struct AstNode *node,
+                                  XaTargetQueryFact *out_fact) {
+    return analyzer && analyzer->node_table && node &&
+           xa_node_table_get_target_query((XaNodeTable *) analyzer->node_table, node, out_fact);
+}
+
+void xa_analyzer_clear_target_query(XaAnalyzer *analyzer, const struct AstNode *node) {
+    if (analyzer && analyzer->node_table && node)
+        xa_node_table_clear_target_query((XaNodeTable *) analyzer->node_table, node);
 }
 
 bool xa_analyzer_set_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,

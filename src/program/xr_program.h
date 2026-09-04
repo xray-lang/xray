@@ -12,6 +12,7 @@
 #define XR_PROGRAM_H
 
 #include "../base/xdefs.h"
+#include "../base/xstable_id.h"
 #include "../shared/xr_param_mode.h"
 #include "../shared/xr_view_origin.h"
 
@@ -22,6 +23,7 @@
 #define XR_PROGRAM_DIGEST_SIZE 32u
 #define XR_CORE_IR_KEY_SIZE 32u
 #define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
+#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 11u
 #define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(16)
 
 typedef enum XrProgramTypeKind {
@@ -30,6 +32,12 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_I64 = 2,
     XR_PROGRAM_TYPE_KIND_U32 = 3,
     XR_PROGRAM_TYPE_KIND_ERROR = 4,
+    XR_PROGRAM_TYPE_KIND_PANIC_INFO = 5,
+    XR_PROGRAM_TYPE_KIND_U16 = 6,
+    XR_PROGRAM_TYPE_KIND_TARGET_OS = 7,
+    XR_PROGRAM_TYPE_KIND_TARGET_ARCH = 8,
+    XR_PROGRAM_TYPE_KIND_TARGET_ABI = 9,
+    XR_PROGRAM_TYPE_KIND_TARGET_ENDIAN = 10,
     XR_PROGRAM_TYPE_KIND_AGGREGATE = 16,
     XR_PROGRAM_TYPE_KIND_VARIANT = 17,
     XR_PROGRAM_TYPE_KIND_VIEW = 18,
@@ -295,6 +303,15 @@ typedef struct XrCoreIrConformanceInput {
     uint32_t slot_count;
 } XrCoreIrConformanceInput;
 
+/* Program imports name semantic provider contracts and the exact operation
+ * subset they require.  Target ABI fingerprints remain profile-owned and are
+ * checked only when an execution instance binds this target-neutral table. */
+typedef struct XrCoreIrProviderRequirementInput {
+    XrStableId contract_id;
+    const XrStableId *operation_ids;
+    uint32_t operation_count;
+} XrCoreIrProviderRequirementInput;
+
 typedef struct XrCoreIrProgramInput {
     const uint8_t *semantic_profile_fingerprint;
     const uint16_t *required_features;
@@ -305,6 +322,8 @@ typedef struct XrCoreIrProgramInput {
     uint32_t interface_count;
     const XrCoreIrConformanceInput *conformances;
     uint32_t conformance_count;
+    const XrCoreIrProviderRequirementInput *provider_requirements;
+    uint32_t provider_requirement_count;
     const XrCoreIrModuleInput *modules;
     uint32_t module_count;
 } XrCoreIrProgramInput;

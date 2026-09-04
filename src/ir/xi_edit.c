@@ -101,6 +101,13 @@ static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool in
     hash = hash_u64(hash, value->xg_implementor_ownership);
     hash = hash_u64(hash, value->xg_implementor_copy_contract);
     hash = hash_u64(hash, value->xg_type_contract_complete);
+    hash = hash_u64(hash, value->xg_target_query_use_id);
+    hash = hash_u64(hash, value->xg_target_source_node_id);
+    hash = hash_u64(hash, value->xg_target_body_ordinal);
+    hash = hash_u64(hash, value->xg_target_namespace_id);
+    hash = hash_u64(hash, value->xg_target_query_kind);
+    hash = hash_u64(hash, value->xg_target_result_native_type);
+    hash = hash_u64(hash, value->xg_target_query_complete);
     hash = hash_u64(hash, (uintptr_t) value->error_producer);
     if (include_type) {
         hash = hash_u64(hash, (uintptr_t) value->type);

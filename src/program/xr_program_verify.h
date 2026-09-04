@@ -32,6 +32,7 @@ typedef enum XrProgramDiagnosticKind {
     XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE,
     XR_PROGRAM_DIAGNOSTIC_EFFECT,
     XR_PROGRAM_DIAGNOSTIC_CAPABILITY,
+    XR_PROGRAM_DIAGNOSTIC_PROVIDER_REQUIREMENT,
     XR_PROGRAM_DIAGNOSTIC_ROOT,
     XR_PROGRAM_DIAGNOSTIC_ENTRY_POINT,
 } XrProgramDiagnosticKind;
@@ -70,6 +71,12 @@ typedef enum XrProgramVerifyStatus {
 
 typedef struct XrValidatedProgram XrValidatedProgram;
 
+typedef struct XrProgramProviderRequirementView {
+    XrStableId contract_id;
+    const XrStableId *operation_ids;
+    uint32_t operation_count;
+} XrProgramProviderRequirementView;
+
 XR_FUNC XrProgramVerifyBudget xr_program_verify_default_budget(void);
 XR_FUNC XrProgramVerifyStatus xr_program_validate(const uint8_t *bytes, size_t size,
                                                   const XrProgramVerifyBudget *budget,
@@ -81,6 +88,10 @@ XR_FUNC XrProgramId xr_validated_program_id(const XrValidatedProgram *program);
 XR_FUNC uint32_t xr_validated_program_function_count(const XrValidatedProgram *program);
 XR_FUNC uint32_t xr_validated_program_entry_function(const XrValidatedProgram *program);
 XR_FUNC uint64_t xr_validated_program_verifier_work(const XrValidatedProgram *program);
+XR_FUNC uint32_t
+xr_validated_program_provider_requirement_count(const XrValidatedProgram *program);
+XR_FUNC bool xr_validated_program_provider_requirement(
+    const XrValidatedProgram *program, uint32_t index, XrProgramProviderRequirementView *view_out);
 XR_FUNC const uint8_t *xr_validated_program_bytes(const XrValidatedProgram *program,
                                                   size_t *size_out);
 XR_FUNC const char *xr_program_verify_status_name(XrProgramVerifyStatus status);

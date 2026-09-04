@@ -2683,6 +2683,20 @@
   :targets (aot-verify)
   :lowering-policy verifier-only)
 
+; Compiler-owned target.pointerBits query. It remains occurrence-sensitive
+; because the Xglobal row identity is part of the proof consumed by Program.
+(define-xi-op xi.target.pointer.bits
+  :class constant
+  :arity 0
+  :own-use borrow
+  :speculation safe
+  :vn-kind none
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-verify)
+  :lowering-policy verifier-only)
+
 ; Every operation belongs to exactly one language-semantic owner category.
 ; These groups deliberately exclude target support, lowering policy, provider
 ; spelling and C representation. xisagen rejects missing, unknown or duplicate
@@ -2734,6 +2748,7 @@
     xi.value.product.construct
     xi.value.product.project
     xi.sum.inject
+    xi.target.pointer.bits
     xi.call
     xi.call.method
     xi.call.method.direct

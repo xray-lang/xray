@@ -35,6 +35,31 @@
     },
     {
       "stable_id": 6,
+      "name": "u16",
+      "description": "Exactly 16-bit unsigned integer semantics."
+    },
+    {
+      "stable_id": 7,
+      "name": "TargetOs",
+      "description": "Closed canonical target operating-system value."
+    },
+    {
+      "stable_id": 8,
+      "name": "TargetArch",
+      "description": "Closed canonical target architecture value."
+    },
+    {
+      "stable_id": 9,
+      "name": "TargetAbi",
+      "description": "Closed canonical target native-ABI value."
+    },
+    {
+      "stable_id": 10,
+      "name": "TargetEndian",
+      "description": "Closed canonical target byte-order value."
+    },
+    {
+      "stable_id": 11,
       "name": "type-variable",
       "description": "Registry meta-type resolved by a verified function or block signature."
     }
@@ -1592,7 +1617,7 @@
       "epoch": 1,
       "type_rule": {
         "operands": [],
-        "result": "u32",
+        "result": "u16",
         "immediates": {}
       },
       "evaluation_order": "none",

@@ -39,6 +39,8 @@ struct XaTypedProgram {
     uint32_t call_error_effect_count;
     XaNodeFunctionExprEffectEntry *function_expr_effects;
     uint32_t function_expr_effect_count;
+    XaNodeTargetQueryEntry *target_queries;
+    uint32_t target_query_count;
     XaNodeCallableTargetSetEntry *callable_target_sets;
     uint32_t callable_target_set_count;
     bool verified;
@@ -204,9 +206,21 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
             "function-expression effect snapshot allocation failed (AnalysisResourceFailure)";
         return result;
     }
+    if (!xa_node_table_snapshot_target_queries((const XaNodeTable *) analyzer->node_table,
+                                               &program->target_queries,
+                                               &program->target_query_count)) {
+        xr_free(program->function_expr_effects);
+        xr_free(program->call_error_effects);
+        xr_free(program->conversions);
+        xr_free(program);
+        result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
+        result.detail = "target-query snapshot allocation failed (AnalysisResourceFailure)";
+        return result;
+    }
     if (!xa_node_table_snapshot_callable_target_sets((const XaNodeTable *) analyzer->node_table,
                                                      &program->callable_target_sets,
                                                      &program->callable_target_set_count)) {
+        xr_free(program->target_queries);
         xr_free(program->function_expr_effects);
         xr_free(program->call_error_effects);
         xr_free(program->conversions);
@@ -220,6 +234,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_INVALID) {
         xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                                  program->callable_target_set_count);
+        xr_free(program->target_queries);
         xr_free(program->function_expr_effects);
         xr_free(program->call_error_effects);
         xr_free(program->conversions);
@@ -231,6 +246,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_RESOURCE_FAILURE) {
         xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                                  program->callable_target_set_count);
+        xr_free(program->target_queries);
         xr_free(program->function_expr_effects);
         xr_free(program->call_error_effects);
         xr_free(program->conversions);
@@ -252,6 +268,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
             closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
             xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                                      program->callable_target_set_count);
+            xr_free(program->target_queries);
             xr_free(program->function_expr_effects);
             xr_free(program->call_error_effects);
             xr_free(program->conversions);
@@ -279,6 +296,7 @@ void xa_typed_program_free(XaTypedProgram *program) {
     xr_program_semantic_closure_free(program->program_semantic_closure);
     xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                              program->callable_target_set_count);
+    xr_free(program->target_queries);
     xr_free(program->function_expr_effects);
     xr_free(program->call_error_effects);
     xr_free(program->conversions);
@@ -400,6 +418,30 @@ bool xa_typed_program_function_expr_effect(const XaTypedProgram *program,
         if (entry->node_id < function_expr->node_id) {
             low = mid + 1;
         } else if (entry->node_id > function_expr->node_id) {
+            high = mid;
+        } else {
+            if (out_fact)
+                *out_fact = entry->fact;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool xa_typed_program_target_query(const XaTypedProgram *program,
+                                   const struct AstNode *member_access,
+                                   XaTargetQueryFact *out_fact) {
+    if (!xa_typed_program_is_current(program) || !member_access ||
+        member_access->type != AST_MEMBER_ACCESS)
+        return false;
+    uint32_t low = 0;
+    uint32_t high = program->target_query_count;
+    while (low < high) {
+        uint32_t mid = low + (high - low) / 2;
+        const XaNodeTargetQueryEntry *entry = &program->target_queries[mid];
+        if (entry->node_id < member_access->node_id) {
+            low = mid + 1;
+        } else if (entry->node_id > member_access->node_id) {
             high = mid;
         } else {
             if (out_fact)

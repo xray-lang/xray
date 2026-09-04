@@ -784,6 +784,10 @@ typedef enum {
      * Some with one non-null T operand. */
     XI_SUM_INJECT,
 
+    /* Compiler-owned target.pointerBits query. The source occurrence is
+     * frozen in Xglobal and carried by xg_target_query_* metadata. */
+    XI_TARGET_POINTER_BITS,
+
     XI_OP_COUNT /* sentinel */
 } XiOp;
 
@@ -1371,6 +1375,13 @@ typedef struct XiValue {
     uint8_t xg_implementor_ownership;    /* XgNominalOwnership */
     uint8_t xg_implementor_copy_contract; /* XgNominalCopyContract */
     uint8_t xg_type_contract_complete;    /* exact conformance type contract is frozen */
+    uint32_t xg_target_query_use_id;    /* exact XgTargetQueryUseId, or 0 */
+    uint32_t xg_target_source_node_id;  /* exact stable source occurrence, or 0 */
+    uint32_t xg_target_body_ordinal;    /* exact body occurrence ordinal, or 0 */
+    uint8_t xg_target_namespace_id;     /* XgTargetNamespaceId */
+    uint8_t xg_target_query_kind;    /* XgTargetQueryKind */
+    uint8_t xg_target_result_native_type; /* XrNativeType */
+    uint8_t xg_target_query_complete;     /* exact analyzer/Xglobal join is frozen */
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t xg_object_access_id; /* stable XgObjectAccessId for evidence-backed structural object
                                      slot access */
@@ -1508,6 +1519,13 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_implementor_ownership = src->xg_implementor_ownership;
     dst->xg_implementor_copy_contract = src->xg_implementor_copy_contract;
     dst->xg_type_contract_complete = src->xg_type_contract_complete;
+    dst->xg_target_query_use_id = src->xg_target_query_use_id;
+    dst->xg_target_source_node_id = src->xg_target_source_node_id;
+    dst->xg_target_body_ordinal = src->xg_target_body_ordinal;
+    dst->xg_target_namespace_id = src->xg_target_namespace_id;
+    dst->xg_target_query_kind = src->xg_target_query_kind;
+    dst->xg_target_result_native_type = src->xg_target_result_native_type;
+    dst->xg_target_query_complete = src->xg_target_query_complete;
     dst->xg_json_codec_id = src->xg_json_codec_id;
     dst->xg_object_access_id = src->xg_object_access_id;
     dst->xg_object_merge_id = src->xg_object_merge_id;
@@ -1698,6 +1716,10 @@ static inline bool xi_copy_is_identity_alias(const XiValue *v) {
            v->xg_existential_kind == XI_EXISTENTIAL_NONE && v->xg_interface_object_use_id == 0 &&
            v->xg_interface_use_kind == XI_INTERFACE_USE_NONE && v->xg_implementor_ownership == 0 &&
            v->xg_implementor_copy_contract == 0 && v->xg_type_contract_complete == 0 &&
+           v->xg_target_query_use_id == 0 && v->xg_target_source_node_id == 0 &&
+           v->xg_target_body_ordinal == 0 && v->xg_target_namespace_id == 0 &&
+           v->xg_target_query_kind == 0 && v->xg_target_result_native_type == 0 &&
+           v->xg_target_query_complete == 0 &&
            v->enum_metadata_owner == NULL && v->enum_metadata_field == 0 &&
            v->enum_metadata_kind == 0;
 }

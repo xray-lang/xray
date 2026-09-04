@@ -31,6 +31,13 @@ static XrCoreIrKey key(const char *text) {
     return xr_core_ir_key(text, strlen(text));
 }
 
+static XrStableId stable_id(const char *text) {
+    XrCoreIrKey value = key(text);
+    XrStableId id;
+    memcpy(id.bytes, value.bytes, sizeof(id.bytes));
+    return id;
+}
+
 static bool contains_bytes(const uint8_t *haystack, size_t haystack_size, const char *needle) {
     size_t needle_size = strlen(needle);
     if (needle_size == 0 || needle_size > haystack_size)
@@ -152,10 +159,28 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
     }
     XrCoreIrKey profile = key(profile_name);
     uint16_t features[] = {XR_CORE_FEATURE_CORE_BASE};
+    XrStableId contract_a = stable_id("provider-contract:a");
+    XrStableId contract_b = stable_id("provider-contract:b");
+    XrStableId operation_a = stable_id("provider-operation:a");
+    XrStableId operation_b = stable_id("provider-operation:b");
+    XrStableId operations_ab[] = {operation_a, operation_b};
+    XrStableId operations_ba[] = {operation_b, operation_a};
+    XrCoreIrProviderRequirementInput forward_requirements[] = {
+        {.contract_id = contract_b, .operation_ids = &operation_a, .operation_count = 1u},
+        {.contract_id = contract_a, .operation_ids = operations_ba, .operation_count = 2u},
+        {.contract_id = contract_a, .operation_ids = &operation_a, .operation_count = 1u},
+    };
+    XrCoreIrProviderRequirementInput reverse_requirements[] = {
+        {.contract_id = contract_a, .operation_ids = &operation_a, .operation_count = 1u},
+        {.contract_id = contract_a, .operation_ids = operations_ab, .operation_count = 2u},
+        {.contract_id = contract_b, .operation_ids = &operation_a, .operation_count = 1u},
+    };
     XrCoreIrProgramInput input = {
         .semantic_profile_fingerprint = profile.bytes,
         .required_features = features,
         .required_feature_count = 1,
+        .provider_requirements = reverse_modules ? reverse_requirements : forward_requirements,
+        .provider_requirement_count = 3u,
         .modules = ordered,
         .module_count = 2,
     };
@@ -192,6 +217,7 @@ static void test_determinism_roundtrip_and_identity(void) {
                                       sizeof(diagnostic)) == XR_PROGRAM_DECODE_OK);
     CHECK(view.format_major == XR_PROGRAM_FORMAT_MAJOR);
     CHECK(view.required_feature_count == 1);
+    CHECK(view.provider_requirement_count == 2u);
     CHECK(view.section_count == XR_PROGRAM_REQUIRED_SECTION_COUNT);
     CHECK(xr_program_id_equal(view.id, first.id));
     CHECK(xr_program_reencode(&view, &reencoded, diagnostic, sizeof(diagnostic)) ==
@@ -201,8 +227,8 @@ static void test_determinism_roundtrip_and_identity(void) {
 
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
-    CHECK(first.size == 239u);
-    CHECK(strcmp(id_hex, "84327c7ad226ebdf9c148d18a8bd36a5b0f6e2bd6aeca298c10372a6f2c267ad") == 0);
+    CHECK(first.size == 343u);
+    CHECK(strcmp(id_hex, "1dde4857de270e7a241db40071a4a0685198c111d9e0bd1b46362c1c2623dc38") == 0);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
 
     xr_program_artifact_free(&reencoded);
@@ -239,6 +265,19 @@ static void test_hostile_structure_and_budget(void) {
     memcpy(mutated, artifact.bytes, artifact.size);
     mutated[0] ^= UINT8_C(0xff);
     expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_BAD_MAGIC);
+
+    XrProgramView valid_view;
+    CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &valid_view, diagnostic,
+                                      sizeof(diagnostic)) == XR_PROGRAM_DECODE_OK);
+    memcpy(mutated, artifact.bytes, artifact.size);
+    memset(mutated + valid_view.sections[XR_PROGRAM_SECTION_IMPORTS - 1u].offset + 1u, 0,
+           XR_STABLE_ID_BYTES);
+    expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_NONCANONICAL);
+
+    memcpy(mutated, artifact.bytes, artifact.size);
+    mutated[valid_view.sections[XR_PROGRAM_SECTION_IMPORTS - 1u].offset + 1u +
+            XR_STABLE_ID_BYTES] = 0u;
+    expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_NONCANONICAL);
 
     memcpy(mutated, artifact.bytes, artifact.size);
     mutated[XR_PROGRAM_MAGIC_SIZE] = 2u;

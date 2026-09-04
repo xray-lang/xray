@@ -82,7 +82,7 @@ static void test_operation_metadata(void) {
     CHECK(call->effect_mask == UINT32_C(4));
 
     CHECK(target != NULL);
-    CHECK(target->result_type == XR_CORE_TYPE_U32);
+    CHECK(target->result_type == XR_CORE_TYPE_U16);
     CHECK(target->capability_mask == UINT32_C(1));
     CHECK(strcmp(target->profile_dependency, "pointer_width") == 0);
 

@@ -22,7 +22,10 @@ SOURCE_PROJECTION_HEADER_PATH = Path("src/program/xr_program_xi_projection_gen.h
 SOURCE_PROJECTION_SOURCE_PATH = Path("src/program/xr_program_xi_projection_gen.c")
 SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v1.md")
 COVERAGE_PATH = Path("contracts/canonical-program/xrprogram-format-coverage.json")
-TOP_KEYS = {"schema", "format", "encoding", "type_system", "value_system", "sections", "limits"}
+TOP_KEYS = {
+    "schema", "format", "encoding", "type_system", "value_system", "imports", "sections",
+    "limits",
+}
 FORMAT_KEYS = {"major", "minor", "magic_hex", "program_id_domain"}
 ENCODING_KEYS = {
     "fixed_integers",
@@ -46,7 +49,10 @@ LIMIT_KEYS = {
     "successors_per_operation",
     "roots_per_function",
     "roots_per_value",
+    "provider_contracts",
+    "provider_operations_per_contract",
 }
+IMPORT_KEYS = {"provider_requirement_table", "target_profile_binding"}
 TYPE_SYSTEM_KEYS = {
     "builtin_rows",
     "dynamic_type_base",
@@ -124,6 +130,7 @@ PROJECTION_KINDS = {
     "place-load": "XR_PROGRAM_XI_PROJECTION_PLACE_LOAD",
     "place-store": "XR_PROGRAM_XI_PROJECTION_PLACE_STORE",
     "callable-pack": "XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK",
+    "target-query": "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
 }
 SEMANTIC_MAPPING_KEYS = {
     "xi_operation",
@@ -189,6 +196,11 @@ CORE_TYPE_NAMES = {
     "u32": "XR_CORE_TYPE_U32",
     "error": "XR_CORE_TYPE_ERROR",
     "panic-info": "XR_CORE_TYPE_PANIC_INFO",
+    "u16": "XR_CORE_TYPE_U16",
+    "TargetOs": "XR_CORE_TYPE_TARGET_OS",
+    "TargetArch": "XR_CORE_TYPE_TARGET_ARCH",
+    "TargetAbi": "XR_CORE_TYPE_TARGET_ABI",
+    "TargetEndian": "XR_CORE_TYPE_TARGET_ENDIAN",
 }
 
 
@@ -266,7 +278,10 @@ def validate(schema: dict[str, Any]) -> None:
     require(isinstance(type_system, dict) and set(type_system) == TYPE_SYSTEM_KEYS,
             "type-system contract fields drifted")
     require(type_system == {
-        "builtin_rows": ["0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info"],
+        "builtin_rows": [
+            "0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info", "6:u16",
+            "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian",
+        ],
         "dynamic_type_base": 16,
         "dynamic_kinds": ["aggregate", "variant", "view", "callable", "existential"],
         "ownership_kinds": ["0:trivial", "1:affine"],
@@ -306,6 +321,14 @@ def validate(schema: dict[str, Any]) -> None:
         "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
         "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
     }, "value-system semantic policy drifted")
+
+    imports = schema["imports"]
+    require(isinstance(imports, dict) and set(imports) == IMPORT_KEYS,
+            "import contract fields drifted")
+    require(imports == {
+        "provider_requirement_table": "target-neutral ascending unique contract IDs; each row has ascending unique nonempty operation IDs",
+        "target_profile_binding": "exact required provider and operation subset; target profile owns call ABI and contract fingerprints; extra bindings are rejected",
+    }, "provider import policy drifted")
 
     sections = schema["sections"]
     require(isinstance(sections, list) and sections, "sections must be a non-empty array")
@@ -479,6 +502,7 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_PLACE_LOAD = 14,",
         "    XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 15,",
         "    XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,",
+        "    XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",
@@ -817,11 +841,12 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         lines.append(f"| {section['stable_id']} | `{section['name']}` | {'yes' if section['required'] else 'no'} |")
     type_system = schema["type_system"]
     value_system = schema["value_system"]
+    imports = schema["imports"]
     lines.extend([
         "",
         "## Logical type rows",
         "",
-        "The type section starts with the six fixed builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
+        "The type section starts with the eleven fixed runtime builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
         "",
         f"- Builtins: `{', '.join(type_system['builtin_rows'])}`",
         f"- Dynamic kinds: `{', '.join(type_system['dynamic_kinds'])}`",
@@ -861,6 +886,11 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Existential REF escape: `{value_system['existential_ref_escape_contract']}`",
         "",
         "A `place` is a verifier-confined SSA capability with a pointee `TypeId`; it is not a language type and never enters the type table. `REF` entry arguments and call operands are places, while `READ` and `MOVE` use values. An `owner` disposition is an exactly-once logical token; physical retain/release and storage remain executor-private.",
+        "",
+        "## Provider requirements",
+        "",
+        f"- Requirement table: `{imports['provider_requirement_table']}`",
+        f"- Execution binding: `{imports['target_profile_binding']}`",
     ])
     lines.extend(["", "## Resource ceilings", ""])
     for name, value in schema["limits"].items():
@@ -886,7 +916,7 @@ def generate_coverage(schema: dict[str, Any], digest: str) -> str:
                 "required": section["required"],
                 "w2_writer": "COMPLETE" if section["required"] else "NOT_YET_EMITTED",
                 "w2_decoder": "ZERO_ROW_ONLY" if section["name"] in {
-                    "imports", "boundaries", "semantic-metadata"
+                    "boundaries", "semantic-metadata"
                 } else ("OPTIONAL_DIGEST_ONLY" if not section["required"] else "COMPLETE"),
             }
             for section in schema["sections"]

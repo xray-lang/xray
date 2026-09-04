@@ -217,7 +217,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         36u,
         255u,
-        6u,
+        11u,
         1u,
         UINT32_C(4),
         UINT32_C(0),
@@ -255,7 +255,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         38u,
         255u,
-        6u,
+        11u,
         1u,
         UINT32_C(4),
         UINT32_C(0),
@@ -293,7 +293,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         40u,
         255u,
-        6u,
+        11u,
         1u,
         UINT32_C(4),
         UINT32_C(0),
@@ -388,7 +388,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         64u,
         0u,
-        3u,
+        6u,
         1u,
         UINT32_C(9),
         UINT32_C(1),
@@ -407,7 +407,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         80u,
         255u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -426,7 +426,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         81u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -445,7 +445,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         82u,
         2u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -464,7 +464,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         83u,
         255u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -502,7 +502,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         85u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(1),
         UINT32_C(0),
@@ -521,7 +521,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         86u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -559,7 +559,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         88u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -578,7 +578,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         89u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -597,7 +597,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         96u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -616,7 +616,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         97u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -654,7 +654,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         104u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),
@@ -673,7 +673,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
     {
         105u,
         1u,
-        6u,
+        11u,
         1u,
         UINT32_C(0),
         UINT32_C(0),

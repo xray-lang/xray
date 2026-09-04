@@ -452,15 +452,15 @@ static XrTargetProviderCallAbiContract make_call_abi(XrTargetProviderCallSlotAbi
 }
 
 static XrTargetProviderOperationContract make_operation(uint8_t id_seed,
-                                                        XrTargetProviderCallAbiContract call_abi,
-                                                        uint32_t effects, uint32_t lifetime,
-                                                        uint32_t failures) {
+                                                         XrTargetProviderCallAbiContract call_abi,
+                                                         uint32_t effects, uint32_t lifetime,
+                                                         uint32_t failure_flags) {
     XrTargetProviderOperationContract operation = {
         .stable_id = {{0}},
         .call_abi = call_abi,
         .effect_flags = effects,
         .lifetime_flags = lifetime,
-        .failure_flags = failures,
+        .failure_flags = failure_flags,
     };
     operation.stable_id = make_id(id_seed);
     return operation;

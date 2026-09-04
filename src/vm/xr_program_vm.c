@@ -62,7 +62,7 @@ struct XrVmCode {
     XrExecutionCacheKey cache_key;
     XrFingerprint private_digest;
     XrVmCodeOptions options;
-    uint32_t pointer_width;
+    uint16_t pointer_width;
     XrVmFixedFunction *fixed_functions;
     size_t private_size;
 };
@@ -172,6 +172,8 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_I64;
         case XR_CORE_TYPE_U32:
             return value.kind == XR_VM_VALUE_U32;
+        case XR_CORE_TYPE_U16:
+            return value.kind == XR_VM_VALUE_U16;
         case XR_CORE_TYPE_ERROR:
             return value.kind == XR_VM_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
@@ -873,8 +875,8 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
                         goto done;
                     }
-                    produced.as.value.kind = XR_VM_VALUE_U32;
-                    produced.as.value.as.u32 = context->code->pointer_width;
+                    produced.as.value.kind = XR_VM_VALUE_U16;
+                    produced.as.value.as.u16 = context->code->pointer_width;
                     break;
                 case XR_CORE_OP_CORE_CALLABLE_PACK: {
                     XrVmCallableValue *carrier = allocate_callable(context);
@@ -1169,23 +1171,24 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
             diagnostic_out->status = XR_VM_CODE_POLICY_REJECTED;
         return XR_VM_CODE_POLICY_REJECTED;
     }
-    if (!xr_execution_instance_pin(instance)) {
+    XrExecutionLease lease = {0};
+    if (!xr_execution_instance_acquire(instance, &lease)) {
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
         return XR_VM_CODE_INSTANCE_UNAVAILABLE;
     }
-    const XrValidatedProgram *program = xr_execution_instance_program(instance);
-    const XrTargetProfile *profile = xr_execution_instance_profile(instance);
-    const XrBoundaryAbi *boundary = profile ? xr_target_profile_boundary_abi(profile) : NULL;
-    if (!program || !boundary) {
-        xr_execution_instance_unpin(instance);
+    const XrValidatedProgram *program = xr_execution_lease_program(&lease);
+    const XrTargetProfile *profile = xr_execution_lease_profile(&lease);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
+    if (!program || !machine) {
+        (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
         return XR_VM_CODE_INSTANCE_UNAVAILABLE;
     }
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
-        xr_execution_instance_unpin(instance);
+        (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_OUT_OF_MEMORY;
         return XR_VM_CODE_OUT_OF_MEMORY;
@@ -1193,16 +1196,16 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
     code->program = xr_validated_program_retain(program);
     code->cache_key = xr_execution_instance_cache_key(instance);
     code->options = selected;
-    code->pointer_width = (uint32_t) boundary->pointer_size * 8u;
+    code->pointer_width = (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8));
     if (selected.decode_policy == XR_VM_DECODE_FIXED_ROWS && !fixed_view_build(code)) {
         xr_vm_code_free(code);
-        xr_execution_instance_unpin(instance);
+        (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_OUT_OF_MEMORY;
         return XR_VM_CODE_OUT_OF_MEMORY;
     }
     compute_private_digest(code);
-    xr_execution_instance_unpin(instance);
+    (void) xr_execution_lease_release(&lease);
     *code_out = code;
     return XR_VM_CODE_OK;
 }
@@ -1247,7 +1250,9 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     if (!code || !instance || function_id >= code->program->function_count ||
         (argument_count != 0u && !arguments))
         return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
-    if (!xr_vm_code_matches_instance(code, instance) || !xr_execution_instance_pin(instance))
+    XrExecutionLease lease = {0};
+    if (!xr_vm_code_matches_instance(code, instance) ||
+        !xr_execution_instance_acquire(instance, &lease))
         return vm_outcome(XR_VM_OUTCOME_STALE_CODE, &context);
     static const uint8_t trace_domain[] = "xray-vm-logical-trace-v1\0";
     xr_sha256_init(&context.trace);
@@ -1260,7 +1265,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
         xr_calloc(argument_count ? argument_count : 1u, sizeof(XrVmRuntimeValue));
     if (!runtime_arguments) {
         free_aggregates(&context);
-        xr_execution_instance_unpin(instance);
+        (void) xr_execution_lease_release(&lease);
         return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, &context);
     }
     for (uint32_t index = 0; index < argument_count; ++index) {
@@ -1268,7 +1273,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
             function->parameter_modes[index] == XR_PARAM_REF) {
             xr_free(runtime_arguments);
             free_aggregates(&context);
-            xr_execution_instance_unpin(instance);
+            (void) xr_execution_lease_release(&lease);
             return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
         }
         runtime_arguments[index].category = XR_CORE_IR_VALUE;
@@ -1299,7 +1304,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     xr_sha256_final(&context.trace, outcome.logical_trace.bytes);
     outcome.steps = context.steps;
     free_aggregates(&context);
-    xr_execution_instance_unpin(instance);
+    (void) xr_execution_lease_release(&lease);
     return outcome;
 }
 

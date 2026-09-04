@@ -2558,8 +2558,70 @@ static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
 static XiValue *lower_bound_method_closure(XiLower *l, AstNode *node, MemberAccessNode *ma,
                                            const XaSelection *sel, XiValue *recv);
 
+static XiValue *lower_target_query(XiLower *l, AstNode *node, bool *out_recognized) {
+    XaTargetQueryFact fact;
+    const XgTargetQuerySummary *row = NULL;
+    uint32_t source_node_id = 0;
+    XrType *result_type;
+    bool has_fact;
+
+    if (out_recognized)
+        *out_recognized = false;
+    if (!l || !node || node->type != AST_MEMBER_ACCESS)
+        return NULL;
+    has_fact = xa_typed_program_target_query(l->typed_program, node, &fact);
+    if (l->global_evidence && l->func && l->func->xg_body_func_id != XG_NO_ID) {
+        source_node_id = xi_lower_source_node_id(l, node);
+        row = xg_global_evidence_find_target_query_at(
+            l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
+            XG_TARGET_QUERY_POINTER_BITS);
+    }
+    if (!has_fact) {
+        if (row) {
+            if (out_recognized)
+                *out_recognized = true;
+            l->had_error = true;
+        }
+        return NULL;
+    }
+    if (out_recognized)
+        *out_recognized = true;
+    result_type = xi_lower_node_type(l, node);
+    if (!row || source_node_id == 0 ||
+        xg_global_evidence_find_target_query(l->global_evidence, row->use_id) != row ||
+        fact.namespace_id != XA_TARGET_NAMESPACE_TARGET ||
+        fact.query_id != XA_TARGET_QUERY_POINTER_BITS || fact.result_native_type != XR_NATIVE_U16 ||
+        fact.complete != 1 || row->namespace_id != XG_TARGET_NAMESPACE_TARGET ||
+        row->query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+        row->result_native_type != XR_NATIVE_U16 || row->contract_complete != 1 ||
+        row->result_type_key != xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16) ||
+        !result_type || result_type->kind != XR_KIND_INT || result_type->is_nullable ||
+        result_type->scalar_rep != XR_NATIVE_U16) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *value = xi_value_new(l->func, l->cur_block, XI_TARGET_POINTER_BITS, result_type, 0);
+    if (!value) {
+        l->had_error = true;
+        return NULL;
+    }
+    value->line = (uint32_t) node->line;
+    value->xg_target_query_use_id = row->use_id;
+    value->xg_target_source_node_id = row->source_node_id;
+    value->xg_target_body_ordinal = row->body_ordinal;
+    value->xg_target_namespace_id = row->namespace_id;
+    value->xg_target_query_kind = row->query_kind;
+    value->xg_target_result_native_type = row->result_native_type;
+    value->xg_target_query_complete = row->contract_complete;
+    return value;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
+    bool is_target_query = false;
+    XiValue *target_query = lower_target_query(l, node, &is_target_query);
+    if (is_target_query)
+        return target_query;
     XiSequenceEvidenceIds sequence_ids;
     uint8_t sequence_access_kind = 0;
     if (ma->name && strcmp(ma->name, "length") == 0 &&

@@ -219,6 +219,13 @@
       "projection_kind": "callable-pack",
       "core_operation": "core.callable.pack",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.target.pointer.bits",
+      "result_type": "u16",
+      "projection_kind": "target-query",
+      "core_operation": "core.target.pointer_width",
+      "immediate_u32": 0
     }
   ],
   "semantic_mappings": [

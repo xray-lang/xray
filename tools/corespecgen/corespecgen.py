@@ -689,7 +689,8 @@ def validate_kats(kats: dict[str, Any], indexes: dict[str, dict[Any, dict[str, A
 
 
 def c_identifier(spelling: str) -> str:
-    return re.sub(r"[^A-Z0-9]+", "_", spelling.upper()).strip("_")
+    camel_split = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", spelling)
+    return re.sub(r"[^A-Z0-9]+", "_", camel_split.upper()).strip("_")
 
 
 def c_string(value: str) -> str:
@@ -998,6 +999,8 @@ def expect_invalid(label: str, registry: dict[str, Any], kats: dict[str, Any]) -
 
 
 def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
+    require(c_identifier("TargetOs") == "TARGET_OS",
+            "CamelCase Core type names must project to stable separated C identifiers")
     first = generate_outputs(registry, kats)
     second = generate_outputs(copy.deepcopy(registry), copy.deepcopy(kats))
     require(first == second, "generation is nondeterministic")

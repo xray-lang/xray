@@ -164,6 +164,9 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
         case XR_CORE_TYPE_U32:
             representation = XR_BACKEND_VALUE_U32;
             break;
+        case XR_CORE_TYPE_U16:
+            representation = XR_BACKEND_VALUE_U16;
+            break;
         case XR_CORE_TYPE_ERROR:
             representation = XR_BACKEND_VALUE_ERROR_U32;
             break;
@@ -474,16 +477,17 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INVALID_INPUT;
     }
-    if (!xr_execution_instance_pin(instance)) {
+    XrExecutionLease lease = {0};
+    if (!xr_execution_instance_acquire(instance, &lease)) {
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INSTANCE_UNAVAILABLE, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INSTANCE_UNAVAILABLE;
     }
-    const XrValidatedProgram *program = xr_execution_instance_program(instance);
-    const XrTargetProfile *profile = xr_execution_instance_profile(instance);
+    const XrValidatedProgram *program = xr_execution_lease_program(&lease);
+    const XrTargetProfile *profile = xr_execution_lease_profile(&lease);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     XrBackendIR *ir = xr_calloc(1u, sizeof(*ir));
     if (!ir) {
-        xr_execution_instance_unpin(instance);
+        (void) xr_execution_lease_release(&lease);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
         return XR_BACKEND_OUT_OF_MEMORY;
     }
@@ -495,25 +499,26 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
     ir->options = *options;
     ir->function_count = program->function_count;
     ir->entry_function = program->entry_function;
-    ir->pointer_width = machine ? machine->data_layout.pointer.size * 8u : 0u;
+    ir->pointer_width =
+        machine ? (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8)) : 0u;
     ir->constant_count = program->constant_count;
     if (program->function_count > options->max_functions ||
         (ir->pointer_width != 32u && ir->pointer_width != 64u)) {
-        xr_execution_instance_unpin(instance);
+        (void) xr_execution_lease_release(&lease);
         xr_backend_ir_free(ir);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_RESOURCE_LIMIT;
     }
     if (program->constant_count != 0u) {
         if ((size_t) program->constant_count > SIZE_MAX / sizeof(*ir->constants)) {
-            xr_execution_instance_unpin(instance);
+            (void) xr_execution_lease_release(&lease);
             xr_backend_ir_free(ir);
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
             return XR_BACKEND_RESOURCE_LIMIT;
         }
         ir->constants = xr_malloc((size_t) program->constant_count * sizeof(*ir->constants));
         if (!ir->constants) {
-            xr_execution_instance_unpin(instance);
+            (void) xr_execution_lease_release(&lease);
             xr_backend_ir_free(ir);
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
             return XR_BACKEND_OUT_OF_MEMORY;
@@ -522,14 +527,14 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
                (size_t) program->constant_count * sizeof(*ir->constants));
     }
     if ((size_t) program->function_count > SIZE_MAX / sizeof(*ir->functions)) {
-        xr_execution_instance_unpin(instance);
+        (void) xr_execution_lease_release(&lease);
         xr_backend_ir_free(ir);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_RESOURCE_LIMIT;
     }
     ir->functions = xr_calloc(program->function_count, sizeof(*ir->functions));
     if (!ir->functions) {
-        xr_execution_instance_unpin(instance);
+        (void) xr_execution_lease_release(&lease);
         xr_backend_ir_free(ir);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
         return XR_BACKEND_OUT_OF_MEMORY;
@@ -548,7 +553,7 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
                 uint16_t operation_id =
                     source->blocks[block].instructions[instruction].operation_id;
                 if (!operation_is_supported(operation_id)) {
-                    xr_execution_instance_unpin(instance);
+                    (void) xr_execution_lease_release(&lease);
                     xr_backend_ir_free(ir);
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION,
                                               operation_id, function, block, instruction);
@@ -558,7 +563,7 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
         }
         if (blocks > options->max_blocks || instructions > options->max_instructions ||
             values > options->max_values || !lower_function(source, &ir->functions[function])) {
-            xr_execution_instance_unpin(instance);
+            (void) xr_execution_lease_release(&lease);
             xr_backend_ir_free(ir);
             XrBackendStatus status = blocks > options->max_blocks ||
                                              instructions > options->max_instructions ||
@@ -573,7 +578,7 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
     xr_backend_compute_lowering_digest(ir, &ir->lowering_digest);
     bool verified = xr_backend_ir_verify(ir, diagnostic_out) &&
                     xr_backend_ir_translation_validate(ir, diagnostic_out);
-    xr_execution_instance_unpin(instance);
+    (void) xr_execution_lease_release(&lease);
     if (!verified) {
         XrBackendStatus status =
             diagnostic_out ? diagnostic_out->status : XR_BACKEND_INVARIANT_REJECTED;

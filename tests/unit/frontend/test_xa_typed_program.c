@@ -226,6 +226,60 @@ TEST(function_expr_effect_snapshot_is_distinct_and_immutable) {
     xr_program_destroy(program);
 }
 
+TEST(target_query_snapshot_preserves_compiler_owned_identity) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    AstNode *program =
+        parse_and_analyze(analyzer, "target-query.xr", "var bits: u16 = target.pointerBits\n");
+    ASSERT_NOT_NULL(program);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
+    AstNode *decl = program->as.program.statements[0];
+    AstNode *query = decl && decl->type == AST_VAR_DECL ? decl->as.var_decl.initializer : NULL;
+    ASSERT_NOT_NULL(query);
+
+    XaTargetQueryFact analyzer_fact = {0};
+    ASSERT_TRUE(xa_analyzer_get_target_query(analyzer, query, &analyzer_fact));
+    ASSERT_EQ_UINT(analyzer_fact.namespace_id, XA_TARGET_NAMESPACE_TARGET);
+    ASSERT_EQ_UINT(analyzer_fact.query_id, XA_TARGET_QUERY_POINTER_BITS);
+    ASSERT_EQ_UINT(analyzer_fact.result_native_type, XR_NATIVE_U16);
+    ASSERT_EQ_UINT(analyzer_fact.complete, 1);
+
+    XaTypedProgramPublishResult result = xa_typed_program_publish(analyzer, program, NULL, 0);
+    ASSERT_NOT_NULL(result.program);
+    xa_analyzer_clear_target_query(analyzer, query);
+    XaTargetQueryFact frozen = {0};
+    ASSERT_TRUE(xa_typed_program_target_query(result.program, query, &frozen));
+    ASSERT_EQ_UINT(frozen.namespace_id, XA_TARGET_NAMESPACE_TARGET);
+    ASSERT_EQ_UINT(frozen.query_id, XA_TARGET_QUERY_POINTER_BITS);
+    ASSERT_EQ_UINT(frozen.result_native_type, XR_NATIVE_U16);
+    ASSERT_EQ_UINT(frozen.complete, 1);
+
+    xa_typed_program_free(result.program);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
+TEST(user_shadowed_target_does_not_publish_target_query) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    AstNode *program = parse_and_analyze(
+        analyzer, "target-shadow.xr",
+        "fn read() -> i64 {\n"
+        "    var target = {pointerBits: 7}\n"
+        "    return target.pointerBits\n"
+        "}\n");
+    ASSERT_NOT_NULL(program);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
+    AstNode *function = program->as.program.statements[0];
+    AstNode *body = function ? function->as.function_decl.body : NULL;
+    AstNode *ret = body && body->type == AST_BLOCK ? body->as.block.statements[1] : NULL;
+    AstNode *member = ret && ret->type == AST_RETURN_STMT ? ret->as.return_stmt.values[0] : NULL;
+    ASSERT_NOT_NULL(member);
+    XaTargetQueryFact fact = {0};
+    ASSERT_FALSE(xa_analyzer_get_target_query(analyzer, member, &fact));
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 TEST(top_level_call_publishes_flow_sensitive_error_effect) {
     XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     AstNode *program = parse_and_analyze(analyzer, "top-level-call-error-effect.xr",
@@ -279,6 +333,8 @@ RUN_TEST(reanalysis_invalidates_old_snapshot);
 RUN_TEST(conversion_snapshot_is_owned_and_immutable);
 RUN_TEST(call_error_effect_snapshot_preserves_flow_sensitive_fact);
 RUN_TEST(function_expr_effect_snapshot_is_distinct_and_immutable);
+RUN_TEST(target_query_snapshot_preserves_compiler_owned_identity);
+RUN_TEST(user_shadowed_target_does_not_publish_target_query);
 RUN_TEST(top_level_call_publishes_flow_sensitive_error_effect);
 RUN_TEST(error_diagnostic_blocks_publication);
 teardown();

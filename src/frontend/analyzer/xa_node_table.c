@@ -38,6 +38,8 @@ typedef struct XaNodeEntry {
     XaCallErrorEffectFact call_error_effect;
     bool has_function_expr_effect;
     XaFunctionExprEffectFact function_expr_effect;
+    bool has_target_query;
+    XaTargetQueryFact target_query;
     bool has_callable_target_set;
     XaCallableTargetSetFact callable_target_set;
     struct XaNodeEntry *next;
@@ -170,7 +172,8 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 
 static bool entry_has_no_facts(const XaNodeEntry *e) {
     return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion &&
-           !e->has_call_error_effect && !e->has_function_expr_effect && !e->has_callable_target_set;
+           !e->has_call_error_effect && !e->has_function_expr_effect && !e->has_target_query &&
+           !e->has_callable_target_set;
 }
 
 static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
@@ -522,6 +525,95 @@ void xa_node_table_clear_function_expr_effect(XaNodeTable *t, const struct AstNo
         return;
     entry->has_function_expr_effect = false;
     entry->function_expr_effect = (XaFunctionExprEffectFact) {0};
+    if (entry_has_no_facts(entry))
+        remove_entry_by_id(t, node->node_id);
+}
+
+static bool target_query_fact_valid(const XaTargetQueryFact *fact) {
+    return fact && fact->namespace_id == XA_TARGET_NAMESPACE_TARGET &&
+           fact->query_id == XA_TARGET_QUERY_POINTER_BITS &&
+           fact->result_native_type == XR_NATIVE_U16 &&
+           fact->complete == 1;
+}
+
+bool xa_node_table_set_target_query(XaNodeTable *t, const struct AstNode *node,
+                                    const XaTargetQueryFact *fact) {
+    if (!t || !node || node->type != AST_MEMBER_ACCESS || !target_query_fact_valid(fact))
+        return false;
+    XaNodeEntry *entry = find_or_create(t, node->node_id);
+    if (!entry)
+        return false;
+    entry->has_target_query = true;
+    entry->target_query = *fact;
+    return true;
+}
+
+bool xa_node_table_get_target_query(const XaNodeTable *t, const struct AstNode *node,
+                                    XaTargetQueryFact *out_fact) {
+    if (!t || !node || node->type != AST_MEMBER_ACCESS)
+        return false;
+    const XaNodeEntry *entry = find_entry(t, node->node_id);
+    if (!entry || !entry->has_target_query)
+        return false;
+    if (out_fact)
+        *out_fact = entry->target_query;
+    return true;
+}
+
+static int compare_node_target_query_entry(const void *left, const void *right) {
+    const XaNodeTargetQueryEntry *a = (const XaNodeTargetQueryEntry *) left;
+    const XaNodeTargetQueryEntry *b = (const XaNodeTargetQueryEntry *) right;
+    return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
+}
+
+bool xa_node_table_snapshot_target_queries(const XaNodeTable *t,
+                                           XaNodeTargetQueryEntry **out_entries,
+                                           uint32_t *out_count) {
+    if (!out_entries || !out_count)
+        return false;
+    *out_entries = NULL;
+    *out_count = 0;
+    if (!t)
+        return false;
+
+    uint32_t count = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (entry->has_target_query)
+                count++;
+        }
+    }
+    if (count == 0)
+        return true;
+
+    XaNodeTargetQueryEntry *entries =
+        (XaNodeTargetQueryEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
+    if (!entries)
+        return false;
+    uint32_t index = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (!entry->has_target_query)
+                continue;
+            entries[index].node_id = entry->node_id;
+            entries[index].fact = entry->target_query;
+            index++;
+        }
+    }
+    qsort(entries, count, sizeof(*entries), compare_node_target_query_entry);
+    *out_entries = entries;
+    *out_count = count;
+    return true;
+}
+
+void xa_node_table_clear_target_query(XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return;
+    XaNodeEntry *entry = (XaNodeEntry *) find_entry(t, node->node_id);
+    if (!entry || !entry->has_target_query)
+        return;
+    entry->has_target_query = false;
+    entry->target_query = (XaTargetQueryFact) {0};
     if (entry_has_no_facts(entry))
         remove_entry_by_id(t, node->node_id);
 }

@@ -484,6 +484,11 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
         {XR_CORE_TYPE_U32, 3u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_ERROR, 4u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_PANIC_INFO, 5u, XR_CORE_IR_TYPE_OWNERSHIP_AFFINE, XR_CORE_IR_COPY_FORBIDDEN},
+        {XR_CORE_TYPE_U16, 6u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_TARGET_OS, 7u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_TARGET_ARCH, 8u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_TARGET_ABI, 9u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_TARGET_ENDIAN, 10u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
     };
     buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]) + program->type_count);
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
@@ -799,6 +804,19 @@ static void encode_code(ByteBuffer *buffer, const FunctionRef *functions, uint32
     }
 }
 
+static void encode_imports(ByteBuffer *buffer, const XrCoreIrProgram *program) {
+    buffer_put_uvar(buffer, program->provider_requirement_count);
+    for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
+        const XrCoreIrProviderRequirement *requirement =
+            &program->provider_requirements[provider];
+        buffer_put_bytes(buffer, requirement->contract_id.bytes, XR_STABLE_ID_BYTES);
+        buffer_put_uvar(buffer, requirement->operation_count);
+        for (uint32_t operation = 0; operation < requirement->operation_count; ++operation)
+            buffer_put_bytes(buffer, requirement->operation_ids[operation].bytes,
+                             XR_STABLE_ID_BYTES);
+    }
+}
+
 static bool parse_hex_digest(const char *hex, uint8_t digest[XR_PROGRAM_DIGEST_SIZE]) {
     for (size_t index = 0; index < XR_PROGRAM_DIGEST_SIZE; ++index) {
         unsigned high = (unsigned) (hex[index * 2u] >= 'a' ? hex[index * 2u] - 'a' + 10
@@ -866,7 +884,7 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
     encode_constants(&sections[1], constants, constant_count);
     encode_functions(&sections[2], functions, function_count, signatures, signature_count);
     encode_code(&sections[3], functions, function_count, constants, constant_count);
-    buffer_put_uvar(&sections[4], 0u);
+    encode_imports(&sections[4], program);
     buffer_put_uvar(&sections[5], 0u);
     encode_semantic_metadata(&sections[6], program, functions, function_count, signatures,
                              signature_count);

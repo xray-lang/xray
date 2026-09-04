@@ -5018,6 +5018,7 @@ if(BUILD_TESTS)
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --archive $<TARGET_FILE:xray_program_vm_runtime>
                 --executable $<TARGET_FILE:test_xr_program_vm_runtime>
+                --nm ${CMAKE_NM}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(xr_program_vm_contracts PROPERTIES

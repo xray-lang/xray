@@ -27,6 +27,7 @@ typedef uint32_t XgInterfaceId;
 typedef uint32_t XgMethodId;
 typedef uint32_t XgInterfaceMethodId;
 typedef uint32_t XgInterfaceObjectUseId;
+typedef uint32_t XgTargetQueryUseId;
 typedef uint32_t XgInterfaceConformanceId;
 typedef uint32_t XgInterfaceWitnessId;
 typedef uint32_t XgFieldId;
@@ -67,8 +68,10 @@ enum {
      * 41: bodies and methods publish return ownership.
      * 43: constructions of a class without a declared constructor carry their
      * own callsite kind instead of the open closure kind.
-     * 44: nested bodies publish their frozen lexical-parent body identity. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 52,
+     * 44: nested bodies publish their frozen lexical-parent body identity.
+     * 53: compiler-owned target queries publish stable source occurrence and
+     * exact result contracts. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 53,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -103,6 +106,16 @@ typedef enum XgBuildProfile {
     XG_BUILD_FREESTANDING,
     XG_BUILD_DEBUG_TOOLING,
 } XgBuildProfile;
+
+typedef enum XgTargetNamespaceId {
+    XG_TARGET_NAMESPACE_NONE = 0,
+    XG_TARGET_NAMESPACE_TARGET = 1,
+} XgTargetNamespaceId;
+
+typedef enum XgTargetQueryKind {
+    XG_TARGET_QUERY_NONE = 0,
+    XG_TARGET_QUERY_POINTER_BITS = 1,
+} XgTargetQueryKind;
 
 typedef enum XgDeclKind {
     XG_DECL_FUNC = 1,
@@ -410,6 +423,7 @@ enum {
     XG_CAP_GENERATOR = XR_CAP_GENERATOR,
     XG_CAP_STACKTRACE = XR_CAP_STACKTRACE,
     XG_CAP_PARALLEL = XR_CAP_PARALLEL,
+    XG_CAP_PROFILE_POINTER_WIDTH = 1u << 22,
 };
 
 enum {
@@ -446,6 +460,8 @@ enum {
     XG_BODY_ACCESSES_MUTABLE_MODULE = XR_EFFECT_ACCESSES_MUTABLE_MODULE,
     XG_BODY_OBSERVES_TASK_ID = XR_EFFECT_OBSERVES_TASK_ID,
     XG_BODY_MAY_PANIC = XR_EFFECT_MAY_PANIC,
+    XG_BODY_MAY_TRAP = 1u << 11,
+    XG_BODY_TARGET_QUERY = 1u << 12,
 };
 
 enum {
@@ -896,6 +912,19 @@ typedef struct XgInterfaceObjectUseSummary {
     uint8_t use_kind; /* XgInterfaceUseKind */
 } XgInterfaceObjectUseSummary;
 
+typedef struct XgTargetQuerySummary {
+    XgTargetQueryUseId use_id;
+    XgFuncId owner_func_id;
+    uint32_t source_node_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint32_t result_type_key;
+    uint8_t namespace_id;      /* XgTargetNamespaceId */
+    uint8_t query_kind;        /* XgTargetQueryKind */
+    uint8_t result_native_type; /* XrNativeType */
+    uint8_t contract_complete;
+} XgTargetQuerySummary;
+
 typedef struct XgBodySummary {
     XgFuncId func_id;
     XgFuncId lexical_parent_func_id;
@@ -1311,6 +1340,7 @@ typedef struct XgGlobalEvidence {
     XgInterfaceMethodSummary *interface_methods;
     XgInterfaceMethodParamSummary *interface_method_params;
     XgInterfaceObjectUseSummary *interface_object_uses;
+    XgTargetQuerySummary *target_queries;
     XgBodySummary *bodies;
     XgParamStorageSummary *param_storages;
     XgCallsiteSummary *callsites;
@@ -1350,6 +1380,7 @@ typedef struct XgGlobalEvidence {
     uint32_t ninterface_methods;
     uint32_t ninterface_method_params;
     uint32_t ninterface_object_uses;
+    uint32_t ntarget_queries;
     uint32_t nbodies;
     uint32_t nparam_storages;
     uint32_t ncallsites;
@@ -1389,6 +1420,7 @@ typedef struct XgGlobalEvidence {
     uint32_t interface_method_cap;
     uint32_t interface_method_param_cap;
     uint32_t interface_object_use_cap;
+    uint32_t target_query_cap;
     uint32_t body_cap;
     uint32_t param_storage_cap;
     uint32_t callsite_cap;
@@ -1433,6 +1465,7 @@ XR_FUNC bool xg_decl_kind_supports_methods(uint8_t kind);
 XR_FUNC bool xg_decl_kind_is_runtime_class(uint8_t kind);
 XR_FUNC bool xg_decl_kind_is_value_aggregate(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
+XR_FUNC const char *xg_target_query_kind_name(uint8_t kind);
 XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_storage_kind_name(uint8_t kind);
@@ -1485,6 +1518,8 @@ XR_FUNC bool xg_global_evidence_reserve_interface_method_params(XgGlobalEvidence
                                                                 uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *evidence,
                                                               uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_target_queries(XgGlobalEvidence *evidence,
+                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_param_storages(XgGlobalEvidence *evidence,
                                                        uint32_t capacity);
@@ -1555,10 +1590,20 @@ xg_global_evidence_add_interface_method_param(XgGlobalEvidence *evidence,
 XR_FUNC XgInterfaceObjectUseSummary *
 xg_global_evidence_add_interface_object_use(XgGlobalEvidence *evidence,
                                             const XgInterfaceObjectUseSummary *summary);
+XR_FUNC XgTargetQuerySummary *
+xg_global_evidence_add_target_query(XgGlobalEvidence *evidence,
+                                    const XgTargetQuerySummary *summary);
 XR_FUNC const XgInterfaceObjectUseSummary *
 xg_global_evidence_find_interface_object_use(const XgGlobalEvidence *evidence,
                                              XgFuncId owner_func_id, uint32_t source_node_id,
-                                             XgInterfaceId interface_id, uint32_t required_reason);
+                                             XgInterfaceId interface_id,
+                                             uint32_t required_reason);
+XR_FUNC const XgTargetQuerySummary *
+xg_global_evidence_find_target_query(const XgGlobalEvidence *evidence,
+                                     XgTargetQueryUseId use_id);
+XR_FUNC const XgTargetQuerySummary *xg_global_evidence_find_target_query_at(
+    const XgGlobalEvidence *evidence, XgFuncId owner_func_id, uint32_t source_node_id,
+    uint8_t query_kind);
 XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
                                                    const XgBodySummary *summary);
 XR_FUNC XgParamStorageSummary *

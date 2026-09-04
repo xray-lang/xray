@@ -60,6 +60,12 @@ typedef struct XrValidatedConformance {
     uint32_t slot_count;
 } XrValidatedConformance;
 
+typedef struct XrValidatedProviderRequirement {
+    XrStableId contract_id;
+    XrStableId *operation_ids;
+    uint32_t operation_count;
+} XrValidatedProviderRequirement;
+
 typedef struct XrValidatedRoot {
     XrCoreIrRootKind kind;
     uint32_t parameter_ordinal;
@@ -161,6 +167,8 @@ struct XrValidatedProgram {
     uint32_t interface_count;
     XrValidatedConformance *conformances;
     uint32_t conformance_count;
+    XrValidatedProviderRequirement *provider_requirements;
+    uint32_t provider_requirement_count;
     XrValidatedConstant *constants;
     uint32_t constant_count;
     XrValidatedFunction *functions;

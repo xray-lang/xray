@@ -140,7 +140,7 @@ static XrBoundaryValueAbi boundary_value(uint16_t type_id, uint8_t representatio
 }
 
 static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAbi *boundary) {
-    static const uint8_t domain[] = "xray-boundary-abi-v2\0";
+    static const uint8_t domain[] = "xray-boundary-abi-v3\0";
     const XrTargetDataLayout *layout = &facts->machine.data_layout;
     memset(boundary, 0, sizeof(*boundary));
     boundary->schema_version = XR_BOUNDARY_ABI_SCHEMA_VERSION;
@@ -166,6 +166,8 @@ static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAb
                                          XR_BOUNDARY_OWNERSHIP_COPY, layout->u32);
     boundary->values[4] = boundary_value(XR_CORE_TYPE_ERROR, XR_BOUNDARY_VALUE_TYPED_ERROR_CODE,
                                          XR_BOUNDARY_OWNERSHIP_COPY, layout->u32);
+    boundary->values[5] = boundary_value(XR_CORE_TYPE_U16, XR_BOUNDARY_VALUE_UNSIGNED_INTEGER,
+                                         XR_BOUNDARY_OWNERSHIP_COPY, layout->u16);
     boundary->object_header_id = facts->object_header_fingerprint;
     boundary->string_object_id = facts->string_literal.fingerprint;
 

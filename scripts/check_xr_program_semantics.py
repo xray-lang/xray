@@ -131,6 +131,20 @@ def validate_sources(registry: dict[str, Any], sources: dict[Path, str]) -> None
     require("max_work" in verifier, "verifier has no explicit work budget")
     require("max_value_cells" in evaluator and "max_value_cells" in test,
             "aggregate evaluator allocation has no tested value-cell budget")
+    require(re.search(
+        r"case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:\s*"
+        r"return\s+expect_shape\([^;]*XR_CORE_TYPE_U16",
+        verifier, re.DOTALL,
+    ) is not None, "pointer-width verifier result is not exact u16")
+    require(re.search(
+        r"case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:"
+        r"(?:(?!\n\s*case\s).)*"
+        r"produced\.as\.value\.kind\s*=\s*XR_REFERENCE_VALUE_U16",
+        evaluator, re.DOTALL,
+    ) is not None, "pointer-width reference result is not exact u16")
+    require("builtin_kind_offset(&artifact, XR_CORE_TYPE_U16" in test and
+            "XR_PROGRAM_TYPE_KIND_U32" in test,
+            "pointer-width test omits the legacy-u32/fixed-row hostile checks")
 
 
 def check(root: Path, source_override: dict[Path, str] | None = None) -> None:
@@ -169,6 +183,16 @@ def self_test(root: Path) -> None:
         pass
     else:
         raise GateError("forbidden evaluator dependency mutation was accepted")
+
+    mutated = evaluator.replace("produced.as.value.kind = XR_REFERENCE_VALUE_U16",
+                                "produced.as.value.kind = XR_REFERENCE_VALUE_U32", 1)
+    require(mutated != evaluator, "pointer-width result mutation did not apply")
+    try:
+        check(root, {EVALUATOR: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("legacy u32 reference result was accepted")
 
 
 def main() -> int:

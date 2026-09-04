@@ -18,6 +18,7 @@ typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_BOOL,
     XR_REFERENCE_VALUE_I64,
     XR_REFERENCE_VALUE_U32,
+    XR_REFERENCE_VALUE_U16,
     XR_REFERENCE_VALUE_ERROR,
     XR_REFERENCE_VALUE_PANIC_INFO,
     XR_REFERENCE_VALUE_AGGREGATE,
@@ -31,6 +32,7 @@ typedef struct XrReferenceValue {
         bool boolean;
         int64_t i64;
         uint32_t u32;
+        uint16_t u16;
         uint32_t error;
         uint32_t panic_info;
         const void *aggregate;
@@ -40,7 +42,7 @@ typedef struct XrReferenceValue {
 } XrReferenceValue;
 
 typedef struct XrReferenceProfile {
-    uint32_t pointer_width;
+    uint16_t pointer_width;
 } XrReferenceProfile;
 
 typedef struct XrReferenceBudget {

@@ -524,6 +524,42 @@ static bool verify_existential_metadata_contract(VerifyCtx *ctx, const XiFunc *f
     return true;
 }
 
+static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                         const XiValue *value) {
+    bool carries_contract = value &&
+                            (value->xg_target_query_use_id != XG_NO_ID ||
+                             value->xg_target_source_node_id != 0 ||
+                             value->xg_target_body_ordinal != 0 ||
+                             value->xg_target_namespace_id != XG_TARGET_NAMESPACE_NONE ||
+                             value->xg_target_query_kind != XG_TARGET_QUERY_NONE ||
+                             value->xg_target_result_native_type != 0 ||
+                             value->xg_target_query_complete != 0);
+    if (!value)
+        return true;
+    if (value->op != XI_TARGET_POINTER_BITS) {
+        if (carries_contract) {
+            verr(ctx, "func '%s': v%u %s in b%u carries target-query metadata", f->name,
+                 value->id, xi_op_name(value->op), blk->id);
+            return false;
+        }
+        return true;
+    }
+    if (!value->type || value->type->kind != XR_KIND_INT || value->type->is_nullable ||
+        value->type->scalar_rep != XR_NATIVE_U16 || value->nargs != 0 || value->aux != NULL ||
+        value->aux_int != 0 || value->xg_target_query_use_id == XG_NO_ID ||
+        value->xg_target_source_node_id == 0 || value->xg_target_body_ordinal == 0 ||
+        value->xg_target_namespace_id != XG_TARGET_NAMESPACE_TARGET ||
+        value->xg_target_query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+        value->xg_target_result_native_type != XR_NATIVE_U16 ||
+        value->xg_target_query_complete != 1) {
+        verr(ctx, "func '%s': v%u XI_TARGET_POINTER_BITS in b%u lacks an exact target query "
+                  "contract",
+             f->name, value->id, blk->id);
+        return false;
+    }
+    return true;
+}
+
 /* Check 4: value-level invariants */
 static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiValue *v) {
     if (ctx->failed)
@@ -606,6 +642,8 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
     if (!verify_sum_inject_contract(ctx, f, blk, v))
         return;
     if (!verify_existential_metadata_contract(ctx, f, blk, v))
+        return;
+    if (!verify_target_query_contract(ctx, f, blk, v))
         return;
 
     // Assertion semantics belong only to an arena-owned typed plan.

@@ -37,6 +37,7 @@ typedef struct XrProgramView {
     uint8_t core_spec_fingerprint[XR_PROGRAM_DIGEST_SIZE];
     uint8_t semantic_profile_fingerprint[XR_PROGRAM_DIGEST_SIZE];
     uint64_t required_feature_count;
+    uint64_t provider_requirement_count;
     uint64_t payload_offset;
     uint32_t section_count;
     XrProgramSectionView sections[XR_PROGRAM_SECTION_COUNT];

@@ -47,32 +47,9 @@ typedef struct TestBindings {
     size_t count;
 } TestBindings;
 
-static void provider_entry(void) {
-}
-
 static void build_bindings(const XrTargetProfile *profile, TestBindings *bindings) {
+    (void) profile;
     memset(bindings, 0, sizeof(*bindings));
-    bindings->count = xr_target_profile_provider_count(profile);
-    REQUIRE(bindings->count > 0u);
-    for (size_t provider_index = 0; provider_index < bindings->count; ++provider_index) {
-        const XrTargetProviderContract *contract =
-            xr_target_profile_provider(profile, provider_index);
-        REQUIRE(contract != NULL);
-        XrProviderBinding *provider = &bindings->providers[provider_index];
-        provider->contract_id = contract->contract_id;
-        REQUIRE(xr_target_provider_contract_fingerprint(
-                    contract, &provider->contract_fingerprint) == XR_RUNTIME_ABI_OK);
-        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
-        provider->operations = bindings->operations[provider_index];
-        provider->operation_count = contract->operation_count;
-        for (uint16_t operation_index = 0; operation_index < contract->operation_count;
-             ++operation_index) {
-            XrProviderOperationBinding *operation =
-                &bindings->operations[provider_index][operation_index];
-            operation->operation_id = contract->operations[operation_index].stable_id;
-            operation->entry = provider_entry;
-        }
-    }
 }
 
 static XrCoreIrKey fixture_key(const char *text) {
@@ -513,7 +490,7 @@ static XrValidatedProgram *build_full_program(void) {
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_TARGET_POINTER_WIDTH,
          .result = width,
-         .result_type_id = XR_CORE_TYPE_U32,
+         .result_type_id = XR_CORE_TYPE_U16,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_BRANCH,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -764,7 +741,7 @@ static XrValidatedProgram *build_pointer_width_program(void) {
     XrCoreIrInstructionInput instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_TARGET_POINTER_WIDTH,
          .result = width,
-         .result_type_id = XR_CORE_TYPE_U32,
+         .result_type_id = XR_CORE_TYPE_U16,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -780,7 +757,7 @@ static XrValidatedProgram *build_pointer_width_program(void) {
     };
     XrCoreIrFunctionInput function = {
         .key = fixture_key("aot:width:function"),
-        .result_type_id = XR_CORE_TYPE_U32,
+        .result_type_id = XR_CORE_TYPE_U16,
         .effect_mask = UINT32_C(9),
         .capability_mask = UINT32_C(1),
         .entry_block = block_key,
@@ -903,7 +880,7 @@ static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile 
     XrExecutionBindingInput input = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
                                      .program = program,
                                      .profile = profile,
-                                     .providers = bindings->providers,
+                                     .providers = bindings->count ? bindings->providers : NULL,
                                      .provider_count = bindings->count,
                                      .generation = generation};
     XrExecutionDiagnostic diagnostic;
@@ -1219,6 +1196,11 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
 }
 
 static void test_foreign_profile_and_translation_mutation(void) {
+    uint8_t representation = 0u;
+    REQUIRE(xr_backend_representation_for_type(XR_CORE_TYPE_U16, &representation));
+    REQUIRE(representation == XR_BACKEND_VALUE_U16);
+    REQUIRE(!xr_backend_representation_for_type(XR_CORE_TYPE_TARGET_OS, &representation));
+
     XrValidatedProgram *program = build_pointer_width_program();
     XrTargetProfile *profile =
         xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
@@ -1230,8 +1212,17 @@ static void test_foreign_profile_and_translation_mutation(void) {
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
-    REQUIRE(strstr(generated.bytes, "UINT32_C(32)") != NULL);
+    REQUIRE(strstr(generated.bytes, "uint16_t v0") != NULL);
+    REQUIRE(strstr(generated.bytes, "UINT16_C(32)") != NULL);
+    REQUIRE(strstr(generated.bytes, "result.u16") != NULL);
     REQUIRE(strstr(generated.bytes, "sizeof(void") == NULL);
+
+    uint8_t saved_representation = ir->functions[0].value_representations[0];
+    ir->functions[0].value_representations[0] = XR_BACKEND_VALUE_U32;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    ir->functions[0].value_representations[0] = saved_representation;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
 
     ir->pointer_width = 64u;
     REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
@@ -1325,6 +1316,7 @@ int main(int argc, char **argv) {
     bool seal_mode = argc == 3 && strcmp(argv[1], "--seal") == 0;
     bool invoke_object_mode = argc == 3 && strcmp(argv[2], "sealed-invoke-object") == 0;
     bool panic_object_mode = argc == 3 && strcmp(argv[2], "typed-panic-object") == 0;
+    bool pointer_width_mode = argc == 3 && strcmp(argv[2], "pointer-width") == 0;
     XrValidatedProgram *program = NULL;
     if (seal_mode)
         program = build_full_program();
@@ -1338,6 +1330,8 @@ int main(int argc, char **argv) {
         program = build_existential_program();
     else if (argc == 3 && strcmp(argv[2], "callable") == 0)
         program = build_callable_program();
+    else if (pointer_width_mode)
+        program = build_pointer_width_program();
     else if (invoke_object_mode || panic_object_mode) {
         XrProgramArtifact artifact = {0};
         char diagnostic[256] = {0};
@@ -1354,8 +1348,9 @@ int main(int argc, char **argv) {
         REQUIRE(argc != 3);
         program = build_full_program();
     }
-    XrTargetProfile *profile =
-        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        pointer_width_mode, pointer_width_mode ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+                                              : XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     TestBindings bindings;
     build_bindings(profile, &bindings);

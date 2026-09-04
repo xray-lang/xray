@@ -388,11 +388,15 @@ set(XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR
     ${CMAKE_CURRENT_BINARY_DIR}/generated/task-293-source-aot)
 set(XR_PROGRAM_SOURCE_AOT_GENERATED_C
     ${XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR}/source_aot_native.c)
+set(XR_PROGRAM_POINTER_AOT_GENERATED_C
+    ${XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR}/pointer_aot_native.c)
+math(EXPR XR_PROGRAM_NATIVE_POINTER_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
 add_custom_command(
-    OUTPUT ${XR_PROGRAM_SOURCE_AOT_GENERATED_C}
+    OUTPUT ${XR_PROGRAM_SOURCE_AOT_GENERATED_C} ${XR_PROGRAM_POINTER_AOT_GENERATED_C}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR}
     COMMAND $<TARGET_FILE:test_xi_pipeline>
         --source-aot-c ${XR_PROGRAM_SOURCE_AOT_GENERATED_C}
+        --pointer-aot-c ${XR_PROGRAM_POINTER_AOT_GENERATED_C}
     DEPENDS test_xi_pipeline
     COMMENT "Generating source-backed existential canonical-program C fixture"
     VERBATIM)
@@ -416,6 +420,26 @@ add_test(NAME test_xr_program_source_aot_native
         --expected-exit 477)
 set_tests_properties(test_xr_program_source_aot_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;existential;witness;generated-c;native;task-293")
+set_source_files_properties(${XR_PROGRAM_POINTER_AOT_GENERATED_C}
+    PROPERTIES GENERATED TRUE)
+add_executable(test_xr_program_pointer_aot_native
+    ${XR_PROGRAM_POINTER_AOT_GENERATED_C})
+xr_enable_pure_aot_symbol_map(test_xr_program_pointer_aot_native)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_pointer_aot_native PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_pointer_aot_native PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_pointer_aot_native
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+        --executable $<TARGET_FILE:test_xr_program_pointer_aot_native>
+        --expected-exit ${XR_PROGRAM_NATIVE_POINTER_BITS})
+set_tests_properties(test_xr_program_pointer_aot_native PROPERTIES
+    LABELS "unit;aot;canonical-program;source;target-profile;pointer-width;generated-c;native;task-293")
 add_xray_unit_test(test_xr_program_imported_callable
     ir/test_xr_program_imported_callable.c)
 set_tests_properties(test_xr_program_imported_callable PROPERTIES
@@ -737,6 +761,7 @@ add_xr_program_aot_native_case(wrapping_overflow wrapping-overflow 0)
 add_xr_program_aot_native_case(division_zero division-zero 212)
 add_xr_program_aot_native_case(existential existential 42)
 add_xr_program_aot_native_case(callable callable 42)
+add_xr_program_aot_native_case(pointer_width pointer-width 32)
 
 set(XR_PROGRAM_AOT_INVOKE_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_sealed_invoke.c)

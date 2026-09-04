@@ -146,6 +146,10 @@ static inline bool xr_runtime_string_traits_valid(uint32_t domain_index,
 /* Static literals in generated C are non-object views. Every materialized
  * runtime string, including VM, hosted AOT, local, shared, and interned forms,
  * uses this exact header-first shape. */
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4200) /* C11 flexible array member */
+#endif
 typedef struct XrString {
     XrRuntimeObjectHeader header;
     _Atomic uint16_t traits;
@@ -155,6 +159,9 @@ typedef struct XrString {
     uint32_t hash;
     char data[];
 } XrString;
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 _Static_assert(offsetof(XrString, header) == 0,
                "runtime string header must be first");

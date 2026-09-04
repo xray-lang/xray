@@ -195,6 +195,8 @@ def validate(root: Path) -> None:
             "pure aggregate update is not exact")
     require(("xi.call.builtin", "owner-copy", "core.owner.copy") in projection_rows,
             "explicit source copy is not exact")
+    require(("xi.target.pointer.bits", "target-query", "core.target.pointer_width") in
+            projection_rows, "target.pointerBits projection is not exact")
     structural_rows = {
         (row.get("source"), row.get("core_operation"))
         for row in projection.get("structural_mappings", []) if isinstance(row, dict)
@@ -305,8 +307,8 @@ def validate(root: Path) -> None:
     }
     frozen = {
         "core.trap",
-        "core.target.pointer_width",
     }
+    wave_five_pointer = {"core.target.pointer_width"}
     wave_three_slice_two = {
         "core.owner.move",
         "core.owner.drop",
@@ -337,7 +339,8 @@ def validate(root: Path) -> None:
         **{operation: "COMPLETE_W7_WAVE3_SLICE3" for operation in wave_three_slice_three},
         **{operation: "COMPLETE_W7_WAVE3_SLICE4" for operation in wave_three_slice_four},
         **{operation: "COMPLETE_W7_WAVE3_SLICE5" for operation in wave_three_slice_five},
-        **{operation: "IN_PROGRESS_W7_WAVE4_EXECUTOR" for operation in wave_four_executor},
+        **{operation: "COMPLETE_W7_WAVE4" for operation in wave_four_executor},
+        **{operation: "COMPLETE_W7_WAVE5_POINTER" for operation in wave_five_pointer},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,
@@ -360,7 +363,7 @@ def validate(root: Path) -> None:
 def self_test(root: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="xray-source-contract-") as temporary:
         target = Path(temporary)
-        for relative in (
+        support = {
             "src/program/xr_program_from_xi.h",
             "src/program/xr_program_from_xi.c",
             "src/program/xr_program_verify.c",
@@ -386,7 +389,17 @@ def self_test(root: Path) -> None:
             "src/aot/program/xr_backend_ir_emit_c.c",
             "contracts/canonical-program/operation-capability-matrix.json",
             "contracts/canonical-program/w7-wave3-contract-freeze.json",
-        ):
+        }
+        matrix_source = json.loads(
+            (root / "contracts/canonical-program/operation-capability-matrix.json")
+            .read_text(encoding="utf-8")
+        )
+        support.update(
+            relative
+            for operation in matrix_source["operations"]
+            for relative in operation.get("evidence", [])
+        )
+        for relative in sorted(support):
             destination = target / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / relative, destination)

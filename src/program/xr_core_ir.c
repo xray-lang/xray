@@ -53,6 +53,30 @@ static int conformance_compare(const void *left, const void *right) {
                              ((const XrCoreIrConformance *) right)->key);
 }
 
+typedef struct ProviderOperationRef {
+    XrStableId contract_id;
+    XrStableId operation_id;
+} ProviderOperationRef;
+
+static int stable_id_compare(XrStableId left, XrStableId right) {
+    return memcmp(left.bytes, right.bytes, XR_STABLE_ID_BYTES);
+}
+
+static bool stable_id_is_zero(XrStableId id) {
+    uint8_t combined = 0;
+    for (size_t index = 0; index < XR_STABLE_ID_BYTES; ++index)
+        combined |= id.bytes[index];
+    return combined == 0u;
+}
+
+static int provider_operation_ref_compare(const void *left, const void *right) {
+    const ProviderOperationRef *a = left;
+    const ProviderOperationRef *b = right;
+    int contract_order = stable_id_compare(a->contract_id, b->contract_id);
+    return contract_order != 0 ? contract_order
+                               : stable_id_compare(a->operation_id, b->operation_id);
+}
+
 static int view_origin_compare(const void *left, const void *right) {
     const XrViewOrigin *a = left;
     const XrViewOrigin *b = right;
@@ -88,12 +112,14 @@ bool xr_core_ir_key_is_zero(XrCoreIrKey key) {
 }
 
 static bool type_id_is_builtin(uint16_t type_id) {
-    return type_id <= XR_CORE_TYPE_PANIC_INFO;
+    return type_id < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT;
 }
 
 static bool type_id_supported(const XrCoreIrProgram *program, uint16_t type_id) {
-    if (type_id_is_builtin(type_id))
+    if (type_id <= XR_CORE_TYPE_U16)
         return true;
+    if (type_id_is_builtin(type_id))
+        return false;
     if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
         return false;
     return (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count;
@@ -216,6 +242,9 @@ void xr_core_ir_program_free(XrCoreIrProgram *program) {
             free_signature(&program->interfaces[interface_index].slots[slot]);
         xr_free(program->interfaces[interface_index].slots);
     }
+    for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider)
+        xr_free(program->provider_requirements[provider].operation_ids);
+    xr_free(program->provider_requirements);
     for (uint32_t conformance = 0;
          program->conformances && conformance < program->conformance_count; ++conformance)
         xr_free(program->conformances[conformance].slot_functions);
@@ -225,6 +254,98 @@ void xr_core_ir_program_free(XrCoreIrProgram *program) {
     xr_free(program->modules);
     xr_free(program->required_features);
     xr_free(program);
+}
+
+static XrProgramBuildStatus copy_provider_requirements(
+    const XrCoreIrProgramInput *input, XrCoreIrProgram *program) {
+    if (input->provider_requirement_count == 0u)
+        return input->provider_requirements ? XR_PROGRAM_BUILD_INVALID_INPUT : XR_PROGRAM_BUILD_OK;
+    if (!input->provider_requirements ||
+        input->provider_requirement_count > XR_PROGRAM_LIMIT_PROVIDER_CONTRACTS)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+
+    size_t pair_count = 0u;
+    for (uint32_t provider = 0; provider < input->provider_requirement_count; ++provider) {
+        const XrCoreIrProviderRequirementInput *requirement =
+            &input->provider_requirements[provider];
+        if (stable_id_is_zero(requirement->contract_id) || !requirement->operation_ids ||
+            requirement->operation_count == 0u ||
+            requirement->operation_count > XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT ||
+            requirement->operation_count > SIZE_MAX - pair_count)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        pair_count += requirement->operation_count;
+    }
+    if (pair_count > SIZE_MAX / sizeof(ProviderOperationRef))
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    ProviderOperationRef *pairs = xr_malloc(pair_count * sizeof(*pairs));
+    if (!pairs)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    size_t cursor = 0u;
+    for (uint32_t provider = 0; provider < input->provider_requirement_count; ++provider) {
+        const XrCoreIrProviderRequirementInput *requirement =
+            &input->provider_requirements[provider];
+        for (uint32_t operation = 0; operation < requirement->operation_count; ++operation) {
+            if (stable_id_is_zero(requirement->operation_ids[operation])) {
+                xr_free(pairs);
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
+            pairs[cursor++] = (ProviderOperationRef) {
+                .contract_id = requirement->contract_id,
+                .operation_id = requirement->operation_ids[operation],
+            };
+        }
+    }
+    qsort(pairs, pair_count, sizeof(*pairs), provider_operation_ref_compare);
+    size_t unique_count = 0u;
+    for (size_t index = 0; index < pair_count; ++index) {
+        if (unique_count != 0u &&
+            provider_operation_ref_compare(&pairs[unique_count - 1u], &pairs[index]) == 0)
+            continue;
+        pairs[unique_count++] = pairs[index];
+    }
+    uint32_t provider_count = 0u;
+    for (size_t index = 0; index < unique_count; ++index) {
+        if (index == 0u || stable_id_compare(pairs[index - 1u].contract_id,
+                                             pairs[index].contract_id) != 0)
+            ++provider_count;
+    }
+    if (provider_count > XR_PROGRAM_LIMIT_PROVIDER_CONTRACTS) {
+        xr_free(pairs);
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    }
+    program->provider_requirements =
+        xr_calloc(provider_count, sizeof(*program->provider_requirements));
+    if (!program->provider_requirements) {
+        xr_free(pairs);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    program->provider_requirement_count = provider_count;
+    uint32_t provider = 0u;
+    size_t begin = 0u;
+    while (begin < unique_count) {
+        size_t end = begin + 1u;
+        while (end < unique_count &&
+               stable_id_compare(pairs[begin].contract_id, pairs[end].contract_id) == 0)
+            ++end;
+        size_t operation_count = end - begin;
+        if (operation_count > XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT) {
+            xr_free(pairs);
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        }
+        XrCoreIrProviderRequirement *destination = &program->provider_requirements[provider++];
+        destination->contract_id = pairs[begin].contract_id;
+        destination->operation_count = (uint32_t) operation_count;
+        destination->operation_ids = xr_malloc(operation_count * sizeof(XrStableId));
+        if (!destination->operation_ids) {
+            xr_free(pairs);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (size_t operation = 0; operation < operation_count; ++operation)
+            destination->operation_ids[operation] = pairs[begin + operation].operation_id;
+        begin = end;
+    }
+    xr_free(pairs);
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus copy_signature(const XrCoreIrCallableSignatureInput *input,
@@ -1550,13 +1671,16 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         !input->required_features || input->required_feature_count == 0 ||
         input->required_feature_count > XR_PROGRAM_LIMIT_FEATURES || !input->modules ||
         input->module_count == 0 || input->module_count > XR_PROGRAM_LIMIT_FUNCTIONS ||
-        input->type_count > XR_PROGRAM_LIMIT_TYPES - 6u ||
+        input->type_count > XR_PROGRAM_LIMIT_TYPES - XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT ||
         input->type_count > UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
         input->interface_count > XR_PROGRAM_LIMIT_TYPES ||
         input->conformance_count > XR_PROGRAM_LIMIT_TYPES ||
+        input->provider_requirement_count > XR_PROGRAM_LIMIT_PROVIDER_CONTRACTS ||
         (input->type_count == 0u) != (input->types == NULL) ||
         (input->interface_count == 0u) != (input->interfaces == NULL) ||
-        (input->conformance_count == 0u) != (input->conformances == NULL)) {
+        (input->conformance_count == 0u) != (input->conformances == NULL) ||
+        (input->provider_requirement_count == 0u) !=
+            (input->provider_requirements == NULL)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR program input is incomplete");
         return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -1585,6 +1709,11 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
             --cursor;
         }
         program->required_features[cursor] = value;
+    }
+    XrProgramBuildStatus provider_status = copy_provider_requirements(input, program);
+    if (provider_status != XR_PROGRAM_BUILD_OK) {
+        xr_core_ir_program_free(program);
+        return provider_status;
     }
     if (input->type_count != 0u) {
         program->types = xr_calloc(input->type_count, sizeof(XrCoreIrType));

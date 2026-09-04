@@ -23,7 +23,7 @@
     "corespec": "owns observable operation, successor, effect, ownership, cancellation and allowed-trace laws",
     "program": "owns logical states, safepoints, continuations, live-across values, provider requirements and target-neutral query operations",
     "target_profile": "owns immutable target facts, BoundaryABI, runtime kernel and provider contracts",
-    "instance": "owns exact provider bindings, ExecutionId, generation and pin/drain lifecycle",
+    "instance": "owns exact provider bindings, ExecutionId, generation and lease/drain lifecycle",
     "reference_vm_aot": "consume one validated program and one exact profile/instance while keeping frame, scheduler, carrier and native layout private"
   },
   "operation_atoms": [
@@ -187,7 +187,7 @@
       "family": "target-profile-query",
       "stable_id": 64,
       "id": "core.target.pointer_width",
-      "law": "read the immutable bound profile pointer width as exact source-visible u16 or publish profile-unavailable; the current u32 walking-skeleton result must be replaced atomically"
+      "law": "read the immutable bound profile pointer width as exact source-visible u16 or publish profile-unavailable"
     }
   ],
   "explicit_non_operations": {
@@ -196,9 +196,9 @@
     "provider_requirement": "sorted program metadata keyed by stable provider contract and operation identity",
     "provider_refusal": "instance admission or typed provider-call outcome, not an executable operation",
     "generation_create_or_rebind": "XrInstance lifecycle; generation never enters target-neutral XrProgram semantics",
-    "generation_pin_or_drain": "XrInstance lifecycle around calls, continuations, callbacks and drops",
+    "generation_lease_or_drain": "XrInstance lifecycle around calls, continuations, callbacks and drops",
     "build_feature_query": "compile-time typed fact folded before XrProgram and included in semantic and cache fingerprints",
-    "direct_target_namespace_read": "compile-time typed fact folded before XrProgram; CoreSpec target-query atoms are reserved for target-dependent semantic operations that remain in the program",
+    "explicit_compile_time_target_namespace_read": "typed fact folded only in an explicitly compile-time-only target-specialized context before XrProgram; ordinary target.* reads remain CoreSpec operations in the target-neutral program",
     "host_target_probe": "forbidden semantic authority"
   },
   "logical_coroutine_program_contract": {
@@ -221,7 +221,7 @@
     "program_requirements": "XrProgram stores sorted provider contract and operation requirements but no provider address, context or generation",
     "profile_contracts": "XrTargetProfile stores exact provider contracts and immutable target/runtime capability facts",
     "instance_binding": "XrInstance binds exact provider entries and one nonzero successor generation to one validated program/profile ExecutionId",
-    "continuation_lifetime": "calls, suspended continuations, callbacks and drops pin their exact instance until completion",
+    "continuation_lifetime": "calls, suspended continuations, callbacks and drops hold an exact generation lease until completion",
     "reload": "successor generation creates a new instance; the old instance drains and is never mutated in place",
     "failure": "missing or mismatched contract, operation, behavior or non-virtualizable foreign capability fails before execution"
   },
@@ -496,7 +496,7 @@
               "tokens": [
                 "typedef enum XrInstanceState",
                 "xr_execution_instance_create_successor(",
-                "XR_FUNC bool xr_execution_instance_pin("
+                "XR_FUNC bool xr_execution_instance_acquire("
               ]
             },
             {
@@ -585,19 +585,62 @@
       "id": "target-profile-query",
       "layers": {
         "source": {
-          "status": "ABSENT_TYPED_TARGET_NAMESPACE",
-          "evidence": []
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "src/frontend/analyzer/xa_target_query.h",
+              "tokens": [
+                "typedef struct XaTargetQueryFact",
+                "XA_TARGET_QUERY_POINTER_BITS"
+              ]
+            },
+            {
+              "path": "tests/unit/frontend/test_xa_typed_program.c",
+              "tokens": [
+                "target_query_snapshot_preserves_compiler_owned_identity",
+                "user_shadowed_target_does_not_publish_target_query"
+              ]
+            }
+          ]
         },
         "xglobal": {
-          "status": "ABSENT_TYPED_TARGET_FACTS",
-          "evidence": []
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "src/analysis/xglobal_summary.h",
+              "tokens": [
+                "typedef struct XgTargetQuerySummary",
+                "xg_global_evidence_find_target_query"
+              ]
+            },
+            {
+              "path": "tests/unit/analysis/test_xglobal_summary.c",
+              "tokens": [
+                "global_evidence_publishes_exact_target_pointer_bits_query"
+              ]
+            }
+          ]
         },
         "xi": {
-          "status": "ABSENT_TARGET_QUERY_PROJECTION",
-          "evidence": []
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "src/ir/xi_lower_expr.c",
+              "tokens": [
+                "lower_target_query",
+                "XI_TARGET_POINTER_BITS"
+              ]
+            },
+            {
+              "path": "src/ir/xi_verify.c",
+              "tokens": [
+                "verify_target_query_contract"
+              ]
+            }
+          ]
         },
         "corespec": {
-          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
           "evidence": [
             {
               "path": "xisa/core/registry.json",
@@ -609,18 +652,26 @@
           ]
         },
         "program": {
-          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
           "evidence": [
             {
-              "path": "src/core/xr_core_spec_gen.h",
+              "path": "xisa/program/xi-source-projection.json",
               "tokens": [
-                "XR_CORE_OP_CORE_TARGET_POINTER_WIDTH"
+                "\"xi_operation\": \"xi.target.pointer.bits\"",
+                "\"core_operation\": \"core.target.pointer_width\""
+              ]
+            },
+            {
+              "path": "src/program/xr_program_from_xi.c",
+              "tokens": [
+                "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
+                "lacks its exact Xglobal contract"
               ]
             }
           ]
         },
         "verifier": {
-          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
           "evidence": [
             {
               "path": "src/program/xr_program_verify.c",
@@ -631,7 +682,7 @@
           ]
         },
         "reference": {
-          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
           "evidence": [
             {
               "path": "src/program/xr_reference_evaluator.c",
@@ -642,7 +693,7 @@
           ]
         },
         "vm": {
-          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
           "evidence": [
             {
               "path": "src/vm/xr_program_vm.c",
@@ -653,7 +704,7 @@
           ]
         },
         "aot": {
-          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "status": "POINTER_WIDTH_CANONICAL_ONLY",
           "evidence": [
             {
               "path": "src/aot/program/xr_backend_ir_emit_c.c",
@@ -676,7 +727,7 @@
             {
               "path": "src/aot/program/xr_backend_ir.c",
               "tokens": [
-                "machine->data_layout.pointer.size * 8u"
+                "machine->data_layout.pointer.size * UINT16_C(8)"
               ]
             }
           ]
@@ -766,7 +817,7 @@
       "status": "PENDING"
     },
     {
-      "id": "generation-provider-pin-drain-rebind-hostile-mutation-closed",
+      "id": "generation-provider-lease-drain-rebind-hostile-mutation-closed",
       "status": "PENDING"
     },
     {

@@ -137,6 +137,12 @@ typedef struct XrCoreIrConformance {
     uint32_t slot_count;
 } XrCoreIrConformance;
 
+typedef struct XrCoreIrProviderRequirement {
+    XrStableId contract_id;
+    XrStableId *operation_ids;
+    uint32_t operation_count;
+} XrCoreIrProviderRequirement;
+
 struct XrCoreIrProgram {
     uint8_t semantic_profile_fingerprint[XR_PROGRAM_DIGEST_SIZE];
     uint16_t *required_features;
@@ -147,6 +153,8 @@ struct XrCoreIrProgram {
     uint32_t interface_count;
     XrCoreIrConformance *conformances;
     uint32_t conformance_count;
+    XrCoreIrProviderRequirement *provider_requirements;
+    uint32_t provider_requirement_count;
     XrCoreIrModule *modules;
     uint32_t module_count;
 };

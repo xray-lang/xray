@@ -9954,6 +9954,29 @@ static bool graph_semantic_value_binding(const XrSemanticPlan *semantic, uint32_
     return true;
 }
 
+static bool graph_semantic_result_ownership_is_exact(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation) {
+    if (!operation || operation->opcode >= XI_OP_COUNT)
+        return false;
+    uint8_t generated = xi_generated_op_result_ownership(operation->opcode);
+    if (operation->result_ownership == generated)
+        return true;
+    if (generated != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT || operation->return_complete != 1u)
+        return false;
+    if (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED)
+        return operation->return_provenance == XR_SEM_RETURN_OWNED &&
+               operation->return_parameter == -1;
+    if (operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED)
+        return false;
+    if (operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC)
+        return operation->return_parameter == -1;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(semantic, operation->function);
+    return operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
+           operation->return_parameter >= 0 &&
+           (uint16_t) operation->return_parameter < function->parameter_count;
+}
+
 static bool graph_semantic_value_storage_kind(const XrSemanticPlan *semantic, uint32_t value,
                                               uint32_t *function, uint32_t *type,
                                               uint32_t *defining_operation, bool *parameter_value,
@@ -9977,7 +10000,7 @@ static bool graph_semantic_value_storage_kind(const XrSemanticPlan *semantic, ui
         !definition ||
         (definition->opcode < XI_OP_COUNT &&
          definition->effects == xi_generated_op_effects(definition->opcode) &&
-         definition->result_ownership == xi_generated_op_result_ownership(definition->opcode));
+         graph_semantic_result_ownership_is_exact(semantic, definition));
     if (!semantic_type || scalar < 0 || !generated_exact)
         return false;
     bool result_void =

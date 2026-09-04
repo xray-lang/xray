@@ -186,12 +186,20 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
         require(token in header or token in vm, f"missing VM contract token {token}")
     for forbidden in FORBIDDEN_VM_TOKENS:
         require(forbidden not in vm, f"VM depends on forbidden semantic owner {forbidden}")
-    require("xr_execution_instance_pin" in vm, "VM does not pin execution generations")
+    require("xr_execution_instance_acquire" in vm and
+            "xr_execution_lease_release" in vm,
+            "VM does not hold exact generation leases")
     require("xr_vm_code_matches_instance" in vm, "VM code has no exact generation match")
     require("xr_program_validate" not in vm,
             "VM must consume a validated graph instead of decoding bytes")
     require("serialize" not in vm.lower() and "deserialize" not in vm.lower(),
             "private VM code acquired a persistence format")
+    require(re.search(
+        r"case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:"
+        r"(?:(?!\n\s*case\s).)*"
+        r"produced\.as\.value\.kind\s*=\s*XR_VM_VALUE_U16",
+        vm, re.DOTALL,
+    ) is not None, "pointer-width VM result is not exact u16")
 
     for row in registry["operations"]:
         coverage = row.get("coverage", {}).get("vm", {})
@@ -207,7 +215,8 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
                   "max_value_cells"):
         require(token in test, f"VM test omits {token}")
     require("XR_TARGET_ARCH_WASM32" in sources[TARGET_FIXTURE] and
-            "run_program(control, true" in test,
+            "run_program(control, true" in test and
+            "XR_VM_VALUE_U16, 32u" in test,
             "VM test omits the explicit foreign ILP32 profile")
     require("xr_core_ir_" not in runtime_test and "xr_program_write" not in runtime_test,
             "runtime-only embedder contains a compiler-side producer")
@@ -225,19 +234,20 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     require(actual == expected, f"{COVERAGE} is stale")
 
 
-def nm_symbols(path: Path) -> str:
+def nm_symbols(nm: Path, path: Path) -> str:
     result = subprocess.run(
-        ["nm", "-g", str(path)], check=False, capture_output=True, text=True
+        [str(nm), "-g", str(path)], check=False, capture_output=True, text=True
     )
     require(result.returncode == 0, f"nm failed for {path}: {result.stderr.strip()}")
     return result.stdout
 
 
-def validate_artifacts(archive: Path, executable: Path) -> None:
+def validate_artifacts(nm: Path, archive: Path, executable: Path) -> None:
+    require(nm.is_file(), f"configured symbol reader is missing: {nm}")
     require(archive.is_file(), f"runtime archive is missing: {archive}")
     require(executable.is_file(), f"runtime embedder is missing: {executable}")
-    archive_symbols = nm_symbols(archive)
-    executable_symbols = nm_symbols(executable)
+    archive_symbols = nm_symbols(nm, archive)
+    executable_symbols = nm_symbols(nm, executable)
     for pattern in FORBIDDEN_RUNTIME_SYMBOLS:
         require(re.search(pattern, archive_symbols, re.IGNORECASE) is None,
                 f"runtime archive contains forbidden symbol pattern {pattern}")
@@ -273,12 +283,23 @@ def self_test(root: Path) -> None:
     else:
         raise GateError("reference-evaluator dependency mutation was accepted")
 
+    mutated = vm.replace("produced.as.value.kind = XR_VM_VALUE_U16",
+                         "produced.as.value.kind = XR_VM_VALUE_U32", 1)
+    require(mutated != vm, "pointer-width result mutation did not apply")
+    try:
+        validate_sources(root, {VM_SOURCE: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("legacy u32 VM result was accepted")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--executable", type=Path)
+    parser.add_argument("--nm", type=Path)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--print-coverage", action="store_true")
     parser.add_argument("--generate", action="store_true")
@@ -299,10 +320,11 @@ def main() -> int:
             print("XrProgram VM contracts self-test: PASS")
         else:
             validate_sources(root)
-            if bool(args.archive) != bool(args.executable):
-                raise GateError("--archive and --executable must be provided together")
+            if bool(args.archive) != bool(args.executable) or bool(args.archive) != bool(args.nm):
+                raise GateError("--archive, --executable and --nm must be provided together")
             if args.archive and args.executable:
-                validate_artifacts(args.archive.resolve(), args.executable.resolve())
+                validate_artifacts(args.nm.resolve(), args.archive.resolve(),
+                                   args.executable.resolve())
             count = len(read_json(root / REGISTRY)["operations"])
             print(f"XrProgram VM contracts: PASS ({count} operations, runtime-only closure)")
     except (GateError, OSError, UnicodeError, json.JSONDecodeError) as exc:

@@ -1208,7 +1208,7 @@ static XrRuntimeAbiStatus verify_provider_operations(const XrTargetProviderContr
             verify_provider_call_abi(&operation->call_abi, &call_lifetime_flags);
         if (call_status != XR_RUNTIME_ABI_OK)
             return call_status;
-        if (id_is_zero(operation->stable_id) || operation->effect_flags == 0 ||
+        if (id_is_zero(operation->stable_id) ||
             (operation->effect_flags & ~XR_TARGET_PROVIDER_EFFECT_FLAGS_ALL) != 0 ||
             (operation->lifetime_flags & ~XR_TARGET_PROVIDER_LIFETIME_FLAGS_ALL) != 0 ||
             (operation->failure_flags & ~XR_TARGET_PROVIDER_FAILURE_FLAGS_ALL) != 0 ||

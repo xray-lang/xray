@@ -380,7 +380,7 @@ static bool type_metric(XrBoundaryLayoutBuilder *builder, uint16_t type_id,
                       XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_RESOURCE, type_id,
                       XR_BOUNDARY_VARIANT_NONE, UINT32_MAX);
     ++builder->type_depth;
-    bool valid = type_id <= XR_CORE_TYPE_ERROR ? scalar_metric(builder, type_id, metric_out)
+    bool valid = scalar_abi(builder->abi, type_id) ? scalar_metric(builder, type_id, metric_out)
                  : type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
                      ? reject(builder, XR_BOUNDARY_MATERIALIZATION_UNSUPPORTED,
                               XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_TYPE, type_id,
@@ -390,14 +390,14 @@ static bool type_metric(XrBoundaryLayoutBuilder *builder, uint16_t type_id,
     return valid;
 }
 
-static bool builder_init(XrBoundaryLayoutBuilder *builder, const XrInstance *instance,
+static bool builder_init(XrBoundaryLayoutBuilder *builder, const XrExecutionLease *lease,
                          XrMaterializedBoundaryKind boundary_kind,
                          const XrBoundaryMaterializationBudget *budget) {
     memset(builder, 0, sizeof(*builder));
     builder->budget = budget ? *budget : xr_boundary_materialization_default_budget();
     builder->boundary_kind = boundary_kind;
-    builder->program = xr_execution_instance_program(instance);
-    builder->profile = xr_execution_instance_profile(instance);
+    builder->program = xr_execution_lease_program(lease);
+    builder->profile = xr_execution_lease_profile(lease);
     builder->abi = xr_target_profile_boundary_abi(builder->profile);
     if (!builder->program || !builder->profile || !boundary_kind_valid(boundary_kind) ||
         !builder->budget.max_work || !builder->budget.max_type_visits ||
@@ -567,7 +567,7 @@ XrBoundaryMaterializationBudget xr_boundary_materialization_default_budget(void)
 }
 
 XrBoundaryMaterializationStatus xr_execution_materialize_boundary_type(
-    const XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint16_t type_id,
+    XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint16_t type_id,
     const XrBoundaryMaterializationBudget *budget, XrBoundaryTypeLayout **layout_out,
     XrBoundaryMaterializationDiagnostic *diagnostic_out) {
     if (layout_out)
@@ -578,11 +578,18 @@ XrBoundaryMaterializationStatus xr_execution_materialize_boundary_type(
             diagnostic_out->kind = XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
         return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
     }
+    XrExecutionLease lease = {0};
+    if (!xr_execution_instance_acquire(instance, &lease)) {
+        if (diagnostic_out)
+            diagnostic_out->kind = XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
+        return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
+    }
     XrBoundaryLayoutBuilder builder;
-    if (!builder_init(&builder, instance, boundary_kind, budget)) {
+    if (!builder_init(&builder, &lease, boundary_kind, budget)) {
         if (diagnostic_out)
             *diagnostic_out = builder.diagnostic;
         builder_destroy(&builder);
+        (void) xr_execution_lease_release(&lease);
         return builder.status;
     }
     XrBoundaryTypeMetric metric;
@@ -606,6 +613,7 @@ XrBoundaryMaterializationStatus xr_execution_materialize_boundary_type(
     if (diagnostic_out)
         *diagnostic_out = builder.diagnostic;
     builder_destroy(&builder);
+    (void) xr_execution_lease_release(&lease);
     return status;
 }
 
@@ -694,7 +702,7 @@ static void finish_call_id(const XrBoundaryLayoutBuilder *builder, XrBoundaryCal
 }
 
 XrBoundaryMaterializationStatus xr_execution_materialize_boundary_call(
-    const XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint32_t function_id,
+    XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint32_t function_id,
     const XrBoundaryMaterializationBudget *budget, XrBoundaryCallLayout **layout_out,
     XrBoundaryMaterializationDiagnostic *diagnostic_out) {
     if (layout_out)
@@ -705,11 +713,18 @@ XrBoundaryMaterializationStatus xr_execution_materialize_boundary_call(
             diagnostic_out->kind = XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
         return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
     }
+    XrExecutionLease lease = {0};
+    if (!xr_execution_instance_acquire(instance, &lease)) {
+        if (diagnostic_out)
+            diagnostic_out->kind = XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
+        return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
+    }
     XrBoundaryLayoutBuilder builder;
-    if (!builder_init(&builder, instance, boundary_kind, budget)) {
+    if (!builder_init(&builder, &lease, boundary_kind, budget)) {
         if (diagnostic_out)
             *diagnostic_out = builder.diagnostic;
         builder_destroy(&builder);
+        (void) xr_execution_lease_release(&lease);
         return builder.status;
     }
     XrBoundaryCallLayout *layout = NULL;
@@ -760,6 +775,7 @@ XrBoundaryMaterializationStatus xr_execution_materialize_boundary_call(
     if (diagnostic_out)
         *diagnostic_out = builder.diagnostic;
     builder_destroy(&builder);
+    (void) xr_execution_lease_release(&lease);
     return status;
 }
 

@@ -115,15 +115,15 @@ EXPECTED_INVENTORY_STATUS = {
         "FOUNDATION_PROFILE_AND_INSTANCE_AUTHORITY",
     ],
     "target-profile-query": [
-        "ABSENT_TYPED_TARGET_NAMESPACE",
-        "ABSENT_TYPED_TARGET_FACTS",
-        "ABSENT_TARGET_QUERY_PROJECTION",
-        "POINTER_WIDTH_WALKING_SKELETON_ONLY",
-        "POINTER_WIDTH_WALKING_SKELETON_ONLY",
-        "POINTER_WIDTH_WALKING_SKELETON_ONLY",
-        "POINTER_WIDTH_WALKING_SKELETON_ONLY",
-        "POINTER_WIDTH_WALKING_SKELETON_ONLY",
-        "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
+        "POINTER_WIDTH_CANONICAL_ONLY",
         "PRESENT_HOST_AND_PRECUT_TARGET_PROBES",
     ],
 }
@@ -137,7 +137,7 @@ EXPECTED_EXIT_CONDITIONS = [
     "independent-verifier-and-negative-mutation-closed",
     "reference-vm-aot-same-profile-differential-closed",
     "concurrency-allowed-trace-refinement-closed",
-    "generation-provider-pin-drain-rebind-hostile-mutation-closed",
+    "generation-provider-lease-drain-rebind-hostile-mutation-closed",
     "foreign-profile-never-reads-host-facts",
     "covered-old-owner-new-canonical-dependency-zero",
     "source-corpus-sanitizer-provider-and-code-shape-gates-closed",
@@ -356,8 +356,8 @@ def validate_contract_shapes(root: Path, data: dict[str, object]) -> None:
     non_operations = data.get("explicit_non_operations")
     require(isinstance(non_operations, dict) and set(non_operations) == {
         "physical_suspend_or_resume", "coroutine_complete", "provider_requirement",
-        "provider_refusal", "generation_create_or_rebind", "generation_pin_or_drain",
-        "build_feature_query", "direct_target_namespace_read", "host_target_probe"
+        "provider_refusal", "generation_create_or_rebind", "generation_lease_or_drain",
+        "build_feature_query", "explicit_compile_time_target_namespace_read", "host_target_probe"
     }, "Wave 5 explicit non-operation partition drifted")
     require("forbidden" in str(non_operations.get("host_target_probe", "")),
             "Wave 5 host target probe is no longer forbidden")

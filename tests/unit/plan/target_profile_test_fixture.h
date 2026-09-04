@@ -25,5 +25,7 @@ bool xr_test_target_profile_fixture_init(XrTestTargetProfileFixture *fixture,
                                          bool ilp32, uint8_t runtime_profile);
 XrTargetProfile *xr_test_target_profile_build(bool ilp32,
                                               uint8_t runtime_profile);
+XrTargetProfile *xr_test_target_profile_build_with_scalar_clock(
+    bool ilp32, uint8_t runtime_profile, uint8_t scalar_value_kind);
 
 #endif  // TARGET_PROFILE_TEST_FIXTURE_H

@@ -135,8 +135,9 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
         "XrOptimizationPolicyId",
     ):
         require(token in header, f"missing AOT contract type {token}")
-    require("xr_execution_instance_pin" in lowering,
-            "AOT lowering does not pin its exact execution input")
+    require("xr_execution_instance_acquire" in lowering and
+            "xr_execution_lease_release" in lowering,
+            "AOT lowering does not hold an exact generation lease")
     require("xr_backend_ir_translation_validate" in lowering and
             "xr_backend_ir_translation_validate" in emitter,
             "translation validation is not mandatory at lowering and emission")
@@ -153,6 +154,17 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
             "typed local spelling must come from BackendIR representation")
     require("XrAotValue" not in emitter,
             "generated local values use a systematic tagged representation")
+    require(re.search(
+        r"case\s+XR_CORE_TYPE_U16\s*:\s*"
+        r"representation\s*=\s*XR_BACKEND_VALUE_U16\s*;",
+        lowering,
+    ) is not None,
+            "BackendIR omits the exact u16 representation")
+    require(re.search(
+        r"case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:\s*"
+        r"return\s+append_format\([^;]*UINT16_C",
+        emitter, re.DOTALL,
+    ) is not None, "pointer-width generated C is not exact u16")
     for token in (
         "XrAotContext *xr_ctx",
         "xr_aot_alloc(xr_ctx",
@@ -193,6 +205,8 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     require("test_xr_program_aot_native" in test_cmake and
             "test_xr_program_aot_providers" in test_cmake,
             "real generated-C/native provider gates are missing")
+    require("add_xr_program_aot_native_case(pointer_width pointer-width 32)" in test_cmake,
+            "real pointer-width generated-C/native gate is missing")
     require("xray_program_aot_compiler" in cmake and "-Wall -Wextra -Werror" in cmake,
             "private AOT compiler warning target is missing")
     require("include/xr_backend_ir.h" not in cmake and
@@ -228,6 +242,16 @@ def self_test(root: Path) -> None:
         pass
     else:
         raise GateError("forbidden AOT owner mutation was accepted")
+
+    mutated = emitter.replace('"        v%u = UINT16_C(%u);\\n"',
+                              '"        v%u = UINT32_C(%u);\\n"', 1)
+    require(mutated != emitter, "pointer-width generated-C mutation did not apply")
+    try:
+        validate_sources(root, {EMITTER: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("legacy u32 pointer-width generated C was accepted")
 
 
 def main() -> int:

@@ -395,15 +395,27 @@
     },
     {
       "id": "core.target.pointer_width",
-      "core_spec_contract": "read the immutable bound profile pointer width as exact u32 or publish profile-unavailable",
-      "program_encoding": "u32 result plus profile.pointer-width capability requirement",
+      "core_spec_contract": "read the immutable bound profile pointer width as exact u16 or publish profile-unavailable",
+      "program_encoding": "u16 result plus profile.pointer-width capability requirement",
       "decoder_verifier_evaluator": "result type, declared effect/capability, and bound-profile availability checks",
       "vm_implementation": "read the pointer-width field from the verified execution binding",
       "aot_lowering": "freeze the same profile value into BackendIR without host sizeof probes",
       "source_producer": "compiler-owned target query inserted only for a typed profile-dependent language operation",
       "old_owner_deletion": "delete host preprocessor and sizeof semantic inference in W7-profile",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "status": "COMPLETE_W7_WAVE5_POINTER",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/xi-source-projection.json",
+        "src/frontend/analyzer/xa_target_query.h",
+        "src/analysis/xglobal_summary.h",
+        "src/ir/xi_lower_expr.c",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.aggregate.construct",

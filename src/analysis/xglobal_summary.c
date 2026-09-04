@@ -372,6 +372,21 @@ static uint64_t hash_interface_object_use_summary(uint64_t hash,
     return hash_u8(hash, row->use_kind);
 }
 
+static uint64_t hash_target_query_summary(uint64_t hash, const XgTargetQuerySummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->use_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_node_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->body_ordinal);
+    hash = hash_u32(hash, row->result_type_key);
+    hash = hash_u8(hash, row->namespace_id);
+    hash = hash_u8(hash, row->query_kind);
+    hash = hash_u8(hash, row->result_native_type);
+    return hash_u8(hash, row->contract_complete);
+}
+
 static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -919,6 +934,16 @@ XR_FUNC const char *xg_callsite_kind_name(uint8_t kind) {
     }
 }
 
+XR_FUNC const char *xg_target_query_kind_name(uint8_t kind) {
+    switch ((XgTargetQueryKind) kind) {
+        case XG_TARGET_QUERY_POINTER_BITS:
+            return "pointer_bits";
+        case XG_TARGET_QUERY_NONE:
+        default:
+            return "none";
+    }
+}
+
 static const char *xg_body_kind_name(uint8_t kind) {
     switch ((XgBodyKind) kind) {
         case XG_BODY_MODULE_INIT:
@@ -1254,6 +1279,10 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
             return "mutable_module";
         case XG_BODY_OBSERVES_TASK_ID:
             return "task_identity";
+        case XG_BODY_MAY_TRAP:
+            return "trap";
+        case XG_BODY_TARGET_QUERY:
+            return "target_query";
         default:
             return "unknown";
     }
@@ -1266,7 +1295,8 @@ XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count) {
         XG_BODY_MAY_MUTATE,       XG_BODY_MAY_CALL_NATIVE,
         XG_BODY_MAY_READ_MEM,     XG_BODY_MAY_CALL,
         XG_BODY_MAY_SPAWN,        XG_BODY_ACCESSES_MUTABLE_MODULE,
-        XG_BODY_OBSERVES_TASK_ID,
+        XG_BODY_OBSERVES_TASK_ID, XG_BODY_MAY_TRAP,
+        XG_BODY_TARGET_QUERY,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(effects) / sizeof(effects[0]));
@@ -1383,6 +1413,8 @@ XR_FUNC const char *xg_capability_name(uint32_t capability) {
             return "stacktrace";
         case XG_CAP_PARALLEL:
             return "parallel";
+        case XG_CAP_PROFILE_POINTER_WIDTH:
+            return "profile_pointer_width";
         default:
             return "unknown";
     }
@@ -1397,7 +1429,7 @@ XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count) {
         XG_CAP_TASK,         XG_CAP_ATOMIC,          XG_CAP_WORK_QUEUE,
         XG_CAP_RESULT_GROUP, XG_CAP_COUNTDOWN_LATCH, XG_CAP_SEMAPHORE,
         XG_CAP_EVENT_COUNT,  XG_CAP_GENERATOR,       XG_CAP_STACKTRACE,
-        XG_CAP_PARALLEL,
+        XG_CAP_PARALLEL,     XG_CAP_PROFILE_POINTER_WIDTH,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(capabilities) / sizeof(capabilities[0]));
@@ -1515,6 +1547,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->interface_methods);
     xr_free(evidence->interface_method_params);
     xr_free(evidence->interface_object_uses);
+    xr_free(evidence->target_queries);
     xr_free(evidence->bodies);
     xr_free(evidence->param_storages);
     xr_free(evidence->callsites);
@@ -1576,6 +1609,7 @@ static bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEviden
     XG_CLONE_ARRAY(interface_methods, ninterface_methods, interface_method_cap);
     XG_CLONE_ARRAY(interface_method_params, ninterface_method_params, interface_method_param_cap);
     XG_CLONE_ARRAY(interface_object_uses, ninterface_object_uses, interface_object_use_cap);
+    XG_CLONE_ARRAY(target_queries, ntarget_queries, target_query_cap);
     XG_CLONE_ARRAY(bodies, nbodies, body_cap);
     XG_CLONE_ARRAY(param_storages, nparam_storages, param_storage_cap);
     XG_CLONE_ARRAY(callsites, ncallsites, callsite_cap);
@@ -1672,6 +1706,13 @@ XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *
     return evidence && reserve_array((void **) &evidence->interface_object_uses,
                                      &evidence->interface_object_use_cap, capacity,
                                      sizeof(XgInterfaceObjectUseSummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_target_queries(XgGlobalEvidence *evidence,
+                                                       uint32_t capacity) {
+    return evidence && reserve_array((void **) &evidence->target_queries,
+                                     &evidence->target_query_cap, capacity,
+                                     sizeof(XgTargetQuerySummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -2002,6 +2043,82 @@ xg_global_evidence_find_interface_object_use(const XgGlobalEvidence *evidence,
         const XgInterfaceObjectUseSummary *row = &evidence->interface_object_uses[i];
         if (row->owner_func_id != owner_func_id || row->source_node_id != source_node_id ||
             row->interface_id != interface_id || (row->reason & required_reason) != required_reason)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    return match;
+}
+
+XR_FUNC XgTargetQuerySummary *
+xg_global_evidence_add_target_query(XgGlobalEvidence *evidence,
+                                    const XgTargetQuerySummary *summary) {
+    XgTargetQueryUseId use_id;
+    XgTargetQueryUseId max_use_id = XG_NO_ID;
+    if (!evidence || !summary || summary->owner_func_id == XG_NO_ID ||
+        summary->source_node_id == 0 || summary->body_ordinal == 0 ||
+        summary->result_type_key == 0 ||
+        summary->namespace_id != XG_TARGET_NAMESPACE_TARGET ||
+        summary->query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+        summary->result_native_type != XR_NATIVE_U16 || summary->contract_complete != 1)
+        return NULL;
+
+    use_id = summary->use_id;
+    for (uint32_t i = 0; i < evidence->ntarget_queries; i++) {
+        const XgTargetQuerySummary *row = &evidence->target_queries[i];
+        if (row->use_id > max_use_id)
+            max_use_id = row->use_id;
+        if ((use_id != XG_NO_ID && row->use_id == use_id) ||
+            (row->owner_func_id == summary->owner_func_id &&
+             row->source_node_id == summary->source_node_id &&
+             row->query_kind == summary->query_kind) ||
+            (row->owner_func_id == summary->owner_func_id &&
+             row->body_ordinal == summary->body_ordinal))
+            return NULL;
+    }
+    if (use_id == XG_NO_ID) {
+        if (max_use_id == UINT32_MAX)
+            return NULL;
+        use_id = max_use_id + 1;
+    }
+    if (!xg_global_evidence_reserve_target_queries(evidence,
+                                                   evidence->ntarget_queries + 1))
+        return NULL;
+    XgTargetQuerySummary *row = &evidence->target_queries[evidence->ntarget_queries++];
+    *row = *summary;
+    row->use_id = use_id;
+    return row;
+}
+
+XR_FUNC const XgTargetQuerySummary *
+xg_global_evidence_find_target_query(const XgGlobalEvidence *evidence,
+                                     XgTargetQueryUseId use_id) {
+    const XgTargetQuerySummary *match = NULL;
+    if (!evidence || use_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ntarget_queries; i++) {
+        const XgTargetQuerySummary *row = &evidence->target_queries[i];
+        if (row->use_id != use_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    return match;
+}
+
+XR_FUNC const XgTargetQuerySummary *xg_global_evidence_find_target_query_at(
+    const XgGlobalEvidence *evidence, XgFuncId owner_func_id, uint32_t source_node_id,
+    uint8_t query_kind) {
+    const XgTargetQuerySummary *match = NULL;
+    if (!evidence || owner_func_id == XG_NO_ID || source_node_id == 0 ||
+        query_kind != XG_TARGET_QUERY_POINTER_BITS)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ntarget_queries; i++) {
+        const XgTargetQuerySummary *row = &evidence->target_queries[i];
+        if (row->owner_func_id != owner_func_id || row->source_node_id != source_node_id ||
+            row->query_kind != query_kind)
             continue;
         if (match)
             return NULL;
@@ -3477,6 +3594,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
                     sizeof(evidence->ninterface_method_params));
     hash =
         hash_mix(hash, &evidence->ninterface_object_uses, sizeof(evidence->ninterface_object_uses));
+    hash = hash_mix(hash, &evidence->ntarget_queries, sizeof(evidence->ntarget_queries));
     hash = hash_mix(hash, &evidence->nbodies, sizeof(evidence->nbodies));
     hash = hash_mix(hash, &evidence->nparam_storages, sizeof(evidence->nparam_storages));
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
@@ -3526,6 +3644,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_interface_method_param_summary(hash, &evidence->interface_method_params[i]);
     for (uint32_t i = 0; i < evidence->ninterface_object_uses; i++)
         hash = hash_interface_object_use_summary(hash, &evidence->interface_object_uses[i]);
+    for (uint32_t i = 0; i < evidence->ntarget_queries; i++)
+        hash = hash_target_query_summary(hash, &evidence->target_queries[i]);
     for (uint32_t i = 0; i < evidence->nbodies; i++)
         hash = hash_body_summary(hash, &evidence->bodies[i]);
     for (uint32_t i = 0; i < evidence->nparam_storages; i++)
@@ -3659,6 +3779,7 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
             hash = hash_u32(hash, evidence->ncallsites);
             hash = hash_u32(hash, evidence->ncallable_targets);
             hash = hash_u32(hash, evidence->ninterface_object_uses);
+            hash = hash_u32(hash, evidence->ntarget_queries);
             hash = hash_u32(hash, evidence->nlink_deps);
             hash = hash_u32(hash, evidence->ngeneric_insts);
             for (uint32_t i = 0; i < evidence->nbodies; i++)
@@ -3671,6 +3792,8 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
                 hash = hash_callable_target_summary(hash, &evidence->callable_targets[i]);
             for (uint32_t i = 0; i < evidence->ninterface_object_uses; i++)
                 hash = hash_interface_object_use_summary(hash, &evidence->interface_object_uses[i]);
+            for (uint32_t i = 0; i < evidence->ntarget_queries; i++)
+                hash = hash_target_query_summary(hash, &evidence->target_queries[i]);
             for (uint32_t i = 0; i < evidence->nlink_deps; i++)
                 hash = hash_link_dependency_summary(hash, &evidence->link_deps[i]);
             for (uint32_t i = 0; i < evidence->ngeneric_insts; i++)
@@ -4175,11 +4298,12 @@ static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evide
 static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
             "payload-count bodies=%u param_storages=%u callsites=%u callable_targets=%u "
-            "interface_object_uses=%u "
+            "interface_object_uses=%u target_queries=%u "
             "link_deps=%u generic_insts=%u\n",
             evidence ? evidence->nbodies : 0, evidence ? evidence->nparam_storages : 0,
             evidence ? evidence->ncallsites : 0, evidence ? evidence->ncallable_targets : 0,
-            evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->nlink_deps : 0,
+            evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->ntarget_queries : 0,
+            evidence ? evidence->nlink_deps : 0,
             evidence ? evidence->ngeneric_insts : 0);
     if (!evidence)
         return;
@@ -4238,6 +4362,16 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
             "reason=0x%x flags=0x%x use=%u\n",
             u->use_id, u->interface_id, u->owner_func_id, u->source_node_id, u->source_span_id,
             u->body_ordinal, u->type_key, u->reason, u->flags, (unsigned) u->use_kind);
+    }
+    for (uint32_t i = 0; i < evidence->ntarget_queries; i++) {
+        const XgTargetQuerySummary *q = &evidence->target_queries[i];
+        fprintf(out,
+                "target-query id=%u owner=%u node=%u span=%u ordinal=%u type=%u "
+                "namespace=%u query=%u native=%u complete=%u\n",
+                q->use_id, q->owner_func_id, q->source_node_id, q->source_span_id,
+                q->body_ordinal, q->result_type_key, (unsigned) q->namespace_id,
+                (unsigned) q->query_kind, (unsigned) q->result_native_type,
+                (unsigned) q->contract_complete);
     }
     for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *l = &evidence->link_deps[i];
@@ -5004,6 +5138,7 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
     uint32_t callsite_count = 0;
     uint32_t callable_target_count = 0;
     uint32_t interface_object_use_count = 0;
+    uint32_t target_query_count = 0;
     uint32_t link_dep_count = 0;
     uint32_t generic_inst_count = 0;
     char trailing = '\0';
@@ -5011,16 +5146,19 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         return false;
     if (sscanf(line,
                "payload-count bodies=%" SCNu32 " param_storages=%" SCNu32 " callsites=%" SCNu32
-               " callable_targets=%" SCNu32 " interface_object_uses=%" SCNu32 " link_deps=%" SCNu32
+               " callable_targets=%" SCNu32 " interface_object_uses=%" SCNu32
+               " target_queries=%" SCNu32 " link_deps=%" SCNu32
                " generic_insts=%" SCNu32 " %c",
                &body_count, &param_storage_count, &callsite_count, &callable_target_count,
-               &interface_object_use_count, &link_dep_count, &generic_inst_count, &trailing) != 7)
+               &interface_object_use_count, &target_query_count, &link_dep_count,
+               &generic_inst_count, &trailing) != 8)
         return false;
     if (!xg_global_evidence_reserve_bodies(evidence, body_count) ||
         !xg_global_evidence_reserve_param_storages(evidence, param_storage_count) ||
         !xg_global_evidence_reserve_callsites(evidence, callsite_count) ||
         !xg_global_evidence_reserve_callable_targets(evidence, callable_target_count) ||
         !xg_global_evidence_reserve_interface_object_uses(evidence, interface_object_use_count) ||
+        !xg_global_evidence_reserve_target_queries(evidence, target_query_count) ||
         !xg_global_evidence_reserve_link_deps(evidence, link_dep_count) ||
         !xg_global_evidence_reserve_generic_insts(evidence, generic_inst_count))
         return false;
@@ -5137,6 +5275,33 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
             return false;
         row.use_kind = (uint8_t) use_kind;
         if (!xg_global_evidence_add_interface_object_use(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < target_query_count; i++) {
+        XgTargetQuerySummary row;
+        uint32_t namespace_id = 0;
+        uint32_t query_kind = 0;
+        uint32_t native_type = 0;
+        uint32_t complete = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "target-query id=%" SCNu32 " owner=%" SCNu32 " node=%" SCNu32
+                   " span=%" SCNu32 " ordinal=%" SCNu32 " type=%" SCNu32
+                   " namespace=%" SCNu32 " query=%" SCNu32 " native=%" SCNu32
+                   " complete=%" SCNu32 " %c",
+                   &row.use_id, &row.owner_func_id, &row.source_node_id, &row.source_span_id,
+                   &row.body_ordinal, &row.result_type_key, &namespace_id, &query_kind,
+                   &native_type, &complete, &trailing) != 10 || namespace_id > UINT8_MAX ||
+            query_kind > UINT8_MAX || native_type > UINT8_MAX || complete > UINT8_MAX)
+            return false;
+        row.namespace_id = (uint8_t) namespace_id;
+        row.query_kind = (uint8_t) query_kind;
+        row.result_native_type = (uint8_t) native_type;
+        row.contract_complete = (uint8_t) complete;
+        if (!xg_global_evidence_add_target_query(evidence, &row))
             return false;
     }
     for (uint32_t i = 0; i < link_dep_count; i++) {
@@ -5751,6 +5916,7 @@ typedef struct XgPackageImportOffsets {
     XgInterfaceConformanceId interface_conformance_id;
     XgInterfaceWitnessId interface_witness_id;
     XgInterfaceObjectUseId interface_object_use_id;
+    XgTargetQueryUseId target_query_use_id;
     XgFuncId func_id;
     XgParamStorageId param_storage_id;
     XgCallsiteId callsite_id;
@@ -5931,6 +6097,11 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
             max_u32(offsets->interface_id, target->interface_object_uses[i].interface_id);
         offsets->func_id =
             max_u32(offsets->func_id, target->interface_object_uses[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->ntarget_queries; i++) {
+        offsets->target_query_use_id =
+            max_u32(offsets->target_query_use_id, target->target_queries[i].use_id);
+        offsets->func_id = max_u32(offsets->func_id, target->target_queries[i].owner_func_id);
     }
     for (uint32_t i = 0; i < target->nbodies; i++) {
         const XgBodySummary *row = &target->bodies[i];
@@ -6128,6 +6299,7 @@ static bool reserve_import_capacity(XgGlobalEvidence *target, const XgGlobalEvid
     RESERVE_IMPORTED(ninterface_methods, xg_global_evidence_reserve_interface_methods);
     RESERVE_IMPORTED(ninterface_method_params, xg_global_evidence_reserve_interface_method_params);
     RESERVE_IMPORTED(ninterface_object_uses, xg_global_evidence_reserve_interface_object_uses);
+    RESERVE_IMPORTED(ntarget_queries, xg_global_evidence_reserve_target_queries);
     RESERVE_IMPORTED(nbodies, xg_global_evidence_reserve_bodies);
     RESERVE_IMPORTED(ncallsites, xg_global_evidence_reserve_callsites);
     RESERVE_IMPORTED(ncallable_targets, xg_global_evidence_reserve_callable_targets);
@@ -6200,7 +6372,8 @@ static uint32_t package_non_module_row_count(const XgGlobalEvidence *package) {
     return package->ndecls + package->nclasses + package->nclass_fields + package->nmethods +
            package->ninterface_impls + package->ninterface_witnesses + package->ninterface_extends +
            package->ninterface_methods + package->ninterface_method_params +
-           package->ninterface_object_uses + package->nbodies + package->nparam_storages +
+           package->ninterface_object_uses + package->ntarget_queries + package->nbodies +
+           package->nparam_storages +
            package->ncallsites + package->ncallable_targets + package->nlink_deps +
            package->ngeneric_insts + package->ngeneric_body_uses + package->ngeneric_storages +
            package->ngeneric_code_sizes + package->nsequence_accesses + package->ncapacity_ops +
@@ -6565,6 +6738,13 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         REMAP_ID(row.use_id, offsets.interface_object_use_id);
         REMAP_ID(row.owner_func_id, offsets.func_id);
         if (!xg_global_evidence_add_interface_object_use(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.ntarget_queries; i++) {
+        XgTargetQuerySummary row = package.target_queries[i];
+        REMAP_ID(row.use_id, offsets.target_query_use_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_target_query(target, &row))
             goto done;
     }
     for (uint32_t i = 0; i < package.nbodies; i++) {
@@ -6968,6 +7148,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "counts modules=%u decls=%u classes=%u class_fields=%u methods=%u "
             "interface_impls=%u interface_witnesses=%u interface_extends=%u "
             "interface_methods=%u interface_method_params=%u interface_object_uses=%u "
+            "target_queries=%u "
             "bodies=%u param_storages=%u "
             "callsites=%u callable_targets=%u link_deps=%u generic_insts=%u "
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
@@ -6979,7 +7160,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->nmodules, evidence->ndecls, evidence->nclasses, evidence->nclass_fields,
             evidence->nmethods, evidence->ninterface_impls, evidence->ninterface_witnesses,
             evidence->ninterface_extends, evidence->ninterface_methods,
-            evidence->ninterface_method_params, evidence->ninterface_object_uses, evidence->nbodies,
+            evidence->ninterface_method_params, evidence->ninterface_object_uses,
+            evidence->ntarget_queries, evidence->nbodies,
             evidence->nparam_storages, evidence->ncallsites, evidence->ncallable_targets,
             evidence->nlink_deps, evidence->ngeneric_insts, evidence->ngeneric_body_uses,
             evidence->ngeneric_storages, evidence->ngeneric_code_sizes,
@@ -7106,6 +7288,16 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         dump_named_bitset(out, u->reason, interface_uses, interface_use_count,
                           xg_interface_object_use_name);
         fprintf(out, " flags=0x%x\n", u->flags);
+    }
+    for (uint32_t i = 0; i < evidence->ntarget_queries; i++) {
+        const XgTargetQuerySummary *q = &evidence->target_queries[i];
+        fprintf(out,
+                "target-query %u id=%u owner=%u node=%u span=%u ordinal=%u type=%u "
+                "namespace=%u query=%s native=%u complete=%u\n",
+                i, q->use_id, q->owner_func_id, q->source_node_id, q->source_span_id,
+                q->body_ordinal, q->result_type_key, (unsigned) q->namespace_id,
+                xg_target_query_kind_name(q->query_kind), (unsigned) q->result_native_type,
+                (unsigned) q->contract_complete);
     }
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *b = &evidence->bodies[i];

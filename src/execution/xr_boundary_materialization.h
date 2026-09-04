@@ -175,12 +175,12 @@ typedef enum XrBoundaryMaterializationStatus {
 
 XR_FUNC XrBoundaryMaterializationBudget xr_boundary_materialization_default_budget(void);
 XR_FUNC XrBoundaryMaterializationStatus xr_execution_materialize_boundary_type(
-    const XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint16_t type_id,
+    XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint16_t type_id,
     const XrBoundaryMaterializationBudget *budget, XrBoundaryTypeLayout **layout_out,
     XrBoundaryMaterializationDiagnostic *diagnostic_out);
 XR_FUNC void xr_boundary_type_layout_free(XrBoundaryTypeLayout *layout);
 XR_FUNC XrBoundaryMaterializationStatus xr_execution_materialize_boundary_call(
-    const XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint32_t function_id,
+    XrInstance *instance, XrMaterializedBoundaryKind boundary_kind, uint32_t function_id,
     const XrBoundaryMaterializationBudget *budget, XrBoundaryCallLayout **layout_out,
     XrBoundaryMaterializationDiagnostic *diagnostic_out);
 XR_FUNC void xr_boundary_call_layout_free(XrBoundaryCallLayout *layout);

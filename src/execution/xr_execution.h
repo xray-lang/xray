@@ -21,7 +21,7 @@
 
 typedef XrFingerprint XrExecutionId;
 
-#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(1)
+#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(2)
 
 typedef enum XrProviderBehaviorFlags {
     XR_PROVIDER_BEHAVIOR_THREAD_SAFE = UINT32_C(1) << 0,
@@ -33,7 +33,16 @@ typedef enum XrProviderBehaviorFlags {
     (XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT |                           \
      XR_PROVIDER_BEHAVIOR_CALLBACK_SAFE)
 
-typedef void (*XrProviderOperationEntry)(void);
+typedef enum XrProviderCallStatus {
+    XR_PROVIDER_CALL_OK = 0,
+    XR_PROVIDER_CALL_FAILED,
+} XrProviderCallStatus;
+
+/* Every admitted provider entry is an execution-owned typed trampoline.  The
+ * provider-specific ABI remains behind the trampoline and cannot escape into
+ * VM or AOT code.  This initial scalar contract is deterministic i64 -> i64. */
+typedef XrProviderCallStatus (*XrProviderOperationEntry)(void *context, int64_t argument,
+                                                        int64_t *result_out);
 
 typedef struct XrProviderOperationBinding {
     XrStableId operation_id;
@@ -68,6 +77,7 @@ typedef enum XrExecutionDiagnosticKind {
     XR_EXECUTION_DIAGNOSTIC_PROVIDER_CONTRACT,
     XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION,
     XR_EXECUTION_DIAGNOSTIC_PROVIDER_BEHAVIOR,
+    XR_EXECUTION_DIAGNOSTIC_PROVIDER_ABI,
     XR_EXECUTION_DIAGNOSTIC_OUT_OF_MEMORY,
     XR_EXECUTION_DIAGNOSTIC_GENERATION_STATE,
     XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY,
@@ -103,14 +113,40 @@ typedef struct XrExecutionCacheKey {
 
 typedef struct XrInstance XrInstance;
 
+/* A lease is the only authority for using generation-bound state after
+ * admission. Its ticket is registered by the instance and is consumed
+ * exactly once by release. Copies name the same ticket: only the first
+ * release succeeds, and every later use fails closed. The caller must keep
+ * the XrInstance object alive until acquire returns; a successful acquire
+ * keeps it alive until that ticket is consumed. */
+typedef struct XrExecutionLease {
+    XrInstance *instance;
+    uint64_t ticket;
+} XrExecutionLease;
+
+/* A provider operation view is borrowed from its lease.  The entry and
+ * context must not be retained or invoked after that lease is released. */
+typedef struct XrProviderOperationView {
+    XrProviderOperationEntry entry;
+    void *context;
+    uint32_t behavior_flags;
+} XrProviderOperationView;
+
 XR_FUNC XrExecutionStatus xr_execution_instance_create(const XrExecutionBindingInput *input,
                                                        XrInstance **instance_out,
                                                        XrExecutionDiagnostic *diagnostic_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_create_successor(
     const XrInstance *retired, const XrProviderBinding *providers, size_t provider_count,
     XrInstance **instance_out, XrExecutionDiagnostic *diagnostic_out);
-XR_FUNC bool xr_execution_instance_pin(XrInstance *instance);
-XR_FUNC void xr_execution_instance_unpin(XrInstance *instance);
+XR_FUNC bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease_out);
+XR_FUNC bool xr_execution_lease_release(XrExecutionLease *lease);
+XR_FUNC bool xr_execution_lease_is_valid(const XrExecutionLease *lease);
+XR_FUNC const XrValidatedProgram *xr_execution_lease_program(const XrExecutionLease *lease);
+XR_FUNC const XrTargetProfile *xr_execution_lease_profile(const XrExecutionLease *lease);
+XR_FUNC bool xr_execution_lease_provider_operation(const XrExecutionLease *lease,
+                                                   XrStableId contract_id,
+                                                   XrStableId operation_id,
+                                                   XrProviderOperationView *view_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_begin_drain(XrInstance *instance,
                                                             XrExecutionDiagnostic *diagnostic_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_retire(XrInstance *instance,
@@ -118,11 +154,10 @@ XR_FUNC XrExecutionStatus xr_execution_instance_retire(XrInstance *instance,
 XR_FUNC XrExecutionStatus xr_execution_instance_free(XrInstance **instance,
                                                      XrExecutionDiagnostic *diagnostic_out);
 XR_FUNC XrInstanceState xr_execution_instance_state(const XrInstance *instance);
-XR_FUNC uint64_t xr_execution_instance_pin_count(const XrInstance *instance);
+XR_FUNC uint64_t xr_execution_instance_lease_count(const XrInstance *instance);
+XR_FUNC uint64_t xr_execution_instance_generation(const XrInstance *instance);
 XR_FUNC XrExecutionId xr_execution_instance_id(const XrInstance *instance);
 XR_FUNC XrExecutionCacheKey xr_execution_instance_cache_key(const XrInstance *instance);
-XR_FUNC const XrValidatedProgram *xr_execution_instance_program(const XrInstance *instance);
-XR_FUNC const XrTargetProfile *xr_execution_instance_profile(const XrInstance *instance);
 XR_FUNC const char *xr_execution_status_name(XrExecutionStatus status);
 XR_FUNC const char *xr_execution_diagnostic_kind_name(XrExecutionDiagnosticKind kind);
 

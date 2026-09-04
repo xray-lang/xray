@@ -2676,6 +2676,73 @@ TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
 #undef REQUIRE_EXISTENTIAL_EVIDENCE
 }
 
+static void remove_target_query_evidence(XgGlobalEvidence *evidence) {
+    if (evidence)
+        evidence->ntarget_queries = 0;
+}
+
+static void corrupt_target_query_result_contract(XgGlobalEvidence *evidence) {
+    if (evidence && evidence->ntarget_queries == 1)
+        evidence->target_queries[0].result_native_type = XR_NATIVE_U32;
+}
+
+#define REQUIRE_TARGET_QUERY(condition)                                                            \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "target query requirement failed: %s (%s:%d)\n", #condition,         \
+                    __FILE__, __LINE__);                                                            \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+TEST(target_pointer_bits_lowers_from_exact_typed_xglobal_join) {
+    XgGlobalEvidence evidence = {0};
+    XiFunc *function = lower_source_with_global_evidence(
+        "fn pointerBits() -> u16 { return target.pointerBits }\n"
+        "print(pointerBits())\n",
+        &evidence);
+    REQUIRE_TARGET_QUERY(function != NULL);
+    REQUIRE_TARGET_QUERY(evidence.ntarget_queries == 1);
+    XiFunc *owner = func_tree_find_func_name(function, "pointerBits");
+    REQUIRE_TARGET_QUERY(owner != NULL);
+    XiValue *query = func_tree_find_op(owner, XI_TARGET_POINTER_BITS);
+    REQUIRE_TARGET_QUERY(query != NULL && query->nargs == 0 && query->type &&
+                         query->type->kind == XR_KIND_INT && !query->type->is_nullable &&
+                         query->type->scalar_rep == XR_NATIVE_U16);
+    REQUIRE_TARGET_QUERY(query->xg_target_query_use_id == evidence.target_queries[0].use_id);
+    REQUIRE_TARGET_QUERY(query->xg_target_source_node_id ==
+                         evidence.target_queries[0].source_node_id);
+    REQUIRE_TARGET_QUERY(query->xg_target_body_ordinal == evidence.target_queries[0].body_ordinal);
+    REQUIRE_TARGET_QUERY(query->xg_target_namespace_id == XG_TARGET_NAMESPACE_TARGET);
+    REQUIRE_TARGET_QUERY(query->xg_target_query_kind == XG_TARGET_QUERY_POINTER_BITS);
+    REQUIRE_TARGET_QUERY(query->xg_target_result_native_type == XR_NATIVE_U16);
+    REQUIRE_TARGET_QUERY(query->xg_target_query_complete == 1);
+    char error[256];
+    REQUIRE_TARGET_QUERY(xi_verify(owner, error, sizeof(error)));
+    uint32_t saved_use_id = query->xg_target_query_use_id;
+    query->xg_target_query_use_id = XG_NO_ID;
+    REQUIRE_TARGET_QUERY(!xi_verify(owner, error, sizeof(error)));
+    query->xg_target_query_use_id = saved_use_id;
+    uint16_t saved_op = query->op;
+    query->op = XI_CONST;
+    REQUIRE_TARGET_QUERY(!xi_verify(owner, error, sizeof(error)));
+    query->op = saved_op;
+    REQUIRE_TARGET_QUERY(xi_verify(owner, error, sizeof(error)));
+    xi_func_free(function);
+    xg_global_evidence_free(&evidence);
+
+    XgGlobalEvidence missing = {0};
+    REQUIRE_TARGET_QUERY(lower_source_with_global_evidence_ex(
+                             "var bits: u16 = target.pointerBits\n", &missing,
+                             remove_target_query_evidence) == NULL);
+    XgGlobalEvidence corrupt = {0};
+    REQUIRE_TARGET_QUERY(lower_source_with_global_evidence_ex(
+                             "var bits: u16 = target.pointerBits\n", &corrupt,
+                             corrupt_target_query_result_contract) == NULL);
+}
+
+#undef REQUIRE_TARGET_QUERY
+
 static void mark_first_interface_call_fallible(XgGlobalEvidence *evidence) {
     if (!evidence)
         return;
@@ -4217,6 +4284,7 @@ int main(void) {
 
     run_simple_arithmetic();
     run_source_spans_reach_xi_values();
+    run_target_pointer_bits_lowers_from_exact_typed_xglobal_join();
     run_variable_assignment();
     run_if_else();
     run_while_loop();

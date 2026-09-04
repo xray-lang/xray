@@ -21,7 +21,12 @@
       "2:i64",
       "3:u32",
       "4:error",
-      "5:panic-info"
+      "5:panic-info",
+      "6:u16",
+      "7:TargetOs",
+      "8:TargetArch",
+      "9:TargetAbi",
+      "10:TargetEndian"
     ],
     "dynamic_type_base": 16,
     "dynamic_kinds": [
@@ -81,6 +86,10 @@
     "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
     "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload"
   },
+  "imports": {
+    "provider_requirement_table": "target-neutral ascending unique contract IDs; each row has ascending unique nonempty operation IDs",
+    "target_profile_binding": "exact required provider and operation subset; target profile owns call ABI and contract fingerprints; extra bindings are rejected"
+  },
   "sections": [
     {
       "stable_id": 1,
@@ -136,6 +145,8 @@
     "operands_per_operation": 65536,
     "successors_per_operation": 16,
     "roots_per_function": 16777216,
-    "roots_per_value": 65536
+    "roots_per_value": 65536,
+    "provider_contracts": 1024,
+    "provider_operations_per_contract": 65535
   }
 }

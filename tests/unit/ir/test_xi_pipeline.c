@@ -13,6 +13,7 @@
 #include "../../../src/ir/xi_program_semantic_plan.h"
 #include "../../../src/aot/program/xr_backend_ir.h"
 #include "../../../src/analysis/xglobal_producer.h"
+#include "../../../src/execution/xr_boundary_materialization.h"
 #include "../../../src/execution/xr_execution.h"
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/runtime/value/xchunk.h"
@@ -71,6 +72,7 @@ _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id dri
 
 static XrVMRuntime *g_iso = NULL;
 static const char *g_source_aot_output_path = NULL;
+static const char *g_pointer_aot_output_path = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
@@ -81,35 +83,10 @@ typedef struct XiProgramProviderBindings {
     size_t count;
 } XiProgramProviderBindings;
 
-static void xi_program_provider_entry(void) {
-}
-
 static void xi_program_build_provider_bindings(const XrTargetProfile *profile,
                                                XiProgramProviderBindings *bindings) {
+    (void) profile;
     memset(bindings, 0, sizeof(*bindings));
-    bindings->count = xr_target_profile_provider_count(profile);
-    PIPELINE_TEST_REQUIRE(bindings->count > 0u);
-    PIPELINE_TEST_REQUIRE(bindings->count <= XR_RUNTIME_ABI_MAX_PROVIDERS);
-    for (size_t provider_index = 0; provider_index < bindings->count; ++provider_index) {
-        const XrTargetProviderContract *contract =
-            xr_target_profile_provider(profile, provider_index);
-        PIPELINE_TEST_REQUIRE(contract != NULL);
-        XrProviderBinding *provider = &bindings->providers[provider_index];
-        provider->contract_id = contract->contract_id;
-        PIPELINE_TEST_REQUIRE(xr_target_provider_contract_fingerprint(
-                                  contract, &provider->contract_fingerprint) == XR_RUNTIME_ABI_OK);
-        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
-        provider->operations = bindings->operations[provider_index];
-        provider->operation_count = contract->operation_count;
-        PIPELINE_TEST_REQUIRE(provider->operation_count <= XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS);
-        for (uint16_t operation_index = 0; operation_index < contract->operation_count;
-             ++operation_index) {
-            XrProviderOperationBinding *operation =
-                &bindings->operations[provider_index][operation_index];
-            operation->operation_id = contract->operations[operation_index].stable_id;
-            operation->entry = xi_program_provider_entry;
-        }
-    }
 }
 
 static void setup(void) {
@@ -1264,6 +1241,8 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_PLACE_STORE},
         {XI_CLOSURE_NEW, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_CALLABLE_PACK, 0u,
          XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK},
+        {XI_TARGET_POINTER_BITS, XR_CORE_TYPE_U16, XR_CORE_OP_CORE_TARGET_POINTER_WIDTH, 0u,
+         XR_PROGRAM_XI_PROJECTION_TARGET_QUERY},
     };
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
         XrProgramXiProjection projection = {0};
@@ -1776,6 +1755,251 @@ static bool xi_canonical_program_test_fixture_build(XiCanonicalProgramTestFixtur
 fail:
     xi_canonical_program_test_fixture_cleanup(fixture);
     return false;
+}
+
+TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
+    static const char source[] =
+        "fn pointer_bits() -> u16 {\n"
+        "  if (true) { return target.pointerBits }\n"
+        "  return target.pointerBits\n"
+        "}\n";
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-target-pointer-bits", source));
+
+    XiFunc *entry = NULL;
+    XiValue *queries[2] = {0};
+    size_t query_count = 0u;
+    for (uint16_t function_index = 0u;
+         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+        XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
+        for (uint32_t block_index = 0u; function && block_index < function->nblocks;
+             ++block_index) {
+            XiBlock *block = function->blocks[block_index];
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
+                 ++value_index) {
+                XiValue *value = block->values[value_index];
+                if (!value || value->op != XI_TARGET_POINTER_BITS)
+                    continue;
+                PIPELINE_TEST_REQUIRE(query_count < 2u);
+                queries[query_count++] = value;
+                entry = function;
+            }
+        }
+    }
+    PIPELINE_TEST_REQUIRE(entry != NULL && !entry->has_receiver && entry->nparams == 0u);
+    PIPELINE_TEST_REQUIRE(query_count == 2u);
+    for (size_t query_index = 0u; query_index < query_count; ++query_index) {
+        XiValue *query = queries[query_index];
+        const XgTargetQuerySummary *row = xg_global_evidence_find_target_query(
+            &fixture.evidence, (XgTargetQueryUseId) query->xg_target_query_use_id);
+        PIPELINE_TEST_REQUIRE(row != NULL);
+        PIPELINE_TEST_REQUIRE(query->xg_target_source_node_id == row->source_node_id);
+        PIPELINE_TEST_REQUIRE(query->xg_target_body_ordinal == row->body_ordinal);
+        PIPELINE_TEST_REQUIRE(query->xg_target_namespace_id == XG_TARGET_NAMESPACE_TARGET);
+        PIPELINE_TEST_REQUIRE(query->xg_target_query_kind == XG_TARGET_QUERY_POINTER_BITS);
+        PIPELINE_TEST_REQUIRE(query->xg_target_result_native_type == XR_NATIVE_U16);
+        PIPELINE_TEST_REQUIRE(query->xg_target_query_complete == 1u);
+    }
+
+    XrCoreIrKey semantic_profile = xr_core_ir_key(
+        "target-pointer-bits-profile", strlen("target-pointer-bits-profile"));
+    const XiFunc *module_roots[] = {fixture.pipeline.ir};
+    XrProgramFromXiInput input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = entry,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    XrProgramBuildStatus build_status =
+        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+    if (build_status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "target pointerBits Program build failed: %s\n", diagnostic);
+    PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) ==
+                          XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated != NULL);
+    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
+        validated, XR_CORE_OP_CORE_TARGET_POINTER_WIDTH));
+    uint32_t entry_function = xr_validated_program_entry_function(validated);
+    PIPELINE_TEST_REQUIRE(entry_function < validated->function_count);
+    PIPELINE_TEST_REQUIRE(validated->functions[entry_function].effect_mask ==
+                          (XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_TARGET_QUERY));
+    PIPELINE_TEST_REQUIRE(validated->functions[entry_function].capability_mask ==
+                          XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(fixture.profile);
+    PIPELINE_TEST_REQUIRE(machine != NULL);
+    uint16_t expected_pointer_bits = (uint16_t) (machine->data_layout.pointer.size * 8u);
+    PIPELINE_TEST_REQUIRE(expected_pointer_bits == 32u || expected_pointer_bits == 64u);
+    XrReferenceProfile profile = {.pointer_width = expected_pointer_bits};
+    XrReferenceOutcome reference = xr_reference_evaluate(
+        validated, xr_validated_program_entry_function(validated), NULL, 0u, &profile, NULL);
+    PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_U16);
+    PIPELINE_TEST_REQUIRE(reference.value.as.u16 == expected_pointer_bits);
+
+    XrExecutionBindingInput execution_input = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = validated,
+        .profile = fixture.profile,
+        .providers = NULL,
+        .provider_count = 0u,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
+                                                       &execution_diagnostic) == XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(instance != NULL);
+
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
+                          XR_VM_CODE_OK);
+    XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry_function, NULL, 0u);
+    PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(vm.value.kind == XR_VM_VALUE_U16);
+    PIPELINE_TEST_REQUIRE(vm.value.as.u16 == expected_pointer_bits);
+    xr_vm_code_free(vm_code);
+
+    XrBoundaryMaterializationDiagnostic boundary_diagnostic;
+    XrBoundaryCallLayout *boundary_call = NULL;
+    PIPELINE_TEST_REQUIRE(xr_execution_materialize_boundary_call(
+                              instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL, entry_function,
+                              NULL, &boundary_call, &boundary_diagnostic) ==
+                          XR_BOUNDARY_MATERIALIZATION_OK);
+    PIPELINE_TEST_REQUIRE(boundary_call != NULL);
+    PIPELINE_TEST_REQUIRE(boundary_call->argument_count == 0u);
+    PIPELINE_TEST_REQUIRE(boundary_call->result.type_id == XR_CORE_TYPE_U16);
+    PIPELINE_TEST_REQUIRE(boundary_call->result.size == 2u);
+    PIPELINE_TEST_REQUIRE(boundary_call->result.alignment == 2u);
+    xr_boundary_call_layout_free(boundary_call);
+
+    XrBackendIR *backend_ir = NULL;
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendOptions backend_options = xr_backend_default_options();
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(instance, &backend_options, &backend_ir,
+                                              &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated,
+                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u);
+    char pointer_constant[32];
+    PIPELINE_SNPRINTF(pointer_constant, sizeof(pointer_constant), "UINT16_C(%u)",
+                      (unsigned int) expected_pointer_bits);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, pointer_constant) != NULL);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "result.u16") != NULL);
+    if (g_pointer_aot_output_path) {
+        FILE *generated_file = fopen(g_pointer_aot_output_path, "wb");
+        PIPELINE_TEST_REQUIRE(generated_file != NULL);
+        PIPELINE_TEST_REQUIRE(fwrite(generated.bytes, 1u, generated.size, generated_file) ==
+                              generated.size);
+        PIPELINE_TEST_REQUIRE(fclose(generated_file) == 0);
+    }
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+
+    uint32_t first_use_id = queries[0]->xg_target_query_use_id;
+    uint32_t second_use_id = queries[1]->xg_target_query_use_id;
+    PIPELINE_TEST_REQUIRE(first_use_id != second_use_id);
+    queries[0]->xg_target_query_use_id = second_use_id;
+    queries[1]->xg_target_query_use_id = first_use_id;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_INVALID_INPUT, "exact Xglobal contract", NULL));
+    queries[0]->xg_target_query_use_id = first_use_id;
+    queries[1]->xg_target_query_use_id = second_use_id;
+
+    uint8_t saved_complete = queries[0]->xg_target_query_complete;
+    queries[0]->xg_target_query_complete = 0u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_INVALID_INPUT, "exact Xglobal contract", NULL));
+    queries[0]->xg_target_query_complete = saved_complete;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_OK, NULL, &artifact));
+
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
+}
+
+TEST(e2e_program_target_query_closes_interface_slot_contract) {
+    static const char source[] =
+        "interface PointerWidth { width() -> u16 }\n"
+        "class NativePointerWidth implements PointerWidth {\n"
+        "  width() -> u16 { return target.pointerBits }\n"
+        "}\n"
+        "fn read_width(value: PointerWidth) -> u16 { return value.width() }\n"
+        "fn root() -> u16 { return read_width(NativePointerWidth()) }\n";
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-target-query-interface", source));
+
+    XiFunc *entry = NULL;
+    for (uint16_t function_index = 0u;
+         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+        XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
+        if (!function || function->has_receiver || function->nparams != 0u)
+            continue;
+        PIPELINE_TEST_REQUIRE(entry == NULL);
+        entry = function;
+    }
+    PIPELINE_TEST_REQUIRE(entry != NULL);
+    PIPELINE_TEST_REQUIRE(fixture.evidence.ninterface_methods == 1u);
+    PIPELINE_TEST_REQUIRE(fixture.evidence.interface_methods[0].effect_bits ==
+                          (XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY));
+    PIPELINE_TEST_REQUIRE(fixture.evidence.interface_methods[0].capability_bits ==
+                          XG_CAP_PROFILE_POINTER_WIDTH);
+
+    XrCoreIrKey semantic_profile = xr_core_ir_key(
+        "target-query-interface-profile", strlen("target-query-interface-profile"));
+    const XiFunc *module_roots[] = {fixture.pipeline.ir};
+    XrProgramFromXiInput input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = entry,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    XrProgramBuildStatus build_status =
+        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+    if (build_status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "target query interface Program build failed: %s\n", diagnostic);
+    PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
+
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated != NULL);
+    PIPELINE_TEST_REQUIRE(validated->interface_count == 1u);
+    PIPELINE_TEST_REQUIRE(validated->interfaces[0].slot_count == 1u);
+    uint32_t slot_signature_id = validated->interfaces[0].slot_signature_ids[0];
+    PIPELINE_TEST_REQUIRE(slot_signature_id < validated->signature_count);
+    PIPELINE_TEST_REQUIRE(validated->signatures[slot_signature_id].effect_mask ==
+                          (XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_TARGET_QUERY));
+    PIPELINE_TEST_REQUIRE(validated->signatures[slot_signature_id].capability_mask ==
+                          XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH);
+
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
 }
 
 static const XgBodySummary *xi_pipeline_find_xg_body(const XgGlobalEvidence *evidence,
@@ -3785,7 +4009,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = validated,
         .profile = profile,
-        .providers = bindings.providers,
+        .providers = bindings.count ? bindings.providers : NULL,
         .provider_count = bindings.count,
         .generation = 1u,
     };
@@ -4052,10 +4276,13 @@ TEST(e2e_print_group_without_write_is_refused) {
 }
 
 int main(int argc, char **argv) {
-    if (argc == 3 && strcmp(argv[1], "--source-aot-c") == 0)
+    if (argc == 5 && strcmp(argv[1], "--source-aot-c") == 0 &&
+        strcmp(argv[3], "--pointer-aot-c") == 0) {
         g_source_aot_output_path = argv[2];
-    else if (argc != 1)
+        g_pointer_aot_output_path = argv[4];
+    } else if (argc != 1) {
         return 2;
+    }
     printf("=== Xi Pipeline E2E Tests ===\n\n");
 
     setup();
@@ -4189,6 +4416,8 @@ int main(int argc, char **argv) {
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
+    run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
+    run_e2e_program_target_query_closes_interface_slot_contract();
     run_e2e_program_move_direct_signatures_are_published_before_bodies();
     run_e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in();
     run_e2e_program_witness_move_operands_are_consumed_once();

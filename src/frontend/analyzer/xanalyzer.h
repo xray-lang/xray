@@ -323,6 +323,7 @@ XR_FUNC bool xa_analyzer_get_node_conversion(XaAnalyzer *analyzer, const struct 
                                              XrConversionWitness *out_witness);
 struct XaCallErrorEffectFact;
 struct XaFunctionExprEffectFact;
+struct XaTargetQueryFact;
 struct XaCallableTargetSetFact;
 XR_FUNC bool xa_analyzer_set_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
                                                const struct XaCallErrorEffectFact *fact);
@@ -335,6 +336,11 @@ XR_FUNC bool xa_analyzer_get_function_expr_effect(XaAnalyzer *analyzer, const st
                                                   struct XaFunctionExprEffectFact *out_fact);
 XR_FUNC void xa_analyzer_clear_function_expr_effect(XaAnalyzer *analyzer,
                                                     const struct AstNode *node);
+XR_FUNC bool xa_analyzer_set_target_query(XaAnalyzer *analyzer, const struct AstNode *node,
+                                          const struct XaTargetQueryFact *fact);
+XR_FUNC bool xa_analyzer_get_target_query(XaAnalyzer *analyzer, const struct AstNode *node,
+                                          struct XaTargetQueryFact *out_fact);
+XR_FUNC void xa_analyzer_clear_target_query(XaAnalyzer *analyzer, const struct AstNode *node);
 XR_FUNC bool xa_analyzer_set_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,
                                                  const struct XaCallableTargetSetFact *fact);
 XR_FUNC bool xa_analyzer_get_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,

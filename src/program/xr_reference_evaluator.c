@@ -100,6 +100,8 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
             return value.kind == XR_REFERENCE_VALUE_I64;
         case XR_CORE_TYPE_U32:
             return value.kind == XR_REFERENCE_VALUE_U32;
+        case XR_CORE_TYPE_U16:
+            return value.kind == XR_REFERENCE_VALUE_U16;
         case XR_CORE_TYPE_ERROR:
             return value.kind == XR_REFERENCE_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
@@ -767,8 +769,8 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         result = trap_outcome(context, XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE);
                         goto done;
                     }
-                    produced.as.value.kind = XR_REFERENCE_VALUE_U32;
-                    produced.as.value.as.u32 = context->profile.pointer_width;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_U16;
+                    produced.as.value.as.u16 = context->profile.pointer_width;
                     break;
                 case XR_CORE_OP_CORE_CALLABLE_PACK: {
                     XrReferenceCallableValue *carrier = allocate_callable(context);

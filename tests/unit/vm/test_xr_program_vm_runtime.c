@@ -25,32 +25,9 @@ typedef struct RuntimeBindings {
     size_t count;
 } RuntimeBindings;
 
-static void provider_entry(void) {
-}
-
 static void build_bindings(const XrTargetProfile *profile, RuntimeBindings *bindings) {
+    (void) profile;
     memset(bindings, 0, sizeof(*bindings));
-    bindings->count = xr_target_profile_provider_count(profile);
-    REQUIRE(bindings->count > 0u);
-    for (size_t provider_index = 0; provider_index < bindings->count; ++provider_index) {
-        const XrTargetProviderContract *contract =
-            xr_target_profile_provider(profile, provider_index);
-        REQUIRE(contract != NULL);
-        XrProviderBinding *provider = &bindings->providers[provider_index];
-        provider->contract_id = contract->contract_id;
-        REQUIRE(xr_target_provider_contract_fingerprint(
-                    contract, &provider->contract_fingerprint) == XR_RUNTIME_ABI_OK);
-        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
-        provider->operations = bindings->operations[provider_index];
-        provider->operation_count = contract->operation_count;
-        for (uint16_t operation_index = 0; operation_index < contract->operation_count;
-             ++operation_index) {
-            XrProviderOperationBinding *operation =
-                &bindings->operations[provider_index][operation_index];
-            operation->operation_id = contract->operations[operation_index].stable_id;
-            operation->entry = provider_entry;
-        }
-    }
 }
 
 int main(void) {
@@ -70,7 +47,7 @@ int main(void) {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = program,
         .profile = profile,
-        .providers = bindings.providers,
+        .providers = bindings.count ? bindings.providers : NULL,
         .provider_count = bindings.count,
         .generation = 1u,
     };

@@ -158,7 +158,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         return false;
     }
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(ir->profile);
-    uint32_t pointer_width = machine ? machine->data_layout.pointer.size * 8u : 0u;
+    uint16_t pointer_width =
+        machine ? (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8)) : 0u;
     XrBackendId expected_backend_id = xr_backend_compute_id();
     XrOptimizationPolicyId expected_optimization_policy_id =
         xr_backend_compute_optimization_policy_id(&ir->options);
