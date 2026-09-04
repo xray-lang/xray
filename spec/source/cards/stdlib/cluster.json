@@ -1,5 +1,20 @@
 {
   "module": "cluster",
-  "summary": "Distributed cluster communication (P2P, pub/sub, RPC)",
-  "lead": "Distributed cluster communication (P2P, pub/sub, RPC)."
+  "summary": "Authenticated cluster membership, monitoring, discovery, and bounded topic messaging",
+  "lead": "Authenticated peer membership and node/coroutine monitoring with LAN discovery and bounded topic delivery. The public messaging surface is `listen` and `send`; the module defines no request/response or RPC primitive.",
+  "usage": "Usage: `import cluster`, start a node with a typed `ClusterConfig`, join authenticated peers, and exchange `Buffer` values through `listen` and `send`.",
+  "sections": [
+    {
+      "heading": "Control plane",
+      "markdown": "`start`, `stop`, `join`, `self`, `nodes`, `info`, `discover`, and `monitor` own node lifecycle, membership observation, authenticated discovery, and node/coroutine exit monitoring."
+    },
+    {
+      "heading": "Topic delivery",
+      "markdown": "`listen(pattern, capacity)` creates a bounded `Channel<Buffer>` subscription. `send(topic, envelope, hopLimit)` moves an opaque `Buffer` into local and peer topic delivery and reports a `ClusterDelivery` admission result."
+    },
+    {
+      "heading": "Protocol surface",
+      "markdown": "The exported frame, handshake, heartbeat, coroutine-monitor, and discovery codecs define the byte-exact peer protocol. Request correlation and response routing are not part of the cluster API."
+    }
+  ]
 }
