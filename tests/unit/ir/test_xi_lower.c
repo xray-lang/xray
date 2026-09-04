@@ -3437,6 +3437,22 @@ TEST(enum_ordinal_as_lowers_to_typed_convert) {
     xi_func_free(f);
 }
 
+TEST(checked_union_as_preserves_narrowed_type) {
+    XiFunc *f = lower_source("class Left {}\n"
+                             "class Right {}\n"
+                             "fn narrow(value: Left | Right) -> Left {\n"
+                             "    return value as Left\n"
+                             "}\n"
+                             "print(narrow(Left()))\n");
+    assert(f != NULL);
+    XiValue *cast = func_tree_find_op(f, XI_AS);
+    assert(cast && cast->conversion.kind == XR_CONVERSION_DYNAMIC_CHECKED && cast->type &&
+           cast->type->kind == XR_KIND_INSTANCE && cast->type->instance.class_ref &&
+           cast->args[0] && cast->args[0]->type && cast->args[0]->type->kind == XR_KIND_UNION &&
+           "checked union casts must preserve the analyzer's narrowed result type in Xi");
+    xi_func_free(f);
+}
+
 static bool lower_enum_after_conversion_mutation(XrConversionKind kind, uint8_t target_rep) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
     const XrCompileUnitIdentity identity = {
@@ -3799,6 +3815,7 @@ int main(void) {
     run_as_to_scalar_rep_int_lowers_to_narrow();
     run_numeric_as_carries_typed_conversion_evidence();
     run_enum_ordinal_as_lowers_to_typed_convert();
+    run_checked_union_as_preserves_narrowed_type();
     run_enum_ordinal_lowering_rejects_forged_analyzer_witness();
     run_implicit_numeric_boundaries_carry_lossless_widen_evidence();
     run_force_unwrap();

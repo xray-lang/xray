@@ -10709,7 +10709,11 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     lower_dynamic_as_target(tref, &tid, &tname);
 
     bool is_safe = as->is_safe;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, l->type_any, 1);
+    /* The conversion witness and runtime target prove the narrowed static
+     * result type. Preserve that type in Xi: erasing it to `any` here makes
+     * every later callsite forget the analyzer's checked narrowing and forces
+     * backends to guess it again from the target spelling. */
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, cast_type, 1);
     if (!v)
         return NULL;
     v->args[0] = val;
