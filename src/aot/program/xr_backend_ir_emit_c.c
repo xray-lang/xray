@@ -286,6 +286,10 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
                              "#include <stddef.h>\n") ||
         (arena && !append_text(buffer, "#include <stdlib.h>\n")) || !append_text(buffer, "\n"))
         return false;
+    if (!append_text(buffer,
+                     "typedef int (*XrAotProviderCallI64)(void *context, uint32_t requirement, "
+                     "uint32_t operation, int64_t argument, int64_t *result);\n\n"))
+        return false;
     if (arena) {
         if (!append_text(buffer,
                          "typedef union XrAotAllocation XrAotAllocation;\n"
@@ -295,6 +299,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
                          "};\n"
                          "typedef struct XrAotContext {\n"
                          "    XrAotAllocation *allocations;\n"
+                         "    void *provider_context;\n"
+                         "    XrAotProviderCallI64 provider_call_i64;\n"
                          "} XrAotContext;\n\n"
                          "static inline void *xr_aot_alloc(XrAotContext *context, size_t size) "
                          "{\n"
@@ -319,7 +325,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
                          "}\n\n"))
             return false;
     } else if (!append_text(buffer, "typedef struct XrAotContext {\n"
-                                    "    uint8_t unused;\n"
+                                    "    void *provider_context;\n"
+                                    "    XrAotProviderCallI64 provider_call_i64;\n"
                                     "} XrAotContext;\n\n")) {
         return false;
     }
@@ -1149,6 +1156,15 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
                                  ir->pointer_width);
+        case XR_CORE_OP_CORE_PROVIDER_CALL:
+            return append_format(
+                buffer,
+                "        if (!xr_ctx->provider_call_i64 || "
+                "xr_ctx->provider_call_i64(xr_ctx->provider_context, UINT32_C(%u), "
+                "UINT32_C(%u), v%u, &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
+                instruction->immediate.provider_operation.requirement_index,
+                instruction->immediate.provider_operation.operation_index,
+                instruction->operands[0], instruction->result_id);
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             uint32_t target_id = instruction->immediate.function_id;
             if (instruction->operand_count == 0u)

@@ -42,6 +42,10 @@ typedef struct XrVmFixedInstruction {
             uint32_t field_ordinal;
         } variant_field;
         uint16_t type_id;
+        struct {
+            uint32_t requirement_index;
+            uint32_t operation_index;
+        } provider_operation;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -88,6 +92,10 @@ typedef struct XrVmInstructionView {
             uint32_t field_ordinal;
         } variant_field;
         uint16_t type_id;
+        struct {
+            uint32_t requirement_index;
+            uint32_t operation_index;
+        } provider_operation;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -95,6 +103,7 @@ typedef struct XrVmInstructionView {
 
 typedef struct XrVmContext {
     const XrVmCode *code;
+    const XrExecutionLease *lease;
     uint64_t steps;
     uint64_t aggregate_cell_count;
     XrSHA256Context trace;
@@ -878,6 +887,20 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.kind = XR_VM_VALUE_U16;
                     produced.as.value.as.u16 = context->code->pointer_width;
                     break;
+                case XR_CORE_OP_CORE_PROVIDER_CALL: {
+                    int64_t provider_result = 0;
+                    XrExecutionProviderCallResult call = xr_execution_lease_provider_call_i64(
+                        context->lease, instruction.immediate.provider_operation.requirement_index,
+                        instruction.immediate.provider_operation.operation_index,
+                        values[instruction.operands[0]].as.value.as.i64, &provider_result);
+                    if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
+                        result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_VM_VALUE_I64;
+                    produced.as.value.as.i64 = provider_result;
+                    break;
+                }
                 case XR_CORE_OP_CORE_CALLABLE_PACK: {
                     XrVmCallableValue *carrier = allocate_callable(context);
                     if (!carrier) {
@@ -1177,10 +1200,12 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
         return XR_VM_CODE_INSTANCE_UNAVAILABLE;
     }
-    const XrValidatedProgram *program = xr_execution_lease_program(&lease);
-    const XrTargetProfile *profile = xr_execution_lease_profile(&lease);
+    XrValidatedProgram *program = xr_execution_lease_retain_program(&lease);
+    XrTargetProfile *profile = xr_execution_lease_retain_profile(&lease);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     if (!program || !machine) {
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
         (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
@@ -1188,16 +1213,19 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
     }
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
         (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_OUT_OF_MEMORY;
         return XR_VM_CODE_OUT_OF_MEMORY;
     }
-    code->program = xr_validated_program_retain(program);
+    code->program = program;
     code->cache_key = xr_execution_instance_cache_key(instance);
     code->options = selected;
     code->pointer_width = (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8));
     if (selected.decode_policy == XR_VM_DECODE_FIXED_ROWS && !fixed_view_build(code)) {
+        xr_target_profile_free(profile);
         xr_vm_code_free(code);
         (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
@@ -1205,6 +1233,7 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
         return XR_VM_CODE_OUT_OF_MEMORY;
     }
     compute_private_digest(code);
+    xr_target_profile_free(profile);
     (void) xr_execution_lease_release(&lease);
     *code_out = code;
     return XR_VM_CODE_OK;
@@ -1254,6 +1283,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     if (!xr_vm_code_matches_instance(code, instance) ||
         !xr_execution_instance_acquire(instance, &lease))
         return vm_outcome(XR_VM_OUTCOME_STALE_CODE, &context);
+    context.lease = &lease;
     static const uint8_t trace_domain[] = "xray-vm-logical-trace-v1\0";
     xr_sha256_init(&context.trace);
     xr_sha256_update(&context.trace, trace_domain, sizeof(trace_domain) - 1u);

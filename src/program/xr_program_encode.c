@@ -711,7 +711,28 @@ static void encode_semantic_metadata(ByteBuffer *buffer, const XrCoreIrProgram *
     }
 }
 
-static void encode_instruction(ByteBuffer *buffer, const XrCoreIrInstruction *instruction,
+static bool provider_operation_index(const XrCoreIrProgram *program,
+                                     XrStableId contract_id, XrStableId operation_id,
+                                     uint32_t *provider_out, uint32_t *operation_out) {
+    for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
+        const XrCoreIrProviderRequirement *requirement = &program->provider_requirements[provider];
+        if (memcmp(requirement->contract_id.bytes, contract_id.bytes, XR_STABLE_ID_BYTES) != 0)
+            continue;
+        for (uint32_t operation = 0; operation < requirement->operation_count; ++operation) {
+            if (memcmp(requirement->operation_ids[operation].bytes, operation_id.bytes,
+                       XR_STABLE_ID_BYTES) != 0)
+                continue;
+            *provider_out = provider;
+            *operation_out = operation;
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+static void encode_instruction(ByteBuffer *buffer, const XrCoreIrProgram *program,
+                               const XrCoreIrInstruction *instruction,
                                const XrCoreIrFunction *function, const FunctionRef *functions,
                                uint32_t function_count, const ConstantRef *constants,
                                uint32_t constant_count) {
@@ -765,6 +786,20 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrInstruction *in
         case XR_CORE_IR_IMMEDIATE_TYPE:
             buffer_put_uvar(buffer, instruction->immediate.type_id);
             break;
+        case XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION: {
+            uint32_t provider = 0u;
+            uint32_t operation = 0u;
+            if (!provider_operation_index(program,
+                                          instruction->immediate.provider_operation.contract_id,
+                                          instruction->immediate.provider_operation.operation_id,
+                                          &provider, &operation)) {
+                buffer->status = XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
+                return;
+            }
+            buffer_put_uvar(buffer, provider);
+            buffer_put_uvar(buffer, operation);
+            break;
+        }
         default:
             buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
             return;
@@ -776,7 +811,8 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrInstruction *in
     }
 }
 
-static void encode_code(ByteBuffer *buffer, const FunctionRef *functions, uint32_t function_count,
+static void encode_code(ByteBuffer *buffer, const XrCoreIrProgram *program,
+                        const FunctionRef *functions, uint32_t function_count,
                         const ConstantRef *constants, uint32_t constant_count) {
     buffer_put_uvar(buffer, function_count);
     for (uint32_t function_id_value = 0; function_id_value < function_count; ++function_id_value) {
@@ -798,8 +834,8 @@ static void encode_code(ByteBuffer *buffer, const FunctionRef *functions, uint32
             }
             buffer_put_uvar(buffer, block->instruction_count);
             for (uint32_t instruction = 0; instruction < block->instruction_count; ++instruction)
-                encode_instruction(buffer, &block->instructions[instruction], function, functions,
-                                   function_count, constants, constant_count);
+                encode_instruction(buffer, program, &block->instructions[instruction], function,
+                                   functions, function_count, constants, constant_count);
         }
     }
 }
@@ -883,7 +919,7 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
     encode_types(&sections[0], program, signatures, signature_count);
     encode_constants(&sections[1], constants, constant_count);
     encode_functions(&sections[2], functions, function_count, signatures, signature_count);
-    encode_code(&sections[3], functions, function_count, constants, constant_count);
+    encode_code(&sections[3], program, functions, function_count, constants, constant_count);
     encode_imports(&sections[4], program);
     buffer_put_uvar(&sections[5], 0u);
     encode_semantic_metadata(&sections[6], program, functions, function_count, signatures,

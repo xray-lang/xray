@@ -82,6 +82,7 @@ typedef enum XrVmTrap {
     XR_VM_TRAP_EXPLICIT = 4,
     XR_VM_TRAP_PROFILE_UNAVAILABLE = 5,
     XR_VM_TRAP_VARIANT_TAG_MISMATCH = 6,
+    XR_VM_TRAP_PROVIDER_CALL_FAILED = 7,
 } XrVmTrap;
 
 typedef struct XrVmOutcome {

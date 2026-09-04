@@ -23,6 +23,7 @@ _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id dri
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted");
@@ -162,7 +163,8 @@ static void test_skip_instruction(const uint8_t *bytes, size_t size, size_t *off
     uint64_t immediate = test_take_uvar(bytes, size, offset);
     if (immediate != XR_CORE_IR_IMMEDIATE_NONE) {
         (void) test_take_uvar(bytes, size, offset);
-        if (immediate == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD)
+        if (immediate == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD ||
+            immediate == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION)
             (void) test_take_uvar(bytes, size, offset);
     }
     uint64_t successors = test_take_uvar(bytes, size, offset);
@@ -3121,7 +3123,8 @@ static bool find_witness_direct_slot_offsets(const XrProgramArtifact *artifact,
                 if (immediate_kind != XR_CORE_IR_IMMEDIATE_NONE) {
                     size_t immediate_offset = cursor;
                     uint64_t immediate = test_take_uvar(artifact->bytes, artifact->size, &cursor);
-                    if (immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD)
+                    if (immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD ||
+                        immediate_kind == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION)
                         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
                     if (operation == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT &&
                         immediate_kind == XR_CORE_IR_IMMEDIATE_U32) {
