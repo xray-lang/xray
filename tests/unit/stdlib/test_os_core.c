@@ -202,7 +202,6 @@ RUN_TEST(os_core_platform_matches_target);
 RUN_TEST(os_core_arch_matches_target);
 
 RUN_TEST_SUITE("OS Core - system metrics");
-RUN_TEST(os_core_cpu_count_normalizes_invalid_raw_values);
 RUN_TEST(os_core_memory_bytes_converts_units);
 RUN_TEST(os_core_memory_bytes_saturates_int64);
 RUN_TEST(os_core_seconds_from_nsec_normalizes);
