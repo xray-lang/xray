@@ -538,6 +538,7 @@
         "src/module/xlockfile.c",
         "src/module/xnative_package.c",
         "src/module/xpkg_client.c",
+        "src/shared/xr_crypto_core.c",
         "stdlib/crypto/crypto.c",
         "stdlib/crypto/crypto.h"
       ],
@@ -548,11 +549,6 @@
       ],
       "representation": "native",
       "signatures": [
-        "xr_crypto_core_alg_eq",
-        "xr_crypto_core_bytes_hex",
-        "xr_crypto_core_bytes_or_empty",
-        "xr_crypto_core_digest_hex",
-        "xr_crypto_core_hash_digest_len",
         "xr_crypto_core_timing_safe_equal"
       ],
       "status": "production",

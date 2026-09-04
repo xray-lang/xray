@@ -103,12 +103,11 @@ TEST(crypto_bytes_to_hex) {
     ASSERT_STR_EQ(hex, "deadbeef");
 }
 
-TEST(crypto_core_bytes_hex) {
-    uint8_t data[] = {0x00, 0x0F, 0xA5};
-    char hex[7];
-    ASSERT_TRUE(xr_crypto_core_bytes_hex(data, 3, hex, sizeof(hex)));
-    ASSERT_STR_EQ(hex, "000fa5");
-    ASSERT_TRUE(!xr_crypto_core_bytes_hex(data, 3, hex, 6));
+TEST(crypto_timing_safe_equal) {
+    ASSERT_TRUE(xr_crypto_core_timing_safe_equal("same", 4, "same", 4));
+    ASSERT_TRUE(!xr_crypto_core_timing_safe_equal("same", 4, "sand", 4));
+    ASSERT_TRUE(!xr_crypto_core_timing_safe_equal("same", 4, "same", 3));
+    ASSERT_TRUE(xr_crypto_core_timing_safe_equal(NULL, 0, NULL, 0));
 }
 
 /* ========== Main ========== */
@@ -129,6 +128,6 @@ RUN_TEST(crypto_random_bytes_zero);
 
 RUN_TEST_SUITE("Crypto - Utility");
 RUN_TEST(crypto_bytes_to_hex);
-RUN_TEST(crypto_core_bytes_hex);
+RUN_TEST(crypto_timing_safe_equal);
 
 TEST_MAIN_END()

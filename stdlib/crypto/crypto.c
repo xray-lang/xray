@@ -14,32 +14,29 @@
  */
 
 #include "crypto.h"
-#include "../../src/shared/xr_crypto_core.h"
 #include "../../stdlib/common.h"
 #include "../../src/os/os_random.h"
-#include "../../src/runtime/mem/xheap.h"
 #include "../../src/runtime/value/xvalue.h"
 
 /* ========== Module Bindings ========== */
 
 /* ========== Module-private native leaves ========== */
 
-// crypto.__randomBytes(n) -> Array<u8>
+// crypto.__fillRandomBytes(bytes) -> ()
 //
-// The ceiling on n is the module's policy and lives in crypto.xr; this answers
-// whatever length it is asked for so the boundary states one fact only.
-static XrValue crypto_random_bytes_raw(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_INT(args[0]))
+// Allocation and length policy live in crypto.xr. This leaf only asks the
+// platform provider to overwrite the destination supplied by Xray.
+static XrValue crypto_fill_random_bytes(XrVMRuntime *isolate, XrValue *args, int nargs) {
+    if (nargs < 1 || !xr_value_is_array(args[0]))
         return xr_null();
-    int64_t n = XR_TO_INT(args[0]);
-    if (n <= 0 || n > INT32_MAX)
+    XrArray *bytes = xr_value_to_array(args[0]);
+    if (!bytes || bytes->elem_type != XR_ELEM_U8 || bytes->length < 0 ||
+        (bytes->length != 0 && !bytes->data))
         return xr_null();
-    XrArray *arr = xr_byte_array_new(xr_current_coro(isolate), (int32_t) n);
-    if (!arr)
-        return xr_null();
-    xr_random_bytes(arr->data, (size_t) n);
-    arr->length = (int32_t) n;
-    return xr_value_from_array(arr);
+    (void) isolate;
+    if (bytes->length != 0)
+        xr_random_bytes(bytes->data, (size_t) bytes->length);
+    return xr_null();
 }
 
 // crypto.__timingSafeEqualBytes(a, b) -> bool
@@ -53,7 +50,8 @@ static XrValue crypto_timing_safe_equal_bytes(XrVMRuntime *isolate, XrValue *arg
         return xr_bool(false);
     XrArray *a = xr_value_to_array(args[0]);
     XrArray *b = xr_value_to_array(args[1]);
-    if (!a || !b || a->elem_type != XR_ELEM_U8 || b->elem_type != XR_ELEM_U8)
+    if (!a || !b || a->elem_type != XR_ELEM_U8 || b->elem_type != XR_ELEM_U8 || a->length < 0 ||
+        b->length < 0 || (a->length != 0 && !a->data) || (b->length != 0 && !b->data))
         return xr_bool(false);
     return xr_bool(xr_crypto_core_timing_safe_equal((const char *) a->data, (size_t) a->length,
                                                     (const char *) b->data, (size_t) b->length));

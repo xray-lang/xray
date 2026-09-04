@@ -38,8 +38,8 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "math.__random";
     if (strcmp(symbol, "math.__randomInt") == 0)
         return "math.__randomInt";
-    if (strcmp(symbol, "crypto.__randomBytes") == 0)
-        return "crypto.__randomBytes";
+    if (strcmp(symbol, "crypto.__fillRandomBytes") == 0)
+        return "crypto.__fillRandomBytes";
     if (strcmp(symbol, "cluster.__start") == 0)
         return "cluster.__start";
     if (strcmp(symbol, "cluster.__join") == 0)

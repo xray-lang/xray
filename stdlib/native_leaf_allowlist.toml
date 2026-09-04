@@ -201,12 +201,12 @@ deletion_trigger = "when cluster.xr owns the coroutines and the listener it star
 
 [[leaf]]
 module = "crypto"
-symbol = "__randomBytes"
+symbol = "__fillRandomBytes"
 class = "security_provider_leaf"
 abi = "Linux getrandom(2), retried on EINTR, falling back to reading /dev/urandom and aborting if that also fails; macOS and BSD arc4random_buf(3); Windows BCryptGenRandom with BCRYPT_USE_SYSTEM_PREFERRED_RNG"
-ownership = "fresh"
+ownership = "none"
 effect = "nothrow"
-provider = "the platform CSPRNG through src/os/os_random.h xr_random_bytes (src/os/unix/random_unix.c, src/os/win/random_win.c). Both backends call that same function -- src/aot/xrt_crypto.h includes os_random.h directly -- and differ only in which allocator carries the result array"
+provider = "the platform CSPRNG through src/os/os_random.h xr_random_bytes (src/os/unix/random_unix.c, src/os/win/random_win.c). Xray allocates and sizes the destination array before either backend enters the provider, so the leaf owns no memory policy"
 deletion_trigger = "never on security grounds: a CSPRNG reimplemented in Xray would replace an audited kernel entropy source with unaudited code. The leaf changes only when the platform's entropy interface changes"
 
 [[leaf]]
@@ -216,7 +216,7 @@ class = "security_provider_leaf"
 abi = "none; a hand-written constant-time comparison, not OpenSSL CRYPTO_memcmp(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "src/shared/xr_crypto_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. The VM additionally checks the element type is u8"
+provider = "src/shared/xr_crypto_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. Both backends reject non-u8 and malformed array representations before calling it"
 deletion_trigger = "when Xray can express a comparison the optimiser is forbidden to short-circuit; until the language can state that constraint, an Xray body would be free to return early on the first differing byte and would silently stop being constant-time"
 
 # ============================================================================

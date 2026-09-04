@@ -366,18 +366,27 @@ export fn hmac(algo: string, key: string, data: string) -> string? {
 // this is the only place that refuses one.
 const MAX_RANDOM_BYTES: i64 = 1024
 
+// Allocation and sizing are language policy. The provider only overwrites an
+// already-owned byte array with entropy, so it cannot acquire an allocation or
+// reclamation contract of its own.
+fn entropyBytes(n: i64) -> Array<u8> {
+    var bytes = Array<u8>(n)
+    __fillRandomBytes(ref bytes)
+    return bytes
+}
+
 // n random bytes, hex encoded. The hex form is what this module has always
 // published and what ws and http build their nonces and boundaries from.
 export fn randomBytes(n: i64) -> string {
     if (n <= 0 || n > MAX_RANDOM_BYTES) { throw CryptoError.InvalidLength }
-    return hexOf(__randomBytes(n))
+    return hexOf(entropyBytes(n))
 }
 
 // A version 4 UUID as RFC 4122 defines it: sixteen random bytes with the
 // version written into the high nibble of byte 6 and the variant into the top
 // two bits of byte 8, printed 8-4-4-4-12.
 export fn uuid() -> string {
-    var b = __randomBytes(16)
+    var b = entropyBytes(16)
     b[6] = ((((b[6] as i64) & 15) | 64)) as u8
     b[8] = ((((b[8] as i64) & 63) | 128)) as u8
 
@@ -758,7 +767,7 @@ export fn encrypt(key: string, plaintext: string) -> string {
     for (var i = 0; i < len(plain); i++) { padded.push(plain[i]) }
     for (var i = 0; i < pad; i++) { padded.push((pad & 255) as u8) }
 
-    var iv = __randomBytes(AES_BLOCK)
+    var iv = entropyBytes(AES_BLOCK)
     var raw: Array<u8> = []
     for (var i = 0; i < AES_BLOCK; i++) { raw.push(iv[i]) }
     var cipher = cbcEncrypt(aesExpandKey(encKey), iv, padded)

@@ -57,7 +57,7 @@ XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *
         return false;
     size_t expected_count = 0;
     (void) expected_count;
-    XRS_EXPORT(module, isolate, "__randomBytes", crypto_random_bytes_raw);
+    XRS_EXPORT(module, isolate, "__fillRandomBytes", crypto_fill_random_bytes);
     expected_count++;
     XRS_EXPORT(module, isolate, "__timingSafeEqualBytes", crypto_timing_safe_equal_bytes);
     expected_count++;
