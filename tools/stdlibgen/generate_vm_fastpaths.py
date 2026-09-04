@@ -212,7 +212,7 @@ def hosted_value_types(
             # First enum batch is nominal scalar/unit variants. Payload-bearing
             # recursive ADTs join the class/container batch once their nested
             # value view and ownership rules are available.
-            if re.search(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(", body):
+            if re.search(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:\(|\{)", body):
                 continue
             name = declaration.group(1)
             value_types[name] = (f"enum:{name}", "XrValue", "", "", "")
