@@ -230,7 +230,7 @@ class AbsoluteOracleValidatorTests(unittest.TestCase):
         hazard = self.root / "hazard_inventory.jsonl"
         hazard.write_text(
             hazard.read_text(encoding="utf-8").replace(
-                "invalid-utf8-force-unwrap", "changed", 1
+                "scalar-boundary-valid-utf8", "changed", 1
             ),
             encoding="utf-8",
         )
@@ -243,7 +243,7 @@ class AbsoluteOracleValidatorTests(unittest.TestCase):
         drifts = {
             "negative_inventory": ("regex.invalid_flag", "regex.changed"),
             "mutation_inventory": ("regex-plan.bad-opcode", "regex-plan.changed"),
-            "hazard_inventory": ("invalid-utf8-force-unwrap", "changed"),
+            "hazard_inventory": ("scalar-boundary-valid-utf8", "changed"),
         }
         for field, (before, after) in drifts.items():
             with self.subTest(field=field):

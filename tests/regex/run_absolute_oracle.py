@@ -133,7 +133,7 @@ SEMANTIC_CONTRACT = {
     "split_zero_limit": "unlimited",
 }
 ENGINE_SNAPSHOT = {
-    "empty_match_progress": "one-utf8-byte-unsafe-red-baseline",
+    "empty_match_progress": "unicode-scalar-boundary",
     "error_codes": {
         "bad_class": 9,
         "bad_escape": 6,
@@ -149,7 +149,7 @@ ENGINE_SNAPSHOT = {
     "instruction_schema": "array-i64-header16-instruction4-unicode3-v1",
     "limits": {"max_capture_groups": 31, "max_instructions": 10000, "max_nesting": 100},
     "owner": "stdlib/regex/regex.xr",
-    "owner_sha256": "d71e012b0d66d4afc4ccff027f25ce4830fd819e1c63b544622ae6f8a78f9320",
+    "owner_sha256": "87dfefb318b04b9708afb4ab684e4cec282256c772cc800e1e754f3276840f69",
 }
 UNICODE_CONTRACT = {
     "case_fold": "ascii-only",
@@ -212,7 +212,7 @@ REQUIRED_TARGET_PLAN_MUTATION_ROUTES = {
     ),
 }
 REQUIRED_INVENTORY_DIGESTS = {
-    "hazard_inventory": "448c04402f090391a7f780ba5ede6c2efb65e50192aca9338d9fec7ce95c56ec",
+    "hazard_inventory": "7305231072f65d9f2acd1e2be477eaefc9183698b9866aedaec55c32a5c03572",
     "mutation_inventory": "ecdf5d3706ac798d51e69605370b2221bda0f70fb9f262bc5c09095170ae2c64",
     "negative_inventory": "b1e9072e0c0fd5896dd1e940271a683425f6689b0452b7ca6a1e6ae0a1ea537a",
 }
@@ -562,7 +562,8 @@ def _load_validated_oracle(
             if not isinstance(row.get(field), str):
                 errors.append(f"hazard inventory {row.get('id')}: {field} must be a string")
         if (row.get("activation_owner") != "canonical_matcher"
-                or row.get("state") != "red"
+                or row.get("current_outcome") != "scalar-boundary-valid-utf8"
+                or row.get("state") != "closed"
                 or row.get("required_end_state")
                 != "scalar-boundary-valid-utf8-or-typed-error-never-panic"):
             errors.append(f"hazard inventory {row.get('id')}: resolution contract is not exact")

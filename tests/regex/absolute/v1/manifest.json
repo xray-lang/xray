@@ -45,7 +45,7 @@
         "regex.unicode.properties"
       ],
       "source": "programs/matching_core.xr",
-      "source_sha256": "bea8f9629d8d1bf6798bb8f9093f9405382dc7c322bad7bf0fcbba2f7204b9d0"
+      "source_sha256": "35cc6391ec834b3136ffeef80771298fd696ea6d7bd60783127da1ccf5e68bdc"
     },
     {
       "domains": [
@@ -95,7 +95,7 @@
     }
   ],
   "engine_snapshot": {
-    "empty_match_progress": "one-utf8-byte-unsafe-red-baseline",
+    "empty_match_progress": "unicode-scalar-boundary",
     "error_codes": {
       "bad_class": 9,
       "bad_escape": 6,
@@ -115,11 +115,11 @@
       "max_nesting": 100
     },
     "owner": "stdlib/regex/regex.xr",
-    "owner_sha256": "d71e012b0d66d4afc4ccff027f25ce4830fd819e1c63b544622ae6f8a78f9320"
+    "owner_sha256": "87dfefb318b04b9708afb4ab684e4cec282256c772cc800e1e754f3276840f69"
   },
   "exit_code": 0,
   "hazard_inventory": "hazard_inventory.jsonl",
-  "hazard_inventory_sha256": "448c04402f090391a7f780ba5ede6c2efb65e50192aca9338d9fec7ce95c56ec",
+  "hazard_inventory_sha256": "7305231072f65d9f2acd1e2be477eaefc9183698b9866aedaec55c32a5c03572",
   "mutation_inventory": "mutation_inventory.jsonl",
   "mutation_inventory_sha256": "ecdf5d3706ac798d51e69605370b2221bda0f70fb9f262bc5c09095170ae2c64",
   "negative_inventory": "negative_inventory.jsonl",

@@ -1239,6 +1239,21 @@ fn rxDecodeUtf8(text: Array<u8>, i: i64) -> i64 {
     return -1
 }
 
+// Return the first byte boundary after the scalar starting at `pos`. Empty
+// matches are observable positions in the public API, so repeated searches
+// must advance by one Unicode scalar rather than one storage byte. A position
+// inside an invalid scalar still advances by one byte: callers always start
+// from a string boundary, but the fallback guarantees progress if that
+// invariant is ever weakened.
+fn rxNextScalarBoundary(text: Array<u8>, pos: i64) -> i64 {
+    var n = len(text)
+    if (pos < 0) { return 0 }
+    if (pos >= n) { return n + 1 }
+    var decoded = rxDecodeUtf8(text, pos)
+    if (decoded < 0) { return pos + 1 }
+    return pos + (decoded & 255)
+}
+
 // Execution scratch: thread lists, capture snapshots and the dedup marks.
 // Two preallocated lists are swapped rather than reallocated per byte.
 class RxX {
@@ -1533,7 +1548,11 @@ fn rxCount(prog: Array<i64>, s: string) -> i64 {
     while (pos <= n) {
         if (!rxSearch(prog, text, pos, false, ref caps)) { break }
         total = total + 1
-        if (caps[1] == caps[0]) { pos = caps[0] + 1 } else { pos = caps[1] }
+        if (caps[1] == caps[0]) {
+            pos = rxNextScalarBoundary(text, caps[0])
+        } else {
+            pos = caps[1]
+        }
     }
     return total
 }
@@ -1579,7 +1598,11 @@ fn rxFindAllRanges(prog: Array<i64>, s: string, limit: i64) -> Array<i64> {
             k = k + 1
         }
         found = found + 1
-        if (caps[1] == caps[0]) { pos = caps[0] + 1 } else { pos = caps[1] }
+        if (caps[1] == caps[0]) {
+            pos = rxNextScalarBoundary(text, caps[0])
+        } else {
+            pos = caps[1]
+        }
     }
     return out
 }
@@ -1677,13 +1700,21 @@ fn rxReplace(prog: Array<i64>, s: string, repl: string, all: bool) -> string {
         rxAppendRepl(buf, rb, text, caps, ncaps)
         last = caps[1]
         if (caps[1] == caps[0]) {
-            // one empty match per position, then step over one byte; the C fast
-            // path re-emitted the byte at p here, which is mine 6
+            // One empty match per scalar boundary. Copy the complete scalar
+            // before searching from the next boundary so the assembled bytes
+            // remain valid UTF-8.
             if (caps[0] < n) {
-                buf.b.push(text[caps[0]])
-                last = caps[0] + 1
+                var next = rxNextScalarBoundary(text, caps[0])
+                var scalarPos = caps[0]
+                while (scalarPos < next) {
+                    buf.b.push(text[scalarPos])
+                    scalarPos = scalarPos + 1
+                }
+                last = next
+                pos = next
+            } else {
+                pos = n + 1
             }
-            pos = caps[0] + 1
         } else {
             pos = caps[1]
         }
@@ -1718,9 +1749,9 @@ fn rxSplit(prog: Array<i64>, s: string, limit: i64) -> Array<string> {
         if (limit > 0 && len(parts) >= limit - 1) { break }
         if (!rxSearch(prog, text, pos, false, ref caps)) { break }
         if (caps[0] == caps[1]) {
-            // an empty separator never splits; step one byte
+            // An empty separator never splits; resume at the next scalar.
             if (caps[0] >= n) { break }
-            pos = caps[0] + 1
+            pos = rxNextScalarBoundary(text, caps[0])
             continue
         }
         parts.push(rxBytesToStr(text, last, caps[0]))
