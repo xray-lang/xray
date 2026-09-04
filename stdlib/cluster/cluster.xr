@@ -1506,7 +1506,18 @@ export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
     }
     if (!validNodeName(name) || !validCoroutineName(coroName!)) { return null }
     var notifications = Channel<string>(COROUTINE_MONITOR_CAPACITY)
-    if (!__registerCoroutineMonitor(name, coroName!, notifications)) {
+    var request = encodeCoroMonitor(FRAME_CORO_MONITOR, coroName!)
+    if (request == null) {
+        notifications.close()
+        return null
+    }
+    var peerGeneration = __registerCoroutineMonitor(name, coroName!, notifications)
+    if (peerGeneration == 0) {
+        notifications.close()
+        return null
+    }
+    if (!__peerEnqueue(peerGeneration, request!)) {
+        __unregisterCoroutineMonitor(name, coroName!, notifications)
         notifications.close()
         return null
     }

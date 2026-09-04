@@ -282,11 +282,6 @@ static inline XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster,
     return XR_CLUSTER_DELIVERY_DISCONNECTED;
 }
 
-/* ========== Remote Coroutine Monitoring ========== */
-
-bool cluster_monitor_register_remote(XrCluster *cluster, const char *node_name,
-                                     const char *coroutine_name, struct XrChannel *channel);
-
 /* ========== Cluster Info API ========== */
 
 // Returns Json with full cluster state, node metrics, phi values

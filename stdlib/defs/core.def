@@ -2238,9 +2238,20 @@ module cluster {
   }
 
   fn __registerCoroutineMonitor {
-    signature: "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool"
-    doc: "Register one source-constructed channel and enqueue its normalized remote monitor request"
+    signature: "(nodeName: string, coroutineName: string, notifications: Channel<string>): i64"
+    doc: "Register one source-constructed channel for a connected peer and return its generation"
     vm: "cluster_register_coro_monitor_fn"
+    argc: 3
+    arg_spec: "ssv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __unregisterCoroutineMonitor {
+    signature: "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool"
+    doc: "Remove one remote monitor registration after source-owned request delivery fails"
+    vm: "cluster_unregister_coro_monitor_fn"
     argc: 3
     arg_spec: "ssv"
     aot_direct: false

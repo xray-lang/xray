@@ -782,12 +782,42 @@ static XrValue cluster_register_node_monitor_fn(XrVMRuntime *X, XrValue *args, i
 static XrValue cluster_register_coro_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) ||
         !xr_value_is_channel(args[2]))
+        return xr_int(0);
+
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster)
+        return xr_int(0);
+    XrString *node_name = XR_TO_STRING(args[0]);
+    uint64_t generation = 0;
+    xr_amutex_lock(&cluster->nodes_lock);
+    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
+        if (node->state == XR_NODE_CONNECTED && strcmp(node->name, node_name->data) == 0) {
+            generation = node->generation_token;
+            break;
+        }
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    if (generation == 0)
+        return xr_int(0);
+
+    XrString *coroutine_name = XR_TO_STRING(args[1]);
+    if (!xr_monitor_registry_add_remote(cluster->monitors, node_name->data, coroutine_name->data,
+                                        xr_value_to_channel(args[2])))
+        return xr_int(0);
+    return xr_int((int64_t) generation);
+}
+
+static XrValue cluster_unregister_coro_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) ||
+        !xr_value_is_channel(args[2]))
         return xr_bool(false);
 
-    XrString *node = XR_TO_STRING(args[0]);
-    XrString *coro = XR_TO_STRING(args[1]);
-    return xr_bool(cluster_monitor_register_remote((XrCluster *) X->cluster, node->data, coro->data,
-                                                   xr_value_to_channel(args[2])));
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster)
+        return xr_bool(false);
+    return xr_bool(xr_monitor_registry_remove_remote(
+        cluster->monitors, XR_TO_STRING(args[0])->data, XR_TO_STRING(args[1])->data,
+        xr_value_to_channel(args[2])));
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_CLUSTER 1

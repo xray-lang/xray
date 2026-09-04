@@ -255,11 +255,21 @@ deletion_trigger = "when a synchronized map of channel values is directly expres
 module = "cluster"
 symbol = "__registerCoroutineMonitor"
 class = "runtime_leaf"
-abi = "none on registration; stores a source-constructed channel and enqueues one CORO_MONITOR frame through the selected peer's output queue"
+abi = "none; stores a source-constructed channel and returns the selected live peer generation"
 ownership = "none"
 effect = "nothrow"
-provider = "the locked channel index in src/coro/xmonitor_registry.c plus the cluster writer queue in stdlib/cluster/cluster_monitor.c. cluster.xr constructs the channel, chooses its capacity and validates both names. There is no AOT binding"
-deletion_trigger = "when cluster.xr can retain the channel in a synchronized map and enqueue a peer control frame directly"
+provider = "the locked peer registry plus the locked channel index in src/coro/xmonitor_registry.c. cluster.xr constructs the channel, encodes the request, enqueues by returned peer generation and owns failure rollback. There is no AOT binding"
+deletion_trigger = "when cluster.xr can retain channels in a synchronized map and select a live peer generation directly"
+
+[[leaf]]
+module = "cluster"
+symbol = "__unregisterCoroutineMonitor"
+class = "runtime_leaf"
+abi = "none; removes one exact source-owned channel registration"
+ownership = "none"
+effect = "nothrow"
+provider = "the locked channel index in src/coro/xmonitor_registry.c. cluster.xr invokes it only to roll back a registration whose source-encoded request could not enter the selected peer queue. There is no AOT binding"
+deletion_trigger = "when cluster.xr can retain channels in a synchronized map directly"
 
 [[leaf]]
 module = "cluster"

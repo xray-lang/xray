@@ -59,6 +59,8 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__registerCoroutineMonitor", cluster_register_coro_monitor_fn);
     expected_count++;
+    XRS_EXPORT(module, isolate, "__unregisterCoroutineMonitor", cluster_unregister_coro_monitor_fn);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__discoveryOpen", xr_cluster_discovery_socket_open);
     expected_count++;
     XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);
