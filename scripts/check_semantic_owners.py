@@ -232,7 +232,6 @@ STATIC_ADDRESS_OPERATIONS = {"xi.static.addr"}
 REFERENCE_COUNT_OPERATIONS = {"xi.retain", "xi.release"}
 ATOMIC_LOAD_OPERATIONS = {"xi.atomic.load"}
 ATOMIC_STORE_OPERATIONS = {"xi.atomic.store"}
-REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
 BYTE_ARRAY_APPEND_OPERATIONS = {"xi.byte.array.append.from"}
@@ -3018,55 +3017,37 @@ def verify_atomic_store_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
-def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
+def verify_regex_source_owner_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
-    owner_name = "stdlib.regex.compile-match"
-    marker = owner_macro_prefix(owner_name)
-    owner = next((row for row in registry.get("owners", [])
-                  if row.get("owner") == owner_name), None)
-    if owner is None or set(owner.get("operations", [])) != REGEX_COMPILE_OPERATIONS:
-        errors.append("semantic owner registry has no exact stdlib regex compile-match family")
-    elif (owner.get("consumers") != ["semantic-plan", "vm", "runtime"] or
-          owner.get("cgen_adapter") is not None):
-        errors.append("stdlib regex owner consumers are not the exact source-backed set")
-    operation = next((row for row in registry.get("operations", [])
-                      if row.get("operation") == "xi.regex.compile"), None)
-    if operation is None or operation.get("observable_contract") != "stdlib/regex/regex.xr":
-        errors.append("xi.regex.compile lacks its operation-level observable contract")
-
-    core_text = (root / "src/shared/xr_regex_core.h").read_text(
-        encoding="utf-8", errors="strict")
-    if "xr_regex_core_parse_flags" not in core_text:
-        errors.append("src/shared/xr_regex_core.h: regex flag contract is missing")
-    if any(token in core_text for token in
-           (f"{marker}_HI", f"{marker}_LO", "XR_REGEX_COMPILE_OWNER_APPLY")):
-        errors.append("src/shared/xr_regex_core.h: flag utility is conflated with compile-match owner")
+    if any(row.get("operation") == "xi.regex.compile"
+           for row in registry.get("operations", [])):
+        errors.append("retired xi.regex.compile operation remains in the owner registry")
+    if (root / "src/shared/xr_regex_core.h").exists():
+        errors.append("retired C regex policy owner src/shared/xr_regex_core.h still exists")
 
     stdlib_text = (root / "stdlib/regex/regex.xr").read_text(encoding="utf-8", errors="strict")
-    if "export fn compile(" not in stdlib_text or "export fn test(" not in stdlib_text:
-        errors.append("stdlib/regex/regex.xr: canonical compile-match source is incomplete")
+    for token in ("export final class Regex {", "constructor(pattern: string, flags: string",
+                  "fn rxParseFlags(", "this.prog = Array<i64>()",
+                  "var re = Regex(pattern, flags)", "export fn compile(", "export fn test("):
+        if token not in stdlib_text:
+            errors.append("stdlib/regex/regex.xr: source Regex owner is incomplete")
+            break
 
     vm_text = (root / "src/vm/xvm_dispatch_assert.inc.c").read_text(
         encoding="utf-8", errors="strict")
-    start = vm_text.find("vmcase(OP_REGEX_COMPILE)")
-    end = vm_text.find("vmbreak;", start)
-    vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
-    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
-                  "xr_semantic_owner_has_consumer", "xr_regex_compile_literal"):
-        if token not in vm_body:
-            errors.append("src/vm/xvm_dispatch_assert.inc.c: regex compile bypasses owner")
-            break
+    if "OP_REGEX_COMPILE" in vm_text or "xr_regex_compile_literal" in vm_text:
+        errors.append("src/vm/xvm_dispatch_assert.inc.c: retired regex literal VM path revived")
 
     runtime_text = (root / "stdlib/regex/xregex_binding.c").read_text(
         encoding="utf-8", errors="strict")
-    body = extract_c_function(runtime_text, "xr_regex_compile_literal") or ""
-    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_RUNTIME",
-                  "xr_semantic_owner_has_consumer", "xr_regex_core_parse_flags"):
-        if token not in body:
-            errors.append("stdlib/regex/xregex_binding.c: regex literal bypasses owner")
+    for retired in ("value_to_cstring", "make_regex", "xr_regex_compile_literal",
+                    "xr_regex_register_class", "regex_parse_flags", "regex_compile"):
+        if retired in runtime_text:
+            errors.append(f"stdlib/regex/xregex_binding.c: retired owner {retired} revived")
             break
-    if "XR_REGEX_COMPILE_OWNER_APPLY" in body:
-        errors.append("stdlib/regex/xregex_binding.c: retired compile-owner wrapper revived")
+    for leaf in ("regex_unicode_prop_id", "regex_unicode_has_prop"):
+        if extract_c_function(runtime_text, leaf) is None:
+            errors.append(f"stdlib/regex/xregex_binding.c: missing Unicode ABI leaf {leaf}")
 
     cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
     if "cg_regex_compile_adapter_name" in cgen_text:
@@ -3074,8 +3055,7 @@ def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
         encoding="utf-8", errors="strict")
     for retired in ('strcmp(bn, "regex_compile") == 0',
-                    'strcmp(method, "test") == 0',
-                    "xrt_regex_test"):
+                    'strcmp(method, "test") == 0', "xrt_regex_test"):
         if retired in dispatch:
             errors.append(
                 "src/aot/xi_cgen_dispatch_helpers.inc.c: retired regex CGen branch revived"
@@ -3957,12 +3937,12 @@ def verify(root: Path, write: bool) -> list[str]:
     # were lifted out of the AOT runtime so both backends could share them.
     # 49: xr_length_source_core.h, naming which count len() answers per kind --
     # code points for a string, not the byte length sitting next to it.
-    # 50: xr_bigint_literal_core.h, stating which base a BigInt literal declared
+    # 49: xr_bigint_literal_core.h, stating which base a BigInt literal declared
     # and where its digits start. The digits travel as text from the front end
     # to the runtime because no fixed-width slot holds them, and the semantic
     # plan and the runtime parser both had to answer this on the way.
-    if len(actual) != 50:
-        errors.append(f"shared-core inventory must contain exactly 50 headers, found {len(actual)}")
+    if len(actual) != 49:
+        errors.append(f"shared-core inventory must contain exactly 49 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -4014,7 +3994,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_reference_count_ratchet(root, registry))
         errors.extend(verify_atomic_load_ratchet(root, registry))
         errors.extend(verify_atomic_store_ratchet(root, registry))
-        errors.extend(verify_regex_compile_ratchet(root, registry))
+        errors.extend(verify_regex_source_owner_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))
         errors.extend(verify_byte_array_append_ratchet(root, registry))

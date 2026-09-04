@@ -225,7 +225,7 @@ static const char *xr_builtin_symbol_names[] = {
     "copyWithin",
     "copyFrom",
     "repeatFrom",
-    // Regex methods
+    // Common source method spellings (including regex)
     "test",
     "findAll",
     "pattern",

@@ -58,7 +58,6 @@ typedef struct XrayCoreClasses {
     // Native-body migrated types
     XrClass *rangeClass;
     XrClass *iteratorClass;
-    XrClass *regexClass;
     XrClass *sysMutexClass;
     XrClass *sysRwLockClass;
     XrClass *sysCondvarClass;

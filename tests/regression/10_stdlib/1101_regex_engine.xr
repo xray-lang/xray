@@ -7,7 +7,7 @@
 //
 // Three C cases have no equivalent and are not lost:
 //   core_parse_flags_matches_regex_engine_flags   the flag mask now has one
-//       owner, the __regexParseFlags leaf, so there are no two values to drift
+//       owner, rxParseFlags in regex.xr, so there are no two values to drift
 //   core_match_field_schema_matches_regex_match_class   RegexMatch is now an
 //       ordinary source class whose constructor and fields share one owner
 //   core_int_argument_rules_match_adapters   the adapters are gone

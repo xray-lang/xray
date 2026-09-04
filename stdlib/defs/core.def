@@ -723,47 +723,6 @@ module sys {
 }
 
 module regex {
-  class Regex {
-    visibility: "internal"
-    super_slot: objectClass
-    core_slot: regexClass
-    flags: "XR_CLASS_BUILTIN"
-    builtin_kind: XR_BK_REGEX
-  }
-
-  class_field Regex.pattern {
-    visibility: "internal"
-  }
-
-  class_field Regex.flags {
-    visibility: "internal"
-  }
-
-  class_field Regex.prog {
-    visibility: "internal"
-  }
-
-  fn __regexNew {
-    signature: "(pattern: string, flags: i64): Regex"
-    doc: "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation"
-    vm: "regex_compile"
-    argc: 2
-    arg_spec: "sv"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __regexParseFlags {
-    signature: "(flags: string): i64"
-    doc: "Parse flag spelling for the VM representation adapter"
-    vm: "regex_parse_flags"
-    argc: 1
-    arg_spec: "s"
-    layer: "pure"
-    allocation: "no_heap"
-  }
-
   fn __unicodePropId {
     signature: "(name: string): i64"
     doc: "Unicode property name to id, -1 when unknown"

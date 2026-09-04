@@ -20,13 +20,13 @@
         "lexical"
       ],
       "expected_sha256": "6380638a66c16b9f3c28ccaa2894e9e5769d001a303f58ef0beee48044dbab3c",
-      "expected_stdout": "expected/literal_no_import.stdout",
-      "id": "literal_no_import",
+      "expected_stdout": "expected/literal_source_owner.stdout",
+      "id": "literal_source_owner",
       "required_capabilities": [
         "regex.literal.syntax"
       ],
-      "source": "programs/literal_no_import.xr",
-      "source_sha256": "e41a47d77f273d87a0608fbf7e14222f5ddaddc747dd6ec25ba8a5fddee387fa"
+      "source": "programs/literal_source_owner.xr",
+      "source_sha256": "dccf3b0a10a2aaf470ff7345b23b41ff80e1127f60afe3a947c6d4772256097f"
     },
     {
       "domains": [
@@ -115,7 +115,7 @@
       "max_nesting": 100
     },
     "owner": "stdlib/regex/regex.xr",
-    "owner_sha256": "3ae33f32a1854fcafcf86f6f99c07013440ed7d221db6fde36003a3050aac7cf"
+    "owner_sha256": "d71e012b0d66d4afc4ccff027f25ce4830fd819e1c63b544622ae6f8a78f9320"
   },
   "exit_code": 0,
   "hazard_inventory": "hazard_inventory.jsonl",

@@ -351,7 +351,6 @@
     _(ASSERTION_SPAN_START, FMT_SPECIAL, KOP_SPECIAL,                                              \
       "assertion metadata: packed start line/column")                                              \
     _(ASSERTION_SPAN_END, FMT_SPECIAL, KOP_SPECIAL, "assertion metadata: packed end line/column")  \
-    _(REGEX_COMPILE, FMT_ABC, KOP_ABC_BIN_K, "R[A] = regex.compile(K[B], K[C])")                   \
     _(GO, FMT_ABC, KOP_ABC_BIN_LIT,                                                                \
       "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                          \
     _(THREAD_SPAWN, FMT_ABC, KOP_ABC_BIN_LIT,                                                      \

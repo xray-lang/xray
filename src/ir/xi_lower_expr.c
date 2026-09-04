@@ -9767,7 +9767,10 @@ generic_constructor:;
             (int) (sizeof(stack_constructor_modes) / sizeof(stack_constructor_modes[0])),
             &constructor_pcount);
     }
-    bool has_user_class_info = class_links && class_links->class_info != NULL;
+    bool has_user_class_info =
+        (class_links && class_links->class_info != NULL) ||
+        (result_type && result_type->kind == XR_KIND_INSTANCE &&
+         result_type->instance.class_ref != NULL);
     {
         int var_id = xi_lower_var_find(l, 0, cname);
         if (var_id >= 0) {
@@ -9796,6 +9799,14 @@ generic_constructor:;
                 cls->aux_int = upval_idx;
         }
     }
+    /* A module-qualified source class is an ordinary graph import. This path
+     * is shared by explicit qualified construction and syntax canonicalized
+     * to such a construction; the source class declaration remains the only
+     * layout and constructor authority. */
+    if (!cls && !force_builtin_class && module_name && has_user_class_info)
+        cls = xi_lower_emit_import_ref(l, module_name, cname,
+                                       class_links ? class_links->type : l->type_any,
+                                       node ? (int) node->line : 0);
     /* Named-imported generic class construction is rewritten by
      * monomorphization to the concrete export name (`Foo$i64(args)`), while
      * the source import binding remains under the generic origin name
@@ -11520,21 +11531,6 @@ static XiValue *xi_lower_expr_impl(XiLower *l, AstNode *node) {
                 l->func, l->cur_block,
                 node->as.literal.raw_value.bigint_val ? node->as.literal.raw_value.bigint_val : "0",
                 l->type_bigint);
-        case AST_LITERAL_REGEX: {
-            const char *pattern = node->as.literal.raw_value.regex.pattern;
-            const char *flags = node->as.literal.raw_value.regex.flags;
-            XiValue *pat_v =
-                xi_const_str(l->func, l->cur_block, pattern ? pattern : "", l->type_string);
-            XiValue *flg_v =
-                xi_const_str(l->func, l->cur_block, flags ? flags : "", l->type_string);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_REGEX_COMPILE, l->type_regex, 2);
-            if (v) {
-                v->args[0] = pat_v;
-                v->args[1] = flg_v;
-            }
-            return v;
-        }
-
         /* Expression statement wrapper: unwrap */
         case AST_EXPR_STMT:
             return xi_lower_expr(l, node->as.expr_stmt);

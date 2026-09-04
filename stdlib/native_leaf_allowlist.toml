@@ -1231,7 +1231,7 @@ provider = "the kernel. VM stdlib/os/os.c os_uptime; AOT src/aot/xrt_os.h xrt_os
 deletion_trigger = "when Xray source can issue the boot-time query itself; the boot-time-to-uptime subtraction could move to os.xr first, but only once the leaf reports the boot instant rather than the difference"
 
 # ============================================================================
-# regex -- handle allocation plus three lookups owned elsewhere
+# regex -- Unicode table ABI leaves
 # ============================================================================
 #
 # The engine is no longer here. Parsing, compilation, NFA simulation and the
@@ -1240,28 +1240,8 @@ deletion_trigger = "when Xray source can issue the boot-time query itself; the b
 # are deleted, and so is the DFA, whose unsynchronised shared cache was a data
 # race on any Regex shared between coroutines.
 #
-# What is left is one handle constructor and three forwards to definitions
-# other files own. None of them decides anything about matching.
-
-[[leaf]]
-module = "regex"
-symbol = "__regexNew"
-class = "runtime_leaf"
-abi = "none; allocates one XrObjectInstance, retains the borrowed pattern into field 0, stores scalar flags in field 1, and transfers the fresh empty program array into field 2"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex_binding.c make_regex. Regex is the VM native handle required by XI_REGEX_COMPILE. The returned instance owns one retained pattern reference and the creator reference of the empty program array; ordinary instance destruction releases both fields. regex.xr alone compiles and fills the program array"
-deletion_trigger = "Regex has to stay a native class for as long as the regex literal syntax exists: /pat/flags lowers to XI_REGEX_COMPILE with its result type pinned to type_regex in src/ir/xi_lower_expr.c:11349. The leaf goes when a literal can lower to a call of an Xray constructor instead, at which point Regex can be an ordinary Xray class"
-
-[[leaf]]
-module = "regex"
-symbol = "__regexParseFlags"
-class = "native_engine_leaf"
-abi = "none; a three-character scan over the flag string"
-ownership = "none"
-effect = "nothrow"
-provider = "src/shared/xr_regex_core.h xr_regex_core_parse_flags. Unknown flag characters are ignored, which is long-standing behaviour"
-deletion_trigger = "rewriting it would fork a shared definition: the regex literal path parses its flags in C (xr_regex_compile_literal, reached from the OP_REGEX_COMPILE bytecode) while regex.compile() parses them through this leaf, and an Xray copy would be free to drift from the C one. It goes when the literal path can reach Xray, which is the same condition that frees __regexNew"
+# Regex construction, flag parsing and the compiled-program cache are source
+# declarations in regex.xr. Only Unicode table queries cross the native ABI.
 
 [[leaf]]
 module = "regex"

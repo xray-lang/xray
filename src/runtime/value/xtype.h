@@ -813,7 +813,6 @@ XR_FUNC XrType *xr_type_new_enum_metadata(XrVMRuntime *X, const char *metadata_n
                                           XrType *enum_type);
 XR_FUNC XrType *xr_type_new_bigint(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_u8_array(XrVMRuntime *X);
-XR_FUNC XrType *xr_type_new_regex(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_stringbuilder(XrVMRuntime *X);
 XR_FUNC XrType *
 xr_type_new_named_instance(XrVMRuntime *X,

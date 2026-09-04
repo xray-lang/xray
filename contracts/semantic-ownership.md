@@ -15,14 +15,14 @@ for a migrated shared owner consume its generated stable owner ID. CGen adapter
 spelling is obtained by stable-ID lookup rather than reconstructed from an Xi
 or source-language name.
 
-`xi.regex.compile` binds its observable contract directly to
-`stdlib/regex/regex.xr`, whose `stdlib.regex.compile-match` identity is the sole
-compile/match owner. The VM and runtime prove exact membership in that owner;
-the AOT target is inapplicable and has no adapter. `xr_regex_core.h` is a
-separate `regex-flag-contract` utility for flag spelling and scalar boundaries,
-not a regex engine or an alternate compile/match owner. A missing VM/runtime
-binding, an AOT compile/match adapter, or owner logic in the flag utility fails
-closed.
+Regex construction is an ordinary source-class operation. Post-analysis
+canonicalization rewrites a regex literal to the module-qualified
+`regex.Regex(pattern, flags)` constructor, and `stdlib/regex/regex.xr` owns the
+object shape, flag spelling, program cache, and compile/match policy. There is
+no regex-specific Xi operation, VM opcode, native class, or shared semantic
+core. The C binding exposes only the two Unicode property-table ABI leaves;
+reviving a C constructor, cache, flag parser, literal helper, or class
+registration fails the owner ratchet.
 
 Bounds semantics have one real operation family: canonical `xi.index.get` and
 `xi.index.set`, whose generated VM and AOT consumers perform the access. The

@@ -1708,36 +1708,3 @@ XR_FUNC void xi_emit_assertion(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     else
         xi_emit_assertion_action(ctx, v, plan);
 }
-
-/* ========== Regex Literal ========== */
-
-XR_FUNC void xi_emit_regex_compile(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs < 2) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-
-    /* args[0] = pattern string constant, args[1] = flags string constant */
-    XiValue *pat = v->args[0];
-    XiValue *flg = v->args[1];
-    XR_DCHECK(pat->op == XI_CONST, "regex pattern must be XI_CONST");
-    XR_DCHECK(flg->op == XI_CONST, "regex flags must be XI_CONST");
-
-    const char *pattern = (const char *) pat->aux;
-    const char *flags = (const char *) flg->aux;
-
-    int ki_pat = add_const_string(ctx, pattern ? pattern : "");
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    int ki_flg = add_const_string(ctx, flags ? flags : "");
-    if (ctx->status != XI_EMIT_OK)
-        return;
-
-    uint16_t pat_arg;
-    uint16_t flg_arg;
-    if (!xi_emit_const_index_to_c(ctx, ki_pat, &pat_arg) ||
-        !xi_emit_const_index_to_c(ctx, ki_flg, &flg_arg))
-        return;
-
-    emit_inst(ctx, CREATE_ABC(OP_REGEX_COMPILE, dst, pat_arg, flg_arg));
-}

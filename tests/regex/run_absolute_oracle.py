@@ -98,7 +98,7 @@ REQUIRED_CASE_SHAPES = {
         "domains": ["lexical", "matching"],
         "required_capabilities": ["regex.dynamic.compile", "regex.literal.syntax"],
     },
-    "literal_no_import": {
+    "literal_source_owner": {
         "domains": ["lexical"],
         "required_capabilities": ["regex.literal.syntax"],
     },
@@ -149,7 +149,7 @@ ENGINE_SNAPSHOT = {
     "instruction_schema": "array-i64-header16-instruction4-unicode3-v1",
     "limits": {"max_capture_groups": 31, "max_instructions": 10000, "max_nesting": 100},
     "owner": "stdlib/regex/regex.xr",
-    "owner_sha256": "3ae33f32a1854fcafcf86f6f99c07013440ed7d221db6fde36003a3050aac7cf",
+    "owner_sha256": "d71e012b0d66d4afc4ccff027f25ce4830fd819e1c63b544622ae6f8a78f9320",
 }
 UNICODE_CONTRACT = {
     "case_fold": "ascii-only",

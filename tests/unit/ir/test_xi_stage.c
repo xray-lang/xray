@@ -665,7 +665,6 @@ static void test_backend_policy_generated_metadata(void) {
     assert(!xi_op_is_backend_legal(XI_ITER_NEW));
     assert(!xi_op_is_backend_legal(XI_ITER_NEXT));
     assert(!xi_op_is_backend_legal(XI_ITER_VALID));
-    assert(!xi_op_is_backend_legal(XI_REGEX_COMPILE));
     assert(!xi_op_is_backend_legal(XI_TASK_GROUP_NEW));
     assert(!xi_op_is_backend_legal(XI_TASK_GROUP_SPAWN_RANGE));
     assert(!xi_op_is_backend_legal(XI_TASK_GROUP_AWAIT_REDUCE));
@@ -675,8 +674,6 @@ static void test_backend_policy_generated_metadata(void) {
     assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_NEW), "iter_new") == 0);
     assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_NEXT), "iter_next") == 0);
     assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_VALID), "iter_valid") == 0);
-    assert(xi_op_backend_rewrite(XI_REGEX_COMPILE) == XI_GEN_BACKEND_REWRITE_NONE);
-    assert(xi_op_backend_rewrite_name(XI_REGEX_COMPILE) == NULL);
 
     printf("  PASS\n");
 }

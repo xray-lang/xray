@@ -244,8 +244,6 @@ const char *xr_type_to_string(XrType *type) {
         (type->instance.type_arg_count <= 0 || !type->instance.type_args)) {
         return type->instance.class_name ? type->instance.class_name : "Interface";
     }
-    if (xr_type_is_named_class(type, "Regex"))
-        return "Regex";
     if (xr_type_is_named_class(type, "BigInt"))
         return "BigInt";
     if (xr_type_is_named_class(type, "StringBuilder"))

@@ -5063,6 +5063,25 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
+static XrType *xa_visit_regex_literal(XaInferContext *ctx, AstNode *node) {
+    xa_freestanding_report_unavailable(ctx, node, "regex literal",
+                                       "regex compilation is hosted-only");
+
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, "regex");
+    XaSymbol *regex_class = exports ? (XaSymbol *) xr_hashmap_get(exports, "Regex") : NULL;
+    XaSymbolLinks *links = regex_class && regex_class->kind == XA_SYM_CLASS
+                               ? xa_analyzer_get_links(ctx->analyzer, regex_class)
+                               : NULL;
+    if (links && links->class_info)
+        return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(
+        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
+        "regex literal requires `import regex`; Regex is owned by the source module", &loc);
+    return xr_type_new_error(ctx->analyzer->isolate);
+}
+
 XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -5120,9 +5139,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xr_type_new_bigint(ctx->analyzer->isolate);
             break;
         case AST_LITERAL_REGEX:
-            xa_freestanding_report_unavailable(ctx, node, "regex literal",
-                                               "regex compilation is hosted-only");
-            result = xr_type_new_regex(ctx->analyzer->isolate);
+            result = xa_visit_regex_literal(ctx, node);
             break;
         case AST_LITERAL_NULL:
             result = xr_type_new_null(NULL);

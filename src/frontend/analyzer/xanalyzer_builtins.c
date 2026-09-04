@@ -59,8 +59,6 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_STRINGBUILDER;
     if (type->kind == XR_KIND_CHANNEL)
         return XR_TID_CHANNEL;
-    if (xr_type_is_builtin_named_class(type, "Regex"))
-        return XR_TID_REGEX;
     if (xr_type_is_builtin_named_class(type, "PanicInfo"))
         return XR_TID_PANIC_INFO;
     if (xr_type_is_builtin_named_class(type, "Task"))
@@ -1390,9 +1388,6 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_enum(X, "CompressionError");
     } else if (base_len == 11 && strncmp(s, "CryptoError", 11) == 0) {
         type = xr_type_new_enum(X, "CryptoError");
-    } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
-        type = xr_type_new_instance(X, NULL);
-        type->instance.class_name = "Regex";
     } else if (base_len == strlen(TYPE_NAME_BUFFER) &&
                strncmp(s, TYPE_NAME_BUFFER, strlen(TYPE_NAME_BUFFER)) == 0) {
         type = xr_type_new_instance(X, NULL);

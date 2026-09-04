@@ -816,7 +816,6 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMR
     l->type_unit = xr_type_new_unit(isolate);
     l->type_any = xr_type_new_unknown(isolate);
     l->type_bigint = xr_type_new_bigint(isolate);
-    l->type_regex = xr_type_new_regex(isolate);
 }
 
 XR_FUNC void xi_lower_cleanup(XiLower *l) {

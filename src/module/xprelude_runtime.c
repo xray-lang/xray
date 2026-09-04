@@ -64,7 +64,6 @@ struct XrVMRuntime;
  * depend on runtime infrastructure only available after core init. */
 extern void xr_iterator_register_class(XrVMRuntime *isolate);
 extern void xr_register_range_class(XrVMRuntime *isolate);
-extern void xr_regex_register_class(XrVMRuntime *isolate);
 extern void xr_thread_register_native_type(XrVMRuntime *isolate);
 #if defined(XR_HAS_NETWORK)
 extern void xr_netconn_register_class(XrVMRuntime *isolate);
@@ -222,7 +221,6 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
      * Prelude registers only the remaining native types. */
     xr_iterator_register_class(isolate);
     xr_register_range_class(isolate);
-    xr_regex_register_class(isolate);
     xr_thread_register_native_type(isolate);
 #if defined(XR_HAS_NETWORK)
     xr_netconn_register_class(isolate);

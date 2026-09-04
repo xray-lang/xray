@@ -14,7 +14,7 @@
  * it on its own will fail; CMake explicitly excludes *.inc.c from
  * the VM_SRC glob.
  *
- * Owns the typed assertion bytecode record and OP_REGEX_COMPILE.
+ * Owns the typed assertion bytecode record.
  */
 
 /* === Assertion instructions (test framework) === */
@@ -202,22 +202,4 @@ vmcase(OP_ASSERTION_SPAN_START) {
 
 vmcase(OP_ASSERTION_SPAN_END) {
     VM_RUNTIME_ERROR(0, "orphan typed assertion end-span metadata");
-}
-
-/* === Regex Literal === */
-
-vmcase(OP_REGEX_COMPILE) {
-    /* R[A] = regex.compile(K[B], K[C]) — pattern and flags
-     * are guaranteed string constants by the compiler.
-     * The actual flag parse + xr_regex_compile() lives
-     * behind xr_regex_compile_literal() in stdlib/regex
-     * to keep src/vm free of stdlib reverse includes. */
-    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_STDLIB_REGEX_COMPILE_MATCH_HI,
-                                        XR_SEM_OWNER_ID_STDLIB_REGEX_COMPILE_MATCH_LO,
-                                        XR_SEM_CONSUMER_VM)) {
-        VM_RUNTIME_ERROR(0, "regex literal owner has no VM consumer");
-    }
-    int a = GETARG_A(i);
-    R(a) = xr_regex_compile_literal(isolate, K(GETARG_B(i)), K(GETARG_C(i)));
-    vmbreak;
 }

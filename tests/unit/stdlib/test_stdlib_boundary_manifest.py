@@ -52,41 +52,6 @@ benchmark_runner = importlib.util.module_from_spec(_BENCHMARK_RUNNER_SPEC)
 _BENCHMARK_RUNNER_SPEC.loader.exec_module(benchmark_runner)
 
 
-def regex_native_handle_ownership_errors(source: str) -> list[str]:
-    """Validate the transfer boundary used by the native Regex handle."""
-    errors: list[str] = []
-    required_before_store = (
-        (
-            "borrowed pattern retain",
-            "    xr_rc_retain_value(pattern);\n",
-            "    xr_instance_set_field_fast(inst, XR_REGEX_FIELD_PATTERN, pattern);\n",
-        ),
-    )
-    for label, retain, store in required_before_store:
-        if source.count(retain) != 1:
-            errors.append(f"{label} must exist exactly once")
-            continue
-        if source.count(store) != 1 or source.index(retain) > source.index(store):
-            errors.append(f"{label} must precede its field store")
-    prog_creation = "    XrArray *prog = xr_array_new(xr_current_coro(isolate));\n"
-    prog_store = (
-        "    xr_instance_set_field_fast(inst, XR_REGEX_FIELD_PROG, "
-        "xr_value_from_array(prog));\n"
-    )
-    if source.count(prog_creation) != 1 or source.count(prog_store) != 1:
-        errors.append("fresh regex program must transfer directly into its field")
-    else:
-        creation_offset = source.index(prog_creation)
-        store_offset = source.index(prog_store)
-        if creation_offset > store_offset:
-            errors.append("fresh regex program creation must precede its field store")
-        elif "xr_rc_retain" in source[
-            creation_offset : store_offset + len(prog_store)
-        ]:
-            errors.append("fresh regex program must not gain a second owner")
-    return errors
-
-
 class StdlibBoundaryManifestTest(unittest.TestCase):
     def test_loadable_modules_have_one_boundary_entry(self) -> None:
         manifest = load_manifest(ROOT)
@@ -208,25 +173,28 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertEqual([], check_semantic_owners(ROOT))
         self.assertEqual([], check_fastpaths(ROOT))
 
-    def test_regex_native_handle_has_one_exact_owner(self) -> None:
-        path = ROOT / "stdlib/regex/xregex_binding.c"
-        source = path.read_text(encoding="utf-8")
-        self.assertEqual([], regex_native_handle_ownership_errors(source))
-        mutations = {"pattern": "    xr_rc_retain_value(pattern);\n"}
-        for label, retain in mutations.items():
-            with self.subTest(label=label):
-                self.assertIn(retain, source)
-                self.assertNotEqual(
-                    [], regex_native_handle_ownership_errors(source.replace(retain, "", 1))
-                )
-        prog_creation = "    XrArray *prog = xr_array_new(xr_current_coro(isolate));\n"
-        self.assertIn(prog_creation, source)
-        extra_owner = source.replace(
-            prog_creation,
-            prog_creation + "    xr_rc_retain_value(xr_value_from_array(prog));\n",
-            1,
-        )
-        self.assertNotEqual([], regex_native_handle_ownership_errors(extra_owner))
+    def test_regex_object_and_literal_policy_are_source_owned(self) -> None:
+        source = (ROOT / "stdlib/regex/regex.xr").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/regex/xregex_binding.c").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        canonicalizer = (ROOT / "src/frontend/canonical/xcanon.c").read_text(encoding="utf-8")
+        self.assertIn("export final class Regex {", source)
+        self.assertIn("constructor(pattern: string, flags: string", source)
+        self.assertIn("fn rxParseFlags(", source)
+        self.assertIn("this.prog = Array<i64>()", source)
+        self.assertIn('xr_ast_new_expr(ctx->session, "regex", "Regex"', canonicalizer)
+        for retired in (
+            "make_regex",
+            "xr_regex_compile_literal",
+            "xr_regex_register_class",
+            "regex_parse_flags",
+            "regex_compile",
+        ):
+            self.assertNotIn(retired, binding)
+        self.assertNotIn("class Regex {", definitions)
+        self.assertNotIn("fn __regexNew {", definitions)
+        self.assertNotIn("fn __regexParseFlags {", definitions)
+        self.assertFalse((ROOT / "stdlib/types/regex.xr").exists())
 
     def test_regex_match_shape_is_source_owned(self) -> None:
         source = (ROOT / "stdlib/regex/regex.xr").read_text(encoding="utf-8")

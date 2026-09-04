@@ -156,12 +156,11 @@ public = true
 layer = "L3"
 policy = "xray_semantic"
 semantic_source = "stdlib/regex/regex.xr"
-# Regex remains a runtime class because literal syntax lowers to
-# XI_REGEX_COMPILE, but its class row and fields are internal binding metadata.
-# RegexMatch, every method, and every module function are implemented in Xray.
+# Regex, RegexMatch, flag policy, caching and every module function are source
+# declarations. Literal syntax canonicalizes to the source Regex constructor.
 public_native = []
 private_native_sources = ["stdlib/regex/*.c"]
-private_native_reason = "Regex literal handle allocation plus the shared flag-string mask and unicode property tables"
+private_native_reason = "Canonical Unicode property table queries"
 perf_suite = "stdlib/regex"
 
 [[module]]

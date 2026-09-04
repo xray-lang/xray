@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "../runtime/xstdlib_bridge.h"
 
 /* ========== Cycle Detection Data Structures ========== */
 

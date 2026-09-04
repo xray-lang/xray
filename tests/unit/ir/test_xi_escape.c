@@ -339,7 +339,6 @@ static void test_heap_alloc_check(void) {
     ASSERT_EQ(xi_op_is_heap_alloc(XI_OBJECT_NEW), 1, "OBJECT_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_CLOSURE_NEW), 1, "CLOSURE_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_STR_CONCAT), 1, "STR_CONCAT is heap alloc");
-    ASSERT_EQ(xi_op_is_heap_alloc(XI_REGEX_COMPILE), 1, "REGEX_COMPILE is heap alloc");
     /* Non-alloc ops */
     ASSERT_EQ(xi_op_is_heap_alloc(XI_ADD), 0, "ADD is not heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_CONST), 0, "CONST is not heap alloc");

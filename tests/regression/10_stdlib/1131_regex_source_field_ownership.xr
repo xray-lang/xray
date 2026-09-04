@@ -1,5 +1,5 @@
 import regex
-import { RegexMatch } from regex
+import { Regex, RegexMatch } from regex
 
 fn makeDynamicPattern(seed: i64) -> string {
     return "([a-z]+)(" + string(seed) + "+)"
@@ -50,7 +50,7 @@ fn constructReadAndDropResults(round: i64) {
 }
 
 @test
-fn test_regex_native_fields_own_borrowed_values() {
+fn test_regex_source_fields_own_borrowed_values() {
     var pattern = makeRegexAcrossFrame(7)
     churnReleasedStorage(11)
     assertEqual(pattern.pattern, "([a-z]+)(7+)")
@@ -82,4 +82,4 @@ fn test_regex_native_fields_own_borrowed_values() {
     }
 }
 
-print("Regex native field ownership tests passed")
+print("Regex source field ownership tests passed")

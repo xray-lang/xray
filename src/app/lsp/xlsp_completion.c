@@ -1163,8 +1163,6 @@ static XlspBuiltinType type_to_builtin_bucket(XrType *type) {
         return XLSP_TYPE_BIGINT;
     if (xr_type_is_builtin_named_class(type, "StringBuilder"))
         return XLSP_TYPE_STRINGBUILDER;
-    if (xr_type_is_builtin_named_class(type, "Regex"))
-        return XLSP_TYPE_REGEX;
     if (xr_type_is_builtin_named_class(type, "PanicInfo"))
         return XLSP_TYPE_PANIC_INFO;
     if (xr_type_is_builtin_named_class(type, "Task"))

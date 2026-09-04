@@ -35,7 +35,6 @@
 #include "../runtime/class/xtype_registry.h"
 #include "../module/xmodule.h"
 #include "../module/xprelude_runtime.h"
-#include "../runtime/xstdlib_bridge.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/mem/xcycle_detector.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -188,7 +187,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
                                  xr_compile_ast_with_source, xr_compile_source_with_path,
                                  xr_program_destroy);
 
-    // Native XrClasses for Regex / NetConn / NetListener are registered up
+    // Native XrClasses for NetConn / NetListener are registered up
     // front inside stdlib loaders. Pure stdlib classes such as
     // datetime.DateTime must be imported from their module.
 

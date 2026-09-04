@@ -352,7 +352,6 @@ static const NativeTypeMapping type_mappings[] = {
     {"StringBuilder", XR_TID_STRINGBUILDER, TYPE_NAME_STRINGBUILDER},
     {"Iterator", XR_TID_ITERATOR, TYPE_NAME_ITERATOR},
     {"Channel", XR_TID_CHANNEL, TYPE_NAME_CHANNEL},
-    {"Regex", XR_TID_REGEX, TYPE_NAME_REGEX},
     {"PanicInfo", XR_TID_PANIC_INFO, TYPE_NAME_PANIC_INFO},
     {"Task", XR_TID_COROUTINE, TYPE_NAME_TASK},
     {"Atomic", XR_TID_ATOMIC, TYPE_NAME_ATOMIC},
@@ -562,7 +561,6 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_STRINGBUILDER, XR_TINSTANCE},
     {XR_TID_CHANNEL, XR_TCHANNEL},
     {XR_TID_THREAD, XR_TTHREAD},
-    {XR_TID_REGEX, XR_TINSTANCE},
     {XR_TID_PANIC_INFO, XR_TINSTANCE},
     {XR_TID_COROUTINE, XR_TTASK},
     {XR_TID_ATOMIC, XR_TATOMIC},
@@ -582,8 +580,6 @@ static XrClass *xa_native_protocol_core_class(XrVMRuntime *X, XrTypeId tid,
             return core->stringBuilderClass;
         case XR_TID_ITERATOR:
             return core->iteratorClass;
-        case XR_TID_REGEX:
-            return core->regexClass;
         case XR_TID_PANIC_INFO:
             return core->panicInfoClass;
         case XR_TID_BUFFER:

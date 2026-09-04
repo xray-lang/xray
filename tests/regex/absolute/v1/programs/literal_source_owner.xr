@@ -1,2 +1,4 @@
+import regex
+
 var direct = /a/
 print("constructed")

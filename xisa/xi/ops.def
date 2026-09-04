@@ -2341,18 +2341,6 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.regex.compile
-  :class allocation
-  :arity 2
-  :observable-contract "stdlib/regex/regex.xr"
-  :escape-alloc heap
-  :own-use consume
-  :tbaa-group fresh
-  :effects (side-effect memory-write allocates)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-verify))
-
 (define-xi-op xi.retain
   :class ownership
   :arity 1
@@ -2899,7 +2887,6 @@
     xi.slice
     xi.scope.enter
     xi.scope.exit
-    xi.regex.compile
     xi.coro.op
   ))
 
@@ -3778,20 +3765,6 @@
     (aot-hosted "src/aot/xrt.h" "xrt_null_test_tagged")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_null_test_tagged")
     (cgen "src/aot/xi_cgen.c" "cg_null_test_adapter_name")
-  ))
-
-(define-xi-observable-owner stdlib.regex.compile-match
-  :category shared-semantic-kernel
-  :operations (xi.regex.compile)
-  :consumers (
-    semantic-plan
-    vm
-    runtime
-  )
-  :production-bindings (
-    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
-    (vm "src/vm/xvm_dispatch_assert.inc.c" "xr_regex_compile_literal")
-    (runtime "stdlib/regex/xregex_binding.c" "xr_regex_compile_literal")
   ))
 
 (define-xi-observable-owner primitive.type-identity

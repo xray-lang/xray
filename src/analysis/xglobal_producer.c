@@ -3514,8 +3514,13 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_synthetic_tref32(XR_TREF_NULL, NULL, NULL, 0);
         case AST_LITERAL_BIGINT:
             return hash_named_type_key32("BigInt", NULL, 0);
-        case AST_LITERAL_REGEX:
-            return hash_named_type_key32("Regex", NULL, 0);
+        case AST_LITERAL_REGEX: {
+            XrType *type = bc->producer && bc->producer->analyzer
+                               ? xa_analyzer_get_node_type(bc->producer->analyzer, expr)
+                               : NULL;
+            const char *class_name = xr_type_get_class_name(type);
+            return class_name ? hash_named_type_key32(class_name, NULL, 0) : 0;
+        }
         case AST_ENUM_ACCESS:
         case AST_MEMBER_ACCESS: {
             const char *enum_name = NULL;

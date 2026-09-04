@@ -94,13 +94,13 @@ class AbsoluteOracleValidatorTests(unittest.TestCase):
         )
 
     def test_source_content_drift_is_rejected(self) -> None:
-        source = self.root / "programs/literal_no_import.xr"
+        source = self.root / "programs/literal_source_owner.xr"
         source.write_text(source.read_text(encoding="utf-8") + "print(1)\n", encoding="utf-8")
         errors = ORACLE.validate_oracle(self.manifest)
         self.assertTrue(any("source_sha256" in error for error in errors))
 
     def test_expected_content_drift_is_rejected(self) -> None:
-        expected = self.root / "expected/literal_no_import.stdout"
+        expected = self.root / "expected/literal_source_owner.stdout"
         expected.write_text("changed\n", encoding="utf-8")
         errors = ORACLE.validate_oracle(self.manifest)
         self.assertTrue(any("expected_sha256" in error for error in errors))

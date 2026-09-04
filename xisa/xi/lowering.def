@@ -1233,11 +1233,6 @@
       (selector)
       (emitter "src/aot/xi_cgen_coro.inc.c" emit_coro_scope_exit_error_check))))
 
-(lower xi.regex.compile
-  :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_regex_compile))
-
 (lower xi.tuple.new
   :match ()
   :required-targets (vm-bytecode aot-c)

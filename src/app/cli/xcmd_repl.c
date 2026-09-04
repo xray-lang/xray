@@ -93,7 +93,7 @@ static const char *const k_repl_keywords[] = {
     "final",      "operator", "void",
     "string",     "bool",     "Array",       "Map",          "Set",
     "JSON.Value", "Channel",  "Array<u8>", "BigInt",       "StringBuilder",
-    "PanicInfo",  "Regex",    "dump",         "typeOf",       "typeName",
+    "PanicInfo",  "dump",     "typeOf",       "typeName",
 #define XR_CORE_INTRINSIC(id, stable_id, source_name, category, call_form, parameter_shape,       \
                           min_arity, max_arity, result_shape, effect_kind, flow_rule,               \
                           expected_failure_channel, semantic_op, target_applicability,              \

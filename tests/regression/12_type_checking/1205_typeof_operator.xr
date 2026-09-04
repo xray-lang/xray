@@ -1,6 +1,8 @@
 // 1205_typeof_operator.xr
 // Test typeof operator and runtime type checking
 
+import regex
+
 // ===== Primitive Types =====
 
 @test

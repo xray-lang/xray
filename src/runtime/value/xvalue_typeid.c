@@ -116,8 +116,6 @@ static XrTypeIdentityCoreKind xr_value_type_identity_kind(XrValue v) {
                             return XR_TYPE_IDENTITY_CORE_ENUM_VALUE;
                         case XR_BK_ITERATOR:
                             return XR_TYPE_IDENTITY_CORE_ITERATOR;
-                        case XR_BK_REGEX:
-                            return XR_TYPE_IDENTITY_CORE_REGEX;
                         case XR_BK_NETCONN:
                             return XR_TYPE_IDENTITY_CORE_NETCONN;
                         case XR_BK_NETLISTENER:

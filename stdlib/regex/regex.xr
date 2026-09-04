@@ -1,20 +1,14 @@
 // regex - pattern matching, written in Xray.
 //
-// This file is the sole compile and match owner: it owns the parser, compiler,
-// NFA simulation and top-level API. The native binding retains only VM handle
-// construction and three non-matching leaves that Xray cannot express.
+// This file is the sole regex owner: it declares the Regex object, flag
+// policy, compiled-program cache, parser, compiler, NFA simulation and public
+// API. A regex literal is canonicalized to this class constructor, so literal
+// and dynamic construction cannot acquire separate representations or flag
+// parsers.
 //
-// What stays native, and why it is not a second owner of anything here:
-//   __regexNew         allocates the Regex handle. `Regex` has to remain a
-//                      native class because the literal syntax /pat/flags
-//                      lowers to XI_REGEX_COMPILE with its result type pinned
-//                      to type_regex (src/ir/xi_lower_expr.c:11349).
-//   __regexParseFlags  the one flag-string mask used by both regex.compile()
-//                      and the VM regex-literal path.
-//   __unicodePropId    the unicode property tables belong to unicode, not to
-//   __unicodeHasProp   regex; their owner is src/base/xunicode.c and copying
-//                      several hundred code-point ranges in here would mint a
-//                      second answer to the same question.
+// Only two native leaves remain. __unicodePropId and __unicodeHasProp query
+// the runtime's canonical Unicode property tables; they contain no regex
+// object, cache, parser or matching policy.
 //
 // Layout of the compiled program image, the AST and every constant below is
 // fixed by analysis/r3-6-5-regex-xray-design.md.
@@ -28,6 +22,18 @@
 //     all mutable state lives in Array<i64> fields.
 //   * Array<i64>(n) does not zero-fill: 255 of 256 elements came back non-zero
 //     from reused memory. Every sized allocation states its fill value.
+
+export final class Regex {
+    pattern: string
+    flags: i64
+    prog: Array<i64>
+
+    constructor(pattern: string, flags: string = "") {
+        this.pattern = pattern
+        this.flags = rxParseFlags(flags)
+        this.prog = Array<i64>()
+    }
+}
 
 export final class RegexMatch {
     start: i64
@@ -48,6 +54,20 @@ const RX_F_IGNORECASE: i64 = 1
 const RX_F_MULTILINE: i64 = 2
 const RX_F_DOTALL: i64 = 4
 const RX_F_UNGREEDY: i64 = 8
+
+fn rxParseFlags(flags: string) -> i64 {
+    var text = flags.copyBytes()
+    var parsed = RX_F_NONE
+    var i = 0
+    while (i < len(text)) {
+        var flag = text[i] as i64
+        if (flag == 105) { parsed = parsed | RX_F_IGNORECASE }
+        else if (flag == 109) { parsed = parsed | RX_F_MULTILINE }
+        else if (flag == 115) { parsed = parsed | RX_F_DOTALL }
+        i = i + 1
+    }
+    return parsed
+}
 
 const EW_BEGIN_LINE: i64 = 1
 const EW_END_LINE: i64 = 2
@@ -1757,9 +1777,9 @@ export enum RegexError {
     InvalidPattern { message: string, position: i64 }
 }
 
-// The program image is compiled on first use and memoised in the handle.
-// Laziness is forced by the literal path: /pat/flags reaches __regexNew
-// through the VM's OP_REGEX_COMPILE, and C can no longer compile a pattern.
+// The program image is compiled on first use and memoised in the source object.
+// Literals call the same constructor as explicit source construction, so this
+// is the only cache and the only lazy-compilation policy.
 // The write is idempotent -- the same pattern and flags compile to an equal
 // image -- so two coroutines racing here can at worst compile twice. That is
 // the whole of the mutable state in this engine, and it is why the DFA is
@@ -1794,7 +1814,7 @@ fn rxProgValid(prog: Array<i64>) -> bool {
 }
 
 export fn compile(pattern: string, flags: string = "") -> Regex {
-    var re = __regexNew(pattern, __regexParseFlags(flags))
+    var re = Regex(pattern, flags)
     // Compile eagerly so a bad pattern is reported by compile(), where C
     // reported it. C answered null after xr_runtime_error
     // (xregex_binding.c:238-242); `-> Regex` cannot answer null, and handing

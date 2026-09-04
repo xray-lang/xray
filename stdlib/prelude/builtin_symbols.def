@@ -112,7 +112,6 @@ XR_BUILTIN_PRELUDE_TYPE("OsRwLock",      0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("PanicInfo",     0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Path",          0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Range",         0, XR_TINSTANCE, SIMPLE)
-XR_BUILTIN_PRELUDE_TYPE("Regex",         0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Set",           1, XR_TSET,      GENERIC_1)
 /* Slice<T> is a borrowed view, not a heap object: a slice value is a tagged
  * XR_IS_SLICE_REF fat reference, so it has no GC type id. Its element storage

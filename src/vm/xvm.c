@@ -49,7 +49,6 @@
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/mem/xheap.h"
-#include "../runtime/xstdlib_bridge.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/xshared.h"
 #include "../shared/xr_print_plan.h"
@@ -931,7 +930,7 @@ startfunc:
 /* Assertion + regex literal opcodes — see file comment in
  * xvm_dispatch_assert.inc.c. The include expands inside
  * the dispatch switch and pulls in the vmcase bodies for
- * OP_ASSERTION metadata records and OP_REGEX_COMPILE. */
+ * OP_ASSERTION metadata records. */
 #include "xvm_dispatch_assert.inc.c"
 
 /* Coroutine + scheduler opcodes — see xvm_dispatch_coro.inc.c. */
