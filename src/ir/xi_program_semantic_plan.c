@@ -59,7 +59,8 @@ semantic_binding_for_program_row(const XrSemanticPlan *plan, uint32_t program_ro
 
 static bool semantic_function_is_exact(const XrSemanticPlan *plan, uint32_t index,
                                        uint16_t parameter_count, uint32_t expected_type,
-                                       char *error, size_t error_size) {
+                                       uint8_t expected_return_provenance, char *error,
+                                       size_t error_size) {
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, index);
     if (!function || function->return_type != expected_type || function->parent != 0 ||
         function->parameter_count != parameter_count)
@@ -77,7 +78,8 @@ static bool semantic_function_is_exact(const XrSemanticPlan *plan, uint32_t inde
     if (function->flags != XR_SEM_FUNCTION_NOTHROW || function->is_module_initializer != 0 ||
         function->carries_coroutine_ops != 0 || function->reserved != 0)
         return semantic_scalar_fail(error, error_size, "SemanticPlan function flags are not exact");
-    if (function->return_parameter != -1 || function->return_provenance != XR_SEM_RETURN_NONE) {
+    if (function->return_parameter != -1 ||
+        function->return_provenance != expected_return_provenance) {
         if (error && error_size)
             snprintf(error, error_size,
                      "XR_SEM_0019: SemanticPlan function %u return ownership "
@@ -269,6 +271,23 @@ static bool semantic_i64_type_is_exact(const XrSemanticTypeRecord *type) {
            type->scalar_rep == XR_NATIVE_I64 && type->flags == 0;
 }
 
+typedef struct SemanticDirectCallContract {
+    uint8_t supported;
+    uint8_t argument_ownership;
+    uint8_t result_ownership;
+    uint8_t return_provenance;
+    uint8_t return_complete;
+} SemanticDirectCallContract;
+
+static const SemanticDirectCallContract
+    semantic_direct_call_contracts[XR_PROGRAM_SEMANTIC_FAMILY_COUNT] = {
+        [XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL] = {1, XR_SEM_OPERAND_CONSUME,
+                                                           XI_GEN_RESULT_OWNERSHIP_OWNED,
+                                                           XR_SEM_RETURN_OWNED, 1},
+        [XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL] =
+            {1, XR_SEM_OPERAND_BORROW, XI_GEN_RESULT_OWNERSHIP_CALL_RESULT, XR_SEM_RETURN_NONE, 0},
+};
+
 static bool semantic_call_is_exact(const XrSemanticPlan *plan,
                                    const XrProgramSemanticCallRecord *program_call, uint32_t caller,
                                    uint32_t callee, uint32_t expected_type, const char *source_file,
@@ -296,11 +315,17 @@ static bool semantic_call_is_exact(const XrSemanticPlan *plan,
         callee_operand ? xr_semantic_plan_type(plan, callee_operand->type) : NULL;
     const XrSemanticFunctionRecord *caller_function = xr_semantic_plan_function(plan, caller);
     const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(plan);
-    uint8_t expected_argument_ownership =
-        provenance && provenance->program_family ==
-                          XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL
-            ? XR_SEM_OPERAND_BORROW
-            : XR_SEM_OPERAND_CONSUME;
+    const SemanticDirectCallContract *call_contract =
+        provenance && provenance->program_family < XR_PROGRAM_SEMANTIC_FAMILY_COUNT
+            ? &semantic_direct_call_contracts[provenance->program_family]
+            : NULL;
+    if (!call_contract || !call_contract->supported)
+        return semantic_scalar_fail(
+            error, error_size, "SemanticPlan direct call family has no exact ownership contract");
+    uint8_t expected_argument_ownership = call_contract->argument_ownership;
+    uint8_t expected_result_ownership = call_contract->result_ownership;
+    uint8_t expected_return_provenance = call_contract->return_provenance;
+    uint8_t expected_return_complete = call_contract->return_complete;
     uint32_t source_discriminator = 1;
     if (operation && operation->source_file) {
         for (uint32_t i = 0; i < operation_index; i++) {
@@ -313,6 +338,20 @@ static bool semantic_call_is_exact(const XrSemanticPlan *plan,
                 candidate->source_end_column == operation->source_end_column)
                 source_discriminator++;
         }
+    }
+    if (operation && (operation->result_ownership != expected_result_ownership ||
+                      operation->return_parameter != -1 ||
+                      operation->return_provenance != expected_return_provenance ||
+                      operation->return_complete != expected_return_complete)) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "XR_SEM_0019: SemanticPlan direct call result ownership is not exact "
+                     "(result=%u parameter=%d provenance=%u complete=%u expected=%u:%u:%u)",
+                     operation->result_ownership, operation->return_parameter,
+                     operation->return_provenance, operation->return_complete,
+                     expected_result_ownership, expected_return_provenance,
+                     expected_return_complete);
+        return false;
     }
     if (!program_call || !operation || !callee_operand || !argument || !caller_function ||
         !callee_type || operation->function != caller || operation->opcode != XI_CALL ||
@@ -339,11 +378,9 @@ static bool semantic_call_is_exact(const XrSemanticPlan *plan,
         operation->evidence[7] != XR_SEMANTIC_INDEX_NONE || operation->metadata_count != 0 ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
         operation->ownership_use != xi_generated_op_own_use(XI_CALL) ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
         operation->transfer_mode != 0 || operation->parameter_mode != XR_PARAM_READ ||
         operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
-        operation->return_parameter != -1 || operation->return_provenance != XR_SEM_RETURN_NONE ||
-        operation->return_complete != 0 || operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
         operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
         operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
         operation->view_origin != 0 || operation->view_capability != 0 ||
@@ -466,8 +503,10 @@ static bool verify_scalar_semantic_plan(const XiFunc *root, const XrSemanticPlan
         !xr_stable_id_equal(callee_binding->program_function, sealed->callee_function) ||
         caller_binding->flags != caller_program_row->flags ||
         callee_binding->flags != callee_program_row->flags || caller == callee ||
-        !semantic_function_is_exact(plan, caller, 0, scalar_type, error, error_size) ||
-        !semantic_function_is_exact(plan, callee, 1, scalar_type, error, error_size) ||
+        !semantic_function_is_exact(plan, caller, 0, scalar_type, XR_SEM_RETURN_OWNED, error,
+                                    error_size) ||
+        !semantic_function_is_exact(plan, callee, 1, scalar_type, XR_SEM_RETURN_OWNED, error,
+                                    error_size) ||
         !semantic_initializer_is_exact(plan, root, error, error_size) ||
         !semantic_call_is_exact(plan, program_call, caller, callee, scalar_type, module->identity,
                                 error, error_size))
@@ -596,7 +635,7 @@ static bool semantic_leaf_aggregate_plan_verify(const XiFunc *root, const XrSema
             return semantic_scalar_fail(error, error_size,
                                         "Xi and SemanticPlan aggregate function bindings disagree");
         if (!semantic_function_is_exact(plan, semantic_function, function->nparams,
-                                        aggregate_semantic, error, error_size))
+                                        aggregate_semantic, XR_SEM_RETURN_NONE, error, error_size))
             return false;
         if (function->nparams == 1 &&
             (!function->params || function->params[0]->psc_type_index != aggregate_program ||
@@ -883,8 +922,8 @@ static bool semantic_leaf_product_plan_verify(const XiFunc *root, const XrSemant
             function->psc_return_type_index != product->program_row ||
             !xr_stable_id_equal(binding->program_function, program_function->id) ||
             binding->flags != program_function->flags ||
-            !semantic_function_is_exact(plan, semantic_function, 0, product->semantic_type, error,
-                                        error_size))
+            !semantic_function_is_exact(plan, semantic_function, 0, product->semantic_type,
+                                        XR_SEM_RETURN_NONE, error, error_size))
             return false;
         for (uint32_t b = 0; b < function->nblocks; b++) {
             const XiBlock *block = function->blocks[b];
@@ -1104,7 +1143,8 @@ static bool semantic_graph_partition_plan_verify(const XiFunc *root, const XrSem
         (local->semantic_plan && local->semantic_plan_function_index != semantic_function) ||
         !semantic_initializer_is_exact(plan, root, error, error_size) ||
         !semantic_function_is_exact(plan, semantic_function, local->nparams,
-                                    type_binding->semantic_type, error, error_size))
+                                    type_binding->semantic_type, XR_SEM_RETURN_OWNED, error,
+                                    error_size))
         return false;
 
     bool entry = program_function->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
@@ -1294,8 +1334,8 @@ static bool semantic_private_leaf_partition_plan_verify(const XiFunc *root,
         operation->result_type != type_binding->semantic_type ||
         !semantic_source_module_key_matches_root(plan, root) ||
         !semantic_initializer_is_exact(plan, root, error, error_size) ||
-        !semantic_function_is_exact(plan, semantic_function, 0, type_binding->semantic_type, error,
-                                    error_size) ||
+        !semantic_function_is_exact(plan, semantic_function, 0, type_binding->semantic_type,
+                                    XR_SEM_RETURN_OWNED, error, error_size) ||
         !semantic_private_leaf_call_inventory_is_exact(plan, semantic_function, call_binding, error,
                                                        error_size))
         return false;

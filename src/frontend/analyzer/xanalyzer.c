@@ -393,6 +393,8 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
                                        XrType ***payload_types, bool is_adt) {
     XR_DCHECK(analyzer != NULL, "register_prelude_enum: NULL analyzer");
     XaSymbol *sym = xa_symbol_new(name, XA_SYM_ENUM);
+    if (!sym)
+        return;
     sym->location.line = 0;
     sym->is_builtin = true;
     sym->is_const = true;
@@ -401,6 +403,16 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
     if (!links)
         return;
     links->type = xr_type_new_enum(analyzer->isolate, name);
+    if (!links->type)
+        return;
+    XrClassInfo *nominal = xa_class_info_new(name);
+    if (!nominal)
+        return;
+    nominal->declaration_symbol = sym;
+    nominal->nominal_kind = XA_NOMINAL_ENUM;
+    links->class_info = nominal;
+    links->owns_class_info = true;
+    links->type->enum_type.nominal_ref = nominal;
     links->declared_type = links->type;
     links->is_definitely_assigned = true;
     if (type_param_count > 0 && type_param_names) {
@@ -577,9 +589,20 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     }
     xr_arena_init(analyzer->consteval_arena, 4096);
 
+    analyzer->callable_target_arena = (XrArena *) xr_malloc(sizeof(XrArena));
+    if (!analyzer->callable_target_arena) {
+        xr_arena_destroy(analyzer->consteval_arena);
+        xr_free(analyzer->consteval_arena);
+        xr_free(analyzer);
+        return NULL;
+    }
+    xr_arena_init(analyzer->callable_target_arena, 4096);
+
     // Initialize type pool (per-analyzer, no global state)
     analyzer->type_pool = xr_type_pool_new();
     if (!analyzer->type_pool) {
+        xr_arena_destroy(analyzer->callable_target_arena);
+        xr_free(analyzer->callable_target_arena);
         xr_arena_destroy(analyzer->consteval_arena);
         xr_free(analyzer->consteval_arena);
         xr_free(analyzer);
@@ -788,6 +811,10 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     if (analyzer->consteval_arena) {
         xr_arena_destroy(analyzer->consteval_arena);
         xr_free(analyzer->consteval_arena);
+    }
+    if (analyzer->callable_target_arena) {
+        xr_arena_destroy(analyzer->callable_target_arena);
+        xr_free(analyzer->callable_target_arena);
     }
 
     xr_free(analyzer);
@@ -1725,6 +1752,8 @@ static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *an
             if (links && links->file_path && strcmp(links->file_path, file) == 0) {
                 // Clear class_info - first clear all base references to prevent dangling pointers
                 if (links->class_info) {
+                    xa_effect_db_detach_error_types_for_nominal(analyzer->effect_db,
+                                                                links->class_info);
                     clear_base_references(analyzer->global_scope, links->class_info, analyzer);
                     if (links->owns_class_info)
                         xa_class_info_free(links->class_info);
@@ -2355,9 +2384,45 @@ bool xa_analyzer_get_call_error_effect(XaAnalyzer *analyzer, const struct AstNod
                                                out_fact);
 }
 
-void xa_analyzer_clear_call_error_effects(XaAnalyzer *analyzer) {
-    if (analyzer && analyzer->node_table)
-        xa_node_table_clear_call_error_effects((XaNodeTable *) analyzer->node_table);
+void xa_analyzer_clear_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node) {
+    if (analyzer && analyzer->node_table && node)
+        xa_node_table_clear_call_error_effect((XaNodeTable *) analyzer->node_table, node);
+}
+
+bool xa_analyzer_set_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                          const XaFunctionExprEffectFact *fact) {
+    return analyzer && analyzer->node_table && node && fact &&
+           xa_node_table_set_function_expr_effect((XaNodeTable *) analyzer->node_table, node, fact);
+}
+
+bool xa_analyzer_get_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                          XaFunctionExprEffectFact *out_fact) {
+    return analyzer && analyzer->node_table && node &&
+           xa_node_table_get_function_expr_effect((XaNodeTable *) analyzer->node_table, node,
+                                                  out_fact);
+}
+
+void xa_analyzer_clear_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node) {
+    if (analyzer && analyzer->node_table && node)
+        xa_node_table_clear_function_expr_effect((XaNodeTable *) analyzer->node_table, node);
+}
+
+bool xa_analyzer_set_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,
+                                         const XaCallableTargetSetFact *fact) {
+    return analyzer && analyzer->node_table &&
+           xa_node_table_set_callable_target_set((XaNodeTable *) analyzer->node_table, node, fact);
+}
+
+bool xa_analyzer_get_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,
+                                         XaCallableTargetSetFact *out_fact) {
+    return analyzer && analyzer->node_table &&
+           xa_node_table_get_callable_target_set((XaNodeTable *) analyzer->node_table, node,
+                                                 out_fact);
+}
+
+void xa_analyzer_clear_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node) {
+    if (analyzer && analyzer->node_table && node)
+        xa_node_table_clear_callable_target_set((XaNodeTable *) analyzer->node_table, node);
 }
 
 void xa_analyzer_set_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,

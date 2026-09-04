@@ -325,8 +325,9 @@ static SignatureRef *collect_signatures(const XrCoreIrProgram *program,
     uint64_t count = function_count;
     for (uint32_t type = 0; type < program->type_count; ++type)
         count += program->types[type].kind == XR_CORE_IR_TYPE_CALLABLE;
-    for (uint32_t interface = 0; interface < program->interface_count; ++interface)
-        count += program->interfaces[interface].slot_count;
+    for (uint32_t interface_index = 0; interface_index < program->interface_count;
+         ++interface_index)
+        count += program->interfaces[interface_index].slot_count;
     if (count > UINT32_MAX)
         return NULL;
     SignatureRef *refs = xr_calloc((size_t) count, sizeof(SignatureRef));
@@ -338,10 +339,11 @@ static SignatureRef *collect_signatures(const XrCoreIrProgram *program,
     for (uint32_t type = 0; type < program->type_count; ++type)
         if (program->types[type].kind == XR_CORE_IR_TYPE_CALLABLE)
             refs[cursor++].signature = signature_from_row(&program->types[type].callable_signature);
-    for (uint32_t interface = 0; interface < program->interface_count; ++interface)
-        for (uint32_t slot = 0; slot < program->interfaces[interface].slot_count; ++slot)
+    for (uint32_t interface_index = 0; interface_index < program->interface_count;
+         ++interface_index)
+        for (uint32_t slot = 0; slot < program->interfaces[interface_index].slot_count; ++slot)
             refs[cursor++].signature =
-                signature_from_row(&program->interfaces[interface].slots[slot]);
+                signature_from_row(&program->interfaces[interface_index].slots[slot]);
     qsort(refs, (size_t) count, sizeof(SignatureRef), signature_ref_compare);
     *count_out = (uint32_t) count;
     return refs;
@@ -608,9 +610,10 @@ static void encode_semantic_metadata(ByteBuffer *buffer, const XrCoreIrProgram *
                                      const FunctionRef *functions, uint32_t function_count,
                                      const SignatureRef *signatures, uint32_t signature_count) {
     buffer_put_uvar(buffer, program->interface_count);
-    for (uint32_t interface = 0; interface < program->interface_count; ++interface) {
-        const XrCoreIrInterface *row = &program->interfaces[interface];
-        buffer_put_uvar(buffer, interface);
+    for (uint32_t interface_index = 0; interface_index < program->interface_count;
+         ++interface_index) {
+        const XrCoreIrInterface *row = &program->interfaces[interface_index];
+        buffer_put_uvar(buffer, interface_index);
         buffer_put_bytes(buffer, row->key.bytes, sizeof(row->key.bytes));
         buffer_put_uvar(buffer, row->slot_count);
         for (uint32_t slot = 0; slot < row->slot_count; ++slot) {

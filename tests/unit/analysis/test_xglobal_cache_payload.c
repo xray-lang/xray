@@ -102,11 +102,13 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     iface_use.use_id = 4;
     iface_use.interface_id = 41;
     iface_use.owner_func_id = body.func_id;
+    iface_use.source_node_id = 104;
     iface_use.source_span_id = 4;
     iface_use.body_ordinal = 2;
     iface_use.type_key = 930;
     iface_use.reason = XG_INTERFACE_OBJECT_USE_VALUE | XG_INTERFACE_OBJECT_USE_PARAM;
     iface_use.flags = 0x8;
+    iface_use.use_kind = XG_INTERFACE_USE_REF;
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_object_use(ev, &iface_use));
 
     link.link_id = 2;
@@ -143,6 +145,7 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     XgInterfaceImplSummary impl = {0};
     XgInterfaceExtendsSummary edge = {0};
     XgInterfaceMethodSummary iface_method = {0};
+    XgInterfaceMethodParamSummary iface_param = {0};
     XgDeriveSummary derive = {0};
     XgDerivedFieldSummary field = {0};
     XgDerivedMethodSummary derived_method = {0};
@@ -156,6 +159,8 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     decl.name_id = xg_name_id("Box");
     decl.type_key = 900;
     decl.signature_key = 901;
+    decl.source_node_id = 10010;
+    decl.nominal_key = UINT64_C(0xabc701);
     decl.source_span_id = 8;
     decl.derive_flags = XG_DERIVE_OPT_IN;
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(ev, &decl));
@@ -203,11 +208,20 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     ASSERT_NOT_NULL(xg_global_evidence_add_method(ev, &method));
 
     impl.implementor_class_id = cls.class_id;
+    impl.implementor_decl_id = decl.decl_id;
+    impl.nominal_key = decl.nominal_key;
+    impl.implementor_kind = XG_DECL_CLASS;
     impl.interface_id = 41;
     impl.name_id = xg_name_id("Readable");
     impl.type_key = 930;
     impl.source_span_id = 9;
     impl.flags = 0x4;
+    impl.verdict_complete = 1;
+    impl.constraint_eligible = 1;
+    impl.existential_eligible = 1;
+    impl.implementor_ownership = XG_NOMINAL_OWNERSHIP_AFFINE;
+    impl.implementor_copy_contract = XG_NOMINAL_COPY_EXPLICIT;
+    impl.type_contract_complete = 1;
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_impl(ev, &impl));
 
     edge.child_interface_id = 42;
@@ -224,7 +238,18 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     iface_method.signature_key = method.signature_key;
     iface_method.ordinal = 0;
     iface_method.source_span_id = 11;
+    iface_method.parameter_start = 1;
+    iface_method.parameter_count = 1;
+    iface_method.result_type_key = 941;
+    iface_method.result_ownership.param_index = -1;
+    iface_method.receiver_mode = XR_PARAM_READ;
+    iface_method.has_receiver = 1;
+    iface_method.contract_complete = 1;
     iface_method.flags = 0x6;
+    iface_param.interface_method_id = iface_method.interface_method_id;
+    iface_param.type_key = 940;
+    iface_param.mode = XR_PARAM_REF;
+    ASSERT_NOT_NULL(xg_global_evidence_add_interface_method_param(ev, &iface_param));
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_method(ev, &iface_method));
 
     derive.derive_id = 60;
@@ -663,6 +688,7 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     ASSERT_EQ_UINT(materialized.ninterface_impls, 1);
     ASSERT_EQ_UINT(materialized.ninterface_extends, 1);
     ASSERT_EQ_UINT(materialized.ninterface_methods, 1);
+    ASSERT_EQ_UINT(materialized.ninterface_method_params, 1);
     ASSERT_EQ_UINT(materialized.nderives, 1);
     ASSERT_EQ_UINT(materialized.nderived_fields, 1);
     ASSERT_EQ_UINT(materialized.nderived_methods, 1);
@@ -677,6 +703,11 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     ASSERT_EQ_UINT(materialized.class_fields[0].target_class_id, 20);
     ASSERT_EQ_UINT(materialized.methods[0].root_method_id, 30);
     ASSERT_EQ_UINT(materialized.methods[0].source_node_id, 10030);
+    ASSERT_EQ_UINT(materialized.interface_methods[0].parameter_start, 1);
+    ASSERT_EQ_UINT(materialized.interface_methods[0].parameter_count, 1);
+    ASSERT_EQ_UINT(materialized.interface_methods[0].contract_complete, 1);
+    ASSERT_EQ_UINT(materialized.interface_method_params[0].interface_method_id, 50);
+    ASSERT_EQ_UINT(materialized.interface_method_params[0].mode, XR_PARAM_REF);
     ASSERT_EQ_UINT(materialized.derives[0].derive_hash, UINT64_C(0x8888));
     ASSERT_EQ_UINT(materialized.derived_fields[0].source_field_id, 1);
 
@@ -798,6 +829,14 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.object_merges[0].merge_id, 204);
     ASSERT_EQ_UINT(materialized.object_merges[0].source_node_id, 31);
     ASSERT_EQ_UINT(materialized.key_accesses[0].access_id, 303);
+    ASSERT_EQ_UINT(materialized.decls[0].nominal_key, UINT64_C(0xabc701));
+    ASSERT_EQ_UINT(materialized.interface_impls[0].implementor_ownership,
+                   XG_NOMINAL_OWNERSHIP_AFFINE);
+    ASSERT_EQ_UINT(materialized.interface_impls[0].implementor_copy_contract,
+                   XG_NOMINAL_COPY_EXPLICIT);
+    ASSERT_EQ_UINT(materialized.interface_impls[0].type_contract_complete, 1);
+    ASSERT_EQ_UINT(materialized.interface_object_uses[0].source_node_id, 104);
+    ASSERT_EQ_UINT(materialized.interface_object_uses[0].use_kind, XG_INTERFACE_USE_REF);
 
     xg_global_evidence_free(&materialized);
     xr_free(payload);
@@ -893,7 +932,9 @@ TEST(cache_payload_imports_package_with_id_remap) {
     consumer_iface_use.use_id = 650;
     consumer_iface_use.interface_id = 700;
     consumer_iface_use.owner_func_id = consumer_body.func_id;
+    consumer_iface_use.source_node_id = 604;
     consumer_iface_use.reason = XG_INTERFACE_OBJECT_USE_VALUE;
+    consumer_iface_use.use_kind = XG_INTERFACE_USE_OWNED_STORAGE;
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_object_use(&target, &consumer_iface_use));
 
     consumer_object.object_shape_id = 800;
@@ -928,7 +969,7 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(report.package_hash, package_hash);
     ASSERT_EQ_UINT(report.modules_remapped, 1);
     ASSERT_EQ_UINT(report.modules_added, 1);
-    ASSERT_EQ_UINT(report.rows_imported, 37);
+    ASSERT_EQ_UINT(report.rows_imported, 38);
 
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.modules[1].module_id, 101);
@@ -951,9 +992,12 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(target.methods[1].method_id, 430);
     ASSERT_EQ_UINT(target.methods[1].root_method_id, 430);
     ASSERT_EQ_UINT(target.interface_impls[0].implementor_class_id, 220);
-    ASSERT_EQ_UINT(target.interface_impls[0].interface_id, 741);
+    ASSERT_EQ_UINT(target.interface_impls[0].interface_id, 41);
     ASSERT_EQ_UINT(target.interface_methods[0].interface_method_id, 50);
-    ASSERT_EQ_UINT(target.interface_methods[0].owner_interface_id, 741);
+    ASSERT_EQ_UINT(target.interface_methods[0].owner_interface_id, 41);
+    ASSERT_EQ_UINT(target.interface_methods[0].parameter_start, 1);
+    ASSERT_EQ_UINT(target.interface_method_params[0].interface_method_id, 50);
+    ASSERT_EQ_UINT(target.interface_method_params[0].mode, XR_PARAM_REF);
     ASSERT_EQ_UINT(target.bodies[1].func_id, 511);
     ASSERT_EQ_UINT(target.bodies[1].module_id, 101);
     ASSERT_EQ_UINT(target.bodies[1].owner_decl_id, 101);
@@ -1015,7 +1059,7 @@ TEST(cache_payload_import_reuses_module_stub_without_duplicate_module) {
     ASSERT(xg_global_evidence_import_package_payload(&target, payload, &report));
     ASSERT_EQ_UINT(report.modules_remapped, 1);
     ASSERT_EQ_UINT(report.modules_added, 0);
-    ASSERT_EQ_UINT(report.rows_imported, 37);
+    ASSERT_EQ_UINT(report.rows_imported, 38);
     ASSERT_EQ_UINT(target.nmodules, 1);
     ASSERT_EQ_UINT(target.modules[0].module_id, 100);
     ASSERT_EQ_UINT(target.decls[0].module_id, 100);
@@ -1095,7 +1139,7 @@ TEST(cache_payload_import_set_imports_multiple_payloads) {
     ASSERT_EQ_UINT(report.modules_remapped, 2);
     ASSERT_EQ_UINT(report.modules_added, 2);
     /* The second package reuses the already imported link dependency. */
-    ASSERT_EQ_UINT(report.rows_imported, 73);
+    ASSERT_EQ_UINT(report.rows_imported, 75);
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.ndecls, 4);
     ASSERT_EQ_UINT(target.nbodies, 2);

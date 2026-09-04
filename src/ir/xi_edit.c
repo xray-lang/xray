@@ -83,8 +83,25 @@ static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool in
     hash = hash_u64(hash, (uint16_t) value->result_alias_operand);
     hash = hash_u64(hash, value->xa_intrinsic_id);
     hash = hash_u64(hash, value->xg_callsite_id);
+    hash = hash_u64(hash, value->xg_callable_target_start);
+    hash = hash_u64(hash, value->xg_callable_target_count);
+    hash = hash_u64(hash, value->xg_callable_signature_key);
+    hash = hash_u64(hash, value->xg_callable_effect_union);
+    hash = hash_u64(hash, value->xg_callable_capability_union);
     hash = hash_u64(hash, value->xg_method_id);
     hash = hash_u64(hash, value->xg_interface_dispatch_slot);
+    hash = hash_u64(hash, value->xg_interface_object_use_id);
+    hash = hash_u64(hash, value->xg_interface_id);
+    hash = hash_u64(hash, value->xg_conformance_id);
+    hash = hash_u64(hash, value->xg_implementor_decl_id);
+    hash = hash_u64(hash, value->xg_nominal_key);
+    hash = hash_u64(hash, value->xg_implementor_kind);
+    hash = hash_u64(hash, value->xg_existential_kind);
+    hash = hash_u64(hash, value->xg_interface_use_kind);
+    hash = hash_u64(hash, value->xg_implementor_ownership);
+    hash = hash_u64(hash, value->xg_implementor_copy_contract);
+    hash = hash_u64(hash, value->xg_type_contract_complete);
+    hash = hash_u64(hash, (uintptr_t) value->error_producer);
     if (include_type) {
         hash = hash_u64(hash, (uintptr_t) value->type);
         hash = hash_u64(hash, value->rep);

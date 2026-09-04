@@ -459,6 +459,8 @@ static XiValue *pre_find_available(const XiFunc *f, const VnTable *vn, uint32_t 
  * 'pred'). Returns NULL on allocation failure. */
 static XiValue *pre_clone_value(XiFunc *f, XiBlock *pred, const XiValue *tmpl) {
     XR_DCHECK(f != NULL && pred != NULL && tmpl != NULL, "pre_clone_value: NULL arg");
+    if (tmpl->error_producer)
+        return NULL;
     XiValue *ins = xi_value_new(f, pred, tmpl->op, tmpl->type, tmpl->nargs);
     if (!ins)
         return NULL;

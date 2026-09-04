@@ -218,6 +218,11 @@ static bool clone_header_values(XiFunc *f, const XiLoop *loop, XiBlock *guard,
                 return false;
             clone->args[a] = mapped;
         }
+        if (orig->error_producer) {
+            clone->error_producer = map_guard_arg(loop, start_map, guard_map, orig->error_producer);
+            if (!clone->error_producer)
+                return false;
+        }
         if (!xi_value_clone_call_plan(f, clone, orig))
             return false;
         if (!map_add(guard_map, orig, clone))

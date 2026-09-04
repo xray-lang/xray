@@ -318,6 +318,8 @@ set(PROGRAMAOTCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_con
 set(PROGRAMSOURCECONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_source_contracts.py)
 set(PROGRAMWAVE3CLOSURECHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave3_closure.py)
 set(PROGRAMWAVE4CONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_contract.py)
+set(PROGRAMWAVE4EXITCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_exit.py)
+set(PROGRAMWAVE4DIFF ${CMAKE_SOURCE_DIR}/scripts/run_xr_program_wave4_differential.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -720,6 +722,46 @@ add_custom_target(check-xr-program-wave4-contract
     VERBATIM
 )
 
+add_custom_target(check-xr-program-wave4-exit-inventory
+    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${PROGRAMWAVE4EXITCHECK}
+            ${PROGRAMWAVE4DIFF}
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-exit-gate.json
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-contract-freeze.json
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
+    COMMENT "Inventorying the W7 Wave 4 exit evidence"
+    VERBATIM
+)
+
+add_custom_target(check-xr-program-wave4-exit
+    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+            --require-ready
+    DEPENDS ${PROGRAMWAVE4EXITCHECK}
+            ${PROGRAMWAVE4DIFF}
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-exit-gate.json
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-contract-freeze.json
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
+    COMMENT "Requiring complete W7 Wave 4 exit evidence"
+    VERBATIM
+)
+
+add_custom_target(run-xr-program-wave4-differential
+    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4DIFF}
+            --root ${CMAKE_SOURCE_DIR}
+            --build-dir ${CMAKE_BINARY_DIR}
+    DEPENDS ${PROGRAMWAVE4DIFF}
+            ${PROGRAMWAVE4EXITCHECK}
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-exit-gate.json
+    COMMENT "Running the W7 Wave 4 source, Reference, VM and native-AOT gate"
+    VERBATIM
+)
+
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_compile_definitions(_GNU_SOURCE)
@@ -762,8 +804,17 @@ if(APPLE)
     endif()
 endif()
 
-# Compiler options
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+# Compiler options.  clang-cl reports compiler id "Clang" while using the
+# MSVC command-line frontend.  Keep that frontend out of the GNU-style flag
+# branch: otherwise private /WX targets turn every ignored `-f...` option into
+# a hard error on the first clean rebuild.
+set(XRAY_C_MSVC_FRONTEND OFF)
+if(MSVC OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+        AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    set(XRAY_C_MSVC_FRONTEND ON)
+endif()
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang" AND NOT XRAY_C_MSVC_FRONTEND)
     add_compile_options(-Wall -Wextra)
 
     # Disable floating-point contraction (FMA fusion). The interpreter rounds
@@ -799,14 +850,24 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         endif()
     endif()
 
-elseif(MSVC)
+elseif(XRAY_C_MSVC_FRONTEND)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     # MSVC needs explicit opt-in for C11 atomics. /std:c11 sets the
     # language version; /experimental:c11atomics turns on the
     # _Atomic keyword path (still flagged "experimental" in VS 2022
     # but the implementation is stable and required by the
     # runtime's lock-free queues / GC marker / IC counters).
-    add_compile_options(/std:c11 /experimental:c11atomics)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        add_compile_options(/std:c11 /experimental:c11atomics)
+    else()
+        # Preserve the no-contraction semantic contract under clang-cl while
+        # using its native pass-through spelling instead of ignored GNU flags.
+        add_compile_options($<$<COMPILE_LANGUAGE:C>:/clang:-ffp-contract=off>)
+        if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+            add_compile_options(/Gy /Gw)
+            add_link_options(/OPT:REF)
+        endif()
+    endif()
     # Silence the wall of CRT "deprecated" warnings on strerror,
     # strncpy and friends. These are POSIX functions whose Windows
     # _s replacements have a different signature; our portable code
@@ -5074,6 +5135,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_program_wave4_contract_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;callable;interface;mutation;task-301"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_wave4_exit_inventory
+        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_wave4_exit_inventory PROPERTIES
+        LABELS "meta;contracts;canonical-program;callable;interface;source;task-301"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_wave4_exit_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4EXITCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_wave4_exit_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;callable;interface;source;mutation;task-301"
         PROCESSORS 1
         TIMEOUT 30
     )

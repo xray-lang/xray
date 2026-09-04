@@ -2158,6 +2158,7 @@ int main(void) {
     assert(xi_lowering_op_backend_legal(XI_PHI) == true);
     assert(!xi_lowering_op_backend_legal(XI_VALUE_PRODUCT_CONSTRUCT));
     assert(!xi_lowering_op_backend_legal(XI_VALUE_PRODUCT_PROJECT));
+    assert(!xi_lowering_op_backend_legal(XI_SUM_INJECT));
     printf("Xi lowering generated coverage: %d entries\n", XI_LOWERING_ENTRY_COUNT);
     return 0;
 }

@@ -102,37 +102,81 @@ static XiValue *lower_enum_method_closure(XiLower *l, XiFunc *child, uint16_t ch
     return closure;
 }
 
+static bool lower_enum_identity_is_exact(const XiLower *l, const XaSymbol *symbol,
+                                         const XaSymbolLinks *links) {
+    const XrClassInfo *info = links ? links->class_info : NULL;
+    const XgDeclSummary *match = NULL;
+    if (!l || !symbol || !links || !info || info->declaration_symbol != symbol ||
+        info->nominal_kind != XA_NOMINAL_ENUM || !links->enum_info || !links->enum_info->layout ||
+        !links->type || links->type->kind != XR_KIND_ENUM ||
+        links->type->enum_type.nominal_ref != info ||
+        links->type->enum_type.layout != links->enum_info->layout ||
+        links->type->enum_type.layout_id == 0 ||
+        links->type->enum_type.layout_id != links->enum_info->layout->layout_id)
+        return false;
+    if (!l->global_evidence)
+        return true;
+    if (l->xg_module_id == XG_NO_ID || info->xg_decl_id == XG_NO_ID || info->xg_nominal_key == 0)
+        return false;
+    for (uint32_t index = 0u; index < l->global_evidence->ndecls; ++index) {
+        const XgDeclSummary *candidate = &l->global_evidence->decls[index];
+        if (candidate->decl_id != info->xg_decl_id)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+    }
+    return match && match->module_id == l->xg_module_id && match->kind == XG_DECL_ENUM &&
+           match->nominal_key == info->xg_nominal_key;
+}
+
 static void lower_enum_methods(XiLower *l, EnumDeclNode *ed) {
     if (!l || !ed || !ed->name || ed->method_count <= 0 || !l->analyzer)
         return;
-    XaSymbol *enum_sym = xa_analyzer_lookup(l->analyzer, ed->name);
+    XaSymbol *enum_sym = ed->symbol_id && l->analyzer->global_scope
+                             ? xa_scope_lookup_by_id(l->analyzer->global_scope, ed->symbol_id)
+                             : NULL;
     XaSymbolLinks *enum_links = enum_sym ? xa_analyzer_get_links(l->analyzer, enum_sym) : NULL;
     XrClassInfo *info = enum_links ? enum_links->class_info : NULL;
-    if (!info)
+    if (!lower_enum_identity_is_exact(l, enum_sym, enum_links)) {
+        l->had_error = true;
         return;
+    }
 
     for (int i = 0; i < ed->method_count; i++) {
         AstNode *method = ed->methods ? ed->methods[i] : NULL;
-        if (!method || method->type != AST_METHOD_DECL)
-            continue;
+        if (!method || method->type != AST_METHOD_DECL) {
+            l->had_error = true;
+            return;
+        }
         MethodDeclNode *md = &method->as.method_decl;
         XaSymbol *method_sym = xa_class_info_lookup_member(info, md->name);
         if (!method_sym || method_sym->kind != XA_SYM_METHOD ||
-            method_sym->is_static != md->is_static)
-            continue;
+            method_sym->is_static != md->is_static) {
+            l->had_error = true;
+            return;
+        }
+        XaScope *method_scope = xa_scope_find_by_node(l->analyzer->global_scope, method);
+        if (!method_scope || method_scope->function_symbol != method_sym) {
+            l->had_error = true;
+            return;
+        }
         XaSymbolLinks *method_links = xa_analyzer_get_links(l->analyzer, method_sym);
-        struct XrType *receiver_type =
-            md->is_static ? NULL : xr_type_new_enum(l->isolate, ed->name);
-        XiFunc *mf = xi_lower_method_as_func(l, md, !md->is_static, NULL, false, receiver_type,
-                                             xi_lower_source_node_id(l, method));
+        if (!method_links || !method_links->type || method_links->type->kind != XR_KIND_FUNCTION) {
+            l->had_error = true;
+            return;
+        }
+        struct XrType *receiver_type = md->is_static ? NULL : enum_links->type;
+        XiFunc *mf = xi_lower_method_as_func(l, md, method_sym, !md->is_static, NULL, false,
+                                             receiver_type, xi_lower_source_node_id(l, method));
         if (!mf) {
             l->had_error = true;
             continue;
         }
         xi_lower_func_add_child(l->func, mf);
         uint16_t child_idx = (uint16_t) (l->func->nchildren - 1);
-        XiValue *closure = lower_enum_method_closure(
-            l, mf, child_idx, method_links ? method_links->type : l->type_any, method->line);
+        XiValue *closure =
+            lower_enum_method_closure(l, mf, child_idx, method_links->type, method->line);
         if (!closure) {
             l->had_error = true;
             continue;
@@ -425,6 +469,23 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
         return NULL;
     v->args[0] = val;
     v->line = (uint32_t) node->line;
+    /* An interface carrier's use capability is part of its canonical type
+     * identity.
+     * XI_SOURCE_MOVE is a real owner-producing SSA value, so it
+     * must retain the exact
+     * interface/object-use identity already frozen on
+     * its operand.  Leaving these fields
+     * empty silently remaps the result to
+     * a READ existential at the Program boundary and
+     * makes a verified MOVE
+     * receiver disagree with its witness slot. */
+    if (result_type && result_type->kind == XR_KIND_INTERFACE && val->xg_interface_id != XG_NO_ID &&
+        val->xg_interface_use_kind >= XI_INTERFACE_USE_READ &&
+        val->xg_interface_use_kind <= XI_INTERFACE_USE_OWNED_STORAGE) {
+        v->xg_interface_object_use_id = val->xg_interface_object_use_id;
+        v->xg_interface_id = val->xg_interface_id;
+        v->xg_interface_use_kind = val->xg_interface_use_kind;
+    }
     if (me->move_evidence_id != 0) {
         /* The analyzer snapshots the consumed generation on the node: the
          * per-binding evidence slots may describe a later generation when the
@@ -761,15 +822,14 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
 
 /* ========== Error Propagation ========== */
 
-XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool producer_may_throw) {
+XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, XiValue *producer) {
     if (!l->cur_block)
         return;
-
-    /* Constructive generation (task 216): a producer proven NO_THROW can never
-     * leave a pending error, so the check is not emitted at all. This replaces
-     * the historical "insert unconditionally, delete later by evidence" path. */
-    if (!producer_may_throw)
+    if (!producer || producer->block != l->cur_block ||
+        (producer->flags & XI_FLAG_MAY_THROW) == 0) {
+        l->had_error = true;
         return;
+    }
 
     if (l->cleanup_body_depth > 0 && l->try_depth <= l->cleanup_body_try_base_depth) {
         /* Cleanup bodies are closed error regions. The analyzer proves that
@@ -779,6 +839,7 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
         XiValue *check = xi_value_new(l->func, l->cur_block, XI_CLEANUP_ERR_CHECK, l->type_unit, 0);
         if (!check)
             return;
+        check->error_producer = producer;
         check->flags |= XI_FLAG_SIDE_EFFECT;
         check->line = node ? (uint32_t) node->line : 0;
     } else if (l->try_depth > 0) {
@@ -788,6 +849,7 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
         XiValue *check = xi_value_new(l->func, l->cur_block, XI_ERR_CHECK, l->type_bool, 0);
         if (!check)
             return;
+        check->error_producer = producer;
         check->error_region = l->active_error_region;
         check->flags |= XI_FLAG_SIDE_EFFECT;
         check->line = node ? (uint32_t) node->line : 0;
@@ -814,6 +876,7 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
         XiValue *check = xi_value_new(l->func, l->cur_block, XI_ERR_CHECK, l->type_bool, 0);
         if (!check)
             return;
+        check->error_producer = producer;
         check->flags |= XI_FLAG_SIDE_EFFECT;
         check->line = node ? (uint32_t) node->line : 0;
         XiBlock *err_block = xi_block_new(l->func);

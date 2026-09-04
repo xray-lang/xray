@@ -250,6 +250,11 @@ static bool emit_unrolled_body(XiFunc *f, XiBlock **body_order, uint32_t body_co
             for (uint16_t a = 0; a < orig->nargs; a++) {
                 clone->args[a] = resolve_arg(map, orig->args[a]);
             }
+            if (orig->error_producer) {
+                clone->error_producer = resolve_arg(map, orig->error_producer);
+                if (!clone->error_producer)
+                    return false;
+            }
             if (!xi_value_clone_call_plan(f, clone, orig))
                 return false;
             if (!umap_add(map, orig, clone))

@@ -193,6 +193,7 @@ static void test_cold_error_cleanup_rejects_boxed_borrow(void) {
     XiValue *check = xi_value_new(f, b0, XI_ERR_CHECK, &t_unit, 1);
     check->args[0] = boxed;
     check->flags = XI_FLAG_SIDE_EFFECT;
+    check->error_producer = fallible;
     XiValue *ret = xi_const_int(f, b0, 0, &t_int);
     xi_block_set_return(b0, ret);
 

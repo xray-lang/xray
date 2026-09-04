@@ -263,9 +263,9 @@
       "decoder_verifier_evaluator": "the callable TypeId owns the visible SignatureId; every closed target matches its structural contract or differs only by one private typed capture receiver; implementation effects and capabilities are verified as subsets of visible upper bounds",
       "vm_implementation": "a private callable carrier selects one validated FunctionId and invokes a typed frame, prepending its optional capture without exposing a universal call ABI",
       "aot_lowering": "a closed FunctionId switch emits exact typed direct calls and prepends a typed boxed capture only for captured targets",
-      "source_producer": "pending Wave 4 function-value, closure and resolved dynamic-target integration",
-      "old_owner_deletion": "pending removal of name/shape dispatch, erased closure invocation and backend-owned callable signature recovery from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "function values, captureless and captured closures, control-flow joins, explicit copies and whole-program imported target unions lower to one typed callable plus exact indirect direct call",
+      "old_owner_deletion": "the canonical source route contains no name/shape dispatch, erased closure invocation or backend-owned callable signature recovery; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -273,6 +273,9 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/ir/test_xr_program_imported_callable.c",
         "tests/unit/program/xr_program_callable_fixture.h"
       ]
     },
@@ -283,9 +286,9 @@
       "decoder_verifier_evaluator": "the callable SignatureId owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; the private target identity cannot override those facts",
       "vm_implementation": "a private callable carrier invokes one typed frame and transfers through the verified normal, error or panic edge without ambient pending state",
       "aot_lowering": "the same closed typed FunctionId switch feeds explicit result/error/panic locals and direct C control transfer",
-      "source_producer": "pending Wave 4 fallible function-value, closure and resolved dynamic-target integration",
-      "old_owner_deletion": "pending removal of erased closure invocation, inferred post-call checks and implicit pending error/panic state from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "fallible function values and closures lower to one typed callable plus exact indirect invoke and explicit normal/error continuation edges",
+      "old_owner_deletion": "the canonical source route contains no erased closure invocation, inferred post-call check or implicit pending error/panic state; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -293,6 +296,8 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_callable_fixture.h"
       ]
     },
@@ -303,9 +308,9 @@
       "decoder_verifier_evaluator": "exact existential InterfaceId, slot range and SignatureId authority; receiver-only nominal substitution, exact structural argument/ownership/borrow-origin matching, implementation effect/capability subset checks, and independent exact ConformanceId slot dispatch",
       "vm_implementation": "private carrier validates concrete TypeId and ConformanceId, unwraps the typed payload and calls the conformance slot FunctionId",
       "aot_lowering": "closed ConformanceId switch whose cases validate concrete TypeId, unwrap the exact native receiver type and directly call the typed implementation",
-      "source_producer": "pending Wave 4 class, struct, enum, import and dynamic-target integration",
-      "old_owner_deletion": "pending removal of selector lookup, class-only itables, erased universal call ABI and backend-owned method resolution from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "class, struct and enum conformances lower declaration-ordered object-safe slots to exact nominal witness direct calls",
+      "old_owner_deletion": "the canonical source route contains no selector lookup, class-only itable, erased universal call ABI or backend-owned method resolution; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -313,6 +318,8 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
       ]
     },
@@ -323,9 +330,9 @@
       "decoder_verifier_evaluator": "the witness slot signature owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; exact ConformanceId selects the slot FunctionId independently",
       "vm_implementation": "private typed frame dispatch followed by one verified normal, error or panic edge without selector lookup or ambient pending state",
       "aot_lowering": "the same closed typed ConformanceId switch feeds explicit result/error/panic locals and direct C control transfer",
-      "source_producer": "pending Wave 4 class, struct, enum, import and dynamic-target integration",
-      "old_owner_deletion": "pending removal of selector lookup, class-only itables, erased universal invoke ABI and implicit pending error/panic state from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "fallible class, struct and enum witness calls lower to exact nominal slots plus explicit normal/error continuation edges",
+      "old_owner_deletion": "the canonical source route contains no selector lookup, class-only itable, erased universal invoke ABI or implicit pending error/panic state; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -333,6 +340,8 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
       ]
     },
@@ -502,9 +511,9 @@
       "decoder_verifier_evaluator": "nominal implementor, runtime existential use kind, exact conformance, ownership transfer and bounded private-carrier construction checks",
       "vm_implementation": "private carrier stores concrete TypeId, conformance identity and typed payload without exposing a public object layout",
       "aot_lowering": "private portable-C11 execution arena boxes READ/MOVE/OWNED payload snapshots while REF preserves a typed place pointer, so internal-call returns remain valid without a shared object ABI",
-      "source_producer": "pending Wave 4 class, struct, enum, import and dynamic-target integration",
-      "old_owner_deletion": "pending removal of class-only itable/carrier and selector-driven existential construction from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "class, struct and enum values lower through exact nominal conformance identity to READ, REF, MOVE or OWNED_STORAGE existential formation",
+      "old_owner_deletion": "the canonical source route contains no class-only itable/carrier or selector-driven existential construction; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -512,6 +521,8 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
       ]
     },
@@ -522,9 +533,9 @@
       "decoder_verifier_evaluator": "runtime existential kind, nominal test target and independent exact-identity comparison",
       "vm_implementation": "compare the private carrier concrete TypeId",
       "aot_lowering": "compare the private C11 carrier concrete_type_id field",
-      "source_producer": "pending Wave 4 checked-cast and selective dynamic-target integration",
-      "old_owner_deletion": "pending removal of class-name, selector and backend-specific RTTI tests from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "typed exact-nominal narrowing lowers to one existential test over the canonical implementor TypeId",
+      "old_owner_deletion": "the canonical source route contains no class-name, selector or backend-specific RTTI test; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -532,6 +543,8 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
       ]
     },
@@ -542,9 +555,9 @@
       "decoder_verifier_evaluator": "must-dataflow intersects predecessor facts; only the true edge of the matching test grants projection and false/unguarded paths are rejected",
       "vm_implementation": "read the typed payload from the private carrier after verifier-owned proof",
       "aot_lowering": "cast and read the exact typed arena payload or place pointer after the same verifier-owned proof",
-      "source_producer": "pending Wave 4 cast-narrowing CFG integration",
-      "old_owner_deletion": "pending removal of unchecked downcasts and executor-owned dynamic type reasoning from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "typed cast-narrowing CFG lowers the dominated success path to one exact existential projection",
+      "old_owner_deletion": "the canonical source route contains no unchecked downcast or executor-owned dynamic type reasoning; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -552,6 +565,8 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
       ]
     },
@@ -562,9 +577,9 @@
       "decoder_verifier_evaluator": "captureless targets match the visible structural signature; captured targets add exactly one READ receiver of the capture aggregate type; implementation effects and capabilities are subsets of visible upper bounds; captures are affine explicit-copy owners and borrowed receiver results are rejected",
       "vm_implementation": "allocate one private callable carrier and recursively clone its typed capture only through explicit owner.copy",
       "aot_lowering": "materialize a private function identity plus arena-owned typed capture box; carrier representation is absent from canonical bytes and BoundaryABI",
-      "source_producer": "pending Wave 4 function-value, closure and capture-environment integration",
-      "old_owner_deletion": "pending removal of erased closure records, implicit environment copying and backend-inferred capture shape from the product route",
-      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "source_producer": "function values and closure expressions lower to one closed FunctionId plus zero or one exact typed capture aggregate",
+      "old_owner_deletion": "the canonical source route contains no erased closure record, implicit environment copy or backend-inferred capture shape; the frozen pre-cut product route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE4",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
@@ -572,6 +587,9 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/ir/test_xr_program_imported_callable.c",
         "tests/unit/program/xr_program_callable_fixture.h"
       ]
     },
@@ -742,7 +760,7 @@
         "call.indirect_direct",
         "call.indirect_invoke"
       ],
-      "status": "EXECUTOR_COMPLETE_SOURCE_PENDING"
+      "status": "COMPLETE_W7_WAVE4"
     },
     {
       "id": "ownership",

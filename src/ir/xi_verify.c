@@ -27,6 +27,7 @@
 #include "xi_semantic_intrinsic.h"
 #include "xi_own.h"
 #include "xi_tbaa.h"
+#include "../analysis/xglobal_summary.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../frontend/analyzer/xa_effect_db.h"
@@ -417,6 +418,112 @@ static bool verify_view_root_matches(const XiValue *value, uint32_t root_value_i
     return false;
 }
 
+static bool verify_sum_inject_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                       const XiValue *value) {
+    if (!value || value->op != XI_SUM_INJECT)
+        return true;
+    if (!value->type || !value->type->is_nullable || XR_TYPE_IS_NULL(value->type) ||
+        XR_TYPE_IS_UNKNOWN(value->type) || value->aux != NULL ||
+        (value->aux_int != 0 && value->aux_int != 1)) {
+        verr(ctx, "func '%s': v%u XI_SUM_INJECT in b%u lacks a closed Optional<T> contract",
+             f->name, value->id, blk->id);
+        return false;
+    }
+    if ((value->aux_int == 0 && value->nargs != 0) || (value->aux_int == 1 && value->nargs != 1)) {
+        verr(ctx, "func '%s': v%u XI_SUM_INJECT in b%u has invalid ordinal/arity %lld/%u", f->name,
+             value->id, blk->id, (long long) value->aux_int, (unsigned) value->nargs);
+        return false;
+    }
+    if (value->aux_int == 1) {
+        if (!value->args || !value->args[0] || !value->args[0]->type ||
+            value->args[0]->type->is_nullable) {
+            verr(ctx, "func '%s': v%u XI_SUM_INJECT Some in b%u lacks a non-null payload", f->name,
+                 value->id, blk->id);
+            return false;
+        }
+        XrType base = *value->type;
+        base.is_nullable = false;
+        if (!xr_type_equals(&base, value->args[0]->type)) {
+            verr(ctx,
+                 "func '%s': v%u XI_SUM_INJECT Some in b%u payload type is not Optional<T>'s T",
+                 f->name, value->id, blk->id);
+            return false;
+        }
+        const XiValue *payload = value->args[0];
+        const XiValue *project = payload;
+        bool cloned = false;
+        if (payload->op == XI_COPY && payload->nargs == 1 && payload->args && payload->args[0] &&
+            payload->args[0]->xg_existential_kind == XI_EXISTENTIAL_PROJECT) {
+            project = payload->args[0];
+            cloned = xi_copy_is_value_clone(payload);
+        }
+        if (project->xg_existential_kind == XI_EXISTENTIAL_PROJECT) {
+            bool borrowed = project->xg_interface_use_kind == XI_INTERFACE_USE_READ ||
+                            project->xg_interface_use_kind == XI_INTERFACE_USE_REF;
+            bool transferred = project->xg_interface_use_kind == XI_INTERFACE_USE_MOVE ||
+                               project->xg_interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE;
+            bool trivial = project->xg_type_contract_complete &&
+                           project->xg_implementor_ownership == XG_NOMINAL_OWNERSHIP_TRIVIAL &&
+                           project->xg_implementor_copy_contract == XG_NOMINAL_COPY_TRIVIAL;
+            bool affine_explicit =
+                project->xg_type_contract_complete &&
+                project->xg_implementor_ownership == XG_NOMINAL_OWNERSHIP_AFFINE &&
+                project->xg_implementor_copy_contract == XG_NOMINAL_COPY_EXPLICIT;
+            bool affine_forbidden =
+                project->xg_type_contract_complete &&
+                project->xg_implementor_ownership == XG_NOMINAL_OWNERSHIP_AFFINE &&
+                project->xg_implementor_copy_contract == XG_NOMINAL_COPY_FORBIDDEN;
+            bool ownership_valid =
+                (borrowed && ((trivial && !cloned) || (affine_explicit && cloned))) ||
+                (transferred && (trivial || affine_explicit || affine_forbidden) && !cloned);
+            if ((!borrowed && !transferred) || !ownership_valid ||
+                (cloned && !xr_type_equals(payload->type, project->type))) {
+                verr(ctx,
+                     "func '%s': v%u XI_SUM_INJECT Some in b%u has an invalid existential "
+                     "project ownership transfer",
+                     f->name, value->id, blk->id);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool verify_existential_metadata_contract(VerifyCtx *ctx, const XiFunc *f,
+                                                 const XiBlock *blk, const XiValue *value) {
+    if (!value || (value->xg_existential_kind != XI_EXISTENTIAL_PACK &&
+                   value->xg_existential_kind != XI_EXISTENTIAL_TEST &&
+                   value->xg_existential_kind != XI_EXISTENTIAL_PROJECT))
+        return true;
+    bool trivial = value->xg_implementor_ownership == XG_NOMINAL_OWNERSHIP_TRIVIAL &&
+                   value->xg_implementor_copy_contract == XG_NOMINAL_COPY_TRIVIAL;
+    bool affine = value->xg_implementor_ownership == XG_NOMINAL_OWNERSHIP_AFFINE &&
+                  (value->xg_implementor_copy_contract == XG_NOMINAL_COPY_EXPLICIT ||
+                   value->xg_implementor_copy_contract == XG_NOMINAL_COPY_FORBIDDEN);
+    bool shape_valid = false;
+    if (value->xg_existential_kind == XI_EXISTENTIAL_PACK)
+        shape_valid = value->op == XI_COPY && value->nargs == 1 && value->type &&
+                      value->type->kind == XR_KIND_INTERFACE;
+    else if (value->xg_existential_kind == XI_EXISTENTIAL_TEST)
+        shape_valid = value->op == XI_IS && value->nargs == 2 && value->args && value->args[0] &&
+                      value->args[0]->type && value->args[0]->type->kind == XR_KIND_INTERFACE;
+    else
+        shape_valid = value->op == XI_AS && value->nargs == 1 && value->args && value->args[0] &&
+                      value->args[0]->type && value->args[0]->type->kind == XR_KIND_INTERFACE &&
+                      value->type && !value->type->is_nullable;
+    if (!shape_valid || value->xg_interface_object_use_id == XG_NO_ID ||
+        value->xg_interface_id == XG_NO_ID || value->xg_conformance_id == XG_NO_ID ||
+        value->xg_implementor_decl_id == XG_NO_ID || value->xg_nominal_key == 0 ||
+        value->xg_implementor_kind == 0 || value->xg_interface_use_kind < XI_INTERFACE_USE_READ ||
+        value->xg_interface_use_kind > XI_INTERFACE_USE_OWNED_STORAGE ||
+        value->xg_type_contract_complete != 1 || (!trivial && !affine)) {
+        verr(ctx, "func '%s': v%u %s in b%u lacks exact existential metadata", f->name, value->id,
+             xi_op_name(value->op), blk->id);
+        return false;
+    }
+    return true;
+}
+
 /* Check 4: value-level invariants */
 static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiValue *v) {
     if (ctx->failed)
@@ -496,9 +603,14 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
             return;
     }
 
-    /* Assertion semantics are carried only by an arena-owned typed plan.  A
-     * missing owner, hostile aux kind on another op, stale arity, or invalid
-     * source path must fail before any optimizer/backend can inspect it. */
+    if (!verify_sum_inject_contract(ctx, f, blk, v))
+        return;
+    if (!verify_existential_metadata_contract(ctx, f, blk, v))
+        return;
+
+    // Assertion semantics belong only to an arena-owned typed plan.
+    // Reject missing ownership, invalid auxiliary kinds, stale arity, and invalid source paths
+    // before optimizers or backends inspect the value.
     if (v->op == XI_ASSERTION || v->aux_kind == XI_AUX_KIND_ASSERTION_PLAN) {
         const XrAssertionPlan *plan = xi_assertion_plan(v);
         if (!plan || !xr_assertion_plan_validate(plan) || plan->arity != v->nargs) {
@@ -886,6 +998,43 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
     }
 }
 
+static void verify_existential_project_guards(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed)
+        return;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *block = f->blocks[b];
+        if (!block)
+            continue;
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            const XiValue *project = block->values[i];
+            if (!project || project->xg_existential_kind != XI_EXISTENTIAL_PROJECT)
+                continue;
+            const XiBlock *guard = block->npreds == 1 ? block->preds[0] : NULL;
+            const XiValue *test = guard && guard->kind == XI_BLOCK_IF ? guard->control : NULL;
+            if (!guard || guard->succs[0] != block || !test || test->op != XI_IS ||
+                test->xg_existential_kind != XI_EXISTENTIAL_TEST || project->nargs != 1 ||
+                test->nargs != 2 || !project->args || !test->args ||
+                project->args[0] != test->args[0] ||
+                project->xg_interface_object_use_id != test->xg_interface_object_use_id ||
+                project->xg_interface_id != test->xg_interface_id ||
+                project->xg_conformance_id != test->xg_conformance_id ||
+                project->xg_implementor_decl_id != test->xg_implementor_decl_id ||
+                project->xg_nominal_key != test->xg_nominal_key ||
+                project->xg_implementor_kind != test->xg_implementor_kind ||
+                project->xg_interface_use_kind != test->xg_interface_use_kind ||
+                project->xg_implementor_ownership != test->xg_implementor_ownership ||
+                project->xg_implementor_copy_contract != test->xg_implementor_copy_contract ||
+                project->xg_type_contract_complete != test->xg_type_contract_complete) {
+                verr(ctx,
+                     "func '%s': existential project v%u in b%u lacks its exact successful test "
+                     "predecessor",
+                     f->name, project->id, block->id);
+                return;
+            }
+        }
+    }
+}
+
 /* ========== Check 9: Operand Arity ========== */
 
 /* Expected argument count per XiOp comes from generated Xi metadata. */
@@ -1029,6 +1178,16 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
 static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
                                        const XiValue *v) {
     XrConversionKind kind = v->conversion.kind;
+    if (v->op == XI_AS && v->xg_existential_kind == XI_EXISTENTIAL_PROJECT) {
+        if (kind != XR_CONVERSION_NONE || (v->aux_int & 1) != 0 || !v->type ||
+            v->type->is_nullable) {
+            verr(ctx,
+                 "func '%s': v%u existential project in b%u must be an exact non-null projection",
+                 f->name, v->id, blk->id);
+            return false;
+        }
+        return true;
+    }
     if (v->op == XI_AS && (v->aux_int & 1) == 0 && v->nargs == 1 && v->args[0] &&
         v->args[0]->type && v->type && v->args[0]->type->kind == XR_KIND_ENUM &&
         !v->args[0]->type->is_nullable && v->type->kind == XR_KIND_INT && !v->type->is_nullable) {
@@ -1224,46 +1383,118 @@ static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Check 11b: Constructive Error Checks (task 216) ========== */
 
-/* Error checks are generated CONSTRUCTIVELY by callee effect: xi_lower emits an
- * XI_ERR_CHECK only immediately after a producer that may raise, in the same
- * block. This verifies the machine-checkable form of "a NO_THROW callsite has no
- * error check": every block that holds an XI_ERR_CHECK must also hold a producer
- * that may throw (a value flagged MAY_THROW, or an XI_SCOPE_EXIT — a linked
- * scope re-raises the first child failure through the error channel without
- * carrying the flag on the exit value).
- *
- * Gated to the CLOSED stage only: that is the freshly lowered shape verified at
- * the pre-optimization barriers (before escape/arc insertion and before the
- * optimizer, which legitimately relocates error checks across blocks and folds
- * proven-nothrow producers). Enforcing it later would reject valid optimizer
- * output. */
+static bool error_check_follows_coro_producer(const XiFunc *f, const XiValue *check,
+                                              const XiValue *producer) {
+    const XiCoroPlan *plan = f ? f->coro_plan : NULL;
+    if (!plan || !check || !producer)
+        return false;
+    for (uint32_t i = 0; i < plan->nstates; i++) {
+        const XiCoroSuspendPoint *point = &plan->points[i];
+        if (point->op == producer && point->suspend_block == producer->block &&
+            point->continuation == check->block)
+            return true;
+    }
+    return false;
+}
+
+static bool error_check_has_intervening_boundary(const XiBlock *block, uint32_t begin,
+                                                 uint32_t end) {
+    for (uint32_t i = begin; block && i < end && i < block->nvalues; i++) {
+        const XiValue *value = block->values ? block->values[i] : NULL;
+        if (value && ((value->flags & XI_FLAG_MAY_THROW) != 0 || value->op == XI_ERR_CHECK ||
+                      value->op == XI_CLEANUP_ERR_CHECK))
+            return true;
+    }
+    return false;
+}
+
+/* An error check names the exact operation whose pending-error channel it
+ * consumes.  Instruction
+ * order may validate that claim, but never supplies a
+ * missing identity.  The only cross-block
+ * form is the explicit coroutine split
+ * where the suspend point remains in its suspend block and
+ * the check begins its
+ * recorded continuation. */
 static void verify_error_check_producers(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
-        return;
-    if (f->stage != XI_STAGE_CLOSED)
         return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
-        bool has_err_check = (blk->control && blk->control->op == XI_ERR_CHECK);
-        bool has_producer = false;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            if (v->op == XI_ERR_CHECK)
-                has_err_check = true;
-            else if ((v->flags & XI_FLAG_MAY_THROW) || v->op == XI_SCOPE_EXIT)
-                has_producer = true;
+            bool is_check = v->op == XI_ERR_CHECK || v->op == XI_CLEANUP_ERR_CHECK;
+            if (!is_check) {
+                if (v->error_producer) {
+                    verr(ctx, "func '%s': non-error-check v%u in b%u carries an error producer",
+                         f->name, v->id, blk->id);
+                    return;
+                }
+                continue;
+            }
+
+            const XiValue *producer = xi_err_check_producer(f, v);
+            if (!producer) {
+                verr(ctx, "func '%s': error check v%u in b%u has no exact live producer", f->name,
+                     v->id, blk->id);
+                return;
+            }
+            if ((producer->flags & XI_FLAG_MAY_THROW) == 0) {
+                verr(ctx, "func '%s': error check v%u producer v%u is not may-throw", f->name,
+                     v->id, producer->id);
+                return;
+            }
+
+            uint32_t producer_index = UINT32_MAX;
+            if (producer->block == blk) {
+                for (uint32_t j = 0; j < i; j++) {
+                    if (blk->values[j] == producer) {
+                        producer_index = j;
+                        break;
+                    }
+                }
+                if (producer_index == UINT32_MAX ||
+                    error_check_has_intervening_boundary(blk, producer_index + 1u, i)) {
+                    verr(ctx,
+                         "func '%s': error check v%u does not immediately consume producer v%u",
+                         f->name, v->id, producer->id);
+                    return;
+                }
+            } else if (!error_check_follows_coro_producer(f, v, producer) ||
+                       error_check_has_intervening_boundary(blk, 0u, i)) {
+                verr(ctx,
+                     "func '%s': error check v%u producer v%u is not in its exact continuation",
+                     f->name, v->id, producer->id);
+                return;
+            }
+
+            uint32_t bindings = 0;
+            for (uint32_t ob = 0; ob < f->nblocks; ob++) {
+                const XiBlock *other_block = f->blocks[ob];
+                for (uint32_t oi = 0; other_block && oi < other_block->nvalues; oi++) {
+                    const XiValue *other = other_block->values[oi];
+                    if (other && (other->op == XI_ERR_CHECK || other->op == XI_CLEANUP_ERR_CHECK) &&
+                        other->error_producer == producer)
+                        bindings++;
+                }
+            }
+            if (bindings != 1u) {
+                verr(ctx, "func '%s': error producer v%u has %u checks", f->name, producer->id,
+                     bindings);
+                return;
+            }
         }
-        if (has_err_check && !has_producer) {
-            verr(ctx,
-                 "func '%s': b%u holds XI_ERR_CHECK with no may-throw producer "
-                 "(task 216: error checks are generated by callee effect)",
-                 f->name, blk->id);
-            return;
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (phi->value.error_producer) {
+                verr(ctx, "func '%s': phi v%u in b%u carries an error producer", f->name,
+                     phi->value.id, blk->id);
+                return;
+            }
         }
     }
 }
@@ -3360,8 +3591,7 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         verify_effect_flags(&ctx, f);
     }
 
-    /* Constructive error checks (task 216): no XI_ERR_CHECK without a throwing
-     * producer in its block, checked on the freshly lowered (CLOSED) shape. */
+    /* Error checks retain exact producer identity through every Xi stage. */
     if (!ctx.failed) {
         verify_error_check_producers(&ctx, f);
     }
@@ -3376,6 +3606,9 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
      * (rpo, idom, dom_depth) but do not modify the IR semantics. */
     if (!ctx.failed) {
         verify_dominance(&ctx, (XiFunc *) f);
+    }
+    if (!ctx.failed) {
+        verify_existential_project_guards(&ctx, f);
     }
 
     /* XI_CALL_METHOD aux_int encoding contract */

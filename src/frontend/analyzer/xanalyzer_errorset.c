@@ -33,31 +33,34 @@
 #include "xtype_ref_resolve.h"
 #include "../../runtime/class/xclass_info.h"
 #include "../../runtime/value/xtype.h"
+#include "../../base/xhash.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xarena.h"
+#include <stdio.h>
 #include <string.h>
 
-static void es_summary_add_enum_all(XaEffectDatabase *db, XaEffectSummary *summary,
+static bool es_summary_add_enum_all(XaEffectDatabase *db, XaEffectSummary *summary,
                                     XrType *enum_type) {
     if (!db || !summary || !enum_type)
-        return;
+        return false;
     XaErrorTypeId type_id = xa_effect_db_register_error_enum(db, enum_type);
     if (type_id == XA_ERROR_TYPE_NONE)
-        return;
-    xa_effect_summary_add_all_variants(db, summary, type_id);
+        return false;
+    return xa_effect_summary_add_all_variants(db, summary, type_id);
 }
 
-static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summary,
+static bool es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summary,
                                      XrType *enum_type, uint32_t case_index) {
     if (!db || !summary || !enum_type)
-        return;
+        return false;
     XaErrorTypeId type_id = xa_effect_db_register_error_enum(db, enum_type);
     if (type_id == XA_ERROR_TYPE_NONE)
-        return;
+        return false;
     XaErrorVariantId variant_id = case_index;
     const XrEnumLayout *layout = enum_type->enum_type.layout;
-    if (layout && case_index >= layout->variant_count)
-        return;
-    xa_effect_summary_add_variant(db, summary, type_id, variant_id);
+    if (!layout || case_index >= layout->variant_count)
+        return false;
+    return xa_effect_summary_add_variant(db, summary, type_id, variant_id);
 }
 
 typedef struct ErrorSetCtx ErrorSetCtx;
@@ -153,10 +156,18 @@ static CatchEffectPattern catch_effect_pattern(XaAnalyzer *analyzer, XrCatchClau
 typedef struct FunctionValueTarget {
     XaSymbol *symbol;
     AstNode *function_expr;
-    XaSymbol *target_symbols[8];
-    AstNode *target_function_exprs[8];
-    int target_count;
+    XaSymbol **target_symbols;
+    AstNode **target_function_exprs;
+    struct FunctionValueTargetSlot *target_slots;
+    uint32_t target_count;
+    uint32_t target_capacity;
+    uint32_t target_slot_capacity;
 } FunctionValueTarget;
+
+typedef struct FunctionValueTargetSlot {
+    XaSymbol *symbol;
+    AstNode *function_expr;
+} FunctionValueTargetSlot;
 
 typedef struct FunctionValueAliasState {
     uint32_t ids[128];
@@ -287,6 +298,12 @@ struct ErrorSetCtx {
     uint32_t function_value_alias_ids[128];
     FunctionValueTarget function_value_alias_targets[128];
     int function_value_alias_count;
+    uint32_t function_value_binding_ids[128];
+    FunctionValueTarget function_value_binding_targets[128];
+    bool function_value_binding_unknown[128];
+    int function_value_binding_count;
+    bool collect_function_value_binding_targets;
+    XaScope *function_value_binding_scope;
     int function_value_control_depth;
     uint32_t function_value_mutation_ids[128];
     int function_value_mutation_count;
@@ -322,6 +339,7 @@ struct ErrorSetCtx {
     bool changed;                    /* Fixpoint: did anything change this iteration? */
     bool publish_call_error_effect_facts;
     bool call_error_effect_publication_failed;
+    bool function_expr_effect_publication_failed;
 };
 
 /* Coroutine-boundary facts are per-body.  Expanding a callee's body into this
@@ -354,19 +372,95 @@ static bool catch_aggregate_index_key(ErrorSetCtx *ctx, AstNode *expr, int64_t *
 static bool variable_ref_symbol(ErrorSetCtx *ctx, AstNode *expr, uint32_t *symbol_id,
                                 const char **name);
 
+static bool exact_enum_layout_identity_equal(const XrEnumLayout *left, const XrEnumLayout *right) {
+    if (!left || !right || !left->nominal_owner || !right->nominal_owner || !left->name ||
+        !right->name || !left->variants || !right->variants || left->layout_id == 0u ||
+        left->layout_id != right->layout_id || left->layout_id != xr_enum_layout_nominal_id(left) ||
+        right->layout_id != xr_enum_layout_nominal_id(right) ||
+        strcmp(left->nominal_owner, right->nominal_owner) != 0 ||
+        strcmp(left->name, right->name) != 0 || left->variant_count != right->variant_count ||
+        left->tag_size != right->tag_size || left->align != right->align ||
+        left->size != right->size || left->payload_offset != right->payload_offset ||
+        left->payload_size != right->payload_size || left->contains_refs != right->contains_refs ||
+        left->is_zero_payload != right->is_zero_payload)
+        return false;
+    for (uint32_t i = 0u; i < left->variant_count; ++i) {
+        const XrEnumVariantLayout *left_variant = &left->variants[i];
+        const XrEnumVariantLayout *right_variant = &right->variants[i];
+        if (!left_variant->name || !right_variant->name ||
+            strcmp(left_variant->name, right_variant->name) != 0 ||
+            left_variant->symbol != right_variant->symbol || left_variant->tag != i ||
+            right_variant->tag != i ||
+            left_variant->payload_count != right_variant->payload_count ||
+            left_variant->payload_size != right_variant->payload_size ||
+            left_variant->payload_align != right_variant->payload_align ||
+            left_variant->contains_refs != right_variant->contains_refs ||
+            !xr_enum_variant_payload_metadata_is_exact(left_variant) ||
+            !xr_enum_variant_payload_metadata_is_exact(right_variant))
+            return false;
+        for (uint16_t payload = 0u; payload < left_variant->payload_count; ++payload) {
+            if (strcmp(left_variant->payload_names[payload],
+                       right_variant->payload_names[payload]) != 0 ||
+                left_variant->payload_type_ids[payload] != right_variant->payload_type_ids[payload])
+                return false;
+        }
+    }
+    return true;
+}
+
+static XrType *exact_enum_selection_declaration_type(const XaSelection *sel) {
+    XaSymbol *symbol = sel && sel->kind == XA_SEL_ENUM_MEMBER ? sel->target_symbol : NULL;
+    XaSymbolLinks *links = symbol && symbol->kind == XA_SYM_ENUM ? &symbol->links : NULL;
+    XrType *selected_type = sel ? sel->result_type : NULL;
+    XrClassInfo *nominal = selected_type && selected_type->kind == XR_KIND_ENUM
+                               ? selected_type->enum_type.nominal_ref
+                               : NULL;
+    XaSymbol *declaration = nominal ? nominal->declaration_symbol : NULL;
+    XaSymbolLinks *declaration_links =
+        declaration && declaration->kind == XA_SYM_ENUM ? &declaration->links : NULL;
+    XrType *declaration_type = declaration_links ? declaration_links->type : NULL;
+    XrEnumLayout *declaration_layout = declaration_links && declaration_links->enum_info
+                                           ? declaration_links->enum_info->layout
+                                           : NULL;
+    const XrEnumLayout *selected_layout = selected_type && selected_type->kind == XR_KIND_ENUM
+                                              ? selected_type->enum_type.layout
+                                              : NULL;
+    if (!symbol || !links || !selected_type || !nominal || !declaration || !declaration_links ||
+        !declaration_type || !declaration_layout || nominal->nominal_kind != XA_NOMINAL_ENUM ||
+        declaration_links->class_info != nominal || !declaration_links->owns_class_info ||
+        declaration_type->kind != XR_KIND_ENUM ||
+        declaration_type->enum_type.nominal_ref != nominal ||
+        selected_type->enum_type.nominal_ref != nominal ||
+        declaration_type->enum_type.layout != declaration_layout ||
+        declaration_type->enum_type.layout_id != declaration_layout->layout_id ||
+        selected_type->enum_type.layout_id != declaration_layout->layout_id || !selected_layout ||
+        !exact_enum_layout_identity_equal(declaration_layout, declaration_layout) ||
+        !exact_enum_layout_identity_equal(selected_layout, declaration_layout) ||
+        sel->field_index < 0 || (uint32_t) sel->field_index >= declaration_layout->variant_count)
+        return NULL;
+    if (symbol == declaration) {
+        if (links != declaration_links || selected_layout != declaration_layout)
+            return NULL;
+    } else {
+        XrEnumLayout *view_layout = links->enum_info ? links->enum_info->layout : NULL;
+        if (!symbol->is_imported || links->type != declaration_type ||
+            links->class_info != nominal || links->owns_class_info || !view_layout ||
+            selected_layout != view_layout ||
+            !exact_enum_layout_identity_equal(view_layout, declaration_layout))
+            return NULL;
+    }
+    return declaration_type;
+}
+
 static bool es_summary_add_enum_selection(ErrorSetCtx *ctx, const XaSelection *sel) {
-    if (!ctx || !sel || sel->kind != XA_SEL_ENUM_MEMBER)
+    if (!ctx)
         return false;
-    XrType *enum_type = sel->result_type;
-    if ((!enum_type || !XR_TYPE_IS_ENUM(enum_type)) && sel->target_symbol)
-        enum_type = sel->target_symbol->links.type;
-    if (!enum_type || !XR_TYPE_IS_ENUM(enum_type))
+    XrType *enum_type = exact_enum_selection_declaration_type(sel);
+    if (!enum_type)
         return false;
-    if (sel->field_index >= 0)
-        es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary, enum_type,
-                                 (uint32_t) sel->field_index);
-    else
-        es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary, enum_type);
+    if (!es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary, enum_type,
+                                  (uint32_t) sel->field_index))
+        xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_INVALID_PROGRAM);
     return true;
 }
 
@@ -379,7 +473,7 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
 static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *callee, int depth);
 static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
-                                      AstNode *function_expr);
+                                      AstNode *function_expr, ErrorSetCtx *ctx);
 static void publish_call_error_effect_fact(ErrorSetCtx *ctx, AstNode *call_node,
                                            FunctionValueTarget target);
 
@@ -493,36 +587,46 @@ static bool symbol_has_function_type(XaSymbol *sym) {
     if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD)
         return true;
     XrType *type = sym->links.type;
-    return type && XR_TYPE_IS_FUNCTION(type);
+    if (!type)
+        return false;
+    if (XR_TYPE_IS_FUNCTION(type))
+        return true;
+    if (type->kind != XR_KIND_UNION || type->union_type.member_count == 0 ||
+        !type->union_type.members)
+        return false;
+    for (int i = 0; i < type->union_type.member_count; i++) {
+        if (!type->union_type.members[i] || !XR_TYPE_IS_FUNCTION(type->union_type.members[i]))
+            return false;
+    }
+    return true;
 }
 
 static FunctionValueTarget function_value_target_none(void) {
     FunctionValueTarget target;
     target.symbol = NULL;
     target.function_expr = NULL;
-    memset(target.target_symbols, 0, sizeof(target.target_symbols));
-    memset(target.target_function_exprs, 0, sizeof(target.target_function_exprs));
+    target.target_symbols = NULL;
+    target.target_function_exprs = NULL;
+    target.target_slots = NULL;
     target.target_count = 0;
+    target.target_capacity = 0;
+    target.target_slot_capacity = 0;
     return target;
 }
 
-static FunctionValueTarget function_value_target_symbol(XaSymbol *sym) {
+static FunctionValueTarget function_value_target_symbol(ErrorSetCtx *ctx, XaSymbol *sym) {
     FunctionValueTarget target = function_value_target_none();
     target.symbol = sym;
-    if (sym && (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD)) {
-        target.target_symbols[0] = sym;
-        target.target_count = 1;
-    }
+    if (sym && (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD))
+        (void) function_value_target_add(&target, sym, NULL, ctx);
     return target;
 }
 
-static FunctionValueTarget function_value_target_expr(AstNode *function_expr) {
+static FunctionValueTarget function_value_target_expr(ErrorSetCtx *ctx, AstNode *function_expr) {
     FunctionValueTarget target = function_value_target_none();
     target.function_expr = function_expr;
-    if (function_expr) {
-        target.target_function_exprs[0] = function_expr;
-        target.target_count = 1;
-    }
+    if (function_expr)
+        (void) function_value_target_add(&target, NULL, function_expr, ctx);
     return target;
 }
 
@@ -674,7 +778,7 @@ static void collect_open_dispatch_candidate(OpenDispatchTargetCollector *collect
     XaSymbol *method = method_target_for_dispatch_class(collector->selection, class_info);
     if (!method || method->kind != XA_SYM_METHOD)
         return;
-    if (!function_value_target_add(&collector->target, method, NULL))
+    if (!function_value_target_add(&collector->target, method, NULL, collector->ctx))
         collector->exact = false;
 }
 
@@ -720,9 +824,9 @@ resolve_open_virtual_dispatch_targets(ErrorSetCtx *ctx, const XaSelection *sel, 
 static bool function_value_target_equal(FunctionValueTarget a, FunctionValueTarget b) {
     if (a.target_count != b.target_count)
         return false;
-    for (int i = 0; i < a.target_count; i++) {
+    for (uint32_t i = 0; i < a.target_count; i++) {
         bool found = false;
-        for (int j = 0; j < b.target_count; j++) {
+        for (uint32_t j = 0; j < b.target_count; j++) {
             if (a.target_symbols[i] == b.target_symbols[j] &&
                 a.target_function_exprs[i] == b.target_function_exprs[j]) {
                 found = true;
@@ -735,19 +839,96 @@ static bool function_value_target_equal(FunctionValueTarget a, FunctionValueTarg
     return true;
 }
 
+static uint64_t function_value_target_identity_hash(XaSymbol *sym, AstNode *function_expr) {
+    uint64_t hash = (uint64_t) (uintptr_t) sym;
+    uint64_t expression = (uint64_t) (uintptr_t) function_expr;
+    hash ^= expression + UINT64_C(0x9e3779b97f4a7c15) + (hash << 6) + (hash >> 2);
+    hash ^= hash >> 30;
+    hash *= UINT64_C(0xbf58476d1ce4e5b9);
+    hash ^= hash >> 27;
+    hash *= UINT64_C(0x94d049bb133111eb);
+    return hash ^ (hash >> 31);
+}
+
+static bool function_value_target_rehash(FunctionValueTarget *target, uint32_t capacity,
+                                         ErrorSetCtx *ctx) {
+    FunctionValueTargetSlot *slots = (FunctionValueTargetSlot *) xr_arena_alloc_array(
+        ctx->analyzer->callable_target_arena, sizeof(*slots), capacity);
+    if (!slots)
+        return false;
+    memset(slots, 0, sizeof(*slots) * (size_t) capacity);
+    for (uint32_t i = 0; i < target->target_count; i++) {
+        XaSymbol *sym = target->target_symbols[i];
+        AstNode *function_expr = target->target_function_exprs[i];
+        uint32_t slot =
+            (uint32_t) function_value_target_identity_hash(sym, function_expr) & (capacity - 1);
+        while (slots[slot].symbol || slots[slot].function_expr)
+            slot = (slot + 1) & (capacity - 1);
+        slots[slot].symbol = sym;
+        slots[slot].function_expr = function_expr;
+    }
+    target->target_slots = slots;
+    target->target_slot_capacity = capacity;
+    return true;
+}
+
 static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
-                                      AstNode *function_expr) {
+                                      AstNode *function_expr, ErrorSetCtx *ctx) {
     if (!target || (!sym && !function_expr))
         return false;
-    for (int i = 0; i < target->target_count; i++) {
-        if (target->target_symbols[i] == sym && target->target_function_exprs[i] == function_expr)
-            return true;
-    }
-    if (target->target_count >= 8)
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->callable_target_arena ||
+        target->target_count == UINT32_MAX)
         return false;
-    int slot = target->target_count++;
+    if (target->target_slot_capacity == 0 ||
+        target->target_count >= target->target_slot_capacity - target->target_slot_capacity / 4) {
+        uint32_t new_slot_capacity =
+            target->target_slot_capacity ? target->target_slot_capacity * 2 : 16;
+        if (new_slot_capacity < target->target_slot_capacity ||
+            !function_value_target_rehash(target, new_slot_capacity, ctx)) {
+            ctx->call_error_effect_publication_failed = true;
+            return false;
+        }
+    }
+    uint32_t identity_slot = (uint32_t) function_value_target_identity_hash(sym, function_expr) &
+                             (target->target_slot_capacity - 1);
+    while (target->target_slots[identity_slot].symbol ||
+           target->target_slots[identity_slot].function_expr) {
+        if (target->target_slots[identity_slot].symbol == sym &&
+            target->target_slots[identity_slot].function_expr == function_expr)
+            return true;
+        identity_slot = (identity_slot + 1) & (target->target_slot_capacity - 1);
+    }
+    if (target->target_count == target->target_capacity) {
+        uint32_t new_capacity;
+        if (target->target_capacity == 0)
+            new_capacity = 4;
+        else if (target->target_capacity > UINT32_MAX / 2)
+            new_capacity = UINT32_MAX;
+        else
+            new_capacity = target->target_capacity * 2;
+        XaSymbol **symbols = (XaSymbol **) xr_arena_alloc_array(
+            ctx->analyzer->callable_target_arena, sizeof(*symbols), new_capacity);
+        AstNode **expressions = (AstNode **) xr_arena_alloc_array(
+            ctx->analyzer->callable_target_arena, sizeof(*expressions), new_capacity);
+        if (!symbols || !expressions) {
+            ctx->call_error_effect_publication_failed = true;
+            return false;
+        }
+        if (target->target_count > 0) {
+            memcpy(symbols, target->target_symbols, sizeof(*symbols) * target->target_count);
+            memcpy(expressions, target->target_function_exprs,
+                   sizeof(*expressions) * target->target_count);
+        }
+        target->target_symbols = symbols;
+        target->target_function_exprs = expressions;
+        target->target_capacity = new_capacity;
+    }
+    uint32_t slot = target->target_count;
     target->target_symbols[slot] = sym;
     target->target_function_exprs[slot] = function_expr;
+    target->target_slots[identity_slot].symbol = sym;
+    target->target_slots[identity_slot].function_expr = function_expr;
+    target->target_count = slot + 1;
     if (slot == 0) {
         target->symbol = sym;
         target->function_expr = function_expr;
@@ -755,20 +936,213 @@ static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym
     return true;
 }
 
-static FunctionValueTarget function_value_target_merge(FunctionValueTarget a,
-                                                       FunctionValueTarget b) {
+static FunctionValueTarget function_value_target_merge(FunctionValueTarget a, FunctionValueTarget b,
+                                                       ErrorSetCtx *ctx) {
     FunctionValueTarget merged = function_value_target_none();
     if (!function_value_target_is_exact(a) || !function_value_target_is_exact(b))
         return merged;
-    for (int i = 0; i < a.target_count; i++) {
-        if (!function_value_target_add(&merged, a.target_symbols[i], a.target_function_exprs[i]))
+    for (uint32_t i = 0; i < a.target_count; i++) {
+        if (!function_value_target_add(&merged, a.target_symbols[i], a.target_function_exprs[i],
+                                       ctx))
             return function_value_target_none();
     }
-    for (int i = 0; i < b.target_count; i++) {
-        if (!function_value_target_add(&merged, b.target_symbols[i], b.target_function_exprs[i]))
+    for (uint32_t i = 0; i < b.target_count; i++) {
+        if (!function_value_target_add(&merged, b.target_symbols[i], b.target_function_exprs[i],
+                                       ctx))
             return function_value_target_none();
     }
     return merged;
+}
+
+static uint64_t callable_signature_hash_mix(uint64_t hash, const void *data, size_t size) {
+    const uint8_t *bytes = (const uint8_t *) data;
+    for (size_t i = 0; i < size; i++) {
+        hash ^= bytes[i];
+        hash *= XR_FNV64_PRIME;
+    }
+    return hash;
+}
+
+static bool callable_function_structure_equal(const XrType *visible, const XrType *target) {
+    if (!visible || !target || visible->kind != XR_KIND_FUNCTION ||
+        target->kind != XR_KIND_FUNCTION ||
+        visible->function.param_count != target->function.param_count ||
+        visible->function.is_variadic != target->function.is_variadic ||
+        visible->function.is_c_abi != target->function.is_c_abi ||
+        visible->function.receiver_mode != target->function.receiver_mode ||
+        visible->function.type_param_count != target->function.type_param_count ||
+        visible->function.view_origin_was_elided != target->function.view_origin_was_elided ||
+        !xr_type_function_view_origins_equal(visible, target) ||
+        !xr_type_equals(visible->function.return_type, target->function.return_type))
+        return false;
+    for (int i = 0; i < visible->function.param_count; i++) {
+        if (xr_type_function_param_mode(visible, i) != xr_type_function_param_mode(target, i) ||
+            !xr_type_equals(xr_type_function_param_type(visible, i),
+                            xr_type_function_param_type(target, i)))
+            return false;
+    }
+    for (int i = 0; i < visible->function.type_param_count; i++) {
+        int visible_count = visible->function.type_param_constraint_counts
+                                ? visible->function.type_param_constraint_counts[i]
+                                : 0;
+        int target_count = target->function.type_param_constraint_counts
+                               ? target->function.type_param_constraint_counts[i]
+                               : 0;
+        if (visible_count != target_count)
+            return false;
+        XrType **visible_constraints = visible->function.type_param_constraints
+                                           ? visible->function.type_param_constraints[i]
+                                           : NULL;
+        XrType **target_constraints = target->function.type_param_constraints
+                                          ? target->function.type_param_constraints[i]
+                                          : NULL;
+        for (int j = 0; j < visible_count; j++) {
+            if (!visible_constraints || !target_constraints ||
+                !xr_type_equals(visible_constraints[j], target_constraints[j]))
+                return false;
+        }
+    }
+    return true;
+}
+
+static const XrType *callable_visible_signature_type(const XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_FUNCTION)
+        return type;
+    if (type->kind != XR_KIND_UNION || type->union_type.member_count == 0 ||
+        !type->union_type.members)
+        return NULL;
+    const XrType *signature = type->union_type.members[0];
+    if (!signature || signature->kind != XR_KIND_FUNCTION)
+        return NULL;
+    for (int i = 1; i < type->union_type.member_count; i++) {
+        if (!callable_function_structure_equal(signature, type->union_type.members[i]))
+            return NULL;
+    }
+    return signature;
+}
+
+static uint64_t callable_structural_signature_key(const XrType *type,
+                                                  XrFnThrowEffect throw_effect) {
+    if (!type || type->kind != XR_KIND_FUNCTION)
+        return 0;
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+#define CALLABLE_HASH_FIELD(field) hash = callable_signature_hash_mix(hash, &(field), sizeof(field))
+    CALLABLE_HASH_FIELD(type->function.param_count);
+    CALLABLE_HASH_FIELD(type->function.is_variadic);
+    CALLABLE_HASH_FIELD(type->function.is_c_abi);
+    CALLABLE_HASH_FIELD(type->function.receiver_mode);
+    CALLABLE_HASH_FIELD(throw_effect);
+    CALLABLE_HASH_FIELD(type->function.view_origin_was_elided);
+    CALLABLE_HASH_FIELD(type->function.type_param_count);
+    uint64_t type_key = xr_type_stable_key(type->function.return_type);
+    CALLABLE_HASH_FIELD(type_key);
+    for (int i = 0; i < type->function.param_count; i++) {
+        XrParamMode mode = xr_type_function_param_mode(type, i);
+        type_key = xr_type_stable_key(xr_type_function_param_type(type, i));
+        CALLABLE_HASH_FIELD(mode);
+        CALLABLE_HASH_FIELD(type_key);
+    }
+    CALLABLE_HASH_FIELD(type->function.view_origin_count);
+    for (int i = 0; i < type->function.view_origin_count; i++)
+        hash = callable_signature_hash_mix(hash, &type->function.view_origin_set[i],
+                                           sizeof(type->function.view_origin_set[i]));
+    for (int i = 0; i < type->function.type_param_count; i++) {
+        int constraint_count = type->function.type_param_constraint_counts
+                                   ? type->function.type_param_constraint_counts[i]
+                                   : 0;
+        CALLABLE_HASH_FIELD(constraint_count);
+        XrType **constraints =
+            type->function.type_param_constraints ? type->function.type_param_constraints[i] : NULL;
+        for (int j = 0; j < constraint_count; j++) {
+            type_key = xr_type_stable_key(constraints ? constraints[j] : NULL);
+            CALLABLE_HASH_FIELD(type_key);
+        }
+    }
+#undef CALLABLE_HASH_FIELD
+    return hash ? hash : 1;
+}
+
+static int callable_target_identity_compare(const XaCallableTarget *a, const XaCallableTarget *b) {
+    if (a->function_node_id != b->function_node_id)
+        return a->function_node_id < b->function_node_id ? -1 : 1;
+    if (a->symbol_id != b->symbol_id)
+        return a->symbol_id < b->symbol_id ? -1 : 1;
+    return 0;
+}
+
+static XrFnThrowEffect function_value_target_throw_effect(ErrorSetCtx *ctx,
+                                                          FunctionValueTarget target);
+
+static int callable_target_identity_qsort_compare(const void *left, const void *right) {
+    return callable_target_identity_compare((const XaCallableTarget *) left,
+                                            (const XaCallableTarget *) right);
+}
+
+static void publish_callable_target_set_fact(ErrorSetCtx *ctx, AstNode *call_node,
+                                             FunctionValueTarget target) {
+    XaCallableTargetSetFact fact = {0};
+    if (!ctx || !ctx->analyzer || !call_node || call_node->type != AST_CALL_EXPR)
+        return;
+    XrType *visible_type = xa_analyzer_get_node_type(ctx->analyzer, call_node->as.call_expr.callee);
+    const XrType *signature_type = callable_visible_signature_type(visible_type);
+    if (signature_type && function_value_target_is_exact(target)) {
+        XrFnThrowEffect throw_effect = function_value_target_throw_effect(ctx, target);
+        uint64_t signature_key = callable_structural_signature_key(signature_type, throw_effect);
+        XaCallableTarget *normalized = (XaCallableTarget *) xr_arena_alloc_array(
+            ctx->analyzer->callable_target_arena, sizeof(*normalized), target.target_count);
+        bool exact = signature_key != 0 && normalized != NULL;
+        if (!normalized)
+            ctx->call_error_effect_publication_failed = true;
+        fact.targets = normalized;
+        for (uint32_t i = 0; exact && i < target.target_count; i++) {
+            XaSymbol *symbol = target.target_symbols[i];
+            AstNode *function_expr = target.target_function_exprs[i];
+            AstNode *declaration = symbol ? symbol->links.function_decl_node : function_expr;
+            XrType *target_type = symbol ? symbol->links.type
+                                  : function_expr
+                                      ? xa_analyzer_get_node_type(ctx->analyzer, function_expr)
+                                      : NULL;
+            if (!declaration || declaration->node_id == 0 ||
+                !callable_function_structure_equal(signature_type, target_type)) {
+                exact = false;
+                break;
+            }
+            /* A selective import owns a local view symbol, not the exported
+             *
+             * declaration symbol.  The copied declaration node remains the
+             *
+             * cross-module identity; publishing the view id would make the
+             *
+             * whole-program join disagree with the declaration owner. */
+            XaCallableTarget entry = {
+                .function_node_id = declaration->node_id,
+                .symbol_id = symbol && !symbol->is_imported ? symbol->id : 0,
+                .structural_signature_key = signature_key,
+            };
+            normalized[fact.target_count++] = entry;
+        }
+        if (exact && fact.target_count > 1) {
+            qsort(normalized, fact.target_count, sizeof(*normalized),
+                  callable_target_identity_qsort_compare);
+            uint32_t unique_count = 1;
+            for (uint32_t i = 1; i < fact.target_count; i++) {
+                if (callable_target_identity_compare(&normalized[unique_count - 1],
+                                                     &normalized[i]) != 0)
+                    normalized[unique_count++] = normalized[i];
+            }
+            fact.target_count = unique_count;
+        }
+        if (exact && fact.target_count > 0) {
+            fact.structural_signature_key = signature_key;
+            fact.complete = 1;
+        } else {
+            fact = (XaCallableTargetSetFact) {0};
+        }
+    }
+    if (!xa_analyzer_set_callable_target_set(ctx->analyzer, call_node, &fact))
+        ctx->call_error_effect_publication_failed = true;
 }
 
 static bool expr_has_function_type(ErrorSetCtx *ctx, AstNode *expr) {
@@ -802,7 +1176,8 @@ static void record_current_function_return_target(ErrorSetCtx *ctx, FunctionValu
         ctx->current_return_target = target;
         return;
     }
-    FunctionValueTarget merged = function_value_target_merge(ctx->current_return_target, target);
+    FunctionValueTarget merged =
+        function_value_target_merge(ctx->current_return_target, target, ctx);
     if (!function_value_target_is_exact(merged)) {
         ctx->current_return_target = function_value_target_none();
         ctx->current_return_target_unknown = true;
@@ -944,7 +1319,7 @@ static void record_specialized_param_target(ErrorSetCtx *ctx, XaSymbol *func_sym
         ctx->changed = true;
         return;
     }
-    FunctionValueTarget merged = function_value_target_merge(entry->target, target);
+    FunctionValueTarget merged = function_value_target_merge(entry->target, target, ctx);
     if (!function_value_target_is_exact(merged)) {
         entry->unknown = true;
         entry->target = function_value_target_none();
@@ -1022,6 +1397,56 @@ static void set_function_value_alias_target(ErrorSetCtx *ctx, XaSymbol *sym,
     int slot = ctx->function_value_alias_count++;
     ctx->function_value_alias_ids[slot] = sym->id;
     ctx->function_value_alias_targets[slot] = target;
+}
+
+/* Record the complete write-domain of a rebindable function value. The normal
+ * alias state
+ * answers "what can this value be here" and therefore overwrites
+ * on a sequential assignment. A
+ * stored function type needs the stronger
+ * whole-binding question: every initializer/assignment
+ * target must be exact
+ * and NO_THROW before the binding may be tightened from MAY_THROW. */
+static void record_function_value_binding_target(ErrorSetCtx *ctx, XaSymbol *sym,
+                                                 FunctionValueTarget target, bool unknown) {
+    if (!ctx || !ctx->collect_function_value_binding_targets || !ctx->current_func ||
+        !ctx->function_value_binding_scope || !sym || !sym->scope ||
+        !xa_scope_is_descendant(sym->scope, ctx->function_value_binding_scope) || sym->id == 0 ||
+        sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
+        !symbol_has_function_type(sym))
+        return;
+    int slot = -1;
+    for (int i = 0; i < ctx->function_value_binding_count; ++i) {
+        if (ctx->function_value_binding_ids[i] == sym->id) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        if (ctx->function_value_binding_count >= 128)
+            return;
+        slot = ctx->function_value_binding_count++;
+        ctx->function_value_binding_ids[slot] = sym->id;
+        ctx->function_value_binding_targets[slot] = function_value_target_none();
+        ctx->function_value_binding_unknown[slot] = false;
+    }
+    if (unknown || !function_value_target_is_exact(target)) {
+        ctx->function_value_binding_unknown[slot] = true;
+        ctx->function_value_binding_targets[slot] = function_value_target_none();
+        return;
+    }
+    if (ctx->function_value_binding_unknown[slot])
+        return;
+    FunctionValueTarget prior = ctx->function_value_binding_targets[slot];
+    FunctionValueTarget merged = function_value_target_is_exact(prior)
+                                     ? function_value_target_merge(prior, target, ctx)
+                                     : target;
+    if (!function_value_target_is_exact(merged)) {
+        ctx->function_value_binding_unknown[slot] = true;
+        ctx->function_value_binding_targets[slot] = function_value_target_none();
+        return;
+    }
+    ctx->function_value_binding_targets[slot] = merged;
 }
 
 static void invalidate_function_value_alias_target(ErrorSetCtx *ctx, uint32_t symbol_id) {
@@ -1303,7 +1728,7 @@ static void merge_function_value_path_states(ErrorSetCtx *ctx, const FunctionVal
         FunctionValueTarget merged = state_lookup_function_value_target(path_states[0], ids[i]);
         for (int p = 1; p < path_count && function_value_target_is_exact(merged); p++) {
             merged = function_value_target_merge(
-                merged, state_lookup_function_value_target(path_states[p], ids[i]));
+                merged, state_lookup_function_value_target(path_states[p], ids[i]), ctx);
         }
         invalidate_function_value_alias_target(ctx, ids[i]);
         if (!function_value_target_is_exact(merged))
@@ -1362,7 +1787,7 @@ resolve_returned_function_value_call_target(ErrorSetCtx *ctx, AstNode *call_expr
         return function_value_target_none();
 
     FunctionValueTarget returned = function_value_target_none();
-    for (int i = 0; i < callee_target.target_count; i++) {
+    for (uint32_t i = 0; i < callee_target.target_count; i++) {
         XaSymbol *callee_sym = callee_target.target_symbols[i];
         if (!callee_sym)
             return function_value_target_none();
@@ -1373,12 +1798,24 @@ resolve_returned_function_value_call_target(ErrorSetCtx *ctx, AstNode *call_expr
         if (!seen || unknown || !function_value_target_is_exact(target))
             return function_value_target_none();
         returned = function_value_target_is_exact(returned)
-                       ? function_value_target_merge(returned, target)
+                       ? function_value_target_merge(returned, target, ctx)
                        : target;
         if (!function_value_target_is_exact(returned))
             return function_value_target_none();
     }
     return returned;
+}
+
+static bool is_builtin_copy_call(ErrorSetCtx *ctx, AstNode *call_expr) {
+    if (!ctx || !call_expr || call_expr->type != AST_CALL_EXPR ||
+        call_expr->as.call_expr.arg_count != 1)
+        return false;
+    AstNode *callee = identity_source(call_expr->as.call_expr.callee);
+    if (!callee || callee->type != AST_VARIABLE)
+        return false;
+    XaSymbol *symbol = lookup_variable_symbol(ctx->analyzer, callee);
+    return symbol && symbol->kind == XA_SYM_FUNCTION && symbol->is_builtin && symbol->name &&
+           strcmp(symbol->name, "copy") == 0;
 }
 
 static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, AstNode *expr,
@@ -1390,9 +1827,23 @@ static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, 
         return function_value_target_none();
     if (expr->type == AST_FUNCTION_EXPR) {
         record_function_expr_capture(ctx, expr);
-        return function_value_target_expr(expr);
+        return function_value_target_expr(ctx, expr);
     }
     if (expr->type == AST_CALL_EXPR) {
+        if (is_builtin_copy_call(ctx, expr)) {
+            AstNode *argument = identity_source(expr->as.call_expr.arguments[0]);
+            if (argument && argument->type == AST_VARIABLE) {
+                XaSymbol *argument_symbol = lookup_variable_symbol(ctx->analyzer, argument);
+                FunctionValueTarget argument_target =
+                    lookup_function_value_alias_target(ctx, argument_symbol);
+                if (function_value_target_is_exact(argument_target))
+                    return argument_target;
+                if (argument_symbol && function_value_alias_id_present(ctx, argument_symbol->id))
+                    return function_value_target_none();
+            }
+            return resolve_function_value_expr_target(ctx, expr->as.call_expr.arguments[0],
+                                                      depth + 1);
+        }
         FunctionValueTarget returned =
             resolve_returned_function_value_call_target(ctx, expr, depth + 1);
         if (function_value_target_is_exact(returned))
@@ -1404,14 +1855,14 @@ static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, 
         (sel->kind == XA_SEL_MODULE_EXPORT || sel->kind == XA_SEL_STATIC_MEMBER)) {
         XaSymbol *selected = sel->target_symbol;
         if (selected->kind == XA_SYM_FUNCTION || selected->kind == XA_SYM_METHOD)
-            return function_value_target_symbol(selected);
+            return function_value_target_symbol(ctx, selected);
     }
     if (expr->type != AST_VARIABLE)
         return function_value_target_none();
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, expr);
     XaSymbol *target = resolve_function_alias_target(ctx->analyzer, sym, 0);
     if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
-        return function_value_target_symbol(target);
+        return function_value_target_symbol(ctx, target);
     if (sym && sym->is_const && !sym->is_rebindable && symbol_has_function_type(sym) &&
         sym->links.const_initializer) {
         FunctionValueTarget const_target =
@@ -1436,6 +1887,7 @@ static void maybe_record_function_value_var_initializer(ErrorSetCtx *ctx, AstNod
         !symbol_has_function_type(sym))
         return;
     FunctionValueTarget target = resolve_function_value_expr_target(ctx, decl->initializer, 0);
+    record_function_value_binding_target(ctx, sym, target, !function_value_target_is_exact(target));
     if (function_value_target_is_exact(target))
         set_function_value_alias_target(ctx, sym, target);
 }
@@ -1451,6 +1903,9 @@ static void record_function_value_assignment(ErrorSetCtx *ctx, AssignmentNode *a
     FunctionValueTarget target = function_value_target_none();
     if (ctx->function_value_control_depth == 0)
         target = resolve_function_value_expr_target(ctx, assign->value, 0);
+    record_function_value_binding_target(ctx, sym, target,
+                                         ctx->function_value_control_depth != 0 ||
+                                             !function_value_target_is_exact(target));
 
     invalidate_function_value_alias_target(ctx, symbol_id);
 
@@ -1474,14 +1929,14 @@ static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *
          sel->kind == XA_SEL_MODULE_EXPORT)) {
         XaSymbol *selected = sel->target_symbol;
         if (selected->kind == XA_SYM_FUNCTION || selected->kind == XA_SYM_METHOD)
-            return function_value_target_symbol(selected);
+            return function_value_target_symbol(ctx, selected);
     }
 
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, callee);
     FunctionValueTarget target = resolve_function_value_expr_target(ctx, callee, depth + 1);
     if (function_value_target_is_exact(target))
         return target;
-    return function_value_target_symbol(sym);
+    return function_value_target_symbol(ctx, sym);
 }
 
 static FunctionValueTarget resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
@@ -3464,7 +3919,8 @@ static bool es_apply_effect_contract(ErrorSetCtx *ctx, const XaEffectContract *c
             continue;
         }
         if (!has_variant) {
-            es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary, enum_type);
+            if (!es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary, enum_type))
+                complete = false;
             continue;
         }
         int case_index = find_enum_case_index(enum_sym, variant_name);
@@ -3472,8 +3928,9 @@ static bool es_apply_effect_contract(ErrorSetCtx *ctx, const XaEffectContract *c
             complete = false;
             continue;
         }
-        es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary, enum_type,
-                                 (uint32_t) case_index);
+        if (!es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary, enum_type,
+                                      (uint32_t) case_index))
+            complete = false;
     }
     if (!complete)
         xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_NATIVE_CONTRACT_MISSING);
@@ -3639,7 +4096,7 @@ static void es_union_spawned_body_effects(ErrorSetCtx *ctx, AstNode *spawn_expr)
         return;
     }
 
-    for (int i = 0; i < target.target_count; i++) {
+    for (uint32_t i = 0; i < target.target_count; i++) {
         AstNode *function_expr = target.target_function_exprs[i];
         XaSymbol *callee_sym = target.target_symbols[i];
         if (function_expr) {
@@ -3804,7 +4261,7 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
                 call_target = resolve_call_target(ctx, node->as.call_expr.callee);
             if (function_value_target_is_exact(call_target)) {
                 publish_call_error_effect_fact(ctx, node, call_target);
-                for (int i = 0; i < call_target.target_count; i++) {
+                for (uint32_t i = 0; i < call_target.target_count; i++) {
                     AstNode *function_expr = call_target.target_function_exprs[i];
                     XaSymbol *callee_sym = call_target.target_symbols[i];
                     if (function_expr) {
@@ -4058,8 +4515,10 @@ static void es_walk_stmt_inner(ErrorSetCtx *ctx, AstNode *node) {
                          : NULL;
                 XrType *enum_type = enum_symbol ? enum_symbol->links.type : NULL;
                 if (plan && plan->complete && enum_type && XR_TYPE_IS_ENUM(enum_type)) {
-                    es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
-                                             enum_type, plan->variant_ordinal);
+                    if (!es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
+                                                  enum_type, plan->variant_ordinal))
+                        xa_effect_summary_mark_incomplete(ctx->current_summary,
+                                                          XA_UNKNOWN_INVALID_PROGRAM);
                     break;
                 }
             }
@@ -4072,43 +4531,21 @@ static void es_walk_stmt_inner(ErrorSetCtx *ctx, AstNode *node) {
                     ctx, xa_analyzer_get_selection(ctx->analyzer, expr->as.call_expr.callee)))
                 break;
 
-            /*
-             * Handle `throw EnumName.CaseName` — add the specific case.
-             * Handle `throw variable` where variable has enum type — add all cases.
-             */
+            /* A qualified enum throw must have retained its declaration-backed
+             *
+             * selection. Re-resolving its spelling after inference could bind a
+             *
+             * same-named enum from another module. */
             if (expr->type == AST_ENUM_ACCESS) {
-                const char *enum_name = expr->as.enum_access.enum_name;
-                const char *member_name = expr->as.enum_access.member_name;
-                const XaSelection *sel = xa_analyzer_get_selection(ctx->analyzer, expr);
-                XaSymbol *enum_sym = NULL;
-                XrType *enum_type = NULL;
-                int case_idx = -1;
-                if (sel && sel->kind == XA_SEL_ENUM_MEMBER) {
-                    enum_sym = sel->target_symbol;
-                    enum_type = sel->result_type;
-                    case_idx = sel->field_index;
-                }
-                if (!enum_sym && enum_name)
-                    enum_sym = lookup_enum_symbol(ctx->analyzer, enum_name);
-                if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
-                    if (!enum_type)
-                        enum_type = enum_sym->links.type;
-                    if (case_idx < 0)
-                        case_idx = find_enum_case_index(enum_sym, member_name);
-                    if (enum_type && case_idx >= 0) {
-                        es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
-                                                 enum_type, (uint32_t) case_idx);
-                    } else if (enum_type) {
-                        es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
-                                                enum_type);
-                    }
-                }
+                xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_INVALID_PROGRAM);
             } else {
                 /* Generic throw: infer type from the expression's analyzed type */
                 XrType *thrown_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
                 if (thrown_type && XR_TYPE_IS_ENUM(thrown_type)) {
-                    es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
-                                            thrown_type);
+                    if (!es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
+                                                 thrown_type))
+                        xa_effect_summary_mark_incomplete(ctx->current_summary,
+                                                          XA_UNKNOWN_INVALID_PROGRAM);
                 }
             }
             break;
@@ -4717,11 +5154,11 @@ static void collect_function_expr_pre(AstNode *node, void *userdata) {
     list->items[list->count++] = node;
 }
 
-/* Function expressions do not own a declaration symbol/effect-id, but their
- * function value still carries the task-216 bit. Infer the same complete/empty
- * conclusion after named-function fixpoint and publish it on the expression's
- * analyzed type. Stored and passed lambdas can then satisfy inferred callable
- * constraints without relying on syntax. */
+/* Function expressions do not own a declaration symbol.  Publish their full
+ * analyzer-owned
+ * effect row in the node table after the named-function
+ * fixpoint; the function type mirrors only
+ * the callable throw dimension. */
 /* Walk an anonymous function body into `out`, which the caller must have
  * initialized and must clear. Shared by throw-effect publication and by the
  * defer rule (spec 8.3.1 D1), which needs the escaping error set itself rather
@@ -4836,6 +5273,16 @@ static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     if (compute_function_expr_summary(ctx, node, &summary)) {
         XrFnThrowEffect effect =
             xa_effect_summary_is_nothrow(&summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+        XaFunctionExprEffectFact fact = {
+            .effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary),
+            .throw_effect = effect,
+            .completeness =
+                xa_effect_summary_is_complete(&summary) ? XA_EFFECT_COMPLETE : XA_EFFECT_INCOMPLETE,
+            .unknown_reasons = summary.unknown_reasons,
+        };
+        if (fact.effect_id == XA_EFFECT_NONE ||
+            !xa_analyzer_set_function_expr_effect(ctx->analyzer, node, &fact))
+            ctx->function_expr_effect_publication_failed = true;
         xr_type_function_set_throw_effect(type, effect);
     }
     xa_effect_summary_clear(&summary);
@@ -4888,13 +5335,18 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
         for (int i = 0; i < node->as.struct_decl.method_count; i++)
             collect_functions(analyzer, node->as.struct_decl.methods[i], out, count, cap);
     }
+
+    if (node->type == AST_ENUM_DECL) {
+        for (int i = 0; i < node->as.enum_decl.method_count; i++)
+            collect_functions(analyzer, node->as.enum_decl.methods[i], out, count, cap);
+    }
 }
 
 static XrFnThrowEffect function_value_target_throw_effect(ErrorSetCtx *ctx,
                                                           FunctionValueTarget target) {
     if (!ctx || !function_value_target_is_exact(target))
         return XR_FN_EFFECT_MAY_THROW;
-    for (int i = 0; i < target.target_count; i++) {
+    for (uint32_t i = 0; i < target.target_count; i++) {
         XaSymbol *symbol = target.target_symbols[i];
         AstNode *function_expr = target.target_function_exprs[i];
         if (symbol) {
@@ -4911,11 +5363,53 @@ static XrFnThrowEffect function_value_target_throw_effect(ErrorSetCtx *ctx,
     return XR_FN_EFFECT_NO_THROW;
 }
 
+/* A function-valued result is effect-polymorphic while source types are being
+ * built.  After the
+ * return-target fixed point is complete, replace that open
+ * bit with the meet of the exact
+ * returned target set.  Missing, mixed, or
+ * incomplete target evidence remains MAY_THROW.
+ * Call-expression node types
+ * share this declaration-owned result type, so Xi sees the same
+ * closed proof
+ * at the storage boundary and does not need a dynamic type check. */
+static void publish_function_return_callable_throw_effects(ErrorSetCtx *ctx, FuncEntry *funcs,
+                                                           int func_count) {
+    if (!ctx || !funcs || func_count <= 0)
+        return;
+    for (int i = 0; i < func_count; ++i) {
+        XaSymbol *symbol = funcs[i].sym;
+        if (!symbol)
+            continue;
+        XrType *return_type = symbol->links.return_type;
+        XrType *signature_return =
+            symbol->links.type && symbol->links.type->kind == XR_KIND_FUNCTION
+                ? symbol->links.type->function.return_type
+                : NULL;
+        if (!return_type)
+            return_type = signature_return;
+        if (!return_type || return_type->kind != XR_KIND_FUNCTION)
+            continue;
+
+        bool seen = false;
+        bool unknown = false;
+        FunctionValueTarget target = lookup_function_return_target(ctx, symbol, &seen, &unknown);
+        XrFnThrowEffect effect = seen && !unknown && function_value_target_is_exact(target)
+                                     ? function_value_target_throw_effect(ctx, target)
+                                     : XR_FN_EFFECT_MAY_THROW;
+        xr_type_function_set_throw_effect(return_type, effect);
+        if (signature_return && signature_return != return_type)
+            xr_type_function_set_throw_effect(signature_return, effect);
+    }
+}
+
 static void publish_call_error_effect_fact(ErrorSetCtx *ctx, AstNode *call_node,
                                            FunctionValueTarget target) {
     if (!ctx || !ctx->publish_call_error_effect_facts || !call_node ||
         call_node->type != AST_CALL_EXPR)
         return;
+
+    publish_callable_target_set_fact(ctx, call_node, target);
 
     XaEffectSummary summary;
     xa_effect_summary_init(&summary);
@@ -4930,7 +5424,7 @@ static void publish_call_error_effect_fact(ErrorSetCtx *ctx, AstNode *call_node,
     } else if (!function_value_target_is_exact(target)) {
         xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
     } else {
-        for (int i = 0; i < target.target_count; i++) {
+        for (uint32_t i = 0; i < target.target_count; i++) {
             XaSymbol *symbol = target.target_symbols[i];
             AstNode *function_expr = target.target_function_exprs[i];
             if (symbol) {
@@ -4994,9 +5488,25 @@ static void publish_function_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *
     ctx->current_return_target_unknown = false;
     ctx->task_spawn_alias_count = 0;
     ctx->linked_scope_depth = 0;
+    ctx->function_value_binding_count = 0;
+    ctx->collect_function_value_binding_targets = true;
+    ctx->function_value_binding_scope = fn_scope;
     clear_function_value_param_aliases(ctx, func_node);
     apply_specialized_function_param_targets(ctx, func_node, func_sym);
     es_walk_block(ctx, body);
+    ctx->collect_function_value_binding_targets = false;
+    ctx->function_value_binding_scope = NULL;
+    for (int i = 0; i < ctx->function_value_binding_count; ++i) {
+        XaSymbol *binding = lookup_symbol_by_id(ctx, ctx->function_value_binding_ids[i]);
+        XrType *type = binding ? binding->links.type : NULL;
+        if (!binding || !type || type->kind != XR_KIND_FUNCTION)
+            continue;
+        XrFnThrowEffect effect =
+            ctx->function_value_binding_unknown[i]
+                ? XR_FN_EFFECT_MAY_THROW
+                : function_value_target_throw_effect(ctx, ctx->function_value_binding_targets[i]);
+        xr_type_function_set_throw_effect(type, effect);
+    }
     xa_effect_summary_clear(&sink);
     ctx->current_summary = NULL;
     ctx->current_func = NULL;
@@ -5259,6 +5769,18 @@ static void validate_defer_no_throw(ErrorSetCtx *ctx, AstNode *ast) {
         xa_ast_walk(ast, defer_no_throw_scan_pre, NULL, ctx);
 }
 
+static void clear_error_publication_pre(AstNode *node, void *userdata) {
+    XaAnalyzer *analyzer = (XaAnalyzer *) userdata;
+    if (!analyzer || !node)
+        return;
+    if (node->type == AST_CALL_EXPR) {
+        xa_analyzer_clear_call_error_effect(analyzer, node);
+        xa_analyzer_clear_callable_target_set(analyzer, node);
+    } else if (node->type == AST_FUNCTION_EXPR) {
+        xa_analyzer_clear_function_expr_effect(analyzer, node);
+    }
+}
+
 /* ========== Public Entry Point ========== */
 
 void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
@@ -5268,7 +5790,14 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     ErrorSetCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.analyzer = analyzer;
-    xa_analyzer_clear_call_error_effects(analyzer);
+    /* Re-analysis invalidates only facts owned by this AST.  One analyzer may
+     * serve a
+     * topologically ordered module graph; clearing the whole side table
+     * here would erase
+     * already-finalized calls from earlier modules. */
+    xa_ast_walk(ast, clear_error_publication_pre, NULL, analyzer);
+    if (analyzer->callable_target_arena)
+        xr_arena_reset(analyzer->callable_target_arena);
 
     /* Phase 1: Collect all function declarations */
     FuncEntry *funcs = NULL;
@@ -5312,12 +5841,22 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
             xr_type_function_set_throw_effect(sym->links.type, effect);
     }
 
-    /* Anonymous function values carry the same bit even though they do not
-     * have an effect-id-bearing declaration symbol. Named callees are already
-     * stable, so one expression pass is sufficient. */
+    /* Anonymous function bodies publish independent node-table effect facts;
+     * named functions
+     * publish the equivalent product through symbol links. */
     for (int i = 0; i < function_exprs.count; i++)
         infer_function_expr_throw_effect(&ctx, function_exprs.items[i]);
+    if (ctx.function_expr_effect_publication_failed) {
+        const char *message =
+            "function-expression effect publication failed (AnalysisResourceFailure)";
+        XrLocation location = {.file = analyzer->current_file,
+                               .line = (uint32_t) ast->line,
+                               .column = (uint32_t) ast->column};
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_OUT_OF_MEMORY, message,
+                                   &location);
+    }
 
+    publish_function_return_callable_throw_effects(&ctx, funcs, func_count);
     publish_specialized_param_throw_effects(&ctx);
     ctx.publish_call_error_effect_facts = true;
     publish_program_call_error_effect_facts(&ctx, ast);

@@ -170,6 +170,62 @@ TEST(call_error_effect_snapshot_preserves_flow_sensitive_fact) {
     xr_program_destroy(program);
 }
 
+TEST(function_expr_effect_snapshot_is_distinct_and_immutable) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    AstNode *program = parse_and_analyze(analyzer, "function-expr-effect.xr",
+                                         "fn run() -> i64 {\n"
+                                         "  var action = fn() -> i64 { return 42 }\n"
+                                         "  return action()\n"
+                                         "}\n");
+    ASSERT_NOT_NULL(program);
+    AstNode *run = program->as.program.statements[0];
+    ASSERT_NOT_NULL(run);
+    AstNode *body = run->as.function_decl.body;
+    ASSERT_NOT_NULL(body);
+    AstNode *binding = body->as.block.statements[0];
+    ASSERT_NOT_NULL(binding);
+    AstNode *function_expr = binding->as.var_decl.initializer;
+    ASSERT_NOT_NULL(function_expr);
+    ASSERT_EQ_INT(function_expr->type, AST_FUNCTION_EXPR);
+
+    XaFunctionExprEffectFact analyzed = {0};
+    ASSERT_TRUE(xa_analyzer_get_function_expr_effect(analyzer, function_expr, &analyzed));
+    ASSERT_TRUE(analyzed.effect_id != XA_EFFECT_NONE);
+    ASSERT_EQ_INT(analyzed.throw_effect, XR_FN_EFFECT_NO_THROW);
+    ASSERT_EQ_INT(analyzed.completeness, XA_EFFECT_COMPLETE);
+    ASSERT_EQ_UINT(analyzed.unknown_reasons, XA_UNKNOWN_NONE);
+    const XaEffectSummary *summary = xa_effect_db_get(analyzer->effect_db, analyzed.effect_id);
+    ASSERT_NOT_NULL(summary);
+    ASSERT_TRUE(xa_effect_summary_is_complete(summary));
+    ASSERT_TRUE(xa_effect_summary_is_nothrow(summary));
+    XaCallErrorEffectFact unrelated_call_fact = {0};
+    ASSERT_FALSE(
+        xa_analyzer_get_call_error_effect(analyzer, function_expr, &unrelated_call_fact));
+
+    XaTypedProgramPublishResult result = xa_typed_program_publish(analyzer, program, NULL, 0);
+    ASSERT_NOT_NULL(result.program);
+
+    XaFunctionExprEffectFact replacement = {
+        .effect_id = analyzed.effect_id,
+        .throw_effect = XR_FN_EFFECT_MAY_THROW,
+        .completeness = XA_EFFECT_INCOMPLETE,
+        .unknown_reasons = XA_UNKNOWN_DYNAMIC_CALL_TARGET,
+    };
+    ASSERT_TRUE(xa_analyzer_set_function_expr_effect(analyzer, function_expr, &replacement));
+
+    XaFunctionExprEffectFact published = {0};
+    ASSERT_TRUE(
+        xa_typed_program_function_expr_effect(result.program, function_expr, &published));
+    ASSERT_EQ_UINT(published.effect_id, analyzed.effect_id);
+    ASSERT_EQ_INT(published.throw_effect, XR_FN_EFFECT_NO_THROW);
+    ASSERT_EQ_INT(published.completeness, XA_EFFECT_COMPLETE);
+    ASSERT_EQ_UINT(published.unknown_reasons, XA_UNKNOWN_NONE);
+
+    xa_typed_program_free(result.program);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 TEST(top_level_call_publishes_flow_sensitive_error_effect) {
     XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     AstNode *program = parse_and_analyze(analyzer, "top-level-call-error-effect.xr",
@@ -222,6 +278,7 @@ RUN_TEST(publishes_verified_current_snapshot);
 RUN_TEST(reanalysis_invalidates_old_snapshot);
 RUN_TEST(conversion_snapshot_is_owned_and_immutable);
 RUN_TEST(call_error_effect_snapshot_preserves_flow_sensitive_fact);
+RUN_TEST(function_expr_effect_snapshot_is_distinct_and_immutable);
 RUN_TEST(top_level_call_publishes_flow_sensitive_error_effect);
 RUN_TEST(error_diagnostic_blocks_publication);
 teardown();

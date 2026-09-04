@@ -7792,6 +7792,14 @@ void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLi
      * released: `fn w(t: string) -> string { return f(t) }` forwards a borrow,
      * yet ARC saw no proof of that and dupped at the return. */
     if (!xa_type_is_reference_capable(return_type)) {
+        /* Trivial values still cross a function ABI as produced results.  They
+         * have no
+         * reference root to borrow, so OWNED is the sole exact
+         * declaration contract.
+         * Publish it here rather than making Xglobal
+         * synthesize a fact which Xi never
+         * sees. */
+        links->return_ownership = xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
         links->return_ownership_scanned = true;
         return;
     }

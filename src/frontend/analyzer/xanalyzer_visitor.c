@@ -3002,6 +3002,7 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
     cls->symbol_id = sym->id;
 
     XrClassInfo *info = xa_class_info_new(cls->name);
+    info->declaration_symbol = sym;
     info->explicit_final = cls->explicit_final;
     info->is_overlay_union = is_union_decl;
     info->location =
@@ -3039,6 +3040,12 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     links->declared_type = links->type;
     links->class_info = xa_class_info_new(edecl->name);
     links->owns_class_info = true;
+    if (links->class_info) {
+        links->class_info->declaration_symbol = sym;
+        links->class_info->nominal_kind = XA_NOMINAL_ENUM;
+    }
+    if (links->type)
+        links->type->enum_type.nominal_ref = links->class_info;
     if (edecl->type_param_count > 0 && edecl->type_params) {
         const char **type_param_names =
             xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
@@ -3169,7 +3176,7 @@ bool xa_specifier_is_named_module(const char *spec) {
 
 XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char *module_name) {
     XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
-    if (!graph)
+    if (!graph || !graph->resolver)
         return NULL;
 
     /* Resolve the import specifier to a canonical ID */
@@ -3353,9 +3360,13 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     }
 }
 
-static XrType *enum_method_this_type(XaInferContext *ctx, const char *enum_name) {
-    return enum_name ? xr_type_new_enum(ctx->analyzer->isolate, enum_name)
-                     : xr_type_new_unknown(NULL);
+static XrType *enum_method_this_type(XaInferContext *ctx, const char *enum_name,
+                                     XrClassInfo *enum_info) {
+    XrType *type =
+        enum_name ? xr_type_new_enum(ctx->analyzer->isolate, enum_name) : xr_type_new_unknown(NULL);
+    if (type && type->kind == XR_KIND_ENUM)
+        type->enum_type.nominal_ref = enum_info;
+    return type;
 }
 
 static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym, XrClassInfo *info,
@@ -3424,6 +3435,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     xa_publish_deprecated_attrs(method_links, md->attributes, md->attr_count);
     method_links->type = method_type;
     method_links->file_path = ctx->file_path;
+    method_links->function_decl_node = method;
     xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
                                      ret_type);
     xa_bind_declared_view_origins(ctx, method, method_links, param_names, !md->is_static);
@@ -3442,6 +3454,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
 
     if (md->body) {
         xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
+        ctx->analyzer->current_scope->function_symbol = method_sym;
 
         if (!md->is_static) {
             XaSymbol *this_sym = xa_symbol_new("this", XA_SYM_PARAMETER);
@@ -3450,7 +3463,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
             xa_visit_add_symbol_checked(ctx, this_sym, 0);
             XaSymbolLinks *this_links = xa_analyzer_get_links(ctx->analyzer, this_sym);
             if (this_links) {
-                this_links->type = enum_method_this_type(ctx, enum_sym->name);
+                this_links->type = enum_method_this_type(ctx, enum_sym->name, info);
                 this_links->is_definitely_assigned = true;
             }
         }
@@ -3538,6 +3551,16 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 links->class_info = enum_info;
                 if (created_enum_info)
                     links->owns_class_info = true;
+                if (enum_info) {
+                    enum_info->declaration_symbol = sym;
+                    enum_info->nominal_kind = XA_NOMINAL_ENUM;
+                    enum_info->location = (XrLocation) {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                }
+                if (links->type && links->type->kind == XR_KIND_ENUM)
+                    links->type->enum_type.nominal_ref = enum_info;
+                if (links->declared_type && links->declared_type->kind == XR_KIND_ENUM)
+                    links->declared_type->enum_type.nominal_ref = enum_info;
                 if (edecl->type_param_count > 0 && edecl->type_params) {
                     const char **type_param_names =
                         xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
@@ -3691,21 +3714,18 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_exit_scope(ctx->analyzer);
                 }
 
-                /* No semantic pass consumes an enum's implements clause: the
-                 * contract is never checked and an enum value is never
-                 * assignable to the interface. Accepting the clause would only
-                 * make the declaration look verified, so it is rejected until
-                 * enum interface dispatch actually exists. */
-                if (edecl->interface_count > 0) {
-                    XrLocation loc = {
-                        .file = ctx->file_path, .line = node->line, .column = node->column};
-                    char msg[224];
-                    snprintf(msg, sizeof(msg),
-                             "enum '%s' cannot declare implements: enums do not participate in "
-                             "interface dispatch; drop the clause or model the type as a class",
-                             edecl->name ? edecl->name : "?");
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                if (enum_info && edecl->interface_count > 0 && edecl->interfaces) {
+                    xr_free(enum_info->interface_types);
+                    enum_info->interface_types =
+                        xr_calloc((size_t) edecl->interface_count, sizeof(XrType *));
+                    if (enum_info->interface_types) {
+                        enum_info->interface_count = edecl->interface_count;
+                        for (int i = 0; i < edecl->interface_count; i++) {
+                            enum_info->interface_types[i] =
+                                xr_tref_resolve_in_analyzer(ctx->analyzer, edecl->interfaces[i]);
+                        }
+                        xa_check_interface_conformance(ctx, node, enum_info);
+                    }
                 }
             }
             break;
@@ -5440,11 +5460,37 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 result = xr_type_make_const(ctx->analyzer->isolate, result);
             break;
         }
-        case AST_ENUM_ACCESS:
-            result = node->as.enum_access.enum_name
-                         ? xr_type_new_enum(ctx->analyzer->isolate, node->as.enum_access.enum_name)
-                         : xr_type_new_unknown(NULL);
+        case AST_ENUM_ACCESS: {
+            const char *enum_name = node->as.enum_access.enum_name;
+            const char *member_name = node->as.enum_access.member_name;
+            XaSymbol *enum_symbol = enum_name ? xa_lookup_visible_symbol(ctx, enum_name) : NULL;
+            XaSymbolLinks *enum_links = enum_symbol && enum_symbol->kind == XA_SYM_ENUM
+                                            ? xa_analyzer_get_links(ctx->analyzer, enum_symbol)
+                                            : NULL;
+            XrType *declaration_type = enum_links ? enum_links->type : NULL;
+            result = declaration_type && declaration_type->kind == XR_KIND_ENUM
+                         ? xr_type_copy(ctx->analyzer->isolate, declaration_type)
+                         : (enum_name ? xr_type_new_enum(ctx->analyzer->isolate, enum_name)
+                                      : xr_type_new_unknown(NULL));
+            int ordinal =
+                xa_enum_info_find_variant(enum_links ? enum_links->enum_info : NULL, member_name);
+            if (result && result->kind == XR_KIND_ENUM && enum_symbol && ordinal >= 0) {
+                XaSelectionTable *selection_table =
+                    (XaSelectionTable *) ctx->analyzer->selection_table;
+                XaSelection selection = {
+                    .kind = XA_SEL_ENUM_MEMBER,
+                    .receiver_type = result,
+                    .target_symbol = enum_symbol,
+                    .field_index = ordinal,
+                    .result_type = result,
+                    .is_indirect = false,
+                    .is_optional = false,
+                };
+                if (selection_table)
+                    xa_selection_table_set(selection_table, node, &selection);
+            }
             break;
+        }
         case AST_SCOPE_BLOCK:
             if (node->as.scope_block.body)
                 xa_visit_infer_stmt(ctx, node->as.scope_block.body);
@@ -7442,6 +7488,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
                 XaSymbol *method_sym =
                     xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
+                ctx->analyzer->current_scope->function_symbol = method_sym;
                 XaSymbolLinks *method_links =
                     method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
                 xa_apply_param_storage_requirements_to_scope(ctx, method_links);

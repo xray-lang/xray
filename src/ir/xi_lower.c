@@ -21,6 +21,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xa_node_table.h"
 #include "../frontend/analyzer/xa_typed_program.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
@@ -72,6 +73,41 @@ static XaSymbol *xi_lower_function_symbol(XaAnalyzer *analyzer, AstNode *node) {
     return scope ? scope->function_symbol : NULL;
 }
 
+static void xi_lower_publish_effect_summary_sidecars(XiFunc *func, XaAnalyzer *analyzer,
+                                                     XaEffectId effect_id,
+                                                     const XaEffectSummary *effect) {
+    func->analyzer_effect_id = effect_id;
+    func->semantic_effects = effect->semantic_effects;
+    func->unknown_semantic_effects = effect->unknown_semantic_effects;
+    func->effect_unknown_reasons = effect->unknown_reasons;
+    func->analyzer_effect_fingerprint = xa_effect_summary_fingerprint(analyzer->effect_db, effect);
+    func->analyzer_effect_complete = xa_effect_summary_is_complete(effect);
+    func->error_effect_nothrow = xa_effect_summary_is_nothrow(effect);
+    func->contains_unsafe_op = effect->contains_unsafe_op;
+    func->requires_unsafe_at_call = effect->requires_unsafe_at_call;
+}
+
+XR_FUNCDEF bool xi_lower_publish_function_expr_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer,
+                                                               const XaTypedProgram *program,
+                                                               const AstNode *node) {
+    XaFunctionExprEffectFact fact = {0};
+    if (!func || !analyzer || !program || !node || node->type != AST_FUNCTION_EXPR ||
+        !xa_typed_program_function_expr_effect(program, node, &fact))
+        return false;
+    const XaEffectSummary *effect = xa_effect_db_get(analyzer->effect_db, fact.effect_id);
+    if (!effect)
+        return false;
+    XrFnThrowEffect expected_throw =
+        xa_effect_summary_is_nothrow(effect) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+    XaEffectCompleteness expected_completeness =
+        xa_effect_summary_is_complete(effect) ? XA_EFFECT_COMPLETE : XA_EFFECT_INCOMPLETE;
+    if (fact.throw_effect != expected_throw || fact.completeness != expected_completeness ||
+        fact.unknown_reasons != effect->unknown_reasons)
+        return false;
+    xi_lower_publish_effect_summary_sidecars(func, analyzer, fact.effect_id, effect);
+    return true;
+}
+
 XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer,
                                               XaSymbol *symbol) {
     if (!func || !analyzer || !symbol)
@@ -81,18 +117,8 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
         links ? xa_effect_db_get(analyzer->effect_db, links->effect_id) : NULL;
     const XaMemoryEffectSummary *memory =
         links ? xa_memory_effect_db_get(analyzer->memory_effect_db, links->memory_effect_id) : NULL;
-    if (effect) {
-        func->analyzer_effect_id = links->effect_id;
-        func->semantic_effects = effect->semantic_effects;
-        func->unknown_semantic_effects = effect->unknown_semantic_effects;
-        func->effect_unknown_reasons = effect->unknown_reasons;
-        func->analyzer_effect_fingerprint =
-            xa_effect_summary_fingerprint(analyzer->effect_db, effect);
-        func->analyzer_effect_complete = xa_effect_summary_is_complete(effect);
-        func->error_effect_nothrow = xa_effect_summary_is_nothrow(effect);
-        func->contains_unsafe_op = effect->contains_unsafe_op;
-        func->requires_unsafe_at_call = effect->requires_unsafe_at_call;
-    }
+    if (effect)
+        xi_lower_publish_effect_summary_sidecars(func, analyzer, links->effect_id, effect);
     if (memory) {
         func->analyzer_memory_effect_id = links->memory_effect_id;
         func->analyzer_memory_effect_fingerprint = xa_memory_effect_summary_fingerprint(memory);
@@ -341,6 +367,67 @@ XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name) 
 
 static inline XiVarId xi_lower_var_id_or_none(int var_id) {
     return (var_id >= 0 && (uint32_t) var_id <= XI_MAX_VAR_ID) ? (XiVarId) var_id : XI_NO_VAR_ID;
+}
+
+XR_FUNC XiInterfaceUseKind xi_lower_interface_use_from_global(uint8_t use_kind) {
+    switch ((XgInterfaceUseKind) use_kind) {
+        case XG_INTERFACE_USE_READ:
+            return XI_INTERFACE_USE_READ;
+        case XG_INTERFACE_USE_REF:
+            return XI_INTERFACE_USE_REF;
+        case XG_INTERFACE_USE_MOVE:
+            return XI_INTERFACE_USE_MOVE;
+        case XG_INTERFACE_USE_OWNED_STORAGE:
+            return XI_INTERFACE_USE_OWNED_STORAGE;
+        case XG_INTERFACE_USE_INVALID:
+            return XI_INTERFACE_USE_NONE;
+    }
+    return XI_INTERFACE_USE_NONE;
+}
+
+XR_FUNC bool xi_lower_bind_interface_parameter(XiLower *l, XiValue *parameter,
+                                               struct XrType *parameter_type,
+                                               XrParamMode parameter_mode,
+                                               uint32_t parameter_ordinal) {
+    if (!parameter_type || parameter_type->kind != XR_KIND_INTERFACE)
+        return true;
+    XrClassInfo *interface_info = parameter_type->instance.class_ref;
+    if (!l || !parameter || parameter->op != XI_PARAM || !l->global_evidence || !l->func ||
+        l->func->xg_body_func_id == XG_NO_ID || !interface_info ||
+        interface_info->xg_interface_id == XG_NO_ID)
+        return false;
+    uint32_t source_node_id =
+        xg_interface_parameter_site_id((XgFuncId) l->func->xg_body_func_id, parameter_ordinal);
+    const XgInterfaceObjectUseSummary *object_use = xg_global_evidence_find_interface_object_use(
+        l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
+        (XgInterfaceId) interface_info->xg_interface_id, XG_INTERFACE_OBJECT_USE_PARAM);
+    XiInterfaceUseKind expected_use = XI_INTERFACE_USE_NONE;
+    switch (parameter_mode) {
+        case XR_PARAM_READ:
+            expected_use = XI_INTERFACE_USE_READ;
+            break;
+        case XR_PARAM_REF:
+            expected_use = XI_INTERFACE_USE_REF;
+            break;
+        case XR_PARAM_MOVE:
+            expected_use = XI_INTERFACE_USE_MOVE;
+            break;
+        default:
+            break;
+    }
+    XiInterfaceUseKind evidence_use = object_use
+                                          ? xi_lower_interface_use_from_global(object_use->use_kind)
+                                          : XI_INTERFACE_USE_NONE;
+    if (!object_use || object_use->use_id == XG_NO_ID || object_use->owner_func_id == XG_NO_ID ||
+        object_use->owner_func_id != l->func->xg_body_func_id ||
+        object_use->source_node_id != source_node_id ||
+        object_use->interface_id != interface_info->xg_interface_id ||
+        evidence_use == XI_INTERFACE_USE_NONE || evidence_use != expected_use)
+        return false;
+    parameter->xg_interface_object_use_id = object_use->use_id;
+    parameter->xg_interface_id = object_use->interface_id;
+    parameter->xg_interface_use_kind = (uint8_t) evidence_use;
+    return true;
 }
 
 /* ========== Top-Level Binding Helpers ========== */
@@ -1141,16 +1228,64 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
             return;
         match = row;
     }
+    if (!match && (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
+        call->args[0] && call->args[0]->type && call->args[0]->type->kind == XR_KIND_INTERFACE &&
+        call->args[0]->type->instance.class_ref) {
+        l->had_error = true;
+        return;
+    }
     if (match) {
         call->xg_callsite_id = match->callsite_id;
+        if (match->kind == XG_CALL_CLOSURE) {
+            uint32_t target_count = 0;
+            if (xg_global_evidence_callable_targets(ev, match, NULL, &target_count)) {
+                call->xg_callable_target_start = match->callable_target_start;
+                call->xg_callable_target_count = target_count;
+                call->xg_callable_signature_key = match->callable_signature_key;
+                call->xg_callable_effect_union = match->callable_effect_union;
+                call->xg_callable_capability_union = match->callable_capability_union;
+            }
+        }
         if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT ||
             match->kind == XG_CALL_NATIVE || match->kind == XG_CALL_EXTERN)
             call->xg_method_id = match->method_id;
         if (match->kind == XG_CALL_INTERFACE) {
             uint32_t dispatch_slot = UINT32_MAX;
-            if (xg_global_evidence_interface_dispatch_slot(ev, match->receiver_static_interface_id,
-                                                           match->method_id, &dispatch_slot))
-                call->xg_interface_dispatch_slot = dispatch_slot;
+            const XgInterfaceMethodSummary *interface_method = NULL;
+            for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+                if (ev->interface_methods[i].interface_method_id == match->method_id) {
+                    interface_method = &ev->interface_methods[i];
+                    break;
+                }
+            }
+            if (match->receiver_static_interface_id == XG_NO_ID || match->method_id == XG_NO_ID ||
+                (match->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u || !interface_method ||
+                !interface_method->contract_complete ||
+                !xg_global_evidence_interface_dispatch_slot(ev, match->receiver_static_interface_id,
+                                                            match->method_id, &dispatch_slot)) {
+                l->had_error = true;
+                return;
+            }
+            call->xg_interface_dispatch_slot = dispatch_slot;
+            call->xg_interface_id = match->receiver_static_interface_id;
+            call->xg_existential_kind =
+                (match->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) != 0u
+                    ? XI_EXISTENTIAL_WITNESS_INVOKE
+                    : XI_EXISTENTIAL_WITNESS_DIRECT;
+            switch ((XrParamMode) interface_method->receiver_mode) {
+                case XR_PARAM_READ:
+                    call->xg_interface_use_kind = XI_INTERFACE_USE_READ;
+                    break;
+                case XR_PARAM_REF:
+                    call->xg_interface_use_kind = XI_INTERFACE_USE_REF;
+                    break;
+                case XR_PARAM_MOVE:
+                    call->xg_interface_use_kind = XI_INTERFACE_USE_MOVE;
+                    break;
+                default:
+                    l->had_error = true;
+                    return;
+            }
             xi_lower_bind_interface_return_ownership(ev, call, match);
         }
     }
@@ -1616,13 +1751,25 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         xi_lower_inherit_evidence(&l, parent_ctx);
     }
 
-    /* Determine return type.  fdecl->return_type is an XrTypeRef (AST
-     * syntax); resolve it to a runtime XrType* via the analyzer's
-     * resolver — assigning the XrTypeRef directly mixes up two unrelated
-     * struct layouts and produces garbage values for every downstream
-     * type lookup (AOT codegen RET tag, TFA, etc.). */
-    struct XrType *ret_type =
-        fdecl->return_type ? xr_tref_resolve_in_analyzer(analyzer, fdecl->return_type) : NULL;
+    /* The analyzed function signature is the canonical source contract.  In
+     * particular,
+     * error-set inference closes function-valued result effects
+     * only after the return-target
+     * fixed point; resolving the syntax again here
+     * would recreate its earlier
+     * effect-polymorphic type and discard that
+     * proof.  Syntax resolution is recovery for
+     * declarations that never
+     * acquired analyzer metadata, not an alternate authority. */
+    XaSymbol *function_symbol = xi_lower_function_symbol(analyzer, func_node);
+    XaSymbolLinks *function_links =
+        function_symbol ? xa_analyzer_get_links(analyzer, function_symbol) : NULL;
+    struct XrType *ret_type = function_links ? function_links->return_type : NULL;
+    if (!ret_type && function_links && function_links->type &&
+        XR_TYPE_IS_FUNCTION(function_links->type))
+        ret_type = function_links->type->function.return_type;
+    if (!ret_type && fdecl->return_type)
+        ret_type = xr_tref_resolve_in_analyzer(analyzer, fdecl->return_type);
     if (!ret_type) {
         /* Un-annotated closure/lambda: named functions must annotate their
          * return type, but anonymous functions may leave it to inference. The
@@ -1672,18 +1819,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
      * must be selected through a concrete generic-body plan. */
     l.func->is_generic_template =
         parent_ctx && parent_ctx->func && parent_ctx->func->is_generic_template;
-    xi_lower_publish_effect_sidecars(l.func, analyzer,
-                                     xi_lower_function_symbol(analyzer, func_node));
-    /* Anonymous functions have no declaration symbol to own an effect-db row.
-     * Their analyzed function-value type is nevertheless the published throw
-     * contract.  Preserve its constructive NO_THROW proof on the Xi body so
-     * canonical call signatures do not widen an infallible closure merely
-     * because declaration-side metadata is inapplicable. */
-    if (func_node->type == AST_FUNCTION_EXPR && !l.func->error_effect_nothrow) {
-        XrType *function_value_type = xa_analyzer_get_node_type(analyzer, func_node);
-        if (function_value_type && function_value_type->kind == XR_KIND_FUNCTION &&
-            function_value_type->function.throw_effect == XR_FN_EFFECT_NO_THROW)
-            l.func->error_effect_nothrow = true;
+    xi_lower_publish_effect_sidecars(l.func, analyzer, function_symbol);
+    if (func_node->type == AST_FUNCTION_EXPR && !xi_lower_publish_function_expr_effect_sidecars(
+                                                    l.func, analyzer, typed_program, func_node)) {
+        xi_func_free(l.func);
+        xi_lower_cleanup(&l);
+        return NULL;
     }
     if (!l.func->return_storage_known && func_node->type == AST_FUNCTION_EXPR) {
         XaScope *semantic_scope = xa_scope_find_by_node(analyzer->global_scope, func_node);
@@ -1771,6 +1912,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
         XrParamMode pmode = xi_lower_param_mode(&l, p);
         XiValue *param_val = xi_param(l.func, entry, (uint16_t) i, ptype);
+        if (!param_val ||
+            !xi_lower_bind_interface_parameter(&l, param_val, ptype, pmode, (uint32_t) i)) {
+            xi_func_free(l.func);
+            xi_lower_cleanup(&l);
+            return NULL;
+        }
         l.func->params[i] = param_val;
         if (i < l.func->nparams && p && pmode != XR_PARAM_READ &&
             !xi_func_set_param_passing_mode(l.func, (uint16_t) i, pmode)) {

@@ -181,6 +181,10 @@ struct XaAnalyzer {
     // Arena-owned compile-time aggregate values cached in symbols/nodes.
     XrArena *consteval_arena;
 
+    // Persistent arrays used by the error-set pass while computing immutable
+    // function-value target sets. Reset at the start of each pass.
+    XrArena *callable_target_arena;
+
     // AST -> selection facts table. Populated during Pass 2 for
     // member access, method call, index, and module export nodes.
     // Consumed by lowerer/backend instead of re-discovering member info.
@@ -318,11 +322,25 @@ XR_FUNC void xa_analyzer_set_node_conversion(XaAnalyzer *analyzer, const struct 
 XR_FUNC bool xa_analyzer_get_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
                                              XrConversionWitness *out_witness);
 struct XaCallErrorEffectFact;
+struct XaFunctionExprEffectFact;
+struct XaCallableTargetSetFact;
 XR_FUNC bool xa_analyzer_set_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
                                                const struct XaCallErrorEffectFact *fact);
 XR_FUNC bool xa_analyzer_get_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
                                                struct XaCallErrorEffectFact *out_fact);
-XR_FUNC void xa_analyzer_clear_call_error_effects(XaAnalyzer *analyzer);
+XR_FUNC void xa_analyzer_clear_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node);
+XR_FUNC bool xa_analyzer_set_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                                  const struct XaFunctionExprEffectFact *fact);
+XR_FUNC bool xa_analyzer_get_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                                  struct XaFunctionExprEffectFact *out_fact);
+XR_FUNC void xa_analyzer_clear_function_expr_effect(XaAnalyzer *analyzer,
+                                                    const struct AstNode *node);
+XR_FUNC bool xa_analyzer_set_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,
+                                                 const struct XaCallableTargetSetFact *fact);
+XR_FUNC bool xa_analyzer_get_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,
+                                                 struct XaCallableTargetSetFact *out_fact);
+XR_FUNC void xa_analyzer_clear_callable_target_set(XaAnalyzer *analyzer,
+                                                   const struct AstNode *node);
 XR_FUNC void xa_analyzer_set_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,
                                            const XrCtValue *value);
 XR_FUNC bool xa_analyzer_get_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,

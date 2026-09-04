@@ -1432,6 +1432,7 @@ static void test_arc_err_check_carries_cold_edge_cleanup(void) {
     fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
     check->flags = XI_FLAG_SIDE_EFFECT;
+    check->error_producer = fallible;
     XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
     use->args[0] = builder;
     xi_block_set_return(entry, use);
@@ -1500,6 +1501,7 @@ static void test_arc_err_check_cleanup_requires_dominating_owner(void) {
     fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     XiValue *check = xi_value_new(f, right, XI_ERR_CHECK, &t_unit, 0);
     check->flags = XI_FLAG_SIDE_EFFECT;
+    check->error_producer = fallible;
     xi_block_set_jump(right, join);
 
     XiPhi *merged = xi_phi_new(f, join, &t_stringbuilder, join->npreds);
@@ -1538,6 +1540,7 @@ static void test_arc_err_check_skips_boxed_ref_load_borrow(void) {
     fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
     check->flags = XI_FLAG_SIDE_EFFECT;
+    check->error_producer = fallible;
     XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
     use->args[0] = boxed;
     xi_block_set_return(entry, use);
@@ -1563,6 +1566,7 @@ static void test_arc_err_check_keeps_boxed_fresh_owner(void) {
     fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
     check->flags = XI_FLAG_SIDE_EFFECT;
+    check->error_producer = fallible;
     XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
     use->args[0] = boxed;
     xi_block_set_return(entry, use);

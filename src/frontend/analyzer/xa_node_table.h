@@ -66,6 +66,56 @@ typedef struct XaNodeCallErrorEffectEntry {
     XaCallErrorEffectFact fact;
 } XaNodeCallErrorEffectEntry;
 
+/* Canonical body-effect conclusion for one anonymous function expression.
+ * This is deliberately
+ * distinct from XaCallErrorEffectFact: it describes the
+ * callable body itself, not the
+ * flow-sensitive result of invoking a value at
+ * one callsite.  The effect id names the complete
+ * analyzer effect product. */
+typedef struct XaFunctionExprEffectFact {
+    XaEffectId effect_id;
+    XrFnThrowEffect throw_effect;
+    XaEffectCompleteness completeness;
+    XaUnknownReasonSet unknown_reasons;
+} XaFunctionExprEffectFact;
+
+typedef struct XaNodeFunctionExprEffectEntry {
+    uint32_t node_id;
+    XaFunctionExprEffectFact fact;
+} XaNodeFunctionExprEffectEntry;
+
+/* Pointer-free identity for one exact function-value target.  Both ids are
+ * semantic identities:
+ * function_node_id names the declaration/expression and
+ * symbol_id disambiguates declaration
+ * bindings when one exists. */
+typedef struct XaCallableTarget {
+    uint32_t function_node_id;
+    uint32_t symbol_id;
+    uint64_t structural_signature_key;
+} XaCallableTarget;
+
+/* Flow-sensitive closed target set for one call expression.  Complete facts
+ * are canonical:
+ * targets are sorted by identity, duplicate-free, non-empty,
+ * and every target has the exact
+ * structural signature key.  Effect and
+ * capability bounds are deliberately not inferred from
+ * source types here;
+ * Xglobal derives their union from target body summaries. */
+typedef struct XaCallableTargetSetFact {
+    uint64_t structural_signature_key;
+    uint32_t target_count;
+    bool complete;
+    const XaCallableTarget *targets;
+} XaCallableTargetSetFact;
+
+typedef struct XaNodeCallableTargetSetEntry {
+    uint32_t node_id;
+    XaCallableTargetSetFact fact;
+} XaNodeCallableTargetSetEntry;
+
 XR_FUNC XaNodeTable *xa_node_table_new(void);
 XR_FUNC void xa_node_table_free(XaNodeTable *t);
 
@@ -116,7 +166,27 @@ XR_FUNC bool xa_node_table_get_call_error_effect(const XaNodeTable *t, const str
 XR_FUNC bool xa_node_table_snapshot_call_error_effects(const XaNodeTable *t,
                                                        XaNodeCallErrorEffectEntry **out_entries,
                                                        uint32_t *out_count);
-XR_FUNC void xa_node_table_clear_call_error_effects(XaNodeTable *t);
+XR_FUNC void xa_node_table_clear_call_error_effect(XaNodeTable *t, const struct AstNode *node);
+
+XR_FUNC bool xa_node_table_set_function_expr_effect(XaNodeTable *t, const struct AstNode *node,
+                                                    const XaFunctionExprEffectFact *fact);
+XR_FUNC bool xa_node_table_get_function_expr_effect(const XaNodeTable *t,
+                                                    const struct AstNode *node,
+                                                    XaFunctionExprEffectFact *out_fact);
+XR_FUNC bool xa_node_table_snapshot_function_expr_effects(
+    const XaNodeTable *t, XaNodeFunctionExprEffectEntry **out_entries, uint32_t *out_count);
+XR_FUNC void xa_node_table_clear_function_expr_effect(XaNodeTable *t, const struct AstNode *node);
+
+XR_FUNC bool xa_node_table_set_callable_target_set(XaNodeTable *t, const struct AstNode *node,
+                                                   const XaCallableTargetSetFact *fact);
+XR_FUNC bool xa_node_table_get_callable_target_set(const XaNodeTable *t, const struct AstNode *node,
+                                                   XaCallableTargetSetFact *out_fact);
+XR_FUNC bool xa_node_table_snapshot_callable_target_sets(const XaNodeTable *t,
+                                                         XaNodeCallableTargetSetEntry **out_entries,
+                                                         uint32_t *out_count);
+XR_FUNC void xa_node_callable_target_set_entries_free(XaNodeCallableTargetSetEntry *entries,
+                                                      uint32_t count);
+XR_FUNC void xa_node_table_clear_callable_target_set(XaNodeTable *t, const struct AstNode *node);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.

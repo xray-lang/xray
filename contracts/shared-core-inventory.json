@@ -1705,6 +1705,7 @@
       "id": "type-names",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/analysis/xglobal_producer.c",
         "src/aot/xrt_exception.h",
         "src/plan/semantic/xr_semantic_union_as_shape.h",
         "src/runtime/value/xtype_names.h",

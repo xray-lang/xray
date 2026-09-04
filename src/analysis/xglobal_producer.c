@@ -17,6 +17,7 @@
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xa_node_table.h"
+#include "../frontend/analyzer/xanalyzer_builtin_interfaces.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -27,6 +28,7 @@
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
 #include "../shared/xobject_shape.h"
+#include "../shared/xr_type_names_core.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -62,7 +64,10 @@ typedef struct XgInterfaceNameRow {
     XgModuleId module_id;
     const char *name;
     XgInterfaceId interface_id;
+    uint32_t source_node_id;
+    uint64_t nominal_key;
     const InterfaceDeclNode *decl;
+    XrClassInfo *analyzer_info;
 } XgInterfaceNameRow;
 
 typedef struct XgEnumNameRow {
@@ -70,6 +75,9 @@ typedef struct XgEnumNameRow {
     const char *name;
     uint32_t type_key;
     const EnumDeclNode *decl;
+    XgDeclId decl_id;
+    XrClassInfo *analyzer_info;
+    uint32_t source_span_id;
 } XgEnumNameRow;
 
 typedef struct XgStdlibImportRow {
@@ -105,6 +113,7 @@ typedef struct XgProducer {
     uint32_t body_cap;
     XgFuncId next_func_id;
     XaAnalyzer *analyzer;
+    bool failed;
 } XgProducer;
 
 typedef struct XgPendingBody {
@@ -117,6 +126,8 @@ typedef struct XgPendingBody {
     uint32_t name_id;
     uint32_t signature_key;
     uint32_t source_node_id;
+    uint32_t analyzer_node_id;
+    uint32_t analyzer_symbol_id;
     uint32_t source_span_id;
     uint8_t kind;
     const AstNode *body;
@@ -139,6 +150,25 @@ static const XgPendingBody *producer_find_child_function_body(const XgProducer *
         const XgPendingBody *pending = &producer->bodies[i];
         if (pending->lexical_parent_func_id != parent_func_id || pending->name_id != name_id ||
             pending->kind != XG_BODY_FUNCTION)
+            continue;
+        if (match)
+            return NULL;
+        match = pending;
+    }
+    return match;
+}
+
+static const XgPendingBody *producer_find_callable_target_body(const XgProducer *producer,
+                                                               const XaCallableTarget *target) {
+    const XgPendingBody *match = NULL;
+    if (!producer || !target || target->function_node_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < producer->nbodies; i++) {
+        const XgPendingBody *pending = &producer->bodies[i];
+        if (pending->analyzer_node_id != target->function_node_id)
+            continue;
+        if (target->symbol_id != 0 && pending->analyzer_symbol_id != 0 &&
+            pending->analyzer_symbol_id != target->symbol_id)
             continue;
         if (match)
             return NULL;
@@ -215,6 +245,55 @@ typedef struct XgBodyCollect {
     uint32_t static_data_use_bits;
     const XrTypeRef *return_type;
 } XgBodyCollect;
+
+static bool producer_prepare_callable_target_set(const XgBodyCollect *bc, const AstNode *call,
+                                                 XgFuncId **out_target_func_ids,
+                                                 uint32_t *target_count, uint64_t *signature_key) {
+    XaCallableTargetSetFact fact;
+    if (target_count)
+        *target_count = 0;
+    if (signature_key)
+        *signature_key = 0;
+    if (out_target_func_ids)
+        *out_target_func_ids = NULL;
+    if (!bc || !bc->producer || !bc->producer->analyzer || !call || !out_target_func_ids ||
+        !target_count || !signature_key ||
+        !xa_analyzer_get_callable_target_set(bc->producer->analyzer, call, &fact) ||
+        !fact.complete || fact.target_count == 0 || fact.structural_signature_key == 0 ||
+        !fact.targets)
+        return false;
+    XgFuncId *target_func_ids =
+        (XgFuncId *) xr_malloc(sizeof(*target_func_ids) * (size_t) fact.target_count);
+    if (!target_func_ids) {
+        bc->producer->failed = true;
+        return false;
+    }
+    for (uint32_t i = 0; i < fact.target_count; i++) {
+        const XgPendingBody *pending =
+            producer_find_callable_target_body(bc->producer, &fact.targets[i]);
+        if (!pending || fact.targets[i].structural_signature_key != fact.structural_signature_key) {
+            xr_free(target_func_ids);
+            return false;
+        }
+        uint32_t slot = *target_count;
+        while (slot > 0 && target_func_ids[slot - 1] > pending->func_id) {
+            target_func_ids[slot] = target_func_ids[slot - 1];
+            slot--;
+        }
+        if ((slot > 0 && target_func_ids[slot - 1] == pending->func_id) ||
+            (slot < *target_count && target_func_ids[slot] == pending->func_id))
+            continue;
+        target_func_ids[slot] = pending->func_id;
+        (*target_count)++;
+    }
+    if (*target_count == 0) {
+        xr_free(target_func_ids);
+        return false;
+    }
+    *out_target_func_ids = target_func_ids;
+    *signature_key = fact.structural_signature_key;
+    return true;
+}
 
 static uint64_t fold_bytes(uint64_t h, const void *data, size_t len) {
     uint64_t part = xr_hash_bytes64(data, len);
@@ -1357,11 +1436,14 @@ static bool producer_reserve_interfaces(XgProducer *p, uint32_t needed) {
     return true;
 }
 
-static XgInterfaceNameRow *producer_lookup_interface_row(const XgProducer *p, const char *name) {
-    if (!p || !name)
+static XgInterfaceNameRow *producer_lookup_interface_row_exact_name(const XgProducer *p,
+                                                                    XgModuleId module_id,
+                                                                    const char *name) {
+    if (!p || module_id == XG_NO_ID || !name)
         return NULL;
     for (uint32_t i = 0; i < p->ninterfaces; i++) {
-        if (p->interfaces[i].name && strcmp(p->interfaces[i].name, name) == 0)
+        if (p->interfaces[i].module_id == module_id && p->interfaces[i].name &&
+            strcmp(p->interfaces[i].name, name) == 0)
             return &p->interfaces[i];
     }
     return NULL;
@@ -1378,15 +1460,78 @@ static XgInterfaceNameRow *producer_lookup_interface_row_by_id(const XgProducer 
     return NULL;
 }
 
-static bool producer_register_interface(XgProducer *p, XgModuleId module_id, const char *name,
-                                        const InterfaceDeclNode *decl) {
+static uint64_t producer_nominal_key_fields(const XgProducer *producer, XgModuleId module_id,
+                                            uint32_t source_node_id, uint8_t kind,
+                                            uint32_t type_key) {
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    const XgModuleSummary *module = NULL;
+    if (!producer || !producer->evidence || module_id == XG_NO_ID || source_node_id == 0 ||
+        kind == 0)
+        return 0;
+    for (uint32_t i = 0; i < producer->evidence->nmodules; i++) {
+        if (producer->evidence->modules[i].module_id == module_id) {
+            module = &producer->evidence->modules[i];
+            break;
+        }
+    }
+    if (!module || module->canonical_hash == 0)
+        return 0;
+    hash = fold_u64(hash, module->canonical_hash);
+    hash = fold_u64(hash, source_node_id);
+    hash = fold_u64(hash, kind);
+    hash = fold_u64(hash, type_key);
+    return hash;
+}
+
+static XgInterfaceId producer_interface_id(uint64_t nominal_key) {
+    uint64_t hash = XR_FNV64_OFFSET_BASIS;
+    static const char domain[] = "xglobal-interface-declaration";
+    if (nominal_key == 0)
+        return XG_NO_ID;
+    hash = fold_bytes(hash, domain, sizeof(domain) - 1);
+    hash = fold_u64(hash, nominal_key);
+    return (XgInterfaceId) hash_folded32(hash);
+}
+
+static bool producer_register_interface(XgProducer *p, XgModuleId module_id, const AstNode *node,
+                                        XrClassInfo *analyzer_info) {
+    const InterfaceDeclNode *decl;
+    const char *name;
+    uint32_t source_node_id;
+    uint64_t nominal_key;
+    XgInterfaceId interface_id;
+    if (!p || !node || node->type != AST_INTERFACE_DECL)
+        return false;
+    decl = &node->as.interface_decl;
+    name = decl->name;
     if (!name)
-        return true;
+        return false;
+    source_node_id = producer_source_node_id(module_id, node);
+    nominal_key = producer_nominal_key_fields(p, module_id, source_node_id, XG_DECL_INTERFACE, 0);
+    interface_id = producer_interface_id(nominal_key);
+    if (source_node_id == 0 || nominal_key == 0 || interface_id == XG_NO_ID)
+        return false;
     for (uint32_t i = 0; i < p->ninterfaces; i++) {
         XgInterfaceNameRow *existing = &p->interfaces[i];
+        if (existing->interface_id == interface_id && existing->nominal_key != nominal_key)
+            return false;
         if (existing->module_id == module_id && existing->name &&
             strcmp(existing->name, name) == 0) {
-            existing->decl = decl;
+            if (existing->decl != decl || existing->source_node_id != source_node_id ||
+                existing->nominal_key != nominal_key || existing->interface_id != interface_id ||
+                (existing->analyzer_info && analyzer_info &&
+                 existing->analyzer_info != analyzer_info))
+                return false;
+            if (analyzer_info) {
+                if ((analyzer_info->xg_interface_id != XG_NO_ID &&
+                     analyzer_info->xg_interface_id != existing->interface_id) ||
+                    (analyzer_info->xg_nominal_key != 0 &&
+                     analyzer_info->xg_nominal_key != nominal_key))
+                    return false;
+                existing->analyzer_info = analyzer_info;
+                analyzer_info->xg_interface_id = existing->interface_id;
+                analyzer_info->xg_nominal_key = nominal_key;
+            }
             return true;
         }
     }
@@ -1394,8 +1539,19 @@ static bool producer_register_interface(XgProducer *p, XgModuleId module_id, con
         return false;
     p->interfaces[p->ninterfaces].module_id = module_id;
     p->interfaces[p->ninterfaces].name = name;
-    p->interfaces[p->ninterfaces].interface_id = (XgInterfaceId) hash_name32(name);
+    p->interfaces[p->ninterfaces].interface_id = interface_id;
+    p->interfaces[p->ninterfaces].source_node_id = source_node_id;
+    p->interfaces[p->ninterfaces].nominal_key = nominal_key;
     p->interfaces[p->ninterfaces].decl = decl;
+    p->interfaces[p->ninterfaces].analyzer_info = analyzer_info;
+    if (analyzer_info) {
+        if ((analyzer_info->xg_interface_id != XG_NO_ID &&
+             analyzer_info->xg_interface_id != interface_id) ||
+            (analyzer_info->xg_nominal_key != 0 && analyzer_info->xg_nominal_key != nominal_key))
+            return false;
+        analyzer_info->xg_interface_id = interface_id;
+        analyzer_info->xg_nominal_key = nominal_key;
+    }
     p->ninterfaces++;
     return true;
 }
@@ -1417,7 +1573,8 @@ static bool producer_reserve_enums(XgProducer *p, uint32_t needed) {
 }
 
 static bool producer_register_enum(XgProducer *p, XgModuleId module_id, const char *name,
-                                   const EnumDeclNode *decl, uint32_t type_key) {
+                                   const EnumDeclNode *decl, XgDeclId decl_id, uint32_t type_key,
+                                   XrClassInfo *analyzer_info, uint32_t source_span_id) {
     if (!name)
         return true;
     for (uint32_t i = 0; i < p->nenums; i++) {
@@ -1426,6 +1583,9 @@ static bool producer_register_enum(XgProducer *p, XgModuleId module_id, const ch
             strcmp(existing->name, name) == 0) {
             existing->decl = decl;
             existing->type_key = type_key;
+            existing->decl_id = decl_id;
+            existing->analyzer_info = analyzer_info;
+            existing->source_span_id = source_span_id;
             return true;
         }
     }
@@ -1435,17 +1595,496 @@ static bool producer_register_enum(XgProducer *p, XgModuleId module_id, const ch
     p->enums[p->nenums].name = name;
     p->enums[p->nenums].type_key = type_key;
     p->enums[p->nenums].decl = decl;
+    p->enums[p->nenums].decl_id = decl_id;
+    p->enums[p->nenums].analyzer_info = analyzer_info;
+    p->enums[p->nenums].source_span_id = source_span_id;
     p->nenums++;
     return true;
 }
 
-static XgInterfaceId producer_lookup_interface(const XgProducer *p, const char *name) {
-    XgInterfaceNameRow *row = producer_lookup_interface_row(p, name);
+static const XgInterfaceNameRow *
+producer_interface_row_for_info(const XgProducer *producer, const XrClassInfo *interface_info) {
+    const XgInterfaceNameRow *match = NULL;
+    if (!producer || !interface_info)
+        return NULL;
+    for (uint32_t i = 0; i < producer->ninterfaces; i++) {
+        const XgInterfaceNameRow *candidate = &producer->interfaces[i];
+        if (candidate->analyzer_info != interface_info)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static const XgPendingBody *producer_body_for_witness(const XgProducer *producer,
+                                                      const XaInterfaceWitness *witness) {
+    const AstNode *declaration = witness && witness->implementation
+                                     ? witness->implementation->links.function_decl_node
+                                     : NULL;
+    const XgPendingBody *match = NULL;
+    if (!producer || !declaration || declaration->node_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < producer->nbodies; i++) {
+        const XgPendingBody *candidate = &producer->bodies[i];
+        if (candidate->analyzer_node_id != declaration->node_id)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static const XgInterfaceMethodSummary *
+producer_interface_method_for_witness(const XgProducer *producer,
+                                      const XgInterfaceNameRow *interface_row,
+                                      const XaInterfaceWitness *witness) {
+    if (!producer || !producer->evidence || !interface_row || !interface_row->decl || !witness ||
+        !witness->requirement || !witness->requirement->links.function_decl_node ||
+        witness->slot >= (uint32_t) interface_row->decl->method_count ||
+        interface_row->decl->methods[witness->slot] !=
+            witness->requirement->links.function_decl_node)
+        return NULL;
+    for (uint32_t i = 0; i < producer->evidence->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &producer->evidence->interface_methods[i];
+        if (method->owner_interface_id == interface_row->interface_id &&
+            method->ordinal == witness->slot)
+            return method;
+    }
+    return NULL;
+}
+
+static bool producer_interface_reaches_interface(const XgProducer *producer,
+                                                 XgInterfaceId child_interface_id,
+                                                 XgInterfaceId target_interface_id,
+                                                 uint32_t depth) {
+    if (!producer || !producer->evidence || child_interface_id == XG_NO_ID ||
+        target_interface_id == XG_NO_ID || depth > 64)
+        return false;
+    if (child_interface_id == target_interface_id)
+        return true;
+    for (uint32_t i = 0; i < producer->evidence->ninterface_extends; i++) {
+        const XgInterfaceExtendsSummary *edge = &producer->evidence->interface_extends[i];
+        if (edge->child_interface_id == child_interface_id &&
+            producer_interface_reaches_interface(producer, edge->parent_interface_id,
+                                                 target_interface_id, depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static const XgInterfaceMethodSummary *
+producer_interface_method_for_symbol(const XgProducer *producer, const XrClassInfo *interface_info,
+                                     const XaSymbol *method_symbol) {
+    const XgInterfaceNameRow *receiver_row =
+        producer_interface_row_for_info(producer, interface_info);
+    const AstNode *declaration = method_symbol ? method_symbol->links.function_decl_node : NULL;
+    const XgInterfaceMethodSummary *match = NULL;
+    if (!producer || !producer->evidence || !receiver_row || !declaration)
+        return NULL;
+    for (uint32_t row_index = 0; row_index < producer->ninterfaces; row_index++) {
+        const XgInterfaceNameRow *owner_row = &producer->interfaces[row_index];
+        if (!owner_row->decl ||
+            !producer_interface_reaches_interface(producer, receiver_row->interface_id,
+                                                  owner_row->interface_id, 0))
+            continue;
+        for (int ordinal = 0; ordinal < owner_row->decl->method_count; ordinal++) {
+            if (!owner_row->decl->methods || owner_row->decl->methods[ordinal] != declaration)
+                continue;
+            for (uint32_t i = 0; i < producer->evidence->ninterface_methods; i++) {
+                const XgInterfaceMethodSummary *summary = &producer->evidence->interface_methods[i];
+                if (summary->owner_interface_id != owner_row->interface_id ||
+                    summary->ordinal != (uint32_t) ordinal)
+                    continue;
+                if (match)
+                    return NULL;
+                match = summary;
+            }
+        }
+    }
+    return match;
+}
+
+static const XgDeclSummary *producer_decl_by_id(const XgProducer *producer, XgDeclId decl_id) {
+    if (!producer || !producer->evidence || decl_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < producer->evidence->ndecls; i++) {
+        if (producer->evidence->decls[i].decl_id == decl_id)
+            return &producer->evidence->decls[i];
+    }
+    return NULL;
+}
+
+static uint64_t producer_nominal_key(const XgProducer *producer, const XgDeclSummary *decl) {
+    if (!decl)
+        return 0;
+    return producer_nominal_key_fields(producer, decl->module_id, decl->source_node_id, decl->kind,
+                                       decl->type_key);
+}
+
+static uint32_t producer_conformance_type_key(const XrClassInfo *nominal_info,
+                                              const XrTypeRef *const *interfaces,
+                                              int interface_count,
+                                              const XaInterfaceConformance *conformance) {
+    if (!nominal_info || !interfaces || !conformance || !conformance->interface_type)
+        return 0;
+    for (int i = 0; i < nominal_info->interface_count && i < interface_count; i++) {
+        if (nominal_info->interface_types[i] == conformance->interface_type)
+            return hash_tref32(interfaces[i]);
+    }
+    return 0;
+}
+
+typedef struct XgDerivedNominalContract {
+    XgNominalOwnership ownership;
+    XgNominalCopyContract copy_contract;
+    bool complete;
+} XgDerivedNominalContract;
+
+static XgDerivedNominalContract producer_incomplete_nominal_contract(void) {
+    XgDerivedNominalContract contract = {XG_NOMINAL_OWNERSHIP_INVALID, XG_NOMINAL_COPY_INVALID,
+                                         false};
+    return contract;
+}
+
+static XgDerivedNominalContract producer_trivial_nominal_contract(void) {
+    XgDerivedNominalContract contract = {XG_NOMINAL_OWNERSHIP_TRIVIAL, XG_NOMINAL_COPY_TRIVIAL,
+                                         true};
+    return contract;
+}
+
+static XgDerivedNominalContract
+producer_affine_nominal_contract(XgNominalCopyContract copy_contract) {
+    XgDerivedNominalContract contract = {XG_NOMINAL_OWNERSHIP_AFFINE, copy_contract, true};
+    return contract;
+}
+
+static bool producer_nominal_contract_merge(XgDerivedNominalContract *into,
+                                            XgDerivedNominalContract child) {
+    if (!into || !into->complete || !child.complete)
+        return false;
+    if (child.ownership == XG_NOMINAL_OWNERSHIP_AFFINE)
+        into->ownership = XG_NOMINAL_OWNERSHIP_AFFINE;
+    if (child.copy_contract == XG_NOMINAL_COPY_FORBIDDEN)
+        into->copy_contract = XG_NOMINAL_COPY_FORBIDDEN;
+    else if (child.copy_contract == XG_NOMINAL_COPY_EXPLICIT &&
+             into->copy_contract != XG_NOMINAL_COPY_FORBIDDEN)
+        into->copy_contract = XG_NOMINAL_COPY_EXPLICIT;
+    return true;
+}
+
+static XgDerivedNominalContract
+producer_derive_type_contract(const XrType *type, const XrClassInfo **stack, uint32_t depth);
+
+static XgDerivedNominalContract producer_derive_nominal_info_contract(const XrClassInfo *info,
+                                                                      const XrClassInfo **stack,
+                                                                      uint32_t depth) {
+    XgDerivedNominalContract result = producer_trivial_nominal_contract();
+    if (!info || depth >= 64 || info->nominal_kind == XA_NOMINAL_INVALID ||
+        !info->declaration_symbol)
+        return producer_incomplete_nominal_contract();
+    if (info->nominal_kind == XA_NOMINAL_CLASS)
+        return producer_affine_nominal_contract(XG_NOMINAL_COPY_EXPLICIT);
+    if (info->declaration_symbol->links.type_param_count > 0)
+        return producer_incomplete_nominal_contract();
+    for (uint32_t i = 0; i < depth; i++) {
+        if (stack[i] == info)
+            return producer_incomplete_nominal_contract();
+    }
+    stack[depth] = info;
+    if (info->nominal_kind == XA_NOMINAL_STRUCT) {
+        if (info->field_count < 0 || (info->field_count > 0 && !info->fields))
+            return producer_incomplete_nominal_contract();
+        for (int i = 0; i < info->field_count; i++) {
+            XaSymbol *field = info->fields[i];
+            XrType *field_type = field ? field->links.type : NULL;
+            if (!field_type ||
+                !producer_nominal_contract_merge(
+                    &result, producer_derive_type_contract(field_type, stack, depth + 1)))
+                return producer_incomplete_nominal_contract();
+        }
+        return result;
+    }
+    if (info->nominal_kind == XA_NOMINAL_ENUM) {
+        const XaEnumInfo *enum_info = info->declaration_symbol->links.enum_info;
+        if (!enum_info || (enum_info->variant_count > 0 && !enum_info->variants))
+            return producer_incomplete_nominal_contract();
+        for (uint32_t variant_index = 0; variant_index < enum_info->variant_count;
+             variant_index++) {
+            const XaEnumVariantInfo *variant = &enum_info->variants[variant_index];
+            if (variant->payload_count > 0 && !variant->payload_types)
+                return producer_incomplete_nominal_contract();
+            for (uint16_t payload_index = 0; payload_index < variant->payload_count;
+                 payload_index++) {
+                XrType *payload_type = variant->payload_types[payload_index];
+                if (!payload_type ||
+                    !producer_nominal_contract_merge(
+                        &result, producer_derive_type_contract(payload_type, stack, depth + 1)))
+                    return producer_incomplete_nominal_contract();
+            }
+        }
+        return result;
+    }
+    return producer_incomplete_nominal_contract();
+}
+
+static XgDerivedNominalContract
+producer_derive_type_contract(const XrType *type, const XrClassInfo **stack, uint32_t depth) {
+    XgDerivedNominalContract result = producer_trivial_nominal_contract();
+    if (!type || depth >= 64)
+        return producer_incomplete_nominal_contract();
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+        case XR_KIND_NULL:
+        case XR_KIND_NEVER:
+        case XR_KIND_UNIT:
+        case XR_KIND_POINTER:
+            return result;
+        case XR_KIND_STRING:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_JSON:
+        case XR_KIND_INTERFACE:
+        case XR_KIND_FUNCTION:
+            return producer_affine_nominal_contract(XG_NOMINAL_COPY_EXPLICIT);
+        case XR_KIND_SLICE:
+            return producer_affine_nominal_contract(XG_NOMINAL_COPY_FORBIDDEN);
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            if (type->instance.class_ref &&
+                type->instance.class_ref->nominal_kind != XA_NOMINAL_CLASS)
+                return producer_derive_nominal_info_contract(type->instance.class_ref, stack,
+                                                             depth);
+            return producer_affine_nominal_contract(XG_NOMINAL_COPY_EXPLICIT);
+        case XR_KIND_ENUM:
+            return producer_derive_nominal_info_contract(type->enum_type.nominal_ref, stack, depth);
+        case XR_KIND_TUPLE:
+            if (type->tuple.element_count < 0 ||
+                (type->tuple.element_count > 0 && !type->tuple.element_types))
+                return producer_incomplete_nominal_contract();
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                if (!producer_nominal_contract_merge(
+                        &result, producer_derive_type_contract(type->tuple.element_types[i], stack,
+                                                               depth + 1)))
+                    return producer_incomplete_nominal_contract();
+            }
+            return result;
+        case XR_KIND_UNION:
+            if (type->union_type.member_count > 0 && !type->union_type.members)
+                return producer_incomplete_nominal_contract();
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (!producer_nominal_contract_merge(
+                        &result, producer_derive_type_contract(type->union_type.members[i], stack,
+                                                               depth + 1)))
+                    return producer_incomplete_nominal_contract();
+            }
+            return result;
+        case XR_KIND_FIXED_ARRAY:
+            if (type->fixed_array.length < 0)
+                return producer_incomplete_nominal_contract();
+            return producer_derive_type_contract(type->fixed_array.element_type, stack, depth + 1);
+        case XR_KIND_STRUCT_OBJECT:
+            if (type->object.field_count < 0 ||
+                (type->object.field_count > 0 && !type->object.field_types))
+                return producer_incomplete_nominal_contract();
+            for (int i = 0; i < type->object.field_count; i++) {
+                if (!producer_nominal_contract_merge(
+                        &result, producer_derive_type_contract(type->object.field_types[i], stack,
+                                                               depth + 1)))
+                    return producer_incomplete_nominal_contract();
+            }
+            return result;
+        case XR_KIND_UNKNOWN:
+        case XR_KIND_ERROR:
+        case XR_KIND_TYPE_PARAM:
+        case XR_KIND_COUNT:
+        default:
+            return producer_incomplete_nominal_contract();
+    }
+}
+
+static XgDerivedNominalContract
+producer_derive_implementor_contract(const XrClassInfo *nominal_info) {
+    const XrClassInfo *stack[64] = {0};
+    return producer_derive_nominal_info_contract(nominal_info, stack, 0);
+}
+
+static bool producer_publish_nominal_conformance(XgProducer *producer, XgClassId class_id,
+                                                 XgDeclId decl_id, XrClassInfo *nominal_info,
+                                                 const XrTypeRef *const *interfaces,
+                                                 int interface_count, uint8_t decl_kind,
+                                                 uint32_t source_span_id) {
+    const XgDeclSummary *decl = producer_decl_by_id(producer, decl_id);
+    uint64_t nominal_key = decl ? decl->nominal_key : 0;
+    if (!producer || !producer->evidence || !producer->analyzer || !nominal_info || !decl ||
+        nominal_key == 0 || producer_nominal_key(producer, decl) != nominal_key ||
+        (nominal_info->xg_decl_id != XG_NO_ID && nominal_info->xg_decl_id != decl_id) ||
+        (nominal_info->xg_nominal_key != 0 && nominal_info->xg_nominal_key != nominal_key))
+        return false;
+    nominal_info->xg_decl_id = decl_id;
+    nominal_info->xg_nominal_key = nominal_key;
+    XgDerivedNominalContract type_contract = producer_derive_implementor_contract(nominal_info);
+    uint32_t published_count = 0;
+    uint32_t published_start = producer->evidence->ninterface_impls + 1;
+    for (int i = 0; i < nominal_info->interface_conformance_count; i++) {
+        const XaInterfaceConformance *conformance = &nominal_info->interface_conformances[i];
+        const XgInterfaceNameRow *interface_row =
+            producer_interface_row_for_info(producer, conformance->interface_info);
+        uint32_t type_key =
+            producer_conformance_type_key(nominal_info, interfaces, interface_count, conformance);
+        if (!conformance->complete || !conformance->constraint_eligible || !interface_row ||
+            type_key == 0 || conformance->witness_count < 0)
+            continue;
+        uint32_t witness_start = producer->evidence->ninterface_witnesses + 1;
+        XgInterfaceConformanceId conformance_id =
+            (XgInterfaceConformanceId) (producer->evidence->ninterface_impls + 1);
+        for (int slot = 0; slot < conformance->witness_count; slot++) {
+            const XaInterfaceWitness *analyzer_witness = &conformance->witnesses[slot];
+            const XgPendingBody *body = producer_body_for_witness(producer, analyzer_witness);
+            const XgInterfaceMethodSummary *method =
+                producer_interface_method_for_witness(producer, interface_row, analyzer_witness);
+            if (!analyzer_witness->complete || !body || !method || body->analyzer_node_id == 0 ||
+                body->func_id == XG_NO_ID)
+                return false;
+            XgInterfaceWitnessSummary witness;
+            memset(&witness, 0, sizeof(witness));
+            witness.conformance_id = conformance_id;
+            witness.implementor_decl_id = decl_id;
+            witness.interface_id = interface_row->interface_id;
+            witness.interface_method_id = method->interface_method_id;
+            witness.implementation_func_id = body->func_id;
+            witness.implementation_source_node_id = body->source_node_id;
+            witness.signature_key = method->signature_key;
+            witness.slot = analyzer_witness->slot;
+            witness.receiver_mode = (uint8_t) analyzer_witness->requirement->receiver_mode;
+            witness.complete = 1;
+            if (!xg_global_evidence_add_interface_witness(producer->evidence, &witness))
+                return false;
+        }
+        XgInterfaceImplSummary impl;
+        memset(&impl, 0, sizeof(impl));
+        impl.conformance_id = conformance_id;
+        impl.implementor_class_id = class_id;
+        impl.interface_id = interface_row->interface_id;
+        impl.name_id = hash_name32(interface_row->name);
+        impl.type_key = type_key;
+        impl.source_span_id = source_span_id;
+        impl.implementor_decl_id = decl_id;
+        impl.nominal_key = nominal_key;
+        impl.witness_start = conformance->witness_count > 0 ? witness_start : 0;
+        impl.witness_count = (uint32_t) conformance->witness_count;
+        impl.implementor_kind = decl_kind;
+        impl.verdict_complete = 1;
+        impl.constraint_eligible = 1;
+        impl.existential_eligible = conformance->existential_eligible ? 1 : 0;
+        impl.implementor_ownership = (uint8_t) type_contract.ownership;
+        impl.implementor_copy_contract = (uint8_t) type_contract.copy_contract;
+        impl.type_contract_complete = type_contract.complete ? 1 : 0;
+        if (!type_contract.complete)
+            impl.existential_eligible = 0;
+        if (!xg_global_evidence_add_interface_impl(producer->evidence, &impl))
+            return false;
+        published_count++;
+    }
+    if (class_id != XG_NO_ID) {
+        for (uint32_t i = 0; i < producer->evidence->nclasses; i++) {
+            XgClassSummary *summary = &producer->evidence->classes[i];
+            if (summary->class_id != class_id)
+                continue;
+            summary->interface_start = published_count > 0 ? published_start : 0;
+            summary->interface_count = published_count;
+            break;
+        }
+    }
+    return true;
+}
+
+static bool producer_publish_nominal_conformances(XgProducer *producer) {
+    if (!producer || !producer->analyzer)
+        return true;
+    for (uint32_t i = 0; i < producer->nclasses; i++) {
+        XgClassNameRow *row = &producer->classes[i];
+        const AstNode *node = row->class_node;
+        if (!node)
+            return false;
+        const ClassDeclNode *declaration = node->type == AST_CLASS_DECL    ? &node->as.class_decl
+                                           : node->type == AST_STRUCT_DECL ? &node->as.struct_decl
+                                                                           : &node->as.union_decl;
+        XaSymbolLinks *links = producer_class_links(producer, declaration);
+        XgClassSummary *summary = row->summary_index < producer->evidence->nclasses
+                                      ? &producer->evidence->classes[row->summary_index]
+                                      : NULL;
+        if (!summary)
+            return false;
+        if (declaration->interface_count == 0) {
+            if (links && links->class_info) {
+                const XgDeclSummary *decl = producer_decl_by_id(producer, summary->decl_id);
+                if (!decl || decl->nominal_key == 0 ||
+                    producer_nominal_key(producer, decl) != decl->nominal_key ||
+                    (links->class_info->xg_decl_id != XG_NO_ID &&
+                     links->class_info->xg_decl_id != summary->decl_id) ||
+                    (links->class_info->xg_nominal_key != 0 &&
+                     links->class_info->xg_nominal_key != decl->nominal_key))
+                    return false;
+                links->class_info->xg_class_id = row->class_id;
+                links->class_info->xg_decl_id = summary->decl_id;
+                links->class_info->xg_nominal_key = decl->nominal_key;
+            }
+            continue;
+        }
+        if (!links || !links->class_info)
+            return false;
+        if (!producer_publish_nominal_conformance(
+                producer, row->class_id, summary->decl_id, links->class_info,
+                (const XrTypeRef *const *) declaration->interfaces, declaration->interface_count,
+                summary->decl_kind, (uint32_t) node->line))
+            return false;
+    }
+    for (uint32_t i = 0; i < producer->nenums; i++) {
+        XgEnumNameRow *row = &producer->enums[i];
+        if (!row->decl)
+            return false;
+        if (row->analyzer_info) {
+            const XgDeclSummary *decl = producer_decl_by_id(producer, row->decl_id);
+            if (!decl || decl->nominal_key == 0 ||
+                producer_nominal_key(producer, decl) != decl->nominal_key ||
+                (row->analyzer_info->xg_decl_id != XG_NO_ID &&
+                 row->analyzer_info->xg_decl_id != row->decl_id) ||
+                (row->analyzer_info->xg_nominal_key != 0 &&
+                 row->analyzer_info->xg_nominal_key != decl->nominal_key))
+                return false;
+            row->analyzer_info->xg_decl_id = row->decl_id;
+            row->analyzer_info->xg_nominal_key = decl->nominal_key;
+        }
+        if (row->decl->interface_count == 0)
+            continue;
+        if (!row->analyzer_info)
+            return false;
+        if (!producer_publish_nominal_conformance(
+                producer, XG_NO_ID, row->decl_id, row->analyzer_info,
+                (const XrTypeRef *const *) row->decl->interfaces, row->decl->interface_count,
+                XG_DECL_ENUM, row->source_span_id))
+            return false;
+    }
+    return true;
+}
+
+static XgInterfaceId producer_lookup_interface(const XgProducer *p, XgModuleId module_id,
+                                               const char *name) {
+    XgInterfaceNameRow *row = producer_lookup_interface_row_exact_name(p, module_id, name);
     return row ? row->interface_id : XG_NO_ID;
 }
 
-static XgInterfaceId producer_lookup_interface_from_tref(const XgProducer *p, const XrTypeRef *t) {
-    return producer_lookup_interface(p, xr_tref_head_name(t));
+static XgInterfaceId producer_lookup_interface_from_tref(const XgProducer *p, XgModuleId module_id,
+                                                         const XrTypeRef *t) {
+    return producer_lookup_interface(p, module_id, xr_tref_head_name(t));
 }
 
 static uint32_t producer_find_interface_method_signature_depth(XgProducer *p,
@@ -1469,8 +2108,8 @@ static uint32_t producer_find_interface_method_signature_depth(XgProducer *p,
             return hash_interface_method_signature(method);
     }
     for (int i = 0; i < iface->extends_count; i++) {
-        XgInterfaceId parent_id =
-            producer_lookup_interface_from_tref(p, iface->extends ? iface->extends[i] : NULL);
+        XgInterfaceId parent_id = producer_lookup_interface_from_tref(
+            p, row->module_id, iface->extends ? iface->extends[i] : NULL);
         uint32_t signature =
             producer_find_interface_method_signature_depth(p, parent_id, name_id, depth + 1);
         if (signature != 0)
@@ -1563,6 +2202,7 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
                                   XgDeclId owner_decl_id, XgClassId current_class_id,
                                   XgMethodId owner_method_id, uint32_t name_id,
                                   uint32_t signature_key, uint32_t source_node_id,
+                                  uint32_t analyzer_node_id, uint32_t analyzer_symbol_id,
                                   uint32_t source_span_id, uint8_t kind, const AstNode *body,
                                   const MethodDeclNode *method, const FunctionDeclNode *function,
                                   XaSymbolLinks *links) {
@@ -1581,6 +2221,8 @@ static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId mo
     row->name_id = name_id;
     row->signature_key = signature_key;
     row->source_node_id = source_node_id;
+    row->analyzer_node_id = analyzer_node_id;
+    row->analyzer_symbol_id = analyzer_symbol_id;
     row->source_span_id = source_span_id;
     row->kind = kind;
     row->body = body;
@@ -1714,21 +2356,12 @@ static XgInterfaceNameRow *producer_lookup_interface_row_scoped(const XgProducer
                                                                 uint32_t name_id,
                                                                 bool allow_global_unique) {
     XgInterfaceNameRow *match = NULL;
+    (void) allow_global_unique;
     if (!p || name_id == 0)
         return NULL;
     for (uint32_t i = 0; i < p->ninterfaces; i++) {
         XgInterfaceNameRow *row = &p->interfaces[i];
         if (row->module_id != module_id || hash_name32(row->name) != name_id)
-            continue;
-        if (match)
-            return NULL;
-        match = row;
-    }
-    if (match || !allow_global_unique)
-        return match;
-    for (uint32_t i = 0; i < p->ninterfaces; i++) {
-        XgInterfaceNameRow *row = &p->interfaces[i];
-        if (hash_name32(row->name) != name_id)
             continue;
         if (match)
             return NULL;
@@ -2324,7 +2957,9 @@ static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) 
     }
     if (producer_lookup_func_row(bc->producer, var->name) ||
         producer_lookup_class(bc->producer, var->name) != XG_NO_ID ||
-        producer_lookup_interface(bc->producer, var->name) != XG_NO_ID ||
+        producer_lookup_interface(bc->producer, bc->module_id, var->name) != XG_NO_ID ||
+        producer_lookup_enum_row_scoped(bc->producer, bc->module_id, hash_name32(var->name),
+                                        true) != NULL ||
         producer_stdlib_module_known(var->name))
         return;
     bc->effect_bits |= XG_BODY_MAY_READ_MEM;
@@ -2772,7 +3407,8 @@ static XgInterfaceId body_resolve_expr_interface(XgBodyCollect *bc, const AstNod
         case AST_VARIABLE:
             return body_lookup_local_interface(bc, expr->as.variable.name);
         case AST_AS_EXPR:
-            return producer_lookup_interface_from_tref(bc->producer, expr->as.as_expr.type);
+            return producer_lookup_interface_from_tref(bc->producer, bc->module_id,
+                                                       expr->as.as_expr.type);
         case AST_MEMBER_ACCESS: {
             XgClassId receiver_class = body_resolve_expr_class(bc, expr->as.member_access.object);
             const char *field_name = expr->as.member_access.name;
@@ -3180,6 +3816,23 @@ static bool body_member_access_is_scalar_builtin(XgBodyCollect *bc,
                     spec->receiver == XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER);
 }
 
+/* Selecting an enum declaration member constructs or references a canonical
+ * value; it does not
+ * read runtime memory.  Consume the analyzer-owned
+ * selection fact so Xglobal does not widen a
+ * typed throw such as `Err.Bad`
+ * with a spurious READ_MEM effect. */
+static bool body_member_access_is_enum_member(XgBodyCollect *bc, const AstNode *node) {
+    XaSelectionTable *table;
+    const XaSelection *selection;
+    if (!bc || !bc->producer || !bc->producer->analyzer || !node ||
+        node->type != AST_MEMBER_ACCESS || !bc->producer->analyzer->selection_table)
+        return false;
+    table = (XaSelectionTable *) bc->producer->analyzer->selection_table;
+    selection = xa_selection_table_get(table, node);
+    return selection && selection->kind == XA_SEL_ENUM_MEMBER;
+}
+
 /* Array/fixed-array pointer projection is a compiler-lowered leaf, not a
  * native call. The sealed receiver registry owns both source spelling and
  * lowering identity; consume it here so whole-program effects agree with Xi's
@@ -3251,7 +3904,7 @@ static XgInterfaceId body_first_constraint_interface(XgBodyCollect *bc, XrTypeRe
         return XG_NO_ID;
     for (int i = 0; i < type_arg_count; i++) {
         XgInterfaceId interface_id =
-            producer_lookup_interface_from_tref(bc->producer, type_args[i]);
+            producer_lookup_interface_from_tref(bc->producer, bc->module_id, type_args[i]);
         if (interface_id != XG_NO_ID)
             return interface_id;
     }
@@ -3275,12 +3928,14 @@ static uint32_t body_interface_type_key(XgBodyCollect *bc, XgInterfaceId interfa
 }
 
 static bool producer_add_interface_object_use_row(XgProducer *p, XgInterfaceId interface_id,
-                                                  XgFuncId owner_func_id, uint32_t source_span_id,
-                                                  uint32_t body_ordinal, uint32_t type_key,
-                                                  uint32_t reason) {
+                                                  XgFuncId owner_func_id, uint32_t source_node_id,
+                                                  uint32_t source_span_id, uint32_t body_ordinal,
+                                                  uint32_t type_key, uint32_t reason,
+                                                  XgInterfaceUseKind use_kind) {
     XgInterfaceObjectUseSummary use;
-    if (!p || !p->evidence || interface_id == XG_NO_ID || reason == 0)
-        return true;
+    if (!p || !p->evidence || interface_id == XG_NO_ID || reason == 0 ||
+        use_kind == XG_INTERFACE_USE_INVALID || use_kind > XG_INTERFACE_USE_OWNED_STORAGE)
+        return false;
     if (type_key == 0)
         type_key = interface_id;
     for (uint32_t i = 0; i < p->evidence->ninterface_object_uses; i++) {
@@ -3288,6 +3943,8 @@ static bool producer_add_interface_object_use_row(XgProducer *p, XgInterfaceId i
         if (existing->interface_id == interface_id && existing->owner_func_id == owner_func_id &&
             existing->source_span_id == source_span_id && existing->body_ordinal == body_ordinal &&
             existing->type_key == type_key) {
+            if (existing->use_kind != (uint8_t) use_kind)
+                return false;
             existing->reason |= reason;
             return true;
         }
@@ -3296,16 +3953,32 @@ static bool producer_add_interface_object_use_row(XgProducer *p, XgInterfaceId i
     use.use_id = (XgInterfaceObjectUseId) (p->evidence->ninterface_object_uses + 1);
     use.interface_id = interface_id;
     use.owner_func_id = owner_func_id;
+    use.source_node_id = source_node_id;
     use.source_span_id = source_span_id;
     use.body_ordinal = body_ordinal;
     use.type_key = type_key;
     use.reason = reason;
+    use.use_kind = (uint8_t) use_kind;
     return xg_global_evidence_add_interface_object_use(p->evidence, &use) != NULL;
 }
 
+static XgInterfaceUseKind producer_interface_use_for_param_mode(XrParamMode mode) {
+    switch (mode) {
+        case XR_PARAM_READ:
+            return XG_INTERFACE_USE_READ;
+        case XR_PARAM_REF:
+            return XG_INTERFACE_USE_REF;
+        case XR_PARAM_MOVE:
+            return XG_INTERFACE_USE_MOVE;
+        default:
+            return XG_INTERFACE_USE_INVALID;
+    }
+}
+
 static bool producer_add_interface_object_uses_for_type_ref(
-    XgProducer *p, XgFuncId owner_func_id, uint32_t source_span_id, uint32_t *body_ordinal,
-    const XrTypeRef *type, uint32_t base_reason, uint32_t storage_type_key) {
+    XgProducer *p, XgModuleId module_id, XgFuncId owner_func_id, uint32_t source_node_id,
+    uint32_t source_span_id, uint32_t *body_ordinal, const XrTypeRef *type, uint32_t base_reason,
+    uint32_t storage_type_key, XgInterfaceUseKind use_kind) {
     XgInterfaceId direct_interface;
     uint32_t type_key;
     if (!p || !type)
@@ -3315,69 +3988,77 @@ static bool producer_add_interface_object_uses_for_type_ref(
     if (type->kind == XR_TREF_GENERIC && type->name && type->children && type->nchildren > 0 &&
         strcmp(type->name, "Array") == 0) {
         const XrTypeRef *elem = type->children[0];
-        XgInterfaceId elem_interface = producer_lookup_interface_from_tref(p, elem);
+        XgInterfaceId elem_interface = producer_lookup_interface_from_tref(p, module_id, elem);
         if (elem_interface != XG_NO_ID) {
             uint32_t ordinal = body_ordinal ? ++(*body_ordinal) : 0;
             return producer_add_interface_object_use_row(
-                p, elem_interface, owner_func_id, source_span_id, ordinal, hash_tref32(type),
-                base_reason | XG_INTERFACE_OBJECT_USE_ARRAY);
+                p, elem_interface, owner_func_id, source_node_id, source_span_id, ordinal,
+                hash_tref32(type), base_reason | XG_INTERFACE_OBJECT_USE_ARRAY, use_kind);
         }
         return producer_add_interface_object_uses_for_type_ref(
-            p, owner_func_id, source_span_id, body_ordinal, elem,
-            base_reason | XG_INTERFACE_OBJECT_USE_ARRAY, hash_tref32(type));
+            p, module_id, owner_func_id, source_node_id, source_span_id, body_ordinal, elem,
+            base_reason | XG_INTERFACE_OBJECT_USE_ARRAY, hash_tref32(type), use_kind);
     }
 
     if (type->kind == XR_TREF_FIXED_ARRAY && type->children && type->nchildren > 0) {
         return producer_add_interface_object_uses_for_type_ref(
-            p, owner_func_id, source_span_id, body_ordinal, type->children[0],
-            base_reason | XG_INTERFACE_OBJECT_USE_ARRAY, hash_tref32(type));
+            p, module_id, owner_func_id, source_node_id, source_span_id, body_ordinal,
+            type->children[0], base_reason | XG_INTERFACE_OBJECT_USE_ARRAY, hash_tref32(type),
+            use_kind);
     }
 
-    direct_interface = producer_lookup_interface_from_tref(p, type);
+    direct_interface = producer_lookup_interface_from_tref(p, module_id, type);
     if (direct_interface != XG_NO_ID) {
         uint32_t ordinal = body_ordinal ? ++(*body_ordinal) : 0;
-        return producer_add_interface_object_use_row(p, direct_interface, owner_func_id,
-                                                     source_span_id, ordinal, type_key,
-                                                     base_reason | XG_INTERFACE_OBJECT_USE_VALUE);
+        return producer_add_interface_object_use_row(
+            p, direct_interface, owner_func_id, source_node_id, source_span_id, ordinal, type_key,
+            base_reason | XG_INTERFACE_OBJECT_USE_VALUE, use_kind);
     }
 
     switch ((XrTypeRefKind) type->kind) {
         case XR_TREF_OPTIONAL:
             return type->children && type->nchildren > 0
                        ? producer_add_interface_object_uses_for_type_ref(
-                             p, owner_func_id, source_span_id, body_ordinal, type->children[0],
-                             base_reason, type_key)
+                             p, module_id, owner_func_id, source_node_id, source_span_id,
+                             body_ordinal, type->children[0], base_reason, type_key, use_kind)
                        : true;
         case XR_TREF_UNION:
         case XR_TREF_TUPLE:
             for (uint8_t i = 0; i < type->nchildren; i++) {
                 if (!producer_add_interface_object_uses_for_type_ref(
-                        p, owner_func_id, source_span_id, body_ordinal,
-                        type->children ? type->children[i] : NULL, base_reason, 0))
+                        p, module_id, owner_func_id, source_node_id, source_span_id, body_ordinal,
+                        type->children ? type->children[i] : NULL, base_reason, 0, use_kind))
                     return false;
             }
             return true;
         case XR_TREF_OBJECT:
             for (uint8_t i = 0; i < type->nchildren; i++) {
                 if (!producer_add_interface_object_uses_for_type_ref(
-                        p, owner_func_id, source_span_id, body_ordinal,
+                        p, module_id, owner_func_id, source_node_id, source_span_id, body_ordinal,
                         type->children ? type->children[i] : NULL,
-                        base_reason | XG_INTERFACE_OBJECT_USE_FIELD, 0))
+                        base_reason | XG_INTERFACE_OBJECT_USE_FIELD, 0,
+                        XG_INTERFACE_USE_OWNED_STORAGE))
                     return false;
             }
             return true;
         case XR_TREF_FUNCTION:
             if (type->children && type->nchildren > 0) {
                 for (uint8_t i = 0; i + 1 < type->nchildren; i++) {
-                    if (!producer_add_interface_object_uses_for_type_ref(
-                            p, owner_func_id, source_span_id, body_ordinal, type->children[i],
-                            base_reason | XG_INTERFACE_OBJECT_USE_PARAM, 0))
+                    XgInterfaceUseKind parameter_use =
+                        type->function_param_modes
+                            ? producer_interface_use_for_param_mode(type->function_param_modes[i])
+                            : XG_INTERFACE_USE_INVALID;
+                    if (parameter_use == XG_INTERFACE_USE_INVALID ||
+                        !producer_add_interface_object_uses_for_type_ref(
+                            p, module_id, owner_func_id, source_node_id, source_span_id,
+                            body_ordinal, type->children[i],
+                            base_reason | XG_INTERFACE_OBJECT_USE_PARAM, 0, parameter_use))
                         return false;
                 }
                 return producer_add_interface_object_uses_for_type_ref(
-                    p, owner_func_id, source_span_id, body_ordinal,
+                    p, module_id, owner_func_id, source_node_id, source_span_id, body_ordinal,
                     type->children[type->nchildren - 1],
-                    base_reason | XG_INTERFACE_OBJECT_USE_RETURN, 0);
+                    base_reason | XG_INTERFACE_OBJECT_USE_RETURN, 0, XG_INTERFACE_USE_MOVE);
             }
             return true;
         default:
@@ -3387,15 +4068,18 @@ static bool producer_add_interface_object_uses_for_type_ref(
 
 static bool body_add_interface_object_uses_for_type_ref(XgBodyCollect *bc, const XrTypeRef *type,
                                                         uint32_t base_reason,
-                                                        uint32_t source_span_id) {
+                                                        uint32_t source_node_id,
+                                                        uint32_t source_span_id,
+                                                        XgInterfaceUseKind use_kind) {
     if (!bc || !type)
         return true;
     return producer_add_interface_object_uses_for_type_ref(
-        bc->producer, bc->owner_func_id, source_span_id, &bc->interface_object_use_count, type,
-        base_reason, 0);
+        bc->producer, bc->module_id, bc->owner_func_id, source_node_id, source_span_id,
+        &bc->interface_object_use_count, type, base_reason, 0, use_kind);
 }
 
-static bool body_add_interface_capture_uses(XgBodyCollect *bc, uint32_t source_span_id) {
+static bool body_add_interface_capture_uses(XgBodyCollect *bc, uint32_t source_node_id,
+                                            uint32_t source_span_id) {
     if (!bc)
         return true;
     for (uint32_t i = 0; i < bc->nlocals; i++) {
@@ -3408,8 +4092,10 @@ static bool body_add_interface_capture_uses(XgBodyCollect *bc, uint32_t source_s
                                         : body_interface_type_key(bc, local->interface_id);
         ordinal = ++bc->interface_object_use_count;
         if (!producer_add_interface_object_use_row(
-                bc->producer, local->interface_id, bc->owner_func_id, source_span_id, ordinal,
-                type_key, XG_INTERFACE_OBJECT_USE_CAPTURE | XG_INTERFACE_OBJECT_USE_VALUE))
+                bc->producer, local->interface_id, bc->owner_func_id, source_node_id,
+                source_span_id, ordinal, type_key,
+                XG_INTERFACE_OBJECT_USE_CAPTURE | XG_INTERFACE_OBJECT_USE_VALUE,
+                XG_INTERFACE_USE_OWNED_STORAGE))
             return false;
     }
     return true;
@@ -6843,13 +7529,35 @@ static const XgClassSummary *body_find_class_by_type_key(XgBodyCollect *bc, uint
 }
 
 static bool body_class_implements_hashable(XgBodyCollect *bc, const XgClassSummary *cls) {
-    uint32_t hashable_id = hash_name32("Hashable");
-    if (!bc || !bc->evidence || !cls)
+    const XaInterfaceDefinition *hashable = xa_builtin_interface_definition("Hashable");
+    const XrClassInfo *class_info = NULL;
+    if (!bc || !bc->producer || !bc->evidence || !cls || !hashable)
         return false;
-    for (uint32_t i = 0; i < bc->evidence->ninterface_impls; i++) {
-        const XgInterfaceImplSummary *impl = &bc->evidence->interface_impls[i];
-        if (impl->implementor_class_id == cls->class_id &&
-            (impl->name_id == hashable_id || impl->interface_id == (XgInterfaceId) hashable_id))
+    for (uint32_t i = 0; i < bc->producer->nclasses; i++) {
+        const XgClassNameRow *row = &bc->producer->classes[i];
+        if (row->summary_index < bc->evidence->nclasses &&
+            &bc->evidence->classes[row->summary_index] == cls) {
+            const AstNode *node = row->class_node;
+            const ClassDeclNode *decl =
+                node && node->type == AST_CLASS_DECL    ? &node->as.class_decl
+                : node && node->type == AST_STRUCT_DECL ? &node->as.struct_decl
+                : node && node->type == AST_UNION_DECL  ? &node->as.union_decl
+                                                        : NULL;
+            XaSymbol *symbol =
+                decl && decl->symbol_id != 0 && bc->producer->analyzer->global_scope
+                    ? xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, decl->symbol_id)
+                    : NULL;
+            class_info = symbol && symbol->kind == XA_SYM_CLASS ? symbol->links.class_info : NULL;
+            break;
+        }
+    }
+    if (!class_info || !class_info->interface_types)
+        return false;
+    for (int i = 0; i < class_info->interface_count; i++) {
+        const XrType *interface_type = class_info->interface_types[i];
+        if (interface_type && interface_type->kind == XR_KIND_INTERFACE &&
+            interface_type->instance.class_ref == NULL &&
+            xa_builtin_interface_definition(interface_type->instance.class_name) == hashable)
             return true;
     }
     return false;
@@ -7261,7 +7969,7 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
     row->sequence_kind = sequence_kind;
     row->sequence_elem_type_key = elem_type_key;
     row->sequence_elem_interface_id =
-        producer_lookup_interface_from_tref(bc->producer, elem_type_ref);
+        producer_lookup_interface_from_tref(bc->producer, bc->module_id, elem_type_ref);
     row->sequence_elem_class_id = producer_lookup_class_from_tref(bc->producer, elem_type_ref);
     row->sequence_storage_id = 0;
     row->sequence_elem_managed_ref = body_type_ref_is_managed_storage_ref(elem_type_ref);
@@ -8333,8 +9041,76 @@ static void body_record_call_object_argument_shapes(XgBodyCollect *bc, const Ast
     }
 }
 
+static XrType *body_call_function_type(XgBodyCollect *bc, const AstNode *call) {
+    const AstNode *callee;
+    const XaSelection *selection;
+    XaSymbol *symbol;
+    XaSymbolLinks *links;
+    XrType *type;
+    if (!bc || !bc->producer || !bc->producer->analyzer || !call || call->type != AST_CALL_EXPR ||
+        !(callee = call->as.call_expr.callee))
+        return NULL;
+    selection = xa_analyzer_get_selection(bc->producer->analyzer, callee);
+    symbol = selection ? selection->target_symbol : NULL;
+    if (!symbol && bc->producer->analyzer->node_table)
+        symbol = xa_node_table_get_symbol((const XaNodeTable *) bc->producer->analyzer->node_table,
+                                          callee);
+    links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
+    type = links ? links->type : NULL;
+    if (!type && selection)
+        type = selection->result_type;
+    if (!type && bc->producer->analyzer->node_table)
+        type = xa_node_table_get_type((const XaNodeTable *) bc->producer->analyzer->node_table,
+                                      callee);
+    return type && XR_TYPE_IS_FUNCTION(type) ? type : NULL;
+}
+
+static bool body_add_interface_call_argument_uses(XgBodyCollect *bc, const AstNode *call) {
+    XrType *function_type = body_call_function_type(bc, call);
+    int parameter_count;
+    if (!bc || !call || call->type != AST_CALL_EXPR)
+        return false;
+    if (!bc->producer->analyzer)
+        return true;
+    parameter_count = function_type ? xr_type_get_param_count(function_type) : 0;
+    for (int i = 0; i < call->as.call_expr.arg_count; i++) {
+        const AstNode *argument =
+            call->as.call_expr.arguments ? call->as.call_expr.arguments[i] : NULL;
+        XrType *formal = i < parameter_count ? xr_type_function_param_type(function_type, i) : NULL;
+        XrClassInfo *interface_info =
+            formal && formal->kind == XR_KIND_INTERFACE ? formal->instance.class_ref : NULL;
+        if (!interface_info)
+            continue;
+        const XgInterfaceNameRow *interface_row =
+            producer_interface_row_for_info(bc->producer, interface_info);
+        const XgDeclSummary *interface_decl =
+            producer_decl_by_id(bc->producer, interface_info->xg_decl_id);
+        XgInterfaceUseKind use_kind =
+            producer_interface_use_for_param_mode(xr_type_function_param_mode(function_type, i));
+        uint64_t stable_type_key = xr_type_stable_key(formal);
+        if (!argument || !interface_row || !interface_decl ||
+            interface_decl->kind != XG_DECL_INTERFACE || interface_decl->nominal_key == 0 ||
+            interface_decl->nominal_key != interface_info->xg_nominal_key ||
+            interface_row->nominal_key != interface_decl->nominal_key ||
+            interface_row->interface_id != interface_info->xg_interface_id ||
+            use_kind == XG_INTERFACE_USE_INVALID || stable_type_key == 0)
+            return false;
+        uint32_t ordinal = ++bc->interface_object_use_count;
+        if (!producer_add_interface_object_use_row(
+                bc->producer, interface_row->interface_id, bc->owner_func_id,
+                producer_source_node_id(bc->module_id, argument), (uint32_t) argument->line,
+                ordinal, hash_folded32(stable_type_key),
+                XG_INTERFACE_OBJECT_USE_ARGUMENT | XG_INTERFACE_OBJECT_USE_VALUE, use_kind))
+            return false;
+    }
+    return true;
+}
+
 static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgCallsiteSummary row;
+    XgFuncId *callable_target_func_ids = NULL;
+    uint32_t callable_target_count = 0;
+    uint64_t callable_signature_key = 0;
     const AstNode *callee;
     XgDeclId generic_origin_decl_id = XG_NO_ID;
     XgFuncId generic_origin_func_id = XG_NO_ID;
@@ -8471,6 +9247,21 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.method_name_id = callee_name_id;
         }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *member_selection =
+            bc->producer->analyzer ? xa_analyzer_get_selection(bc->producer->analyzer, callee)
+                                   : NULL;
+        XrType *analyzer_receiver_type =
+            member_selection ? member_selection->receiver_type
+            : bc->producer->analyzer && bc->producer->analyzer->node_table
+                ? xa_node_table_get_type((const XaNodeTable *) bc->producer->analyzer->node_table,
+                                         callee->as.member_access.object)
+                : NULL;
+        XaSymbol *analyzer_target_symbol =
+            member_selection ? member_selection->target_symbol
+            : bc->producer->analyzer && bc->producer->analyzer->node_table
+                ? xa_node_table_get_symbol((const XaNodeTable *) bc->producer->analyzer->node_table,
+                                           callee)
+                : NULL;
         const char *stdlib_module =
             body_stdlib_module_for_expr(bc, callee->as.member_access.object);
         XgModuleId stdlib_module_id =
@@ -8491,8 +9282,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         const XaBuiltinReceiverMethodSpec *builtin_receiver_method =
             body_builtin_receiver_method_spec(bc, &callee->as.member_access,
                                               call->as.call_expr.arg_count);
+        XrClassInfo *receiver_interface_info =
+            analyzer_receiver_type && analyzer_receiver_type->kind == XR_KIND_INTERFACE
+                ? analyzer_receiver_type->instance.class_ref
+                : NULL;
         XgInterfaceId receiver_interface =
-            body_resolve_expr_interface(bc, callee->as.member_access.object);
+            bc->producer->analyzer
+                ? (receiver_interface_info ? receiver_interface_info->xg_interface_id : XG_NO_ID)
+                : body_resolve_expr_interface(bc, callee->as.member_access.object);
         uint32_t method_name_id = hash_name32(callee->as.member_access.name);
         generic_name = callee->as.member_access.name;
         generic_kind = XG_GENERIC_INST_METHOD;
@@ -8526,8 +9323,15 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             generic_origin_class_id = stdlib_class->class_id;
         } else if (receiver_interface != XG_NO_ID) {
             const XgInterfaceMethodSummary *interface_method =
-                producer_find_interface_method_summary(bc->producer, receiver_interface,
-                                                       method_name_id);
+                bc->producer->analyzer
+                    ? producer_interface_method_for_symbol(bc->producer, receiver_interface_info,
+                                                           analyzer_target_symbol)
+                    : producer_find_interface_method_summary(bc->producer, receiver_interface,
+                                                             method_name_id);
+            if (bc->producer->analyzer && !interface_method) {
+                bc->producer->failed = true;
+                return;
+            }
             row.kind = XG_CALL_INTERFACE;
             row.receiver_static_interface_id = receiver_interface;
             row.method_id = interface_method ? interface_method->interface_method_id
@@ -8548,9 +9352,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
              * that does not exist and reject the build; the concrete target set
              * is proven by the callable analysis instead. The analyzer records
              * XA_SEL_FIELD on the callee for exactly this case. */
-            const XaSelection *field_sel =
-                bc->producer->analyzer ? xa_analyzer_get_selection(bc->producer->analyzer, callee)
-                                       : NULL;
+            const XaSelection *field_sel = member_selection;
             XrType *field_result =
                 field_sel && field_sel->kind == XA_SEL_FIELD && field_sel->target_symbol &&
                         field_sel->result_type
@@ -8593,6 +9395,18 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             }
         }
     }
+    if (row.kind == XG_CALL_CLOSURE) {
+        /* A closure call never carries the old single-target field.  Its only
+         *
+         * closed-world authority is the analyzer-published canonical set. */
+        row.static_target_func_id = XG_NO_ID;
+        if (producer_prepare_callable_target_set(bc, call, &callable_target_func_ids,
+                                                 &callable_target_count, &callable_signature_key)) {
+            row.callable_target_start = bc->evidence->ncallable_targets + 1;
+            row.callable_target_count = callable_target_count;
+            row.callable_signature_key = callable_signature_key;
+        }
+    }
     XaCallErrorEffectFact call_effect;
     if (bc->producer->analyzer &&
         xa_analyzer_get_call_error_effect(bc->producer->analyzer, call, &call_effect)) {
@@ -8608,14 +9422,40 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     if (bc->callsite_count == 0)
         bc->callsite_start = row.callsite_id;
     if (xg_global_evidence_add_callsite(bc->evidence, &row)) {
+        for (uint32_t i = 0; i < callable_target_count; i++) {
+            XgCallableTargetSummary target = {
+                .target_id = bc->evidence->ncallable_targets + 1,
+                .callsite_id = row.callsite_id,
+                .target_func_id = callable_target_func_ids[i],
+                .structural_signature_key = callable_signature_key,
+            };
+            if (!xg_global_evidence_add_callable_target(bc->evidence, &target)) {
+                bc->producer->failed = true;
+                break;
+            }
+        }
         bc->callsite_count++;
+        if (!body_add_interface_call_argument_uses(bc, call))
+            bc->producer->failed = true;
         body_record_call_object_argument_shapes(bc, call);
         body_add_options_bag_callsite(bc, &call->as.call_expr, &row);
         body_add_generic_inst(bc, generic_kind, generic_name, call->as.call_expr.type_args,
                               call->as.call_expr.type_arg_count, row.callsite_id,
                               (uint32_t) call->line, generic_origin_decl_id, generic_origin_func_id,
                               generic_origin_method_id, generic_origin_class_id);
+    } else {
+        bc->producer->failed = true;
     }
+    xr_free(callable_target_func_ids);
+}
+
+static XaSymbolLinks *producer_enum_links(const XgProducer *p, const EnumDeclNode *enumeration) {
+    if (!p || !p->analyzer || !p->analyzer->global_scope || !enumeration ||
+        enumeration->symbol_id == 0)
+        return NULL;
+    XaSymbol *symbol = xa_scope_lookup_by_id(p->analyzer->global_scope, enumeration->symbol_id);
+    return symbol && symbol->kind == XA_SYM_ENUM ? xa_analyzer_get_links(p->analyzer, symbol)
+                                                 : NULL;
 }
 
 static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
@@ -8871,8 +9711,8 @@ static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *n
         hash_name32(name), signature_key);
     if (!producer_enqueue_body(bc->producer, child_func_id, bc->module_id, XG_NO_ID,
                                bc->current_class_id, XG_NO_ID, hash_name32(name), signature_key,
-                               source_node_id, (uint32_t) node->line, XG_BODY_FUNCTION, fn->body,
-                               NULL, fn, NULL))
+                               source_node_id, node->node_id, fn->symbol_id, (uint32_t) node->line,
+                               XG_BODY_FUNCTION, fn->body, NULL, fn, NULL))
         return;
     pending = &bc->producer->bodies[bc->producer->nbodies - 1];
     pending->lexical_parent_func_id = bc->owner_func_id;
@@ -9149,7 +9989,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (captures) {
                 bc->escape_bits |= XG_BODY_ESCAPE_CAPTURE;
                 bc->effect_bits |= XG_BODY_MAY_ALLOC;
-                (void) body_add_interface_capture_uses(bc, (uint32_t) node->line);
+                if (!body_add_interface_capture_uses(
+                        bc, producer_source_node_id(bc->module_id, node), (uint32_t) node->line))
+                    bc->producer->failed = true;
             }
             if (fn->is_generator)
                 bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
@@ -9213,7 +10055,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
             XgInterfaceId interface_id = producer_lookup_interface_from_tref(
-                bc->producer, node->as.var_decl.type_annotation);
+                bc->producer, bc->module_id, node->as.var_decl.type_annotation);
             bool inferred = false;
             (void) body_type_ref_sequence_parts(node->as.var_decl.type_annotation, &sequence_kind,
                                                 &sequence_elem_type_key);
@@ -9231,8 +10073,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                     sequence_elem_type_key = body_rune_type_key();
                 }
             }
-            (void) body_add_interface_object_uses_for_type_ref(
-                bc, node->as.var_decl.type_annotation, 0, (uint32_t) node->line);
+            if (!body_add_interface_object_uses_for_type_ref(
+                    bc, node->as.var_decl.type_annotation, XG_INTERFACE_OBJECT_USE_VALUE,
+                    producer_source_node_id(bc->module_id, node), (uint32_t) node->line,
+                    XG_INTERFACE_USE_OWNED_STORAGE))
+                bc->producer->failed = true;
             bc->capability_bits |=
                 body_capabilities_for_type_ref(node->as.var_decl.type_annotation);
             walk_body_for_calls(bc, node->as.var_decl.initializer);
@@ -9423,9 +10268,12 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                         ? target_row->type_key
                         : body_interface_type_key(bc, target_row->interface_id);
                 uint32_t ordinal = ++bc->interface_object_use_count;
-                (void) producer_add_interface_object_use_row(
-                    bc->producer, target_row->interface_id, bc->owner_func_id,
-                    (uint32_t) node->line, ordinal, target_type_key, XG_INTERFACE_OBJECT_USE_VALUE);
+                if (!producer_add_interface_object_use_row(
+                        bc->producer, target_row->interface_id, bc->owner_func_id,
+                        producer_source_node_id(bc->module_id, node), (uint32_t) node->line,
+                        ordinal, target_type_key, XG_INTERFACE_OBJECT_USE_VALUE,
+                        XG_INTERFACE_USE_OWNED_STORAGE))
+                    bc->producer->failed = true;
             }
             target_row = body_find_local(bc, node->as.assignment.name);
             body_bind_static_object_shape_for_type_key(
@@ -9464,7 +10312,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_MEMBER_ACCESS: {
             const char *stdlib_module =
                 body_stdlib_module_for_expr(bc, node->as.member_access.object);
-            if (!body_member_access_is_scalar_builtin(bc, &node->as.member_access))
+            if (!body_member_access_is_scalar_builtin(bc, &node->as.member_access) &&
+                !body_member_access_is_enum_member(bc, node))
                 bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             if (stdlib_module &&
                 producer_stdlib_member_is_constant(stdlib_module, node->as.member_access.name)) {
@@ -9513,8 +10362,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
                 walk_body_for_calls(bc, node->as.return_stmt.values[i]);
             if (node->as.return_stmt.value_count > 0)
-                (void) body_add_interface_object_uses_for_type_ref(
-                    bc, bc->return_type, XG_INTERFACE_OBJECT_USE_RETURN, (uint32_t) node->line);
+                if (!body_add_interface_object_uses_for_type_ref(
+                        bc, bc->return_type, XG_INTERFACE_OBJECT_USE_RETURN,
+                        producer_source_node_id(bc->module_id, node), (uint32_t) node->line,
+                        XG_INTERFACE_USE_MOVE))
+                    bc->producer->failed = true;
             if (node->as.return_stmt.value_count > 0)
                 bc->escape_bits |= XG_BODY_ESCAPE_RETURN;
             break;
@@ -9797,8 +10649,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             const AstNode *collection = node->as.for_in_stmt.collection;
             XgClassId item_class =
                 producer_lookup_class_from_tref(bc->producer, node->as.for_in_stmt.item_type);
-            XgInterfaceId item_interface =
-                producer_lookup_interface_from_tref(bc->producer, node->as.for_in_stmt.item_type);
+            XgInterfaceId item_interface = producer_lookup_interface_from_tref(
+                bc->producer, bc->module_id, node->as.for_in_stmt.item_type);
             uint32_t item_type_key =
                 node->as.for_in_stmt.item_type ? hash_tref32(node->as.for_in_stmt.item_type) : 0;
             /* Untyped for-in item over a tracked Array<C>: inherit the element
@@ -9878,13 +10730,19 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
         XrTypeRef *param_type = param ? param->type : NULL;
         const char *param_name = param ? param->name : NULL;
         XgClassId class_id = producer_lookup_class_from_tref(bc->producer, param_type);
-        XgInterfaceId interface_id = producer_lookup_interface_from_tref(bc->producer, param_type);
+        XgInterfaceId interface_id =
+            producer_lookup_interface_from_tref(bc->producer, bc->module_id, param_type);
         uint32_t type_key = param_type ? hash_tref32(param_type) : 0;
         uint8_t sequence_kind = 0;
         uint32_t sequence_elem_type_key = 0;
         bc->capability_bits |= body_capabilities_for_type_ref(param_type);
-        (void) body_add_interface_object_uses_for_type_ref(bc, param_type,
-                                                           XG_INTERFACE_OBJECT_USE_PARAM, 0);
+        XgInterfaceUseKind parameter_use =
+            producer_interface_use_for_param_mode(param ? param->passing_mode : XR_PARAM_READ);
+        if (parameter_use == XG_INTERFACE_USE_INVALID ||
+            !body_add_interface_object_uses_for_type_ref(
+                bc, param_type, XG_INTERFACE_OBJECT_USE_PARAM,
+                xg_interface_parameter_site_id(bc->owner_func_id, (uint32_t) i), 0, parameter_use))
+            bc->producer->failed = true;
         (void) body_push_local(bc, param_name, 0, class_id, interface_id, type_key,
                                param_type ? param_type->name : NULL, false);
         if (param_type && param_type->kind == XR_TREF_OBJECT)
@@ -9915,15 +10773,20 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
         XrParamNode *param = function->params ? function->params[i] : NULL;
         XgClassId class_id =
             producer_lookup_class_from_tref(bc->producer, param ? param->type : NULL);
-        XgInterfaceId interface_id =
-            producer_lookup_interface_from_tref(bc->producer, param ? param->type : NULL);
+        XgInterfaceId interface_id = producer_lookup_interface_from_tref(
+            bc->producer, bc->module_id, param ? param->type : NULL);
         uint32_t type_key = param && param->type ? hash_tref32(param->type) : 0;
         uint8_t sequence_kind = 0;
         uint32_t sequence_elem_type_key = 0;
         bc->capability_bits |= body_capabilities_for_type_ref(param ? param->type : NULL);
-        (void) body_add_interface_object_uses_for_type_ref(
-            bc, param ? param->type : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
-            param && param->line > 0 ? (uint32_t) param->line : 0);
+        XgInterfaceUseKind parameter_use =
+            producer_interface_use_for_param_mode(param ? param->passing_mode : XR_PARAM_READ);
+        if (parameter_use == XG_INTERFACE_USE_INVALID ||
+            !body_add_interface_object_uses_for_type_ref(
+                bc, param ? param->type : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
+                xg_interface_parameter_site_id(bc->owner_func_id, (uint32_t) i),
+                param && param->line > 0 ? (uint32_t) param->line : 0, parameter_use))
+            bc->producer->failed = true;
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
                                class_id, interface_id, type_key,
                                param && param->type ? param->type->name : NULL, false);
@@ -10058,14 +10921,160 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     return xg_global_evidence_add_body(producer->evidence, &row) != NULL;
 }
 
+static const XgBodySummary *producer_find_body_summary(const XgGlobalEvidence *evidence,
+                                                       XgFuncId func_id) {
+    if (!evidence || func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nbodies; i++) {
+        if (evidence->bodies[i].func_id == func_id)
+            return &evidence->bodies[i];
+    }
+    return NULL;
+}
+
+static bool producer_body_capability_closure(const XgGlobalEvidence *evidence,
+                                             const XgBodySummary *body, uint32_t *capability_bits) {
+    if (capability_bits)
+        *capability_bits = 0u;
+    if (!evidence || !body || !capability_bits || evidence->nbodies == 0u)
+        return false;
+    uint8_t *reachable = xr_calloc(evidence->nbodies, sizeof(*reachable));
+    if (!reachable)
+        return false;
+    bool ok = xg_body_reachability_mark_closed_world_calls(evidence, body->func_id, reachable,
+                                                           evidence->nbodies);
+    uint32_t closure = 0u;
+    for (uint32_t index = 0u; ok && index < evidence->nbodies; ++index) {
+        if (reachable[index])
+            closure |= evidence->bodies[index].capability_bits;
+    }
+    xr_free(reachable);
+    if (ok)
+        *capability_bits = closure;
+    return ok;
+}
+
 static bool producer_emit_body_summaries(XgProducer *producer) {
     if (!producer)
         return false;
     for (uint32_t i = 0; i < producer->nbodies; i++) {
         if (!add_body_summary(producer, &producer->bodies[i]))
             return false;
+        if (producer->failed)
+            return false;
     }
+    uint32_t *closed_effects =
+        producer->evidence->ncallable_targets
+            ? xr_calloc(producer->evidence->ncallable_targets, sizeof(*closed_effects))
+            : NULL;
+    uint32_t *closed_capabilities =
+        producer->evidence->ncallable_targets
+            ? xr_calloc(producer->evidence->ncallable_targets, sizeof(*closed_capabilities))
+            : NULL;
+    if (producer->evidence->ncallable_targets && (!closed_effects || !closed_capabilities))
+        goto fail;
+
+    /* First publish a self-consistent raw snapshot.  The existing closed-world
+     * graph walkers
+     * deliberately reject an unverified callable range, so no
+     * row may be partially upgraded
+     * while another target is being composed. */
+    for (uint32_t i = 0; i < producer->evidence->ncallsites; i++) {
+        XgCallsiteSummary *callsite = &producer->evidence->callsites[i];
+        if (callsite->kind != XG_CALL_CLOSURE || callsite->callable_target_count == 0)
+            continue;
+        uint32_t start = callsite->callable_target_start;
+        uint32_t count = callsite->callable_target_count;
+        if (start == 0 || start - 1 >= producer->evidence->ncallable_targets ||
+            count > producer->evidence->ncallable_targets - (start - 1) ||
+            callsite->static_target_func_id != XG_NO_ID || callsite->callable_signature_key == 0)
+            goto fail;
+        uint32_t effect_union = 0;
+        uint32_t capability_union = 0;
+        XgFuncId previous_func_id = XG_NO_ID;
+        for (uint32_t j = 0; j < count; j++) {
+            XgCallableTargetSummary *target = &producer->evidence->callable_targets[start - 1 + j];
+            const XgBodySummary *body =
+                producer_find_body_summary(producer->evidence, target->target_func_id);
+            if (!body || target->target_id != start + j ||
+                target->callsite_id != callsite->callsite_id ||
+                target->structural_signature_key != callsite->callable_signature_key ||
+                (j > 0 && target->target_func_id <= previous_func_id))
+                goto fail;
+            previous_func_id = target->target_func_id;
+            target->effect_bits = body->effect_bits;
+            target->capability_bits = body->capability_bits;
+            effect_union |= target->effect_bits;
+            capability_union |= target->capability_bits;
+        }
+        callsite->callable_effect_union = effect_union;
+        callsite->callable_capability_union = capability_union;
+        callsite->flags |= XG_CALL_TARGET_SET_VERIFIED;
+    }
+
+    /* Compose transitive effects and capabilities without mutating the raw
+     * snapshot.  This
+     * makes fallibility and provider requirements properties
+     * of the complete target
+     * implementation, not merely its outer syntax. */
+    for (uint32_t i = 0u; i < producer->evidence->ncallable_targets; ++i) {
+        XgCallableTargetSummary *target = &producer->evidence->callable_targets[i];
+        const XgBodySummary *body =
+            producer_find_body_summary(producer->evidence, target->target_func_id);
+        if (!body ||
+            !xg_body_effects_compose_closed_world_calls(producer->evidence, body,
+                                                        &closed_effects[i]) ||
+            !producer_body_capability_closure(producer->evidence, body, &closed_capabilities[i]))
+            goto fail;
+    }
+
+    for (uint32_t i = 0u; i < producer->evidence->ncallable_targets; ++i) {
+        producer->evidence->callable_targets[i].effect_bits = closed_effects[i];
+        producer->evidence->callable_targets[i].capability_bits = closed_capabilities[i];
+    }
+    for (uint32_t i = 0u; i < producer->evidence->ncallsites; ++i) {
+        XgCallsiteSummary *callsite = &producer->evidence->callsites[i];
+        if (callsite->kind != XG_CALL_CLOSURE || callsite->callable_target_count == 0u)
+            continue;
+        uint32_t start = callsite->callable_target_start - 1u;
+        uint32_t effect_union = 0u;
+        uint32_t capability_union = 0u;
+        for (uint32_t j = 0u; j < callsite->callable_target_count; ++j) {
+            effect_union |= producer->evidence->callable_targets[start + j].effect_bits;
+            capability_union |= producer->evidence->callable_targets[start + j].capability_bits;
+        }
+        callsite->callable_effect_union = effect_union;
+        callsite->callable_capability_union = capability_union;
+        callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC);
+        if ((effect_union & XG_BODY_MAY_ERROR) != 0u)
+            callsite->flags |= XG_CALL_MAY_ERROR;
+        if ((effect_union & XG_BODY_MAY_PANIC) != 0u)
+            callsite->flags |= XG_CALL_MAY_PANIC;
+        callsite->flags |= XG_CALL_ERROR_EFFECT_VERIFIED;
+    }
+    for (uint32_t i = 0u; i < producer->evidence->ncallsites; ++i) {
+        XgCallsiteSummary *callsite = &producer->evidence->callsites[i];
+        uint32_t effect_union = 0u;
+        if (callsite->kind != XG_CALL_INTERFACE)
+            continue;
+        if (!xg_callsite_effects_compose_closed_world_calls(producer->evidence, callsite,
+                                                            &effect_union))
+            goto fail;
+        callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC);
+        if ((effect_union & XG_BODY_MAY_ERROR) != 0u)
+            callsite->flags |= XG_CALL_MAY_ERROR;
+        if ((effect_union & XG_BODY_MAY_PANIC) != 0u)
+            callsite->flags |= XG_CALL_MAY_PANIC;
+        callsite->flags |= XG_CALL_ERROR_EFFECT_VERIFIED;
+    }
+    xr_free(closed_effects);
+    xr_free(closed_capabilities);
     return true;
+
+fail:
+    xr_free(closed_effects);
+    xr_free(closed_capabilities);
+    return false;
 }
 
 static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
@@ -10097,7 +11106,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
                                  hash_name32(fn->name), decl.signature_key, decl.source_node_id,
-                                 (uint32_t) node->line, XG_BODY_FUNCTION, fn->body, NULL, fn,
+                                 node->node_id, fn->symbol_id, (uint32_t) node->line,
+                                 XG_BODY_FUNCTION, fn->body, NULL, fn,
                                  producer_function_links(p, fn));
 }
 
@@ -10156,9 +11166,12 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     decl.decl_id = decl_id;
     decl.kind = (uint8_t) kind;
     decl.name_id = hash_name32(cls->name);
+    decl.type_key = hash_named_type_key32(cls->name, NULL, 0);
     decl.source_node_id =
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
+    decl.nominal_key =
+        producer_nominal_key_fields(p, module_id, decl.source_node_id, decl.kind, decl.type_key);
     decl.source_span_id = (uint32_t) node->line;
     decl.storage_domain = XR_STORAGE_MODULE_STATIC;
     decl.storage_mutability = XR_STORAGE_READONLY;
@@ -10169,7 +11182,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
     decl.derive_flags = derive_flags;
-    if (!xg_global_evidence_add_decl(p->evidence, &decl))
+    if (decl.nominal_key == 0 || !xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
     for (int i = 0; i < cls->method_count; i++) {
         const AstNode *method_node = cls->methods[i];
@@ -10203,8 +11216,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         method_count++;
         if (!producer_enqueue_body(p, method_func_id, module_id, decl_id, class_id,
                                    method.method_id, hash_name32(m->name), method.signature_key,
-                                   method.source_node_id, (uint32_t) method_node->line,
-                                   XG_BODY_METHOD, m->body, m, NULL,
+                                   method.source_node_id, method_node->node_id, 0,
+                                   (uint32_t) method_node->line, XG_BODY_METHOD, m->body, m, NULL,
                                    producer_method_links(p, class_info, m)))
             return false;
     }
@@ -10233,8 +11246,9 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             return false;
         field_count++;
         if (!producer_add_interface_object_uses_for_type_ref(
-                p, XG_NO_ID, (uint32_t) field_node->line, NULL, field->field_type,
-                XG_INTERFACE_OBJECT_USE_FIELD, 0))
+                p, module_id, XG_NO_ID, producer_source_node_id(module_id, field_node),
+                (uint32_t) field_node->line, NULL, field->field_type, XG_INTERFACE_OBJECT_USE_FIELD,
+                0, XG_INTERFACE_USE_OWNED_STORAGE))
             return false;
     }
 
@@ -10269,29 +11283,24 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     csum.field_count = field_count;
     csum.method_start = method_count > 0 ? method_start : 0;
     csum.method_count = method_count;
-    csum.interface_start = cls->interface_count > 0 ? p->evidence->ninterface_impls + 1 : 0;
-    csum.interface_count = (uint32_t) cls->interface_count;
+    if (!p->analyzer && cls->interface_count > 0)
+        return false;
+    csum.interface_start = 0;
+    csum.interface_count = 0;
     csum.decl_kind = (uint8_t) kind;
-    for (int i = 0; i < cls->interface_count; i++) {
-        XgInterfaceImplSummary impl;
-        const XrTypeRef *iface = cls->interfaces ? cls->interfaces[i] : NULL;
-        uint32_t name_id = hash_name32(iface ? iface->name : NULL);
-        memset(&impl, 0, sizeof(impl));
-        impl.implementor_class_id = class_id;
-        impl.interface_id = (XgInterfaceId) name_id;
-        impl.name_id = name_id;
-        impl.type_key = hash_tref32(iface);
-        impl.source_span_id = (uint32_t) node->line;
-        if (!xg_global_evidence_add_interface_impl(p->evidence, &impl))
-            return false;
-    }
     if (!xg_global_evidence_add_class(p->evidence, &csum))
         return false;
     // Backfill the evidence class id onto the analyzer's class info so IR
     // lowering can resolve field accesses through the exact declaring class,
     // disambiguating same-named classes exported by different modules.
-    if (class_info)
+    if (class_info) {
+        if ((class_info->xg_decl_id != XG_NO_ID && class_info->xg_decl_id != decl_id) ||
+            (class_info->xg_nominal_key != 0 && class_info->xg_nominal_key != decl.nominal_key))
+            return false;
         class_info->xg_class_id = class_id;
+        class_info->xg_decl_id = decl_id;
+        class_info->xg_nominal_key = decl.nominal_key;
+    }
     if (!producer_add_decl_derives(p, module_id, decl_id, (uint32_t) node->line, cls->name,
                                    derive_flags, cls, class_id))
         return false;
@@ -10304,7 +11313,21 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
 static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
     const InterfaceDeclNode *iface = &node->as.interface_decl;
     XgDeclSummary decl;
-    XgInterfaceId interface_id = (XgInterfaceId) hash_name32(iface->name);
+    XgInterfaceNameRow *interface_row =
+        producer_lookup_interface_row_exact_name(p, module_id, iface->name);
+    XgInterfaceId interface_id = interface_row ? interface_row->interface_id : XG_NO_ID;
+    XaSymbol *interface_symbol =
+        p->analyzer && iface->symbol_id && p->analyzer->global_scope
+            ? xa_scope_lookup_by_id(p->analyzer->global_scope, iface->symbol_id)
+            : NULL;
+    XrClassInfo *interface_info = interface_symbol && interface_symbol->kind == XA_SYM_CLASS
+                                      ? interface_symbol->links.class_info
+                                      : NULL;
+    if (!interface_row || interface_row->decl != iface ||
+        (p->analyzer && (!interface_symbol || !interface_info ||
+                         interface_info->declaration_symbol != interface_symbol ||
+                         interface_row->analyzer_info != interface_info)))
+        return false;
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
@@ -10314,25 +11337,43 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
     decl.source_node_id =
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
+    decl.nominal_key =
+        producer_nominal_key_fields(p, module_id, decl.source_node_id, decl.kind, decl.type_key);
     decl.source_span_id = (uint32_t) node->line;
-    if (!xg_global_evidence_add_decl(p->evidence, &decl))
+    if (decl.source_node_id != interface_row->source_node_id ||
+        decl.nominal_key != interface_row->nominal_key ||
+        producer_interface_id(decl.nominal_key) != interface_id ||
+        !xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
+    if (interface_info) {
+        if ((interface_info->xg_decl_id != XG_NO_ID &&
+             interface_info->xg_decl_id != decl.decl_id) ||
+            interface_info->xg_interface_id != interface_id ||
+            interface_info->xg_nominal_key != decl.nominal_key)
+            return false;
+        interface_info->xg_decl_id = decl.decl_id;
+    }
     for (int i = 0; i < iface->extends_count; i++) {
         const XrTypeRef *parent = iface->extends ? iface->extends[i] : NULL;
         const char *parent_name = xr_tref_head_name(parent);
         XgInterfaceExtendsSummary edge;
         memset(&edge, 0, sizeof(edge));
         edge.child_interface_id = interface_id;
-        edge.parent_interface_id = (XgInterfaceId) hash_name32(parent_name);
-        edge.name_id = edge.parent_interface_id;
+        edge.parent_interface_id = producer_lookup_interface(p, module_id, parent_name);
+        edge.name_id = hash_name32(parent_name);
         edge.type_key = hash_tref32(parent);
         edge.source_span_id = (uint32_t) node->line;
-        if (!xg_global_evidence_add_interface_extends(p->evidence, &edge))
+        if (edge.parent_interface_id == XG_NO_ID ||
+            !xg_global_evidence_add_interface_extends(p->evidence, &edge))
             return false;
     }
     for (int i = 0; i < iface->method_count; i++) {
         const AstNode *method_node = iface->methods ? iface->methods[i] : NULL;
         const InterfaceMethodNode *method;
+        XaSymbol *method_symbol =
+            interface_info && i < interface_info->method_count ? interface_info->methods[i] : NULL;
+        XaSymbolLinks *method_links =
+            method_symbol ? xa_analyzer_get_links(p->analyzer, method_symbol) : NULL;
         XgInterfaceMethodSummary summary;
         if (!method_node || method_node->type != AST_INTERFACE_METHOD)
             continue;
@@ -10344,10 +11385,190 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
         summary.signature_key = hash_interface_method_signature(method);
         summary.ordinal = (uint32_t) i;
         summary.source_span_id = (uint32_t) method_node->line;
+        summary.parameter_start =
+            method->param_count > 0 ? p->evidence->ninterface_method_params + 1 : 0;
+        summary.parameter_count = method->param_count > 0 ? (uint32_t) method->param_count : 0;
+        summary.result_type_key = hash_tref32(method->return_type);
+        summary.error_type_key = 0;
+        summary.panic_type_key = 0;
+        summary.effect_bits = 0;
+        summary.capability_bits = 0;
+        summary.result_ownership = producer_return_ownership(method_links);
+        summary.receiver_mode = (uint8_t) method->receiver_mode;
+        summary.has_receiver = 1;
+        summary.contract_complete =
+            method_links && method_links->type && XR_TYPE_IS_FUNCTION(method_links->type) &&
+                    method->type_param_count == 0 && iface->type_param_count == 0 &&
+                    method->return_type && xr_param_mode_is_valid(method->receiver_mode)
+                ? 1
+                : 0;
+        for (int parameter = 0; parameter < method->param_count; parameter++) {
+            const XrParamNode *source = method->params ? method->params[parameter] : NULL;
+            XgInterfaceMethodParamSummary param;
+            memset(&param, 0, sizeof(param));
+            param.interface_method_id = summary.interface_method_id;
+            param.ordinal = (uint32_t) parameter;
+            param.type_key = source && source->type ? hash_tref32(source->type) : 0;
+            param.mode = (uint8_t) (source ? source->passing_mode : XR_PARAM_READ);
+            if (!source || !source->type || !xr_param_mode_is_valid((XrParamMode) param.mode) ||
+                !xg_global_evidence_add_interface_method_param(p->evidence, &param))
+                return false;
+        }
         if (!xg_global_evidence_add_interface_method(p->evidence, &summary))
             return false;
     }
-    return producer_register_interface(p, module_id, iface->name, iface);
+    return producer_register_interface(p, module_id, node, interface_info);
+}
+
+static uint32_t producer_type_key_for_analyzer_type(const XgProducer *producer,
+                                                    const XrType *type) {
+    const XrClassInfo *info = NULL;
+    if (!producer || !type)
+        return 0;
+    if (type->kind == XR_KIND_ENUM)
+        info = type->enum_type.nominal_ref;
+    else if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE ||
+             type->kind == XR_KIND_INTERFACE)
+        info = type->instance.class_ref;
+    if (!info || info->xg_decl_id == XG_NO_ID || info->xg_nominal_key == 0)
+        return 0;
+    const XgDeclSummary *decl = producer_decl_by_id(producer, info->xg_decl_id);
+    return decl && decl->nominal_key == info->xg_nominal_key ? decl->type_key : 0;
+}
+
+static bool producer_body_error_type_key(const XgProducer *producer, XgFuncId func_id,
+                                         uint32_t closed_effects, uint32_t *out_type_key) {
+    const XgPendingBody *pending = NULL;
+    if (out_type_key)
+        *out_type_key = 0;
+    if (!producer || !producer->analyzer || !out_type_key)
+        return false;
+    if ((closed_effects & XG_BODY_MAY_ERROR) == 0u)
+        return true;
+    for (uint32_t i = 0; i < producer->nbodies; i++) {
+        if (producer->bodies[i].func_id == func_id) {
+            pending = &producer->bodies[i];
+            break;
+        }
+    }
+    const XaEffectSummary *effect =
+        pending && pending->links && pending->links->effect_id != XA_EFFECT_NONE
+            ? xa_effect_db_get(producer->analyzer->effect_db, pending->links->effect_id)
+            : NULL;
+    if (!effect || effect->error_set_completeness != XA_EFFECT_COMPLETE ||
+        effect->error_unknown_reasons != XA_UNKNOWN_NONE || effect->escaping.count != 1u)
+        return false;
+    XrType *error_type = xa_effect_db_error_type_handle(producer->analyzer->effect_db,
+                                                        effect->escaping.types[0].type_id);
+    *out_type_key = producer_type_key_for_analyzer_type(producer, error_type);
+    return *out_type_key != 0;
+}
+
+static bool producer_body_return_ownership_contract(const XgProducer *producer, XgFuncId func_id,
+                                                    const XgBodySummary *body,
+                                                    XgReturnOwnership *out_ownership) {
+    const XgPendingBody *pending = NULL;
+    XrType *return_type = NULL;
+    if (!producer || !body || !out_ownership || func_id == XG_NO_ID)
+        return false;
+    if (body->return_ownership.complete &&
+        body->return_ownership.kind != XG_RETURN_OWNERSHIP_UNKNOWN) {
+        *out_ownership = body->return_ownership;
+        return true;
+    }
+    for (uint32_t i = 0; i < producer->nbodies; i++) {
+        if (producer->bodies[i].func_id == func_id) {
+            pending = &producer->bodies[i];
+            break;
+        }
+    }
+    if (pending && pending->links) {
+        return_type = pending->links->return_type;
+        if (!return_type && pending->links->type && XR_TYPE_IS_FUNCTION(pending->links->type))
+            return_type = pending->links->type->function.return_type;
+    }
+    if (!return_type)
+        return false;
+    switch (return_type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+        case XR_KIND_NULL:
+        case XR_KIND_NEVER:
+        case XR_KIND_UNIT:
+        case XR_KIND_POINTER:
+            *out_ownership = (XgReturnOwnership) {XG_RETURN_OWNERSHIP_OWNED, -1, 1};
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool producer_finalize_interface_method_contracts(XgProducer *producer) {
+    if (!producer || !producer->evidence)
+        return false;
+    if (!producer->analyzer)
+        return true;
+    for (uint32_t i = 0; i < producer->evidence->ninterface_methods; i++) {
+        XgInterfaceMethodSummary *method = &producer->evidence->interface_methods[i];
+        XgReturnOwnership ownership = {XG_RETURN_OWNERSHIP_UNKNOWN, -1, 0};
+        uint32_t effect_union = 0;
+        uint32_t capability_union = 0;
+        uint32_t error_type_key = 0;
+        bool seen = false;
+        for (uint32_t j = 0; j < producer->evidence->ninterface_impls; j++) {
+            const XgInterfaceImplSummary *impl = &producer->evidence->interface_impls[j];
+            if (impl->interface_id != method->owner_interface_id || !impl->verdict_complete)
+                continue;
+            const XgInterfaceWitnessSummary *witness = xg_global_evidence_find_interface_witness(
+                producer->evidence, impl->conformance_id, method->ordinal);
+            const XgBodySummary *body =
+                witness ? producer_find_body_summary(producer->evidence,
+                                                     witness->implementation_func_id)
+                        : NULL;
+            uint32_t closed_effects = 0;
+            uint32_t closed_capabilities = 0;
+            uint32_t target_error_type_key = 0;
+            XgReturnOwnership target_ownership = {XG_RETURN_OWNERSHIP_UNKNOWN, -1, 0};
+            if (!witness || !witness->complete || !body ||
+                !producer_body_return_ownership_contract(producer, witness->implementation_func_id,
+                                                         body, &target_ownership) ||
+                !xg_body_effects_compose_closed_world_calls(producer->evidence, body,
+                                                            &closed_effects) ||
+                !producer_body_capability_closure(producer->evidence, body, &closed_capabilities) ||
+                !producer_body_error_type_key(producer, witness->implementation_func_id,
+                                              closed_effects, &target_error_type_key))
+                return false;
+            if (!seen) {
+                ownership = target_ownership;
+                error_type_key = target_error_type_key;
+            } else if (ownership.kind != target_ownership.kind ||
+                       ownership.param_index != target_ownership.param_index ||
+                       error_type_key != target_error_type_key) {
+                return false;
+            }
+            effect_union |= closed_effects;
+            capability_union |= closed_capabilities;
+            seen = true;
+        }
+        if (!seen) {
+            method->contract_complete = 0;
+            continue;
+        }
+        if (method->result_type_key == 0 || !method->has_receiver ||
+            !xr_param_mode_is_valid((XrParamMode) method->receiver_mode))
+            return false;
+        method->error_type_key = error_type_key;
+        method->panic_type_key = (effect_union & XG_BODY_MAY_PANIC) != 0u
+                                     ? hash_named_type_key32(TYPE_NAME_PANIC_INFO, NULL, 0)
+                                     : 0;
+        method->effect_bits = effect_union;
+        method->capability_bits = capability_union;
+        method->result_ownership = ownership;
+        method->contract_complete = 1;
+    }
+    return true;
 }
 
 static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
@@ -10355,6 +11576,10 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     XgDeclSummary decl;
     uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
     uint32_t type_key = hash_named_type_key32(e->name, NULL, 0);
+    XaSymbolLinks *enum_links = producer_enum_links(p, e);
+    XrClassInfo *enum_info = enum_links ? enum_links->class_info : NULL;
+    if (p->analyzer && (!enum_links || !enum_info))
+        return false;
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
@@ -10365,6 +11590,8 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     decl.source_node_id =
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
+    decl.nominal_key =
+        producer_nominal_key_fields(p, module_id, decl.source_node_id, decl.kind, decl.type_key);
     decl.source_span_id = (uint32_t) node->line;
     decl.storage_domain = XR_STORAGE_MODULE_STATIC;
     decl.storage_mutability = XR_STORAGE_READONLY;
@@ -10373,9 +11600,43 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
     decl.derive_flags = derive_flags;
-    if (!xg_global_evidence_add_decl(p->evidence, &decl))
+    if (decl.nominal_key == 0 || !xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
-    if (!producer_register_enum(p, module_id, e->name, e, type_key))
+    if (enum_info) {
+        if ((enum_info->xg_decl_id != XG_NO_ID && enum_info->xg_decl_id != decl.decl_id) ||
+            (enum_info->xg_nominal_key != 0 && enum_info->xg_nominal_key != decl.nominal_key))
+            return false;
+        enum_info->xg_decl_id = decl.decl_id;
+        enum_info->xg_nominal_key = decl.nominal_key;
+    }
+    for (int i = 0; i < e->method_count; i++) {
+        const AstNode *method_node = e->methods ? e->methods[i] : NULL;
+        if (!method_node || method_node->type != AST_METHOD_DECL)
+            continue;
+        const MethodDeclNode *method = &method_node->as.method_decl;
+        XaSymbol *method_symbol = NULL;
+        for (int j = 0; enum_info && j < enum_info->method_count; j++) {
+            XaSymbol *candidate = enum_info->methods[j];
+            if (candidate && candidate->links.function_decl_node == method_node) {
+                method_symbol = candidate;
+                break;
+            }
+        }
+        XaSymbolLinks *method_links = method_symbol ? &method_symbol->links : NULL;
+        XgFuncId method_func_id = producer_next_func_id(p);
+        uint32_t signature_key = hash_method_signature(method);
+        uint32_t source_node_id = producer_source_node_id(module_id, method_node);
+        if (p->analyzer && (!method_symbol || !method_links))
+            return false;
+        if (!producer_enqueue_body(p, method_func_id, module_id, decl.decl_id, XG_NO_ID, XG_NO_ID,
+                                   hash_name32(method->name), signature_key, source_node_id,
+                                   method_node->node_id, method_symbol ? method_symbol->id : 0,
+                                   (uint32_t) method_node->line, XG_BODY_METHOD, method->body,
+                                   method, NULL, method_links))
+            return false;
+    }
+    if (!producer_register_enum(p, module_id, e->name, e, decl.decl_id, type_key, enum_info,
+                                (uint32_t) node->line))
         return false;
     return producer_add_decl_derives(p, module_id, decl.decl_id, (uint32_t) node->line, e->name,
                                      derive_flags, NULL, 0);
@@ -10546,8 +11807,8 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
     if (has_module_body) {
         XgFuncId module_func_id = producer_next_func_id(p);
         if (!producer_enqueue_body(p, module_func_id, module_id, XG_NO_ID, XG_NO_ID, XG_NO_ID,
-                                   hash_name32("<module-init>"), 0, 0, 0, XG_BODY_MODULE_INIT, ast,
-                                   NULL, NULL, NULL))
+                                   hash_name32("<module-init>"), 0, 0, 0, 0, 0, XG_BODY_MODULE_INIT,
+                                   ast, NULL, NULL, NULL))
             return false;
     }
     return true;
@@ -10766,7 +12027,52 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
             xg_global_evidence_free(evidence);
             return false;
         }
-        if (module_identity_is_imported(imported_modules, imported_module_count, &module_summary))
+    }
+
+    /* Interface identities are registered before declaration emission so
+     * forward extends
+     * edges resolve to the exact declaration. Registration
+     * rejects any 32-bit id collision
+     * between distinct canonical nominals. */
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int idx = graph->topo_order[ti];
+        const XrModuleSpec *spec = &graph->specs[idx];
+        XgModuleId module_id = (XgModuleId) (ti + 1);
+        const XgModuleSummary *module_summary = &evidence->modules[ti];
+        if (module_identity_is_imported(imported_modules, imported_module_count, module_summary) ||
+            !spec->ast || spec->ast->type != AST_PROGRAM)
+            continue;
+        for (int i = 0; i < spec->ast->as.program.count; i++) {
+            const AstNode *node = spec->ast->as.program.statements[i];
+            XaSymbol *symbol = analyzer && node && node->type == AST_INTERFACE_DECL &&
+                                       node->as.interface_decl.symbol_id != 0 &&
+                                       analyzer->global_scope
+                                   ? xa_scope_lookup_by_id(analyzer->global_scope,
+                                                           node->as.interface_decl.symbol_id)
+                                   : NULL;
+            XrClassInfo *info =
+                symbol && symbol->kind == XA_SYM_CLASS ? symbol->links.class_info : NULL;
+            if (node && node->type == AST_INTERFACE_DECL &&
+                ((analyzer && (!symbol || !info || info->declaration_symbol != symbol)) ||
+                 !producer_register_interface(&producer, module_id, node, info))) {
+                xr_free(producer.classes);
+                xr_free(producer.interfaces);
+                xr_free(producer.enums);
+                xr_free(producer.funcs);
+                xr_free(producer.stdlib_imports);
+                producer_free_bodies(&producer);
+                xg_global_evidence_free(evidence);
+                return false;
+            }
+        }
+    }
+
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int idx = graph->topo_order[ti];
+        const XrModuleSpec *spec = &graph->specs[idx];
+        XgModuleId module_id = (XgModuleId) (ti + 1);
+        const XgModuleSummary *module_summary = &evidence->modules[ti];
+        if (module_identity_is_imported(imported_modules, imported_module_count, module_summary))
             continue;
         if (!add_module_ast(&producer, module_id, spec->ast)) {
             xr_free(producer.classes);
@@ -10780,7 +12086,9 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
         }
     }
 
-    if (!producer_finalize_class_graph(&producer) || !producer_emit_body_summaries(&producer)) {
+    if (!producer_publish_nominal_conformances(&producer) ||
+        !producer_finalize_class_graph(&producer) || !producer_emit_body_summaries(&producer) ||
+        !producer_finalize_interface_method_contracts(&producer)) {
         xr_free(producer.classes);
         xr_free(producer.interfaces);
         xr_free(producer.enums);

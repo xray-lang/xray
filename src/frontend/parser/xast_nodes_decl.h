@@ -135,6 +135,7 @@ typedef struct InterfaceDeclNode {
     int property_count;
     XrGenericParam **type_params;  // Generic type parameters (e.g. `interface Iterable<T>`)
     int type_param_count;
+    uint32_t symbol_id;  // Analyzer-assigned exact declaration ID
 } InterfaceDeclNode;
 
 typedef struct FieldDeclNode {

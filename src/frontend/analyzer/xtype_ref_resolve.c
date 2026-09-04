@@ -1936,6 +1936,8 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                         links->enum_info ? links->enum_info->layout : head->enum_type.layout;
                     result = xr_type_new_generic_enum(analyzer->isolate, tref->name, layout, args,
                                                       nargs);
+                    if (result)
+                        result->enum_type.nominal_ref = links->class_info;
                 } else {
                     result = xr_type_new_generic_instance(analyzer->isolate, tref->name,
                                                           links->class_info, args, nargs);

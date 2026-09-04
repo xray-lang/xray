@@ -10985,11 +10985,12 @@ static bool cg_block_owns_final_call(const XiBlock *blk, const XiValue *call) {
             continue;
         if (cg_unwrap_identity_value(value) == call)
             continue;
-        /* ERR_CHECK deliberately has no producer operand. With every other
-         * post-call instruction rejected, this operand-free check belongs to
-         * the call by Xi's constructive nearest-producer contract. */
+        /* The error check is part of this exact call boundary even though its
+         * producer
+         * relation is intentionally not an SSA operand. */
         if (value->op == XI_ERR_CHECK && !saw_error_check &&
-            !xi_err_check_has_arc_cleanups(value)) {
+            !xi_err_check_has_arc_cleanups(value) &&
+            xi_err_check_producer(blk->func, value) == call) {
             saw_error_check = true;
             continue;
         }
@@ -11085,7 +11086,8 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         }
         if (mt_call && after_mt_call &&
             (cg_unwrap_identity_value(v) == mt_call ||
-             (v->op == XI_ERR_CHECK && !xi_err_check_has_arc_cleanups(v))))
+             (v->op == XI_ERR_CHECK && !xi_err_check_has_arc_cleanups(v) &&
+              xi_err_check_producer(f, v) == mt_call)))
             continue;
         xicgen_emit_stringbuilder_literal_append_reserve(ctx, out, blk, i);
         emit_value_stmt(ctx, out, f, v, prefix);

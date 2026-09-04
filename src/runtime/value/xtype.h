@@ -284,6 +284,7 @@ struct XrType {
         // For enum value type
         struct {
             const char *enum_name;
+            XrClassInfo *nominal_ref; /* declaration identity; NULL for builtins */
             uint32_t layout_id;
             const XrEnumLayout *layout;
             XrType **type_args;  // Concrete arguments retained by a generic enum type domain.

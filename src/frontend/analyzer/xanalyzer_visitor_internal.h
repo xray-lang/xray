@@ -66,6 +66,8 @@ XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNod
                                                  int fallback_line);
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node);
+XR_FUNC void xa_check_interface_conformance(XaInferContext *ctx, AstNode *node,
+                                            XrClassInfo *class_info);
 XR_FUNC void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx,
                                                           XaSymbolLinks *links);
 XR_FUNC bool xa_function_expr_param_mutates(XaInferContext *ctx, XrType *function_type,
@@ -119,11 +121,14 @@ XR_FUNC XaSymbol *xa_resolve_variable_symbol(XaInferContext *ctx, AstNode *node)
 XR_FUNC bool xa_call_is_builtin_module_member(XaInferContext *ctx, const CallExprNode *call,
                                               const char *module_name, const char *member_name);
 
-/* Task 216: a function item can carry a precise inferred effect, but storing it
- * in an unannotated variable/field creates a merge point whose type defaults to
- * MAY_THROW. Copy before widening so the declaration symbol's precise function
- * type remains unchanged. A compiler-owned effect constraint may bypass this
- * helper by using its canonical declared type. */
+/* A function item can carry a precise inferred effect, but storing it in an
+ * unannotated
+ * variable/field creates a merge point whose type starts at
+ * MAY_THROW. Copy before widening so
+ * the declaration symbol's precise function
+ * type remains unchanged. Error-set inference may
+ * later tighten a local
+ * binding only from the complete union of every value written to it. */
 static inline XrType *xa_function_value_storage_type(XaInferContext *ctx, XrType *inferred) {
     if (!ctx || !ctx->analyzer || !inferred || inferred->kind != XR_KIND_FUNCTION)
         return inferred;

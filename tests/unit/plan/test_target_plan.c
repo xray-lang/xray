@@ -3,6 +3,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_stage.h"
@@ -588,6 +589,92 @@ static XrSemanticPlan *build_source_instance_method_semantic(void) {
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
     REQUIRE(semantic != NULL && semantic->call_target_count == 1 &&
+            semantic->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
+    root->module = NULL;
+    xi_func_free(root);
+    module->init = NULL;
+    xi_module_free(module);
+    return semantic;
+}
+
+static XrSemanticPlan *build_move_receiver_source_method_semantic(void) {
+    XiFunc *root = xi_func_new("target_move_receiver_root", &stub_unit);
+    XiFunc *callee = xi_func_new("finish", &stub_int);
+    XiFunc *caller = xi_func_new("call_finish", &stub_int);
+    REQUIRE(root != NULL && callee != NULL && caller != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *callee_entry = xi_block_new(callee);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry != NULL && callee_entry != NULL && caller_entry != NULL);
+    root->children = (XiFunc **) xr_malloc(2u * sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = callee;
+    root->children[1] = caller;
+    root->nchildren = root->children_cap = 2;
+    callee->parent_func = caller->parent_func = root;
+
+    callee->nparams = callee->min_params = 1;
+    caller->nparams = caller->min_params = 1;
+    callee->params = (XiValue **) xr_calloc(1, sizeof(*callee->params));
+    caller->params = (XiValue **) xr_calloc(1, sizeof(*caller->params));
+    REQUIRE(callee->params != NULL && caller->params != NULL);
+    callee->params[0] = xi_param(callee, callee_entry, 0, &stub_target_source_instance);
+    caller->params[0] = xi_param(caller, caller_entry, 0, &stub_target_source_instance);
+    REQUIRE(callee->params[0] != NULL && caller->params[0] != NULL);
+    callee->has_receiver = true;
+    callee->receiver_mode = XR_PARAM_MOVE;
+    REQUIRE(xi_func_set_param_passing_mode(callee, 0, XR_PARAM_MOVE));
+
+    XiValue *callee_result = xi_const_int(callee, callee_entry, 7, &stub_int);
+    REQUIRE(callee_result != NULL);
+    xi_block_set_return(callee_entry, callee_result);
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_int, 1);
+    REQUIRE(call != NULL);
+    call->args[0] = caller->params[0];
+    call->aux = "finish";
+    XiCallPlan call_plan = {
+        .receiver =
+            {
+                .param_mode = XR_PARAM_MOVE,
+                .access = XR_CALL_ARG_MOVE,
+                .origin_var_id = XI_NO_VAR_ID,
+            },
+        .has_receiver = true,
+        .verified = true,
+    };
+    call->call_plan = &call_plan;
+    xi_block_set_return(caller_entry, call);
+    xi_block_set_return(root_entry, NULL);
+
+    XiModule *module = xi_module_new("pkg/target_move_receiver.xr", "target_move_receiver", root);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(module, "memory-module-v1:id=31:target-move-receiver-v1"));
+    root->module = module;
+    XiClassMethod method = {.name = "finish"};
+    uint16_t child_index = 0;
+    XiClassData source_class = {
+        .class_info = &stub_target_source_class_info,
+        .class_name = "FinalTargetWorker",
+        .methods = &method,
+        .nmethod = 1,
+        .child_idx = &child_index,
+        .ninst = 1,
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &source_class;
+    module->nclasses = 1;
+
+    xi_arc_analyze_contracts(root);
+    root->stage = callee->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "MOVE receiver SemanticPlan failed: %s\n", error);
+    REQUIRE(built && semantic != NULL && semantic->call_target_count == 1 &&
             semantic->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
     root->module = NULL;
     xi_func_free(root);
@@ -6172,6 +6259,48 @@ static void test_source_instance_method_target_fails_closed(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_move_receiver_ownership_authority(void) {
+    XrSemanticPlan *semantic = build_move_receiver_source_method_semantic();
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    const XrSemanticFunctionRecord *callee =
+        target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+    const XrSemanticParameterRecord *parameter =
+        callee ? xr_semantic_plan_parameter(semantic, callee->parameter_begin) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    const XrSemanticOperandRecord *receiver = operation && operation->operand_begin < operand_count
+                                                  ? &operands[operation->operand_begin]
+                                                  : NULL;
+    REQUIRE(target && operation && callee && parameter && receiver &&
+            operation->opcode == XI_CALL_METHOD && parameter->mode == XR_PARAM_MOVE &&
+            parameter->ownership == XI_OWN_OWNED && receiver->role == XR_SEM_OPERAND_RECEIVER &&
+            receiver->parameter_mode == XR_PARAM_MOVE && receiver->access == XR_CALL_ARG_MOVE &&
+            receiver->ownership_action == XR_SEM_OPERAND_CONSUME &&
+            xr_semantic_class_parameter_call_transfer_is_exact(semantic, callee->parameter_begin,
+                                                               receiver));
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "MOVE receiver TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->calls_count == 1 && plan->call_arguments_count == 1);
+    const XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    REQUIRE(
+        argument->mode == XR_TARGET_CALL_VALUE && argument->ownership == XR_TARGET_CALL_CONSUME &&
+        argument->caller_slot < plan->slots_count && argument->callee_slot < plan->slots_count &&
+        plan->slots[argument->caller_slot].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+        plan->slots[argument->callee_slot].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+        xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_open_source_instance_method_target_fails_closed(void) {
     XrSemanticPlan *dependency = NULL;
     XrSemanticPlan *semantic = build_open_source_instance_method_semantic(&dependency);
@@ -9683,6 +9812,11 @@ int main(int argc, char **argv) {
         puts("Direct-local class argument authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "move-receiver-ownership") == 0) {
+        test_move_receiver_ownership_authority();
+        puts("MOVE receiver ownership tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "direct-local-source-class-array-ref-authority") == 0) {
         test_direct_local_source_class_array_ref_authority();
         puts("Direct-local source-class Array ref authority tests passed");
@@ -9867,6 +10001,7 @@ int main(int argc, char **argv) {
     test_direct_local_source_class_array_ref_authority();
     test_direct_local_forwarded_source_class_ref_authority();
     test_direct_local_managed_aggregate_lifecycle_authority();
+    test_move_receiver_ownership_authority();
     test_source_instance_method_target_fails_closed();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();

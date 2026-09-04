@@ -44,6 +44,11 @@ XR_FUNC bool xi_print_operand_renders_unsigned(const XiValue *operand);
 /* Clone metadata between values of the same operation.  Unlike the shallow
  * field copier, this preserves ownership for operation-specific aux payloads. */
 XR_FUNC bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src);
+/* Resolve an error check's claimed producer without guessing from instruction
+ * order.  NULL means
+ * the relation is absent or does not name a live value in
+ * the same function. */
+XR_FUNC const XiValue *xi_err_check_producer(const XiFunc *f, const XiValue *check);
 
 XR_FUNC XiBlock *xi_block_new(XiFunc *f);
 XR_FUNC void xi_block_add_pred(XiBlock *blk, XiBlock *pred);

@@ -88,7 +88,29 @@ static void test_use_policy(void) {
               "CALL_METHOD consumes non-receiver args");
     ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 0), false, "CALL borrows callee");
     ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 1), true, "CALL consumes ordinary args");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_SUM_INJECT, 0), true,
+              "SUM_INJECT consumes its owned Some payload");
     ASSERT_EQ(xi_own_use_is_consuming(XI_OP_COUNT, 0), true, "unknown op conservatively consumes");
+
+    XiValue move_receiver = {.op = XI_PARAM, .type = &t_array};
+    XiValue *move_method_args[] = {&move_receiver};
+    XiCallPlan move_method_plan = {
+        .receiver = {.param_mode = XR_PARAM_MOVE, .access = XR_CALL_ARG_MOVE},
+        .has_receiver = true,
+        .verified = true,
+    };
+    XiValue move_method = {
+        .op = XI_CALL_METHOD,
+        .type = &t_int,
+        .nargs = 1,
+        .args = move_method_args,
+        .call_plan = &move_method_plan,
+    };
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&move_method, 0), true,
+              "verified MOVE method receiver is consumed");
+    move_method_plan.verified = false;
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&move_method, 0), false,
+              "unverified MOVE receiver cannot override the generated policy");
 
     XiValue select_args_storage[3] = {{.type = &t_any}, {.type = &t_any}, {.type = &t_any}};
     XiValue *select_args[] = {&select_args_storage[0], &select_args_storage[1],
@@ -440,6 +462,31 @@ static void test_borrow_signature(void) {
     xi_func_free(f);
 }
 
+static void test_move_parameter_signature(void) {
+    XiFunc *f = make_func("move_parameter", &t_int);
+    XiBlock *entry = f->entry;
+    XiValue *parameter = xi_param(f, entry, 0, &t_array);
+    ASSERT_TRUE(parameter != NULL, "create MOVE parameter");
+    f->nparams = 1;
+    f->params = (XiValue **) xr_calloc(1, sizeof(*f->params));
+    ASSERT_TRUE(f->params != NULL, "allocate MOVE parameter table");
+    f->params[0] = parameter;
+    ASSERT_TRUE(xi_func_set_param_passing_mode(f, 0, XR_PARAM_MOVE),
+                "publish MOVE parameter contract");
+    XiValue *length = xi_value_new(f, entry, XI_LEN, &t_int, 1);
+    ASSERT_TRUE(length != NULL, "create borrowed MOVE parameter use");
+    length->args[0] = parameter;
+    xi_block_set_return(entry, length);
+
+    XiOwnResult own;
+    ASSERT_TRUE(xi_own_analyze(f, &own), "analyze MOVE parameter");
+    ASSERT_EQ(own.sig.param_own[0], XI_OWN_OWNED,
+              "declared MOVE parameter stays owned when its body only reads it");
+
+    xi_own_free(&own);
+    xi_func_free(f);
+}
+
 /* ========== Test: scalar values are not RC tracked ========== */
 
 static void test_scalar_not_tracked(void) {
@@ -504,6 +551,7 @@ int main(void) {
     test_consumed_return();
     test_consumed_store_field();
     test_borrow_signature();
+    test_move_parameter_signature();
     test_scalar_not_tracked();
     test_cross_execution_capture_actions();
 

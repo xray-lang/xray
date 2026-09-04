@@ -247,6 +247,65 @@ static void test_user_interface_constraint_rejects_non_implementor(void) {
     ASSERT(n == 1);
 }
 
+static void test_read_conformance_publishes_exact_class_struct_enum_witnesses(void) {
+    const char *src = "interface ReadValue {\n"
+                      "    read() -> i64\n"
+                      "}\n"
+                      "class ReadClass implements ReadValue {\n"
+                      "    read() -> i64 { return 1 }\n"
+                      "}\n"
+                      "struct ReadStruct implements ReadValue {\n"
+                      "    read() -> i64 { return 2 }\n"
+                      "}\n"
+                      "enum ReadEnum implements ReadValue {\n"
+                      "    One, Two\n"
+                      "    read() -> i64 { return this.ordinal }\n"
+                      "}\n";
+    AstNode *program = xr_parse(g_session, src);
+    ASSERT(program != NULL);
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT(analyzer != NULL);
+    xa_analyzer_analyze(analyzer, "iface_nominal_test.xr", program);
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+
+    XaSymbol *interface_symbol = xa_analyzer_lookup(analyzer, "ReadValue");
+    ASSERT(interface_symbol != NULL);
+    ASSERT(interface_symbol->links.class_info != NULL);
+    ASSERT(interface_symbol->links.class_info->method_count == 1);
+    XaSymbol *requirement = interface_symbol->links.class_info->methods[0];
+    ASSERT(requirement != NULL);
+    ASSERT(requirement->links.function_decl_node != NULL);
+
+    const char *nominal_names[] = {"ReadClass", "ReadStruct", "ReadEnum"};
+    const XaNominalKind nominal_kinds[] = {XA_NOMINAL_CLASS, XA_NOMINAL_STRUCT, XA_NOMINAL_ENUM};
+    for (int i = 0; i < 3; i++) {
+        XaSymbol *nominal = xa_analyzer_lookup(analyzer, nominal_names[i]);
+        ASSERT(nominal != NULL);
+        XrClassInfo *info = nominal->links.class_info;
+        ASSERT(info != NULL);
+        ASSERT(info->nominal_kind == nominal_kinds[i]);
+        ASSERT(info->interface_conformance_count == 1);
+        XaInterfaceConformance *conformance = &info->interface_conformances[0];
+        ASSERT(conformance->complete);
+        ASSERT(conformance->constraint_eligible);
+        ASSERT(conformance->existential_eligible);
+        ASSERT(conformance->interface_info == interface_symbol->links.class_info);
+        ASSERT(conformance->witness_count == 1);
+        ASSERT(conformance->witnesses[0].slot == 0);
+        ASSERT(conformance->witnesses[0].complete);
+        ASSERT(conformance->witnesses[0].requirement == requirement);
+        ASSERT(conformance->witnesses[0].implementation != NULL);
+        ASSERT(conformance->witnesses[0].implementation->links.function_decl_node != NULL);
+        ASSERT(conformance->witnesses[0].implementation != requirement);
+        ASSERT(xr_type_assignable(interface_symbol->links.type, nominal->links.type));
+    }
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 // ============================================================================
 // Built-in interfaces with type arguments
 // ============================================================================
@@ -321,6 +380,7 @@ int main(void) {
     RUN_TEST(user_interface_constraint_accepts_implementor);
     RUN_TEST(user_interface_constraint_accepts_same_interface_object);
     RUN_TEST(user_interface_constraint_rejects_non_implementor);
+    RUN_TEST(read_conformance_publishes_exact_class_struct_enum_witnesses);
 
     printf("\nParameterised built-in interface constraints:\n");
     RUN_TEST(iterable_int_satisfied_by_array_int);

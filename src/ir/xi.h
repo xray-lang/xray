@@ -99,6 +99,32 @@ typedef enum XiArrayHofKind {
     XI_ARRAY_HOF_COUNT,
 } XiArrayHofKind;
 
+/* Exact source intent for erased interface values. Concrete packing, nominal
+ * tests and
+ * projections, and the two witness call shapes remain distinct from
+ * ordinary Xi operations
+ * before the canonical Program writer materializes
+ * their operations. */
+typedef enum XiExistentialKind {
+    XI_EXISTENTIAL_NONE = 0,
+    XI_EXISTENTIAL_PACK,
+    XI_EXISTENTIAL_TEST,
+    XI_EXISTENTIAL_PROJECT,
+    XI_EXISTENTIAL_WITNESS_DIRECT,
+    XI_EXISTENTIAL_WITNESS_INVOKE,
+} XiExistentialKind;
+
+/* Exact existential TypeId ownership/view identity. Values intentionally
+ * mirror the canonical
+ * Program interface-use contract. */
+typedef enum XiInterfaceUseKind {
+    XI_INTERFACE_USE_NONE = 0,
+    XI_INTERFACE_USE_READ = 1,
+    XI_INTERFACE_USE_REF = 2,
+    XI_INTERFACE_USE_MOVE = 3,
+    XI_INTERFACE_USE_OWNED_STORAGE = 4,
+} XiInterfaceUseKind;
+
 /* Stable method identities generated from the dispatch-symbol registry.
  * Selector text remains diagnostic metadata; compiler authorities compare
  * these typed IDs so a fabricated spelling cannot acquire builtin semantics. */
@@ -751,6 +777,13 @@ typedef enum {
     XI_VALUE_PRODUCT_CONSTRUCT,
     XI_VALUE_PRODUCT_PROJECT,
 
+    /* Compiler-private closed-sum injection. Currently restricted to the
+     * canonical
+     * Optional<T> normalization boundary: aux_int=0 is None with
+     * no operands, aux_int=1 is
+     * Some with one non-null T operand. */
+    XI_SUM_INJECT,
+
     XI_OP_COUNT /* sentinel */
 } XiOp;
 
@@ -1290,6 +1323,14 @@ typedef struct XiValue {
     XiCallPlan *call_plan;          /* verified read/ref/move call contract */
     XiViewEvidence view_evidence;   /* Slice origin/range lifetime proof */
     XiErrorRegion *error_region;    /* exact source error region, or NULL */
+    /* Exact pending-error producer for XI_ERR_CHECK/XI_CLEANUP_ERR_CHECK.
+     * This is a
+     * non-owning graph relation, not an SSA operand: ARC cleanup
+     * operands remain in args[]
+     * and the producer result is not materialized
+     * merely because its error channel is
+     * observed. */
+    struct XiValue *error_producer;
     /* Instantiated result provenance for calls whose body is outside this Xi
      * unit.  Local direct calls may refine it from the XiFunc fixpoint. */
     XiReturnOwnership call_return_ownership;
@@ -1297,15 +1338,20 @@ typedef struct XiValue {
      * seals native member aliases here before SemanticPlan construction so
      * ownership passes never reconstruct the fact from names. */
     int16_t result_alias_operand;
-    struct XiValue **args;         /* operand values (SSA uses) */
-    uint16_t nargs;                /* number of args */
-    int16_t uses;                  /* use count (for DCE; -1 = not computed) */
-    uint32_t line;                 /* source line number (0 = unknown) */
-    uint32_t source_kind;          /* pointer-free source node kind (0 = unavailable) */
-    XiSourceSpan source_span;      /* exact source range; all zero when unavailable */
-    uint32_t psc_call_index;       /* frozen PSC call row, or XI_PSC_ROW_NONE */
-    uint32_t psc_type_index;       /* frozen PSC type row, or XI_PSC_ROW_NONE */
-    uint32_t xg_callsite_id;       /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    struct XiValue **args;    /* operand values (SSA uses) */
+    uint16_t nargs;           /* number of args */
+    int16_t uses;             /* use count (for DCE; -1 = not computed) */
+    uint32_t line;            /* source line number (0 = unknown) */
+    uint32_t source_kind;     /* pointer-free source node kind (0 = unavailable) */
+    XiSourceSpan source_span; /* exact source range; all zero when unavailable */
+    uint32_t psc_call_index;  /* frozen PSC call row, or XI_PSC_ROW_NONE */
+    uint32_t psc_type_index;  /* frozen PSC type row, or XI_PSC_ROW_NONE */
+    uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xg_callable_target_start;     /* first immutable XgCallableTargetId, or 0 */
+    uint32_t xg_callable_target_count;     /* exact closed target count, or 0 */
+    uint64_t xg_callable_signature_key;    /* exact structural callable signature */
+    uint32_t xg_callable_effect_union;     /* union of exact target implementation effects */
+    uint32_t xg_callable_capability_union; /* union of exact target capabilities */
     uint32_t xa_intrinsic_id;      /* stable XaIntrinsicId for canonical semantic operations */
     uint8_t array_intrinsic_kind;  /* XiArrayIntrinsicKind, or NONE */
     uint8_t array_member_kind;     /* XiArrayMemberKind, or NONE */
@@ -1314,6 +1360,17 @@ typedef struct XiValue {
     uint8_t array_result_element_storage; /* exact scalar storage returned by an Array HOF */
     uint32_t xg_method_id; /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
+    uint32_t xg_interface_object_use_id; /* exact XgInterfaceObjectUseId for this carrier */
+    uint32_t xg_interface_id;            /* declaration-backed XgInterfaceId, or 0 */
+    uint32_t xg_conformance_id;          /* exact XgInterfaceConformanceId for a pack, or 0 */
+    uint32_t xg_implementor_decl_id;     /* exact nominal XgDeclId, or 0 */
+    uint64_t xg_nominal_key;             /* exact declaration-backed nominal key, or 0 */
+    uint8_t xg_implementor_kind;         /* XgDeclKind for exact nominal evidence */
+    uint8_t xg_existential_kind;         /* XiExistentialKind */
+    uint8_t xg_interface_use_kind;       /* XiInterfaceUseKind */
+    uint8_t xg_implementor_ownership;    /* XgNominalOwnership */
+    uint8_t xg_implementor_copy_contract; /* XgNominalCopyContract */
+    uint8_t xg_type_contract_complete;    /* exact conformance type contract is frozen */
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t xg_object_access_id; /* stable XgObjectAccessId for evidence-backed structural object
                                      slot access */
@@ -1404,6 +1461,11 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux = src->aux;
     dst->conversion = src->conversion;
     dst->error_region = src->error_region;
+    /* error_producer is deliberately not shallow-copied.  Graph cloning must
+     * remap the
+     * relation through its value map; leaving NULL fails closed if a
+     * cloning pass forgets
+     * that second step. */
     dst->call_return_ownership = src->call_return_ownership;
     dst->result_alias_operand = src->result_alias_operand;
     dst->line = src->line;
@@ -1412,6 +1474,11 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->psc_call_index = src->psc_call_index;
     dst->psc_type_index = src->psc_type_index;
     dst->xg_callsite_id = src->xg_callsite_id;
+    dst->xg_callable_target_start = src->xg_callable_target_start;
+    dst->xg_callable_target_count = src->xg_callable_target_count;
+    dst->xg_callable_signature_key = src->xg_callable_signature_key;
+    dst->xg_callable_effect_union = src->xg_callable_effect_union;
+    dst->xg_callable_capability_union = src->xg_callable_capability_union;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->array_intrinsic_kind = src->array_intrinsic_kind;
     dst->array_member_kind = src->array_member_kind;
@@ -1430,6 +1497,17 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->move_source_domain = src->move_source_domain;
     dst->move_target_domain = src->move_target_domain;
     dst->xg_interface_dispatch_slot = src->xg_interface_dispatch_slot;
+    dst->xg_interface_object_use_id = src->xg_interface_object_use_id;
+    dst->xg_interface_id = src->xg_interface_id;
+    dst->xg_conformance_id = src->xg_conformance_id;
+    dst->xg_implementor_decl_id = src->xg_implementor_decl_id;
+    dst->xg_nominal_key = src->xg_nominal_key;
+    dst->xg_implementor_kind = src->xg_implementor_kind;
+    dst->xg_existential_kind = src->xg_existential_kind;
+    dst->xg_interface_use_kind = src->xg_interface_use_kind;
+    dst->xg_implementor_ownership = src->xg_implementor_ownership;
+    dst->xg_implementor_copy_contract = src->xg_implementor_copy_contract;
+    dst->xg_type_contract_complete = src->xg_type_contract_complete;
     dst->xg_json_codec_id = src->xg_json_codec_id;
     dst->xg_object_access_id = src->xg_object_access_id;
     dst->xg_object_merge_id = src->xg_object_merge_id;
@@ -1588,11 +1666,15 @@ static inline uint32_t xi_variant_projection_field(const XiValue *v) {
 }
 
 /* XI_ERR_CHECK starts operand-free at lowering.  After all AOT value-rewriting
- * passes, ARC finalization attaches the owners which remain live only on the
- * successful continuation.  The may-throw producer is deliberately not an
- * operand: making its otherwise-unused result an SSA use would force useless
- * hot-path materialization.  AOT C emits the owners inside the existing
- * pending-error cold branch. */
+ * passes, ARC
+ * finalization attaches the owners which remain live only on the
+ * successful continuation.  The
+ * may-throw producer is deliberately not an
+ * operand; it is named by error_producer instead.
+ * Making its otherwise-unused
+ * result an SSA use would force useless hot-path materialization.
+ * AOT C emits
+ * the owners inside the existing pending-error cold branch. */
 #define XI_ERR_CHECK_CLEANUP_ARG_BASE 0u
 
 static inline bool xi_err_check_has_arc_cleanups(const XiValue *v) {
@@ -1613,6 +1695,9 @@ static inline bool xi_copy_is_cleanup_return(const XiValue *v) {
 
 static inline bool xi_copy_is_identity_alias(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_IDENTITY &&
+           v->xg_existential_kind == XI_EXISTENTIAL_NONE && v->xg_interface_object_use_id == 0 &&
+           v->xg_interface_use_kind == XI_INTERFACE_USE_NONE && v->xg_implementor_ownership == 0 &&
+           v->xg_implementor_copy_contract == 0 && v->xg_type_contract_complete == 0 &&
            v->enum_metadata_owner == NULL && v->enum_metadata_field == 0 &&
            v->enum_metadata_kind == 0;
 }

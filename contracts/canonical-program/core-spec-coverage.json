@@ -3,7 +3,7 @@
   "semantic_sha256": "487e3271836d0ecd5f4db8d07511b66c8135092fac69f66a8566a2b3df9edca0",
   "epoch": 1,
   "operation_count": 37,
-  "normative_kat_count": 97,
+  "normative_kat_count": 98,
   "operations": [
     {
       "stable_id": 1,

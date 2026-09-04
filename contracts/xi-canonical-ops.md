@@ -158,5 +158,5 @@ compatibility opcode, reserved hole, or second bounds owner.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 48d6806b8d845848532b64e4d111d957bd2f2a7699771e9b02687a53b3167ff5
+anchor-sha256: xisa/xi/ops.def 668326ae9a2d36e8e0ae0eaaf5314a91e0547cd3d3e20408465624501568d1cc
 anchor-sha256: xisa/xi/lowering.def 0ba48fe2a89c94dc0d2ac6a362ccd7edde314edcdcc9331743c3cafeed79dcac

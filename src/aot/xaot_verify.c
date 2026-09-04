@@ -980,9 +980,11 @@ static bool verify_array_class_field_alloc_plan(const XaotBundle *bundle,
     return true;
 }
 
-static bool verify_func_attr_value_is_ignorable_err_check(const XiValue *value) {
+static bool verify_func_attr_value_is_ignorable_err_check(const XiFunc *func,
+                                                          const XiValue *value) {
     return value && value->op == XI_ERR_CHECK &&
-           (!value->type || value->type->kind != XR_KIND_BOOL);
+           (!value->type || value->type->kind != XR_KIND_BOOL) &&
+           xi_err_check_producer(func, value) != NULL;
 }
 
 /* Re-derive the effect evidence behind a function attribute plan.
@@ -1078,7 +1080,7 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
             }
             if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                             XI_FLAG_WRITES_MEM) &&
-                !verify_func_attr_value_is_ignorable_err_check(v) && !composed_call)
+                !verify_func_attr_value_is_ignorable_err_check(plan->func, v) && !composed_call)
                 return set_error(errbuf, errbuf_len,
                                  "AOT function attribute plan func has effectful value");
             if (!composed_call) {
@@ -3316,9 +3318,11 @@ static bool verify_interface_extends_rows(const XgGlobalEvidence *ev, char *errb
             edge->name_id == 0)
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence interface extends identity is stale");
-        if (edge->name_id != edge->parent_interface_id)
-            return set_error(errbuf, errbuf_len,
-                             "AOT global evidence interface extends parent does not re-derive");
+        /* name_id is source spelling metadata. The declaration-backed
+         * interface ids are
+         * module-qualified nominal identities and must not
+         * be reconstructed from that
+         * spelling. */
         if (!verify_find_evidence_decl_by_kind_name(ev, XG_DECL_INTERFACE,
                                                     edge->child_interface_id))
             return set_error(errbuf, errbuf_len,
@@ -6331,8 +6335,7 @@ static bool verify_class_field_rows(const XgGlobalEvidence *ev,
                                      "AOT class field target kind does not re-derive");
             }
             if (field->target_interface_id != XG_NO_ID &&
-                (!verify_interface_identity_exists(ev, field->target_interface_id) ||
-                 field->target_interface_id != field->target_name_id))
+                !verify_interface_identity_exists(ev, field->target_interface_id))
                 return set_error(errbuf, errbuf_len,
                                  "AOT class field interface target does not re-derive");
             if ((field->semantic_kind == XG_CLASS_FIELD_TYPE_CLASS ||

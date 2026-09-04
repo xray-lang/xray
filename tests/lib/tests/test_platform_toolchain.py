@@ -204,6 +204,10 @@ class ToolchainProbeTest(unittest.TestCase):
         mutations = [
             result(returncode=2, stderr=b"bad image\n"),
             result(stdout=b"001 malformed | xr_parse_hidden\n"),
+            result(stdout=(
+                b"001 00000010 SECT3 notype () External | xr_clean\n"
+                b"002 00000020 SECT3 notype () External xr_parse_hidden\n"
+            )),
             result(stdout=b"Dump of file stripped.exe\nFile Type: EXECUTABLE IMAGE\n"),
         ]
         for mutation in mutations:

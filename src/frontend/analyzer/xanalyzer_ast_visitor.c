@@ -86,6 +86,12 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             }
             break;
 
+        case AST_ENUM_DECL:
+            for (int i = 0; i < node->as.enum_decl.method_count; i++) {
+                visit_node(node->as.enum_decl.methods[i], v);
+            }
+            break;
+
         case AST_METHOD_DECL:
             visit_node(node->as.method_decl.body, v);
             break;

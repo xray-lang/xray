@@ -55,7 +55,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
             .key = xr_callable_fixture_key("callable:type:capture"),
             .local_id = XR_CALLABLE_FIXTURE_CAPTURE_TYPE,
             .kind = XR_CORE_IR_TYPE_AGGREGATE,
-            .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+            .nominal_kind = XR_CORE_IR_NOMINAL_NONE,
             .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
             .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
             .field_types = capture_fields,

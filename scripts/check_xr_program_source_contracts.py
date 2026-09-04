@@ -15,6 +15,57 @@ class ContractError(ValueError):
     """Raised when the source producer contract is incomplete."""
 
 
+CANONICAL_LEGACY_AUTHORITY_TOKENS = {
+    "frozen legacy route": (
+        "XrSemanticPlan",
+        "XrTargetPlan",
+        "XrProto",
+        "XChunk",
+        "xr_semantic_plan",
+        "xr_target_plan",
+        "program_semantic_closure",
+    ),
+    "CallDecision": (
+        "XrScalarCallDecision",
+        "xr_scalar_call_decision_",
+        "scalar_call_decision",
+    ),
+    "selector/name fallback": (
+        "method_name_id",
+        "method_signature_key",
+        "xr_class_lookup_method",
+        "xr_symbol_lookup_in_table",
+        "cg_lookup_method",
+        "cg_resolve_static_function_call",
+        "cg_resolve_import_function_call",
+    ),
+    "class-only itable": (
+        "XAOT_DISPATCH_ITABLE",
+        "XAOT_INTERFACE_USE_NEEDS_ITABLE",
+        "XAOT_INTERFACE_ABI_NEEDS_ITABLE",
+        "XrtInterfaceMethodTable",
+        "xrt_itable_method",
+        "xrt_type_set_itable",
+        "itable_source",
+    ),
+    "erased closure ABI": (
+        "XrAotCallableDesc",
+        "XrClosure",
+        "xrt_closure_t",
+        "xrt_closure_new",
+        "xr_vm_call_closure",
+    ),
+    "backend signature recovery": (
+        "xaot_type_fingerprint",
+        "xaot_callable_plans_build",
+        "xaot_callable_plans_verify",
+        "xaot_boundary_resolve_direct_call_target",
+        "callable_body_effects",
+        "callable_rederive_matches",
+    ),
+}
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ContractError(message)
@@ -49,9 +100,10 @@ def validate(root: Path) -> None:
         "xr_program_xi_value_is_materialized",
         "map_type_recursive",
         "logical_value_identity",
-        "block_sealed_invoke_call",
+        "block_typed_invoke_call",
         "map_function_error_type",
         "XR_CORE_OP_CORE_CALL_SEALED_INVOKE",
+        "XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE",
         "XR_CORE_OP_CORE_ERROR_PUBLISH",
         "XR_CORE_OP_CORE_PANIC_PUBLISH",
     ):
@@ -97,12 +149,10 @@ def validate(root: Path) -> None:
     ]
     for path in new_pipeline_files:
         text = path.read_text(encoding="utf-8", errors="strict")
-        for token in (
-            "XrSemanticPlan", "XrTargetPlan", "XrProto", "XChunk",
-            "xr_semantic_plan", "xr_target_plan", "program_semantic_closure",
-        ):
-            require(token not in text,
-                    f"new canonical pipeline depends on frozen legacy route: {path}: {token}")
+        for owner, tokens in CANONICAL_LEGACY_AUTHORITY_TOKENS.items():
+            for token in tokens:
+                require(token not in text,
+                        f"new canonical pipeline depends on {owner}: {path}: {token}")
 
     require("XI_PIPE_XR_PROGRAM_INPUT" in pipeline_header,
             "pipeline lacks canonical-program input mode")
@@ -121,6 +171,11 @@ def validate(root: Path) -> None:
         "XR_PROGRAM_BUILD_INVALID_INPUT",
         "XR_CORE_OP_CORE_OWNER_COPY",
         "XR_CORE_OP_CORE_CALL_SEALED_INVOKE",
+        "XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE",
+        "callable_error_value(-2)",
+        "missing_fallible_target_artifact",
+        "rebound_fallible_target_artifact",
+        "mismatched_fallible_error_artifact",
         "XR_CORE_OP_CORE_ERROR_PUBLISH",
         "xr_reference_evaluate",
         "xr_vm_code_execute",
@@ -350,13 +405,38 @@ def self_test(root: Path) -> None:
             raise ContractError("incomplete Wave 1 operation was accepted")
         matrix.write_text(original_matrix, encoding="utf-8")
         producer = target / "src/program/xr_program_from_xi.c"
-        producer.write_text(producer.read_text(encoding="utf-8") + "\n/* XrTargetPlan injected */\n",
-                            encoding="utf-8")
-        try:
-            validate(target)
-        except ContractError:
-            return
-        raise ContractError("legacy-authority mutation was accepted")
+        original_producer = producer.read_text(encoding="utf-8")
+        allowed_tokens = (
+            "XI_CLOSURE_NEW",
+            "signature_id",
+            "slot_signature_ids",
+            "conformance_id",
+        )
+        producer.write_text(
+            original_producer + "\n/* Allowed canonical tokens: " +
+            ", ".join(allowed_tokens) + ". */\n",
+            encoding="utf-8",
+        )
+        validate(target)
+        mutations = (
+            ("frozen legacy route", "XrTargetPlan"),
+            ("CallDecision", "XrScalarCallDecision"),
+            ("selector/name fallback", "method_name_id"),
+            ("class-only itable", "XrtInterfaceMethodTable"),
+            ("erased closure ABI", "xrt_closure_t"),
+            ("backend signature recovery", "xaot_type_fingerprint"),
+        )
+        for owner, token in mutations:
+            producer.write_text(original_producer + f"\n/* {token} injected */\n",
+                                encoding="utf-8")
+            try:
+                validate(target)
+            except ContractError as exc:
+                require(owner in str(exc),
+                        f"{owner} mutation reported the wrong authority: {exc}")
+            else:
+                raise ContractError(f"{owner} mutation was accepted")
+        producer.write_text(original_producer, encoding="utf-8")
 
 
 def main() -> int:

@@ -152,8 +152,8 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
         XrCoreIrCopyContract expected_copy =
             id == XR_CORE_TYPE_VOID || id == XR_CORE_TYPE_PANIC_INFO ? XR_CORE_IR_COPY_FORBIDDEN
                                                                      : XR_CORE_IR_COPY_TRIVIAL;
-        if (type_id != id || kind != id || ownership != expected_ownership ||
-            copy_contract != expected_copy)
+        if (type_id != id || kind != id || ownership != (uint64_t) expected_ownership ||
+            copy_contract != (uint64_t) expected_copy)
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
     }
     uint64_t dynamic_count = count - 6u;
@@ -184,7 +184,7 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
         memcpy(previous_key, key, sizeof(key));
         if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
             uint64_t field_count = take_uvar(&section);
-            if (shape_head > XR_CORE_IR_NOMINAL_ENUM || field_count == 0u ||
+            if (shape_head > XR_CORE_IR_NOMINAL_ENUM ||
                 field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                 !count_records(&section, field_count)) {
                 section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
@@ -404,15 +404,16 @@ static bool decode_semantic_metadata(Reader *artifact, const XrProgramSectionVie
         return section_done(&section, artifact);
     }
     uint8_t prior_interface_key[XR_CORE_IR_KEY_SIZE] = {0};
-    for (uint64_t interface = 0;
-         interface < interface_count && section.status == XR_PROGRAM_DECODE_OK; ++interface) {
+    for (uint64_t interface_index = 0;
+         interface_index < interface_count && section.status == XR_PROGRAM_DECODE_OK;
+         ++interface_index) {
         uint64_t id = take_uvar(&section);
         uint8_t key[XR_CORE_IR_KEY_SIZE] = {0};
         take_bytes(&section, key, sizeof(key));
         uint64_t slot_count = take_uvar(&section);
-        if (id != interface || slot_count == 0u ||
+        if (id != interface_index || slot_count == 0u ||
             slot_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
-            (interface != 0u && memcmp(prior_interface_key, key, sizeof(key)) >= 0) ||
+            (interface_index != 0u && memcmp(prior_interface_key, key, sizeof(key)) >= 0) ||
             !count_records(&section, slot_count)) {
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
             break;

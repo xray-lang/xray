@@ -14,6 +14,7 @@
 #include "../base/xdefs.h"
 #include "../base/xentry_plan.h"
 #include "../base/xstorage.h"
+#include "../shared/xr_param_mode.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -26,8 +27,11 @@ typedef uint32_t XgInterfaceId;
 typedef uint32_t XgMethodId;
 typedef uint32_t XgInterfaceMethodId;
 typedef uint32_t XgInterfaceObjectUseId;
+typedef uint32_t XgInterfaceConformanceId;
+typedef uint32_t XgInterfaceWitnessId;
 typedef uint32_t XgFieldId;
 typedef uint32_t XgCallsiteId;
+typedef uint32_t XgCallableTargetId;
 typedef uint32_t XgParamStorageId;
 typedef uint32_t XgLinkId;
 typedef uint32_t XgGenericInstId;
@@ -64,7 +68,7 @@ enum {
      * 43: constructions of a class without a declared constructor carry their
      * own callsite kind instead of the open closure kind.
      * 44: nested bodies publish their frozen lexical-parent body identity. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 47,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 52,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -377,6 +381,10 @@ enum {
      * callsite fact.  Without this bit, absence of MAY_ERROR is not proof of
      * no-throw and consumers must fail closed. */
     XG_CALL_ERROR_EFFECT_VERIFIED = 1u << 4,
+    /* The closure call owns a complete, canonical callable-target range.
+     * Absence is unknown,
+     * never an empty closed set. */
+    XG_CALL_TARGET_SET_VERIFIED = 1u << 5,
 };
 
 enum {
@@ -487,7 +495,29 @@ enum {
     XG_INTERFACE_OBJECT_USE_RETURN = 1u << 3,
     XG_INTERFACE_OBJECT_USE_CAPTURE = 1u << 4,
     XG_INTERFACE_OBJECT_USE_PARAM = 1u << 5,
+    XG_INTERFACE_OBJECT_USE_ARGUMENT = 1u << 6,
 };
+
+typedef enum XgInterfaceUseKind {
+    XG_INTERFACE_USE_INVALID = 0,
+    XG_INTERFACE_USE_READ,
+    XG_INTERFACE_USE_REF,
+    XG_INTERFACE_USE_MOVE,
+    XG_INTERFACE_USE_OWNED_STORAGE,
+} XgInterfaceUseKind;
+
+typedef enum XgNominalOwnership {
+    XG_NOMINAL_OWNERSHIP_INVALID = 0,
+    XG_NOMINAL_OWNERSHIP_TRIVIAL,
+    XG_NOMINAL_OWNERSHIP_AFFINE,
+} XgNominalOwnership;
+
+typedef enum XgNominalCopyContract {
+    XG_NOMINAL_COPY_INVALID = 0,
+    XG_NOMINAL_COPY_TRIVIAL,
+    XG_NOMINAL_COPY_EXPLICIT,
+    XG_NOMINAL_COPY_FORBIDDEN,
+} XgNominalCopyContract;
 
 enum {
     XG_SEQ_ACCESS_MUTATING = 1u << 0,
@@ -715,6 +745,7 @@ typedef struct XgDeclSummary {
     uint32_t name_id;
     uint32_t type_key;
     uint32_t signature_key;
+    uint64_t nominal_key;
     uint32_t source_span_id;
     uint32_t derive_flags;
     uint32_t storage_flags;
@@ -781,13 +812,39 @@ typedef struct XgMethodSummary {
 } XgMethodSummary;
 
 typedef struct XgInterfaceImplSummary {
+    XgInterfaceConformanceId conformance_id;
     XgClassId implementor_class_id;
     XgInterfaceId interface_id;
     uint32_t name_id;
     uint32_t type_key;
     uint32_t source_span_id;
     uint32_t flags;
+    XgDeclId implementor_decl_id;
+    uint64_t nominal_key;
+    uint32_t witness_start;
+    uint32_t witness_count;
+    uint8_t implementor_kind; /* XgDeclKind */
+    uint8_t verdict_complete;
+    uint8_t constraint_eligible;
+    uint8_t existential_eligible;
+    uint8_t implementor_ownership;     /* XgNominalOwnership */
+    uint8_t implementor_copy_contract; /* XgNominalCopyContract */
+    uint8_t type_contract_complete;
 } XgInterfaceImplSummary;
+
+typedef struct XgInterfaceWitnessSummary {
+    XgInterfaceWitnessId witness_id;
+    XgInterfaceConformanceId conformance_id;
+    XgDeclId implementor_decl_id;
+    XgInterfaceId interface_id;
+    XgInterfaceMethodId interface_method_id;
+    XgFuncId implementation_func_id;
+    uint32_t implementation_source_node_id;
+    uint32_t signature_key;
+    uint32_t slot;
+    uint8_t receiver_mode;
+    uint8_t complete;
+} XgInterfaceWitnessSummary;
 
 typedef struct XgInterfaceExtendsSummary {
     XgInterfaceId child_interface_id;
@@ -805,18 +862,38 @@ typedef struct XgInterfaceMethodSummary {
     uint32_t signature_key;
     uint32_t ordinal;
     uint32_t source_span_id;
+    uint32_t parameter_start;
+    uint32_t parameter_count;
+    uint32_t result_type_key;
+    uint32_t error_type_key;
+    uint32_t panic_type_key;
+    uint32_t effect_bits;
+    uint32_t capability_bits;
+    XgReturnOwnership result_ownership;
+    uint8_t receiver_mode; /* XrParamMode */
+    uint8_t has_receiver;
+    uint8_t contract_complete;
     uint32_t flags;
 } XgInterfaceMethodSummary;
+
+typedef struct XgInterfaceMethodParamSummary {
+    XgInterfaceMethodId interface_method_id;
+    uint32_t ordinal;
+    uint32_t type_key;
+    uint8_t mode; /* XrParamMode */
+} XgInterfaceMethodParamSummary;
 
 typedef struct XgInterfaceObjectUseSummary {
     XgInterfaceObjectUseId use_id;
     XgInterfaceId interface_id;
     XgFuncId owner_func_id;
+    uint32_t source_node_id;
     uint32_t source_span_id;
     uint32_t body_ordinal;
     uint32_t type_key;
     uint32_t reason;
     uint32_t flags;
+    uint8_t use_kind; /* XgInterfaceUseKind */
 } XgInterfaceObjectUseSummary;
 
 typedef struct XgBodySummary {
@@ -873,8 +950,22 @@ typedef struct XgCallsiteSummary {
     uint32_t method_signature_key;
     uint32_t arg_type_key_start;
     uint16_t arg_count;
+    XgCallableTargetId callable_target_start;
+    uint32_t callable_target_count;
+    uint64_t callable_signature_key;
+    uint32_t callable_effect_union;
+    uint32_t callable_capability_union;
     uint32_t flags;
 } XgCallsiteSummary;
+
+typedef struct XgCallableTargetSummary {
+    XgCallableTargetId target_id;
+    XgCallsiteId callsite_id;
+    XgFuncId target_func_id;
+    uint64_t structural_signature_key;
+    uint32_t effect_bits;
+    uint32_t capability_bits;
+} XgCallableTargetSummary;
 
 typedef struct XgLinkDependencySummary {
     XgLinkId link_id;
@@ -1215,12 +1306,15 @@ typedef struct XgGlobalEvidence {
     XgClassFieldSummary *class_fields;
     XgMethodSummary *methods;
     XgInterfaceImplSummary *interface_impls;
+    XgInterfaceWitnessSummary *interface_witnesses;
     XgInterfaceExtendsSummary *interface_extends;
     XgInterfaceMethodSummary *interface_methods;
+    XgInterfaceMethodParamSummary *interface_method_params;
     XgInterfaceObjectUseSummary *interface_object_uses;
     XgBodySummary *bodies;
     XgParamStorageSummary *param_storages;
     XgCallsiteSummary *callsites;
+    XgCallableTargetSummary *callable_targets;
     XgLinkDependencySummary *link_deps;
     XgGenericInstSummary *generic_insts;
     XgGenericBodyUseSummary *generic_body_uses;
@@ -1251,12 +1345,15 @@ typedef struct XgGlobalEvidence {
     uint32_t nclass_fields;
     uint32_t nmethods;
     uint32_t ninterface_impls;
+    uint32_t ninterface_witnesses;
     uint32_t ninterface_extends;
     uint32_t ninterface_methods;
+    uint32_t ninterface_method_params;
     uint32_t ninterface_object_uses;
     uint32_t nbodies;
     uint32_t nparam_storages;
     uint32_t ncallsites;
+    uint32_t ncallable_targets;
     uint32_t nlink_deps;
     uint32_t ngeneric_insts;
     uint32_t ngeneric_body_uses;
@@ -1287,12 +1384,15 @@ typedef struct XgGlobalEvidence {
     uint32_t class_field_cap;
     uint32_t method_cap;
     uint32_t interface_impl_cap;
+    uint32_t interface_witness_cap;
     uint32_t interface_extend_cap;
     uint32_t interface_method_cap;
+    uint32_t interface_method_param_cap;
     uint32_t interface_object_use_cap;
     uint32_t body_cap;
     uint32_t param_storage_cap;
     uint32_t callsite_cap;
+    uint32_t callable_target_cap;
     uint32_t link_dep_cap;
     uint32_t generic_inst_cap;
     uint32_t generic_body_use_cap;
@@ -1321,6 +1421,7 @@ typedef struct XgGlobalEvidence {
 XR_FUNC uint32_t xg_name_id(const char *name);
 XR_FUNC uint32_t xg_stable_source_node_id(XgModuleId module_id, uint32_t ast_kind, uint32_t line,
                                           uint32_t column);
+XR_FUNC uint32_t xg_interface_parameter_site_id(XgFuncId owner_func_id, uint32_t parameter_ordinal);
 XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind);
 XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t scalar_rep);
 XR_FUNC uint64_t xg_json_shape_hash_begin(uint32_t field_count);
@@ -1374,16 +1475,22 @@ XR_FUNC bool xg_global_evidence_reserve_class_fields(XgGlobalEvidence *evidence,
 XR_FUNC bool xg_global_evidence_reserve_methods(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_impls(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_interface_witnesses(XgGlobalEvidence *evidence,
+                                                            uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_extends(XgGlobalEvidence *evidence,
                                                           uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_methods(XgGlobalEvidence *evidence,
                                                           uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_interface_method_params(XgGlobalEvidence *evidence,
+                                                                uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *evidence,
                                                               uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_param_storages(XgGlobalEvidence *evidence,
                                                        uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_callsites(XgGlobalEvidence *evidence, uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_callable_targets(XgGlobalEvidence *evidence,
+                                                         uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_link_deps(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_generic_insts(XgGlobalEvidence *evidence,
                                                       uint32_t capacity);
@@ -1433,15 +1540,25 @@ XR_FUNC XgMethodSummary *xg_global_evidence_add_method(XgGlobalEvidence *evidenc
 XR_FUNC XgInterfaceImplSummary *
 xg_global_evidence_add_interface_impl(XgGlobalEvidence *evidence,
                                       const XgInterfaceImplSummary *summary);
+XR_FUNC XgInterfaceWitnessSummary *
+xg_global_evidence_add_interface_witness(XgGlobalEvidence *evidence,
+                                         const XgInterfaceWitnessSummary *summary);
 XR_FUNC XgInterfaceExtendsSummary *
 xg_global_evidence_add_interface_extends(XgGlobalEvidence *evidence,
                                          const XgInterfaceExtendsSummary *summary);
 XR_FUNC XgInterfaceMethodSummary *
 xg_global_evidence_add_interface_method(XgGlobalEvidence *evidence,
                                         const XgInterfaceMethodSummary *summary);
+XR_FUNC XgInterfaceMethodParamSummary *
+xg_global_evidence_add_interface_method_param(XgGlobalEvidence *evidence,
+                                              const XgInterfaceMethodParamSummary *summary);
 XR_FUNC XgInterfaceObjectUseSummary *
 xg_global_evidence_add_interface_object_use(XgGlobalEvidence *evidence,
                                             const XgInterfaceObjectUseSummary *summary);
+XR_FUNC const XgInterfaceObjectUseSummary *
+xg_global_evidence_find_interface_object_use(const XgGlobalEvidence *evidence,
+                                             XgFuncId owner_func_id, uint32_t source_node_id,
+                                             XgInterfaceId interface_id, uint32_t required_reason);
 XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
                                                    const XgBodySummary *summary);
 XR_FUNC XgParamStorageSummary *
@@ -1449,6 +1566,9 @@ xg_global_evidence_add_param_storage(XgGlobalEvidence *evidence,
                                      const XgParamStorageSummary *summary);
 XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evidence,
                                                            const XgCallsiteSummary *summary);
+XR_FUNC XgCallableTargetSummary *
+xg_global_evidence_add_callable_target(XgGlobalEvidence *evidence,
+                                       const XgCallableTargetSummary *summary);
 XR_FUNC XgLinkDependencySummary *
 xg_global_evidence_add_link_dependency(XgGlobalEvidence *evidence,
                                        const XgLinkDependencySummary *summary);
@@ -1512,10 +1632,21 @@ XR_FUNC const XgClassFieldSummary *
 xg_global_evidence_find_class_field(const XgGlobalEvidence *evidence, XgFieldId field_id);
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
                                                                   XgCallsiteId callsite_id);
+XR_FUNC bool xg_global_evidence_callable_targets(const XgGlobalEvidence *evidence,
+                                                 const XgCallsiteSummary *callsite,
+                                                 const XgCallableTargetSummary **out_targets,
+                                                 uint32_t *out_count);
 XR_FUNC bool xg_global_evidence_interface_dispatch_slot(const XgGlobalEvidence *evidence,
                                                         XgInterfaceId receiver_interface_id,
                                                         XgInterfaceMethodId interface_method_id,
                                                         uint32_t *out_slot);
+XR_FUNC const XgInterfaceImplSummary *
+xg_global_evidence_find_conformance(const XgGlobalEvidence *evidence, XgDeclId implementor_decl_id,
+                                    uint64_t nominal_key, uint8_t implementor_kind,
+                                    XgInterfaceId interface_id);
+XR_FUNC const XgInterfaceWitnessSummary *
+xg_global_evidence_find_interface_witness(const XgGlobalEvidence *evidence,
+                                          XgInterfaceConformanceId conformance_id, uint32_t slot);
 /* Return ownership of a call made through an interface.
  *
  * This is a meet over implementors, not devirtualization: the caller does not

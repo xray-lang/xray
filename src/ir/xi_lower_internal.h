@@ -158,6 +158,10 @@ XR_FUNC void xi_lower_cleanup(XiLower *l);
 XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent);
 XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, struct XaAnalyzer *analyzer,
                                               struct XaSymbol *symbol);
+XR_FUNC bool xi_lower_publish_function_expr_effect_sidecars(XiFunc *func,
+                                                            struct XaAnalyzer *analyzer,
+                                                            const struct XaTypedProgram *program,
+                                                            const struct AstNode *node);
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
                                         int line);
 XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, const char *context,
@@ -165,6 +169,11 @@ XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, con
 XR_FUNC XiSourceSpan xi_lower_push_source_span(XiLower *l, const struct AstNode *node);
 XR_FUNC void xi_lower_pop_source_span(XiLower *l, XiSourceSpan previous);
 XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const struct AstNode *node);
+XR_FUNC XiInterfaceUseKind xi_lower_interface_use_from_global(uint8_t use_kind);
+XR_FUNC bool xi_lower_bind_interface_parameter(XiLower *l, XiValue *parameter,
+                                               struct XrType *parameter_type,
+                                               XrParamMode parameter_mode,
+                                               uint32_t parameter_ordinal);
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l);
 XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id,
                                             uint32_t source_span_id);
@@ -234,7 +243,8 @@ XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_enum_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
-XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
+XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m,
+                                        struct XaSymbol *method_symbol, bool is_inst,
                                         ClassDeclNode *cd, bool owner_is_value_aggregate,
                                         struct XrType *receiver_type, uint32_t source_span_id);
 XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
@@ -280,14 +290,10 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, X
 
 /* ========== Error Propagation (xi_lower_misc.c) ========== */
 
-/* Insert error channel check after a producer that may raise (task 216).
- *
- * The check is generated CONSTRUCTIVELY by callee effect: `producer_may_throw`
- * must be false only when the producer is proven NO_THROW, in which case no
- * XI_ERR_CHECK node is emitted at all (the check could never fire). When true,
- * behaves as before — inside a try block it branches to the current catch
- * target; otherwise it propagates by writing the error and returning. */
-XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool producer_may_throw);
+/* Insert an error-channel check bound to its exact producer.  A producer proven
+ * NO_THROW does
+ * not call this helper at all. */
+XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, XiValue *producer);
 
 /* Whether a call may raise into the error channel. Flow-sensitive callsite
  * evidence is authoritative; declaration/type fallback remains fail-closed

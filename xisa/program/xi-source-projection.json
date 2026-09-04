@@ -144,6 +144,13 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.sum.inject",
+      "result_type": "any",
+      "projection_kind": "variant-construct",
+      "core_operation": "core.variant.construct",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.variant.test",
       "result_type": "bool",
       "projection_kind": "variant-test",
@@ -159,6 +166,13 @@
     },
     {
       "xi_operation": "xi.call.builtin",
+      "result_type": "any",
+      "projection_kind": "owner-copy",
+      "core_operation": "core.owner.copy",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.copy",
       "result_type": "any",
       "projection_kind": "owner-copy",
       "core_operation": "core.owner.copy",
@@ -205,6 +219,57 @@
       "projection_kind": "callable-pack",
       "core_operation": "core.callable.pack",
       "immediate_u32": 0
+    }
+  ],
+  "semantic_mappings": [
+    {
+      "xi_operation": "xi.copy",
+      "xi_existential_kind": "pack",
+      "projection_kind": "existential-pack",
+      "core_operation": "core.existential.pack",
+      "first_operand_policy": "concrete-by-interface-use"
+    },
+    {
+      "xi_operation": "xi.is",
+      "xi_existential_kind": "test",
+      "projection_kind": "existential-test",
+      "core_operation": "core.existential.test",
+      "first_operand_policy": "borrow"
+    },
+    {
+      "xi_operation": "xi.as",
+      "xi_existential_kind": "project",
+      "projection_kind": "existential-project",
+      "core_operation": "core.existential.project",
+      "first_operand_policy": "existential-by-interface-use"
+    },
+    {
+      "xi_operation": "xi.call.method",
+      "xi_existential_kind": "witness-direct",
+      "projection_kind": "witness-direct",
+      "core_operation": "core.call.witness_direct",
+      "first_operand_policy": "receiver-by-interface-use"
+    },
+    {
+      "xi_operation": "xi.call.method.direct",
+      "xi_existential_kind": "witness-direct",
+      "projection_kind": "witness-direct",
+      "core_operation": "core.call.witness_direct",
+      "first_operand_policy": "receiver-by-interface-use"
+    },
+    {
+      "xi_operation": "xi.call.method",
+      "xi_existential_kind": "witness-invoke",
+      "projection_kind": "witness-invoke",
+      "core_operation": "core.call.witness_invoke",
+      "first_operand_policy": "receiver-by-interface-use"
+    },
+    {
+      "xi_operation": "xi.call.method.direct",
+      "xi_existential_kind": "witness-invoke",
+      "projection_kind": "witness-invoke",
+      "core_operation": "core.call.witness_invoke",
+      "first_operand_policy": "receiver-by-interface-use"
     }
   ],
   "structural_mappings": [

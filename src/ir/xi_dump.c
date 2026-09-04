@@ -167,6 +167,15 @@ static void dump_value(FILE *out, const XiValue *v) {
         }
     }
 
+    if (v->op == XI_ERR_CHECK || v->op == XI_CLEANUP_ERR_CHECK) {
+        const XiFunc *function = v->block ? v->block->func : NULL;
+        const XiValue *producer = xi_err_check_producer(function, v);
+        if (producer)
+            fprintf(out, " [error-producer=v%u]", producer->id);
+        else
+            fprintf(out, " [error-producer=invalid]");
+    }
+
     /* Auxiliary info for specific ops */
     if (v->op == XI_LOAD_FIELD && xi_load_field_is_adt(v)) {
         fprintf(out, " [adt-field=%" PRId64 "]", v->aux_int);
@@ -183,6 +192,26 @@ static void dump_value(FILE *out, const XiValue *v) {
     } else if (v->op == XI_AGG_NEW && v->aux) {
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
+    } else if (v->op == XI_SUM_INJECT) {
+        fprintf(out, " [optional=%s ordinal=%" PRId64 "]",
+                v->aux_int == 0   ? "none"
+                : v->aux_int == 1 ? "some"
+                                  : "invalid",
+                v->aux_int);
+    } else if (v->xg_existential_kind == XI_EXISTENTIAL_PACK ||
+               v->xg_existential_kind == XI_EXISTENTIAL_TEST ||
+               v->xg_existential_kind == XI_EXISTENTIAL_PROJECT) {
+        const char *kind = v->xg_existential_kind == XI_EXISTENTIAL_PACK   ? "pack"
+                           : v->xg_existential_kind == XI_EXISTENTIAL_TEST ? "test"
+                                                                           : "project";
+        fprintf(out,
+                " [existential_%s object_use=%u interface=%u conformance=%u implementor=%u "
+                "nominal=%016" PRIx64 " kind=%u use=%u ownership=%u copy=%u complete=%u]",
+                kind, v->xg_interface_object_use_id, v->xg_interface_id, v->xg_conformance_id,
+                v->xg_implementor_decl_id, v->xg_nominal_key, (unsigned) v->xg_implementor_kind,
+                (unsigned) v->xg_interface_use_kind, (unsigned) v->xg_implementor_ownership,
+                (unsigned) v->xg_implementor_copy_contract,
+                (unsigned) v->xg_type_contract_complete);
     } else if (v->op == XI_OBJECT_GET_F || v->op == XI_OBJECT_SET_F || v->op == XI_OBJECT_INIT_F) {
         fprintf(out, " [field=%" PRId64 "]", v->aux_int);
         if (v->xg_object_access_id != 0)
@@ -193,6 +222,11 @@ static void dump_value(FILE *out, const XiValue *v) {
     } else if (v->op == XI_CALL) {
         if (v->xg_callsite_id != 0)
             fprintf(out, " [callsite=%u]", v->xg_callsite_id);
+        if (v->xg_callable_target_count != 0)
+            fprintf(out, " [callable_targets=%u+%u sig=%016" PRIx64 " effect=0x%x caps=0x%x]",
+                    v->xg_callable_target_start, v->xg_callable_target_count,
+                    v->xg_callable_signature_key, v->xg_callable_effect_union,
+                    v->xg_callable_capability_union);
         if (v->xa_intrinsic_id != 0)
             fprintf(out, " [intrinsic=%u]", v->xa_intrinsic_id);
     } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT || v->op == XI_LEN ||
@@ -208,6 +242,12 @@ static void dump_value(FILE *out, const XiValue *v) {
         if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
             v->xg_interface_dispatch_slot != UINT32_MAX)
             fprintf(out, " [interface_slot=%u]", v->xg_interface_dispatch_slot);
+        if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
+            (v->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT ||
+             v->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE))
+            fprintf(out, " [witness_%s interface=%u use=%u]",
+                    v->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT ? "direct" : "invoke",
+                    v->xg_interface_id, (unsigned) v->xg_interface_use_kind);
         if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->xg_key_access_id != 0)
             fprintf(out, " [key_access=%u]", v->xg_key_access_id);
     } else if (v->op == XI_GET_GLOBAL || v->op == XI_SET_GLOBAL) {

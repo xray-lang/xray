@@ -28,6 +28,21 @@ typedef enum XrProgramXiProjectionKind {
     XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,
 } XrProgramXiProjectionKind;
 
+typedef enum XrProgramXiSemanticProjectionKind {
+    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PACK = 1,
+    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_TEST = 2,
+    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PROJECT = 3,
+    XR_PROGRAM_XI_SEMANTIC_WITNESS_DIRECT = 4,
+    XR_PROGRAM_XI_SEMANTIC_WITNESS_INVOKE = 5,
+} XrProgramXiSemanticProjectionKind;
+
+typedef enum XrProgramXiFirstOperandPolicy {
+    XR_PROGRAM_XI_FIRST_OPERAND_BORROW = 1,
+    XR_PROGRAM_XI_FIRST_OPERAND_CONCRETE_BY_INTERFACE_USE = 2,
+    XR_PROGRAM_XI_FIRST_OPERAND_EXISTENTIAL_BY_INTERFACE_USE = 3,
+    XR_PROGRAM_XI_FIRST_OPERAND_RECEIVER_BY_INTERFACE_USE = 4,
+} XrProgramXiFirstOperandPolicy;
+
 typedef struct XrProgramXiProjection {
     uint16_t core_operation_id;
     uint16_t result_type_id;
@@ -35,10 +50,28 @@ typedef struct XrProgramXiProjection {
     XrProgramXiProjectionKind kind;
 } XrProgramXiProjection;
 
+typedef struct XrProgramXiSemanticProjection {
+    uint16_t core_operation_id;
+    XrProgramXiSemanticProjectionKind kind;
+    XrProgramXiFirstOperandPolicy first_operand_policy;
+} XrProgramXiSemanticProjection;
+
 bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,
                               XrProgramXiProjection *projection_out);
+bool xr_program_xi_semantic_projection(uint16_t xi_operation,
+                                       uint8_t xi_existential_kind,
+                                       XrProgramXiSemanticProjection *projection_out);
+bool xr_program_xi_semantic_operation_kind(
+    uint16_t core_operation_id, XrProgramXiSemanticProjectionKind *kind_out);
+bool xr_program_xi_semantic_first_operand_consumption(uint16_t core_operation_id,
+                                                      uint8_t interface_use_kind,
+                                                      bool *consumed_out);
 bool xr_program_xi_operation_contract(uint16_t xi_operation, uint32_t *effect_mask_out,
                                       uint32_t *capability_mask_out);
+bool xr_program_xi_semantic_operation_contract(uint16_t xi_operation,
+                                                uint8_t xi_existential_kind,
+                                                uint32_t *effect_mask_out,
+                                                uint32_t *capability_mask_out);
 bool xr_program_xi_value_is_materialized(uint16_t xi_operation);
 
 #endif /* XR_PROGRAM_XI_PROJECTION_GEN_H */

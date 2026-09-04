@@ -4,6 +4,9 @@
 
 #include "xa_effect_db.h"
 #include "xa_memory_effect_db.h"
+#include "xclass_info.h"
+#include "xenum_layout.h"
+#include "xtype.h"
 #include "xmalloc.h"
 #include <stdio.h>
 #include <string.h>
@@ -279,6 +282,70 @@ TEST(error_type_handle_is_bound_by_stable_key) {
     ASSERT(first != XA_ERROR_TYPE_NONE);
     ASSERT(first == second);
     ASSERT(xa_effect_db_error_type_handle(db, first) == fake_type);
+    xa_effect_db_free(db);
+}
+
+TEST(error_enum_identity_is_owner_qualified_and_rejects_incomplete_handle) {
+    XrEnumVariantLayout first_variants[1] = {{.name = "Failed", .tag = 0u}};
+    XrEnumVariantLayout second_variants[1] = {{.name = "Failed", .tag = 0u}};
+    XrEnumLayout first_layout = {
+        .nominal_owner = "module://first",
+        .name = "ReadFailure",
+        .variant_count = 1u,
+        .variants = first_variants,
+    };
+    XrEnumLayout second_layout = {
+        .nominal_owner = "module://second",
+        .name = "ReadFailure",
+        .variant_count = 1u,
+        .variants = second_variants,
+    };
+    first_layout.layout_id = xr_enum_layout_nominal_id(&first_layout);
+    second_layout.layout_id = xr_enum_layout_nominal_id(&second_layout);
+    ASSERT(first_layout.layout_id != 0u);
+    ASSERT(second_layout.layout_id != 0u);
+
+    XrClassInfo first_nominal = {.nominal_kind = XA_NOMINAL_ENUM};
+    XrClassInfo second_nominal = {.nominal_kind = XA_NOMINAL_ENUM};
+    first_nominal.declaration_symbol = (XaSymbol *) &first_nominal;
+    second_nominal.declaration_symbol = (XaSymbol *) &second_nominal;
+    XrType first_type = {.kind = XR_KIND_ENUM};
+    XrType second_type = {.kind = XR_KIND_ENUM};
+    first_type.enum_type.enum_name = "ReadFailure";
+    first_type.enum_type.nominal_ref = &first_nominal;
+    first_type.enum_type.layout_id = first_layout.layout_id;
+    first_type.enum_type.layout = &first_layout;
+    second_type.enum_type.enum_name = "ReadFailure";
+    second_type.enum_type.nominal_ref = &second_nominal;
+    second_type.enum_type.layout_id = second_layout.layout_id;
+    second_type.enum_type.layout = &second_layout;
+
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId first = xa_effect_db_register_error_enum(db, &first_type);
+    XaErrorTypeId second = xa_effect_db_register_error_enum(db, &second_type);
+    ASSERT(first != XA_ERROR_TYPE_NONE);
+    ASSERT(second != XA_ERROR_TYPE_NONE);
+    ASSERT(first != second);
+    uint64_t first_key = xa_effect_db_error_type_key(db, first);
+    ASSERT(first_key != 0u);
+    xa_effect_db_detach_error_types_for_nominal(db, &first_nominal);
+    ASSERT(xa_effect_db_error_type_handle(db, first) == NULL);
+    XrClassInfo replacement_nominal = {.nominal_kind = XA_NOMINAL_ENUM};
+    replacement_nominal.declaration_symbol = (XaSymbol *) &replacement_nominal;
+    XrType replacement_type = first_type;
+    replacement_type.enum_type.nominal_ref = &replacement_nominal;
+    ASSERT(xa_effect_db_register_error_enum(db, &replacement_type) == first);
+    ASSERT(xa_effect_db_error_type_handle(db, first) == &replacement_type);
+    xa_effect_db_free(db);
+
+    XrType incomplete_type = first_type;
+    incomplete_type.enum_type.layout = NULL;
+    db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    ASSERT(xa_effect_db_register_error_type(db, first_key, &incomplete_type) !=
+           XA_ERROR_TYPE_NONE);
+    ASSERT(xa_effect_db_register_error_enum(db, &first_type) == XA_ERROR_TYPE_NONE);
     xa_effect_db_free(db);
 }
 
@@ -820,6 +887,7 @@ int main(void) {
     RUN_TEST(summary_merge_preserves_variants_and_incomplete_reason);
     RUN_TEST(provenance_roots_merge_without_changing_semantic_identity);
     RUN_TEST(error_type_handle_is_bound_by_stable_key);
+    RUN_TEST(error_enum_identity_is_owner_qualified_and_rejects_incomplete_handle);
     RUN_TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete);
     RUN_TEST(diff_identical_summaries_are_compatible);
     RUN_TEST(diff_added_escaping_variant_is_source_breaking);

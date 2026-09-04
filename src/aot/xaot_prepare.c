@@ -5716,9 +5716,10 @@ static bool func_attr_op_is_closed_world_call_like(uint16_t op) {
     }
 }
 
-static bool func_attr_value_is_ignorable_err_check(const XiValue *value) {
+static bool func_attr_value_is_ignorable_err_check(const XiFunc *func, const XiValue *value) {
     return value && value->op == XI_ERR_CHECK &&
-           (!value->type || value->type->kind != XR_KIND_BOOL);
+           (!value->type || value->type->kind != XR_KIND_BOOL) &&
+           xi_err_check_producer(func, value) != NULL;
 }
 
 /* Ops that observe mutable non-local state. Forced into the "reads memory"
@@ -5810,7 +5811,7 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
             }
             if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                             XI_FLAG_WRITES_MEM) &&
-                !func_attr_value_is_ignorable_err_check(v) && !composed_call)
+                !func_attr_value_is_ignorable_err_check(func, v) && !composed_call)
                 return true;
             if (!composed_call) {
                 if (xi_op_allocates(v->op))

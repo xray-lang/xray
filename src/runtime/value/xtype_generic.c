@@ -271,6 +271,8 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         XrType *result = changed ? xr_type_new_generic_enum(X, type->enum_type.enum_name,
                                                             type->enum_type.layout, new_args, ac)
                                  : type;
+        if (changed && result)
+            result->enum_type.nominal_ref = type->enum_type.nominal_ref;
         if (new_args != stack_args)
             xr_free(new_args);
         return result;
@@ -553,7 +555,8 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
     check_user_implements:
         // User-defined classes with explicit 'implements' — defer to
         // xr_type_assignable which walks interface_types[] on the class.
-        if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) {
+        if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE ||
+            type->kind == XR_KIND_ENUM) {
             return xr_type_assignable(constraint, type);
         }
         return false;

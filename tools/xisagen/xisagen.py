@@ -4060,7 +4060,7 @@ def _xi_literal_c_includes(source: str, context: str
     includes: list[tuple[str, str]] = []
     logical = _xi_preprocessor_logical_source(source, context)
     directive = re.compile(
-        r'(?m)^[^\S\r\n]*(?:#|%:)[^\S\r\n]*include\b([^\r\n]*)$')
+        r'(?m)^[^\S\r\n]*(?:#|%:)[^\S\r\n]*include\b([^\r\n]*)\r?$')
     for match in directive.finditer(logical):
         operand = match.group(1).strip()
         if operand.startswith('<'):
@@ -6266,8 +6266,16 @@ def write_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef],
                               ops: list[XiOpDef]) -> list[str]:
     written = []
     for relpath, content in _xi_lowering_output_contents(entries, ops):
-        path = os.path.join(output_root, relpath)
-        write_file_if_changed(path, content)
+        path = os.fspath(Path(output_root) / relpath)
+        data = content.encode('utf-8')
+        try:
+            if Path(path).read_bytes() == data:
+                written.append(path)
+                continue
+        except FileNotFoundError:
+            pass
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_bytes(data)
         written.append(path)
     return written
 
@@ -7902,6 +7910,9 @@ def _test_xi_lowering_build_artifacts() -> None:
     assert _xi_local_c_include_spellings(
         '#include <stddef.h>\n#include "owner.h"\n',
         'header include fixture') == ['owner.h']
+    assert _xi_local_c_include_spellings(
+        '#include "windows-owner.h"\r\n',
+        'CRLF include fixture') == ['windows-owner.h']
     assert _xi_literal_c_includes(
         '??=inc??/\nlude "tri.h"\n#inc\\\nlude <angle.h>\n',
         'translation phase include fixture') == [
@@ -8049,7 +8060,30 @@ def _test_xi_lowering_build_artifacts() -> None:
         (aot / 'router.c').write_text(
             'static void route(void) {}\n', encoding='utf-8')
 
-        if hasattr(os, 'symlink'):
+        symlink_tests_supported = hasattr(os, 'symlink')
+        if symlink_tests_supported:
+            probe_target = aot / 'symlink-probe-target'
+            probe_link = aot / 'symlink-probe-link'
+            probe_target.write_text('probe\n', encoding='utf-8')
+            try:
+                probe_link.symlink_to(probe_target.name)
+            except OSError as error:
+                unsupported = {
+                    errno.EACCES, errno.EPERM, errno.ENOTSUP,
+                    getattr(errno, 'EOPNOTSUPP', errno.ENOTSUP),
+                }
+                if (error.errno not in unsupported and
+                        getattr(error, 'winerror', None) != 1314):
+                    raise
+                symlink_tests_supported = False
+            finally:
+                try:
+                    probe_link.unlink()
+                except FileNotFoundError:
+                    pass
+                probe_target.unlink()
+
+        if symlink_tests_supported:
             symlink = aot / 'owner-link.c'
             directory_symlink = aot / 'outside-link'
             external = root.parent / f'{root.name}-outside'
@@ -8868,6 +8902,7 @@ with events.open('a', encoding='utf-8') as stream:
         validator.write_text(validator_source, encoding='utf-8')
         checker.write_text(checker_source, encoding='utf-8')
         module_path = Path(__file__).resolve()
+        python_executable = Path(sys.executable).resolve().as_posix()
         include_lines = ''.join(
             f'    ${{CMAKE_CURRENT_SOURCE_DIR}}/{relative}\n'
             for relative in closure.include_directories)
@@ -8898,7 +8933,7 @@ with events.open('a', encoding='utf-8') as stream:
             '  VERBATIM)\n'
             'add_custom_command(\n'
             '  OUTPUT ${STAMP}\n'
-            f'  COMMAND "{sys.executable}" -B ${{VALIDATOR}} ${{XISAGEN}} '
+            f'  COMMAND "{python_executable}" -B ${{VALIDATOR}} ${{XISAGEN}} '
             '${CMAKE_CURRENT_SOURCE_DIR} ${MODE} ${STAMP} ${DEPFILE}\n'
             '  BYPRODUCTS ${DEPFILE}\n'
             '  DEPENDS ${XISAGEN} ${VALIDATOR} ${MODE} '
@@ -8908,7 +8943,7 @@ with events.open('a', encoding='utf-8') as stream:
             '  DEPFILE ${DEPFILE}\n'
             '  VERBATIM)\n'
             'add_custom_target(gen-xi-lowering\n'
-            f'  COMMAND "{sys.executable}" -B ${{CHECKER}} ${{XISAGEN}} '
+            f'  COMMAND "{python_executable}" -B ${{CHECKER}} ${{XISAGEN}} '
             '${CMAKE_CURRENT_SOURCE_DIR} ${STAMP}\n'
             '  DEPENDS ${STAMP} ${PROJECTIONS}\n'
             '  VERBATIM)\n'
@@ -10275,6 +10310,12 @@ def _test_xi_lowering_parser():
     with tempfile.TemporaryDirectory(prefix='xisagen-lowering-no-touch-') as directory:
         first_outputs = write_xi_lowering_outputs(directory, real_entries, real_ops)
         assert len(first_outputs) == 12
+        crlf_output = Path(first_outputs[0])
+        canonical_bytes = crlf_output.read_bytes()
+        assert b'\r' not in canonical_bytes
+        crlf_output.write_bytes(canonical_bytes.replace(b'\n', b'\r\n'))
+        write_xi_lowering_outputs(directory, real_entries, real_ops)
+        assert crlf_output.read_bytes() == canonical_bytes
         for index, output in enumerate(first_outputs):
             marker = 1_700_000_000_000_000_000 + index
             os.utime(output, ns=(marker, marker))
@@ -10858,6 +10899,7 @@ def _test_xi_lowering_parser():
         snapshot_sources = dict(real_snapshot.sources)
         assert set(snapshot_sources) == consumer_sources
         text = snapshot_sources[relative].decode('utf-8', errors='strict')
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
         for old, new in replacements:
             assert old in text
             text = text.replace(old, new)

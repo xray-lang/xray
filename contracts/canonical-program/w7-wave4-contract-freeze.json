@@ -15,11 +15,11 @@
     "borrow_origin_set": "COMPLETE",
     "borrow_root_tables": "COMPLETE",
     "program_tables": "COMPLETE",
-    "existential_operations": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-    "witness_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-    "callable_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-    "source_integration": "PENDING",
-    "wave_closure": "PENDING"
+    "existential_operations": "COMPLETE",
+    "witness_dispatch": "COMPLETE",
+    "callable_dispatch": "COMPLETE",
+    "source_integration": "COMPLETE",
+    "wave_closure": "COMPLETE"
   },
   "phase_erasure": {
     "generic_constraint_call": "monomorphized to sealed direct or sealed invoke before XrProgram",
@@ -143,7 +143,7 @@
     "ownership": "READ carriers are trivial-copy logical snapshots; REF carriers preserve one typed place and are affine/copy-forbidden borrow tokens; MOVE/OWNED_STORAGE carriers are affine and copy-forbidden; CONSTRAINT_BOUND is not a runtime existential",
     "ref_escape": "REF existential is a call-chain-local affine borrow token; parameters and local control flow may carry it, but function results, error types, aggregate fields and variant payloads must reject it",
     "carrier": "reference evaluator and VM use execution-lifetime arenas and an owned-storage cell; AOT threads a backend-private execution context and arena-boxes READ/MOVE/OWNED payload snapshots while REF preserves a typed place pointer; no carrier layout is serialized or exposed through BoundaryABI",
-    "source_status": "pending class, struct, enum, import and dynamic-target producer integration",
+    "source_status": "complete for class, struct and enum existential formation plus exact nominal test/project flows",
     "compatibility": "no old reader, erased-object fallback, selector lookup, backend semantic inference or dual operation spelling"
   },
   "witness_operation_contract": {
@@ -155,7 +155,7 @@
     "direct": "witness_direct is admitted only for a slot without error or panic and returns through its typed result",
     "invoke": "witness_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",
     "executor_realization": "reference evaluator and VM resolve the validated FunctionId; portable-C AOT emits a closed ConformanceId switch whose cases directly call the exact typed implementation after unwrapping the receiver",
-    "source_status": "pending class, struct, enum, import and dynamic-target producer integration",
+    "source_status": "complete for class, struct and enum declaration-ordered witness direct/invoke flows",
     "compatibility": "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling"
   },
   "callable_operation_contract": {
@@ -167,7 +167,7 @@
     "invoke": "indirect_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",
     "executor_realization": "reference evaluator and VM resolve the validated FunctionId from a private carrier; portable-C AOT emits a closed FunctionId switch whose cases directly call the exact typed target and prepend a typed capture receiver only when required",
     "boundary": "callable carrier layout is backend-private and callable values cannot escape as public reference-evaluator or VM outcomes",
-    "source_status": "pending function-value, closure, import and resolved dynamic-target producer integration",
+    "source_status": "complete for function values, closures, imported callable unions and resolved finite target sets",
     "compatibility": "no erased argument vector, universal closure ABI, name/selector lookup, backend semantic inference, old reader or dual operation spelling"
   },
   "old_owner_inventory": [

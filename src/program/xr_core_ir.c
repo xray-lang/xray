@@ -115,6 +115,14 @@ static XrCoreIrTypeOwnership type_ownership(const XrCoreIrProgram *program, uint
     return program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].ownership;
 }
 
+static XrCoreIrCopyContract type_copy_contract(const XrCoreIrProgram *program, uint16_t type_id) {
+    if (type_id == XR_CORE_TYPE_VOID || type_id == XR_CORE_TYPE_PANIC_INFO)
+        return XR_CORE_IR_COPY_FORBIDDEN;
+    if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+        return XR_CORE_IR_COPY_TRIVIAL;
+    return program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].copy_contract;
+}
+
 static bool value_contract_is_valid(const XrCoreIrProgram *program, uint16_t type_id,
                                     XrCoreIrValueCategory category,
                                     XrCoreIrOwnershipDisposition ownership) {
@@ -202,11 +210,11 @@ void xr_core_ir_program_free(XrCoreIrProgram *program) {
     }
     for (uint32_t type = 0; program->types && type < program->type_count; ++type)
         free_type(&program->types[type]);
-    for (uint32_t interface = 0; program->interfaces && interface < program->interface_count;
-         ++interface) {
-        for (uint32_t slot = 0; slot < program->interfaces[interface].slot_count; ++slot)
-            free_signature(&program->interfaces[interface].slots[slot]);
-        xr_free(program->interfaces[interface].slots);
+    for (uint32_t interface_index = 0;
+         program->interfaces && interface_index < program->interface_count; ++interface_index) {
+        for (uint32_t slot = 0; slot < program->interfaces[interface_index].slot_count; ++slot)
+            free_signature(&program->interfaces[interface_index].slots[slot]);
+        xr_free(program->interfaces[interface_index].slots);
     }
     for (uint32_t conformance = 0;
          program->conformances && conformance < program->conformance_count; ++conformance)
@@ -624,8 +632,9 @@ static bool remap_program_types(XrCoreIrProgram *program) {
                 return false;
         }
     }
-    for (uint32_t interface = 0; interface < program->interface_count; ++interface) {
-        XrCoreIrInterface *row = &program->interfaces[interface];
+    for (uint32_t interface_index = 0; interface_index < program->interface_count;
+         ++interface_index) {
+        XrCoreIrInterface *row = &program->interfaces[interface_index];
         for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
             XrCoreIrCallableSignature *signature = &row->slots[slot];
             for (uint32_t parameter = 0; parameter < signature->parameter_count; ++parameter)
@@ -1108,7 +1117,9 @@ static bool validate_types(const XrCoreIrProgram *program) {
                  (type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
                   type->copy_contract != XR_CORE_IR_COPY_TRIVIAL));
         if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
-            valid = valid && type->field_count != 0u && type->field_types &&
+            valid = valid &&
+                    ((type->field_count == 0u && !type->field_types) ||
+                     (type->field_count != 0u && type->field_types)) &&
                     type->variant_count == 0u && !type->variants &&
                     type->nominal_kind <= XR_CORE_IR_NOMINAL_ENUM;
             for (uint32_t field = 0; valid && field < type->field_count; ++field)
@@ -1167,31 +1178,65 @@ static bool validate_types(const XrCoreIrProgram *program) {
     }
     for (uint32_t index = 0; valid && index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
-        for (uint32_t field = 0; valid && field < type->field_count; ++field)
-            valid = !type_is_existential_ref(program, type->field_types[field]) &&
-                    (type->ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
-                     type_ownership(program, type->field_types[field]) ==
-                         XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL);
+        XrCoreIrTypeOwnership derived_ownership =
+            type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+                    type->nominal_kind == XR_CORE_IR_NOMINAL_CLASS
+                ? XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
+                : XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+        XrCoreIrCopyContract derived_copy = derived_ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
+                                                ? XR_CORE_IR_COPY_EXPLICIT
+                                                : XR_CORE_IR_COPY_TRIVIAL;
+        bool has_affine_child = false;
+        for (uint32_t field = 0; valid && field < type->field_count; ++field) {
+            uint16_t child = type->field_types[field];
+            valid = !type_is_existential_ref(program, child);
+            if (valid && type_ownership(program, child) == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE) {
+                has_affine_child = true;
+                derived_ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+                if (type_copy_contract(program, child) == XR_CORE_IR_COPY_FORBIDDEN)
+                    derived_copy = XR_CORE_IR_COPY_FORBIDDEN;
+                else if (derived_copy == XR_CORE_IR_COPY_TRIVIAL)
+                    derived_copy = XR_CORE_IR_COPY_EXPLICIT;
+            }
+        }
         for (uint32_t variant = 0; valid && variant < type->variant_count; ++variant) {
             const XrCoreIrVariant *row = &type->variants[variant];
-            for (uint32_t field = 0; valid && field < row->payload_count; ++field)
-                valid = !type_is_existential_ref(program, row->payload_types[field]) &&
-                        (type->ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
-                         type_ownership(program, row->payload_types[field]) ==
-                             XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL);
+            for (uint32_t field = 0; valid && field < row->payload_count; ++field) {
+                uint16_t child = row->payload_types[field];
+                valid = !type_is_existential_ref(program, child);
+                if (valid && type_ownership(program, child) == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE) {
+                    has_affine_child = true;
+                    derived_ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+                    if (type_copy_contract(program, child) == XR_CORE_IR_COPY_FORBIDDEN)
+                        derived_copy = XR_CORE_IR_COPY_FORBIDDEN;
+                    else if (derived_copy == XR_CORE_IR_COPY_TRIVIAL)
+                        derived_copy = XR_CORE_IR_COPY_EXPLICIT;
+                }
+            }
         }
+        bool anonymous_owner_aggregate = type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+                                         type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
+                                         !has_affine_child &&
+                                         type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                                         type->copy_contract == XR_CORE_IR_COPY_EXPLICIT;
+        bool structural =
+            type->kind == XR_CORE_IR_TYPE_AGGREGATE || type->kind == XR_CORE_IR_TYPE_VARIANT;
+        valid = valid &&
+                (!structural || anonymous_owner_aggregate ||
+                 (type->ownership == derived_ownership && type->copy_contract == derived_copy));
     }
     xr_free(state);
     return valid;
 }
 
 static bool validate_program_tables(const XrCoreIrProgram *program) {
-    for (uint32_t interface = 0; interface < program->interface_count; ++interface) {
-        const XrCoreIrInterface *row = &program->interfaces[interface];
+    for (uint32_t interface_index = 0; interface_index < program->interface_count;
+         ++interface_index) {
+        const XrCoreIrInterface *row = &program->interfaces[interface_index];
         if (xr_core_ir_key_is_zero(row->key) || row->slot_count == 0u || !row->slots ||
             row->slot_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
-            (interface != 0u &&
-             key_compare_value(program->interfaces[interface - 1u].key, row->key) >= 0))
+            (interface_index != 0u &&
+             key_compare_value(program->interfaces[interface_index - 1u].key, row->key) >= 0))
             return false;
         for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
             const XrCoreIrCallableSignature *signature = &row->slots[slot];
@@ -1213,20 +1258,20 @@ static bool validate_program_tables(const XrCoreIrProgram *program) {
     }
     for (uint32_t conformance = 0; conformance < program->conformance_count; ++conformance) {
         const XrCoreIrConformance *row = &program->conformances[conformance];
-        const XrCoreIrInterface *interface = find_interface(program, row->interface_key);
+        const XrCoreIrInterface *interface_row = find_interface(program, row->interface_key);
         const XrCoreIrType *implementor =
             row->implementor_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
                     (uint32_t) row->implementor_type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE <
                         program->type_count
                 ? &program->types[row->implementor_type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
                 : NULL;
-        if (xr_core_ir_key_is_zero(row->key) || !interface || !implementor ||
+        if (xr_core_ir_key_is_zero(row->key) || !interface_row || !implementor ||
             row->implementor_kind == XR_CORE_IR_NOMINAL_NONE ||
             row->implementor_kind > XR_CORE_IR_NOMINAL_ENUM ||
             implementor->nominal_kind != row->implementor_kind ||
             (implementor->kind != XR_CORE_IR_TYPE_AGGREGATE &&
              implementor->kind != XR_CORE_IR_TYPE_VARIANT) ||
-            row->slot_count != interface->slot_count ||
+            row->slot_count != interface_row->slot_count ||
             (row->slot_count != 0u && !row->slot_functions) ||
             (conformance != 0u &&
              key_compare_value(program->conformances[conformance - 1u].key, row->key) >= 0))
@@ -1241,7 +1286,7 @@ static bool validate_program_tables(const XrCoreIrProgram *program) {
             if (!function)
                 return false;
             XrCoreIrCallableSignature signature = function_signature(function);
-            if (!signature_satisfies_interface(program, &signature, &interface->slots[slot],
+            if (!signature_satisfies_interface(program, &signature, &interface_row->slots[slot],
                                                row->implementor_type_id, row->interface_key))
                 return false;
         }

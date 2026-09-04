@@ -149,6 +149,7 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
     spec.authority.kind = XR_MODULE_IDENTITY_MEMORY;
     spec.authority.namespace_id = "xi-lower-fixture-v1";
     spec.ast = program;
+    spec.source_path = "test.xr";
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
@@ -157,22 +158,26 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
-    if (!xg_global_evidence_build_from_module_graph(out_ev, &graph, XG_BUILD_NATIVE_RELEASE, 0)) {
-        fprintf(stderr, "  GLOBAL EVIDENCE FAILED for: %s\n", source);
-        xr_program_destroy(program);
-        return NULL;
-    }
-    if (mutate_evidence)
-        mutate_evidence(out_ev);
-
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer) {
         fprintf(stderr, "  ANALYZER ALLOC FAILED\n");
-        xg_global_evidence_free(out_ev);
         xr_program_destroy(program);
         return NULL;
     }
+    xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, "test.xr", program);
+    if (analyzer->diagnostic_count != 0 ||
+        !xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+            out_ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer)) {
+        fprintf(stderr, "  GLOBAL EVIDENCE FAILED for: %s\n", source);
+        xa_analyzer_set_graph(analyzer, NULL);
+        xa_analyzer_free(analyzer);
+        xr_program_destroy(program);
+        return NULL;
+    }
+    xa_analyzer_set_graph(analyzer, NULL);
+    if (mutate_evidence)
+        mutate_evidence(out_ev);
 
     XrCompilerSessionScope canon_scope;
     bool has_canon_scope =
@@ -2286,6 +2291,491 @@ TEST(strong_source_node_identity_binds_same_line_calls_and_same_name_bodies) {
 #undef REQUIRE_STRONG_IDENTITY
 }
 
+TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
+#define REQUIRE_EXISTENTIAL_EVIDENCE(cond, msg)                                                    \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "existential_evidence: %s\n", msg);                                    \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence evidence;
+    memset(&evidence, 0, sizeof(evidence));
+    XiFunc *root = lower_source_with_global_evidence(
+        "interface ReadValue { read() -> i64 }\n"
+        "class ReadClass implements ReadValue { read() -> i64 { return 1 } }\n"
+        "struct ReadStruct implements ReadValue { read() -> i64 { return 2 } }\n"
+        "enum ReadEnum implements ReadValue {\n"
+        "    One, Two\n"
+        "    read() -> i64 { return 3 }\n"
+        "}\n"
+        "fn readClass(value: ReadClass) -> i64 {\n"
+        "    var erased: ReadValue = value\n"
+        "    return erased.read()\n"
+        "}\n"
+        "fn readStruct(value: ReadStruct) -> i64 {\n"
+        "    var erased: ReadValue = value\n"
+        "    return erased.read()\n"
+        "}\n"
+        "fn readEnum(value: ReadEnum) -> i64 {\n"
+        "    var erased: ReadValue = value\n"
+        "    return erased.read()\n"
+        "}\n"
+        "fn isReadClass(value: ReadValue) -> bool {\n"
+        "    return value is ReadClass\n"
+        "}\n"
+        "fn projectReadClass(value: ReadValue) -> ReadClass? {\n"
+        "    return value as ReadClass?\n"
+        "}\n"
+        "fn projectReadStruct(value: ReadValue) -> ReadStruct? {\n"
+        "    return value as ReadStruct?\n"
+        "}\n"
+        "fn projectReadEnum(value: ReadValue) -> ReadEnum? {\n"
+        "    return value as ReadEnum?\n"
+        "}\n",
+        &evidence);
+    REQUIRE_EXISTENTIAL_EVIDENCE(root != NULL, "class/struct/enum source should lower");
+    REQUIRE_EXISTENTIAL_EVIDENCE(evidence.ninterface_impls == 3,
+                                 "all three nominal conformances must be published");
+
+    uint32_t seen_pack_kinds = 0;
+    uint32_t pack_count = 0;
+    uint32_t test_count = 0;
+    uint32_t project_count = 0;
+    uint32_t witness_direct_count = 0;
+    XgInterfaceId interface_id = XG_NO_ID;
+    XiFunc *safe_cast_functions[3] = {0};
+    XiValue *safe_cast_tests[3] = {0};
+    XiValue *safe_cast_projects[3] = {0};
+    XiValue *safe_cast_clones[3] = {0};
+    XiValue *safe_cast_somes[3] = {0};
+    XiValue *safe_cast_nones[3] = {0};
+    const char *function_names[] = {"readClass", "readStruct", "readEnum", "isReadClass",
+                                    "projectReadClass", "projectReadStruct", "projectReadEnum"};
+    for (uint32_t f = 0; f < 7; f++) {
+        XiFunc *function = func_tree_find_func_name(root, function_names[f]);
+        REQUIRE_EXISTENTIAL_EVIDENCE(function != NULL, "fixture function must be lowered");
+        if (f >= 4)
+            safe_cast_functions[f - 4] = function;
+        if (f >= 3) {
+            XiValue *parameter = function->nparams > 0 ? function->params[0] : NULL;
+            const XgInterfaceObjectUseSummary *parameter_use =
+                parameter && parameter->xg_interface_id != XG_NO_ID
+                    ? xg_global_evidence_find_interface_object_use(
+                          &evidence, function->xg_body_func_id,
+                          xg_interface_parameter_site_id(function->xg_body_func_id, 0),
+                          parameter->xg_interface_id, XG_INTERFACE_OBJECT_USE_PARAM)
+                    : NULL;
+            REQUIRE_EXISTENTIAL_EVIDENCE(
+                parameter && parameter->op == XI_PARAM && parameter_use &&
+                    parameter_use->use_id == parameter->xg_interface_object_use_id &&
+                    parameter_use->use_kind == XG_INTERFACE_USE_READ &&
+                    parameter->xg_interface_use_kind == XI_INTERFACE_USE_READ,
+                "interface parameter must bind its exact synthetic PARAM object-use row");
+        }
+        for (uint32_t b = 0; b < function->nblocks; b++) {
+            XiBlock *block = function->blocks[b];
+            if (!block)
+                continue;
+            for (uint32_t i = 0; i < block->nvalues; i++) {
+                XiValue *value = block->values[i];
+                if (!value)
+                    continue;
+                if (value->xg_existential_kind == XI_EXISTENTIAL_PACK) {
+                    REQUIRE_EXISTENTIAL_EVIDENCE(value->op == XI_COPY && value->nargs == 1 &&
+                                                     value->args[0] != NULL,
+                                                 "pack must remain an explicit Xi value");
+                    REQUIRE_EXISTENTIAL_EVIDENCE(value->xg_interface_id != XG_NO_ID &&
+                                                     value->xg_interface_object_use_id != XG_NO_ID &&
+                                                     value->xg_conformance_id != XG_NO_ID &&
+                                                     value->xg_implementor_decl_id != XG_NO_ID &&
+                                                     value->xg_nominal_key != 0 &&
+                                                     value->xg_implementor_kind != 0 &&
+                                                     value->xg_type_contract_complete,
+                                                 "pack must carry exact stable ids");
+                    const XgInterfaceObjectUseSummary *object_use = NULL;
+                    for (uint32_t use_index = 0;
+                         use_index < evidence.ninterface_object_uses; use_index++) {
+                        if (evidence.interface_object_uses[use_index].use_id ==
+                            value->xg_interface_object_use_id) {
+                            object_use = &evidence.interface_object_uses[use_index];
+                            break;
+                        }
+                    }
+                    bool use_kind_matches =
+                        object_use &&
+                        ((object_use->use_kind == XG_INTERFACE_USE_READ &&
+                          value->xg_interface_use_kind == XI_INTERFACE_USE_READ) ||
+                         (object_use->use_kind == XG_INTERFACE_USE_REF &&
+                          value->xg_interface_use_kind == XI_INTERFACE_USE_REF) ||
+                         (object_use->use_kind == XG_INTERFACE_USE_MOVE &&
+                          value->xg_interface_use_kind == XI_INTERFACE_USE_MOVE) ||
+                         (object_use->use_kind == XG_INTERFACE_USE_OWNED_STORAGE &&
+                          value->xg_interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE));
+                    REQUIRE_EXISTENTIAL_EVIDENCE(
+                        object_use && object_use->interface_id == value->xg_interface_id &&
+                            (object_use->reason & XG_INTERFACE_OBJECT_USE_VALUE) != 0u &&
+                            use_kind_matches,
+                        "pack must consume its exact object-use row and use kind");
+                    const XgInterfaceImplSummary *conformance = xg_global_evidence_find_conformance(
+                        &evidence, value->xg_implementor_decl_id, value->xg_nominal_key,
+                        value->xg_implementor_kind, value->xg_interface_id);
+                    REQUIRE_EXISTENTIAL_EVIDENCE(
+                        conformance && conformance->conformance_id == value->xg_conformance_id &&
+                            conformance->existential_eligible &&
+                            conformance->implementor_ownership ==
+                                value->xg_implementor_ownership &&
+                            conformance->implementor_copy_contract ==
+                                value->xg_implementor_copy_contract &&
+                            conformance->type_contract_complete ==
+                                value->xg_type_contract_complete,
+                        "pack ids must select one verified existential conformance");
+                    seen_pack_kinds |= 1u << conformance->implementor_kind;
+                    interface_id = value->xg_interface_id;
+                    pack_count++;
+                }
+                if (value->xg_existential_kind == XI_EXISTENTIAL_TEST ||
+                    value->xg_existential_kind == XI_EXISTENTIAL_PROJECT) {
+                    REQUIRE_EXISTENTIAL_EVIDENCE(
+                        value->xg_interface_object_use_id != XG_NO_ID &&
+                            value->xg_interface_id != XG_NO_ID &&
+                            value->xg_conformance_id != XG_NO_ID &&
+                            value->xg_implementor_decl_id != XG_NO_ID &&
+                            value->xg_nominal_key != 0 &&
+                            (value->xg_implementor_kind == XG_DECL_CLASS ||
+                             value->xg_implementor_kind == XG_DECL_STRUCT ||
+                             value->xg_implementor_kind == XG_DECL_ENUM) &&
+                            value->xg_interface_use_kind == XI_INTERFACE_USE_READ &&
+                            value->xg_type_contract_complete,
+                        "test and project must carry exact immutable nominal identity");
+                    const XgInterfaceImplSummary *conformance = xg_global_evidence_find_conformance(
+                        &evidence, value->xg_implementor_decl_id, value->xg_nominal_key,
+                        value->xg_implementor_kind, value->xg_interface_id);
+                    REQUIRE_EXISTENTIAL_EVIDENCE(
+                        conformance && conformance->conformance_id == value->xg_conformance_id &&
+                            conformance->existential_eligible &&
+                            conformance->implementor_ownership ==
+                                value->xg_implementor_ownership &&
+                            conformance->implementor_copy_contract ==
+                                value->xg_implementor_copy_contract &&
+                            conformance->type_contract_complete ==
+                                value->xg_type_contract_complete,
+                        "test and project must select one verified existential conformance");
+                    if (value->xg_existential_kind == XI_EXISTENTIAL_TEST) {
+                        REQUIRE_EXISTENTIAL_EVIDENCE(value->op == XI_IS,
+                                                     "existential test must remain an XI_IS");
+                        if (f >= 4)
+                            safe_cast_tests[f - 4] = value;
+                        test_count++;
+                    } else {
+                        REQUIRE_EXISTENTIAL_EVIDENCE(value->op == XI_AS,
+                                                     "existential project must remain an XI_AS");
+                        if (f >= 4)
+                            safe_cast_projects[f - 4] = value;
+                        project_count++;
+                    }
+                }
+                if (f >= 4 && value->op == XI_COPY && xi_copy_is_value_clone(value))
+                    safe_cast_clones[f - 4] = value;
+                if (f >= 4 && value->op == XI_SUM_INJECT) {
+                    if (value->aux_int == 0)
+                        safe_cast_nones[f - 4] = value;
+                    else if (value->aux_int == 1)
+                        safe_cast_somes[f - 4] = value;
+                }
+                if (value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT) {
+                    REQUIRE_EXISTENTIAL_EVIDENCE(
+                        (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
+                            value->xg_callsite_id != XG_NO_ID && value->xg_method_id != XG_NO_ID &&
+                            value->xg_interface_id != XG_NO_ID &&
+                            value->xg_interface_dispatch_slot != UINT32_MAX &&
+                            value->xg_interface_use_kind == XI_INTERFACE_USE_READ,
+                        "witness call must carry interface, method, callsite and slot ids");
+                    const XgCallsiteSummary *callsite =
+                        xg_global_evidence_find_callsite(&evidence, value->xg_callsite_id);
+                    REQUIRE_EXISTENTIAL_EVIDENCE(
+                        callsite && callsite->kind == XG_CALL_INTERFACE &&
+                            callsite->receiver_static_interface_id == value->xg_interface_id &&
+                            callsite->method_id == value->xg_method_id &&
+                            (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u &&
+                            (callsite->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) == 0u,
+                        "witness call metadata must be sourced from its exact callsite row");
+                    witness_direct_count++;
+                }
+            }
+        }
+    }
+    REQUIRE_EXISTENTIAL_EVIDENCE(pack_count == 3, "one explicit pack is required per nominal kind");
+    REQUIRE_EXISTENTIAL_EVIDENCE(test_count == 4 && project_count == 3,
+                                 "source test and safe-cast test/project must stay distinct in Xi");
+    REQUIRE_EXISTENTIAL_EVIDENCE(witness_direct_count == 3,
+                                 "one direct witness call is required per erased receiver");
+    REQUIRE_EXISTENTIAL_EVIDENCE(interface_id != XG_NO_ID,
+                                 "fixture must resolve one declaration-backed interface");
+    REQUIRE_EXISTENTIAL_EVIDENCE((seen_pack_kinds & (1u << XG_DECL_CLASS)) != 0 &&
+                                     (seen_pack_kinds & (1u << XG_DECL_STRUCT)) != 0 &&
+                                     (seen_pack_kinds & (1u << XG_DECL_ENUM)) != 0,
+                                 "packs must preserve class/struct/enum nominal kind");
+
+    char verify_error[256] = {0};
+    const uint8_t expected_kinds[3] = {XG_DECL_CLASS, XG_DECL_STRUCT, XG_DECL_ENUM};
+    for (uint32_t cast_index = 0; cast_index < 3; cast_index++) {
+        XiFunc *safe_cast_function = safe_cast_functions[cast_index];
+        XiValue *safe_cast_test = safe_cast_tests[cast_index];
+        XiValue *safe_cast_project = safe_cast_projects[cast_index];
+        XiValue *safe_cast_clone = safe_cast_clones[cast_index];
+        XiValue *safe_cast_some = safe_cast_somes[cast_index];
+        XiValue *safe_cast_none = safe_cast_nones[cast_index];
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            safe_cast_function && safe_cast_test && safe_cast_project && safe_cast_some &&
+                safe_cast_none,
+            "every nominal safe cast must materialize test, project and both Optional injections");
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            safe_cast_project->xg_implementor_kind == expected_kinds[cast_index],
+            "safe cast must preserve its class/struct/enum implementor kind");
+        bool affine_class = cast_index == 0;
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            affine_class
+                ? (safe_cast_project->xg_implementor_ownership ==
+                       XG_NOMINAL_OWNERSHIP_AFFINE &&
+                   safe_cast_project->xg_implementor_copy_contract == XG_NOMINAL_COPY_EXPLICIT &&
+                   safe_cast_clone != NULL)
+                : (safe_cast_project->xg_implementor_ownership ==
+                       XG_NOMINAL_OWNERSHIP_TRIVIAL &&
+                   safe_cast_project->xg_implementor_copy_contract == XG_NOMINAL_COPY_TRIVIAL &&
+                   safe_cast_clone == NULL),
+            "safe-cast ownership must come from the exact nominal contract");
+        XiBlock *test_block = safe_cast_test->block;
+        XiBlock *success_block = safe_cast_project->block;
+        XiBlock *failure_block = safe_cast_none->block;
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            test_block && test_block->kind == XI_BLOCK_IF && test_block->control == safe_cast_test &&
+                test_block->succs[0] == success_block && test_block->succs[1] == failure_block,
+            "safe cast must branch on its exact existential test");
+        XiValue *expected_payload = affine_class ? safe_cast_clone : safe_cast_project;
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            safe_cast_project->type && !safe_cast_project->type->is_nullable && expected_payload &&
+                expected_payload->block == success_block && safe_cast_some->block == success_block &&
+                safe_cast_some->nargs == 1 && safe_cast_some->args[0] == expected_payload,
+            "Some must consume the ownership-correct non-null projection payload");
+        if (affine_class) {
+            REQUIRE_EXISTENTIAL_EVIDENCE(
+                safe_cast_clone->nargs == 1 && safe_cast_clone->args[0] == safe_cast_project &&
+                    xi_copy_is_value_clone(safe_cast_clone),
+                "borrowed affine projection must carry an explicit value clone");
+        }
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            safe_cast_some->type && safe_cast_some->type->is_nullable && safe_cast_none->type &&
+                xr_type_equals(safe_cast_some->type, safe_cast_none->type),
+            "Some and None must have one exact Optional<T> result type");
+        XiBlock *merge_block = success_block ? success_block->succs[0] : NULL;
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            success_block && failure_block && success_block->kind == XI_BLOCK_PLAIN &&
+                failure_block->kind == XI_BLOCK_PLAIN && merge_block &&
+                failure_block->succs[0] == merge_block && merge_block->npreds == 2,
+            "safe-cast branches must join one merge block");
+        XiPhi *safe_cast_phi = merge_block ? merge_block->phis : NULL;
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            safe_cast_phi && safe_cast_phi->value.nargs == merge_block->npreds &&
+                safe_cast_phi->value.type && safe_cast_phi->value.type->is_nullable &&
+                xr_type_equals(safe_cast_phi->value.type, safe_cast_some->type),
+            "safe cast merge must produce the analyzer's Optional<T> through a phi");
+        for (uint16_t i = 0; i < merge_block->npreds; i++) {
+            XiValue *expected =
+                merge_block->preds[i] == success_block ? safe_cast_some : safe_cast_none;
+            REQUIRE_EXISTENTIAL_EVIDENCE(safe_cast_phi->value.args[i] == expected,
+                                         "safe-cast phi operands must follow predecessor order");
+        }
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            safe_cast_test->xg_interface_object_use_id ==
+                    safe_cast_project->xg_interface_object_use_id &&
+                safe_cast_test->xg_interface_use_kind == safe_cast_project->xg_interface_use_kind &&
+                safe_cast_test->xg_interface_id == safe_cast_project->xg_interface_id &&
+                safe_cast_test->xg_conformance_id == safe_cast_project->xg_conformance_id &&
+                safe_cast_test->xg_nominal_key == safe_cast_project->xg_nominal_key &&
+                safe_cast_test->xg_implementor_ownership ==
+                    safe_cast_project->xg_implementor_ownership &&
+                safe_cast_test->xg_implementor_copy_contract ==
+                    safe_cast_project->xg_implementor_copy_contract,
+            "safe-cast test and project must retain one exact carrier and nominal contract");
+        REQUIRE_EXISTENTIAL_EVIDENCE(
+            xi_verify(safe_cast_function, verify_error, sizeof(verify_error)), verify_error);
+    }
+
+    XiFunc *safe_cast_function = safe_cast_functions[0];
+    XiValue *safe_cast_test = safe_cast_tests[0];
+    XiValue *safe_cast_some = safe_cast_somes[0];
+    int64_t saved_ordinal = safe_cast_some->aux_int;
+    safe_cast_some->aux_int = 2;
+    REQUIRE_EXISTENTIAL_EVIDENCE(!xi_verify(safe_cast_function, verify_error,
+                                            sizeof(verify_error)),
+                                 "verifier must reject an invalid Optional injection ordinal");
+    safe_cast_some->aux_int = saved_ordinal;
+    XiValue *saved_payload = safe_cast_some->args[0];
+    safe_cast_some->args[0] = safe_cast_test;
+    REQUIRE_EXISTENTIAL_EVIDENCE(!xi_verify(safe_cast_function, verify_error,
+                                            sizeof(verify_error)),
+                                 "verifier must reject a Some payload with the wrong base type");
+    safe_cast_some->args[0] = saved_payload;
+    safe_cast_some->args[0] = safe_cast_projects[0];
+    REQUIRE_EXISTENTIAL_EVIDENCE(
+        !xi_verify(safe_cast_function, verify_error, sizeof(verify_error)),
+        "verifier must reject a borrowed affine projection without its explicit clone");
+    safe_cast_some->args[0] = saved_payload;
+    uint8_t saved_use_kind = safe_cast_test->xg_interface_use_kind;
+    safe_cast_test->xg_interface_use_kind = XI_INTERFACE_USE_REF;
+    REQUIRE_EXISTENTIAL_EVIDENCE(
+        !xi_verify(safe_cast_function, verify_error, sizeof(verify_error)),
+        "verifier must reject a project whose use kind differs from its exact test carrier");
+    safe_cast_test->xg_interface_use_kind = saved_use_kind;
+    XiBlock *safe_test_block = safe_cast_test->block;
+    XiBlock *saved_success = safe_test_block->succs[0];
+    safe_test_block->succs[0] = safe_test_block->succs[1];
+    safe_test_block->succs[1] = saved_success;
+    REQUIRE_EXISTENTIAL_EVIDENCE(
+        !xi_verify(safe_cast_function, verify_error, sizeof(verify_error)),
+        "verifier must reject a projection placed on the failed test edge");
+    safe_test_block->succs[1] = safe_test_block->succs[0];
+    safe_test_block->succs[0] = saved_success;
+    uint8_t saved_complete = safe_cast_test->xg_type_contract_complete;
+    safe_cast_test->xg_type_contract_complete = 0;
+    REQUIRE_EXISTENTIAL_EVIDENCE(
+        !xi_verify(safe_cast_function, verify_error, sizeof(verify_error)),
+        "verifier must reject an incomplete existential nominal contract");
+    safe_cast_test->xg_type_contract_complete = saved_complete;
+    REQUIRE_EXISTENTIAL_EVIDENCE(xi_verify(safe_cast_function, verify_error, sizeof(verify_error)),
+                                 "restored safe-cast graph must verify");
+
+    xi_func_free(root);
+    xg_global_evidence_free(&evidence);
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    AstNode *unrelated_program =
+        xr_parse(session, "class ReadClass {}\n"
+                          "class Other {}\n"
+                          "fn reject(value: ReadClass) -> Other? { return value as Other? }\n");
+    REQUIRE_EXISTENTIAL_EVIDENCE(unrelated_program != NULL,
+                                 "unrelated nominal cast fixture must parse");
+    XaAnalyzer *unrelated_analyzer = xa_analyzer_new(session);
+    REQUIRE_EXISTENTIAL_EVIDENCE(unrelated_analyzer != NULL,
+                                 "unrelated nominal cast analyzer must allocate");
+    xa_analyzer_analyze(unrelated_analyzer, "unrelated-cast.xr", unrelated_program);
+    bool rejected_unrelated_cast = false;
+    for (XaDiagnostic *diag = unrelated_analyzer->diagnostics; diag; diag = diag->next) {
+        if (diag->message && strstr(diag->message, "Cannot cast type 'ReadClass' to unrelated type")) {
+            rejected_unrelated_cast = true;
+            break;
+        }
+    }
+    REQUIRE_EXISTENTIAL_EVIDENCE(rejected_unrelated_cast,
+                                 "nullable safe casts must still reject unrelated nominal types");
+    xa_analyzer_free(unrelated_analyzer);
+    xr_program_destroy(unrelated_program);
+
+#undef REQUIRE_EXISTENTIAL_EVIDENCE
+}
+
+static void mark_first_interface_call_fallible(XgGlobalEvidence *evidence) {
+    if (!evidence)
+        return;
+    for (uint32_t i = 0; i < evidence->ncallsites; i++) {
+        if (evidence->callsites[i].kind != XG_CALL_INTERFACE)
+            continue;
+        evidence->callsites[i].flags |= XG_CALL_MAY_ERROR | XG_CALL_ERROR_EFFECT_VERIFIED;
+        return;
+    }
+}
+
+TEST(witness_invoke_metadata_requires_exact_verified_callsite_effect) {
+#define REQUIRE_WITNESS_INVOKE(cond, msg)                                                          \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "witness_invoke: %s\n", msg);                                        \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence evidence = {0};
+    XiFunc *root = lower_source_with_global_evidence_ex(
+        "interface ReadValue { read() -> i64 }\n"
+        "class ReadClass implements ReadValue { read() -> i64 { return 1 } }\n"
+        "fn dispatchRead(value: ReadValue) -> i64 { return value.read() }\n",
+        &evidence, mark_first_interface_call_fallible);
+    REQUIRE_WITNESS_INVOKE(root != NULL, "verified fallible interface call should lower");
+    XiFunc *read = func_tree_find_func_name(root, "dispatchRead");
+    REQUIRE_WITNESS_INVOKE(read != NULL, "dispatchRead fixture function must be lowered");
+    XiValue *witness = NULL;
+    for (uint32_t b = 0; b < read->nblocks; b++) {
+        XiBlock *block = read->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE) {
+                REQUIRE_WITNESS_INVOKE(witness == NULL,
+                                       "callsite identity must select one witness invoke");
+                witness = value;
+            }
+        }
+    }
+    REQUIRE_WITNESS_INVOKE(witness != NULL && witness->xg_callsite_id != XG_NO_ID &&
+                               witness->xg_interface_id != XG_NO_ID &&
+                               witness->xg_interface_dispatch_slot != UINT32_MAX &&
+                               witness->xg_interface_use_kind == XI_INTERFACE_USE_READ,
+                           "witness invoke must carry exact interface callsite identity");
+    const XgCallsiteSummary *callsite =
+        xg_global_evidence_find_callsite(&evidence, witness->xg_callsite_id);
+    REQUIRE_WITNESS_INVOKE(callsite != NULL && callsite->kind == XG_CALL_INTERFACE &&
+                               (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u &&
+                               (callsite->flags & XG_CALL_MAY_ERROR) != 0u,
+                           "witness invoke must retain its verified fallible callsite row");
+    xi_func_free(root);
+    xg_global_evidence_free(&evidence);
+
+#undef REQUIRE_WITNESS_INVOKE
+}
+
+static void invalidate_first_existential_conformance(XgGlobalEvidence *evidence) {
+    if (evidence && evidence->ninterface_impls > 0)
+        evidence->interface_impls[0].existential_eligible = 0;
+}
+
+TEST(existential_pack_fails_closed_without_verified_erasure_verdict) {
+    XgGlobalEvidence evidence;
+    memset(&evidence, 0, sizeof(evidence));
+    XiFunc *root = lower_source_with_global_evidence_ex(
+        "interface ReadValue { read() -> i64 }\n"
+        "class ReadClass implements ReadValue { read() -> i64 { return 1 } }\n"
+        "fn erase(value: ReadClass) -> ReadValue { return value }\n",
+        &evidence, invalidate_first_existential_conformance);
+    if (root != NULL) {
+        fprintf(stderr, "existential_erasure: missing verdict must reject lowering\n");
+        abort();
+    }
+}
+
+static void forbid_first_existential_copy(XgGlobalEvidence *evidence) {
+    if (!evidence || evidence->ninterface_impls == 0)
+        return;
+    evidence->interface_impls[0].implementor_ownership = XG_NOMINAL_OWNERSHIP_AFFINE;
+    evidence->interface_impls[0].implementor_copy_contract = XG_NOMINAL_COPY_FORBIDDEN;
+    evidence->interface_impls[0].type_contract_complete = 1;
+}
+
+TEST(existential_safe_cast_fails_closed_for_borrowed_copy_forbidden_target) {
+    XgGlobalEvidence evidence;
+    memset(&evidence, 0, sizeof(evidence));
+    XiFunc *root = lower_source_with_global_evidence_ex(
+        "interface ReadValue { read() -> i64 }\n"
+        "class ReadClass implements ReadValue { read() -> i64 { return 1 } }\n"
+        "fn reject(value: ReadValue) -> ReadClass? { return value as ReadClass? }\n",
+        &evidence, forbid_first_existential_copy);
+    if (root != NULL) {
+        fprintf(stderr,
+                "existential_safe_cast: borrowed copy-forbidden target must reject lowering\n");
+        abort();
+    }
+}
+
 TEST(nested_body_identity_binds_method_calls_through_frozen_parent) {
 #define REQUIRE_NESTED_IDENTITY(cond, msg)                                                         \
     do {                                                                                           \
@@ -2387,7 +2877,10 @@ TEST(nested_function) {
 }
 
 TEST(function_expr) {
-    XiFunc *f = lower_source("var double = fn(x: i64) -> i64 { return x * 2 }\n"
+    XiFunc *f = lower_source("var double = fn(x: i64) -> i64 {\n"
+                             "  var values = Array<i64>(1)\n"
+                             "  return x * 2\n"
+                             "}\n"
                              "var r = double(5)\n"
                              "print(r)\n");
     assert(f != NULL);
@@ -2395,7 +2888,27 @@ TEST(function_expr) {
     XiFunc *child = f->children[0];
     assert(child != NULL);
     assert(child->nparams == 1);
+    assert(child->analyzer_effect_id != XA_EFFECT_NONE &&
+           child->analyzer_effect_fingerprint != 0 &&
+           "anonymous function body must retain its analyzer effect identity");
+    assert(child->analyzer_effect_complete && child->error_effect_nothrow &&
+           child->semantic_effects == XA_SEM_EFFECT_NONE &&
+           child->unknown_semantic_effects == XA_SEM_EFFECT_NONE &&
+           child->effect_unknown_reasons == XA_UNKNOWN_NONE &&
+           "infallible anonymous function sidecars must come from its complete effect row");
     xi_func_free(f);
+
+    XiFunc *throwing = lower_source("enum LambdaFailure { Boom }\n"
+                                    "var fail = fn() { throw LambdaFailure.Boom }\n");
+    assert(throwing != NULL);
+    assert(throwing->nchildren == 1);
+    XiFunc *throwing_child = throwing->children[0];
+    assert(throwing_child != NULL && throwing_child->analyzer_effect_id != XA_EFFECT_NONE &&
+           throwing_child->analyzer_effect_fingerprint != 0);
+    assert(throwing_child->analyzer_effect_complete &&
+           !throwing_child->error_effect_nothrow &&
+           "escaping anonymous function errors must publish a complete MAY_THROW row");
+    xi_func_free(throwing);
 }
 
 TEST(multiple_functions) {
@@ -3755,6 +4268,10 @@ int main(void) {
     run_map_key_access_alias_shape_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();
     run_strong_source_node_identity_binds_same_line_calls_and_same_name_bodies();
+    run_existential_pack_and_witness_calls_bind_exact_nominal_evidence();
+    run_witness_invoke_metadata_requires_exact_verified_callsite_effect();
+    run_existential_safe_cast_fails_closed_for_borrowed_copy_forbidden_target();
+    run_existential_pack_fails_closed_without_verified_erasure_verdict();
     run_nested_body_identity_binds_method_calls_through_frozen_parent();
     run_nested_function();
     run_function_expr();

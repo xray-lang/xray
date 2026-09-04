@@ -363,10 +363,9 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
      * concrete type arguments. A constructor always produces a non-null
      * member value; nullable widening belongs to the enclosing assignment or
      * return boundary, not to the constructor's semantic operation. */
-    XrType *enum_type =
-        ctx->expected_type->is_nullable
-            ? xr_type_non_nullable(ctx->analyzer->isolate, ctx->expected_type)
-            : xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
+    XrType *enum_type = ctx->expected_type->is_nullable
+                            ? xr_type_non_nullable(ctx->analyzer->isolate, ctx->expected_type)
+                            : xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
     if (enum_type && info && info->layout) {
         enum_type->enum_type.layout = info->layout;
         enum_type->enum_type.layout_id = info->layout->layout_id;
@@ -1191,18 +1190,33 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     }
 
     // Record reference location for Find References
-    /* A graph module may be collected after the importing file's declaration
-     * pass, so a selective import can initially carry only an unknown value
-     * type. Resolve its exported semantic metadata lazily on first use. This
-     * is especially important for imported value classes: the identifier is a
-     * class namespace at the call site, not a dynamically typed value. */
-    if (sym->kind == XA_SYM_IMPORT && links && links->module_name && links->import_member_name &&
-        (!links->type || XR_TYPE_IS_UNKNOWN(links->type))) {
+    /* A graph module may be collected or reach its effect fixpoint after the
+     * importing
+     * file's declaration pass. Refresh a selective import from the
+     * resolver-selected export
+     * on use when its value type is absent, or when
+     * the exported function's sealed throw
+     * contract is newer than the local
+     * view. The module/member pair belongs to the resolved
+     * import statement;
+     * this is not a lexical-name fallback. */
+    bool imported_type_missing = links && (!links->type || XR_TYPE_IS_UNKNOWN(links->type));
+    bool imported_function_contract_may_be_stale =
+        links && links->type && links->type->kind == XR_KIND_FUNCTION;
+    if (sym->is_imported && links && links->module_name && links->import_member_name &&
+        (imported_type_missing || imported_function_contract_may_be_stale)) {
         const char *module_name = links->module_name;
         const char *member_name = links->import_member_name;
         XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
         XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
-        if (export_sym) {
+        XrType *export_type = export_sym ? export_sym->links.type : NULL;
+        bool refresh_missing = export_sym && imported_type_missing;
+        bool refresh_function =
+            export_sym && export_type && export_type->kind == XR_KIND_FUNCTION && links->type &&
+            links->type->kind == XR_KIND_FUNCTION &&
+            (links->throw_effect != export_sym->links.throw_effect ||
+             links->type->function.throw_effect != export_type->function.throw_effect);
+        if (refresh_missing || refresh_function) {
             xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
             links->module_name = module_name;
             links->import_member_name = member_name;
@@ -1885,6 +1899,53 @@ static XrType *xa_const_projection_type(XaInferContext *ctx, XrType *owner, XrTy
     return xr_type_make_const(ctx->analyzer->isolate, projected);
 }
 
+static XaSymbol *xa_interface_lookup_inherited_member_depth(XaInferContext *ctx,
+                                                            XrClassInfo *interface_info,
+                                                            const char *name, uint32_t depth,
+                                                            bool *ambiguous) {
+    XaSymbolLinks *declaration_links;
+    AstNode *declaration;
+    XaSymbol *match = NULL;
+    if (!ctx || !ctx->analyzer || !interface_info || !name || !ambiguous || *ambiguous)
+        return NULL;
+    if (depth > 64) {
+        *ambiguous = true;
+        return NULL;
+    }
+    declaration_links =
+        interface_info->declaration_symbol
+            ? xa_analyzer_get_links(ctx->analyzer, interface_info->declaration_symbol)
+            : NULL;
+    declaration = declaration_links ? declaration_links->interface_decl_node : NULL;
+    if (!declaration || declaration->type != AST_INTERFACE_DECL)
+        return NULL;
+    for (int i = 0; i < declaration->as.interface_decl.extends_count; i++) {
+        const XrTypeRef *parent_ref = declaration->as.interface_decl.extends
+                                          ? declaration->as.interface_decl.extends[i]
+                                          : NULL;
+        XrType *parent_type =
+            parent_ref ? xr_tref_resolve_in_analyzer(ctx->analyzer, parent_ref) : NULL;
+        XrClassInfo *parent_info = parent_type && parent_type->kind == XR_KIND_INTERFACE
+                                       ? parent_type->instance.class_ref
+                                       : NULL;
+        XaSymbol *candidate =
+            parent_info ? xa_class_info_lookup_instance_member(parent_info, name) : NULL;
+        if (!candidate && parent_info)
+            candidate = xa_interface_lookup_inherited_member_depth(ctx, parent_info, name,
+                                                                   depth + 1, ambiguous);
+        if (*ambiguous)
+            return NULL;
+        if (!candidate)
+            continue;
+        if (match && match != candidate) {
+            *ambiguous = true;
+            return NULL;
+        }
+        match = candidate;
+    }
+    return match;
+}
+
 XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
@@ -2467,13 +2528,28 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
-    if (obj_type->kind == XR_KIND_INTERFACE && obj_type->instance.class_name) {
-        XaSymbol *iface_sym = xa_analyzer_lookup_deep(ctx->analyzer, obj_type->instance.class_name);
+    if (obj_type->kind == XR_KIND_INTERFACE && obj_type->instance.class_ref) {
+        XrClassInfo *iface_info = obj_type->instance.class_ref;
+        XaSymbol *iface_sym = iface_info->declaration_symbol;
         XaSymbolLinks *iface_links =
             iface_sym ? xa_analyzer_get_links(ctx->analyzer, iface_sym) : NULL;
-        XrClassInfo *iface_info = iface_links ? iface_links->class_info : NULL;
-        if (iface_info) {
+        if (iface_sym && iface_links && iface_links->class_info == iface_info) {
             XaSymbol *member = xa_class_info_lookup_instance_member(iface_info, ma->name);
+            bool inherited_ambiguous = false;
+            if (!member)
+                member = xa_interface_lookup_inherited_member_depth(ctx, iface_info, ma->name, 0,
+                                                                    &inherited_ambiguous);
+            if (inherited_ambiguous) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "interface '%s' inherits multiple declarations of member '%s'",
+                         iface_info->name ? iface_info->name : "?", ma->name ? ma->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
             if (member) {
                 XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);
                 if (member_links && member_links->type) {
@@ -4015,6 +4091,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                                        ctx->analyzer->isolate, ne->class_name,
                                        links && links->enum_info ? links->enum_info->layout : NULL,
                                        args, ne->type_arg_count);
+            if (result && result->kind == XR_KIND_ENUM)
+                result->enum_type.nominal_ref = links ? links->class_info : NULL;
             if (args != stack_args)
                 xr_free(args);
             return result ? result : xr_type_new_error(ctx->analyzer->isolate);
@@ -5038,9 +5116,11 @@ static bool xa_cast_types_may_overlap(XrType *source, XrType *target) {
     }
     if (xa_cast_types_have_builtin_conversion(source, target))
         return true;
-    if (xr_type_assignable(target, source))
+    XrType *source_base = xa_cast_non_nullable_type(source);
+    XrType *target_base = xa_cast_non_nullable_type(target);
+    if (xr_type_assignable(target_base, source_base))
         return true;
-    if (xr_type_assignable(source, target))
+    if (xr_type_assignable(source_base, target_base))
         return true;
     return false;
 }

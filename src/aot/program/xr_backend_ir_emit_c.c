@@ -149,6 +149,8 @@ static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_
     if (!append_format(buffer, "struct XrAotType%u {\n", type->type_id))
         return false;
     if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
+        if (type->field_count == 0u && !append_text(buffer, "    uint8_t xr_unit;\n"))
+            return false;
         for (uint32_t field = 0; field < type->field_count; ++field) {
             char storage[32];
             const char *name = type_c_name(type->field_types[field], storage);
@@ -262,7 +264,7 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, b
                         *wrapping = true;
                 }
                 if (op->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
-                    op->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK)
+                    (op->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK && op->operand_count != 0u))
                     *arena = true;
             }
         }
@@ -504,13 +506,13 @@ static const XrValidatedSignature *witness_signature(const XrBackendIR *ir,
     if (!receiver || receiver->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
         receiver->interface_id >= ir->program->interface_count)
         return NULL;
-    const XrValidatedInterface *interface = &ir->program->interfaces[receiver->interface_id];
+    const XrValidatedInterface *interface_row = &ir->program->interfaces[receiver->interface_id];
     uint32_t slot = instruction->immediate.u32;
-    if (slot >= interface->slot_count ||
-        interface->slot_signature_ids[slot] >= ir->program->signature_count)
+    if (slot >= interface_row->slot_count ||
+        interface_row->slot_signature_ids[slot] >= ir->program->signature_count)
         return NULL;
     *interface_id_out = receiver->interface_id;
-    return &ir->program->signatures[interface->slot_signature_ids[slot]];
+    return &ir->program->signatures[interface_row->slot_signature_ids[slot]];
 }
 
 static bool emit_witness_call_cases(CBuffer *buffer, const XrBackendIR *ir,
@@ -1200,6 +1202,8 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             if (!name ||
                 !append_format(buffer, "        v%u = (%s){", instruction->result_id, name))
                 return false;
+            if (instruction->operand_count == 0u && !append_text(buffer, ".xr_unit = UINT8_C(0)"))
+                return false;
             for (uint32_t field = 0; field < instruction->operand_count; ++field) {
                 if (!append_format(buffer, "%s.f%u = v%u", field ? ", " : "", field,
                                    instruction->operands[field]))
@@ -1355,7 +1359,7 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
                 return false;
         }
     }
-    return append_text(buffer, "    return xr_aot_make(4, 0, 0);\n}\n\n");
+    return append_text(buffer, "}\n\n");
 }
 
 static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {

@@ -1,0 +1,792 @@
+{
+  "schema": "xray-w7-wave5-contract-freeze/1",
+  "status": "OPEN_PRE_W7_WAVE5",
+  "owner_tasks": [
+    275,
+    284,
+    292,
+    293,
+    298,
+    301
+  ],
+  "scope": "coroutine-concurrency-generation-provider-target-profile-query",
+  "compatibility": "none",
+  "activation_precondition": {
+    "gate": "contracts/canonical-program/w7-wave4-exit-gate.json",
+    "required_status": "READY_W7_WAVE4",
+    "observed_status_at_freeze": "OPEN_W7_WAVE4",
+    "rule": "Wave 5 implementation cannot activate until the Wave 4 exit gate is ready"
+  },
+  "authority_partition": {
+    "source_and_xglobal": "publish typed task, suspendability, capability, provider-requirement and target-query facts before Xi",
+    "xi": "compiler-private normalization and logical coroutine analysis; never a durable executor contract",
+    "corespec": "owns observable operation, successor, effect, ownership, cancellation and allowed-trace laws",
+    "program": "owns logical states, safepoints, continuations, live-across values, provider requirements and target-neutral query operations",
+    "target_profile": "owns immutable target facts, BoundaryABI, runtime kernel and provider contracts",
+    "instance": "owns exact provider bindings, ExecutionId, generation and pin/drain lifecycle",
+    "reference_vm_aot": "consume one validated program and one exact profile/instance while keeping frame, scheduler, carrier and native layout private"
+  },
+  "operation_atoms": [
+    {
+      "family": "coroutine",
+      "stable_id": 112,
+      "id": "core.task.spawn",
+      "law": "create one child task from an exact typed callable and explicit link mode; the child result, error, panic and cancellation channels remain typed"
+    },
+    {
+      "family": "coroutine",
+      "stable_id": 113,
+      "id": "core.task.await",
+      "law": "observe one task outcome through explicit normal, error, panic and cancel successors; suspension is an explicit logical successor"
+    },
+    {
+      "family": "coroutine",
+      "stable_id": 114,
+      "id": "core.task.cancel",
+      "law": "request cancellation of one task without implying completion; cleanup and terminal observation remain separate obligations"
+    },
+    {
+      "family": "coroutine",
+      "stable_id": 115,
+      "id": "core.task.is_cancelled",
+      "law": "read the current logical cancellation request as a deterministic boolean at a verifier-declared safepoint"
+    },
+    {
+      "family": "coroutine",
+      "stable_id": 116,
+      "id": "core.coroutine.yield",
+      "law": "cooperatively transfer control through an explicit suspend successor and resume at the paired logical continuation"
+    },
+    {
+      "family": "coroutine",
+      "stable_id": 117,
+      "id": "core.generator.create",
+      "law": "create a typed generator handle from an exact closed target without serializing an executor frame"
+    },
+    {
+      "family": "coroutine",
+      "stable_id": 118,
+      "id": "core.generator.yield",
+      "law": "publish one typed generator value and suspend at an explicit logical continuation"
+    },
+    {
+      "family": "coroutine",
+      "stable_id": 119,
+      "id": "core.generator.resume",
+      "law": "resume one typed generator and observe yielded, completed, error, panic or cancel outcome without exposing a physical frame"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 120,
+      "id": "core.thread.spawn",
+      "law": "request one dedicated-thread execution through a typed runtime capability and exact transfer contract"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 121,
+      "id": "core.scope.enter",
+      "law": "open one structured-concurrency scope with an explicit wait or linked-child policy"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 122,
+      "id": "core.scope.exit",
+      "law": "close one structured-concurrency scope only after its child and cleanup obligations reach a typed terminal outcome"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 123,
+      "id": "core.channel.create",
+      "law": "create one typed channel with an explicit bounded capacity and transfer ownership contract"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 124,
+      "id": "core.channel.send",
+      "law": "transfer one typed value to a channel with explicit ready, closed, error, panic, cancel and suspend outcomes"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 125,
+      "id": "core.channel.receive",
+      "law": "receive one typed value and status from a channel with explicit closed, error, panic, cancel and suspend outcomes"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 126,
+      "id": "core.channel.try_send",
+      "law": "attempt one non-suspending typed send and return an exact readiness result"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 127,
+      "id": "core.channel.try_receive",
+      "law": "attempt one non-suspending typed receive and return an exact readiness, closed and value result"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 128,
+      "id": "core.channel.is_closed",
+      "law": "observe the channel closed state under the frozen memory-order contract"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 129,
+      "id": "core.channel.select",
+      "law": "select one ready typed channel case according to the CoreSpec allowed-trace relation and explicit suspend continuation"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 130,
+      "id": "core.atomic.load",
+      "law": "load one exact atomic scalar under an explicit supported memory order"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 131,
+      "id": "core.atomic.store",
+      "law": "store one exact atomic scalar under an explicit supported memory order"
+    },
+    {
+      "family": "concurrency",
+      "stable_id": 132,
+      "id": "core.atomic.rmw",
+      "law": "perform one exact typed read-modify-write operation under an explicit supported memory order"
+    },
+    {
+      "family": "provider",
+      "stable_id": 136,
+      "id": "core.provider.call",
+      "law": "invoke one stable provider operation required by the program and admitted by the exact profile and instance binding"
+    },
+    {
+      "family": "target-profile-query",
+      "stable_id": 65,
+      "id": "core.target.operating_system",
+      "law": "read the immutable bound profile operating-system enum without consulting the host"
+    },
+    {
+      "family": "target-profile-query",
+      "stable_id": 66,
+      "id": "core.target.architecture",
+      "law": "read the immutable bound profile architecture enum without consulting the host"
+    },
+    {
+      "family": "target-profile-query",
+      "stable_id": 67,
+      "id": "core.target.native_abi",
+      "law": "read the immutable bound profile native-ABI enum without consulting the host"
+    },
+    {
+      "family": "target-profile-query",
+      "stable_id": 68,
+      "id": "core.target.endianness",
+      "law": "read the immutable bound profile endianness enum without consulting the host"
+    },
+    {
+      "family": "target-profile-query",
+      "stable_id": 64,
+      "id": "core.target.pointer_width",
+      "law": "read the immutable bound profile pointer width as exact source-visible u16 or publish profile-unavailable; the current u32 walking-skeleton result must be replaced atomically"
+    }
+  ],
+  "explicit_non_operations": {
+    "physical_suspend_or_resume": "logical state edges and continuations in XrProgram; VM instruction offsets and native labels are private",
+    "coroutine_complete": "typed return, error, panic or cancel terminal plus verified cleanup closure, not a second completion opcode",
+    "provider_requirement": "sorted program metadata keyed by stable provider contract and operation identity",
+    "provider_refusal": "instance admission or typed provider-call outcome, not an executable operation",
+    "generation_create_or_rebind": "XrInstance lifecycle; generation never enters target-neutral XrProgram semantics",
+    "generation_pin_or_drain": "XrInstance lifecycle around calls, continuations, callbacks and drops",
+    "build_feature_query": "compile-time typed fact folded before XrProgram and included in semantic and cache fingerprints",
+    "direct_target_namespace_read": "compile-time typed fact folded before XrProgram; CoreSpec target-query atoms are reserved for target-dependent semantic operations that remain in the program",
+    "host_target_probe": "forbidden semantic authority"
+  },
+  "logical_coroutine_program_contract": {
+    "function_contract": "exact suspendability, typed effects and capabilities are closed before program writing",
+    "state_rows": "stable logical state identity with pre, suspend, resume, error, panic, cancel and drop edges",
+    "safepoints": "each suspend-capable operation names one logical safepoint and all continuation targets",
+    "live_across": "ordered typed values plus ownership disposition and RootId obligations, never byte offsets or VM slots",
+    "cleanup": "normal, error, panic and cancel paths prove exactly-once cleanup and drop closure",
+    "open_targets": "publish a typed suspendability and provider obligation or fail before XrProgram; no provenance-free conservative boolean",
+    "private_realization": "VM and AOT independently choose frame layout, spill placement, root maps and dispatch strategy"
+  },
+  "concurrency_contract": {
+    "transfer": "READ, REF and MOVE rules remain the Wave 3 authority; cross-execution REF is rejected unless an explicit sharing contract admits it",
+    "scheduler": "scheduler order is not canonical; CoreSpec defines allowed traces and refinement",
+    "atomic": "type, width, operation and memory order must be admitted by immutable TargetProfile machine facts",
+    "channel": "send and receive ownership, close state, cancellation, timeout and wakeup results are typed and independently verified",
+    "structured_scope": "child creation, joining, linked failure, cancellation and cleanup obligations are explicit program facts"
+  },
+  "generation_provider_contract": {
+    "program_requirements": "XrProgram stores sorted provider contract and operation requirements but no provider address, context or generation",
+    "profile_contracts": "XrTargetProfile stores exact provider contracts and immutable target/runtime capability facts",
+    "instance_binding": "XrInstance binds exact provider entries and one nonzero successor generation to one validated program/profile ExecutionId",
+    "continuation_lifetime": "calls, suspended continuations, callbacks and drops pin their exact instance until completion",
+    "reload": "successor generation creates a new instance; the old instance drains and is never mutated in place",
+    "failure": "missing or mismatched contract, operation, behavior or non-virtualizable foreign capability fails before execution"
+  },
+  "target_query_catalog": [
+    {
+      "source": "target.os",
+      "operation": "core.target.operating_system",
+      "profile_field": "XrTargetMachineFacts.operating_system",
+      "result": "TargetOs"
+    },
+    {
+      "source": "target.arch",
+      "operation": "core.target.architecture",
+      "profile_field": "XrTargetMachineFacts.architecture",
+      "result": "TargetArch"
+    },
+    {
+      "source": "target.abi",
+      "operation": "core.target.native_abi",
+      "profile_field": "XrTargetMachineFacts.native_abi",
+      "result": "TargetAbi"
+    },
+    {
+      "source": "target.endian",
+      "operation": "core.target.endianness",
+      "profile_field": "XrTargetDataLayout.endian",
+      "result": "TargetEndian"
+    },
+    {
+      "source": "target.pointerBits",
+      "operation": "core.target.pointer_width",
+      "profile_field": "XrTargetDataLayout.pointer.size",
+      "result": "u16"
+    }
+  ],
+  "layer_inventory": [
+    {
+      "id": "coroutine",
+      "layers": {
+        "source": {
+          "status": "PRESENT_SOURCE_SURFACE",
+          "evidence": [
+            {
+              "path": "src/frontend/parser/xparse_coroutine.c",
+              "tokens": [
+                "AstNode *xr_parse_go_expr(",
+                "AstNode *xr_parse_await_expr(",
+                "AstNode *xr_parse_cancelled_expr("
+              ]
+            }
+          ]
+        },
+        "xglobal": {
+          "status": "PRESENT_COMPILER_PRIVATE_SUMMARY",
+          "evidence": [
+            {
+              "path": "src/analysis/xglobal_summary.h",
+              "tokens": [
+                "XG_CAP_COROUTINE = XR_CAP_COROUTINE",
+                "XG_BODY_MAY_SUSPEND = XR_EFFECT_MAY_SUSPEND"
+              ]
+            }
+          ]
+        },
+        "xi": {
+          "status": "PRESENT_PRECUT_LOGICAL_PLAN",
+          "evidence": [
+            {
+              "path": "src/ir/xi.h",
+              "tokens": [
+                "XI_GO,",
+                "XI_AWAIT,",
+                "XI_YIELD,",
+                "struct XiCoroPlan *coro_plan;"
+              ]
+            },
+            {
+              "path": "src/ir/xi_coro_analyze.c",
+              "tokens": [
+                "XR_FUNC XiCoroPlan *xi_coro_analyze("
+              ]
+            }
+          ]
+        },
+        "corespec": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "program": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "verifier": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "reference": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "vm": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "aot": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "legacy_owner": {
+          "status": "PRESENT_FROZEN_PRECUT",
+          "evidence": [
+            {
+              "path": "src/plan/semantic/xr_semantic_builder.c",
+              "tokens": [
+                "static bool build_coroutine_entities("
+              ]
+            },
+            {
+              "path": "src/vm/xr_typed_dispatch.c",
+              "tokens": [
+                "static XrTypedDispatchStatus execute_suspend("
+              ]
+            },
+            {
+              "path": "src/aot/xaot_callable.c",
+              "tokens": [
+                "return xi_coro_is_suspend_point(func, value, NULL);"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "concurrency",
+      "layers": {
+        "source": {
+          "status": "PRESENT_SOURCE_SURFACE",
+          "evidence": [
+            {
+              "path": "src/frontend/parser/xparse_coroutine.c",
+              "tokens": [
+                "AstNode *xr_parse_channel_new(",
+                "AstNode *xr_parse_select_statement(",
+                "AstNode *xr_parse_scope_block("
+              ]
+            }
+          ]
+        },
+        "xglobal": {
+          "status": "PRESENT_COMPILER_PRIVATE_SUMMARY",
+          "evidence": [
+            {
+              "path": "src/analysis/xglobal_producer.c",
+              "tokens": [
+                "XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS",
+                "XG_CAP_SCOPE | XG_CAP_COROUTINE | XG_CAP_OBJECTS"
+              ]
+            }
+          ]
+        },
+        "xi": {
+          "status": "PRESENT_PRECUT_OPERATIONS",
+          "evidence": [
+            {
+              "path": "src/ir/xi.h",
+              "tokens": [
+                "XI_THREAD_SPAWN,",
+                "XI_CHAN_SEND,",
+                "XI_SCOPE_ENTER,",
+                "XI_ATOMIC_LOAD,"
+              ]
+            }
+          ]
+        },
+        "corespec": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "program": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "verifier": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "reference": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "vm": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "aot": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "legacy_owner": {
+          "status": "PRESENT_FROZEN_PRECUT",
+          "evidence": [
+            {
+              "path": "src/plan/semantic/xr_semantic_ops_gen.h",
+              "tokens": [
+                "\"xi.chan.send\"",
+                "\"xi.scope.exit\""
+              ]
+            },
+            {
+              "path": "src/vm/xvm_chan_ops.c",
+              "tokens": [
+                "xr_coro_chan_send_resume("
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "generation",
+      "layers": {
+        "source": {
+          "status": "NOT_APPLICABLE_INSTANCE_ONLY",
+          "evidence": []
+        },
+        "xglobal": {
+          "status": "NOT_APPLICABLE_INSTANCE_ONLY",
+          "evidence": []
+        },
+        "xi": {
+          "status": "NOT_APPLICABLE_INSTANCE_ONLY",
+          "evidence": []
+        },
+        "corespec": {
+          "status": "NOT_APPLICABLE_INSTANCE_ONLY",
+          "evidence": []
+        },
+        "program": {
+          "status": "ABSENT_GENERATION_OBLIGATIONS",
+          "evidence": []
+        },
+        "verifier": {
+          "status": "ABSENT_GENERATION_OBLIGATIONS",
+          "evidence": []
+        },
+        "reference": {
+          "status": "ABSENT_GENERATION_PINNING",
+          "evidence": []
+        },
+        "vm": {
+          "status": "FOUNDATION_EXACT_CACHE_KEY",
+          "evidence": [
+            {
+              "path": "src/vm/xr_program_vm.c",
+              "tokens": [
+                "XrExecutionCacheKey cache_key;",
+                "return key.generation == code->cache_key.generation"
+              ]
+            }
+          ]
+        },
+        "aot": {
+          "status": "ABSENT_GENERATION_PINNING",
+          "evidence": []
+        },
+        "legacy_owner": {
+          "status": "FOUNDATION_INSTANCE_AUTHORITY_AND_PRECUT_DUPLICATES",
+          "evidence": [
+            {
+              "path": "src/execution/xr_execution.h",
+              "tokens": [
+                "typedef enum XrInstanceState",
+                "xr_execution_instance_create_successor(",
+                "XR_FUNC bool xr_execution_instance_pin("
+              ]
+            },
+            {
+              "path": "src/aot/xaot_bundle.c",
+              "tokens": [
+                "generation_identity.bytes"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "provider",
+      "layers": {
+        "source": {
+          "status": "PARTIAL_IMPORTED_NATIVE_SURFACE",
+          "evidence": [
+            {
+              "path": "src/analysis/xglobal_producer.c",
+              "tokens": [
+                "bc->capability_bits |= XG_CAP_NATIVE;"
+              ]
+            }
+          ]
+        },
+        "xglobal": {
+          "status": "PARTIAL_CAPABILITY_SUMMARY_ONLY",
+          "evidence": [
+            {
+              "path": "src/analysis/xglobal_summary.h",
+              "tokens": [
+                "uint32_t capability_bits;"
+              ]
+            }
+          ]
+        },
+        "xi": {
+          "status": "ABSENT_STABLE_PROVIDER_REQUIREMENT",
+          "evidence": []
+        },
+        "corespec": {
+          "status": "ABSENT_CANONICAL",
+          "evidence": []
+        },
+        "program": {
+          "status": "ABSENT_PROVIDER_REQUIREMENT_TABLE",
+          "evidence": []
+        },
+        "verifier": {
+          "status": "ABSENT_PROVIDER_CALL_VERIFICATION",
+          "evidence": []
+        },
+        "reference": {
+          "status": "ABSENT_PROVIDER_CALL_EXECUTION",
+          "evidence": []
+        },
+        "vm": {
+          "status": "ABSENT_PROVIDER_CALL_EXECUTION",
+          "evidence": []
+        },
+        "aot": {
+          "status": "ABSENT_PROVIDER_CALL_EXECUTION",
+          "evidence": []
+        },
+        "legacy_owner": {
+          "status": "FOUNDATION_PROFILE_AND_INSTANCE_AUTHORITY",
+          "evidence": [
+            {
+              "path": "src/runtime/abi/xr_runtime_contract.h",
+              "tokens": [
+                "typedef struct XrTargetProviderContract"
+              ]
+            },
+            {
+              "path": "src/execution/xr_execution.h",
+              "tokens": [
+                "typedef struct XrProviderBinding"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "target-profile-query",
+      "layers": {
+        "source": {
+          "status": "ABSENT_TYPED_TARGET_NAMESPACE",
+          "evidence": []
+        },
+        "xglobal": {
+          "status": "ABSENT_TYPED_TARGET_FACTS",
+          "evidence": []
+        },
+        "xi": {
+          "status": "ABSENT_TARGET_QUERY_PROJECTION",
+          "evidence": []
+        },
+        "corespec": {
+          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "evidence": [
+            {
+              "path": "xisa/core/registry.json",
+              "tokens": [
+                "\"spelling\": \"core.target.pointer_width\"",
+                "\"profile_dependency\": \"pointer_width\""
+              ]
+            }
+          ]
+        },
+        "program": {
+          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "evidence": [
+            {
+              "path": "src/core/xr_core_spec_gen.h",
+              "tokens": [
+                "XR_CORE_OP_CORE_TARGET_POINTER_WIDTH"
+              ]
+            }
+          ]
+        },
+        "verifier": {
+          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "evidence": [
+            {
+              "path": "src/program/xr_program_verify.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+              ]
+            }
+          ]
+        },
+        "reference": {
+          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "evidence": [
+            {
+              "path": "src/program/xr_reference_evaluator.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+              ]
+            }
+          ]
+        },
+        "vm": {
+          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "evidence": [
+            {
+              "path": "src/vm/xr_program_vm.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+              ]
+            }
+          ]
+        },
+        "aot": {
+          "status": "POINTER_WIDTH_WALKING_SKELETON_ONLY",
+          "evidence": [
+            {
+              "path": "src/aot/program/xr_backend_ir_emit_c.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+              ]
+            }
+          ]
+        },
+        "legacy_owner": {
+          "status": "PRESENT_HOST_AND_PRECUT_TARGET_PROBES",
+          "evidence": [
+            {
+              "path": "src/runtime/abi/xr_target_machine_facts.h",
+              "tokens": [
+                "typedef struct XrTargetMachineFacts",
+                "XrTargetDataLayout data_layout;"
+              ]
+            },
+            {
+              "path": "src/aot/program/xr_backend_ir.c",
+              "tokens": [
+                "machine->data_layout.pointer.size * 8u"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "old_owner_inventory": [
+    {
+      "id": "old-coro-rows-and-semantic-plan",
+      "state": "PRESENT_FROZEN_PRECUT",
+      "paths": [
+        "src/plan/semantic/xr_semantic_builder.c",
+        "src/plan/semantic/xr_semantic_ops_gen.h"
+      ],
+      "canonical_replacement": "CoreSpec operations plus XrProgram logical state, safepoint and continuation rows"
+    },
+    {
+      "id": "hidden-retained-stack-and-typed-target-plan-vm",
+      "state": "PRESENT_FROZEN_PRECUT",
+      "paths": [
+        "src/vm/xr_typed_dispatch.c",
+        "src/vm/xr_typed_frame.c"
+      ],
+      "canonical_replacement": "validated program to VM-private frame and root-map construction"
+    },
+    {
+      "id": "aot-xi-coro-and-backend-suspend-inference",
+      "state": "PRESENT_FROZEN_PRECUT",
+      "paths": [
+        "src/aot/xaot_callable.c",
+        "src/aot/xaot_bundle.c"
+      ],
+      "canonical_replacement": "validated logical coroutine program to AOT-private frame lowering"
+    },
+    {
+      "id": "generation-and-provider-duplicate-owner",
+      "state": "FOUNDATION_PRESENT_NEW_CANONICAL_INTEGRATION_ABSENT",
+      "paths": [
+        "src/execution/xr_execution.c",
+        "src/aot/xaot_bundle.c",
+        "src/vm/xr_typed_dispatch.c"
+      ],
+      "canonical_replacement": "TargetProfile provider contracts and one generation-scoped XrInstance binding"
+    },
+    {
+      "id": "host-target-probe",
+      "state": "PRESENT_OUTSIDE_POINTER_WIDTH_WALKING_SKELETON",
+      "paths": [
+        "src/app/toolchain/xtc_target_profile.c",
+        "src/aot/xaot_bundle.c"
+      ],
+      "canonical_replacement": "typed target queries sourced only from the immutable bound XrTargetProfile"
+    }
+  ],
+  "exit_conditions": [
+    {
+      "id": "wave4-ready",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "all-operation-atoms-have-stable-registry-rows-and-kats",
+      "status": "PENDING"
+    },
+    {
+      "id": "source-xglobal-xi-program-producer-closure",
+      "status": "PENDING"
+    },
+    {
+      "id": "logical-coroutine-and-concurrency-program-schema-closed",
+      "status": "PENDING"
+    },
+    {
+      "id": "provider-requirement-and-target-query-program-schema-closed",
+      "status": "PENDING"
+    },
+    {
+      "id": "independent-verifier-and-negative-mutation-closed",
+      "status": "PENDING"
+    },
+    {
+      "id": "reference-vm-aot-same-profile-differential-closed",
+      "status": "PENDING"
+    },
+    {
+      "id": "concurrency-allowed-trace-refinement-closed",
+      "status": "PENDING"
+    },
+    {
+      "id": "generation-provider-pin-drain-rebind-hostile-mutation-closed",
+      "status": "PENDING"
+    },
+    {
+      "id": "foreign-profile-never-reads-host-facts",
+      "status": "PENDING"
+    },
+    {
+      "id": "covered-old-owner-new-canonical-dependency-zero",
+      "status": "PENDING"
+    },
+    {
+      "id": "source-corpus-sanitizer-provider-and-code-shape-gates-closed",
+      "status": "PENDING"
+    }
+  ],
+  "qualification_entries": {
+    "normal": "python scripts/check_xr_program_wave5_contract.py --root .",
+    "self_test": "python scripts/check_xr_program_wave5_contract.py --root . --self-test",
+    "exit": "python scripts/check_xr_program_wave5_contract.py --root . --require-ready",
+    "result_claims": []
+  },
+  "precut_product_route": "frozen during W7; physical deletion belongs to atomic Task 302"
+}

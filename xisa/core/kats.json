@@ -1204,6 +1204,25 @@
       }
     },
     {
+      "id": "existential-pack-valid-read-owner-borrow",
+      "operation": "core.existential.pack",
+      "kind": "contract",
+      "actual": {
+        "concrete_type": "Rect",
+        "concrete_nominal": true,
+        "conformance_interface": "Shape",
+        "existential_interface": "Shape",
+        "interface_use": "read",
+        "operand_category": "value",
+        "operand_ownership": "owner",
+        "result_category": "value",
+        "result_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
       "id": "existential-test-valid",
       "operation": "core.existential.test",
       "kind": "contract",

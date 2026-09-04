@@ -50,27 +50,6 @@ static bool inline_error_source_passthrough(const XiValue *v) {
             xi_generated_op_class(v->op) == XI_GEN_CLASS_CONVERSION);
 }
 
-static const XiValue *inline_prev_block_value(const XiValue *site) {
-    if (!site || !site->block)
-        return NULL;
-    const XiValue *prev = NULL;
-    for (uint32_t i = 0; i < site->block->nvalues; i++) {
-        const XiValue *cur = site->block->values[i];
-        if (cur == site)
-            break;
-        if (cur)
-            prev = cur;
-    }
-    return prev;
-}
-
-static const XiValue *inline_prev_error_source_value(const XiValue *site) {
-    const XiValue *prev = inline_prev_block_value(site);
-    for (uint8_t depth = 0; inline_error_source_passthrough(prev) && depth < 8; depth++)
-        prev = prev->args[0];
-    return prev;
-}
-
 static bool inline_value_is_nothrow_lowlevel(const XiValue *v) {
     while (inline_error_source_passthrough(v))
         v = v->args[0];
@@ -95,9 +74,22 @@ static bool inline_call_is_nothrow_direct(const XiFunc *current, const XiValue *
 static bool inline_err_check_is_dead(const XiFunc *current, const XiValue *check, uint8_t depth) {
     if (!check || check->op != XI_ERR_CHECK)
         return false;
-    const XiValue *source = inline_prev_error_source_value(check);
+    const XiValue *source = xi_err_check_producer(current, check);
     return inline_value_is_nothrow_lowlevel(source) ||
            inline_call_is_nothrow_direct(current, source, (uint8_t) (depth + 1));
+}
+
+static bool inline_call_has_error_check(const XiFunc *function, const XiValue *call) {
+    for (uint32_t bi = 0; function && bi < function->nblocks; bi++) {
+        const XiBlock *block = function->blocks ? function->blocks[bi] : NULL;
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values ? block->values[vi] : NULL;
+            if (value && (value->op == XI_ERR_CHECK || value->op == XI_CLEANUP_ERR_CHECK) &&
+                value->error_producer == call)
+                return true;
+        }
+    }
+    return false;
 }
 
 static bool inline_func_has_error_flow(const XiFunc *f, uint8_t depth) {
@@ -498,6 +490,13 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
             cloned->args[a] = value_map[orig_arg->id];
         else
             cloned->args[a] = orig_arg; /* external reference (e.g. caller value) */
+    }
+    if (src->error_producer) {
+        XiValue *producer =
+            src->error_producer->id < map_size ? value_map[src->error_producer->id] : NULL;
+        if (!producer)
+            return NULL;
+        cloned->error_producer = producer;
     }
     if (!xi_value_clone_call_plan(caller, cloned, src))
         return NULL;
@@ -950,6 +949,13 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
              * return convention; unknown or conflicting evidence is a hard
              * optimization boundary, not permission to guess. */
             if (!inline_ownership_boundary_is_exact(v, callee))
+                continue;
+            /* The call and its pending-error observation are one semantic
+             * boundary.
+             * Removing only the call would leave a check bound to
+             * a retired value in
+             * the continuation. */
+            if (inline_call_has_error_check(f, v))
                 continue;
             /* Open class/interface dispatch plans are keyed by both callsite
              * and owning function. Cloning such a site into another function

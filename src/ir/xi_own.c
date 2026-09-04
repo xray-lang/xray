@@ -442,6 +442,15 @@ XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx
         return false;
     if ((user->op == XI_GO || user->op == XI_THREAD_SPAWN) && arg_idx > 0)
         return xi_go_arg_transfer_mode(user, (uint16_t) (arg_idx - 1)) == XR_TRANSFER_MOVE;
+    /* The generated method policy describes the ordinary borrowed receiver.
+     * A verified call
+     * plan is the declaration-owned exception: MOVE hands the
+     * receiver's owner to parameter
+     * 0 and is therefore a consuming use. */
+    if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) && arg_idx == 0 &&
+        user->call_plan && user->call_plan->verified && user->call_plan->has_receiver &&
+        user->call_plan->receiver.param_mode == XR_PARAM_MOVE)
+        return true;
     if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
         user->call_plan && arg_idx > 0 && arg_idx <= user->call_plan->nargs &&
         user->call_plan->args[arg_idx - 1].place == user->args[arg_idx])
@@ -573,9 +582,12 @@ static void compute_last_use(XiFunc *f, const XiDefUse *du, const XiLiveness *li
 
 /* ========== Borrow Signature Inference (intraprocedural seed) ========== */
 
-/* A parameter is OWNED if any consuming use of it exists, else BORROWED.
- * The cross-function fixpoint for mutually recursive functions can use this
- * intraprocedural result as its initial state. */
+/* A declared MOVE parameter is always OWNED. Other parameters are OWNED if a
+ * consuming use
+ * exists, else BORROWED. The cross-function fixpoint for
+ * mutually recursive functions can use
+ * this intraprocedural result as its
+ * initial state. */
 static void infer_borrow_sig(XiFunc *f, const XiOwnResult *r, XiBorrowSig *sig) {
     memset(sig, 0, sizeof(*sig));
     uint16_t n = xi_func_semantic_param_count(f);
@@ -594,7 +606,9 @@ static void infer_borrow_sig(XiFunc *f, const XiOwnResult *r, XiBorrowSig *sig) 
         if (!pi->rc_managed) {
             sig->param_own[p] = XI_OWN_NONE;
         } else {
-            sig->param_own[p] = pi->consumed ? XI_OWN_OWNED : XI_OWN_BORROWED;
+            sig->param_own[p] = xi_func_param_passing_mode(f, p) == XR_PARAM_MOVE || pi->consumed
+                                    ? XI_OWN_OWNED
+                                    : XI_OWN_BORROWED;
         }
     }
 }

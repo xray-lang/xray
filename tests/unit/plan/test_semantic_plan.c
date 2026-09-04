@@ -563,9 +563,12 @@ static XrSemanticPlan *build_error_edge_plan(void) {
     XiBlock *normal_block = xi_block_new(function);
     REQUIRE(check_block != NULL && error_block != NULL && normal_block != NULL);
 
+    XiValue *producer = xi_value_new(function, check_block, XI_CALL_BUILTIN, &stub_int, 0);
     XiValue *check = xi_value_new(function, check_block, XI_ERR_CHECK, &stub_bool, 0);
-    REQUIRE(check != NULL);
+    REQUIRE(producer != NULL && check != NULL);
+    producer->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     check->flags = XI_FLAG_SIDE_EFFECT;
+    check->error_producer = producer;
     xi_block_set_if(check_block, check, error_block, normal_block);
     XiValue *error_result = xi_const_int(function, error_block, -1, &stub_int);
     XiValue *normal_result = xi_const_int(function, normal_block, 1, &stub_int);

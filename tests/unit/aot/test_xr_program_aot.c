@@ -221,6 +221,57 @@ static XrValidatedProgram *build_affine_copy_program(void) {
     return validate_program(&type, 1u, &constant, 1u, &function, 1u);
 }
 
+static XrValidatedProgram *build_empty_aggregate_program(void) {
+    enum {
+        EMPTY_TYPE = 64
+    };
+    XrCoreIrTypeInput type = {
+        .key = fixture_key("aot-empty:type"),
+        .local_id = EMPTY_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+    };
+    XrCoreIrConstantInput constant = {
+        .key = fixture_key("aot-empty:constant"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 42,
+    };
+    XrCoreIrKey empty_value = fixture_key("aot-empty:value");
+    XrCoreIrKey scalar = fixture_key("aot-empty:scalar");
+    XrCoreIrKey returned[] = {scalar};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = empty_value,
+         .result_type_id = EMPTY_TYPE,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = scalar,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("aot-empty:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("aot-empty:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_program(&type, 1u, &constant, 1u, &function, 1u);
+}
+
 static XrValidatedProgram *build_full_program(void) {
     enum {
         AGGREGATE_TYPE = 101,
@@ -956,6 +1007,29 @@ static void test_affine_copy_lowering(void) {
     xr_validated_program_free(program);
 }
 
+static void test_empty_aggregate_has_portable_private_c_storage(void) {
+    XrValidatedProgram *program = build_empty_aggregate_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestBindings bindings;
+    build_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 76u);
+    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "    uint8_t xr_unit;\n") != NULL);
+    REQUIRE(strstr(generated.bytes, ".xr_unit = UINT8_C(0)") != NULL);
+    REQUIRE(strstr(generated.bytes, "{\n};") == NULL);
+
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    retire_instance(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void test_sealed_invoke_typed_error_cleanup_lowering(void) {
     XrProgramArtifact artifact = {0};
     char build_diagnostic[256] = {0};
@@ -1116,6 +1190,7 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
     REQUIRE(strstr(generated_none.bytes, "XrAotValue") == NULL);
     REQUIRE(strstr(generated_none.bytes, "TargetPlan") == NULL);
     REQUIRE(strstr(generated_none.bytes, "int main(void)") != NULL);
+    REQUIRE(strstr(generated_none.bytes, "    return xr_aot_make(4, 0, 0);\n}\n") == NULL);
 
     XrAotToolchainBinding toolchain = toolchain_for(generated_none.target_profile_id);
     static const uint8_t native_bytes[] = {0x7f, 'X', 'R', 'A', 'O', 'T'};
@@ -1292,6 +1367,7 @@ int main(int argc, char **argv) {
     } else {
         test_reference_vm_aot_identity(program, instance);
         test_affine_copy_lowering();
+        test_empty_aggregate_has_portable_private_c_storage();
         test_sealed_invoke_typed_error_cleanup_lowering();
         test_typed_panic_cleanup_lowering();
         test_existential_pack_test_project_lowering();

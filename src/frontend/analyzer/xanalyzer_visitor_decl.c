@@ -3053,11 +3053,14 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     sym->location.line = node->line;
     sym->is_exported = node->is_exported;
     xa_visit_add_symbol_checked(ctx, sym, 0);
+    iface->symbol_id = sym->id;
 
     XrClassInfo *info = xa_class_info_new(iface->name);
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     links->class_info = info;
     links->owns_class_info = true;
+    links->interface_decl_node = node;
+    info->declaration_symbol = sym;
     // Represent the interface as a parameterized XR_KIND_INTERFACE: built-in
     // singletons stay as plain interface types; user `interface Foo<T>` keeps
     // its declared type parameters so generic resolution can plug arguments
@@ -3100,6 +3103,7 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         msym->location.line = m->line;
         msym->receiver_mode = im->receiver_mode;
         XaSymbolLinks *mlinks = xa_analyzer_get_links(ctx->analyzer, msym);
+        mlinks->function_decl_node = m;
         xa_publish_deprecated_attrs(mlinks, im->attributes, im->attr_count);
         // An interface method may carry its own generic params and constraints.
         // They are stored, and the method published as the signature scope's
@@ -3245,9 +3249,22 @@ static XrType *xa_interface_required_signature(XaInferContext *ctx, XaSymbolLink
 // user-defined interface listed in info->interface_types. Built-in interface
 // conformance (Iterable / Comparable / ...) is checked by
 // xr_type_satisfies_constraint and stays outside this loop.
-static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_node,
-                                           XrClassInfo *cls_info) {
-    if (!cls_info || cls_info->interface_count == 0 || !cls_info->interface_types)
+void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_node, XrClassInfo *cls_info) {
+    if (!cls_info)
+        return;
+
+    if (cls_info->interface_conformances) {
+        for (int i = 0; i < cls_info->interface_conformance_count; i++)
+            xr_free(cls_info->interface_conformances[i].witnesses);
+        xr_free(cls_info->interface_conformances);
+        cls_info->interface_conformances = NULL;
+        cls_info->interface_conformance_count = 0;
+    }
+    if (cls_info->interface_count == 0 || !cls_info->interface_types)
+        return;
+    cls_info->interface_conformances =
+        xr_calloc((size_t) cls_info->interface_count, sizeof(XaInterfaceConformance));
+    if (!cls_info->interface_conformances)
         return;
 
     for (int i = 0; i < cls_info->interface_count; i++) {
@@ -3356,17 +3373,13 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
             continue;
         }
 
-        XaSymbol *iface_sym = xa_scope_lookup(ctx->analyzer->current_scope, iface_name);
-        if (!iface_sym || iface_sym->kind != XA_SYM_CLASS)
+        XrClassInfo *iface_info = iface_type->instance.class_ref;
+        if (!iface_info)
             continue;
-        XaSymbolLinks *iface_links = xa_analyzer_get_links(ctx->analyzer, iface_sym);
-        if (!iface_links || !iface_links->class_info)
-            continue;
-        XrClassInfo *iface_info = iface_links->class_info;
-        if (iface_links->type && iface_links->type->kind != XR_KIND_INTERFACE) {
-            // Anything else that resolves to a non-interface is a user
-            // error; skipping it silently made the clause look verified
-            // when nothing was checked.
+        XaSymbol *iface_sym = iface_info->declaration_symbol;
+        XaSymbolLinks *iface_links =
+            iface_sym ? xa_analyzer_get_links(ctx->analyzer, iface_sym) : NULL;
+        if (iface_type->kind != XR_KIND_INTERFACE) {
             char msg[256];
             snprintf(msg, sizeof(msg),
                      "'%s' is not an interface; only interfaces can appear in an implements "
@@ -3378,13 +3391,60 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
             continue;
         }
 
+        XaInterfaceConformance *verdict =
+            &cls_info->interface_conformances[cls_info->interface_conformance_count++];
+        verdict->interface_info = iface_info;
+        verdict->interface_type = iface_type;
+        verdict->complete = true;
+        verdict->constraint_eligible = true;
+        verdict->existential_eligible = iface_info->field_count == 0;
+        verdict->witness_count = iface_info->method_count;
+        if (verdict->witness_count > 0) {
+            verdict->witnesses =
+                xr_calloc((size_t) verdict->witness_count, sizeof(XaInterfaceWitness));
+            if (!verdict->witnesses) {
+                verdict->complete = false;
+                verdict->constraint_eligible = false;
+                verdict->existential_eligible = false;
+                continue;
+            }
+        }
+
         // Required methods
         for (int j = 0; j < iface_info->method_count; j++) {
             XaSymbol *required = iface_info->methods[j];
-            if (!required || !required->name)
+            XaInterfaceWitness *witness = &verdict->witnesses[j];
+            witness->requirement = required;
+            witness->slot = (uint32_t) j;
+            if (!required || !required->name) {
+                verdict->complete = false;
                 continue;
+            }
+            XaSymbolLinks *required_links = xa_analyzer_get_links(ctx->analyzer, required);
+            if (!required_links || !required_links->function_decl_node ||
+                required_links->type_param_count > 0)
+                verdict->existential_eligible = false;
+            if ((cls_info->nominal_kind == XA_NOMINAL_ENUM &&
+                 required->receiver_mode != XR_PARAM_READ) ||
+                (cls_info->nominal_kind == XA_NOMINAL_STRUCT &&
+                 required->receiver_mode == XR_PARAM_MOVE)) {
+                char msg[320];
+                snprintf(msg, sizeof(msg),
+                         "%s '%s' cannot implement interface '%s' slot '%s': the %s receiver "
+                         "capability is not supported by this nominal kind",
+                         cls_info->nominal_kind == XA_NOMINAL_ENUM ? "Enum" : "Struct",
+                         cls_info->name ? cls_info->name : "?", iface_name, required->name,
+                         xr_param_mode_label(required->receiver_mode));
+                XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                verdict->complete = false;
+                verdict->constraint_eligible = false;
+                verdict->existential_eligible = false;
+                continue;
+            }
             XaSymbol *found = xa_class_info_lookup_member(cls_info, required->name);
-            if (!found || found->kind != XA_SYM_METHOD) {
+            if (!found || found->kind != XA_SYM_METHOD || found->is_static) {
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "Class '%s' does not implement method '%s' required by interface '%s'",
@@ -3392,17 +3452,26 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
                 XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                verdict->complete = false;
+                verdict->constraint_eligible = false;
+                verdict->existential_eligible = false;
                 continue;
             }
 
-            XaSymbolLinks *required_links = xa_analyzer_get_links(ctx->analyzer, required);
             XaSymbolLinks *found_links = xa_analyzer_get_links(ctx->analyzer, found);
             XrType *required_sig = xa_interface_required_signature(
                 ctx, iface_links, iface_type, required_links ? required_links->type : NULL);
             XrType *found_sig = found_links ? found_links->type : NULL;
-            if (!xa_interface_signature_has_recovery_type(required_sig) &&
-                !xa_interface_signature_has_recovery_type(found_sig) &&
-                !xr_type_function_signature_assignable(required_sig, found_sig)) {
+            bool signature_complete = !xa_interface_signature_has_recovery_type(required_sig) &&
+                                      !xa_interface_signature_has_recovery_type(found_sig);
+            bool signature_matches = signature_complete &&
+                                     xr_type_function_signature_assignable(required_sig, found_sig);
+            if (!signature_matches) {
+                verdict->complete = false;
+                verdict->constraint_eligible = false;
+                verdict->existential_eligible = false;
+            }
+            if (signature_complete && !signature_matches) {
                 char msg[512];
                 if (required_sig->function.receiver_mode != found_sig->function.receiver_mode) {
                     snprintf(msg, sizeof(msg),
@@ -3424,6 +3493,14 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
                 XrLocation loc = {.file = ctx->file_path, .line = found->location.line};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+            }
+            if (signature_matches && found_links && found_links->function_decl_node) {
+                witness->implementation = found;
+                witness->complete = true;
+            } else {
+                verdict->complete = false;
+                verdict->constraint_eligible = false;
+                verdict->existential_eligible = false;
             }
         }
 
@@ -3449,7 +3526,14 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
                 XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                verdict->complete = false;
+                verdict->constraint_eligible = false;
             }
+            verdict->existential_eligible = false;
+        }
+        if (!verdict->complete) {
+            verdict->constraint_eligible = false;
+            verdict->existential_eligible = false;
         }
     }
 }
@@ -3458,39 +3542,39 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
  * while implementation method types are deliberately POLY. Recheck only the
  * covariant throw-effect dimension after Pass 3 has published final bits. */
 static void xa_validate_class_interface_throw_effects(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node ||
-        (node->type != AST_CLASS_DECL && node->type != AST_STRUCT_DECL &&
-         node->type != AST_UNION_DECL))
+    if (!ctx || !node)
         return;
-    ClassDeclNode *cls = node->type == AST_CLASS_DECL    ? &node->as.class_decl
-                         : node->type == AST_STRUCT_DECL ? &node->as.struct_decl
-                                                         : &node->as.union_decl;
+    uint32_t symbol_id = 0;
+    if (node->type == AST_CLASS_DECL)
+        symbol_id = node->as.class_decl.symbol_id;
+    else if (node->type == AST_STRUCT_DECL)
+        symbol_id = node->as.struct_decl.symbol_id;
+    else if (node->type == AST_UNION_DECL)
+        symbol_id = node->as.union_decl.symbol_id;
+    else if (node->type == AST_ENUM_DECL)
+        symbol_id = node->as.enum_decl.symbol_id;
+    else
+        return;
     XaSymbol *class_symbol =
-        cls->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, cls->symbol_id) : NULL;
+        symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id) : NULL;
     XrClassInfo *class_info = class_symbol ? class_symbol->links.class_info : NULL;
-    if (!class_info || !class_info->interface_types)
+    if (!class_info || !class_info->interface_conformances)
         return;
 
-    for (int i = 0; i < class_info->interface_count; i++) {
-        XrType *interface_type = class_info->interface_types[i];
+    for (int i = 0; i < class_info->interface_conformance_count; i++) {
+        XaInterfaceConformance *conformance = &class_info->interface_conformances[i];
+        XrType *interface_type = conformance->interface_type;
         const char *interface_name = interface_type ? interface_type->instance.class_name : NULL;
-        if (!interface_name || xa_is_builtin_interface_name(interface_name))
+        if (!interface_name || !conformance->interface_info)
             continue;
-        XaSymbol *interface_symbol = xa_scope_lookup(ctx->analyzer->current_scope, interface_name);
-        if (!interface_symbol)
-            interface_symbol = xa_analyzer_lookup_deep(ctx->analyzer, interface_name);
+        XaSymbol *interface_symbol = conformance->interface_info->declaration_symbol;
         XaSymbolLinks *interface_links =
             interface_symbol ? xa_analyzer_get_links(ctx->analyzer, interface_symbol) : NULL;
-        XrClassInfo *interface_info = interface_links ? interface_links->class_info : NULL;
-        if (!interface_info ||
-            (interface_links->type && interface_links->type->kind != XR_KIND_INTERFACE))
-            continue;
-        for (int j = 0; j < interface_info->method_count; j++) {
-            XaSymbol *required = interface_info->methods[j];
-            XaSymbol *found = required && required->name
-                                  ? xa_class_info_lookup_member(class_info, required->name)
-                                  : NULL;
-            if (!required || !found || found->kind != XA_SYM_METHOD)
+        for (int j = 0; j < conformance->witness_count; j++) {
+            XaInterfaceWitness *witness = &conformance->witnesses[j];
+            XaSymbol *required = witness->requirement;
+            XaSymbol *found = witness->implementation;
+            if (!witness->complete || !required || !found)
                 continue;
             XrType *required_signature = xa_interface_required_signature(
                 ctx, interface_links, interface_type, required->links.type);
@@ -3511,6 +3595,10 @@ static void xa_validate_class_interface_throw_effects(XaInferContext *ctx, AstNo
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, message,
                                            &location);
+                witness->complete = false;
+                conformance->complete = false;
+                conformance->constraint_eligible = false;
+                conformance->existential_eligible = false;
             }
             if (required_signature->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
                 found_signature->function.throw_effect == XR_FN_EFFECT_NO_THROW)
@@ -3524,6 +3612,10 @@ static void xa_validate_class_interface_throw_effects(XaInferContext *ctx, AstNo
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, message,
                                        &location);
+            witness->complete = false;
+            conformance->complete = false;
+            conformance->constraint_eligible = false;
+            conformance->existential_eligible = false;
         }
     }
 }
@@ -3666,6 +3758,10 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         info->location =
             (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
     }
+    info->nominal_kind = node->type == AST_CLASS_DECL    ? XA_NOMINAL_CLASS
+                         : node->type == AST_STRUCT_DECL ? XA_NOMINAL_STRUCT
+                                                         : XA_NOMINAL_INVALID;
+    info->declaration_symbol = sym;
     if (!links->type) {
         links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
     }

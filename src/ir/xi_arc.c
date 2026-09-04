@@ -339,6 +339,15 @@ static void arc_copy_to_move(XiFunc *f) {
                 XiValue *v = blk->values[i];
                 if (!v || v->op != XI_COPY || v->nargs < 1 || !v->args[0])
                     continue;
+                /* Existential pack is a semantic conversion, not an aliasing
+                 *
+                 * source copy.  Its XI_COPY shape and frozen metadata are the
+                 *
+                 * canonical Xi contract consumed by verification and Program
+                 *
+                 * projection, so ownership normalization must preserve it. */
+                if (v->xg_existential_kind != XI_EXISTENTIAL_NONE)
+                    continue;
                 if (xi_copy_is_value_clone(v))
                     continue;
                 /* Only RC objects carry ownership; a scalar copy is irrelevant
@@ -2399,10 +2408,15 @@ static bool param_has_consuming_use(XiFunc *f, XiValue *p) {
 }
 
 /* Initialize every reachable function's borrow signature OPTIMISTICALLY (all
- * RC parameters borrowed) and collect the functions for the fixpoint. The
- * cached pointer doubles as the visited marker, so call-graph cycles
- * terminate. The optimistic seed is what lets mutually recursive functions
- * converge to the greatest borrow set. */
+ * eligible RC
+ * parameters borrowed) and collect the functions for the fixpoint.
+ * A declared MOVE parameter is
+ * fixed at OWNED because its ABI transfers the
+ * owner even when the body only reads it. The
+ * cached pointer doubles as the
+ * visited marker, so call-graph cycles terminate. The optimistic
+ * seed is what
+ * lets mutually recursive functions converge to the greatest borrow set. */
 static void arc_init_sigs_collect(XiFunc *f, XiFuncVec *vec) {
     if (!f || f->arc_borrow_sig)
         return;
@@ -2416,7 +2430,9 @@ static void arc_init_sigs_collect(XiFunc *f, XiFuncVec *vec) {
     sig->valid = true;
     for (uint16_t p = 0; p < n; p++) {
         XiValue *pv = f->params[p];
-        sig->param_own[p] = (pv && xi_own_value_is_rc(pv)) ? XI_OWN_BORROWED : XI_OWN_NONE;
+        sig->param_own[p] = !pv || !xi_own_value_is_rc(pv)                      ? XI_OWN_NONE
+                            : xi_func_param_passing_mode(f, p) == XR_PARAM_MOVE ? XI_OWN_OWNED
+                                                                                : XI_OWN_BORROWED;
     }
     f->arc_borrow_sig = sig;
     if (!xi_func_vec_push(vec, f))
@@ -2884,31 +2900,6 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
     arc_withdraw_tail_flag_before_releases(f);
 }
 
-/* Return the nearest producer associated with a unit ERR_CHECK.  ARC ops can
- * legally be inserted between the producer and the check, so adjacency is not
- * sufficient.  Stop at a previous check: pending-error boundaries never
- * borrow a producer across another already-consumed boundary. */
-static XiValue *arc_err_check_source(XiValue *check) {
-    if (!check || check->op != XI_ERR_CHECK || !check->block)
-        return NULL;
-    XiBlock *blk = check->block;
-    for (uint32_t i = 0; i < blk->nvalues; i++) {
-        if (blk->values[i] != check)
-            continue;
-        while (i > 0) {
-            XiValue *candidate = blk->values[--i];
-            if (!candidate)
-                continue;
-            if (candidate->op == XI_ERR_CHECK)
-                return NULL;
-            if ((candidate->flags & XI_FLAG_MAY_THROW) != 0 || candidate->op == XI_SCOPE_EXIT)
-                return candidate;
-        }
-        break;
-    }
-    return NULL;
-}
-
 static bool arc_value_is_defined_before_block_index(const XiValue *target, const XiBlock *blk,
                                                     uint32_t index) {
     if (!target || !blk)
@@ -2966,7 +2957,8 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
              * error edge and must not gain cleanup operands (which would also
              * make otherwise-dead owners look live on the hot path). */
             if (v->op == XI_ERR_CHECK && (!v->type || v->type->kind != XR_KIND_BOOL) &&
-                v->nargs == 0 && arc_err_check_source(v) != NULL && !xi_value_vec_push(&checks, v))
+                v->nargs == 0 && xi_err_check_producer(f, v) != NULL &&
+                !xi_value_vec_push(&checks, v))
                 goto oom;
             if (v->op == XI_PARAM || stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;

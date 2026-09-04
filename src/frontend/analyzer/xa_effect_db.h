@@ -20,6 +20,7 @@ typedef uint32_t XaErrorTypeId;
 typedef uint32_t XaErrorVariantId;
 typedef uint32_t XaEffectEdgeId;
 typedef struct XrType XrType;
+typedef struct XrClassInfo XrClassInfo;
 
 #define XA_EFFECT_NONE ((XaEffectId) 0u)
 #define XA_EFFECT_ID_NONE XA_EFFECT_NONE
@@ -157,6 +158,13 @@ XR_FUNC XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db,
                                                        uint64_t stable_type_key,
                                                        XrType *type_handle);
 XR_FUNC XaErrorTypeId xa_effect_db_register_error_enum(XaEffectDatabase *db, XrType *enum_type);
+/* Detach borrowed type handles before their declaration metadata is reclaimed.
+ * Stable
+ * error/variant identities remain interned and are rebound when the
+ * replacement declaration is
+ * analyzed. */
+XR_FUNC void xa_effect_db_detach_error_types_for_nominal(XaEffectDatabase *db,
+                                                         const XrClassInfo *nominal);
 XR_FUNC XaErrorVariantId xa_effect_db_register_error_variant(XaEffectDatabase *db,
                                                              XaErrorTypeId type_id,
                                                              uint64_t stable_variant_key);

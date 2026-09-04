@@ -374,6 +374,85 @@ add_xray_unit_test(test_xi_analysis ir/test_xi_analysis.c)
 add_xray_unit_test(test_xi_cfg_edit ir/test_xi_cfg_edit.c)
 add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
+
+function(xr_enable_pure_aot_symbol_map target_name)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+            OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+                AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+        target_link_options(${target_name} PRIVATE
+            "/MAP:${CMAKE_CURRENT_BINARY_DIR}/${target_name}.map")
+    endif()
+endfunction()
+
+set(XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/task-293-source-aot)
+set(XR_PROGRAM_SOURCE_AOT_GENERATED_C
+    ${XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR}/source_aot_native.c)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_SOURCE_AOT_GENERATED_C}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR}
+    COMMAND $<TARGET_FILE:test_xi_pipeline>
+        --source-aot-c ${XR_PROGRAM_SOURCE_AOT_GENERATED_C}
+    DEPENDS test_xi_pipeline
+    COMMENT "Generating source-backed existential canonical-program C fixture"
+    VERBATIM)
+set_source_files_properties(${XR_PROGRAM_SOURCE_AOT_GENERATED_C}
+    PROPERTIES GENERATED TRUE)
+add_executable(test_xr_program_source_aot_native
+    ${XR_PROGRAM_SOURCE_AOT_GENERATED_C})
+xr_enable_pure_aot_symbol_map(test_xr_program_source_aot_native)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_source_aot_native PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_source_aot_native PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_source_aot_native
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+        --executable $<TARGET_FILE:test_xr_program_source_aot_native>
+        --expected-exit 477)
+set_tests_properties(test_xr_program_source_aot_native PROPERTIES
+    LABELS "unit;aot;canonical-program;source;existential;witness;generated-c;native;task-293")
+add_xray_unit_test(test_xr_program_imported_callable
+    ir/test_xr_program_imported_callable.c)
+set_tests_properties(test_xr_program_imported_callable PROPERTIES
+    LABELS "unit;canonical-program;source;callable;multi-module;task-301")
+
+set(XR_PROGRAM_IMPORTED_CALLABLE_FIXTURE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/task-301-imported-callable)
+set(XR_PROGRAM_IMPORTED_CALLABLE_GENERATED_C
+    ${XR_PROGRAM_IMPORTED_CALLABLE_FIXTURE_DIR}/imported_callable_native.c)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_IMPORTED_CALLABLE_GENERATED_C}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${XR_PROGRAM_IMPORTED_CALLABLE_FIXTURE_DIR}
+    COMMAND $<TARGET_FILE:test_xr_program_imported_callable>
+        ${XR_PROGRAM_IMPORTED_CALLABLE_GENERATED_C}
+    DEPENDS test_xr_program_imported_callable
+    COMMENT "Generating source-backed imported callable canonical-program C fixture"
+    VERBATIM)
+set_source_files_properties(${XR_PROGRAM_IMPORTED_CALLABLE_GENERATED_C}
+    PROPERTIES GENERATED TRUE)
+add_executable(test_xr_program_imported_callable_native
+    ${XR_PROGRAM_IMPORTED_CALLABLE_GENERATED_C})
+xr_enable_pure_aot_symbol_map(test_xr_program_imported_callable_native)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_imported_callable_native PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_imported_callable_native PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_imported_callable_native
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+        --executable $<TARGET_FILE:test_xr_program_imported_callable_native>
+        --expected-exit 42)
+set_tests_properties(test_xr_program_imported_callable_native PROPERTIES
+    LABELS "unit;aot;canonical-program;source;callable;multi-module;generated-c;native;task-301")
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
 add_test(NAME test_xi_cgen_native_target_leaf_emission
@@ -602,6 +681,7 @@ add_custom_command(
     VERBATIM)
 set_source_files_properties(${XR_PROGRAM_AOT_GENERATED_C} PROPERTIES GENERATED TRUE)
 add_executable(test_xr_program_aot_native ${XR_PROGRAM_AOT_GENERATED_C})
+xr_enable_pure_aot_symbol_map(test_xr_program_aot_native)
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
         OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
             AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
@@ -634,6 +714,7 @@ function(add_xr_program_aot_native_case case_name mode expected_exit)
         VERBATIM)
     set_source_files_properties(${case_source} PROPERTIES GENERATED TRUE)
     add_executable(test_xr_program_aot_${case_name} ${case_source})
+    xr_enable_pure_aot_symbol_map(test_xr_program_aot_${case_name})
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
             OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
                 AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))

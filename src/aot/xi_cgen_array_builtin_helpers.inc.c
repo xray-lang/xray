@@ -54,8 +54,7 @@ static bool cg_array_builtin_err_check_after_trusted_nothrow(XiCgenCtx *ctx, con
                                                              const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_array_builtin_call_is_trusted_nothrow(ctx, f,
-                                                    cg_class_native_prev_error_source_value(check));
+    return cg_array_builtin_call_is_trusted_nothrow(ctx, f, xi_err_check_producer(f, check));
 }
 
 static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,

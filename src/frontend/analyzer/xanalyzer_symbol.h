@@ -234,6 +234,7 @@ struct XaSymbolLinks {
     bool return_fn_effect_scanned;
     bool return_fn_effect_scan_in_progress;
     struct AstNode *function_decl_node;
+    struct AstNode *interface_decl_node;
     bool is_deprecated;
     const char *deprecated_message;
     bool is_extern;        // extern-block foreign function (FFI): calls require unsafe { }

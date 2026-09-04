@@ -1,0 +1,338 @@
+{
+  "schema": "xray-w7-wave4-exit-gate/1",
+  "status": "READY_W7_WAVE4",
+  "owner_tasks": [
+    293,
+    301
+  ],
+  "compatibility": "none",
+  "matrix_status": {
+    "open": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+    "ready": "COMPLETE_W7_WAVE4"
+  },
+  "operations": [
+    {
+      "stable_id": 38,
+      "id": "core.call.indirect_direct",
+      "macro": "XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT",
+      "kat_validator": "indirect-call",
+      "kats": [
+        "indirect-call-valid",
+        "indirect-call-rejects-fallible-signature"
+      ]
+    },
+    {
+      "stable_id": 39,
+      "id": "core.call.indirect_invoke",
+      "macro": "XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE",
+      "kat_validator": "indirect-invoke",
+      "kats": [
+        "indirect-invoke-valid",
+        "indirect-invoke-rejects-infallible-signature"
+      ]
+    },
+    {
+      "stable_id": 40,
+      "id": "core.call.witness_direct",
+      "macro": "XR_CORE_OP_CORE_CALL_WITNESS_DIRECT",
+      "kat_validator": "witness-call",
+      "kats": [
+        "witness-direct-valid",
+        "witness-direct-rejects-slot-interface-mismatch"
+      ]
+    },
+    {
+      "stable_id": 41,
+      "id": "core.call.witness_invoke",
+      "macro": "XR_CORE_OP_CORE_CALL_WITNESS_INVOKE",
+      "kat_validator": "witness-invoke",
+      "kats": [
+        "witness-invoke-valid",
+        "witness-invoke-rejects-out-of-range-slot"
+      ]
+    },
+    {
+      "stable_id": 86,
+      "id": "core.existential.pack",
+      "macro": "XR_CORE_OP_CORE_EXISTENTIAL_PACK",
+      "kat_validator": "existential-pack",
+      "kats": [
+        "existential-pack-valid-read",
+        "existential-pack-conformance-mismatch",
+        "existential-pack-valid-read-owner-borrow"
+      ]
+    },
+    {
+      "stable_id": 87,
+      "id": "core.existential.test",
+      "macro": "XR_CORE_OP_CORE_EXISTENTIAL_TEST",
+      "kat_validator": "existential-test",
+      "kats": [
+        "existential-test-valid",
+        "existential-test-nonconforming-type"
+      ]
+    },
+    {
+      "stable_id": 88,
+      "id": "core.existential.project",
+      "macro": "XR_CORE_OP_CORE_EXISTENTIAL_PROJECT",
+      "kat_validator": "existential-project",
+      "kats": [
+        "existential-project-valid-dominated",
+        "existential-project-undominated"
+      ]
+    },
+    {
+      "stable_id": 89,
+      "id": "core.callable.pack",
+      "macro": "XR_CORE_OP_CORE_CALLABLE_PACK",
+      "kat_validator": "callable-pack",
+      "kats": [
+        "callable-pack-captureless-valid",
+        "callable-pack-captured-valid",
+        "callable-pack-rejects-signature-mismatch",
+        "callable-pack-rejects-capture-borrow-result"
+      ]
+    }
+  ],
+  "evidence_surfaces": {
+    "spec_oracle": "tools/corespecgen/corespecgen.py",
+    "source_producer": "src/program/xr_program_from_xi.c",
+    "source_end_to_end": "tests/unit/ir/test_xi_pipeline.c",
+    "verifier": "src/program/xr_program_verify.c",
+    "verifier_test": "tests/unit/program/test_xr_program_verify.c",
+    "reference": "src/program/xr_reference_evaluator.c",
+    "reference_test": "tests/unit/program/test_xr_program_verify.c",
+    "vm": "src/vm/xr_program_vm.c",
+    "vm_test": "tests/unit/vm/test_xr_program_vm.c",
+    "aot": "src/aot/program/xr_backend_ir_emit_c.c",
+    "aot_test": "tests/unit/aot/test_xr_program_aot.c"
+  },
+  "source_domains": [
+    {
+      "id": "callable-captureless-captured-fallible",
+      "evidence": [
+        {
+          "path": "tests/unit/ir/test_xi_pipeline.c",
+          "tokens": [
+            "fn callable_value() -> i64",
+            "fn callable_error_value(value: i64) -> i64",
+            "XR_CORE_OP_CORE_CALLABLE_PACK",
+            "XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT",
+            "XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "callable-escape-multiuse-cross-cfg-loop-copy",
+      "evidence": [
+        {
+          "path": "tests/unit/ir/test_xi_pipeline.c",
+          "tokens": [
+            "fn escaped_callable_value() -> i64",
+            "fn callable_multiuse() -> i64",
+            "fn callable_cross_cfg(flag: bool) -> i64",
+            "fn callable_loop() -> i64",
+            "fn callable_copy() -> i64"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "imported-callable-multi-target-union",
+      "evidence": [
+        {
+          "path": "tests/unit/ir/test_xr_program_imported_callable.c",
+          "tokens": [
+            "test_imported_callable_multi_target_program",
+            "callable_target_count == 2u",
+            "XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT",
+            "XR_CORE_EFFECT_TRAP"
+          ]
+        },
+        {
+          "path": "tests/unit/CMakeLists.txt",
+          "tokens": [
+            "test_xr_program_imported_callable"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "class-struct-enum-existential-pack",
+      "evidence": [
+        {
+          "path": "tests/unit/ir/test_xi_lower.c",
+          "tokens": [
+            "XI_EXISTENTIAL_PACK",
+            "class ReadClass implements ReadValue",
+            "struct ReadStruct implements ReadValue",
+            "enum ReadEnum implements ReadValue"
+          ]
+        },
+        {
+          "path": "tests/unit/ir/test_xi_pipeline.c",
+          "tokens": [
+            "XR_CORE_OP_CORE_EXISTENTIAL_PACK"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "existential-test-project",
+      "evidence": [
+        {
+          "path": "tests/unit/ir/test_xi_lower.c",
+          "tokens": [
+            "XI_EXISTENTIAL_TEST",
+            "XI_EXISTENTIAL_PROJECT"
+          ]
+        },
+        {
+          "path": "tests/unit/ir/test_xi_pipeline.c",
+          "tokens": [
+            "XR_CORE_OP_CORE_EXISTENTIAL_TEST",
+            "XR_CORE_OP_CORE_EXISTENTIAL_PROJECT"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "witness-direct-invoke",
+      "evidence": [
+        {
+          "path": "tests/unit/ir/test_xi_lower.c",
+          "tokens": [
+            "XI_EXISTENTIAL_WITNESS_DIRECT",
+            "XI_EXISTENTIAL_WITNESS_INVOKE"
+          ]
+        },
+        {
+          "path": "tests/unit/ir/test_xi_pipeline.c",
+          "tokens": [
+            "XR_CORE_OP_CORE_CALL_WITNESS_DIRECT",
+            "XR_CORE_OP_CORE_CALL_WITNESS_INVOKE"
+          ]
+        }
+      ]
+    }
+  ],
+  "old_owner_new_canonical_path_zero": {
+    "scan_roots": [
+      "src/program",
+      "src/aot/program",
+      "src/execution"
+    ],
+    "scan_files": [
+      "src/vm/xr_program_vm.c",
+      "src/vm/xr_program_vm.h"
+    ],
+    "categories": [
+      {
+        "id": "CallDecision",
+        "tokens": [
+          "XrScalarCallDecision",
+          "xr_scalar_call_decision_",
+          "scalar_call_decision"
+        ]
+      },
+      {
+        "id": "selector/name fallback",
+        "tokens": [
+          "method_name_id",
+          "method_signature_key",
+          "xr_class_lookup_method",
+          "xr_symbol_lookup_in_table",
+          "cg_lookup_method",
+          "cg_resolve_static_function_call",
+          "cg_resolve_import_function_call"
+        ]
+      },
+      {
+        "id": "class-only itable",
+        "tokens": [
+          "XAOT_DISPATCH_ITABLE",
+          "XAOT_INTERFACE_USE_NEEDS_ITABLE",
+          "XAOT_INTERFACE_ABI_NEEDS_ITABLE",
+          "XrtInterfaceMethodTable",
+          "xrt_itable_method",
+          "xrt_type_set_itable",
+          "itable_source"
+        ]
+      },
+      {
+        "id": "erased closure ABI",
+        "tokens": [
+          "XrAotCallableDesc",
+          "XrClosure",
+          "xrt_closure_t",
+          "xrt_closure_new",
+          "xr_vm_call_closure"
+        ]
+      },
+      {
+        "id": "backend signature recovery",
+        "tokens": [
+          "xaot_type_fingerprint",
+          "xaot_callable_plans_build",
+          "xaot_callable_plans_verify",
+          "xaot_boundary_resolve_direct_call_target",
+          "callable_body_effects",
+          "callable_rederive_matches"
+        ]
+      }
+    ]
+  },
+  "three_channel_differential_entry": {
+    "entry_script": "scripts/run_xr_program_wave4_differential.py",
+    "command": "ctest --test-dir build --output-on-failure -R ^(test_xi_pipeline|test_xr_program_imported_callable|test_xr_program_vm|test_xr_program_aot|test_xr_program_aot_callable|test_xr_program_aot_existential|test_xr_program_source_aot_native|test_xr_program_imported_callable_native)$",
+    "channels": [
+      {
+        "id": "source-reference",
+        "path": "tests/unit/ir/test_xi_pipeline.c",
+        "tokens": [
+          "xr_reference_evaluate",
+          "reference.value.as.i64"
+        ]
+      },
+      {
+        "id": "source-vm",
+        "path": "tests/unit/ir/test_xi_pipeline.c",
+        "tokens": [
+          "xr_vm_code_execute",
+          "vm.value.as.i64 == reference.value.as.i64"
+        ]
+      },
+      {
+        "id": "source-aot-translation",
+        "path": "tests/unit/ir/test_xi_pipeline.c",
+        "tokens": [
+          "xr_backend_ir_translation_validate",
+          "xr_backend_ir_emit_c"
+        ]
+      },
+      {
+        "id": "native-aot-executor-fixtures",
+        "path": "tests/unit/CMakeLists.txt",
+        "tokens": [
+          "add_xr_program_aot_native_case(existential existential 42)",
+          "add_xr_program_aot_native_case(callable callable 42)"
+        ]
+      }
+    ],
+    "source_native_aot": {
+      "path": "tests/unit/CMakeLists.txt",
+      "tokens": [
+        "test_xr_program_source_aot_native",
+        "test_xr_program_imported_callable_native"
+      ]
+    }
+  },
+  "qualification_entries": {
+    "normal": "ctest --test-dir build --output-on-failure -R ^(xr_program_wave4_exit_inventory|xr_program_wave4_exit_self_test|test_xi_lower|test_xi_pipeline|test_xr_program_imported_callable|test_xr_program_verify|test_xr_program_vm|test_xr_program_aot|test_xr_program_aot_callable|test_xr_program_aot_existential|test_xr_program_source_aot_native|test_xr_program_imported_callable_native)$",
+    "asan_ubsan": "ctest --test-dir build-asan --output-on-failure -R ^(test_xi_lower|test_xi_pipeline|test_xr_program_imported_callable|test_xr_program_verify|test_xr_program_vm|test_xr_program_aot)$",
+    "result_claims": []
+  },
+  "precut_product_route": "frozen during W7; physical deletion belongs to atomic Task 302"
+}

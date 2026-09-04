@@ -15,6 +15,8 @@
 #include "xtype_names.h"
 #include "xanalyzer_symbol.h"
 #include "xanalyzer.h"
+#include "xa_node_table.h"
+#include "xa_selection.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_capability.h"
 #include "xanalyzer_flow.h"
@@ -1937,7 +1939,8 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
                          "struct LocalValue { value: i64 }\n"
                          "fn makeLocalValue(value: i64) -> LocalValue {\n"
                          "  return LocalValue{value: value}\n"
-                         "}\n";
+                         "}\n"
+                         "fn scalarValue() -> i64 { return 7 }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "local_fresh_return_ownership.xr", program);
@@ -1946,7 +1949,8 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
     XaSymbol *make = xa_analyzer_lookup_deep(a, "makeLocal");
     XaSymbol *forward = xa_analyzer_lookup_deep(a, "forwardLocal");
     XaSymbol *make_value = xa_analyzer_lookup_deep(a, "makeLocalValue");
-    ASSERT(make != NULL && forward != NULL && make_value != NULL);
+    XaSymbol *scalar_value = xa_analyzer_lookup_deep(a, "scalarValue");
+    ASSERT(make != NULL && forward != NULL && make_value != NULL && scalar_value != NULL);
     ASSERT(make->links.return_ownership_scanned);
     ASSERT(make->links.return_ownership.complete);
     ASSERT(make->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
@@ -1956,6 +1960,9 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
     ASSERT(make_value->links.return_ownership_scanned);
     ASSERT(make_value->links.return_ownership.complete);
     ASSERT(make_value->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
+    ASSERT(scalar_value->links.return_ownership_scanned);
+    ASSERT(scalar_value->links.return_ownership.complete);
+    ASSERT(scalar_value->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
 
     xr_program_destroy(program);
     xa_analyzer_free(a);
@@ -2348,6 +2355,64 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
     /* Dynamic (function-value) call is incomplete → fail-closed MAY_THROW. */
     check_throw_effect_consistency(a, "viaDynamic", XR_FN_EFFECT_MAY_THROW);
 
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_enum_methods_publish_effect_summaries) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum MethodError { Failed }\n"
+                         "enum Reader {\n"
+                         "  One\n"
+                         "  read() -> i64 { return 1 }\n"
+                         "  fail() -> i64 { throw MethodError.Failed }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "enum_method_effects.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+    ASSERT(program->type == AST_PROGRAM && program->as.program.count == 2);
+
+    AstNode *reader_decl = program->as.program.statements[1];
+    ASSERT(reader_decl != NULL && reader_decl->type == AST_ENUM_DECL);
+    EnumDeclNode *reader = &reader_decl->as.enum_decl;
+    ASSERT(reader->symbol_id != 0 && reader->method_count == 2);
+    XaSymbol *reader_symbol = xa_scope_lookup_by_id(a->global_scope, reader->symbol_id);
+    XaSymbolLinks *reader_links = reader_symbol ? xa_analyzer_get_links(a, reader_symbol) : NULL;
+    ASSERT(reader_links != NULL && reader_links->class_info != NULL);
+
+    XaSymbol *read_method =
+        xa_class_info_lookup_instance_member(reader_links->class_info, "read");
+    XaSymbol *fail_method =
+        xa_class_info_lookup_instance_member(reader_links->class_info, "fail");
+    ASSERT(read_method != NULL && fail_method != NULL);
+    ASSERT(read_method->links.effect_id != XA_EFFECT_NONE);
+    ASSERT(fail_method->links.effect_id != XA_EFFECT_NONE);
+    XaScope *read_scope = xa_scope_find_by_node(a->global_scope, reader->methods[0]);
+    XaScope *fail_scope = xa_scope_find_by_node(a->global_scope, reader->methods[1]);
+    ASSERT(read_scope != NULL && read_scope->function_symbol == read_method);
+    ASSERT(fail_scope != NULL && fail_scope->function_symbol == fail_method);
+
+    const XaEffectSummary *read_effect =
+        xa_effect_db_get(a->effect_db, read_method->links.effect_id);
+    const XaEffectSummary *fail_effect =
+        xa_effect_db_get(a->effect_db, fail_method->links.effect_id);
+    ASSERT(read_effect != NULL && xa_effect_summary_is_complete(read_effect));
+    ASSERT(xa_effect_summary_is_nothrow(read_effect));
+    ASSERT(read_method->links.throw_effect == XR_FN_EFFECT_NO_THROW);
+    ASSERT(fail_effect != NULL && xa_effect_summary_is_complete(fail_effect));
+    ASSERT(!xa_effect_summary_is_nothrow(fail_effect));
+    ASSERT(fail_effect->escaping.count == 1);
+    XrType *fail_type = xa_effect_db_error_type_handle(
+        a->effect_db, fail_effect->escaping.types[0].type_id);
+    ASSERT(fail_type != NULL && XR_TYPE_IS_ENUM(fail_type));
+    ASSERT(fail_type->enum_type.enum_name != NULL);
+    ASSERT(strcmp(fail_type->enum_type.enum_name, "MethodError") == 0);
+    ASSERT(fail_method->links.throw_effect == XR_FN_EFFECT_MAY_THROW);
+
+    xr_program_destroy(program);
     xa_analyzer_free(a);
     setup_pool();
 }
@@ -3215,6 +3280,229 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     setup_pool();
 }
 
+TEST(analyzer_callable_target_set_has_no_small_fixed_limit) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const uint32_t target_count = 40;
+    const size_t source_capacity = 32768;
+    char *source = (char *) xr_malloc(source_capacity);
+    ASSERT(source != NULL);
+    size_t used = 0;
+    for (uint32_t i = 0; i < target_count; i++) {
+        int written = snprintf(source + used, source_capacity - used, "fn target%02u() { }\n", i);
+        ASSERT(written > 0 && (size_t) written < source_capacity - used);
+        used += (size_t) written;
+    }
+    int written = snprintf(source + used, source_capacity - used,
+                           "fn chooseTarget(index: i64) {\n  var selected = target00\n");
+    ASSERT(written > 0 && (size_t) written < source_capacity - used);
+    used += (size_t) written;
+    for (uint32_t i = 1; i < target_count; i++) {
+        written = snprintf(source + used, source_capacity - used,
+                           "  if (index == %u) { selected = target%02u }\n", i, i);
+        ASSERT(written > 0 && (size_t) written < source_capacity - used);
+        used += (size_t) written;
+    }
+    written = snprintf(source + used, source_capacity - used, "  selected()\n}\n");
+    ASSERT(written > 0 && (size_t) written < source_capacity - used);
+
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "callable_target_set_unbounded.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+    ASSERT(program->as.program.count == (int) target_count + 1);
+    AstNode *choose = program->as.program.statements[target_count];
+    ASSERT(choose != NULL && choose->type == AST_FUNCTION_DECL);
+    AstNode *body = choose->as.function_decl.body;
+    ASSERT(body != NULL && body->type == AST_BLOCK);
+    AstNode *call_stmt = body->as.block.statements[body->as.block.count - 1];
+    ASSERT(call_stmt != NULL && call_stmt->type == AST_EXPR_STMT);
+    AstNode *call = call_stmt->as.expr_stmt;
+    ASSERT(call != NULL && call->type == AST_CALL_EXPR);
+    XaCallableTargetSetFact fact;
+    ASSERT(xa_analyzer_get_callable_target_set(a, call, &fact));
+    ASSERT(fact.complete);
+    ASSERT(fact.target_count == target_count);
+    ASSERT(fact.targets != NULL);
+    ASSERT(fact.structural_signature_key != 0);
+    for (uint32_t i = 0; i < fact.target_count; i++) {
+        ASSERT(fact.targets[i].structural_signature_key == fact.structural_signature_key);
+        if (i > 0) {
+            ASSERT(fact.targets[i - 1].function_node_id < fact.targets[i].function_node_id ||
+                   (fact.targets[i - 1].function_node_id == fact.targets[i].function_node_id &&
+                    fact.targets[i - 1].symbol_id < fact.targets[i].symbol_id));
+        }
+    }
+
+    xr_free(source);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_callable_target_set_flows_through_builtin_copy) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "fn first() { }\n"
+                         "fn second() { }\n"
+                         "fn exact() {\n"
+                         "  var f = first\n"
+                         "  var copied = copy(f)\n"
+                         "  copied()\n"
+                         "}\n"
+                         "fn branch(flag: bool) {\n"
+                         "  var f = first\n"
+                         "  if (flag) { f = second }\n"
+                         "  var copied = copy(f)\n"
+                         "  copied()\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "callable_target_set_builtin_copy.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+    ASSERT(program->as.program.count == 4);
+
+    XaSymbol *first = analyzer_function_symbol(a, "first");
+    XaSymbol *second = analyzer_function_symbol(a, "second");
+    ASSERT(first != NULL && first->id != 0);
+    ASSERT(second != NULL && second->id != 0);
+
+    AstNode *exact = program->as.program.statements[2];
+    ASSERT(exact != NULL && exact->type == AST_FUNCTION_DECL);
+    AstNode *exact_body = exact->as.function_decl.body;
+    ASSERT(exact_body != NULL && exact_body->type == AST_BLOCK && exact_body->as.block.count == 3);
+    AstNode *exact_call_stmt = exact_body->as.block.statements[2];
+    ASSERT(exact_call_stmt != NULL && exact_call_stmt->type == AST_EXPR_STMT);
+    AstNode *exact_call = exact_call_stmt->as.expr_stmt;
+    ASSERT(exact_call != NULL && exact_call->type == AST_CALL_EXPR);
+    XaCallableTargetSetFact exact_fact;
+    ASSERT(xa_analyzer_get_callable_target_set(a, exact_call, &exact_fact));
+    ASSERT(exact_fact.complete);
+    ASSERT(exact_fact.target_count == 1);
+    ASSERT(exact_fact.targets[0].symbol_id == first->id);
+
+    AstNode *branch = program->as.program.statements[3];
+    ASSERT(branch != NULL && branch->type == AST_FUNCTION_DECL);
+    AstNode *branch_body = branch->as.function_decl.body;
+    ASSERT(branch_body != NULL && branch_body->type == AST_BLOCK &&
+           branch_body->as.block.count == 4);
+    AstNode *branch_call_stmt = branch_body->as.block.statements[3];
+    ASSERT(branch_call_stmt != NULL && branch_call_stmt->type == AST_EXPR_STMT);
+    AstNode *branch_call = branch_call_stmt->as.expr_stmt;
+    ASSERT(branch_call != NULL && branch_call->type == AST_CALL_EXPR);
+    XaCallableTargetSetFact branch_fact;
+    ASSERT(xa_analyzer_get_callable_target_set(a, branch_call, &branch_fact));
+    ASSERT(branch_fact.complete);
+    ASSERT(branch_fact.target_count == 2);
+    ASSERT(branch_fact.targets[0].symbol_id == first->id);
+    ASSERT(branch_fact.targets[1].symbol_id == second->id);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_callable_target_set_does_not_guess_user_copy_by_name) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "fn original() { }\n"
+                         "fn replacement() { }\n"
+                         "fn copy(value: fn()) -> fn() { return replacement }\n"
+                         "fn run() {\n"
+                         "  var f = original\n"
+                         "  var copied = copy(f)\n"
+                         "  copied()\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "callable_target_set_user_copy.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+    ASSERT(program->as.program.count == 4);
+
+    XaSymbol *original = analyzer_function_symbol(a, "original");
+    XaSymbol *replacement = analyzer_function_symbol(a, "replacement");
+    XaSymbol *user_copy = analyzer_function_symbol(a, "copy");
+    ASSERT(original != NULL && original->id != 0);
+    ASSERT(replacement != NULL && replacement->id != 0);
+    ASSERT(user_copy != NULL && user_copy->id != 0 && !user_copy->is_builtin);
+
+    AstNode *run = program->as.program.statements[3];
+    ASSERT(run != NULL && run->type == AST_FUNCTION_DECL);
+    AstNode *body = run->as.function_decl.body;
+    ASSERT(body != NULL && body->type == AST_BLOCK && body->as.block.count == 3);
+    AstNode *copy_decl = body->as.block.statements[1];
+    ASSERT(copy_decl != NULL && copy_decl->type == AST_VAR_DECL);
+    AstNode *copy_call = copy_decl->as.var_decl.initializer;
+    ASSERT(copy_call != NULL && copy_call->type == AST_CALL_EXPR);
+    XaCallableTargetSetFact copy_fact;
+    ASSERT(xa_analyzer_get_callable_target_set(a, copy_call, &copy_fact));
+    ASSERT(copy_fact.complete);
+    ASSERT(copy_fact.target_count == 1);
+    ASSERT(copy_fact.targets[0].symbol_id == user_copy->id);
+
+    AstNode *invoke_stmt = body->as.block.statements[2];
+    ASSERT(invoke_stmt != NULL && invoke_stmt->type == AST_EXPR_STMT);
+    AstNode *invoke = invoke_stmt->as.expr_stmt;
+    ASSERT(invoke != NULL && invoke->type == AST_CALL_EXPR);
+    XaCallableTargetSetFact invoke_fact;
+    ASSERT(xa_analyzer_get_callable_target_set(a, invoke, &invoke_fact));
+    ASSERT(invoke_fact.complete);
+    ASSERT(invoke_fact.target_count == 1);
+    ASSERT(invoke_fact.targets[0].symbol_id == replacement->id);
+    ASSERT(invoke_fact.targets[0].symbol_id != original->id);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_callable_signature_identity_includes_typed_throw_effect) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "enum CallableIdentityError { Boom }\n"
+        "fn plain(value: i64) -> i64 { return value }\n"
+        "fn fallible(value: i64) -> i64 { throw CallableIdentityError.Boom }\n"
+        "fn run() {\n"
+        "  var direct = plain\n"
+        "  direct(1)\n"
+        "  var throwing = fallible\n"
+        "  try { throwing(2) } catch (error: CallableIdentityError) { }\n"
+        "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "callable_signature_throw_identity.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+    ASSERT(program->as.program.count == 4);
+
+    AstNode *run = program->as.program.statements[3];
+    ASSERT(run != NULL && run->type == AST_FUNCTION_DECL);
+    AstNode *body = run->as.function_decl.body;
+    ASSERT(body != NULL && body->type == AST_BLOCK && body->as.block.count == 4);
+    AstNode *direct_stmt = body->as.block.statements[1];
+    ASSERT(direct_stmt != NULL && direct_stmt->type == AST_EXPR_STMT);
+    AstNode *direct_call = direct_stmt->as.expr_stmt;
+    ASSERT(direct_call != NULL && direct_call->type == AST_CALL_EXPR);
+    AstNode *try_stmt = body->as.block.statements[3];
+    ASSERT(try_stmt != NULL && try_stmt->type == AST_TRY_CATCH);
+    AstNode *try_body = try_stmt->as.try_catch.try_body;
+    ASSERT(try_body != NULL && try_body->type == AST_BLOCK && try_body->as.block.count == 1);
+    AstNode *fallible_stmt = try_body->as.block.statements[0];
+    ASSERT(fallible_stmt != NULL && fallible_stmt->type == AST_EXPR_STMT);
+    AstNode *fallible_call = fallible_stmt->as.expr_stmt;
+    ASSERT(fallible_call != NULL && fallible_call->type == AST_CALL_EXPR);
+
+    XaCallableTargetSetFact direct_fact;
+    XaCallableTargetSetFact fallible_fact;
+    ASSERT(xa_analyzer_get_callable_target_set(a, direct_call, &direct_fact));
+    ASSERT(xa_analyzer_get_callable_target_set(a, fallible_call, &fallible_fact));
+    ASSERT(direct_fact.complete && direct_fact.target_count == 1);
+    ASSERT(fallible_fact.complete && fallible_fact.target_count == 1);
+    ASSERT(direct_fact.structural_signature_key != 0);
+    ASSERT(fallible_fact.structural_signature_key != 0);
+    ASSERT(direct_fact.structural_signature_key != fallible_fact.structural_signature_key);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3927,6 +4215,46 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     xa_analyzer_analyze(a, specs[4].source_path, entry_program);
     ASSERT(!analyzer_diag_contains(a, "error"));
 
+    XaSymbol *local_callback_symbol =
+        analyzer_function_symbol(a, "localCallbackForImportedHof");
+    ASSERT(local_callback_symbol != NULL);
+    AstNode *local_callback_decl = local_callback_symbol->links.function_decl_node;
+    ASSERT(local_callback_decl != NULL && local_callback_decl->type == AST_FUNCTION_DECL);
+    AstNode *local_callback_body = local_callback_decl->as.function_decl.body;
+    ASSERT(local_callback_body != NULL && local_callback_body->type == AST_BLOCK &&
+           local_callback_body->as.block.count == 1);
+    AstNode *local_callback_throw = local_callback_body->as.block.statements[0];
+    ASSERT(local_callback_throw != NULL && local_callback_throw->type == AST_THROW_STMT);
+    const XaSelection *local_callback_selection = xa_analyzer_get_selection(
+        a, local_callback_throw->as.throw_stmt.expression);
+    ASSERT(local_callback_selection != NULL &&
+           local_callback_selection->kind == XA_SEL_ENUM_MEMBER);
+    XaSymbol *callback_enum_view = local_callback_selection->target_symbol;
+    XrType *callback_enum_type = local_callback_selection->result_type;
+    XrClassInfo *callback_enum_nominal =
+        callback_enum_type && callback_enum_type->kind == XR_KIND_ENUM
+            ? callback_enum_type->enum_type.nominal_ref
+            : NULL;
+    XaSymbol *callback_enum_declaration =
+        callback_enum_nominal ? callback_enum_nominal->declaration_symbol : NULL;
+    ASSERT(callback_enum_view != NULL && callback_enum_view->kind == XA_SYM_ENUM);
+    ASSERT(callback_enum_view->is_imported);
+    ASSERT(callback_enum_nominal != NULL &&
+           callback_enum_nominal->nominal_kind == XA_NOMINAL_ENUM);
+    ASSERT(callback_enum_declaration != NULL && callback_enum_declaration != callback_enum_view);
+    ASSERT(callback_enum_view->links.class_info == callback_enum_nominal);
+    ASSERT(!callback_enum_view->links.owns_class_info);
+    ASSERT(callback_enum_view->links.type == callback_enum_declaration->links.type);
+    ASSERT(callback_enum_view->links.enum_info != NULL &&
+           callback_enum_view->links.enum_info->layout != NULL);
+    ASSERT(callback_enum_type->enum_type.layout == callback_enum_view->links.enum_info->layout);
+    ASSERT(callback_enum_declaration->links.enum_info != NULL &&
+           callback_enum_declaration->links.enum_info->layout != NULL);
+    ASSERT(callback_enum_view->links.enum_info->layout !=
+           callback_enum_declaration->links.enum_info->layout);
+    ASSERT(callback_enum_view->links.enum_info->layout->layout_id ==
+           callback_enum_declaration->links.enum_info->layout->layout_id);
+
     const XaEffectSummary *selective = analyzer_function_effect_summary(a, "viaSelective");
     const XaEffectSummary *ns = analyzer_function_effect_summary(a, "viaNamespace");
     const XaEffectSummary *reexported =
@@ -4425,6 +4753,24 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
 
     XaAnalyzer *current = xa_analyzer_new(g_session);
     ASSERT(current != NULL);
+    XaSymbol *utf8_error = xa_analyzer_lookup_deep(current, "Utf8Error");
+    XaSymbol *slice_error = xa_analyzer_lookup_deep(current, "StringSliceError");
+    ASSERT(utf8_error != NULL && utf8_error->kind == XA_SYM_ENUM);
+    ASSERT(slice_error != NULL && slice_error->kind == XA_SYM_ENUM);
+    ASSERT(utf8_error->links.class_info != NULL && utf8_error->links.owns_class_info);
+    ASSERT(slice_error->links.class_info != NULL && slice_error->links.owns_class_info);
+    ASSERT(utf8_error->links.class_info->nominal_kind == XA_NOMINAL_ENUM);
+    ASSERT(slice_error->links.class_info->nominal_kind == XA_NOMINAL_ENUM);
+    ASSERT(utf8_error->links.class_info->declaration_symbol == utf8_error);
+    ASSERT(slice_error->links.class_info->declaration_symbol == slice_error);
+    ASSERT(utf8_error->links.type != NULL && utf8_error->links.type->kind == XR_KIND_ENUM);
+    ASSERT(slice_error->links.type != NULL && slice_error->links.type->kind == XR_KIND_ENUM);
+    ASSERT(utf8_error->links.type->enum_type.nominal_ref == utf8_error->links.class_info);
+    ASSERT(slice_error->links.type->enum_type.nominal_ref == slice_error->links.class_info);
+    ASSERT(utf8_error->links.enum_info != NULL && utf8_error->links.enum_info->layout != NULL);
+    ASSERT(slice_error->links.enum_info != NULL && slice_error->links.enum_info->layout != NULL);
+    ASSERT(utf8_error->links.type->enum_type.layout == utf8_error->links.enum_info->layout);
+    ASSERT(slice_error->links.type->enum_type.layout == slice_error->links.enum_info->layout);
     const char *current_source = "fn currentStatic(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n"
                                  "fn currentInstance(s: string) { s.sliceBytes(0, 1) }\n"
                                  "fn currentLossy(bytes: Slice<u8>) { "
@@ -4457,6 +4803,29 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     ASSERT(xa_bitset_test(&current_instance_set->variants, 0));
     ASSERT(xa_effect_summary_is_nothrow(current_lossy));
     xa_analyzer_free(current);
+
+    XaAnalyzer *hostile = xa_analyzer_new(g_session);
+    ASSERT(hostile != NULL);
+    XaSymbol *hostile_utf8_error = xa_analyzer_lookup_deep(hostile, "Utf8Error");
+    ASSERT(hostile_utf8_error != NULL && hostile_utf8_error->links.type != NULL);
+    XrClassInfo *saved_utf8_nominal = hostile_utf8_error->links.type->enum_type.nominal_ref;
+    ASSERT(saved_utf8_nominal != NULL);
+    hostile_utf8_error->links.type->enum_type.nominal_ref = NULL;
+    const char *hostile_source =
+        "fn malformedPreludeIdentity(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n";
+    AstNode *hostile_program = xr_parse(g_session, hostile_source);
+    ASSERT(hostile_program != NULL);
+    xa_analyzer_analyze(hostile, "effect_builtin_type_member_malformed_identity.xr",
+                        hostile_program);
+    const XaEffectSummary *hostile_summary =
+        analyzer_function_effect_summary(hostile, "malformedPreludeIdentity");
+    ASSERT(hostile_summary != NULL);
+    ASSERT(hostile_summary->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((hostile_summary->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT(hostile_summary->escaping.count == 0);
+    ASSERT(!xa_effect_summary_is_nothrow(hostile_summary));
+    hostile_utf8_error->links.type->enum_type.nominal_ref = saved_utf8_nominal;
+    xa_analyzer_free(hostile);
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -7539,6 +7908,7 @@ int main(void) {
     RUN_TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
+    RUN_TEST(analyzer_enum_methods_publish_effect_summaries);
     RUN_TEST(analyzer_inferred_effects_accept_function_values);
     RUN_TEST(analyzer_call_context_accepts_u64_only_literals);
     RUN_TEST(analyzer_effect_inference_handles_redundant_try_catch);
@@ -7554,6 +7924,10 @@ int main(void) {
     RUN_TEST(analyzer_enum_record_pattern_rejects_noncanonical_forms);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
+    RUN_TEST(analyzer_callable_target_set_has_no_small_fixed_limit);
+    RUN_TEST(analyzer_callable_target_set_flows_through_builtin_copy);
+    RUN_TEST(analyzer_callable_target_set_does_not_guess_user_copy_by_name);
+    RUN_TEST(analyzer_callable_signature_identity_includes_typed_throw_effect);
     RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
     RUN_TEST(cycle_candidate_marks_every_field_shape);

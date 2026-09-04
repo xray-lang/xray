@@ -464,6 +464,28 @@ bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src) {
     return true;
 }
 
+const XiValue *xi_err_check_producer(const XiFunc *f, const XiValue *check) {
+    if (!f || !check || (check->op != XI_ERR_CHECK && check->op != XI_CLEANUP_ERR_CHECK) ||
+        !check->error_producer || !check->block || check->block->func != f)
+        return NULL;
+
+    bool check_is_live = false;
+    bool producer_is_live = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks ? f->blocks[bi] : NULL;
+        if (!block || block->func != f)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values ? block->values[vi] : NULL;
+            if (value == check)
+                check_is_live = true;
+            if (value == check->error_producer)
+                producer_is_live = true;
+        }
+    }
+    return check_is_live && producer_is_live ? check->error_producer : NULL;
+}
+
 XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode) {
     if (!f || index >= f->nparams || !f->params || !f->params[index])
         return false;
@@ -731,6 +753,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->aux_int = 0;
     v->aux = NULL;
     memset(&v->conversion, 0, sizeof(v->conversion));
+    v->error_producer = NULL;
     v->call_return_ownership.param_index = -1;
     v->result_alias_operand = -1;
     v->args = NULL;
@@ -742,6 +765,11 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->psc_call_index = XI_PSC_ROW_NONE;
     v->psc_type_index = XI_PSC_ROW_NONE;
     v->xg_callsite_id = 0;
+    v->xg_callable_target_start = 0;
+    v->xg_callable_target_count = 0;
+    v->xg_callable_signature_key = 0;
+    v->xg_callable_effect_union = 0;
+    v->xg_callable_capability_union = 0;
     v->xa_intrinsic_id = 0;
     v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_NONE;
     v->array_member_kind = XI_ARRAY_MEMBER_NONE;
@@ -750,6 +778,17 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->array_result_element_storage = XR_ELEM_ANY;
     v->xg_method_id = 0;
     v->xg_interface_dispatch_slot = UINT32_MAX;
+    v->xg_interface_object_use_id = 0;
+    v->xg_interface_id = 0;
+    v->xg_conformance_id = 0;
+    v->xg_implementor_decl_id = 0;
+    v->xg_nominal_key = 0;
+    v->xg_implementor_kind = 0;
+    v->xg_existential_kind = XI_EXISTENTIAL_NONE;
+    v->xg_interface_use_kind = XI_INTERFACE_USE_NONE;
+    v->xg_implementor_ownership = 0;
+    v->xg_implementor_copy_contract = 0;
+    v->xg_type_contract_complete = 0;
     v->xg_json_codec_id = 0;
     v->xg_object_access_id = 0;
     v->xg_object_merge_id = 0;

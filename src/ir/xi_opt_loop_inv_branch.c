@@ -321,6 +321,11 @@ static bool create_version(XiFunc *f, const XiLoop *loop, XiBlock *branch_block,
             return false;
         for (uint16_t a = 0; a < source->nargs; a++)
             clone->args[a] = resolve_value(&version->values, source->args[a]);
+        if (source->error_producer) {
+            clone->error_producer = resolve_value(&version->values, source->error_producer);
+            if (!clone->error_producer)
+                return false;
+        }
         if (!xi_value_clone_call_plan(f, clone, source))
             return false;
     }

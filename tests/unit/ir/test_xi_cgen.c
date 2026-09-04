@@ -11335,9 +11335,9 @@ TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
     XrType unit_type = {
         .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 1901, .frozen = true};
     XiValue *check =
-        xi_value_insert_after(caller, caller_call->block, caller_call, XI_ERR_CHECK, &unit_type, 1);
+        xi_value_insert_after(caller, caller_call->block, caller_call, XI_ERR_CHECK, &unit_type, 0);
     TEST_REQUIRE(check != NULL, "conservative error check inserted");
-    check->args[0] = caller_call;
+    check->error_producer = caller_call;
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     TEST_REQUIRE(ctx != NULL, "CGen context allocated");

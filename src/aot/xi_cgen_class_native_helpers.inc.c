@@ -5667,32 +5667,6 @@ static bool emit_class_native_getter_field_expr(XiCgenCtx *ctx, FILE *out, const
     return emit_class_native_method_call_expr(ctx, out, f, prefix, v, mfunc, method_prefix);
 }
 
-static const XiValue *cg_class_native_prev_block_value(const XiValue *site) {
-    if (!site || !site->block)
-        return NULL;
-    const XiValue *prev = NULL;
-    for (uint32_t i = 0; i < site->block->nvalues; i++) {
-        const XiValue *cur = site->block->values[i];
-        if (cur == site)
-            break;
-        if (cur)
-            prev = cur;
-    }
-    return prev;
-}
-
-static const XiValue *cg_class_native_prev_error_source_value(const XiValue *site) {
-    const XiValue *prev = cg_class_native_prev_block_value(site);
-    for (uint8_t depth = 0; prev && depth < 8; depth++) {
-        bool passthrough = xi_op_is_identity_forward(prev->op) || xi_copy_is_identity_alias(prev) ||
-                           xi_generated_op_class(prev->op) == XI_GEN_CLASS_CONVERSION;
-        if (!passthrough || prev->nargs < 1)
-            break;
-        prev = prev->args[0];
-    }
-    return prev;
-}
-
 static const XiFunc *cg_class_native_resolve_method_call(XiCgenCtx *ctx, const XiFunc *current,
                                                          const XiValue *call,
                                                          const char **out_prefix) {
@@ -6453,7 +6427,7 @@ static bool cg_class_native_err_check_is_dead(XiCgenCtx *ctx, const XiFunc *curr
                                               const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    const XiValue *source = cg_class_native_prev_error_source_value(check);
+    const XiValue *source = xi_err_check_producer(current, check);
     return cg_class_native_value_is_nothrow_lowlevel(ctx, current, source, 0) ||
            cg_class_native_call_is_nothrow_direct(ctx, current, source);
 }

@@ -9854,34 +9854,6 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
     return xicgen_call_is_nothrow_direct_depth(ctx, current, v, depth);
 }
 
-/* ARC and representation cleanup can legally be scheduled between a
- * may-throw producer and its XI_ERR_CHECK.  Those intervening values cannot
- * publish a pending error, so recover the nearest preceding MAY_THROW value
- * instead of assuming physical adjacency.  Stop at an earlier ERR_CHECK to
- * avoid attributing a check across an already-consumed error boundary. */
-static const XiValue *xicgen_prev_pending_error_source(const XiValue *check) {
-    if (!check || check->op != XI_ERR_CHECK || !check->block)
-        return NULL;
-    for (uint32_t i = 0; i < check->block->nvalues; i++) {
-        if (check->block->values[i] != check)
-            continue;
-        while (i > 0) {
-            const XiValue *candidate = check->block->values[--i];
-            if (!candidate)
-                continue;
-            candidate = cg_unwrap_identity_value(candidate);
-            if (!candidate)
-                continue;
-            if (candidate->op == XI_ERR_CHECK)
-                return NULL;
-            if ((candidate->flags & XI_FLAG_MAY_THROW) != 0)
-                return candidate;
-        }
-        break;
-    }
-    return NULL;
-}
-
 static bool xicgen_assert_is_parallel_body_safe(XiCgenCtx *ctx, const XiFunc *current,
                                                 const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
@@ -9902,17 +9874,7 @@ static bool xicgen_err_check_after_proven_nothrow(XiCgenCtx *ctx, const XiFunc *
                                                   const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    /* Keep the ordinary adjacent producer as the primary source.  Besides
-     * calls, Xi can place a proven-nothrow scalar/pointer value immediately
-     * before an ERR_CHECK; restricting recovery to MAY_THROW values would
-     * incorrectly resurrect the TLS probe for those established cases.
-     * Vector stores are the exceptional shape that can have ARC/rep cleanup
-     * between the producer and check, so only fall back to the backwards
-     * MAY_THROW search when the adjacent value is not itself proven safe. */
-    const XiValue *adjacent = cg_class_native_prev_error_source_value(check);
-    if (xicgen_value_is_proven_nothrow(ctx, current, adjacent, 0))
-        return true;
-    return xicgen_value_is_proven_nothrow(ctx, current, xicgen_prev_pending_error_source(check), 0);
+    return xicgen_value_is_proven_nothrow(ctx, current, xi_err_check_producer(current, check), 0);
 }
 
 static bool xicgen_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth) {

@@ -36,6 +36,10 @@ typedef struct XaNodeEntry {
     XrConversionWitness conversion;
     bool has_call_error_effect;
     XaCallErrorEffectFact call_error_effect;
+    bool has_function_expr_effect;
+    XaFunctionExprEffectFact function_expr_effect;
+    bool has_callable_target_set;
+    XaCallableTargetSetFact callable_target_set;
     struct XaNodeEntry *next;
 } XaNodeEntry;
 
@@ -79,6 +83,7 @@ void xa_node_table_free(XaNodeTable *t) {
         XaNodeEntry *e = t->buckets[i];
         while (e) {
             XaNodeEntry *next = e->next;
+            xr_free((void *) e->callable_target_set.targets);
             xr_free(e);
             e = next;
         }
@@ -94,6 +99,7 @@ void xa_node_table_clear(XaNodeTable *t) {
         XaNodeEntry *e = t->buckets[i];
         while (e) {
             XaNodeEntry *next = e->next;
+            xr_free((void *) e->callable_target_set.targets);
             xr_free(e);
             e = next;
         }
@@ -164,7 +170,7 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 
 static bool entry_has_no_facts(const XaNodeEntry *e) {
     return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion &&
-           !e->has_call_error_effect;
+           !e->has_call_error_effect && !e->has_function_expr_effect && !e->has_callable_target_set;
 }
 
 static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
@@ -176,6 +182,7 @@ static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
         if ((*pp)->node_id == id) {
             XaNodeEntry *to_free = *pp;
             *pp = to_free->next;
+            xr_free((void *) to_free->callable_target_set.targets);
             xr_free(to_free);
             t->size--;
             return;
@@ -416,22 +423,240 @@ bool xa_node_table_snapshot_call_error_effects(const XaNodeTable *t,
     return true;
 }
 
-void xa_node_table_clear_call_error_effects(XaNodeTable *t) {
-    if (!t)
+void xa_node_table_clear_call_error_effect(XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
         return;
+    XaNodeEntry *entry = (XaNodeEntry *) find_entry(t, node->node_id);
+    if (!entry || !entry->has_call_error_effect)
+        return;
+    entry->has_call_error_effect = false;
+    entry->call_error_effect = (XaCallErrorEffectFact) {0};
+    if (entry_has_no_facts(entry))
+        remove_entry_by_id(t, node->node_id);
+}
+
+static bool function_expr_effect_fact_valid(const XaFunctionExprEffectFact *fact) {
+    if (!fact || fact->effect_id == XA_EFFECT_NONE ||
+        (fact->throw_effect != XR_FN_EFFECT_NO_THROW &&
+         fact->throw_effect != XR_FN_EFFECT_MAY_THROW) ||
+        (fact->completeness != XA_EFFECT_COMPLETE && fact->completeness != XA_EFFECT_INCOMPLETE))
+        return false;
+    return fact->completeness != XA_EFFECT_COMPLETE || fact->unknown_reasons == XA_UNKNOWN_NONE;
+}
+
+bool xa_node_table_set_function_expr_effect(XaNodeTable *t, const struct AstNode *node,
+                                            const XaFunctionExprEffectFact *fact) {
+    if (!t || !node || node->type != AST_FUNCTION_EXPR || !function_expr_effect_fact_valid(fact))
+        return false;
+    XaNodeEntry *entry = find_or_create(t, node->node_id);
+    if (!entry)
+        return false;
+    entry->has_function_expr_effect = true;
+    entry->function_expr_effect = *fact;
+    return true;
+}
+
+bool xa_node_table_get_function_expr_effect(const XaNodeTable *t, const struct AstNode *node,
+                                            XaFunctionExprEffectFact *out_fact) {
+    if (!t || !node || node->type != AST_FUNCTION_EXPR)
+        return false;
+    const XaNodeEntry *entry = find_entry(t, node->node_id);
+    if (!entry || !entry->has_function_expr_effect)
+        return false;
+    if (out_fact)
+        *out_fact = entry->function_expr_effect;
+    return true;
+}
+
+static int compare_node_function_expr_effect_entry(const void *left, const void *right) {
+    const XaNodeFunctionExprEffectEntry *a = (const XaNodeFunctionExprEffectEntry *) left;
+    const XaNodeFunctionExprEffectEntry *b = (const XaNodeFunctionExprEffectEntry *) right;
+    return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
+}
+
+bool xa_node_table_snapshot_function_expr_effects(const XaNodeTable *t,
+                                                  XaNodeFunctionExprEffectEntry **out_entries,
+                                                  uint32_t *out_count) {
+    if (!out_entries || !out_count)
+        return false;
+    *out_entries = NULL;
+    *out_count = 0;
+    if (!t)
+        return false;
+
+    uint32_t count = 0;
     for (int i = 0; i < t->bucket_count; i++) {
-        XaNodeEntry **link = &t->buckets[i];
-        while (*link) {
-            XaNodeEntry *entry = *link;
-            entry->has_call_error_effect = false;
-            entry->call_error_effect = (XaCallErrorEffectFact) {0};
-            if (entry_has_no_facts(entry)) {
-                *link = entry->next;
-                xr_free(entry);
-                t->size--;
-                continue;
-            }
-            link = &entry->next;
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (entry->has_function_expr_effect)
+                count++;
         }
     }
+    if (count == 0)
+        return true;
+
+    XaNodeFunctionExprEffectEntry *entries =
+        (XaNodeFunctionExprEffectEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
+    if (!entries)
+        return false;
+    uint32_t index = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (!entry->has_function_expr_effect)
+                continue;
+            entries[index].node_id = entry->node_id;
+            entries[index].fact = entry->function_expr_effect;
+            index++;
+        }
+    }
+    qsort(entries, count, sizeof(*entries), compare_node_function_expr_effect_entry);
+    *out_entries = entries;
+    *out_count = count;
+    return true;
+}
+
+void xa_node_table_clear_function_expr_effect(XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return;
+    XaNodeEntry *entry = (XaNodeEntry *) find_entry(t, node->node_id);
+    if (!entry || !entry->has_function_expr_effect)
+        return;
+    entry->has_function_expr_effect = false;
+    entry->function_expr_effect = (XaFunctionExprEffectFact) {0};
+    if (entry_has_no_facts(entry))
+        remove_entry_by_id(t, node->node_id);
+}
+
+static int callable_target_compare(const XaCallableTarget *a, const XaCallableTarget *b) {
+    if (a->function_node_id != b->function_node_id)
+        return a->function_node_id < b->function_node_id ? -1 : 1;
+    if (a->symbol_id != b->symbol_id)
+        return a->symbol_id < b->symbol_id ? -1 : 1;
+    return 0;
+}
+
+static bool callable_target_set_valid(const XaCallableTargetSetFact *fact) {
+    if (!fact)
+        return false;
+    if (!fact->complete)
+        return fact->target_count == 0 && fact->structural_signature_key == 0 && !fact->targets;
+    if (fact->target_count == 0 || fact->structural_signature_key == 0 || !fact->targets)
+        return false;
+    for (uint32_t i = 0; i < fact->target_count; i++) {
+        const XaCallableTarget *target = &fact->targets[i];
+        if ((target->function_node_id == 0 && target->symbol_id == 0) ||
+            target->structural_signature_key != fact->structural_signature_key ||
+            (i > 0 && callable_target_compare(&fact->targets[i - 1], target) >= 0))
+            return false;
+    }
+    return true;
+}
+
+bool xa_node_table_set_callable_target_set(XaNodeTable *t, const struct AstNode *node,
+                                           const XaCallableTargetSetFact *fact) {
+    if (!t || !node || !callable_target_set_valid(fact))
+        return false;
+    XaNodeEntry *entry = find_or_create(t, node->node_id);
+    if (!entry)
+        return false;
+    XaCallableTarget *targets = NULL;
+    if (fact->target_count > 0) {
+        targets = (XaCallableTarget *) xr_malloc(sizeof(*targets) * (size_t) fact->target_count);
+        if (!targets)
+            return false;
+        memcpy(targets, fact->targets, sizeof(*targets) * (size_t) fact->target_count);
+    }
+    xr_free((void *) entry->callable_target_set.targets);
+    entry->has_callable_target_set = true;
+    entry->callable_target_set = *fact;
+    entry->callable_target_set.targets = targets;
+    return true;
+}
+
+bool xa_node_table_get_callable_target_set(const XaNodeTable *t, const struct AstNode *node,
+                                           XaCallableTargetSetFact *out_fact) {
+    if (!t || !node)
+        return false;
+    const XaNodeEntry *entry = find_entry(t, node->node_id);
+    if (!entry || !entry->has_callable_target_set)
+        return false;
+    if (out_fact)
+        *out_fact = entry->callable_target_set;
+    return true;
+}
+
+static int compare_node_callable_target_set_entry(const void *left, const void *right) {
+    const XaNodeCallableTargetSetEntry *a = (const XaNodeCallableTargetSetEntry *) left;
+    const XaNodeCallableTargetSetEntry *b = (const XaNodeCallableTargetSetEntry *) right;
+    return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
+}
+
+bool xa_node_table_snapshot_callable_target_sets(const XaNodeTable *t,
+                                                 XaNodeCallableTargetSetEntry **out_entries,
+                                                 uint32_t *out_count) {
+    if (!out_entries || !out_count)
+        return false;
+    *out_entries = NULL;
+    *out_count = 0;
+    if (!t)
+        return false;
+    uint32_t count = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (entry->has_callable_target_set)
+                count++;
+        }
+    }
+    if (count == 0)
+        return true;
+    XaNodeCallableTargetSetEntry *entries =
+        (XaNodeCallableTargetSetEntry *) xr_calloc(count, sizeof(*entries));
+    if (!entries)
+        return false;
+    uint32_t index = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (!entry->has_callable_target_set)
+                continue;
+            entries[index].node_id = entry->node_id;
+            entries[index].fact = entry->callable_target_set;
+            if (entry->callable_target_set.target_count > 0) {
+                XaCallableTarget *targets = (XaCallableTarget *) xr_malloc(
+                    sizeof(*targets) * (size_t) entry->callable_target_set.target_count);
+                if (!targets) {
+                    xa_node_callable_target_set_entries_free(entries, count);
+                    return false;
+                }
+                memcpy(targets, entry->callable_target_set.targets,
+                       sizeof(*targets) * (size_t) entry->callable_target_set.target_count);
+                entries[index].fact.targets = targets;
+            }
+            index++;
+        }
+    }
+    qsort(entries, count, sizeof(*entries), compare_node_callable_target_set_entry);
+    *out_entries = entries;
+    *out_count = count;
+    return true;
+}
+
+void xa_node_callable_target_set_entries_free(XaNodeCallableTargetSetEntry *entries,
+                                              uint32_t count) {
+    if (!entries)
+        return;
+    for (uint32_t i = 0; i < count; i++)
+        xr_free((void *) entries[i].fact.targets);
+    xr_free(entries);
+}
+
+void xa_node_table_clear_callable_target_set(XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return;
+    XaNodeEntry *entry = (XaNodeEntry *) find_entry(t, node->node_id);
+    if (!entry || !entry->has_callable_target_set)
+        return;
+    entry->has_callable_target_set = false;
+    xr_free((void *) entry->callable_target_set.targets);
+    entry->callable_target_set = (XaCallableTargetSetFact) {0};
+    if (entry_has_no_facts(entry))
+        remove_entry_by_id(t, node->node_id);
 }

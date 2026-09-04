@@ -126,6 +126,9 @@ _DUMPBIN_SYMBOL_RE = re.compile(
     r"(?P<section>UNDEF|SECT[0-9A-F]+|ABS)\s+.*?\|\s*(?P<symbol>\S.*)$",
     re.IGNORECASE,
 )
+_DUMPBIN_SYMBOL_ROW_PREFIX = re.compile(
+    r"^\s*[0-9A-F]+\s+[0-9A-F]+(?:\s|$)", re.IGNORECASE
+)
 _POSIX_NM_SYMBOL_RE = re.compile(
     r"^(?:.*?:\s+)?(?P<symbol>\S+)\s+(?P<kind>[A-Za-z?])"
     r"(?:\s+(?:[0-9A-Fa-f]+|-))?(?:\s+(?:[0-9A-Fa-f]+|-))?\s*$"
@@ -136,6 +139,8 @@ def _normalize_dumpbin_symbols(raw: str) -> "tuple[str | None, str]":
     symbols: "list[str]" = []
     for line in raw.splitlines():
         if "|" not in line:
+            if _DUMPBIN_SYMBOL_ROW_PREFIX.match(line):
+                return None, "unrecognized dumpbin symbol row"
             continue
         match = _DUMPBIN_SYMBOL_RE.match(line)
         if not match:
@@ -341,6 +346,34 @@ def _parse_msvc_link_map(
         if not any(owner.startswith(prefix) for owner in folded_owners):
             return None, None, f"linker map does not cover final archive input: {Path(path).name}"
     return "\n".join(symbols), pe_timestamp, ""
+
+
+def load_msvc_link_map_symbols(
+    binary: Path, map_path: Path
+) -> "tuple[bool, str]":
+    """Load a linker-map inventory bound to the exact sibling PE image."""
+    if binary.is_symlink():
+        return False, "target PE image must not be a symlink"
+    if map_path.is_symlink():
+        return False, "target PE linker map must not be a symlink"
+    binary = binary.resolve()
+    map_path = map_path.resolve()
+    if map_path.parent != binary.parent or map_path.suffix.lower() != ".map":
+        return False, "linker map is not owned beside the target PE image"
+    if not binary.is_file():
+        return False, "target PE image is missing"
+    if not map_path.is_file():
+        return False, "target PE linker map is missing"
+    try:
+        map_text = map_path.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeError) as exc:
+        return False, f"cannot read linker map as strict UTF-8: {exc}"
+    symbols, _timestamp, error = _parse_msvc_link_map(
+        map_text, binary, (), ()
+    )
+    if symbols is None:
+        return False, error
+    return True, symbols
 
 
 def capture_msvc_link_map(

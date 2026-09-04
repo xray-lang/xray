@@ -11,6 +11,7 @@
 #include "xa_effect_db.h"
 #include "../../base/xhash.h"
 #include "../../base/xmalloc.h"
+#include "../../runtime/class/xclass_info.h"
 #include "../../runtime/value/xtype.h"
 #include "../../shared/xr_hash_core.h"
 #include <stdio.h>
@@ -205,20 +206,98 @@ void xa_effect_db_free(XaEffectDatabase *db) {
     xr_free(db);
 }
 
-static uint64_t stable_key_text2(const char *prefix, const char *name) {
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%s:%s", prefix ? prefix : "", name ? name : "<anonymous>");
-    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
+XR_NO_SANITIZE_UNSIGNED
+static uint64_t stable_key_fold_bytes(uint64_t hash, const void *data, size_t size) {
+    const uint8_t *bytes = (const uint8_t *) data;
+    for (size_t index = 0u; index < size; ++index) {
+        hash ^= bytes[index];
+        hash *= XR_FNV64_PRIME;
+    }
+    return hash;
+}
+
+static uint64_t stable_key_fold_u32(uint64_t hash, uint32_t value) {
+    uint8_t bytes[4] = {(uint8_t) (value >> 24), (uint8_t) (value >> 16), (uint8_t) (value >> 8),
+                        (uint8_t) value};
+    return stable_key_fold_bytes(hash, bytes, sizeof(bytes));
+}
+
+static uint64_t stable_key_fold_u64(uint64_t hash, uint64_t value) {
+    uint8_t bytes[8] = {(uint8_t) (value >> 56), (uint8_t) (value >> 48), (uint8_t) (value >> 40),
+                        (uint8_t) (value >> 32), (uint8_t) (value >> 24), (uint8_t) (value >> 16),
+                        (uint8_t) (value >> 8),  (uint8_t) value};
+    return stable_key_fold_bytes(hash, bytes, sizeof(bytes));
+}
+
+static uint64_t stable_key_fold_text(uint64_t hash, const char *text) {
+    size_t length = text ? strlen(text) : 0u;
+    if (length > UINT32_MAX)
+        return 0u;
+    hash = stable_key_fold_u32(hash, (uint32_t) length);
+    return stable_key_fold_bytes(hash, text, length);
+}
+
+static bool exact_error_enum_type(const XrType *type) {
+    const XrEnumLayout *layout = type && type->kind == XR_KIND_ENUM ? type->enum_type.layout : NULL;
+    const XrClassInfo *nominal =
+        type && type->kind == XR_KIND_ENUM ? type->enum_type.nominal_ref : NULL;
+    if (!layout || !nominal || nominal->nominal_kind != XA_NOMINAL_ENUM ||
+        !nominal->declaration_symbol || !type->enum_type.enum_name || !layout->nominal_owner ||
+        !layout->nominal_owner[0] || !layout->name ||
+        strcmp(type->enum_type.enum_name, layout->name) != 0 || layout->layout_id == 0u ||
+        type->enum_type.layout_id != layout->layout_id || layout->variant_count == 0u ||
+        !layout->variants || xr_enum_layout_nominal_id(layout) != layout->layout_id)
+        return false;
+    for (uint32_t variant = 0u; variant < layout->variant_count; ++variant) {
+        const XrEnumVariantLayout *row = &layout->variants[variant];
+        if (!row->name || !row->name[0] || row->tag != variant ||
+            !xr_enum_variant_payload_metadata_is_exact(row))
+            return false;
+        for (uint32_t prior = 0u; prior < variant; ++prior) {
+            if (strcmp(row->name, layout->variants[prior].name) == 0)
+                return false;
+        }
+    }
+    return true;
+}
+
+static uint64_t stable_error_enum_key(const XrType *type) {
+    static const char domain[] = "xray.error.enum.v2";
+    if (!exact_error_enum_type(type))
+        return 0u;
+    const XrEnumLayout *layout = type->enum_type.layout;
+    uint64_t key = stable_key_fold_bytes(XR_FNV64_OFFSET_BASIS, domain, sizeof(domain) - 1u);
+    key = stable_key_fold_text(key, layout->nominal_owner);
+    key = stable_key_fold_text(key, layout->name);
+    key = stable_key_fold_u32(key, layout->layout_id);
     return key ? key : 1u;
 }
 
-static uint64_t stable_key_text3(const char *prefix, const char *type_name,
-                                 const char *variant_name) {
-    char buf[768];
-    snprintf(buf, sizeof(buf), "%s:%s.%s", prefix ? prefix : "", type_name ? type_name : "?",
-             variant_name ? variant_name : "?");
-    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
+static uint64_t stable_error_variant_key(uint64_t type_key, uint32_t ordinal, const char *name) {
+    static const char domain[] = "xray.error.variant.v2";
+    if (type_key == 0u || !name || !name[0])
+        return 0u;
+    uint64_t key = stable_key_fold_bytes(XR_FNV64_OFFSET_BASIS, domain, sizeof(domain) - 1u);
+    key = stable_key_fold_u64(key, type_key);
+    key = stable_key_fold_u32(key, ordinal);
+    key = stable_key_fold_text(key, name);
     return key ? key : 1u;
+}
+
+static bool exact_error_enum_identity_equal(const XrType *left, const XrType *right) {
+    if (!exact_error_enum_type(left) || !exact_error_enum_type(right))
+        return false;
+    const XrEnumLayout *a = left->enum_type.layout;
+    const XrEnumLayout *b = right->enum_type.layout;
+    if (a->layout_id != b->layout_id || a->variant_count != b->variant_count ||
+        strcmp(a->nominal_owner, b->nominal_owner) != 0 || strcmp(a->name, b->name) != 0)
+        return false;
+    for (uint32_t variant = 0u; variant < a->variant_count; ++variant) {
+        if (a->variants[variant].payload_count != b->variants[variant].payload_count ||
+            strcmp(a->variants[variant].name, b->variants[variant].name) != 0)
+            return false;
+    }
+    return true;
 }
 
 static char *dup_cstr(const char *s) {
@@ -256,22 +335,43 @@ XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db, uint64_t st
 }
 
 XaErrorTypeId xa_effect_db_register_error_enum(XaEffectDatabase *db, XrType *enum_type) {
-    if (!db || !enum_type || !XR_TYPE_IS_ENUM(enum_type))
+    uint64_t type_key = stable_error_enum_key(enum_type);
+    if (!db || type_key == 0u)
         return XA_ERROR_TYPE_NONE;
-    const char *name = enum_type->enum_type.enum_name;
-    XaErrorTypeId type_id =
-        xa_effect_db_register_error_type(db, stable_key_text2("enum", name), enum_type);
-    xa_effect_db_set_error_type_name(db, type_id, name);
-    const XrEnumLayout *layout = enum_type->enum_type.layout;
-    if (type_id != XA_ERROR_TYPE_NONE && layout) {
-        for (uint32_t i = 0; i < layout->variant_count; i++) {
-            const char *variant_name = layout->variants[i].name;
-            XaErrorVariantId variant_id = xa_effect_db_register_error_variant(
-                db, type_id, stable_key_text3("variant", name, variant_name));
-            xa_effect_db_set_error_variant_name(db, type_id, variant_id, variant_name);
-        }
+    for (uint32_t index = 0u; index < db->error_type_count; ++index) {
+        const XaErrorTypeInfo *existing = &db->error_types[index];
+        if (existing->stable_key == type_key && existing->type_handle &&
+            !exact_error_enum_identity_equal(existing->type_handle, enum_type))
+            return XA_ERROR_TYPE_NONE;
     }
+    const XrEnumLayout *layout = enum_type->enum_type.layout;
+    const char *name = layout->name;
+    XaErrorTypeId type_id = xa_effect_db_register_error_type(db, type_key, enum_type);
+    XaErrorTypeInfo *info = db_type_info_mut(db, type_id);
+    if (!info || !exact_error_enum_identity_equal(info->type_handle, enum_type))
+        return XA_ERROR_TYPE_NONE;
+    xa_effect_db_set_error_type_name(db, type_id, name);
+    for (uint32_t i = 0; i < layout->variant_count; i++) {
+        const char *variant_name = layout->variants[i].name;
+        XaErrorVariantId variant_id = xa_effect_db_register_error_variant(
+            db, type_id, stable_error_variant_key(type_key, i, variant_name));
+        if (variant_id != i)
+            return XA_ERROR_TYPE_NONE;
+        xa_effect_db_set_error_variant_name(db, type_id, variant_id, variant_name);
+    }
+    if (info->variant_count != layout->variant_count)
+        return XA_ERROR_TYPE_NONE;
     return type_id;
+}
+
+void xa_effect_db_detach_error_types_for_nominal(XaEffectDatabase *db, const XrClassInfo *nominal) {
+    if (!db || !nominal)
+        return;
+    for (uint32_t index = 0u; index < db->error_type_count; ++index) {
+        XrType *handle = db->error_types[index].type_handle;
+        if (handle && handle->kind == XR_KIND_ENUM && handle->enum_type.nominal_ref == nominal)
+            db->error_types[index].type_handle = NULL;
+    }
 }
 
 XaErrorVariantId xa_effect_db_register_error_variant(XaEffectDatabase *db, XaErrorTypeId type_id,

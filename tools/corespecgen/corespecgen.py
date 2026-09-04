@@ -579,13 +579,15 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         interface_use = actual.get("interface_use")
         expected_category = "place" if interface_use == "ref" else "value"
         expected_ownership = "owner" if interface_use in {"move", "owned-storage"} else "non-owner"
+        operand_ownership = actual.get("operand_ownership")
         return (actual.get("concrete_nominal") is True
                 and actual.get("conformance_interface") == actual.get("existential_interface")
                 and interface_use in {"read", "ref", "move", "owned-storage"}
                 and actual.get("operand_category") == expected_category
                 and actual.get("result_category") == "value"
                 and actual.get("result_ownership") == expected_ownership
-                and (interface_use != "read" or actual.get("operand_ownership") == "non-owner"))
+                and (interface_use != "read"
+                     or operand_ownership in {"non-owner", "owner"}))
     if validator == "existential-test":
         return (actual.get("requested_nominal") is True
                 and actual.get("conformance_interface") == actual.get("operand_interface")

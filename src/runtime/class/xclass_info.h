@@ -49,6 +49,35 @@ typedef struct XaMethodSlot {
     int vtable_index;    // Slot index in vtable (-1 if not virtual)
 } XaMethodSlot;
 
+/* A declaration-backed interface conformance is resolved once by the
+ * analyzer.  Downstream
+ * stages consume these exact symbols; they must never
+ * reconstruct a witness table from method
+ * names or backend body shape. */
+typedef enum XaNominalKind {
+    XA_NOMINAL_INVALID = 0,
+    XA_NOMINAL_CLASS,
+    XA_NOMINAL_STRUCT,
+    XA_NOMINAL_ENUM,
+} XaNominalKind;
+
+typedef struct XaInterfaceWitness {
+    XaSymbol *requirement;
+    XaSymbol *implementation;
+    uint32_t slot;
+    bool complete;
+} XaInterfaceWitness;
+
+typedef struct XaInterfaceConformance {
+    struct XrClassInfo *interface_info;
+    XrType *interface_type;
+    XaInterfaceWitness *witnesses;
+    int witness_count;
+    bool constraint_eligible;
+    bool existential_eligible;
+    bool complete;
+} XaInterfaceConformance;
+
 // Class metadata. Fields are filled during analysis and remain stable at runtime.
 typedef struct XrClassInfo XrClassInfo;
 struct XrClassInfo {
@@ -99,12 +128,21 @@ struct XrClassInfo {
     XrType **interface_types;
     int interface_count;
 
+    /* Immutable analyzer verdicts for declaration-backed interfaces. */
+    XaInterfaceConformance *interface_conformances;
+    int interface_conformance_count;
+    uint8_t nominal_kind;         /* XaNominalKind */
+    XaSymbol *declaration_symbol; /* exact analyzer declaration identity */
+
     // Stable global-evidence class id for this declaration (0 = none). The
     // evidence producer backfills it while building the class summary so that
     // IR lowering can resolve a field access to the exact declaring class even
     // when two modules export classes that share a name -- name-based lookup is
     // ambiguous across such twins, this id is not.
     uint32_t xg_class_id;
+    uint32_t xg_decl_id;
+    uint32_t xg_interface_id;
+    uint64_t xg_nominal_key;
 
     XrLocation location;
 };

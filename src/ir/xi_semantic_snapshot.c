@@ -283,6 +283,7 @@ static XrClassInfo *snapshot_class_info(XiSemanticSnapshot *snapshot, const XrCl
         return NULL;
     }
     *copy = *source;
+    copy->declaration_symbol = NULL;
     copy->name = snapshot_strdup(snapshot, source->name);
     copy->base_name = snapshot_strdup(snapshot, source->base_name);
     copy->location.file = snapshot_strdup(snapshot, source->location.file);
@@ -311,6 +312,8 @@ static XrClassInfo *snapshot_class_info(XiSemanticSnapshot *snapshot, const XrCl
     copy->constructor_param_count = 0;
     copy->interface_types = NULL;
     copy->interface_count = 0;
+    copy->interface_conformances = NULL;
+    copy->interface_conformance_count = 0;
 
     copy->base = snapshot_class_info(snapshot, source->base);
     copy->struct_layout = snapshot_aggregate_layout(snapshot, source->struct_layout);
@@ -506,9 +509,12 @@ static XrType *snapshot_type(XiSemanticSnapshot *snapshot, const XrType *source)
             break;
         case XR_KIND_ENUM:
             copy->enum_type.enum_name = snapshot_strdup(snapshot, source->enum_type.enum_name);
+            copy->enum_type.nominal_ref =
+                snapshot_class_info(snapshot, source->enum_type.nominal_ref);
             copy->enum_type.layout = snapshot_enum_layout(snapshot, source->enum_type.layout);
             ok =
                 (!source->enum_type.enum_name || copy->enum_type.enum_name) &&
+                (!source->enum_type.nominal_ref || copy->enum_type.nominal_ref) &&
                 (!source->enum_type.layout || copy->enum_type.layout) &&
                 snapshot_type_vector(snapshot, &copy->enum_type.type_args,
                                      source->enum_type.type_args, source->enum_type.type_arg_count);
@@ -606,9 +612,16 @@ static bool snapshot_class_data(XiSemanticSnapshot *snapshot, XiClassData *data)
     return !snapshot->failed;
 }
 
-static bool snapshot_value(XiSemanticSnapshot *snapshot, XiValue *value) {
+static bool snapshot_value(XiSemanticSnapshot *snapshot, XiFunc *func, XiValue *value) {
     if (!value)
         return true;
+    bool is_error_check = value->op == XI_ERR_CHECK || value->op == XI_CLEANUP_ERR_CHECK;
+    if ((is_error_check && !xi_err_check_producer(func, value)) ||
+        (!is_error_check && value->error_producer)) {
+        snapshot_note_failure(snapshot, "Xi error-check producer identity");
+        snapshot->failure_value_op = (int) value->op;
+        return false;
+    }
     XrType *source_type = value->type;
     XrType *source_owner = value->enum_metadata_owner;
     value->type = snapshot_type(snapshot, source_type);
@@ -734,13 +747,13 @@ static bool snapshot_func(XiSemanticSnapshot *snapshot, XiFunc *func) {
         if (!block)
             continue;
         for (XiPhi *phi = block->phis; phi; phi = phi->next) {
-            if (!snapshot_value(snapshot, &phi->value)) {
+            if (!snapshot_value(snapshot, func, &phi->value)) {
                 snapshot_note_failure(snapshot, "phi metadata");
                 return false;
             }
         }
         for (uint32_t vi = 0; vi < block->nvalues; vi++) {
-            if (!snapshot_value(snapshot, block->values ? block->values[vi] : NULL)) {
+            if (!snapshot_value(snapshot, func, block->values ? block->values[vi] : NULL)) {
                 snapshot_note_failure(snapshot, "instruction metadata");
                 return false;
             }

@@ -355,7 +355,8 @@ def run_changed(binary: str, base: str) -> int:
             continue
         if is_generated(absolute):
             continue
-        if not any(str(path).startswith(f"{d}/") for d in SCAN_DIRS):
+        normalized = path.as_posix()
+        if not any(normalized.startswith(f"{d}/") for d in SCAN_DIRS):
             continue
         checkable[path] = line_ranges
 
@@ -401,7 +402,8 @@ def run_changed_fix(binary: str, base: str) -> int:
         absolute = REPO_ROOT / path
         if not absolute.is_file() or is_generated(absolute):
             continue
-        if not any(str(path).startswith(f"{d}/") for d in SCAN_DIRS):
+        normalized = path.as_posix()
+        if not any(normalized.startswith(f"{d}/") for d in SCAN_DIRS):
             continue
         command = [binary, "-i"]
         command += [f"--lines={start}:{end}" for start, end in line_ranges]

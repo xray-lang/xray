@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "dfd6db4f2d5fd4e6313bdc2fde1f56dca4d9b621690fd31dc421280cb6e73e3f",
+  "canonical_fingerprint": "60d89b538bd542586b1abb4e39648180bac3e2f1c6ce04e6ee728395f0848b60",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -4045,6 +4045,28 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.store.upval"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.sum.inject",
+      "owner_id": "63aee83f5e2f9ecfbb3390e105aa0c55",
+      "owner_id_hi": "0x63aee83f5e2f9ecf",
+      "owner_id_lo": "0xbb3390e105aa0c55",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.sum.inject"
       ],
       "consumers": [
         "semantic-plan"
@@ -12580,6 +12602,30 @@
       "owner_id": "acfd067e46bbc707d1837bee2890d982",
       "owner_id_hi": "0xacfd067e46bbc707",
       "owner_id_lo": "0xd1837bee2890d982",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.sum.inject",
+      "operation_id": "63aee83f5e2f9ecfbb3390e105aa0c55",
+      "operation_id_hi": "0x63aee83f5e2f9ecf",
+      "operation_id_lo": "0xbb3390e105aa0c55",
+      "owner": "xi.sum.inject",
+      "owner_id": "63aee83f5e2f9ecfbb3390e105aa0c55",
+      "owner_id_hi": "0x63aee83f5e2f9ecf",
+      "owner_id_lo": "0xbb3390e105aa0c55",
       "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [

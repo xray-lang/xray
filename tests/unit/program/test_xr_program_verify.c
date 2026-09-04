@@ -1219,7 +1219,7 @@ typedef enum AffineCopyFixtureKind {
     AFFINE_COPY_VALID = 0,
     AFFINE_COPY_MISSING_DROP,
     AFFINE_COPY_USE_AFTER_DROP,
-    AFFINE_COPY_FORBIDDEN,
+    AFFINE_COPY_INVALID_TYPE_CONTRACT,
 } AffineCopyFixtureKind;
 
 static XrProgramBuildStatus build_affine_copy_artifact(AffineCopyFixtureKind kind,
@@ -1233,8 +1233,9 @@ static XrProgramBuildStatus build_affine_copy_artifact(AffineCopyFixtureKind kin
         .local_id = AFFINE_TYPE,
         .kind = XR_CORE_IR_TYPE_AGGREGATE,
         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
-        .copy_contract =
-            kind == AFFINE_COPY_FORBIDDEN ? XR_CORE_IR_COPY_FORBIDDEN : XR_CORE_IR_COPY_EXPLICIT,
+        .copy_contract = kind == AFFINE_COPY_INVALID_TYPE_CONTRACT
+                             ? XR_CORE_IR_COPY_FORBIDDEN
+                             : XR_CORE_IR_COPY_EXPLICIT,
         .field_types = fields,
         .field_count = 1u,
     };
@@ -1694,9 +1695,8 @@ static void test_affine_owner_domain(void) {
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
     xr_program_artifact_free(&artifact);
 
-    CHECK(build_affine_copy_artifact(AFFINE_COPY_FORBIDDEN, &artifact) == XR_PROGRAM_BUILD_OK);
-    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
-    xr_program_artifact_free(&artifact);
+    CHECK(build_affine_copy_artifact(AFFINE_COPY_INVALID_TYPE_CONTRACT, &artifact) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
 
     CHECK(build_affine_branch_artifact(1u, &artifact) == XR_PROGRAM_BUILD_OK);
     program = validate_ok(&artifact);
@@ -1709,6 +1709,174 @@ static void test_affine_owner_domain(void) {
 
     CHECK(build_affine_branch_artifact(2u, &artifact) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+}
+
+typedef enum OptionalOwnerFixtureMode {
+    OPTIONAL_OWNER_VALID = 0,
+    OPTIONAL_OWNER_TRIVIAL_PARENT,
+    OPTIONAL_OWNER_WRONG_COPY_CONTRACT,
+    OPTIONAL_OWNER_NONOWNER_PAYLOAD,
+    OPTIONAL_OWNER_AFFINE_PROJECT,
+} OptionalOwnerFixtureMode;
+
+static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMode mode,
+                                                          XrProgramArtifact *artifact) {
+    enum {
+        CLASS_TYPE = 310,
+        OPTIONAL_TYPE = 311,
+    };
+    uint16_t class_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t some_payload[] = {CLASS_TYPE};
+    XrCoreIrVariantInput variants[] = {
+        {0},
+        {.payload_types = some_payload, .payload_count = 1u},
+    };
+    XrCoreIrTypeInput types[] = {
+        {.key = key("optional-owner:class"),
+         .local_id = CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = class_fields,
+         .field_count = 1u},
+        {.key = key("optional-owner:optional"),
+         .local_id = OPTIONAL_TYPE,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .ownership = mode == OPTIONAL_OWNER_TRIVIAL_PARENT
+                          ? XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL
+                          : XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = mode == OPTIONAL_OWNER_TRIVIAL_PARENT
+                              ? XR_CORE_IR_COPY_TRIVIAL
+                              : (mode == OPTIONAL_OWNER_WRONG_COPY_CONTRACT
+                                     ? XR_CORE_IR_COPY_FORBIDDEN
+                                     : XR_CORE_IR_COPY_EXPLICIT),
+         .variants = variants,
+         .variant_count = 2u},
+    };
+    XrCoreIrConstantInput constant = {
+        .key = key("optional-owner:42"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 42,
+    };
+    XrCoreIrKey block_key = key("optional-owner:block");
+    XrCoreIrKey parameter = key("optional-owner:parameter");
+    XrCoreIrKey optional = key("optional-owner:some");
+    XrCoreIrKey projected = key("optional-owner:projected");
+    XrCoreIrKey answer = key("optional-owner:answer");
+    XrCoreIrValueInput block_argument = {
+        .key = parameter,
+        .type_id = CLASS_TYPE,
+        .ownership = mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD ? XR_CORE_IR_NON_OWNER
+                                                             : XR_CORE_IR_OWNER,
+    };
+    XrCoreIrKey parameter_operand[] = {parameter};
+    XrCoreIrKey optional_operand[] = {optional};
+    XrCoreIrKey answer_operand[] = {answer};
+    XrCoreIrInstructionInput instructions[6] = {0};
+    uint32_t count = 0u;
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = parameter_operand,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+        .result = optional,
+        .result_type_id = OPTIONAL_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = parameter_operand,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+        .immediate.variant_ordinal = 1u,
+    };
+    if (mode == OPTIONAL_OWNER_AFFINE_PROJECT) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_VARIANT_PROJECT,
+            .result = projected,
+            .result_type_id = CLASS_TYPE,
+            .operands = optional_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT_FIELD,
+            .immediate.variant_field = {.variant_ordinal = 1u, .field_ordinal = 0u},
+        };
+    }
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = optional_operand,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+        .result = answer,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+        .immediate.key = constant.key,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = answer_operand,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .arguments = &block_argument,
+        .argument_count = 1u,
+        .instructions = instructions,
+        .instruction_count = count,
+    };
+    XrParamMode parameter_mode = mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD ? XR_PARAM_READ
+                                                                         : XR_PARAM_MOVE;
+    uint16_t parameter_type = CLASS_TYPE;
+    XrCoreIrFunctionInput function = {
+        .key = key("optional-owner:function"),
+        .parameter_types = &parameter_type,
+        .parameter_modes = &parameter_mode,
+        .parameter_count = 1u,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("optional-owner:module"),
+        .constants = &constant,
+        .constant_count = 1u,
+        .functions = &function,
+        .function_count = 1u,
+    };
+    return write_typed_modules(types, 2u, &module, 1u, artifact);
+}
+
+static void test_optional_owner_contract(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_VALID, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_TRIVIAL_PARENT, &artifact) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_WRONG_COPY_CONTRACT, &artifact) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_NONOWNER_PAYLOAD, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
     xr_program_artifact_free(&artifact);
 }
 
@@ -2612,7 +2780,7 @@ static size_t first_conformance_slot_offset(const XrProgramArtifact *artifact) {
         return SIZE_MAX;
     size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_SEMANTIC_METADATA - 1u].offset;
     uint64_t interface_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
-    for (uint64_t interface = 0; interface < interface_count; ++interface) {
+    for (uint64_t interface_index = 0; interface_index < interface_count; ++interface_index) {
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
         cursor += XR_CORE_IR_KEY_SIZE;
         uint64_t slot_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
@@ -2629,6 +2797,36 @@ static size_t first_conformance_slot_offset(const XrProgramArtifact *artifact) {
     if (test_take_uvar(artifact->bytes, artifact->size, &cursor) == 0u)
         return SIZE_MAX;
     return cursor;
+}
+
+static bool find_interface_slot(const XrProgramArtifact *artifact, XrCoreIrKey interface_key,
+                                size_t *slot_offset, uint64_t *signature_id) {
+    XrProgramView view;
+    if (xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+        XR_PROGRAM_DECODE_OK)
+        return false;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_SEMANTIC_METADATA - 1u].offset;
+    uint64_t interface_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint64_t interface_index = 0; interface_index < interface_count; ++interface_index) {
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (cursor > artifact->size || XR_CORE_IR_KEY_SIZE > artifact->size - cursor)
+            return false;
+        bool matches = memcmp(&artifact->bytes[cursor], interface_key.bytes,
+                              XR_CORE_IR_KEY_SIZE) == 0;
+        cursor += XR_CORE_IR_KEY_SIZE;
+        uint64_t slot_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        for (uint64_t slot = 0; slot < slot_count; ++slot) {
+            size_t current_offset = cursor;
+            uint64_t current_signature =
+                test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            if (matches && slot == 0u) {
+                *slot_offset = current_offset;
+                *signature_id = current_signature;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static void test_callable_interface_conformance_tables(void) {
@@ -2653,6 +2851,108 @@ static void test_callable_interface_conformance_tables(void) {
     }
     xr_program_artifact_free(&reordered);
     xr_program_artifact_free(&first);
+}
+
+typedef struct WitnessDirectSlotOffsets {
+    size_t read_slot;
+    size_t ref_slot;
+} WitnessDirectSlotOffsets;
+
+static bool find_witness_direct_slot_offsets(const XrProgramArtifact *artifact,
+                                             WitnessDirectSlotOffsets *offsets) {
+    offsets->read_slot = SIZE_MAX;
+    offsets->ref_slot = SIZE_MAX;
+    XrProgramView view;
+    if (xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+        XR_PROGRAM_DECODE_OK)
+        return false;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_CODE - 1u].offset;
+    uint64_t function_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint64_t function = 0u; function < function_count; ++function) {
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t block_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        for (uint64_t block = 0u; block < block_count; ++block) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            uint64_t argument_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t argument = 0u; argument < argument_count; ++argument)
+                for (uint32_t field = 0u; field < 4u; ++field)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            uint64_t instruction_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t instruction = 0u; instruction < instruction_count; ++instruction) {
+                uint64_t operation = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                for (uint32_t field = 0u; field < 4u; ++field)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                uint64_t operand_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                for (uint64_t operand = 0u; operand < operand_count; ++operand)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                uint64_t immediate_kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                if (immediate_kind != XR_CORE_IR_IMMEDIATE_NONE) {
+                    size_t immediate_offset = cursor;
+                    uint64_t immediate = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                    if (immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD)
+                        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                    if (operation == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT &&
+                        immediate_kind == XR_CORE_IR_IMMEDIATE_U32) {
+                        if (immediate == 0u)
+                            offsets->read_slot = immediate_offset;
+                        else if (immediate == 2u)
+                            offsets->ref_slot = immediate_offset;
+                    }
+                }
+                uint64_t successor_count =
+                    test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                for (uint64_t successor = 0u; successor < successor_count; ++successor)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            }
+        }
+    }
+    return offsets->read_slot != SIZE_MAX && offsets->ref_slot != SIZE_MAX;
+}
+
+static void test_witness_receiver_capability_and_interface_identity(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    WitnessDirectSlotOffsets offsets;
+    bool found = find_witness_direct_slot_offsets(&artifact, &offsets);
+    CHECK(found);
+    if (found) {
+        CHECK(artifact.bytes[offsets.read_slot] == 0u);
+        CHECK(artifact.bytes[offsets.ref_slot] == 2u);
+
+        uint8_t saved = artifact.bytes[offsets.ref_slot];
+        artifact.bytes[offsets.ref_slot] = 0u;
+        XrValidatedProgram *program = validate_ok(&artifact);
+        xr_validated_program_free(program);
+        artifact.bytes[offsets.ref_slot] = saved;
+
+        expect_mutated_verify(&artifact, offsets.read_slot, 2u,
+                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                              XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE);
+    }
+    xr_program_artifact_free(&artifact);
+
+    XrProgramArtifact interface_artifact = {0};
+    CHECK(build_program_table_artifact(false, false, &interface_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    size_t interface_a_slot = SIZE_MAX;
+    size_t interface_b_slot = SIZE_MAX;
+    uint64_t interface_a_signature = UINT64_MAX;
+    uint64_t interface_b_signature = UINT64_MAX;
+    CHECK(find_interface_slot(&interface_artifact, key("program-table:interface:a"),
+                              &interface_a_slot, &interface_a_signature));
+    CHECK(find_interface_slot(&interface_artifact, key("program-table:interface:b"),
+                              &interface_b_slot, &interface_b_signature));
+    CHECK(interface_a_signature != interface_b_signature);
+    CHECK(interface_b_signature < UINT8_C(0x80));
+    if (interface_a_slot != SIZE_MAX && interface_b_slot != SIZE_MAX &&
+        interface_a_signature != interface_b_signature && interface_b_signature < UINT8_C(0x80))
+        expect_mutated_verify(&interface_artifact, interface_a_slot,
+                              (uint8_t) interface_b_signature,
+                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                              XR_PROGRAM_DIAGNOSTIC_FUNCTION);
+    xr_program_artifact_free(&interface_artifact);
 }
 
 typedef struct ExistentialTypeOffsets {
@@ -2849,6 +3149,7 @@ int main(void) {
     test_direct_call();
     test_owner_and_local_place_operations();
     test_affine_owner_domain();
+    test_optional_owner_contract();
     test_parameter_modes_and_value_categories();
     test_terminal_operations();
     test_sealed_invoke_and_cleanup_cfg();
@@ -2858,6 +3159,7 @@ int main(void) {
     test_typed_random_and_linear_work();
     test_immutable_view_root_tables();
     test_callable_interface_conformance_tables();
+    test_witness_receiver_capability_and_interface_identity();
     test_existential_pack_test_project();
     test_callable_pack_and_indirect_calls();
     if (failures != 0) {

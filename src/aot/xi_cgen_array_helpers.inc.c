@@ -5696,8 +5696,7 @@ static bool cg_array_err_check_after_byte_slice_load_trusted(XiCgenCtx *ctx, con
                                                              const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_byte_slice_load_trusted_nothrow(ctx, f,
-                                              cg_class_native_prev_error_source_value(check));
+    return cg_byte_slice_load_trusted_nothrow(ctx, f, xi_err_check_producer(f, check));
 }
 
 static bool cg_array_index_get_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
@@ -5721,8 +5720,7 @@ static bool cg_array_err_check_after_index_get_trusted(XiCgenCtx *ctx, const XiF
                                                        const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_array_index_get_trusted_nothrow(ctx, f,
-                                              cg_class_native_prev_error_source_value(check));
+    return cg_array_index_get_trusted_nothrow(ctx, f, xi_err_check_producer(f, check));
 }
 
 static bool cg_span_common_prefix_trusted_nothrow(XiCgenCtx *ctx, const XiValue *value) {
@@ -5738,38 +5736,16 @@ static bool cg_array_err_check_after_direct_byte_array_mutator_trusted(XiCgenCtx
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
     return cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(
-        ctx, f, cg_class_native_prev_error_source_value(check));
+        ctx, f, xi_err_check_producer(f, check));
 }
 
 static bool cg_array_err_check_after_byte_array_append_trusted(XiCgenCtx *ctx, const XiFunc *f,
                                                                const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    const XiBlock *block = check->block;
-    if (!block)
-        return false;
-
-    bool seen_check = false;
-    for (uint32_t i = block->nvalues; i > 0; i--) {
-        const XiValue *cur = block->values[i - 1];
-        if (!cur)
-            continue;
-        if (cur == check) {
-            seen_check = true;
-            continue;
-        }
-        if (!seen_check)
-            continue;
-        if (cg_array_call_is_byte_array_append_trusted_nothrow(ctx, f, cur) ||
-            cg_array_call_is_byte_array_repeat_trusted_nothrow(ctx, f, cur))
-            return true;
-        if (cur->op == XI_RETAIN || cur->op == XI_RELEASE)
-            continue;
-        if (cur->flags &
-            (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND))
-            return false;
-    }
-    return false;
+    const XiValue *producer = xi_err_check_producer(f, check);
+    return cg_array_call_is_byte_array_append_trusted_nothrow(ctx, f, producer) ||
+           cg_array_call_is_byte_array_repeat_trusted_nothrow(ctx, f, producer);
 }
 
 static bool cg_array_call_is_typed_fill_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
@@ -5790,8 +5766,7 @@ static bool cg_array_err_check_after_typed_fill_trusted(XiCgenCtx *ctx, const Xi
                                                         const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_array_call_is_typed_fill_trusted_nothrow(
-        ctx, f, cg_class_native_prev_error_source_value(check));
+    return cg_array_call_is_typed_fill_trusted_nothrow(ctx, f, xi_err_check_producer(f, check));
 }
 
 static bool cg_array_fill_value_is_zero_bits_literal(const XiValue *value) {
@@ -6074,14 +6049,7 @@ static bool cg_array_err_check_after_unchecked_fill_push(XiCgenCtx *ctx, const X
                                                          const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || !check->block)
         return false;
-    const XiValue *prev = NULL;
-    for (uint32_t i = 0; i < check->block->nvalues; i++) {
-        const XiValue *cur = check->block->values[i];
-        if (cur == check)
-            break;
-        if (cur)
-            prev = cur;
-    }
+    const XiValue *prev = xi_err_check_producer(f, check);
     CgArrayFillLoop fill;
     CgArrayFillLoop unique;
     return cg_array_fill_loop_match(ctx, f, prev, &fill) &&
@@ -6128,8 +6096,6 @@ static bool cg_array_push_value_is_elided(XiCgenCtx *ctx, const XiFunc *f,
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] != target)
                     continue;
-                if (v->op == XI_ERR_CHECK && a == 0)
-                    continue;
                 return false;
             }
         }
@@ -6141,14 +6107,7 @@ static bool cg_array_err_check_after_push(XiCgenCtx *ctx, const XiFunc *f,
                                           const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || !check->block)
         return false;
-    const XiValue *prev = NULL;
-    for (uint32_t i = 0; i < check->block->nvalues; i++) {
-        const XiValue *cur = check->block->values[i];
-        if (cur == check)
-            break;
-        if (cur)
-            prev = cur;
-    }
+    const XiValue *prev = xi_err_check_producer(f, check);
     XrCValueEmissionView tagged = {0};
     return cg_tagged_array_push_emission_view(ctx, f, prev, &tagged) ==
                CG_VALUE_EMISSION_FOUND ||

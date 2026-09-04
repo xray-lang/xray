@@ -586,6 +586,146 @@ static XiValue *xi_lower_apply_primitive_type_view(XiLower *l, AstNode *node, Xi
     return copy;
 }
 
+static XrClassInfo *xi_lower_concrete_nominal_info(const XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE)
+        return type->instance.class_ref;
+    if (type->kind == XR_KIND_ENUM)
+        return type->enum_type.nominal_ref;
+    return NULL;
+}
+
+static uint8_t xi_lower_nominal_decl_kind(const XrClassInfo *info) {
+    if (!info)
+        return 0;
+    switch ((XaNominalKind) info->nominal_kind) {
+        case XA_NOMINAL_CLASS:
+            return XG_DECL_CLASS;
+        case XA_NOMINAL_STRUCT:
+            return XG_DECL_STRUCT;
+        case XA_NOMINAL_ENUM:
+            return XG_DECL_ENUM;
+        default:
+            return 0;
+    }
+}
+
+static const XgInterfaceImplSummary *
+xi_lower_existential_conformance(XiLower *l, const XrType *interface_type,
+                                 const XrType *implementor_type) {
+    XrClassInfo *interface_info = interface_type && interface_type->kind == XR_KIND_INTERFACE
+                                      ? interface_type->instance.class_ref
+                                      : NULL;
+    XrClassInfo *implementor_info = xi_lower_concrete_nominal_info(implementor_type);
+    uint8_t implementor_kind = xi_lower_nominal_decl_kind(implementor_info);
+    if (!l || !l->global_evidence || !interface_info || !implementor_info ||
+        interface_info->xg_interface_id == XG_NO_ID || implementor_info->xg_decl_id == XG_NO_ID ||
+        implementor_info->xg_nominal_key == 0 || implementor_kind == 0)
+        return NULL;
+    return xg_global_evidence_find_conformance(l->global_evidence, implementor_info->xg_decl_id,
+                                               implementor_info->xg_nominal_key, implementor_kind,
+                                               interface_info->xg_interface_id);
+}
+
+static XiInterfaceUseKind xi_lower_interface_use_for_param_mode(XrParamMode mode) {
+    switch (mode) {
+        case XR_PARAM_READ:
+            return XI_INTERFACE_USE_READ;
+        case XR_PARAM_REF:
+            return XI_INTERFACE_USE_REF;
+        case XR_PARAM_MOVE:
+            return XI_INTERFACE_USE_MOVE;
+        default:
+            return XI_INTERFACE_USE_NONE;
+    }
+}
+
+/* Test and project operate on an existing carrier. Its Xi metadata is the
+ * capability authority;
+ * an interface parameter obtains the same fact from
+ * its analyzer-owned parameter mode. Never
+ * reconstruct this from cast syntax
+ * or from the requested nominal type. */
+static XiInterfaceUseKind xi_lower_interface_use_for_carrier(const XiValue *value) {
+    if (!value || !value->type || value->type->kind != XR_KIND_INTERFACE)
+        return XI_INTERFACE_USE_NONE;
+    if (value->xg_interface_use_kind >= XI_INTERFACE_USE_READ &&
+        value->xg_interface_use_kind <= XI_INTERFACE_USE_OWNED_STORAGE)
+        return (XiInterfaceUseKind) value->xg_interface_use_kind;
+    if (value->op == XI_PARAM && xr_param_mode_is_valid((XrParamMode) value->param_mode))
+        return xi_lower_interface_use_for_param_mode((XrParamMode) value->param_mode);
+    return XI_INTERFACE_USE_NONE;
+}
+
+static bool xi_lower_bind_existential_nominal(XiLower *l, XiValue *value,
+                                              const XrType *interface_type,
+                                              const XrType *implementor_type,
+                                              XiExistentialKind existential_kind,
+                                              uint32_t interface_object_use_id,
+                                              XiInterfaceUseKind interface_use_kind) {
+    const XgInterfaceImplSummary *conformance =
+        xi_lower_existential_conformance(l, interface_type, implementor_type);
+    if (!value || !conformance || !conformance->verdict_complete ||
+        !conformance->existential_eligible || conformance->conformance_id == XG_NO_ID ||
+        conformance->implementor_decl_id == XG_NO_ID || conformance->nominal_key == 0 ||
+        conformance->implementor_kind == 0 || conformance->interface_id == XG_NO_ID ||
+        interface_object_use_id == XG_NO_ID || !conformance->type_contract_complete ||
+        conformance->implementor_ownership == XG_NOMINAL_OWNERSHIP_INVALID ||
+        conformance->implementor_copy_contract == XG_NOMINAL_COPY_INVALID ||
+        interface_use_kind < XI_INTERFACE_USE_READ ||
+        interface_use_kind > XI_INTERFACE_USE_OWNED_STORAGE)
+        return false;
+    value->xg_interface_object_use_id = interface_object_use_id;
+    value->xg_interface_id = conformance->interface_id;
+    value->xg_conformance_id = conformance->conformance_id;
+    value->xg_implementor_decl_id = conformance->implementor_decl_id;
+    value->xg_nominal_key = conformance->nominal_key;
+    value->xg_implementor_kind = conformance->implementor_kind;
+    value->xg_existential_kind = (uint8_t) existential_kind;
+    value->xg_interface_use_kind = (uint8_t) interface_use_kind;
+    value->xg_implementor_ownership = conformance->implementor_ownership;
+    value->xg_implementor_copy_contract = conformance->implementor_copy_contract;
+    value->xg_type_contract_complete = conformance->type_contract_complete;
+    return true;
+}
+
+static XiValue *xi_lower_pack_existential(XiLower *l, AstNode *node, XiValue *value,
+                                          XrType *target_type) {
+    if (!l || !node || !value || !value->type || !target_type ||
+        target_type->kind != XR_KIND_INTERFACE)
+        return value;
+    if (!target_type->instance.class_ref || !xi_lower_concrete_nominal_info(value->type))
+        return value;
+    XiValue *pack = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+    if (!pack) {
+        l->had_error = true;
+        return value;
+    }
+    pack->args[0] = value;
+    pack->line = (uint32_t) node->line;
+    const XgInterfaceObjectUseSummary *object_use =
+        l->global_evidence && l->func && l->func->xg_body_func_id != XG_NO_ID &&
+                target_type->instance.class_ref &&
+                target_type->instance.class_ref->xg_interface_id != XG_NO_ID
+            ? xg_global_evidence_find_interface_object_use(
+                  l->global_evidence, (XgFuncId) l->func->xg_body_func_id,
+                  xi_lower_source_node_id(l, node),
+                  (XgInterfaceId) target_type->instance.class_ref->xg_interface_id,
+                  XG_INTERFACE_OBJECT_USE_VALUE)
+            : NULL;
+    XiInterfaceUseKind interface_use_kind =
+        object_use ? xi_lower_interface_use_from_global(object_use->use_kind)
+                   : XI_INTERFACE_USE_NONE;
+    if (!xi_lower_bind_existential_nominal(l, pack, target_type, value->type, XI_EXISTENTIAL_PACK,
+                                           object_use ? object_use->use_id : XG_NO_ID,
+                                           interface_use_kind)) {
+        l->had_error = true;
+        return value;
+    }
+    return pack;
+}
+
 XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, AstNode *node, XiValue *val,
                                              struct XrType *target_type) {
     if (!l || !l->func || !node || !val || !target_type || XR_TYPE_IS_UNKNOWN(target_type))
@@ -594,8 +734,11 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, AstNode *node, XiValue 
      * has the target representation.  It is assignment-compatible for source
      * recovery, but every dynamic-to-concrete boundary still needs an
      * explicit CHECKTYPE before SemanticPlan is frozen. */
-    if (val->type && !XR_TYPE_IS_UNKNOWN(val->type) && xr_type_assignable(target_type, val->type))
+    if (val->type && !XR_TYPE_IS_UNKNOWN(val->type) && xr_type_assignable(target_type, val->type)) {
+        if (target_type->kind == XR_KIND_INTERFACE)
+            return xi_lower_pack_existential(l, node, val, target_type);
         return xi_lower_apply_primitive_type_view(l, node, val, target_type);
+    }
 
     /* `T?` reaching a `T` target is a narrowing the analyzer already proved:
      * it rejects the unguarded form outright ("cannot assign 'T?' to 'T'
@@ -1973,7 +2116,7 @@ static XiValue *lower_mem_with_slice_mut_call(XiLower *l, AstNode *node, CallExp
         XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     invoke->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, invoke, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, invoke);
     return invoke;
 }
 
@@ -4274,6 +4417,23 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* copy(x) → XI_CALL_BUILTIN aux="copy" → OP_COPY */
     if (strcmp(fname, "copy") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+        XaSymbol *copy_symbol =
+            l->analyzer && call->callee && call->callee->as.variable.symbol_id != 0
+                ? xa_scope_lookup_by_id(l->analyzer->global_scope,
+                                        call->callee->as.variable.symbol_id)
+                : NULL;
+        /* Function-value storage starts fail-closed and is tightened only after
+         * the
+         * complete write-target pass.  The call node's earlier copy of that
+         * type can
+         * therefore still be MAY_THROW here.  For the resolved compiler
+         * builtin, copy
+         * preserves the argument's exact callable signature; a
+         * user function that merely
+         * has the same spelling gets no refinement. */
+        if (copy_symbol && copy_symbol->is_builtin && copy_symbol->kind == XA_SYM_FUNCTION && arg &&
+            arg->type && arg->type->kind == XR_KIND_FUNCTION)
+            rtype = arg->type;
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, rtype, 1);
         if (!v)
             return NULL;
@@ -5420,9 +5580,9 @@ XR_FUNC bool xi_lower_call_may_throw(XiLower *l, const AstNode *call_node,
  * recovery stay well-defined; only the error-channel check node is elided. */
 static void lower_call_emit_err_check(XiLower *l, XiValue *call_v, AstNode *node,
                                       CallExprNode *call, struct XrType *callee_type) {
-    (void) call_v;
     (void) call;
-    xi_lower_insert_err_check(l, node, xi_lower_call_may_throw(l, node, callee_type));
+    if (xi_lower_call_may_throw(l, node, callee_type))
+        xi_lower_insert_err_check(l, node, call_v);
 }
 
 static XaSymbolLinks *lower_call_return_ownership_links(XiLower *l, CallExprNode *call) {
@@ -5700,6 +5860,15 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
              * coercing (e.g. Json int 1 into a `bool` parameter). */
             if (xr_is_json_coercion(pt, arg_vals[i]->type))
                 arg_vals[i] = xi_lower_checktype_for_type(l, node, arg_vals[i], pt);
+            if (pt->kind == XR_KIND_INTERFACE && arg_vals[i]->type->kind != XR_KIND_INTERFACE) {
+                AstNode *argument_node =
+                    i < call->arg_count && call->arguments ? call->arguments[i] : NULL;
+                if (!argument_node || argument_node->type == AST_SPREAD_EXPR)
+                    return NULL;
+                arg_vals[i] = xi_lower_checktype_for_type(l, argument_node, arg_vals[i], pt);
+                if (!arg_vals[i] || l->had_error)
+                    return NULL;
+            }
             if (i < call->arg_count && call->arguments[i] &&
                 call->arguments[i]->type != AST_SPREAD_EXPR) {
                 arg_vals[i] = xi_lower_apply_numeric_conversion_witness(l, call->arguments[i],
@@ -6163,7 +6332,7 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
         v->aux_int |= XI_ACCESS_UNCHECKED;
     v->flags = xi_op_default_effects((XiOp) v->op);
     if (!unchecked_access)
-        xi_lower_insert_err_check(l, node, true);
+        xi_lower_insert_err_check(l, node, v);
     return byte_slice_typed_load ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
                                  : v;
 }
@@ -6266,12 +6435,12 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
     v->aux = (void *) arena_strdup(l->func, method);
     v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
     xi_chan_send_set_transfer_mode(v, transfer_mode);
-    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     if (xi_lower_method_may_suspend(recv->type, method, want_args))
         v->flags |= XI_FLAG_MAY_SUSPEND;
     v->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, v);
     return v;
 }
 
@@ -6707,7 +6876,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         value->flags = required ? XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW : 0;
         value->line = (uint32_t) node->line;
         if (required)
-            xi_lower_insert_err_check(l, node, true);
+            xi_lower_insert_err_check(l, node, value);
         return value;
     }
     MemberAccessNode *member = &call->callee->as.member_access;
@@ -6863,7 +7032,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     if (!unchecked_access && (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
                               desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
                               desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW))
-        xi_lower_insert_err_check(l, node, true);
+        xi_lower_insert_err_check(l, node, value);
     return value;
 }
 
@@ -7282,7 +7451,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
                 v->line = (uint32_t) node->line;
                 xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                xi_lower_insert_err_check(l, node, true);
+                xi_lower_insert_err_check(l, node, v);
                 return v;
             }
         }
@@ -8596,6 +8765,12 @@ static XiFunc *parallel_call_lower_lambda_func(
     child_l.func->parent_func = parent->func;
     child_l.func->analyzer = parent->analyzer;
     child_l.func->is_generic_template = parent->func && parent->func->is_generic_template;
+    if (!xi_lower_publish_function_expr_effect_sidecars(child_l.func, parent->analyzer,
+                                                        child_l.typed_program, lambda_node)) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
     XaScope *semantic_scope = xa_scope_find_by_node(parent->analyzer->global_scope, lambda_node);
     if (semantic_scope && semantic_scope->return_storage_known &&
         !semantic_scope->return_storage_mixed) {
@@ -8888,7 +9063,7 @@ static XiValue *parallel_call_make_for_each(XiLower *l, AstNode *node, AstNode *
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, par);
     return par;
 }
 
@@ -8973,7 +9148,7 @@ static XiValue *parallel_call_make_map(XiLower *l, AstNode *node, AstNode *range
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, par);
 
     if (!into_array)
         return par;
@@ -9092,7 +9267,7 @@ static XiValue *parallel_call_make_reduce(XiLower *l, AstNode *node, AstNode *ra
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, par);
     return par;
 }
 
@@ -9181,7 +9356,7 @@ XR_FUNC XiValue *xi_lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     v->lowering_flags |= XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE;
     v->line = (uint32_t) (node ? node->line : 0);
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, v);
     return v;
 }
 
@@ -9278,7 +9453,7 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, par);
     xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
@@ -9394,7 +9569,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, par);
     xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
 
     if (!into_array)
@@ -9541,7 +9716,7 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, par);
     xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
@@ -9941,7 +10116,7 @@ generic_constructor:;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, call);
     if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
         return NULL;
     return call;
@@ -10144,7 +10319,7 @@ static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
      * no-throw bodies stays no-throw, so this check simply never fires there,
      * and the optimizer drops it once inlining makes that visible. */
     if (!aw->is_any && !aw->is_all && !aw->is_any_success && !aw->timeout && !aw->into)
-        xi_lower_insert_err_check(l, node, true);
+        xi_lower_insert_err_check(l, node, v);
     return v;
 }
 
@@ -10564,6 +10739,16 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
     v->args[1] = type_val;
     v->aux = (void *) target_type;
     v->line = (uint32_t) line;
+    if (val->type && val->type->kind == XR_KIND_INTERFACE &&
+        xi_lower_concrete_nominal_info(target_type)) {
+        XiInterfaceUseKind interface_use_kind = xi_lower_interface_use_for_carrier(val);
+        if (!xi_lower_bind_existential_nominal(l, v, val->type, target_type, XI_EXISTENTIAL_TEST,
+                                               val->xg_interface_object_use_id,
+                                               interface_use_kind)) {
+            l->had_error = true;
+            return NULL;
+        }
+    }
     return v;
 }
 
@@ -10768,6 +10953,150 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     int tid;
     const char *tname;
     lower_dynamic_as_target(tref, &tid, &tname);
+
+    /* A safe interface downcast is an explicit Xi control-flow operation.
+     * The exact test
+     * dominates the only project, while the failed edge yields
+     * null and the merge retains
+     * the analyzer's nullable result type. This is
+     * the canonical shape consumed by
+     * XrProgram; a single nullable XI_AS would
+     * erase the failure edge and could not prove
+     * project dominance. */
+    if (as->is_safe && val->type && val->type->kind == XR_KIND_INTERFACE &&
+        xi_lower_concrete_nominal_info(cast_type)) {
+        XrTypeRef *project_tref = tref;
+        if (project_tref && project_tref->kind == XR_TREF_OPTIONAL && project_tref->nchildren > 0) {
+            project_tref = project_tref->children[0];
+            if (project_tref && project_tref->kind == XR_TREF_OPTIONAL) {
+                l->had_error = true;
+                return NULL;
+            }
+        }
+        struct XrType *project_type =
+            cast_type->is_nullable ? xr_type_non_nullable(l->isolate, cast_type) : cast_type;
+        const XgInterfaceImplSummary *target_conformance =
+            xi_lower_existential_conformance(l, val->type, project_type);
+        bool trivial_contract =
+            target_conformance && target_conformance->type_contract_complete &&
+            target_conformance->implementor_ownership == XG_NOMINAL_OWNERSHIP_TRIVIAL &&
+            target_conformance->implementor_copy_contract == XG_NOMINAL_COPY_TRIVIAL;
+        bool affine_contract =
+            target_conformance && target_conformance->type_contract_complete &&
+            target_conformance->implementor_ownership == XG_NOMINAL_OWNERSHIP_AFFINE &&
+            (target_conformance->implementor_copy_contract == XG_NOMINAL_COPY_EXPLICIT ||
+             target_conformance->implementor_copy_contract == XG_NOMINAL_COPY_FORBIDDEN);
+        if (!cast_type->is_nullable || !project_tref || !project_type ||
+            project_type->is_nullable || !xi_lower_concrete_nominal_info(project_type) ||
+            (!trivial_contract && !affine_contract)) {
+            l->had_error = true;
+            return NULL;
+        }
+
+        XiValue *test =
+            xi_lower_is_test(l, val, project_tref, node->line, xi_lower_source_node_id(l, node));
+        if (!test || test->xg_existential_kind != XI_EXISTENTIAL_TEST) {
+            l->had_error = true;
+            return NULL;
+        }
+
+        XiBlock *test_block = l->cur_block;
+        XiBlock *success = xi_block_new(l->func);
+        XiBlock *failure = xi_block_new(l->func);
+        XiBlock *merge = xi_block_new(l->func);
+        if (!success || !failure || !merge) {
+            l->had_error = true;
+            return NULL;
+        }
+        xi_block_set_if(test_block, test, success, failure);
+        xi_lower_braun_seal(l, success);
+        xi_lower_braun_seal(l, failure);
+
+        l->cur_block = success;
+        XiValue *project = xi_value_new(l->func, success, XI_AS, project_type, 1);
+        if (!project || !xi_lower_bind_existential_nominal(
+                            l, project, val->type, project_type, XI_EXISTENTIAL_PROJECT,
+                            test->xg_interface_object_use_id,
+                            (XiInterfaceUseKind) test->xg_interface_use_kind)) {
+            l->had_error = true;
+            return NULL;
+        }
+        project->args[0] = val;
+        project->aux_int = (int64_t) (uint32_t) tid << 1;
+        project->aux = (void *) arena_strdup(l->func, tname);
+        project->line = (uint32_t) node->line;
+        XiValue *some_payload = project;
+        XiInterfaceUseKind project_use = (XiInterfaceUseKind) project->xg_interface_use_kind;
+        bool borrowed = project_use == XI_INTERFACE_USE_READ || project_use == XI_INTERFACE_USE_REF;
+        bool transferred =
+            project_use == XI_INTERFACE_USE_MOVE || project_use == XI_INTERFACE_USE_OWNED_STORAGE;
+        if (!borrowed && !transferred) {
+            l->had_error = true;
+            return NULL;
+        }
+        if (borrowed && affine_contract &&
+            target_conformance->implementor_copy_contract == XG_NOMINAL_COPY_FORBIDDEN) {
+            l->had_error = true;
+            return NULL;
+        }
+        if (borrowed && affine_contract) {
+            /* A borrowed carrier exposes an affine referent without transferring
+             * an
+             * owner. The exact conformance contract requires Xi to clone it
+             * before
+             * constructing the owned Optional<T>. */
+            some_payload = xi_value_new(l->func, success, XI_COPY, project_type, 1);
+            if (!some_payload) {
+                l->had_error = true;
+                return NULL;
+            }
+            some_payload->args[0] = project;
+            xi_lower_mark_value_clone_copy(some_payload);
+            some_payload->line = (uint32_t) node->line;
+        }
+        XiValue *some = xi_value_new(l->func, success, XI_SUM_INJECT, cast_type, 1);
+        if (!some) {
+            l->had_error = true;
+            return NULL;
+        }
+        some->args[0] = some_payload;
+        some->aux_int = 1;
+        some->line = (uint32_t) node->line;
+        xi_block_set_jump(success, merge);
+
+        l->cur_block = failure;
+        XiValue *none = xi_value_new(l->func, failure, XI_SUM_INJECT, cast_type, 0);
+        if (!none) {
+            l->had_error = true;
+            return NULL;
+        }
+        none->aux_int = 0;
+        none->line = (uint32_t) node->line;
+        xi_block_set_jump(failure, merge);
+
+        xi_lower_braun_seal(l, merge);
+        l->cur_block = merge;
+        XiPhi *phi = xi_phi_new(l->func, merge, cast_type, merge->npreds);
+        if (!phi) {
+            l->had_error = true;
+            return NULL;
+        }
+        for (uint16_t i = 0; i < merge->npreds; i++)
+            phi->value.args[i] = merge->preds[i] == success ? some : none;
+        phi->value.line = (uint32_t) node->line;
+        return &phi->value;
+    }
+
+    /* An existential projection is never unconditional: every projection
+     * must be
+     * control-dependent on a successful exact test. Until checked
+     * non-null casts have their
+     * own explicit trap CFG, reject them here. */
+    if (val->type && val->type->kind == XR_KIND_INTERFACE &&
+        xi_lower_concrete_nominal_info(cast_type)) {
+        l->had_error = true;
+        return NULL;
+    }
 
     bool is_safe = as->is_safe;
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, l->type_any, 1);
@@ -11359,7 +11688,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, call);
     if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
         return NULL;
     return call;

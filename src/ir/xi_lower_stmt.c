@@ -1139,6 +1139,8 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
     if (exit_v) {
         exit_v->aux_int = sb->scope_mode;
         exit_v->flags |= XI_FLAG_SIDE_EFFECT;
+        if (sb->scope_mode == 1 /* XR_SCOPE_LINKED */)
+            exit_v->flags |= XI_FLAG_MAY_THROW;
         exit_v->line = (uint32_t) node->line;
     }
 
@@ -1148,7 +1150,7 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
      * same way a fallible call does.  Panic-channel child failures unwind
      * inside OP_SCOPE_EXIT and never reach here. */
     if (sb->scope_mode == 1 /* XR_SCOPE_LINKED */)
-        xi_lower_insert_err_check(l, node, true);
+        xi_lower_insert_err_check(l, node, exit_v);
 
     return exit_v;
 }
@@ -2563,9 +2565,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
         iter->call_return_ownership = (XiReturnOwnership) {
             .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
     }
-    iter->flags |= XI_FLAG_SIDE_EFFECT;
+    iter->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     iter->line = line;
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, iter);
     if (!l->cur_block)
         return;
 
@@ -2593,9 +2595,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     has_next->args[0] = iter_cond;
     has_next->aux = (void *) "hasNext";
     has_next->aux_int = (int64_t) xi_lower_method_symbol(l, "hasNext") << 1;
-    has_next->flags |= XI_FLAG_SIDE_EFFECT;
+    has_next->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     has_next->line = line;
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, has_next);
     if (!l->cur_block)
         return;
     xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
@@ -2616,9 +2618,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     next_val->aux_int = (int64_t) xi_lower_method_symbol(l, "next") << 1;
     next_val->call_return_ownership = (XiReturnOwnership) {
         .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
-    next_val->flags |= XI_FLAG_SIDE_EFFECT;
+    next_val->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     next_val->line = line;
-    xi_lower_insert_err_check(l, node, true);
+    xi_lower_insert_err_check(l, node, next_val);
     if (!l->cur_block)
         return;
 

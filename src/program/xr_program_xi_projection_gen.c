@@ -12,6 +12,14 @@ typedef struct XrProgramXiProjectionRow {
     XrProgramXiProjectionKind kind;
 } XrProgramXiProjectionRow;
 
+typedef struct XrProgramXiSemanticProjectionRow {
+    uint16_t xi_operation;
+    uint8_t xi_existential_kind;
+    uint16_t core_operation_id;
+    XrProgramXiSemanticProjectionKind kind;
+    XrProgramXiFirstOperandPolicy first_operand_policy;
+} XrProgramXiSemanticProjectionRow;
+
 static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
     {
         XI_CONST,
@@ -147,6 +155,13 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT,
     },
     {
+        XI_SUM_INJECT,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT,
+    },
+    {
         XI_VARIANT_TEST,
         XR_CORE_TYPE_BOOL,
         XR_CORE_OP_CORE_VARIANT_TEST,
@@ -162,6 +177,13 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
     },
     {
         XI_CALL_BUILTIN,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_OWNER_COPY,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_OWNER_COPY,
+    },
+    {
+        XI_COPY,
         XR_PROGRAM_XI_ANY_RESULT_TYPE,
         XR_CORE_OP_CORE_OWNER_COPY,
         UINT32_C(0),
@@ -211,6 +233,59 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
     },
 };
 
+static const XrProgramXiSemanticProjectionRow
+    xr_program_xi_semantic_projection_rows[] = {
+    {
+        XI_COPY,
+        XI_EXISTENTIAL_PACK,
+        XR_CORE_OP_CORE_EXISTENTIAL_PACK,
+        XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PACK,
+        XR_PROGRAM_XI_FIRST_OPERAND_CONCRETE_BY_INTERFACE_USE,
+    },
+    {
+        XI_IS,
+        XI_EXISTENTIAL_TEST,
+        XR_CORE_OP_CORE_EXISTENTIAL_TEST,
+        XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_TEST,
+        XR_PROGRAM_XI_FIRST_OPERAND_BORROW,
+    },
+    {
+        XI_AS,
+        XI_EXISTENTIAL_PROJECT,
+        XR_CORE_OP_CORE_EXISTENTIAL_PROJECT,
+        XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PROJECT,
+        XR_PROGRAM_XI_FIRST_OPERAND_EXISTENTIAL_BY_INTERFACE_USE,
+    },
+    {
+        XI_CALL_METHOD,
+        XI_EXISTENTIAL_WITNESS_DIRECT,
+        XR_CORE_OP_CORE_CALL_WITNESS_DIRECT,
+        XR_PROGRAM_XI_SEMANTIC_WITNESS_DIRECT,
+        XR_PROGRAM_XI_FIRST_OPERAND_RECEIVER_BY_INTERFACE_USE,
+    },
+    {
+        XI_CALL_METHOD_DIRECT,
+        XI_EXISTENTIAL_WITNESS_DIRECT,
+        XR_CORE_OP_CORE_CALL_WITNESS_DIRECT,
+        XR_PROGRAM_XI_SEMANTIC_WITNESS_DIRECT,
+        XR_PROGRAM_XI_FIRST_OPERAND_RECEIVER_BY_INTERFACE_USE,
+    },
+    {
+        XI_CALL_METHOD,
+        XI_EXISTENTIAL_WITNESS_INVOKE,
+        XR_CORE_OP_CORE_CALL_WITNESS_INVOKE,
+        XR_PROGRAM_XI_SEMANTIC_WITNESS_INVOKE,
+        XR_PROGRAM_XI_FIRST_OPERAND_RECEIVER_BY_INTERFACE_USE,
+    },
+    {
+        XI_CALL_METHOD_DIRECT,
+        XI_EXISTENTIAL_WITNESS_INVOKE,
+        XR_CORE_OP_CORE_CALL_WITNESS_INVOKE,
+        XR_PROGRAM_XI_SEMANTIC_WITNESS_INVOKE,
+        XR_PROGRAM_XI_FIRST_OPERAND_RECEIVER_BY_INTERFACE_USE,
+    },
+};
+
 bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,
                               XrProgramXiProjection *projection_out) {
     if (!projection_out)
@@ -230,6 +305,95 @@ bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,
         return true;
     }
     return false;
+}
+
+bool xr_program_xi_semantic_projection(
+    uint16_t xi_operation, uint8_t xi_existential_kind,
+    XrProgramXiSemanticProjection *projection_out) {
+    if (!projection_out || xi_existential_kind == XI_EXISTENTIAL_NONE)
+        return false;
+    for (uint32_t index = 0;
+         index < sizeof(xr_program_xi_semantic_projection_rows) /
+                     sizeof(xr_program_xi_semantic_projection_rows[0]);
+         ++index) {
+        const XrProgramXiSemanticProjectionRow *row =
+            &xr_program_xi_semantic_projection_rows[index];
+        if (row->xi_operation != xi_operation ||
+            row->xi_existential_kind != xi_existential_kind)
+            continue;
+        projection_out->core_operation_id = row->core_operation_id;
+        projection_out->kind = row->kind;
+        projection_out->first_operand_policy = row->first_operand_policy;
+        return true;
+    }
+    return false;
+}
+
+bool xr_program_xi_semantic_operation_kind(
+    uint16_t core_operation_id, XrProgramXiSemanticProjectionKind *kind_out) {
+    if (!kind_out)
+        return false;
+    bool found = false;
+    XrProgramXiSemanticProjectionKind kind = 0;
+    for (uint32_t index = 0;
+         index < sizeof(xr_program_xi_semantic_projection_rows) /
+                     sizeof(xr_program_xi_semantic_projection_rows[0]);
+         ++index) {
+        const XrProgramXiSemanticProjectionRow *row =
+            &xr_program_xi_semantic_projection_rows[index];
+        if (row->core_operation_id != core_operation_id)
+            continue;
+        if (found && kind != row->kind)
+            return false;
+        found = true;
+        kind = row->kind;
+    }
+    if (!found)
+        return false;
+    *kind_out = kind;
+    return true;
+}
+
+bool xr_program_xi_semantic_first_operand_consumption(uint16_t core_operation_id,
+                                                      uint8_t interface_use_kind,
+                                                      bool *consumed_out) {
+    if (!consumed_out)
+        return false;
+    bool found = false;
+    XrProgramXiFirstOperandPolicy policy = 0;
+    for (uint32_t index = 0;
+         index < sizeof(xr_program_xi_semantic_projection_rows) /
+                     sizeof(xr_program_xi_semantic_projection_rows[0]);
+         ++index) {
+        const XrProgramXiSemanticProjectionRow *row =
+            &xr_program_xi_semantic_projection_rows[index];
+        if (row->core_operation_id != core_operation_id)
+            continue;
+        if (found && policy != row->first_operand_policy)
+            return false;
+        found = true;
+        policy = row->first_operand_policy;
+    }
+    if (!found || interface_use_kind < XI_INTERFACE_USE_READ ||
+        interface_use_kind > XI_INTERFACE_USE_OWNED_STORAGE)
+        return false;
+    switch (policy) {
+        case XR_PROGRAM_XI_FIRST_OPERAND_BORROW:
+            *consumed_out = false;
+            return true;
+        case XR_PROGRAM_XI_FIRST_OPERAND_CONCRETE_BY_INTERFACE_USE:
+        case XR_PROGRAM_XI_FIRST_OPERAND_EXISTENTIAL_BY_INTERFACE_USE:
+            *consumed_out = interface_use_kind == XI_INTERFACE_USE_MOVE ||
+                            interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE;
+            return true;
+        case XR_PROGRAM_XI_FIRST_OPERAND_RECEIVER_BY_INTERFACE_USE:
+            if (interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE)
+                return false;
+            *consumed_out = interface_use_kind == XI_INTERFACE_USE_MOVE;
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool xr_program_xi_operation_contract(uint16_t xi_operation, uint32_t *effect_mask_out,
@@ -260,6 +424,25 @@ bool xr_program_xi_operation_contract(uint16_t xi_operation, uint32_t *effect_ma
         return false;
     *effect_mask_out = effects;
     *capability_mask_out = capabilities;
+    return true;
+}
+
+bool xr_program_xi_semantic_operation_contract(uint16_t xi_operation,
+                                                uint8_t xi_existential_kind,
+                                                uint32_t *effect_mask_out,
+                                                uint32_t *capability_mask_out) {
+    if (!effect_mask_out || !capability_mask_out)
+        return false;
+    XrProgramXiSemanticProjection projection;
+    if (!xr_program_xi_semantic_projection(xi_operation, xi_existential_kind,
+                                           &projection))
+        return false;
+    const XrCoreOperationSpec *operation =
+        xr_core_spec_operation_by_id(projection.core_operation_id);
+    if (!operation)
+        return false;
+    *effect_mask_out = operation->effect_mask;
+    *capability_mask_out = operation->capability_mask;
     return true;
 }
 

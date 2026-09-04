@@ -129,7 +129,7 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
             .panic_type_id = XR_CORE_TYPE_VOID,
         },
     };
-    XrCoreIrInterfaceInput interface = {
+    XrCoreIrInterfaceInput interface_input = {
         .key = interface_key,
         .slots = interface_slots,
         .slot_count = 3u,
@@ -805,7 +805,7 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
         .required_feature_count = 1u,
         .types = types,
         .type_count = 3u,
-        .interfaces = &interface,
+        .interfaces = &interface_input,
         .interface_count = 1u,
         .conformances = mutation == XR_EXISTENTIAL_FIXTURE_NO_CONFORMANCE ? NULL : &conformance,
         .conformance_count = mutation == XR_EXISTENTIAL_FIXTURE_NO_CONFORMANCE ? 0u : 1u,

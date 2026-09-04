@@ -186,7 +186,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 228 };
+enum { XI_GEN_OP_COUNT = 229 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -448,7 +448,8 @@ typedef struct {
     X(VEC_WIDEN_MUL_HALF, "xi.vec.widen.mul.half", XI_GEN_CLASS_VECTOR, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(VEC_REDUCE_ADD, "xi.vec.reduce.add", XI_GEN_CLASS_VECTOR, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(VALUE_PRODUCT_CONSTRUCT, "xi.value.product.construct", XI_GEN_CLASS_ARITHMETIC, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_VERIFIER_ONLY, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_AOT_VERIFY, NULL, NULL) \
-    X(VALUE_PRODUCT_PROJECT, "xi.value.product.project", XI_GEN_CLASS_ARITHMETIC, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_VERIFIER_ONLY, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_AOT_VERIFY, NULL, NULL)
+    X(VALUE_PRODUCT_PROJECT, "xi.value.product.project", XI_GEN_CLASS_ARITHMETIC, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_VERIFIER_ONLY, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(SUM_INJECT, "xi.sum.inject", XI_GEN_CLASS_ARITHMETIC, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_VERIFIER_ONLY, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_AOT_VERIFY, NULL, NULL)
 
 
 static inline const char *xi_generated_op_name(uint16_t op) {
@@ -681,6 +682,7 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return "VEC_REDUCE_ADD";
         case XI_VALUE_PRODUCT_CONSTRUCT: return "VALUE_PRODUCT_CONSTRUCT";
         case XI_VALUE_PRODUCT_PROJECT: return "VALUE_PRODUCT_PROJECT";
+        case XI_SUM_INJECT: return "SUM_INJECT";
         case XI_OP_COUNT: break;
     }
     return "???";
@@ -916,6 +918,7 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_OP_ARITY_VARIADIC;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_OP_ARITY_VARIADIC;
         case XI_VALUE_PRODUCT_PROJECT: return 1;
+        case XI_SUM_INJECT: return XI_OP_ARITY_VARIADIC;
         case XI_OP_COUNT: break;
     }
     return XI_OP_ARITY_VARIADIC;
@@ -1151,6 +1154,7 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_CLASS_VECTOR;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_CLASS_ARITHMETIC;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_CLASS_ARITHMETIC;
+        case XI_SUM_INJECT: return XI_GEN_CLASS_ARITHMETIC;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_CLASS__COUNT;
@@ -1386,6 +1390,7 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_RESULT_VALUE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_RESULT_VALUE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_RESULT_VALUE;
+        case XI_SUM_INJECT: return XI_GEN_RESULT_VALUE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_RESULT_VALUE;
@@ -1621,6 +1626,7 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_SUM_INJECT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1856,6 +1862,7 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return NULL;
         case XI_VALUE_PRODUCT_CONSTRUCT: return NULL;
         case XI_VALUE_PRODUCT_PROJECT: return NULL;
+        case XI_SUM_INJECT: return NULL;
         case XI_OP_COUNT: break;
     }
     return NULL;
@@ -2091,6 +2098,7 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_LOWERING_GENERATED;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_LOWERING_VERIFIER_ONLY;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SUM_INJECT: return XI_GEN_LOWERING_VERIFIER_ONLY;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_LOWERING__COUNT;
@@ -2326,6 +2334,7 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_SPECULATION_SAFE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_SPECULATION_SAFE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_SPECULATION_SAFE;
+        case XI_SUM_INJECT: return XI_GEN_SPECULATION_SAFE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_SPECULATION_NEVER;
@@ -2561,6 +2570,7 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_VN_PURE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_VN_PURE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_VN_PURE;
+        case XI_SUM_INJECT: return XI_GEN_VN_PURE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_VN_NONE;
@@ -2796,6 +2806,7 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_TBAA_NONE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_TBAA_NONE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_TBAA_NONE;
+        case XI_SUM_INJECT: return XI_GEN_TBAA_NONE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_TBAA_NONE;
@@ -3031,6 +3042,7 @@ static inline uint8_t xi_generated_op_sync_order(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_SYNC_NONE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_SYNC_NONE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_SYNC_NONE;
+        case XI_SUM_INJECT: return XI_GEN_SYNC_NONE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_SYNC_NONE;
@@ -3266,6 +3278,7 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_SUM_INJECT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_BACKEND_REWRITE__COUNT;
@@ -3501,6 +3514,7 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return NULL;
         case XI_VALUE_PRODUCT_CONSTRUCT: return NULL;
         case XI_VALUE_PRODUCT_PROJECT: return NULL;
+        case XI_SUM_INJECT: return NULL;
         case XI_OP_COUNT: break;
     }
     return NULL;
@@ -3736,6 +3750,7 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_ESCAPE_USE_NONE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_SUM_INJECT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_ESCAPE_USE_HEAP;
@@ -3971,6 +3986,7 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_SUM_INJECT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -4206,6 +4222,7 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_OWN_USE_BORROW;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_OWN_USE_BORROW;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_OWN_USE_BORROW;
+        case XI_SUM_INJECT: return XI_GEN_OWN_USE_CONSUME;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_OWN_USE_CONSUME;
@@ -4441,6 +4458,7 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_GEN_IC_SITE_NONE;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_GEN_IC_SITE_NONE;
         case XI_VALUE_PRODUCT_PROJECT: return XI_GEN_IC_SITE_NONE;
+        case XI_SUM_INJECT: return XI_GEN_IC_SITE_NONE;
         case XI_OP_COUNT: break;
     }
     return XI_GEN_IC_SITE_NONE;
@@ -4676,6 +4694,7 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return XI_OP_COUNT;
         case XI_VALUE_PRODUCT_CONSTRUCT: return XI_OP_COUNT;
         case XI_VALUE_PRODUCT_PROJECT: return XI_OP_COUNT;
+        case XI_SUM_INJECT: return XI_OP_COUNT;
         case XI_OP_COUNT: break;
     }
     return XI_OP_COUNT;
@@ -4911,6 +4930,7 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return 0;
         case XI_VALUE_PRODUCT_CONSTRUCT: return 0;
         case XI_VALUE_PRODUCT_PROJECT: return 0;
+        case XI_SUM_INJECT: return 0;
         case XI_OP_COUNT: break;
     }
     return 0;
@@ -5146,6 +5166,7 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return 0;
         case XI_VALUE_PRODUCT_CONSTRUCT: return 0;
         case XI_VALUE_PRODUCT_PROJECT: return 0;
+        case XI_SUM_INJECT: return 0;
         case XI_OP_COUNT: break;
     }
     return 0;
@@ -5381,6 +5402,7 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_VEC_REDUCE_ADD: return 0;
         case XI_VALUE_PRODUCT_CONSTRUCT: return 0;
         case XI_VALUE_PRODUCT_PROJECT: return 0;
+        case XI_SUM_INJECT: return 0;
         case XI_OP_COUNT: break;
     }
     return 0;

@@ -731,6 +731,7 @@ XrType *xr_type_new_enum(XrVMRuntime *X, const char *enum_name) {
     if (type && enum_name) {
         XrTypePool *pool = resolve_type_pool(X);
         type->enum_type.enum_name = xr_pool_strdup(pool, enum_name);
+        type->enum_type.nominal_ref = NULL;
         type->enum_type.layout_id = 0;
         type->enum_type.layout = NULL;
         type->enum_type.type_args = NULL;
@@ -1597,6 +1598,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
         case XR_KIND_ENUM:
             copy->enum_type.enum_name =
                 type->enum_type.enum_name ? xr_pool_strdup(pool, type->enum_type.enum_name) : NULL;
+            copy->enum_type.nominal_ref = type->enum_type.nominal_ref;
             copy->enum_type.layout_id = type->enum_type.layout_id;
             copy->enum_type.layout = type->enum_type.layout;
             copy->enum_type.type_arg_count = type->enum_type.type_arg_count;
@@ -2326,14 +2328,42 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return true;
     }
 
-    // Class inheritance + interface conformance
+    // Class inheritance + analyzer-verified nominal interface conformance.
     if ((target->kind == XR_KIND_CLASS || target->kind == XR_KIND_INSTANCE ||
          target->kind == XR_KIND_INTERFACE) &&
-        (source->kind == XR_KIND_CLASS || source->kind == XR_KIND_INSTANCE)) {
-        if (xr_type_is_subclass_of(source, target))
+        (source->kind == XR_KIND_CLASS || source->kind == XR_KIND_INSTANCE ||
+         source->kind == XR_KIND_ENUM)) {
+        if (source->kind != XR_KIND_ENUM && xr_type_is_subclass_of(source, target))
             return true;
 
-        // Check interface conformance: source class implements target interface.
+        XrClassInfo *source_info = source->kind == XR_KIND_ENUM ? source->enum_type.nominal_ref
+                                                                : source->instance.class_ref;
+        if (target->kind == XR_KIND_INTERFACE && target->instance.class_ref) {
+            for (XrClassInfo *ci = source_info; ci; ci = ci->base) {
+                for (int i = 0; i < ci->interface_conformance_count; i++) {
+                    const XaInterfaceConformance *conformance = &ci->interface_conformances[i];
+                    XrType *iface = conformance->interface_type;
+                    if (!conformance->complete || !conformance->constraint_eligible ||
+                        conformance->interface_info != target->instance.class_ref || !iface ||
+                        iface->instance.type_arg_count != target->instance.type_arg_count)
+                        continue;
+                    bool args_match = true;
+                    for (int j = 0; j < target->instance.type_arg_count; j++) {
+                        if (!xr_type_equals(iface->instance.type_args[j],
+                                            target->instance.type_args[j])) {
+                            args_match = false;
+                            break;
+                        }
+                    }
+                    if (args_match)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        // Built-in interfaces have no declaration identity and retain their
+        // dedicated structural predicates above this generic relation.
         // Target may be XR_KIND_INTERFACE (builtin) or XR_KIND_CLASS (user-defined
         // interface resolved by parser as class name).  When the target carries
         // type arguments, both the head name and the parameter list must match;
@@ -2341,7 +2371,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         const char *target_name = target->instance.class_name;
         int target_args = target->instance.type_arg_count;
         if (target_name) {
-            for (XrClassInfo *ci = source->instance.class_ref; ci; ci = ci->base) {
+            for (XrClassInfo *ci = source_info; ci; ci = ci->base) {
                 for (int i = 0; i < ci->interface_count; i++) {
                     XrType *iface = ci->interface_types[i];
                     if (!iface || !iface->instance.class_name)
@@ -2570,6 +2600,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         /* Enum identity is nominal and generic arguments remain part of the
          * concrete runtime type. Without this branch the trailing return would
          * make unrelated enum declarations and specializations compare equal. */
+        if (a->enum_type.nominal_ref != b->enum_type.nominal_ref)
+            return false;
         if (!a->enum_type.enum_name || !b->enum_type.enum_name ||
             strcmp(a->enum_type.enum_name, b->enum_type.enum_name) != 0 ||
             a->enum_type.type_arg_count != b->enum_type.type_arg_count)

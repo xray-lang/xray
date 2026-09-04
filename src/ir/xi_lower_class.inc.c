@@ -177,13 +177,35 @@ static XaSymbol *class_method_analyzer_symbol(XiLower *l, const ClassDeclNode *c
     return method_sym;
 }
 
-static XrType *class_method_analyzer_signature(XiLower *l, const ClassDeclNode *cd,
-                                               const MethodDeclNode *m) {
-    XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
-    XaSymbolLinks *method_links =
-        method_sym && l && l->analyzer ? xa_analyzer_get_links(l->analyzer, method_sym) : NULL;
-    XrType *method_type = method_links ? method_links->type : NULL;
-    return (method_type && method_type->kind == XR_KIND_FUNCTION) ? method_type : NULL;
+static const XgClassSummary *class_xglobal_row_for_info(const XiLower *l, const XrClassInfo *info) {
+    const XgDeclSummary *decl = NULL;
+    const XgClassSummary *match = NULL;
+    if (!l || !l->global_evidence || l->xg_module_id == XG_NO_ID || !info ||
+        info->xg_class_id == XG_NO_ID || info->xg_decl_id == XG_NO_ID || info->xg_nominal_key == 0)
+        return NULL;
+    for (uint32_t index = 0; index < l->global_evidence->ndecls; ++index) {
+        const XgDeclSummary *candidate = &l->global_evidence->decls[index];
+        if (candidate->decl_id != info->xg_decl_id)
+            continue;
+        if (decl)
+            return NULL;
+        decl = candidate;
+    }
+    if (!decl || decl->module_id != l->xg_module_id ||
+        (decl->kind != XG_DECL_CLASS && decl->kind != XG_DECL_STRUCT) ||
+        decl->nominal_key != info->xg_nominal_key)
+        return NULL;
+    for (uint32_t index = 0; index < l->global_evidence->nclasses; ++index) {
+        const XgClassSummary *candidate = &l->global_evidence->classes[index];
+        if (candidate->decl_id != decl->decl_id)
+            continue;
+        if (match || candidate->class_id != info->xg_class_id ||
+            candidate->module_id != decl->module_id || candidate->decl_kind != decl->kind ||
+            candidate->class_id == XG_NO_ID)
+            return NULL;
+        match = candidate;
+    }
+    return match;
 }
 
 /* Resolve the analyzer class metadata for a class declaration. The hierarchy in
@@ -465,17 +487,29 @@ static bool class_synth_ctor_needs_super(XiLower *l, const ClassDeclNode *cd) {
  * Instance methods get an implicit 'this' parameter at index 0.
  * For constructors, cd provides field declarations so complex
  * default values can be lowered as IR before the user body. */
-XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
-                                        ClassDeclNode *cd, bool owner_is_value_aggregate,
-                                        struct XrType *receiver_type, uint32_t source_node_id) {
+XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, XaSymbol *method_sym,
+                                        bool is_inst, ClassDeclNode *cd,
+                                        bool owner_is_value_aggregate, struct XrType *receiver_type,
+                                        uint32_t source_node_id) {
+    const bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
+    XaSymbolLinks *method_links =
+        method_sym && l && l->analyzer ? xa_analyzer_get_links(l->analyzer, method_sym) : NULL;
+    XrType *method_sig = method_links ? method_links->type : NULL;
+    if ((!method_sym && !(is_ctor && !m->body)) ||
+        (method_sym &&
+         (method_sym->kind != XA_SYM_METHOD || method_sym->is_static != m->is_static ||
+          !method_sym->name || !m->name || strcmp(method_sym->name, m->name) != 0 || !method_sig ||
+          method_sig->kind != XR_KIND_FUNCTION))) {
+        l->had_error = true;
+        return NULL;
+    }
+
     XiLower ml;
     xi_lower_init(&ml, l->analyzer, l->isolate);
     ml.parent = l;
     ml.repl_mode = l->repl_mode;
     xi_lower_inherit_evidence(&ml, l);
 
-    const bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
-    XrType *method_sig = class_method_analyzer_signature(l, cd, m);
     /* Prefer the analyzer-owned method signature: it was resolved in the
      * class lexical scope, so self-references and same-module class names do
      * not depend on whatever scope the backend lowering happens to be in. */
@@ -535,11 +569,46 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
     }
 
+    XaSymbol *owner_sym = cd && cd->symbol_id
+                              ? xa_scope_lookup_by_id(l->analyzer->global_scope, cd->symbol_id)
+                              : NULL;
+    XaSymbolLinks *owner_links = owner_sym ? xa_analyzer_get_links(l->analyzer, owner_sym) : NULL;
+    XrClassInfo *owner_info = owner_links ? owner_links->class_info : NULL;
     struct XrType *this_type = receiver_type ? receiver_type : ml.type_any;
     if (is_inst && !receiver_type && cd && cd->name) {
+        /* The executable receiver must retain the declaration's nominal
+         * identity.
+         * Reconstructing a named instance without class_ref loses
+         * the Xglobal
+         * declaration/key pair at the Xi snapshot boundary, so a
+         * witness method can no
+         * longer prove which conformance it implements.
+         * The declaration symbol id is the
+         * authority; do not recover this
+         * contract from a method name or a surrounding
+         * scope. */
+        if (!owner_sym || !owner_links || !owner_info ||
+            owner_info->declaration_symbol != owner_sym) {
+            l->had_error = true;
+            xi_func_free(ml.func);
+            xi_lower_cleanup(&ml);
+            return NULL;
+        }
         struct XrType *named_this = xr_type_new_named_instance(l->isolate, cd->name);
-        if (named_this)
-            this_type = named_this;
+        if (!named_this) {
+            l->had_error = true;
+            xi_func_free(ml.func);
+            xi_lower_cleanup(&ml);
+            return NULL;
+        }
+        named_this->instance.class_ref = owner_info;
+        named_this->instance.superclass =
+            owner_links->type && (owner_links->type->kind == XR_KIND_CLASS ||
+                                  owner_links->type->kind == XR_KIND_INSTANCE)
+                ? owner_links->type->instance.superclass
+                : NULL;
+        named_this->is_value_type = owner_is_value_aggregate || owner_info->struct_layout != NULL;
+        this_type = named_this;
     }
     /* A constructor's executable ABI returns the newly initialized receiver.
      * Keep that fact in XiFunc itself instead of teaching every verifier and
@@ -547,11 +616,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     if (is_ctor && is_inst)
         ml.func->return_type = this_type;
 
-    XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
     xi_lower_publish_effect_sidecars(ml.func, l->analyzer, method_sym);
-    XaSymbolLinks *owner_links = method_sym && method_sym->parent
-                                     ? xa_analyzer_get_links(l->analyzer, method_sym->parent)
-                                     : NULL;
     bool value_receiver =
         is_inst && !is_ctor &&
         (owner_is_value_aggregate ||
@@ -607,8 +672,13 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
             return NULL;
         }
         XiValue *p = xi_param(ml.func, entry, (uint16_t) (base + i), pt);
-        ml.func->params[base + i] = p;
         XrParamMode mode = param ? param->passing_mode : XR_PARAM_READ;
+        if (!p || !xi_lower_bind_interface_parameter(&ml, p, pt, mode, (uint32_t) i)) {
+            xi_func_free(ml.func);
+            xi_lower_cleanup(&ml);
+            return NULL;
+        }
+        ml.func->params[base + i] = p;
         if ((base + i) < fixed_params && mode != XR_PARAM_READ &&
             !xi_func_set_param_passing_mode(ml.func, (uint16_t) (base + i), mode)) {
             xi_func_free(ml.func);
@@ -754,8 +824,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || m->is_static)
             continue;
 
+        XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
         XiFunc *mf =
-            xi_lower_method_as_func(l, m, true, cd, owner_is_value_aggregate, NULL,
+            xi_lower_method_as_func(l, m, method_sym, true, cd, owner_is_value_aggregate, NULL,
                                     class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (!mf) {
             l->had_error = true;
@@ -773,7 +844,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         synth.is_constructor = true;
 
         XiFunc *mf =
-            xi_lower_method_as_func(l, &synth, true, cd, owner_is_value_aggregate, NULL, 0);
+            xi_lower_method_as_func(l, &synth, NULL, true, cd, owner_is_value_aggregate, NULL, 0);
         if (mf) {
             xi_lower_func_add_child(l->func, mf);
             if (cidx)
@@ -792,8 +863,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || !m->is_static)
             continue;
 
+        XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
         XiFunc *mf =
-            xi_lower_method_as_func(l, m, false, cd, owner_is_value_aggregate, NULL,
+            xi_lower_method_as_func(l, m, method_sym, false, cd, owner_is_value_aggregate, NULL,
                                     class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (!mf) {
             l->had_error = true;
@@ -851,8 +923,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (!m->is_static_constructor)
             continue;
+        XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
         XiFunc *cf =
-            xi_lower_method_as_func(l, m, false, cd, owner_is_value_aggregate, NULL,
+            xi_lower_method_as_func(l, m, method_sym, false, cd, owner_is_value_aggregate, NULL,
                                     class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (cf) {
             xi_lower_func_add_child(l->func, cf);
@@ -978,64 +1051,65 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->inherited_field_count = 0;
     data->is_cycle_candidate = false;
     data->explicit_final = cd->explicit_final;
-    /* Stamp the evidence class id now.  The semantic snapshot nulls class_info
-     * before the backend runs, and a bare-name lookup there would collide with
-     * a same-named class from another module.  The class being lowered lives in
-     * this unit, so (module, name) resolves it uniquely. */
+    /* Stamp the declaration-backed evidence identity now. The semantic
+     * snapshot may null
+     * class_info, so XiClassData must retain the Xglobal
+     * class row selected by the
+     * analyzer's exact declaration symbol. */
     data->xg_class_id = XG_NO_ID;
-    if (l->global_evidence && l->xg_module_id != 0 && cd->name) {
-        uint32_t cls_name_id = xg_name_id(cd->name);
-        for (uint32_t ci = 0; cls_name_id && ci < l->global_evidence->nclasses; ci++) {
-            const XgClassSummary *cs = &l->global_evidence->classes[ci];
-            if (cs->module_id == l->xg_module_id && cs->name_id == cls_name_id) {
-                data->xg_class_id = cs->class_id;
-                break;
+    if (l->analyzer) {
+        XaSymbol *class_symbol =
+            cd->symbol_id && l->analyzer->global_scope
+                ? xa_scope_lookup_by_id(l->analyzer->global_scope, cd->symbol_id)
+                : NULL;
+        XaSymbolLinks *links =
+            class_symbol ? xa_analyzer_get_links(l->analyzer, class_symbol) : NULL;
+        XrClassInfo *class_info = links ? links->class_info : NULL;
+        const XgClassSummary *class_row = class_xglobal_row_for_info(l, class_info);
+        if (!class_symbol || !class_info || class_info->declaration_symbol != class_symbol ||
+            (l->global_evidence && !class_row)) {
+            l->had_error = true;
+            return;
+        }
+        data->class_info = class_info;
+        if (class_row)
+            data->xg_class_id = class_row->class_id;
+        /* The AST type reference preserves the spelling but can still be
+         * an unresolved
+         * nominal instance (class_ref == NULL).  Json AOT
+         * schemas need the
+         * analyzer-owned field identity so nested
+         * @derive(Json) classes resolve to their
+         * XiClassData. */
+        if (data->instance_field_types) {
+            for (uint16_t field_index = 0; field_index < data->instance_field_count;
+                 field_index++) {
+                const char *field_name = data->instance_field_names[field_index];
+                XaSymbol *field_symbol =
+                    xa_class_info_lookup_instance_member(class_info, field_name);
+                XaSymbolLinks *field_links =
+                    field_symbol ? xa_analyzer_get_links(l->analyzer, field_symbol) : NULL;
+                XrType *field_type =
+                    field_links && (field_links->type || field_links->declared_type)
+                        ? (field_links->type ? field_links->type : field_links->declared_type)
+                        : NULL;
+                if (field_type)
+                    data->instance_field_types[field_index] = field_type;
             }
         }
-    }
-    if (cd->name && l->analyzer) {
-        XaSymbol *cls_sym = xa_analyzer_lookup(l->analyzer, cd->name);
-        if (!cls_sym)
-            cls_sym = xa_analyzer_lookup_deep(l->analyzer, cd->name);
-        if (cls_sym) {
-            XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, cls_sym);
-            XrClassInfo *class_info = links ? links->class_info : NULL;
-            data->class_info = class_info;
-            /* The AST type reference preserves the spelling but can still be
-             * an unresolved nominal instance (class_ref == NULL).  Json AOT
-             * schemas need the analyzer-owned field identity so nested
-             * @derive(Json) classes resolve to their XiClassData. */
-            if (class_info && data->instance_field_types) {
-                for (uint16_t field_index = 0; field_index < data->instance_field_count;
-                     field_index++) {
-                    const char *field_name = data->instance_field_names[field_index];
-                    XaSymbol *field_symbol =
-                        xa_class_info_lookup_instance_member(class_info, field_name);
-                    XaSymbolLinks *field_links =
-                        field_symbol ? xa_analyzer_get_links(l->analyzer, field_symbol) : NULL;
-                    XrType *field_type =
-                        field_links && (field_links->type || field_links->declared_type)
-                            ? (field_links->type ? field_links->type : field_links->declared_type)
-                            : NULL;
-                    if (field_type)
-                        data->instance_field_types[field_index] = field_type;
-                }
+        data->source_file = arena_strdup(l->func, class_info->location.file);
+        if (class_info->struct_layout) {
+            data->struct_layout = class_clone_value_layout(l, class_info->struct_layout, 0);
+            if (!data->struct_layout) {
+                l->had_error = true;
+                return;
             }
-            if (class_info)
-                data->source_file = arena_strdup(l->func, class_info->location.file);
-            if (class_info && class_info->struct_layout) {
-                data->struct_layout = class_clone_value_layout(l, class_info->struct_layout, 0);
-                if (!data->struct_layout) {
-                    l->had_error = true;
-                    return;
-                }
-            }
-            if (class_info && !class_info->struct_layout)
-                data->instance_layout =
-                    class_make_native_instance_layout(l, cd, &data->inherited_field_count);
-            if (links && links->type && links->type->is_cycle_candidate)
-                data->is_cycle_candidate = true;
         }
+        if (!class_info->struct_layout)
+            data->instance_layout =
+                class_make_native_instance_layout(l, cd, &data->inherited_field_count);
+        if (links && links->type && links->type->is_cycle_candidate)
+            data->is_cycle_candidate = true;
     }
 
     /* Build arena-safe method descriptor array so cgen can resolve

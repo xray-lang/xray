@@ -663,6 +663,11 @@ void xa_class_info_free(XrClassInfo *info) {
         xr_free(info->constructor_params);
     if (info->interface_types)
         xr_free(info->interface_types);
+    if (info->interface_conformances) {
+        for (int i = 0; i < info->interface_conformance_count; i++)
+            xr_free(info->interface_conformances[i].witnesses);
+        xr_free(info->interface_conformances);
+    }
     if (info->vtable)
         xr_free(info->vtable);
     if (info->struct_layout)
@@ -1129,6 +1134,7 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     }
     xa_symbol_links_copy_return_function_effect_summary(dst, src);
     dst->function_decl_node = src->function_decl_node;
+    dst->interface_decl_node = src->interface_decl_node;
     dst->is_deprecated = src->is_deprecated;
     dst->deprecated_message = src->deprecated_message ? xr_strdup(src->deprecated_message) : NULL;
     dst->is_extern = src->is_extern;
