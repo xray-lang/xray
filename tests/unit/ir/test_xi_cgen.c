@@ -3087,7 +3087,6 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
     call_plan->verified = true;
     call->call_plan = call_plan;
     xi_block_set_return(entry, call);
-    function->stage = XI_STAGE_OPTIMIZED;
     if (out_ref)
         *out_ref = ref;
     return function;
