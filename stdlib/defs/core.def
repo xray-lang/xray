@@ -2040,6 +2040,12 @@ module cluster {
     doc: "Private scalar snapshot of one connected peer's failure detector state"
   }
 
+  object __ClusterBroadcastStats {
+    fields: "const connected: i64, const accepted: i64"
+    exact: true
+    doc: "Private raw counts from one locked peer broadcast"
+  }
+
   fn __start {
     signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool"
     doc: "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration"
@@ -2200,16 +2206,19 @@ module cluster {
     caps: "channel"
   }
 
-  fn __forwardInbound {
-    signature: "(peerGeneration: i64, wire: Array<u8>): i64"
-    doc: "Broadcast one source-encoded frame while excluding its peer generation"
-    vm: "cluster_forward_inbound_fn"
+  fn __broadcast {
+    signature: "(excludedPeerGeneration: i64, wire: Array<u8>): __ClusterBroadcastStats?"
+    doc: "Return raw connected and accepted counts after one locked peer broadcast"
+    vm: "cluster_broadcast_fn"
     argc: 2
     arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "channel"
+    return_ownership: "fresh"
+    effect: "nothrow"
+    allocation: "may_heap"
   }
 
   fn __notifyRemoteMonitor {
@@ -2311,21 +2320,6 @@ module cluster {
     vm: "cluster_publish_local_primitive"
     argc: 2
     arg_spec: "sv"
-    ret: "i64"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-    effect: "nothrow"
-    allocation: "may_heap"
-  }
-
-  fn __publishRemote {
-    signature: "(wire: Array<u8>): i64"
-    doc: "Broadcast one source-encoded transport frame to connected native transports"
-    vm: "cluster_publish_remote_primitive"
-    argc: 1
-    arg_spec: "v"
     ret: "i64"
     aot_direct: false
     link_object: false

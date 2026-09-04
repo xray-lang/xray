@@ -51,7 +51,7 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__deliverInbound", cluster_deliver_inbound_fn);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__forwardInbound", cluster_forward_inbound_fn);
+    XRS_EXPORT(module, isolate, "__broadcast", cluster_broadcast_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__notifyRemoteMonitor", cluster_notify_remote_monitor_fn);
     expected_count++;
@@ -70,8 +70,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     XRS_EXPORT(module, isolate, "__runtimeSnapshot", cluster_runtime_snapshot_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__publishLocal", cluster_publish_local_primitive);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__publishRemote", cluster_publish_remote_primitive);
     expected_count++;
     XRS_EXPORT(module, isolate, "__listen", cluster_listen_fn);
     expected_count++;

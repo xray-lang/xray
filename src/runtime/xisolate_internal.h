@@ -163,7 +163,11 @@ struct XrVMRuntime {
     void *debug_hooks;  // XrDebugHooks* for VM callback interface
 
     /* ========== Cluster (optional, enabled with XR_HAS_CLUSTER) ========== */
-    void *cluster;  // XrCluster* (stdlib/cluster), NULL if not started
+    /* The slot mutex makes taking a strong provider reference atomic with
+     * observing the slot. Without it, cluster.stop could clear and free the
+     * provider between a consumer's pointer load and refcount increment. */
+    XrAdaptiveMutex cluster_slot_lock;
+    void *cluster;  // XrCluster* (stdlib/cluster), protected by cluster_slot_lock
 
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by module/xstdlib_runtime_cache.h. Holds memoised

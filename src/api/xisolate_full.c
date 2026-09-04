@@ -299,6 +299,7 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
         return NULL;
     }
     memset(isolate, 0, sizeof(XrVMRuntime));
+    xr_amutex_init(&isolate->cluster_slot_lock);
 
     isolate->params = *params;
 

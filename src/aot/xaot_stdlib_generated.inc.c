@@ -98,7 +98,7 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__deliverInbound") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__forwardInbound") == 0)
+    if (strcmp(symbol, "cluster.__broadcast") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__notifyRemoteMonitor") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
@@ -107,8 +107,6 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
     if (strcmp(symbol, "cluster.__stop") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__publishLocal") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__publishRemote") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__listen") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
