@@ -737,7 +737,7 @@ deletion_trigger = "when Xray can mark a store as one the optimiser may not elid
 # net -- sockets, DNS and TLS
 # ============================================================================
 #
-# The VM half (stdlib/net/net.c) and the AOT half (src/aot/xrt_net.h) are two
+# The VM half (src/io/xnet_provider.c) and the AOT half (src/aot/xrt_net.h) are two
 # independent implementations. They share only the header-only socket shims in
 # `src/os/os_net.h` and, under a coroutine, one netpoll instance. Where a leaf
 # reaches different syscalls or offers a capability on one backend only, the
@@ -756,7 +756,7 @@ class = "host_abi_leaf"
 abi = "accept(2) -- on the Linux io_uring path with SOCK_NONBLOCK, i.e. accept4(2) semantics -- plus fcntl(2) F_SETFL and setsockopt(2) TCP_NODELAY on the accepted descriptor"
 ownership = "fresh"
 effect = "suspends"
-provider = "kernel accept(2); the wait is the Xray netpoll (kqueue/epoll/io_uring/IOCP-AFD) on the VM and, under a coroutine, on AOT too. VM stdlib/net/net.c -> src/coro/xsocket.c xr_socket_accept_try; AOT src/aot/xrt_net.h xrt_net_accept_try under a coroutine and a select(2) wait otherwise"
+provider = "kernel accept(2); the wait is the Xray netpoll (kqueue/epoll/io_uring/IOCP-AFD) on the VM and, under a coroutine, on AOT too. VM src/io/xnet_provider.c -> src/coro/xsocket.c xr_socket_accept_try; AOT src/aot/xrt_net.h xrt_net_accept_try under a coroutine and a select(2) wait otherwise"
 deletion_trigger = "when Xray source can issue the accept(2) call itself and register the resulting descriptor with the netpoll; the descriptor's non-blocking and TCP_NODELAY setup would move to net.xr at the same time"
 
 [[leaf]]
@@ -766,7 +766,7 @@ class = "host_abi_leaf"
 abi = "close(2) (Win32 closesocket), preceded on the AOT side by shutdown(2) SHUT_RDWR; netpoll deregistration is epoll_ctl(2) EPOLL_CTL_DEL or kevent(2) EV_DELETE; on the VM a TLS connection first runs OpenSSL SSL_shutdown(3) and SSL_free(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "libc close plus Xray netpoll deregistration, plus OpenSSL on the VM only. VM stdlib/net/net.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
+provider = "libc close plus Xray netpoll deregistration, plus OpenSSL on the VM only. VM src/io/xnet_provider.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
 deletion_trigger = "when the runtime offers a typed socket handle whose release Xray source can express, so the descriptor close, the netpoll deregistration and the TLS teardown stop having to happen together inside one C call"
 
 [[leaf]]
@@ -786,7 +786,7 @@ class = "runtime_leaf"
 abi = "none; reads the transport-kind field of a runtime-owned connection handle"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_conn_is_tls; AOT src/aot/xrt_net.h xrt_net_is_tls"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_conn_is_tls; AOT src/aot/xrt_net.h xrt_net_is_tls"
 deletion_trigger = "when the connection handle representation is declared in Xray, so the TLS transport tag is an ordinary field read"
 
 [[leaf]]
@@ -796,7 +796,7 @@ class = "runtime_leaf"
 abi = "none; reads the descriptor field of a runtime-owned socket handle, answering -1 once the handle is closed"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
 deletion_trigger = "when the socket handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call"
 
 [[leaf]]
@@ -806,7 +806,7 @@ class = "build_identity_leaf"
 abi = "none; reports whether a TLS provider was linked into this build"
 ownership = "none"
 effect = "nothrow"
-provider = "build configuration. The VM answers from XR_ENABLE_TLS in stdlib/net/net.c; the standalone AOT runtime links no TLS engine and src/aot/xrt_net.h returns false unconditionally"
+provider = "build configuration. The VM answers from XR_ENABLE_TLS in src/io/xnet_provider.c; the standalone AOT runtime links no TLS engine and src/aot/xrt_net.h returns false unconditionally"
 deletion_trigger = "when the TLS provider is present in every supported build, so the question has one answer and net.xr can stop asking it -- or when build configuration becomes readable from Xray source"
 
 [[leaf]]
@@ -826,7 +826,7 @@ class = "runtime_leaf"
 abi = "none; reads a per-worker thread-local integer, used because a failed connect has no handle to attach the code to"
 ownership = "none"
 effect = "nothrow"
-provider = "an XR_THREAD_LOCAL slot in the Xray runtime. VM stdlib/net/net.c g_last_connect_code; AOT src/aot/xrt_net.h g_xrt_last_connect_code. Two separate slots with the same contract"
+provider = "an XR_THREAD_LOCAL slot in the Xray runtime. VM src/io/xnet_provider.c g_last_connect_code; AOT src/aot/xrt_net.h g_xrt_last_connect_code. Two separate slots with the same contract"
 deletion_trigger = "when net.__connectFd returns its error code in its own result, so no thread-local has to carry it between two calls"
 
 [[leaf]]
@@ -836,7 +836,7 @@ class = "runtime_leaf"
 abi = "none; reads the errno snapshot cached on the handle at the point of failure, not the live errno"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
 deletion_trigger = "when a failing net leaf returns the platform errno in its own result, so it does not have to be snapshotted onto the handle for a later call"
 
 [[leaf]]
@@ -846,7 +846,7 @@ class = "host_abi_leaf"
 abi = "socket(2), setsockopt(2) SO_REUSEADDR, setsockopt(2) IPV6_V6ONLY=0 for dual stack, bind(2), listen(2), fcntl(2) F_SETFL, and getsockname(2) to read back a kernel-assigned port; the VM path also sets TCP_NOTSENT_LOWAT"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel socket/bind/listen. VM stdlib/net/net.c -> src/io/xnet_transport.c xr_io_listen; AOT src/aot/xrt_net.h xrt_net_listen_fd. Equivalent behaviour, two implementations"
+provider = "kernel socket/bind/listen. VM src/io/xnet_provider.c -> src/io/xnet_transport.c xr_io_listen; AOT src/aot/xrt_net.h xrt_net_listen_fd. Equivalent behaviour, two implementations"
 deletion_trigger = "when Xray source can issue the socket(2)/bind(2)/listen(2) sequence itself; the sequence is one atomic setup from the caller's point of view and cannot be usefully split first"
 
 [[leaf]]
@@ -856,7 +856,7 @@ class = "runtime_leaf"
 abi = "none; reads the bound-port field of a runtime-owned listener handle"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_listener_port; AOT src/aot/xrt_net.h xrt_net_listener_port"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_listener_port; AOT src/aot/xrt_net.h xrt_net_listener_port"
 deletion_trigger = "when the listener handle representation is declared in Xray, so the port cached after bind is an ordinary field read"
 
 [[leaf]]
@@ -896,7 +896,7 @@ class = "runtime_leaf"
 abi = "none; writes the selected read, write, or both deadline fields on the connection handle"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_deadline_direction; AOT src/aot/xrt_net.h xrt_net_set_deadline_direction"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_set_deadline_direction; AOT src/aot/xrt_net.h xrt_net_set_deadline_direction"
 deletion_trigger = "when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call"
 
 [[leaf]]
@@ -906,7 +906,7 @@ class = "host_abi_leaf"
 abi = "shutdown(2) with SHUT_RD, SHUT_WR, or SHUT_RDWR selected by the primitive direction argument"
 ownership = "none"
 effect = "nothrow"
-provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_direction records errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown_direction returns only a bool"
+provider = "kernel shutdown(2). VM src/io/xnet_provider.c net_shutdown_direction records errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown_direction returns only a bool"
 deletion_trigger = "when Xray source can issue shutdown(2) itself; the public direction-specific API is already source-owned and this is the single remaining syscall boundary"
 
 [[leaf]]
@@ -926,7 +926,7 @@ class = "host_abi_leaf"
 abi = "socket(2) SOCK_DGRAM, inet_pton(3), bind(2) and fcntl(2) F_SETFL"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel socket/bind. VM stdlib/net/net.c net_udp_bind_handle; AOT src/aot/xrt_net.h xrt_net_udp_bind. Equivalent behaviour, two implementations"
+provider = "kernel socket/bind. VM src/io/xnet_provider.c net_udp_bind_handle; AOT src/aot/xrt_net.h xrt_net_udp_bind. Equivalent behaviour, two implementations"
 deletion_trigger = "when Xray source can issue the socket(2)/bind(2) pair itself; the setup is atomic from the caller's point of view and has no smaller form"
 
 [[leaf]]
@@ -946,7 +946,7 @@ class = "runtime_leaf"
 abi = "none; reads the sender-port field on the handle. The ntohs(3) that produced it ran inside net.__udpRecvInto, not here"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_udp_from_port; AOT src/aot/xrt_net.h xrt_net_udp_from_port"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_udp_from_port; AOT src/aot/xrt_net.h xrt_net_udp_from_port"
 deletion_trigger = "when net.__udpRecvInto returns the sender port in its own result, so it does not have to be parked on the handle for a second call to collect"
 
 [[leaf]]
@@ -956,7 +956,7 @@ class = "host_abi_leaf"
 abi = "recvfrom(2), then inet_ntop(3) and ntohs(3) to record the sender"
 ownership = "none"
 effect = "suspends"
-provider = "kernel recvfrom; the readability wait is the Xray netpoll on the VM and select(2) on AOT. VM stdlib/net/net.c net_udp_recv_step; AOT src/aot/xrt_net.h xrt_net_udp_recv_into"
+provider = "kernel recvfrom; the readability wait is the Xray netpoll on the VM and select(2) on AOT. VM src/io/xnet_provider.c net_udp_recv_step; AOT src/aot/xrt_net.h xrt_net_udp_recv_into"
 deletion_trigger = "when Xray source can issue the recvfrom(2) call itself and await readability through the netpoll; the sender formatting would move to net.xr with it"
 
 [[leaf]]

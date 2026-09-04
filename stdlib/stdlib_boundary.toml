@@ -358,8 +358,8 @@ layer = "L2"
 policy = "xray_semantic"
 semantic_source = "stdlib/net/net.xr"
 public_native = []
-private_native_sources = ["stdlib/net/*.c"]
-private_native_reason = "Private socket, TLS, deadline, netpoll and bidirectional-pump primitives consumed by net.xr"
+private_native_sources = ["src/io/xnet_provider.c"]
+private_native_reason = "Runtime-owned socket, TLS, deadline and netpoll providers for the private leaves consumed by net.xr"
 perf_suite = "stdlib/net"
 
 [[module]]

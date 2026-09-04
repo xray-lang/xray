@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * net.c - Raw network primitives behind the net.xr semantic layer
+ * xnet_provider.c - VM providers for the net.xr native leaves
  *
  * KEY CONCEPT:
  *   This file holds only the yieldable socket/TLS/netpoll primitives and the
@@ -20,34 +20,34 @@
  *   (net.__connectFd, net.__tlsHandshake); the script layer classifies.
  */
 
-#include "../../src/base/xmalloc.h"
-#include "../common.h"
-#include "../../src/io/xnet_transport.h"
-#include "../../src/io/xtls_provider.h"
-#include "../../src/module/xstdlib_runtime_cache.h"
-#include "../../src/io/xdns.h"
-#include "../../src/io/xnet_handle.h"
-#include "../../src/runtime/class/xclass.h"
-#include "../../src/runtime/class/xclass_builder.h"
-#include "../../src/runtime/class/xclass_system.h"
-#include "../../src/runtime/class/xinstance.h"
-#include "../../src/runtime/class/xenum.h"
-#include "../../src/runtime/value/xvalue.h"
-#include "../../src/runtime/object/xstring.h"
-#include "../../src/runtime/object/xarray.h"
-#include "../../src/runtime/object/xjson.h"
+#include "../base/xmalloc.h"
+#include "../../stdlib/common.h"
+#include "xnet_transport.h"
+#include "xtls_provider.h"
+#include "../module/xstdlib_runtime_cache.h"
+#include "xdns.h"
+#include "xnet_handle.h"
+#include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_builder.h"
+#include "../runtime/class/xclass_system.h"
+#include "../runtime/class/xinstance.h"
+#include "../runtime/class/xenum.h"
+#include "../runtime/value/xvalue.h"
+#include "../runtime/object/xstring.h"
+#include "../runtime/object/xarray.h"
+#include "../runtime/object/xjson.h"
 
-#include "../../src/module/xmodule.h"
-#include "../../src/coro/xyieldable.h"
-#include "../../src/coro/xcoroutine.h"
-#include "../../src/coro/xworker.h"
-#include "../../src/coro/xnetpoll.h"
-#include "../../src/vm/xvm.h"
-#include "../../src/vm/xvm_coro_api.h"
-#include "../../src/runtime/symbol/xsymbol_table.h"
-#include "../../src/runtime/xisolate_internal.h"
-#include "../../src/runtime/xisolate_api.h"
-#include "../../src/os/os_time.h"
+#include "../module/xmodule.h"
+#include "../coro/xyieldable.h"
+#include "../coro/xcoroutine.h"
+#include "../coro/xworker.h"
+#include "../coro/xnetpoll.h"
+#include "../vm/xvm.h"
+#include "../vm/xvm_coro_api.h"
+#include "../runtime/symbol/xsymbol_table.h"
+#include "../runtime/xisolate_internal.h"
+#include "../runtime/xisolate_api.h"
+#include "../os/os_time.h"
 
 // Import types and functions from xsocket.h (avoid header conflicts)
 typedef struct {
@@ -68,8 +68,8 @@ extern void xr_socket_close(struct XrVMRuntime *X, int fd);
 #include <stdio.h>
 #include <stdatomic.h>
 #include <stdint.h>
-#include "../../src/os/os_net.h"
-#include "../../src/os/os_thread.h"
+#include "../os/os_net.h"
+#include "../os/os_thread.h"
 #ifndef XR_OS_WINDOWS
 #include <unistd.h>
 #include <sys/socket.h>
@@ -1772,12 +1772,12 @@ static XrValue net_udp_from_port(XrVMRuntime *X, XrValue *args, int nargs) {
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_NET 1
-#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#include "../stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_NET
 
 #define XR_STDLIB_VM_BIND_CLASS_NET_CONN 1
 #define XR_STDLIB_VM_BIND_CLASS_NET_LISTENER 1
-#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#include "../stdlib/xstdlib_class_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_CLASS_NET_LISTENER
 #undef XR_STDLIB_VM_BIND_CLASS_NET_CONN
 

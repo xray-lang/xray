@@ -78,7 +78,7 @@ new_behavior = "socket loopback preserves high-byte octets exactly through the A
 [[legacy_behavior]]
 id = "native-copy-byte-boundary"
 classification = "required"
-new_behavior = "net.copy and copyBidirectional keep payloads in native byte buffers; a mid-stream error ends the pump and reports the byte count, with the reason queryable via lastError"
+new_behavior = "net.copy and copyBidirectional are Xray-owned pumps over reusable Array<u8> buffers; a mid-stream error ends the pump and reports the byte count, with the reason queryable via lastError"
 
 [[legacy_behavior]]
 id = "timeout-rearm-per-yield"
