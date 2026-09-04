@@ -17,6 +17,7 @@
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_source_class_field_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_source_structural_field_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_string_slice_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_index_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
@@ -1179,12 +1180,25 @@ static XrSemanticPlan *build_string_runes_leading_type_semantic(void) {
     return semantic;
 }
 
-static XrSemanticPlan *build_string_slice_range_semantic(void) {
+static XrSemanticPlan *build_string_slice_range_semantic(bool optional_receiver) {
     XiFunc *function = xi_func_new("target_string_slice_range", &stub_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
-    XiValue *source = xi_const_str(function, entry, "target-slice", &stub_exact_string);
+    XiValue *source = NULL;
+    if (optional_receiver) {
+        function->nparams = 1;
+        function->min_params = 0;
+        function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+        REQUIRE(function->params != NULL);
+        function->params[0] = xi_param(function, entry, 0, &stub_exact_string);
+        REQUIRE(function->params[0] != NULL);
+        function->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+        set_single_parameter_ownership(function, XI_OWN_BORROWED);
+        source = function->params[0];
+    } else {
+        source = xi_const_str(function, entry, "target-slice", &stub_exact_string);
+    }
     XiValue *start = xi_const_int(function, entry, 1, &stub_int);
     XiValue *end = xi_const_int(function, entry, 4, &stub_int);
     XiValue *slice = xi_value_new(function, entry, XI_CALL_METHOD, &stub_exact_string, 3);
@@ -8754,7 +8768,7 @@ static void test_string_runes_call_authority(void) {
 }
 
 static void test_string_slice_range_call_authority(void) {
-    XrSemanticPlan *semantic = build_string_slice_range_semantic();
+    XrSemanticPlan *semantic = build_string_slice_range_semantic(false);
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -8814,6 +8828,34 @@ static void test_string_slice_range_call_authority(void) {
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
+}
+
+static void test_string_slice_optional_parameter_authority(void) {
+    XrSemanticPlan *semantic = build_string_slice_range_semantic(true);
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)) &&
+            semantic->parameter_count == 1 && semantic->parameters[0].flags == 0);
+    XrSemanticOperationRecord *slice = NULL;
+    for (uint32_t i = 0; i < semantic->operation_count; i++)
+        if (semantic->operations[i].intrinsic_kind == XR_SEM_INTRINSIC_STRING_SLICE_RANGE) {
+            REQUIRE(slice == NULL);
+            slice = &semantic->operations[i];
+        }
+    REQUIRE(slice && xr_semantic_string_slice_range_is_exact(semantic, slice, NULL, NULL, NULL));
+
+    uint8_t saved_flags = semantic->parameters[0].flags;
+    semantic->parameters[0].flags = XR_SEM_PARAMETER_VARIADIC;
+    REQUIRE(!xr_semantic_string_slice_range_is_exact(semantic, slice, NULL, NULL, NULL));
+    semantic->parameters[0].flags = saved_flags;
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan &&
+            xr_target_plan_verify(plan, error, sizeof(error)) &&
+            find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_STRING_SLICE_RANGE) != NULL);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
 }
 
 static void test_iterator_rune_has_next_call_authority(void) {
@@ -10268,6 +10310,7 @@ int main(int argc, char **argv) {
     }
     if (argc == 2 && strcmp(argv[1], "string-slice-range-authority") == 0) {
         test_string_slice_range_call_authority();
+        test_string_slice_optional_parameter_authority();
         puts("String range-slice TargetPlan authority tests passed");
         return 0;
     }
@@ -10378,6 +10421,7 @@ int main(int argc, char **argv) {
     test_stringbuilder_clear_call_authority();
     test_string_runes_call_authority();
     test_string_slice_range_call_authority();
+    test_string_slice_optional_parameter_authority();
     test_iterator_rune_has_next_call_authority();
     test_iterator_rune_next_call_authority();
     test_iterator_rune_nth_call_argument_authority();
