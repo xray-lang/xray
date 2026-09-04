@@ -41,9 +41,9 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__adoptPeer", cluster_adopt_peer_fn);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__readPeer", cluster_peer_read_fn);
+    XRS_EXPORT(module, isolate, "__readPeer", cluster_peer_read_fn);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__writePeer", cluster_peer_write_fn);
+    XRS_EXPORT(module, isolate, "__writePeer", cluster_peer_write_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__peerEnqueue", cluster_peer_enqueue_fn);
     expected_count++;

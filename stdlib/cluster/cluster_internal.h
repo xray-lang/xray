@@ -104,10 +104,8 @@ typedef struct XrClusterNode {
     struct XrClusterNode *next;
 } XrClusterNode;
 
-XrCFuncResult cluster_peer_read_fn(struct XrVMRuntime *isolate, XrValue *args, int argc,
-                                   XrValue *result);
-XrCFuncResult cluster_peer_write_fn(struct XrVMRuntime *isolate, XrValue *args, int argc,
-                                    XrValue *result);
+XrValue cluster_peer_read_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
+XrValue cluster_peer_write_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
 
 /* ========== Cluster State ========== */
 

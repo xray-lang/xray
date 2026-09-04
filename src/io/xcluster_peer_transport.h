@@ -67,12 +67,13 @@ typedef enum XrClusterPeerWriteEvent {
     XR_CLUSTER_PEER_WRITE_PROVIDER_ERROR = 9,
 } XrClusterPeerWriteEvent;
 
-/* Both entry points consume lease->owner on every return path. */
-XR_FUNC XrCFuncResult xr_cluster_peer_read_frame(struct XrVMRuntime *X,
-                                                 const XrClusterPeerIoLease *lease,
-                                                 uint32_t max_frame_payload, XrValue *result);
-XR_FUNC XrCFuncResult xr_cluster_peer_write_batch(struct XrVMRuntime *X,
-                                                  const XrClusterPeerIoLease *lease,
-                                                  XrValue *result);
+/* Each start consumes the lease and, on success, retains callback until its
+ * owned C-function coroutine has completed or been cancelled. */
+XR_FUNC int64_t xr_cluster_peer_read_start(struct XrVMRuntime *X, const XrClusterPeerIoLease *lease,
+                                           uint64_t peer_generation, uint32_t max_frame_payload,
+                                           XrValue callback);
+XR_FUNC int64_t xr_cluster_peer_write_start(struct XrVMRuntime *X,
+                                            const XrClusterPeerIoLease *lease,
+                                            uint64_t peer_generation, XrValue callback);
 
 #endif  // XR_IO_CLUSTER_PEER_TRANSPORT_H

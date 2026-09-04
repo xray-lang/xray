@@ -15,28 +15,28 @@
 
 #include "cluster_internal.h"
 #include "../../src/runtime/xisolate_internal.h"
+#include "../../src/vm/xvm_closure.h"
 
 /* ========== Generation-safe Peer I/O Leases ========== */
 
-XrCFuncResult cluster_peer_read_fn(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || XR_TO_INT(args[1]) <= 0 ||
-        XR_TO_INT(args[1]) > INT32_MAX - XR_FRAME_HEADER_SIZE) {
-        *result = xr_int(XR_CLUSTER_PEER_READ_INVALID_LIMIT);
-        return XR_CFUNC_DONE;
-    }
+XrValue cluster_peer_read_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) ||
+        !xr_closure_from_callback_arg(X, args[2], "cluster.__readPeer"))
+        return xr_int(XR_CLUSTER_PEER_READ_PROVIDER_ERROR);
+    if (XR_TO_INT(args[1]) <= 0 || XR_TO_INT(args[1]) > UINT32_MAX)
+        return xr_int(XR_CLUSTER_PEER_READ_INVALID_LIMIT);
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
     if (!cluster || !atomic_load(&cluster->running)) {
         cluster_runtime_release(cluster);
-        *result = xr_int(XR_CLUSTER_PEER_READ_RUNTIME_STOPPED);
-        return XR_CFUNC_DONE;
+        return xr_int(XR_CLUSTER_PEER_READ_RUNTIME_STOPPED);
     }
 
-    XrClusterNode *node = cluster_node_acquire(cluster, (uint64_t) XR_TO_INT(args[0]));
+    uint64_t generation = (uint64_t) XR_TO_INT(args[0]);
+    XrClusterNode *node = cluster_node_acquire(cluster, generation);
     if (!node) {
         cluster_runtime_release(cluster);
-        *result = xr_int(XR_CLUSTER_PEER_READ_STALE);
-        return XR_CFUNC_DONE;
+        return xr_int(XR_CLUSTER_PEER_READ_STALE);
     }
 
     XrClusterPeerIoLease lease = {
@@ -49,27 +49,26 @@ XrCFuncResult cluster_peer_read_fn(XrVMRuntime *X, XrValue *args, int argc, XrVa
         .frames_recv = &node->metrics.frames_recv,
         .bytes_recv = &node->metrics.bytes_recv,
     };
-    return xr_cluster_peer_read_frame(X, &lease, (uint32_t) XR_TO_INT(args[1]), result);
+    return xr_int(
+        xr_cluster_peer_read_start(X, &lease, generation, (uint32_t) XR_TO_INT(args[1]), args[2]));
 }
 
-XrCFuncResult cluster_peer_write_fn(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !XR_IS_INT(args[0])) {
-        *result = xr_int(XR_CLUSTER_PEER_WRITE_RESOURCE_UNAVAILABLE);
-        return XR_CFUNC_DONE;
-    }
+XrValue cluster_peer_write_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_INT(args[0]) ||
+        !xr_closure_from_callback_arg(X, args[1], "cluster.__writePeer"))
+        return xr_int(XR_CLUSTER_PEER_WRITE_PROVIDER_ERROR);
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
     if (!cluster || !atomic_load(&cluster->running)) {
         cluster_runtime_release(cluster);
-        *result = xr_int(XR_CLUSTER_PEER_WRITE_RUNTIME_STOPPED);
-        return XR_CFUNC_DONE;
+        return xr_int(XR_CLUSTER_PEER_WRITE_RUNTIME_STOPPED);
     }
 
-    XrClusterNode *node = cluster_node_acquire(cluster, (uint64_t) XR_TO_INT(args[0]));
+    uint64_t generation = (uint64_t) XR_TO_INT(args[0]);
+    XrClusterNode *node = cluster_node_acquire(cluster, generation);
     if (!node) {
         cluster_runtime_release(cluster);
-        *result = xr_int(XR_CLUSTER_PEER_WRITE_STALE);
-        return XR_CFUNC_DONE;
+        return xr_int(XR_CLUSTER_PEER_WRITE_STALE);
     }
 
     XrClusterPeerIoLease lease = {
@@ -84,5 +83,5 @@ XrCFuncResult cluster_peer_write_fn(XrVMRuntime *X, XrValue *args, int argc, XrV
         .send_errors = &node->metrics.send_errors,
         .queue_full_events = &node->metrics.slow_consumer_events,
     };
-    return xr_cluster_peer_write_batch(X, &lease, result);
+    return xr_int(xr_cluster_peer_write_start(X, &lease, generation, args[1]));
 }

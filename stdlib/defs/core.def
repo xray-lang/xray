@@ -2145,26 +2145,23 @@ module cluster {
   }
 
   fn __readPeer {
-    signature: "(peerGeneration: i64, maxFramePayload: i64): Array<u8> | i64"
-    doc: "Suspend for one frame and return owned wire bytes or an orthogonal raw stale, stopped, EOF, socket-I/O, provider, wire-length, capacity, resource, cancellation or caller-limit reason"
+    signature: "(peerGeneration: i64, maxFramePayload: i64, callback: fn(peerGeneration: i64, wire: Array<u8>?, reason: i64): ()): i64"
+    doc: "Start one owned peer read and deliver wire bytes or an orthogonal raw reason to the source callback"
     vm: "cluster_peer_read_fn"
-    vm_binding: "yieldable"
-    argc: 2
-    arg_spec: "vv"
+    argc: 3
+    arg_spec: "vvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "coro,netpoll"
-    return_ownership: "fresh"
   }
 
   fn __writePeer {
-    signature: "(peerGeneration: i64): i64"
-    doc: "Suspend while writing at most one queued batch and return an orthogonal raw stale, stopped, full, resource, socket, socket-I/O, provider or cancellation reason"
+    signature: "(peerGeneration: i64, callback: fn(peerGeneration: i64, reason: i64): ()): i64"
+    doc: "Start one owned peer write and deliver an orthogonal raw queue, socket, provider or cancellation reason to the source callback"
     vm: "cluster_peer_write_fn"
-    vm_binding: "yieldable"
-    argc: 1
-    arg_spec: "v"
+    argc: 2
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
