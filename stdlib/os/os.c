@@ -472,16 +472,6 @@ static XrValue os_kill(XrVMRuntime *X, XrValue *args, int argc) {
 #endif
 }
 
-// Continuation for os.sleep — timer fired, return null.
-static XrCFuncResult os_sleep_done(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
-                                   XrValue *result) {
-    (void) X;
-    (void) status;
-    (void) ctx;
-    *result = xr_null();
-    return XR_CFUNC_DONE;
-}
-
 // sleep(ms) - Coroutine-friendly sleep for milliseconds.
 // Yields the coroutine via the timer wheel so the worker thread can
 // service other coroutines during the wait.
@@ -497,7 +487,7 @@ static XrCFuncResult os_sleep(XrVMRuntime *X, XrValue *args, int argc, XrValue *
         return XR_CFUNC_DONE;
     }
 
-    return xr_yield_for_timeout(X, ms, os_sleep_done, NULL, result);
+    return xr_yield_for_timeout(X, ms, xr_yield_finish_null, NULL, result);
 }
 
 // clock() - Get process CPU time in seconds

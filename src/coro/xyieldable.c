@@ -371,6 +371,16 @@ XrCFuncResult xr_yield_for_timeout(XrVMRuntime *X, int64_t timeout_ms, XrContinu
     return xr_yield_for_io(X, -1, 0, timeout_ms, cont, user_data, result);
 }
 
+XrCFuncResult xr_yield_finish_null(XrVMRuntime *X, int status, XrValue resume_value,
+                                   void *user_data, XrValue *result) {
+    (void) X;
+    (void) status;
+    (void) resume_value;
+    (void) user_data;
+    *result = xr_null();
+    return XR_CFUNC_DONE;
+}
+
 // xr_yield - Voluntary yield (no wait condition)
 //
 // For C functions needing multi-step execution without I/O wait.

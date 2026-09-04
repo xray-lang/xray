@@ -57,19 +57,6 @@ static XrValue time_utcOffsetAt(XrVMRuntime *isolate, XrValue *args, int nargs) 
 }
 
 /*
- * Continuation for time.sleep — the timer has fired, just return null.
- */
-static XrCFuncResult time_sleep_done(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
-                                     XrValue *result) {
-    (void) X;
-    (void) status;
-    (void) resume_value;
-    (void) ctx;
-    *result = xr_null();
-    return XR_CFUNC_DONE;
-}
-
-/*
  * time.sleep(milliseconds: int) -> null
  *
  * Coroutine-friendly: yields via xr_yield_for_timeout so the worker
@@ -97,7 +84,7 @@ static XrCFuncResult xr_time_sleep(XrVMRuntime *X, XrValue *args, int nargs, XrV
     if (ms > MAX_SLEEP_MS)
         ms = MAX_SLEEP_MS;
 
-    return xr_yield_for_timeout(X, ms, time_sleep_done, NULL, result);
+    return xr_yield_for_timeout(X, ms, xr_yield_finish_null, NULL, result);
 }
 
 // ========== Module loader ==========

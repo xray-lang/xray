@@ -151,6 +151,10 @@ XR_FUNC bool xr_yield_for_uring_io(struct XrVMRuntime *X, struct XrPollDesc *pd,
 XR_FUNC XrCFuncResult xr_yield_for_timeout(struct XrVMRuntime *X, int64_t timeout_ms,
                                            XrContinuation cont, void *user_data, XrValue *result);
 
+// Generic completion for timer leaves that return unit after resumption.
+XR_FUNC XrCFuncResult xr_yield_finish_null(struct XrVMRuntime *X, int status,
+                                           XrValue resume_value, void *user_data, XrValue *result);
+
 // xr_yield - Voluntarily yield (no wait condition)
 //
 // C function voluntarily yields execution, continuation called on next schedule.
