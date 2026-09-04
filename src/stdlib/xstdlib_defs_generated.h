@@ -309,6 +309,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "__deliverInbound", "(topic: string, envelope: Array<u8>): i64", "Offer one source-decoded envelope to the synchronized topic registry", "cluster_deliver_inbound_fn", "normal", "", "", "sv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__forwardInbound", "(peerGeneration: i64, topic: string, envelope: Array<u8>, hopLimit: i64): i64", "Broadcast one source-authorized envelope while excluding its peer generation", "cluster_forward_inbound_fn", "normal", "", "", "vsvv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 4, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__notifyRemoteMonitor", "(peerGeneration: i64, coroutineName: string, reason: string): bool", "Publish one source-decoded remote exit through the synchronized monitor registry", "cluster_notify_remote_monitor_fn", "normal", "", "", "vss", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__disconnectPeer", "(peerGeneration: i64): bool", "Detach and close the peer generation selected by Xray transport policy", "cluster_disconnect_peer_fn", "normal", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__registerNodeMonitor", "(name: string, notifications: Channel<string>): bool", "Register one source-constructed notification channel for a normalized node target", "cluster_register_node_monitor_fn", "normal", "", "", "sv", "value", "", "", "", "runtime", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__registerCoroutineMonitor", "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool", "Register one source-constructed channel and enqueue its normalized remote monitor request", "cluster_register_coro_monitor_fn", "normal", "", "", "ssv", "value", "", "", "", "runtime", "", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__discoveryOpen", "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?", "Open one IPv4 multicast UDP handle for the source-owned discovery loop", "xr_cluster_discovery_socket_open", "normal", "", "", "svvv", "value", "", "", "", "runtime", "", 0, 4, XR_STDLIB_TARGET_LEAF_NONE, false},
@@ -352,7 +353,8 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterInboundFrame[] = {
     {"cluster", "__ClusterInboundFrame", "peerGeneration", "i64", true},
     {"cluster", "__ClusterInboundFrame", "receivedAtMs", "i64", true},
-    {"cluster", "__ClusterInboundFrame", "wire", "Array<u8>", true},
+    {"cluster", "__ClusterInboundFrame", "status", "i64", true},
+    {"cluster", "__ClusterInboundFrame", "wire", "Array<u8>?", true},
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
@@ -379,7 +381,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlo
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
     {"cluster", "__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
     {"cluster", "__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot, 3, true},
-    {"cluster", "__ClusterInboundFrame", "Private borrowed projection of the complete frame owned by the current native reader", xr_stdlib_object_fields_cluster___ClusterInboundFrame, 3, true},
+    {"cluster", "__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", xr_stdlib_object_fields_cluster___ClusterInboundFrame, 4, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},

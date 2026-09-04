@@ -504,7 +504,11 @@ fn _dispatchInbound() {
     if (inbound == null) { return }
     var peerGeneration = inbound!.peerGeneration
     var receivedAtMs = inbound!.receivedAtMs
-    var wire = inbound!.wire
+    if (inbound!.status != 0 || inbound!.wire == null) {
+        __disconnectPeer(peerGeneration)
+        return
+    }
+    var wire = inbound!.wire!
     var frame = decodeFrame(wire)
     if (frame == null) { return }
     if (frame!.kind == FRAME_HEARTBEAT_PING) {

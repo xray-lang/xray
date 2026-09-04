@@ -96,6 +96,8 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__notifyRemoteMonitor") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
+    if (strcmp(symbol, "cluster.__disconnectPeer") == 0)
+        return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__stop") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__publishLocal") == 0)

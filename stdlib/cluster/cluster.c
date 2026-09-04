@@ -588,6 +588,36 @@ static XrValue cluster_notify_remote_monitor_fn(XrVMRuntime *X, XrValue *args, i
     return xr_bool(true);
 }
 
+static XrValue cluster_disconnect_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster)
+        return xr_bool(false);
+    uint64_t generation = (uint64_t) XR_TO_INT(args[0]);
+    XrClusterNode *node = NULL;
+    xr_amutex_lock(&cluster->nodes_lock);
+    for (XrClusterNode *candidate = cluster->nodes; candidate; candidate = candidate->next) {
+        if (candidate->generation_token == generation) {
+            cluster_node_retain(candidate);
+            node = candidate;
+            break;
+        }
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    if (!node)
+        return xr_bool(false);
+    bool removed = cluster_node_remove(cluster, node);
+    if (removed) {
+        if (atomic_load(&cluster->running))
+            xr_monitor_registry_notify_node(cluster->monitors, cluster->isolate, node->name);
+        cluster_node_shutdown(node);
+        cluster_node_release(node);
+    }
+    cluster_node_release(node);
+    return xr_bool(removed);
+}
+
 static XrValue cluster_publish_local_primitive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]))
         return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);

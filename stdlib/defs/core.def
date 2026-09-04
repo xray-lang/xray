@@ -2035,9 +2035,9 @@ module cluster {
   }
 
   object __ClusterInboundFrame {
-    fields: "const peerGeneration: i64, const receivedAtMs: i64, const wire: Array<u8>"
+    fields: "const peerGeneration: i64, const receivedAtMs: i64, const status: i64, const wire: Array<u8>?"
     exact: true
-    doc: "Private borrowed projection of the complete frame owned by the current native reader"
+    doc: "Private projection of one complete frame or terminal reader event"
   }
 
   fn __start {
@@ -2190,6 +2190,18 @@ module cluster {
     vm: "cluster_notify_remote_monitor_fn"
     argc: 3
     arg_spec: "vss"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "channel"
+  }
+
+  fn __disconnectPeer {
+    signature: "(peerGeneration: i64): bool"
+    doc: "Detach and close the peer generation selected by Xray transport policy"
+    vm: "cluster_disconnect_peer_fn"
+    argc: 1
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"

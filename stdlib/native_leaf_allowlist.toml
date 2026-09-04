@@ -155,10 +155,10 @@ deletion_trigger = "when peer output queues are ordinary Xray-owned values"
 module = "cluster"
 symbol = "__takeInboundFrame"
 class = "runtime_leaf"
-abi = "none; projects the frame retained by the currently executing VM C-function reader"
+abi = "none; projects the complete frame or terminal event retained by the currently executing VM C-function reader"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the VM coroutine owned-context ABI. cluster.xr owns all decoding and dispatch after taking the complete frame"
+provider = "the VM coroutine owned-context ABI. cluster.xr owns decoding, dispatch, and terminal reader policy after taking the event"
 deletion_trigger = "when socket reader state is directly expressible as a source coroutine value"
 
 [[leaf]]
@@ -200,6 +200,16 @@ ownership = "none"
 effect = "nothrow"
 provider = "the native monitor channel registry. cluster.xr owns exit decoding and notification selection"
 deletion_trigger = "when the synchronized monitor index is ordinary Xray-owned state"
+
+[[leaf]]
+module = "cluster"
+symbol = "__disconnectPeer"
+class = "runtime_leaf"
+abi = "none; detaches one generation from the locked registry and shuts down its socket and queue"
+ownership = "none"
+effect = "nothrow"
+provider = "the native peer registry and opaque transport resources. cluster.xr exclusively decides which terminal reader event closes the peer"
+deletion_trigger = "when the peer registry and transport resources are ordinary Xray-owned values"
 
 [[leaf]]
 module = "cluster"

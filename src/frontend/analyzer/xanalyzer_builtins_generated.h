@@ -111,13 +111,14 @@ static const XaBuiltinObjectField g_gen_cluster___clusterruntimesnapshot_object_
 static const XaBuiltinObjectField g_gen_cluster___clusterinboundframe_object_fields[] = {
     {"peerGeneration", "i64"},
     {"receivedAtMs", "i64"},
-    {"wire", "Array<u8>"},
+    {"status", "i64"},
+    {"wire", "Array<u8>?"},
 };
 
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
     {"__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", g_gen_cluster___clusternodesnapshot_object_fields, 16, true},
     {"__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", g_gen_cluster___clusterruntimesnapshot_object_fields, 3, true},
-    {"__ClusterInboundFrame", "Private borrowed projection of the complete frame owned by the current native reader", g_gen_cluster___clusterinboundframe_object_fields, 3, true},
+    {"__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", g_gen_cluster___clusterinboundframe_object_fields, 4, true},
 };
 #define GEN_CLUSTER_OBJECT_SHAPE_COUNT 3
 
@@ -136,6 +137,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__deliverInbound", "(topic: string, envelope: Array<u8>): i64", "Offer one source-decoded envelope to the synchronized topic registry", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__forwardInbound", "(peerGeneration: i64, topic: string, envelope: Array<u8>, hopLimit: i64): i64", "Broadcast one source-authorized envelope while excluding its peer generation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__notifyRemoteMonitor", "(peerGeneration: i64, coroutineName: string, reason: string): bool", "Publish one source-decoded remote exit through the synchronized monitor registry", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__disconnectPeer", "(peerGeneration: i64): bool", "Detach and close the peer generation selected by Xray transport policy", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__registerNodeMonitor", "(name: string, notifications: Channel<string>): bool", "Register one source-constructed notification channel for a normalized node target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__registerCoroutineMonitor", "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool", "Register one source-constructed channel and enqueue its normalized remote monitor request", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__discoveryOpen", "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?", "Open one IPv4 multicast UDP handle for the source-owned discovery loop", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
@@ -145,7 +147,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__publishRemote", "(topic: string, envelope: move Buffer, hopLimit: i64): i64", "Broadcast one validated opaque service envelope to connected native transports", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 21
+#define GEN_CLUSTER_FUNCTION_COUNT 22
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
