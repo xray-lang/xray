@@ -313,6 +313,7 @@ static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *recor
     hash_u64(ctx, record->callee_function);
     hash_u64(ctx, record->source_dependency);
     hash_u64(ctx, record->source_export);
+    hash_u64(ctx, record->runtime_capabilities);
     hash_id(ctx, record->source_export_identity);
     hash_id(ctx, record->source_callee_identity);
     hash_id(ctx, record->native_callee_identity);

@@ -510,7 +510,7 @@ static XrSemanticPlan *build_native_direct_ref_semantic(void) {
                 .param_count = 1,
                 .min_params = 1,
                 .return_type = &stub_unit,
-                .throw_effect = XR_FN_EFFECT_NO_THROW,
+                .throw_effect = XR_FN_EFFECT_MAY_THROW,
             },
     };
     XiFunc *function = xi_func_new("native_direct_ref_probe", &stub_unit);
@@ -562,10 +562,28 @@ static XrSemanticPlan *build_native_direct_ref_semantic(void) {
 
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    XiModule *module =
+        xi_module_new("pkg/native_direct_ref_probe.xr", "native_direct_ref_probe", function);
+    REQUIRE(module != NULL &&
+            xi_module_set_identity(module, "memory-module-v1:id=26:native-direct-ref-probe-v1"));
+    function->module = module;
+    XiClassData source_class = {
+        .class_info = &stub_net_conn_class_info,
+        .class_name = "NetConn",
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &source_class;
+    module->nclasses = 1;
+    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "native direct ref semantic fixture failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
+    function->module = NULL;
+    module->init = NULL;
+    xi_module_free(module);
     xi_func_free(function);
     return semantic;
 }
@@ -2785,11 +2803,26 @@ static void test_native_direct_ref_authority(void) {
             call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT &&
             call->callee_function == XR_SEMANTIC_INDEX_NONE &&
             call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
-            call->source_export == XR_SEMANTIC_INDEX_NONE && call->argument_count == 0 &&
+            call->source_export == XR_SEMANTIC_INDEX_NONE &&
+            call->runtime_capabilities == XR_CAP_NETPOLL && call->argument_count == 1 &&
             call->result_mode == XR_TARGET_CALL_VALUE &&
             call->result_ownership == XR_TARGET_CALL_NONE && call->flags == 0 &&
-            memcmp(call->native_callee_identity.bytes,
-                   (const uint8_t[XR_STABLE_ID_BYTES]) {0}, XR_STABLE_ID_BYTES) != 0);
+            memcmp(call->native_callee_identity.bytes, (const uint8_t[XR_STABLE_ID_BYTES]) {0},
+                   XR_STABLE_ID_BYTES) != 0);
+    uint32_t argument_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(plan, &argument_count);
+    REQUIRE(arguments != NULL && argument_count == 1 && arguments[0].call == 0 &&
+            arguments[0].semantic_operand != XR_SEMANTIC_INDEX_NONE &&
+            arguments[0].semantic_value != XR_SEMANTIC_INDEX_NONE &&
+            arguments[0].callee_parameter == XR_SEMANTIC_INDEX_NONE &&
+            arguments[0].caller_slot != XR_SEMANTIC_INDEX_NONE &&
+            arguments[0].callee_slot == XR_SEMANTIC_INDEX_NONE &&
+            plan->machine_reps[arguments[0].callee_register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[arguments[0].callee_memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            arguments[0].mode == XR_TARGET_CALL_VALUE &&
+            arguments[0].ownership == XR_TARGET_CALL_READ &&
+            arguments[0].transfer_mode == XR_TRANSFER_SHARE && arguments[0].flags == 0);
 
     XrTargetCallRecord saved = plan->calls[0];
     plan->calls[0].native_callee_identity.bytes[0] ^= 1u;
@@ -2798,6 +2831,10 @@ static void test_native_direct_ref_authority(void) {
     plan->calls[0].calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE;
     expect_verify_failure(plan, "XR_TARGET_1003");
     plan->calls[0] = saved;
+    XrTargetCallArgumentRecord saved_argument = plan->call_arguments[0];
+    plan->call_arguments[0].flags = XR_TARGET_CALL_ARGUMENT_ADDRESSABLE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->call_arguments[0] = saved_argument;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
     xr_target_plan_free(plan);
@@ -4951,7 +4988,7 @@ static void test_imported_source_class_constructor_authority(void) {
             semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
             semantic_target->callable_type == operation->result_type &&
             xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
-            strstr(semantic_target->canonical_key, "call-target-v10:schema=46:") != NULL &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=47:") != NULL &&
             xr_semantic_imported_class_construction_authority_source_class(
                 semantic, dependency, &semantic->dependencies[0], source_export, operation,
                 &constructor) == 0 &&
@@ -7621,9 +7658,9 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
     REQUIRE(xr_xtp_encode_plan(plan, &encoded, &encoded_size, error, sizeof(error)));
     uint8_t *call_entry = target_test_xtp_directory_entry(encoded, XR_XTP_SECTION_CALLS);
     size_t call_offset = (size_t) xr_xtp_take_u64(call_entry + 8);
-    REQUIRE(encoded[call_offset + 140] == XR_TARGET_ARRAY_STORAGE_I64 &&
-            encoded[call_offset + 141] == expected->target_kind &&
-            encoded[call_offset + 142] == XR_TARGET_ARRAY_STORAGE_I64);
+    REQUIRE(encoded[call_offset + 144] == XR_TARGET_ARRAY_STORAGE_I64 &&
+            encoded[call_offset + 145] == expected->target_kind &&
+            encoded[call_offset + 146] == XR_TARGET_ARRAY_STORAGE_I64);
     REQUIRE(xr_xtp_decode_candidate(encoded, encoded_size, &candidate, error, sizeof(error)) &&
             xr_xtp_materialize_target_plan(candidate, semantic, profile, &decoded, error,
                                            sizeof(error)));
@@ -7635,7 +7672,7 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
     xr_target_plan_free(decoded);
     xr_xtp_candidate_release(candidate);
 
-    encoded[call_offset + 141] = expected->target_kind == XR_TARGET_ARRAY_HOF_MAP
+    encoded[call_offset + 145] = expected->target_kind == XR_TARGET_ARRAY_HOF_MAP
                                      ? XR_TARGET_ARRAY_HOF_FILTER
                                      : XR_TARGET_ARRAY_HOF_MAP;
     target_test_xtp_resign_section(encoded, XR_XTP_SECTION_CALLS);

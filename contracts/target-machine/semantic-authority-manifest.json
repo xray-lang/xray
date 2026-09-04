@@ -56,7 +56,7 @@
       },
       "producer": {
         "path": "src/plan/semantic/xr_semantic_ids.h",
-        "required_regex": "^#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(46\\)$"
+        "required_regex": "^#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(47\\)$"
       },
       "semantic_meaning": "Exact semantic plan and artifact schema identity accepted by all current readers and cache identities",
       "serialized_form": [

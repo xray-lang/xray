@@ -1,6 +1,6 @@
 # Typed TargetPlan execution contract
 
-TargetPlan schema 57 may carry a canonical per-function instruction table and
+TargetPlan schema 58 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
@@ -29,7 +29,7 @@ C-emission recipe consumes these rows; the old method-name emitter is not an
 authorized product fallback.
 
 The bounded leaf-value aggregate direct-call family is one exact executable
-family within schema 57, not a second aggregate-only plan. SemanticPlan 46
+family within schema 58, not a second aggregate-only plan. SemanticPlan 46
 program bindings project one target-profile-derived aggregate layout,
 caller/callee value and slot rows, one `VALUE/READ` argument, and a caller-storage
 result with no adapter or ownership transfer. The callee group is exactly
@@ -78,7 +78,7 @@ fail-closed because this family does not yet define one unique process entry.
 Managed tuple, tagged place/aggregate-reference, dynamic, boxed, name-derived,
 and legacy leaf-aggregate routes are forbidden for covered product functions.
 
-The bounded two-module scalar graph is one additional executable schema-57
+The bounded two-module scalar graph is one additional executable schema-58
 TargetPlan family. Its sole program-graph row and two
 canonical module partitions index global TargetPlan tables and bind the complete
 ordered SemanticPlan module set, aggregate semantic fingerprint, entry and
@@ -141,7 +141,7 @@ stable producer symbol directly and contains no module-name, shared-slot, or
 runtime import/export lookup.
 
 The graph XTP route preserves the same executable VM authority and AOT lower
-authority. Current schema 57 retains the exact graph and partition sections, mutually
+authority. Current schema 58 retains the exact graph and partition sections, mutually
 excludes ordinary and graph directory shapes, binds the header semantic
 fingerprint to the full canonical module set, and materializes only through that
 set plus the exact target profile.
@@ -304,7 +304,7 @@ executable family caps parameters at 64 so that density is proved without
 allocating.
 
 Instruction rows participate in the TargetPlan fingerprint as exact 32-byte
-canonical rows. XTP schema 57 preserves the bounded sequential compact stream
+canonical rows. XTP schema 58 preserves the bounded sequential compact stream
 introduced by v34; its directory entry carries the expanded row count, compact byte
 length, `COMPACT` flag, and zero row size. Canonical ULEB128 and signed ZigZag
 payloads plus the format-only superinstruction registry are the sole wire
@@ -439,8 +439,8 @@ budget exit releases exactly one generation pin. Token release is transactional:
 failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
-TargetPlan schema 57 is a hard cutover from v56 and every earlier TargetPlan
-schema. It requires SemanticPlan schema 46, program-provenance schema 5, and
+TargetPlan schema 58 is a hard cutover from v56 and every earlier TargetPlan
+schema. It requires SemanticPlan schema 47, program-provenance schema 5, and
 its exact generated Xi operation registry. Schema 54 preserves the PSC7 leaf
 value-product family whose canonical Xi construct/project proof
 has the exact x64 48-byte/8-byte layout and ordinal-bound target rows; it does
@@ -472,7 +472,7 @@ changed the instruction opcode carrier to an unsigned
 canonical instruction row remains exactly 32 bytes by shrinking its reserved
 tail to one byte. The generated target instruction registry is the only opcode
 authority consumed by the builder, verifier, artifact renderer, and dispatcher.
-XTP schema 57 preserves the compact instruction stream introduced by v34,
+XTP schema 58 preserves the compact instruction stream introduced by v34,
 appends the exact 144-byte entry-expectation section after all prior tables,
 widens each coroutine state with its function-local resume-instruction
 authority, and preserves the exact lifecycle root-map, root-slot, and cleanup
@@ -582,7 +582,7 @@ projection gate rejects nested entity/operation/release scans. Schema 16 added a
 `StringBuilder()` constructor call whose
 identity binds the exact Semantic allocation ID and whose result is an owned
 dynamic slot. It grants no generic builtin call authority. Its
-schema-57 `StringBuilder.clear()` family is a separate exact receiver-alias
+schema-58 `StringBuilder.clear()` family is a separate exact receiver-alias
 method authority: the frozen `clear` symbol, one exact `StringBuilder`
 receiver, zero call arguments, and the receiver-alias result must all match.
 The result slot follows the verified borrowed-or-owned SemanticPlan return
@@ -682,7 +682,7 @@ The same partition discipline governs AOT representation refinement and live
 Xi binding before CGen consumes a per-module projection.
 It also projects an exact raw-pointer TargetPlan binding without consulting a
 live Xi type. When and only when the same semantic `LOCAL_ADDR` value is bound
-by an exact SOURCE_EXPORT `ref` argument row or the schema-57 direct-local
+by an exact SOURCE_EXPORT `ref` argument row or the schema-58 direct-local
 scalar-ref-v1 row, the projection adds one C pointer level. The latter freezes
 an `int64_t *` function ABI with an `I64` pointee while its caller storage,
 callee storage, and call argument machine rows remain `I64`. The C consumer
@@ -863,7 +863,7 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 - `test_xa_program_semantic_closure` proves the bounded source graph builds one
-  verified schema-57 TargetPlan, uses global rows with exact module partitions
+  verified schema-58 TargetPlan, uses global rows with exact module partitions
   and a `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge, rejects independently mutated
   or re-signed inner authority, executes its graph-owned entry through both VM
   providers in cold and exact-generation-cache modes, rejects a wrong

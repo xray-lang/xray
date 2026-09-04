@@ -139,6 +139,7 @@ typedef struct XrTargetCallIntent {
     uint32_t callee_function;
     uint32_t source_dependency;
     uint32_t source_export;
+    uint32_t runtime_capabilities;
     XrStableId source_export_identity;
     XrStableId source_callee_identity;
     XrStableId native_callee_identity;
@@ -11482,20 +11483,54 @@ static bool collect_native_direct_call_intent(XrTargetPlanBuilder *builder, uint
         .callee_function = XR_SEMANTIC_INDEX_NONE,
         .source_dependency = XR_SEMANTIC_INDEX_NONE,
         .source_export = XR_SEMANTIC_INDEX_NONE,
+        .runtime_capabilities = entry ? entry->runtime_capabilities : 0,
         .native_callee_identity = native_identity,
         .result_value = operation->result_value,
         .argument_begin = builder->call_argument_intent_count,
-        .argument_count = 0,
+        .argument_count = entry ? entry->argc : 0,
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership = XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT,
         .target_kind = XR_TARGET_CALL_TARGET_NATIVE_DIRECT,
     };
-    if (!entry ||
+    if (!entry || operation->operand_count != (uint16_t) (entry->argc + 1u) ||
         !stable_identity_from_pair("xray-target-native-direct-v1", target->id, native_identity,
                                    entry->runtime_capabilities, &call.identity))
         return fail(error, error_size, "XR_TARGET_1003",
                     "native direct call identity is incomplete");
+    XrTargetMachineRepRecord tagged_rep = {0};
+    if (!make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile),
+                                         &tagged_rep) ||
+        !append_rep_intent(builder, &tagged_rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native direct tagged argument representation is incomplete");
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t call_intent = builder->call_intent_count;
+    for (uint16_t ordinal = 0; ordinal < call.argument_count; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;
+        if (!operands || semantic_operand >= operand_count)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "native direct call argument authority is incomplete");
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = operand->value,
+            .caller_storage_value = operand->value,
+            .callee_parameter = XR_SEMANTIC_INDEX_NONE,
+            .ordinal = ordinal,
+            .mode = XR_TARGET_CALL_VALUE,
+            .ownership = XR_TARGET_CALL_READ,
+            .transfer_mode = XR_TRANSFER_SHARE,
+            .flags = 0,
+            .array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE,
+        };
+        if (!stable_identity_from_pair("xray-target-native-direct-argument-v1", target->id,
+                                       native_identity, ordinal, &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
     return append_call_intent(builder, &call, error, error_size);
 }
 
@@ -15507,6 +15542,15 @@ static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t 
     return -1;
 }
 
+static int find_rep_kind_ownership(const XrTargetMaterializedPlan *materialized, uint16_t kind,
+                                   uint8_t ownership) {
+    for (uint32_t i = 0; i < materialized->machine_rep_count; i++)
+        if (materialized->machine_reps[i].kind == kind &&
+            materialized->machine_reps[i].ownership == ownership)
+            return (int) i;
+    return -1;
+}
+
 /* The shared judgement in xr_target_call_abi_shape.h decides this; only the
  * container holding the machine-rep table differs between the two layers, and
  * it must be proven non-null before it is read. */
@@ -15533,8 +15577,10 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
         (materialized->call_argument_count && !materialized->call_arguments))
         return fail(error, error_size, "XR_EXEC_5003", "call materialization failed");
     int void_rep = find_rep_kind(materialized, XR_MACHINE_REP_VOID);
+    int tagged_rep = find_rep_kind_ownership(materialized, XR_MACHINE_REP_DYN_VALUE,
+                                             XR_TARGET_OWNERSHIP_BORROWED);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(builder->profile);
-    if (void_rep < 0 || !machine)
+    if (void_rep < 0 || tagged_rep < 0 || !machine)
         return fail(error, error_size, "XR_TARGET_1003",
                     "call error-channel representation is missing");
     uint32_t next_argument = 0;
@@ -15576,6 +15622,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             .callee_function = intent->callee_function,
             .source_dependency = intent->source_dependency,
             .source_export = intent->source_export,
+            .runtime_capabilities = intent->runtime_capabilities,
             .source_export_identity = intent->source_export_identity,
             .source_callee_identity = intent->source_callee_identity,
             .native_callee_identity = intent->native_callee_identity,
@@ -15611,6 +15658,9 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             bool array_intrinsic =
                 intent->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC &&
                 intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC;
+            bool native_direct =
+                intent->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT &&
+                intent->target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT;
             bool external_source_callee =
                 intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
                 (intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
@@ -15634,7 +15684,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 intent->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
                 (intent->argument_count == 2 || intent->argument_count == 4);
             const XrSemanticParameterRecord *parameter =
-                array_intrinsic || array_fill || array_hof || iterator_rune_nth ||
+                array_intrinsic || native_direct || array_fill || array_hof || iterator_rune_nth ||
                         array_member_tagged_store
                     ? NULL
                     : xr_semantic_plan_parameter(callee_semantic,
@@ -15746,12 +15796,13 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                     materialized->machine_reps, materialized->machine_rep_count, caller, callee,
                     xr_semantic_type_is_const_read_admission(operand_type, parameter_type,
                                                              parameter->mode));
-            if (array_intrinsic || array_fill || array_hof || iterator_rune_nth ||
+            if (array_intrinsic || native_direct || array_fill || array_hof || iterator_rune_nth ||
                 array_member_tagged_store) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                     !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
                     return fail(error, error_size, "XR_TARGET_1003",
-                                iterator_rune_nth
+                                native_direct ? "native direct argument lacks exact caller storage"
+                                : iterator_rune_nth
                                     ? "Iterator<rune>.nth index lacks exact caller storage"
                                 : array_member_tagged_store
                                     ? "Array member tagged store lacks exact caller storage"
@@ -15766,8 +15817,9 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                     .callee_slot = XR_SEMANTIC_INDEX_NONE,
                     .register_rep = caller->register_rep,
                     .memory_rep = caller->memory_rep,
-                    .callee_register_rep = caller->register_rep,
-                    .callee_memory_rep = caller->memory_rep,
+                    .callee_register_rep =
+                        native_direct ? (uint16_t) tagged_rep : caller->register_rep,
+                    .callee_memory_rep = native_direct ? (uint16_t) tagged_rep : caller->memory_rep,
                     .ordinal = argument_intent->ordinal,
                     .mode = argument_intent->mode,
                     .ownership = argument_intent->ownership,

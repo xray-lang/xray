@@ -124,7 +124,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     operations. The independent Xi verifier rechecks all six ordinals, the `u8`
     member, both caller/callee joins, exact operation coverage, and an
     authority-free module initializer. Ordinary TypedProgram publication and
-    SemanticPlan and schema-57 TargetPlan preserve the exact six-member layout,
+    SemanticPlan and schema-58 TargetPlan preserve the exact six-member layout,
     two caller-storage calls, and ordinal-bound instructions. Typed VM and the
     hosted-fragment C projection execute only after independent TargetPlan
     verification grants the leaf-value-product family. Ordinary product
@@ -167,7 +167,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     fail closed. The verifier independently reconstructs the same unique local
     declaration/PSC join instead of trusting the publisher's annotation or
     scanning same-shaped PSC rows.
-15. SemanticPlan schema 46 and program-provenance schema 5 admit the bounded
+15. SemanticPlan schema 47 and program-provenance schema 5 admit the bounded
     scalar, leaf aggregate, leaf value-product, and graph families only after
     PSC-to-Xi verification. The plan stores pointer-free
     PSC schema/family/fingerprint/GCI/counts, its exact module row, and typed
@@ -208,7 +208,7 @@ projection defined below; they never imply TargetPlan admission on their own.
 17. XSM exact-version encoding serializes counts and provenance followed by all program
     type, type-field, function, dependency, and call bindings. Their counts participate in
     decoder storage/payload budgets; every field participates in the
-    SemanticPlan fingerprint. Decode requires schema 46, exact bounds and
+    SemanticPlan fingerprint. Decode requires schema 47, exact bounds and
     payload digest, reconstructs the frozen plan, and reruns generic semantic
     verification. A dependency-bearing graph entry is accepted only by the
     module-set decoder with the exact ordered producer plan; the zero-dependency
@@ -221,7 +221,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
-    then builds one schema-57 program TargetPlan from the complete canonical
+    then builds one schema-58 program TargetPlan from the complete canonical
     SemanticPlan module set. The plan has one program-graph row, two module
     partitions over global rows, one aggregate semantic fingerprint, and the
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
@@ -298,7 +298,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     and their XSM round-trips close the same graph authority. Target construction
     consumes the full canonical plan set in `program_module_row` order while the
     entry fragment separately carries only its ordered direct dependency.
-    It emits one verified schema-57 TargetPlan with global functions, slots,
+    It emits one verified schema-58 TargetPlan with global functions, slots,
     values, instructions, calls, arguments, debug facts, layouts, extents, and
     capabilities; module partitions are bounded pointer-free views and are not
     independent plans. The cross-partition edge is exactly one

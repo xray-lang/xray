@@ -977,6 +977,24 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
     }
 }
 
+static int canonical_tagged_rep_index(const XrTargetPlan *plan) {
+    int found = -1;
+    if (!plan)
+        return -1;
+    for (uint32_t i = 0; i < plan->machine_reps_count; i++) {
+        const XrTargetMachineRepRecord *rep = &plan->machine_reps[i];
+        if (rep->kind != XR_MACHINE_REP_DYN_VALUE || rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+            rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+            rep->null_encoding != XR_TARGET_NULL_TAGGED || rep->detail != 0 ||
+            rep->lane_count != 0 || rep->signedness != XR_TARGET_SIGN_NONE)
+            continue;
+        if (found >= 0)
+            return -1;
+        found = (int) i;
+    }
+    return found;
+}
+
 static bool verify_machine_reps(const XrTargetPlan *plan, char *error, size_t error_size) {
     const XrTargetMachineFacts *profile = xr_target_profile_machine_facts(plan->profile);
     if (!plan->machine_reps_count)
@@ -6816,6 +6834,9 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             plan->machine_reps[call->error_register_rep].kind == XR_MACHINE_REP_VOID &&
             plan->machine_reps[call->error_memory_rep].kind == XR_MACHINE_REP_VOID &&
             call->native_abi == machine->native_abi &&
+            call->runtime_capabilities == (native_direct && native_direct_entry
+                                               ? native_direct_entry->runtime_capabilities
+                                               : 0) &&
             (native_target_leaf
                  ? (native_target_leaf_entry && !stable_id_is_zero(call->native_callee_identity) &&
                     call->native_leaf == native_target_leaf_entry->target_leaf)
@@ -7311,12 +7332,47 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
                     call->source_export == XR_SEMANTIC_INDEX_NONE &&
                     stable_id_is_zero(call->source_export_identity) &&
-                    stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
-                    call->flags == 0 &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == native_direct_entry->argc && call->flags == 0 &&
                     call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT &&
                     call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT;
             if (!valid)
                 break;
+            for (uint16_t ordinal = 0; valid && ordinal < call->argument_count; ordinal++) {
+                uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;
+                const XrSemanticOperandRecord *operand =
+                    semantic_operand < operand_count ? &operands[semantic_operand] : NULL;
+                const XrTargetValueRepRecord *caller_value =
+                    operand ? verifier_value_rep(plan, view, operand->value) : NULL;
+                const XrTargetCallArgumentRecord *argument =
+                    next_argument < argument_end ? &plan->call_arguments[next_argument] : NULL;
+                int tagged_rep = canonical_tagged_rep_index(plan);
+                XrStableId argument_identity = {{0}};
+                valid =
+                    operand && caller_value && argument &&
+                    slot_binds_value_in_function(
+                        plan, caller_value, view->range.functions_begin + operation->function) &&
+                    reconstruct_call_identity("xray-target-native-direct-argument-v1", target->id,
+                                              native_direct_identity, ordinal,
+                                              &argument_identity) &&
+                    xr_stable_id_equal(argument->identity, argument_identity) &&
+                    argument->call == i && argument->semantic_operand == semantic_operand &&
+                    argument->semantic_value == operand->value &&
+                    argument->callee_parameter == XR_SEMANTIC_INDEX_NONE &&
+                    argument->caller_slot == caller_value->slot &&
+                    argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+                    argument->register_rep == caller_value->register_rep &&
+                    argument->memory_rep == caller_value->memory_rep && tagged_rep >= 0 &&
+                    argument->callee_register_rep == (uint16_t) tagged_rep &&
+                    argument->callee_memory_rep == (uint16_t) tagged_rep &&
+                    argument->ordinal == ordinal && argument->mode == XR_TARGET_CALL_VALUE &&
+                    argument->ownership == XR_TARGET_CALL_READ &&
+                    argument->transfer_mode == XR_TRANSFER_SHARE && argument->flags == 0 &&
+                    argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+                    argument->reserved8[0] == 0 && argument->reserved8[1] == 0 &&
+                    argument->reserved8[2] == 0;
+                next_argument++;
+            }
         } else if (native_yieldable) {
             valid = suspends && expected_suspend && operation->opcode == XI_CALL &&
                     operation->operand_count >= 1 && target->function == XR_SEMANTIC_INDEX_NONE &&

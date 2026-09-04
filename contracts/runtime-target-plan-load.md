@@ -275,8 +275,8 @@ roots, or general product activation.
 5. Runtime loading accepts only an XTP v56 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V56 is a breaking hard cutover from
-   v55 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 46,
-   TargetProfile schema 3, TargetPlan schema 57, program-provenance schema 5,
+   v55 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 47,
+   TargetProfile schema 3, TargetPlan schema 58, program-provenance schema 5,
    and exact PSC v9 provenance, typed program bindings, and the direct-local
    scalar-ref v1 call-row interpretation; no compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
@@ -340,7 +340,7 @@ roots, or general product activation.
    therefore remains fail closed for cross-module artifacts. The bounded scalar
    module-graph family instead uses the same public TargetPlan loader with
    PROGRAM_MODULE_SET authority, which selects the unique program-graph
-   materializer. TargetPlan schema 57 carries one program-graph row and canonical
+   materializer. TargetPlan schema 58 carries one program-graph row and canonical
    module partitions over global TargetPlan tables; each partition identifies
    its SemanticPlan through the full canonical program module set and records
    pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 216-byte rows and has
@@ -377,7 +377,7 @@ roots, or general product activation.
    SemanticPlan verifier before the runtime builds its canonical native
    TargetProfile. They do not guess SemanticPlan or TargetProfile authority
    from a host name, file name, sibling artifact, or caller-authored
-   fingerprint. A dependency-bearing schema-46 XSM cannot be decoded as a
+   fingerprint. A dependency-bearing schema-47 XSM cannot be decoded as a
    standalone artifact: the currently admitted module-set route requires the
    exact two fragments of this bounded capability and canonicalizes arbitrary
    input order only from their verified program-module rows. The decoder

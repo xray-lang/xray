@@ -49,9 +49,9 @@ SCHEMA = 2
 
 CURRENT_PLAN_SCHEMAS = {
     "psc_schema": 9,
-    "semantic_schema": 46,
-    "target_schema": 57,
-    "xtp_schema": 57,
+    "semantic_schema": 47,
+    "target_schema": 58,
+    "xtp_schema": 58,
 }
 
 HEX_32_RE = re.compile(r"^[0-9a-f]{32}$")

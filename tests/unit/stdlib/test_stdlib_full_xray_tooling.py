@@ -41,9 +41,9 @@ def valid_plan() -> completion.PlanIdentity:
     identity, errors = completion.PlanIdentity.parse(
         {
             "psc_schema": 9,
-            "semantic_schema": 46,
-            "target_schema": 57,
-            "xtp_schema": 57,
+            "semantic_schema": 47,
+            "target_schema": 58,
+            "xtp_schema": 58,
             "module_count": 3,
             "dependency_count": 2,
             "program_fingerprint": "1" * 64,
@@ -85,7 +85,7 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
                     f"psc={'1' * 64} gci={'3' * 32}"
                 ),
                 *(
-                    f"target-plan module={index} schema=57 fingerprint={target} "
+                    f"target-plan module={index} schema=58 fingerprint={target} "
                     f"semantic={semantic} profile={'7' * 64}"
                     for index in range(3)
                 ),
