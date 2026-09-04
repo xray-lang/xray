@@ -97,6 +97,27 @@ class ClusterAotBoundaryTests(unittest.TestCase):
 
         self.assertNotIn("stdlib/cluster/.*\\\\.c", cmake)
 
+    def test_cluster_source_uses_the_network_feature_group(self) -> None:
+        cmake = (ROOT / "CMakeLists.txt").read_text()
+
+        self.assertNotIn("XR_STDLIB_CLUSTER", cmake)
+        self.assertIn("stdlib/(net|http|http2|cluster)/[^/]+\\\\.xr$", cmake)
+
+    def test_retired_cluster_aot_service_slot_is_absent(self) -> None:
+        for relative in (
+            "src/coro/xaot_coro.h",
+            "src/coro/xaot_runtime.c",
+            "src/coro/xaot_runtime_internal.h",
+        ):
+            text = (ROOT / relative).read_text()
+            self.assertNotIn("XR_AOT_SERVICE_SLOT_CLUSTER", text, relative)
+            self.assertNotIn("xr_aot_runtime_service_", text, relative)
+
+    def test_cluster_symbols_do_not_claim_an_aot_core_implementation(self) -> None:
+        cli = (ROOT / "src/app/cli/xcmd_build.c").read_text()
+
+        self.assertNotIn('strncmp(value, "cluster.", 8)', cli)
+
     def test_generated_aot_tables_have_no_cluster_dispatch(self) -> None:
         for relative in (
             "src/aot/xstdlib_aot_methods_generated.inc.c",

@@ -308,18 +308,6 @@ XR_FUNC struct XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime);
 XR_FUNC struct XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime);
 XR_FUNC const XrAotValueOps *xr_aot_runtime_value_ops(XrAotRuntime *runtime);
 
-enum {
-    XR_AOT_SERVICE_SLOT_CLUSTER = 0,
-    XR_AOT_SERVICE_SLOT_COUNT = 1,
-};
-
-typedef void (*XrAotServiceDestroyFn)(void *service);
-
-XR_FUNC bool xr_aot_runtime_service_install(XrAotRuntime *runtime, uint32_t slot, void *service,
-                                            XrAotServiceDestroyFn destroy);
-XR_FUNC void *xr_aot_runtime_service_acquire(XrAotRuntime *runtime, uint32_t slot);
-XR_FUNC void xr_aot_runtime_service_release(XrAotRuntime *runtime, uint32_t slot);
-XR_FUNC bool xr_aot_runtime_service_remove(XrAotRuntime *runtime, uint32_t slot);
 XR_FUNC void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime);
 XR_FUNC XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index);
 XR_FUNC XrValue xr_aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index);
