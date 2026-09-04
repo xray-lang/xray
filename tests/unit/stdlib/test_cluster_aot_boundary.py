@@ -56,6 +56,11 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertEqual([], present)
         self.assertNotIn('include "xrt_cluster.h"', (ROOT / "src/aot/xrt.h").read_text())
 
+    def test_build_has_no_cluster_c_exception(self) -> None:
+        cmake = (ROOT / "CMakeLists.txt").read_text()
+
+        self.assertNotIn("stdlib/cluster/.*\\\\.c", cmake)
+
     def test_generated_aot_tables_have_no_cluster_dispatch(self) -> None:
         for relative in (
             "src/aot/xstdlib_aot_methods_generated.inc.c",

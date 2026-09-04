@@ -1351,7 +1351,6 @@ if(XR_STDLIB_FULL)
     # modules do not contribute C translation units.
     file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
-    list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/cluster/.*\\.c$")
     if(NOT XR_BUILD_TEST_MODULES)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
     endif()
