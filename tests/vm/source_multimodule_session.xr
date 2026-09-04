@@ -1,6 +1,14 @@
 import { sourceSessionIncrement } from "./modules/source_multimodule_session_lib"
+import "./modules/source_multimodule_session_lib" as sessionLib
 
 @test
 fn dependency_compiles_in_the_file_transaction() {
     assertEqual(sourceSessionIncrement(41), 42)
+}
+
+@test
+fn namespace_call_reuses_one_value_through_two_borrowed_parameters() {
+    var values = ["alpha", "beta"]
+    assertEqual(sessionLib.sourceSessionSharedLengths(values, values), 4)
+    assertEqual(len(values), 2)
 }

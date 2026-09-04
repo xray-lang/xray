@@ -20,6 +20,7 @@
 #include "xray_vm.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../ir/xi_module.h"
 #include "../../module/xproto_codec.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
@@ -192,6 +193,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     XrProto *proto = NULL;
     XrModuleGraph *graph = NULL;
     XaAnalyzer *graph_analyzer = NULL;
+    XrCompiledModuleGraph graph_compilation = {0};
     XrCompilerSession *session = NULL;
     XrCompilerSessionOperationScope operation_scope = {0};
 
@@ -216,6 +218,12 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     }
     if (!prepare_compile_graph(X, session, input_file, &graph, &graph_analyzer))
         goto cleanup;
+    if (graph_analyzer &&
+        !xr_compile_module_graph_dependencies(session, graph_analyzer, graph,
+                                              &graph_compilation)) {
+        xr_cli_error("compile", "dependency semantic authority compilation failed");
+        goto cleanup;
+    }
 
     /* Graph analysis annotates its owned ASTs. Compile from a fresh parse so
      * analyzer-owned links from the preflight cannot leak into codegen. */
@@ -224,9 +232,16 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         xr_cli_error("compile", "cannot open '%s'", input_file);
         goto cleanup;
     }
-    const XrModuleIdentityAuthority *entry_authority =
-        &graph->specs[graph->entry_index].authority;
-    proto = xr_compile_source_with_path(session, source, input_file, entry_authority);
+    XrModuleSpec *entry_spec = &graph->specs[graph->entry_index];
+    const XrModuleIdentityAuthority *entry_authority = &entry_spec->authority;
+    if (graph_analyzer) {
+        XiModule *entry_module = NULL;
+        proto = xr_compile_source_in_graph(
+            session, graph_analyzer, source, entry_spec->source_path, graph,
+            graph_compilation.modules, graph_compilation.count, &entry_module, entry_authority);
+    } else {
+        proto = xr_compile_source_with_path(session, source, input_file, entry_authority);
+    }
     if (!proto) {
         xr_cli_error("compile", "compilation failed");
         goto cleanup;
@@ -246,6 +261,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
 cleanup:
     if (proto)
         xr_instruction_unit_free(proto);
+    xr_compiled_module_graph_dispose(&graph_compilation);
     xr_free(source);
     if (X) {
         xr_compiler_session_set_module_graph(session, NULL);

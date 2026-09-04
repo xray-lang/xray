@@ -25,6 +25,7 @@
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
+#include "../ir/xi_module.h"
 #include "../runtime/value/xvalue.h"
 #include "../vm/xic_method.h"
 #include "../vm/xvm_internal.h"
@@ -45,6 +46,7 @@ typedef struct DostringGraphState {
     XrModule **previous_module_table;
     int previous_module_table_count;
     XrModule **owned_module_table;
+    XrCompiledModuleGraph compilation;
 } DostringGraphState;
 
 static XrSourceCache *ensure_script_source_cache(XrVMRuntime *isolate) {
@@ -62,6 +64,7 @@ static void dostring_graph_cleanup(XrCompilerSession *session, DostringGraphStat
         state->registry->module_table_count = state->previous_module_table_count;
     }
     xr_free(state->owned_module_table);
+    xr_compiled_module_graph_dispose(&state->compilation);
     if (state->analyzer) {
         xa_analyzer_set_graph(state->analyzer, NULL);
         xa_analyzer_free(state->analyzer);
@@ -178,6 +181,11 @@ static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *
     }
 
     xr_compiler_session_set_module_graph(session, graph);
+    if (!xr_compile_module_graph_dependencies(session, state->analyzer, graph,
+                                              &state->compilation)) {
+        dostring_graph_cleanup(session, state);
+        return false;
+    }
     if (!preload_graph_modules_for_dostring(isolate, graph, state)) {
         dostring_graph_cleanup(session, state);
         return false;
@@ -301,8 +309,18 @@ int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
             &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return -1;
     }
-    XrProto *code = xr_compile_source_with_path(session, source, authority->namespace_id,
-                                                authority);
+    XrProto *code = NULL;
+    if (graph_state.graph) {
+        const char *entry_identity =
+            graph_state.graph->specs[graph_state.graph->entry_index].canonical;
+        XiModule *entry_module = NULL;
+        code = xr_compile_source_in_graph(
+            session, graph_state.analyzer, source, entry_identity, graph_state.graph,
+            graph_state.compilation.modules, graph_state.compilation.count, &entry_module,
+            authority);
+    } else {
+        code = xr_compile_source_with_path(session, source, authority->namespace_id, authority);
+    }
     if (code == NULL) {
         dostring_graph_cleanup(session, &graph_state);
         (void) xr_compiler_session_operation_fail(
@@ -358,6 +376,49 @@ int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename,
     xr_free_code(isolate, code);
     xr_free(source);
 
+    return result;
+}
+
+int xr_isolate_dofile_in_graph(XrVMRuntime *isolate, const char *filename,
+                               const XrModuleIdentityAuthority *authority,
+                               XaAnalyzer *shared_analyzer, const XrModuleGraph *graph,
+                               XiModule **graph_modules, int graph_module_count) {
+    xray_api_checkr(isolate != NULL, "xr_isolate_dofile_in_graph: NULL isolate", -1);
+    xray_api_checkr(filename != NULL, "xr_isolate_dofile_in_graph: NULL filename", -1);
+    xray_api_checkr(authority != NULL && authority->kind != XR_MODULE_IDENTITY_MEMORY &&
+                        xr_module_identity_authority_valid(authority),
+                    "xr_isolate_dofile_in_graph: file module authority is required", -1);
+    xray_api_checkr(shared_analyzer != NULL && graph != NULL && graph_modules != NULL &&
+                        graph_module_count > 0,
+                    "xr_isolate_dofile_in_graph: graph authority is required", -1);
+
+    char *source = read_file_source(filename);
+    if (!source) {
+        fprintf(stderr, "Cannot open file: %s\n", filename);
+        return -1;
+    }
+    XrSourceCache *source_cache = ensure_script_source_cache(isolate);
+    if (source_cache)
+        xr_source_cache_add(source_cache, filename, source);
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    XiModule *entry_module = NULL;
+    const char *compile_path =
+        graph->entry_index >= 0 && graph->entry_index < graph->spec_count
+            ? graph->specs[graph->entry_index].source_path
+            : NULL;
+    XrProto *code = session ? xr_compile_source_in_graph(
+                                  session, shared_analyzer, source, compile_path, graph, graph_modules,
+                                  graph_module_count, &entry_module, authority)
+                            : NULL;
+    if (!code) {
+        xr_free(source);
+        return -1;
+    }
+
+    int result = execute_and_dump(isolate, code, filename);
+    xr_free_code(isolate, code);
+    xr_free(source);
     return result;
 }
 

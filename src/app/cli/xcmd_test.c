@@ -40,6 +40,7 @@
 #include "../../coro/xworker.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../ir/xi_module.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
@@ -384,6 +385,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     char *entry_authority_root = NULL;
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
+    XrCompiledModuleGraph graph_compilation = {0};
     XrCompilerSessionOperationScope compile_operation = {0};
     char graph_error[256] = "";
     if (!xr_compiler_session_operation_begin(session, &compile_operation)) {
@@ -410,6 +412,15 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         result->errors = 1;
         goto cleanup_graph;
     }
+    if (active_graph &&
+        !xr_compile_module_graph_dependencies(session, active_graph_analyzer, active_graph,
+                                              &graph_compilation)) {
+        result->has_error = true;
+        snprintf(result->error_msg, sizeof(result->error_msg),
+                 "dependency semantic authority compilation failed");
+        result->errors = 1;
+        goto cleanup_graph;
+    }
 
     // Read + Parse + Compile
     char *source = xr_cli_read_file(filepath);
@@ -428,7 +439,16 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         goto cleanup_source;
     }
 
-    XrProto *proto = xr_compile_ast_with_source(session, ast, filepath, &entry_authority);
+    XiModule *entry_module = NULL;
+    const char *compile_path = active_graph
+                                   ? active_graph->specs[active_graph->entry_index].source_path
+                                   : filepath;
+    XrProto *proto = active_graph
+                         ? xr_compile_ast_in_graph(
+                               session, active_graph_analyzer, ast, compile_path, active_graph,
+                               graph_compilation.modules, graph_compilation.count, &entry_module,
+                               &entry_authority)
+                         : xr_compile_ast_with_source(session, ast, filepath, &entry_authority);
     if (!proto) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "compile failed");
@@ -567,6 +587,7 @@ cleanup_graph:
         (void) xr_compiler_session_operation_fail(
             &compile_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
     xr_compiler_session_set_module_graph(session, NULL);
+    xr_compiled_module_graph_dispose(&graph_compilation);
     if (active_graph_analyzer) {
         xa_analyzer_set_graph(active_graph_analyzer, NULL);
         xa_analyzer_free(active_graph_analyzer);

@@ -1,4 +1,5 @@
 import { baselineValue } from "./helper"
+import "./helper" as helper
 
 fn workload(iterations: i64) -> i64 {
     var result = 0
@@ -11,3 +12,7 @@ fn workload(iterations: i64) -> i64 {
 }
 
 print(baselineValue(workload(1000000)))
+
+var shared = ["alpha", "beta"]
+print(helper.sharedLengths(shared, shared))
+print(len(shared))

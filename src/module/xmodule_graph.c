@@ -223,6 +223,8 @@ XR_FUNC int xr_module_graph_find_named_dependency(const XrModuleGraph *g, const 
     if (!g || !importer_path || !specifier || !specifier[0])
         return -1;
     int importer = xr_module_graph_find_source(g, importer_path);
+    if (importer < 0)
+        importer = xr_module_graph_find(g, importer_path);
     if (importer < 0 || importer >= g->spec_count)
         return -1;
 
