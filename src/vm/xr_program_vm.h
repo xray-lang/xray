@@ -42,6 +42,10 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_I64,
     XR_VM_VALUE_U32,
     XR_VM_VALUE_U16,
+    XR_VM_VALUE_TARGET_OS,
+    XR_VM_VALUE_TARGET_ARCH,
+    XR_VM_VALUE_TARGET_ABI,
+    XR_VM_VALUE_TARGET_ENDIAN,
     XR_VM_VALUE_ERROR,
     XR_VM_VALUE_PANIC_INFO,
     XR_VM_VALUE_AGGREGATE,
@@ -56,6 +60,7 @@ typedef struct XrVmValue {
         int64_t i64;
         uint32_t u32;
         uint16_t u16;
+        uint16_t target_enum;
         uint32_t error;
         uint32_t panic_info;
         const void *aggregate;

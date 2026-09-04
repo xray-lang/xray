@@ -12,12 +12,13 @@
 #define XTARGET_DATA_LAYOUT_H
 
 #include "xdefs.h"
+#include "../shared/xr_target_query_values_gen.h"
 #include <stdbool.h>
 #include <stdint.h>
 
 typedef enum XrTargetEndian {
-    XR_TARGET_ENDIAN_LITTLE = 1,
-    XR_TARGET_ENDIAN_BIG = 2,
+    XR_TARGET_ENDIAN_LITTLE = XR_TARGET_QUERY_VALUE_ENDIAN_LITTLE,
+    XR_TARGET_ENDIAN_BIG = XR_TARGET_QUERY_VALUE_ENDIAN_BIG,
 } XrTargetEndian;
 
 typedef struct XrTargetTypeLayout {

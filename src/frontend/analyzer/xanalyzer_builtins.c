@@ -14,6 +14,7 @@
 #include "../../base/xnumber_parse_error.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/symbol/xsymbol_table.h"
+#include "../../shared/xr_target_query_registry_gen.h"
 #include "../../base/xmalloc.h"
 #include "../../../stdlib/prelude/prelude.h"
 #include <string.h>
@@ -1209,6 +1210,7 @@ XaAllocationContractKind xa_builtin_get_handle_method_allocation_contract(const 
  * diagnostic. The list is the same registry the resolver and the LSP read, so
  * it cannot drift from what the language actually provides. */
 static const char *const g_reserved_builtin_names[] = {
+    "target",
 #define XR_BUILTIN_PRELUDE_TYPE(name, arity, native_type, prelude_kind) name,
 #define XR_BUILTIN_TYPE(name, arity) name,
 #define XR_BUILTIN_ENUM(name, arity, vm_slot, variants) name,
@@ -1224,7 +1226,7 @@ bool xa_builtin_name_is_reserved(const char *name) {
         if (strcmp(g_reserved_builtin_names[i], name) == 0)
             return true;
     }
-    return false;
+    return xr_target_query_enum_by_type_name(name) != NULL;
 }
 
 const char *xa_builtin_find_handle_module(const char *handle_name) {

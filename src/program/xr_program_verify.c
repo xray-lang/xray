@@ -12,6 +12,7 @@
 
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
+#include "../shared/xr_target_query_registry_gen.h"
 #include "xr_validated_program_internal.h"
 
 #include <stdio.h>
@@ -110,7 +111,7 @@ static bool reader_done(const VerifyReader *reader) {
 }
 
 static bool type_is_runtime(const XrValidatedProgram *program, uint64_t type_id) {
-    bool builtin_has_representation = type_id <= XR_CORE_TYPE_U16;
+    bool builtin_has_representation = type_id <= XR_CORE_TYPE_TARGET_ENDIAN;
     return builtin_has_representation ||
            (program && type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
             type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count);
@@ -783,7 +784,7 @@ static bool parse_signature(VerifyContext *context, VerifyReader *reader,
             ? XR_CORE_IR_OWNER
             : XR_CORE_IR_NON_OWNER;
     if ((signature->effect_mask & ~UINT32_C(0x1f)) != 0u ||
-        (signature->capability_mask & ~UINT32_C(0x01)) != 0u ||
+        (signature->capability_mask & ~UINT32_C(0x1f)) != 0u ||
         ((signature->error_type_id == XR_CORE_TYPE_VOID) !=
          ((signature->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
         signature->error_type_id == XR_CORE_TYPE_PANIC_INFO ||
@@ -2503,6 +2504,18 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             return true;
         }
+        case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
+            if (instruction->result_type_id < XR_CORE_TYPE_TARGET_OS ||
+                instruction->result_type_id > XR_CORE_TYPE_TARGET_ENDIAN ||
+                !expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_U32,
+                              instruction->result_type_id, true) ||
+                instruction->immediate.u32 > UINT16_MAX ||
+                !xr_target_query_enum_value_valid(instruction->result_type_id,
+                                                  (uint16_t) instruction->immediate.u32)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
         case XR_CORE_OP_CORE_ADD_I64:
         case XR_CORE_OP_CORE_SUB_I64:
         case XR_CORE_OP_CORE_MUL_I64:
@@ -2535,6 +2548,20 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             return true;
+        case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM: {
+            uint16_t left_type = instruction->operand_count == 2u
+                                     ? function->value_types[instruction->operands[0]]
+                                     : XR_CORE_TYPE_VOID;
+            if (!expect_shape(context, instruction, location, 2, 0, XR_CORE_IR_IMMEDIATE_U32,
+                              XR_CORE_TYPE_BOOL, true) ||
+                instruction->immediate.u32 > 1u || left_type < XR_CORE_TYPE_TARGET_OS ||
+                left_type > XR_CORE_TYPE_TARGET_ENDIAN ||
+                !operand_type_is(function, instruction, 1, left_type)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT: {
             const XrValidatedBlock *block = &function->blocks[block_id];
             if (!expect_shape(context, instruction, location, block->argument_count, 0,
@@ -2888,6 +2915,18 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
                                 XR_CORE_TYPE_U16, true);
+        case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:
+            return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                                XR_CORE_TYPE_TARGET_OS, true);
+        case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
+            return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                                XR_CORE_TYPE_TARGET_ARCH, true);
+        case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
+            return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                                XR_CORE_TYPE_TARGET_ABI, true);
+        case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
+            return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                                XR_CORE_TYPE_TARGET_ENDIAN, true);
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             const XrValidatedType *callable =
                 xr_validated_program_type(context->program, instruction->result_type_id);
@@ -3417,7 +3456,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     location.function_id = function_id;
     if ((function->flags & ~XR_PROGRAM_FUNCTION_ENTRY) != 0u ||
         (function->effect_mask & ~UINT32_C(0x1f)) != 0u ||
-        (function->capability_mask & ~UINT32_C(0x01)) != 0u ||
+        (function->capability_mask & ~UINT32_C(0x1f)) != 0u ||
         ((function->error_type_id == XR_CORE_TYPE_VOID) !=
          ((function->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
         function->error_type_id == XR_CORE_TYPE_PANIC_INFO ||

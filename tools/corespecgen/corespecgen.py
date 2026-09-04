@@ -79,6 +79,7 @@ ARITHMETIC_KINDS = {
 SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
 GENERIC_TYPES = {
     "A", "C", "Capture?", "E", "V", "T", "T...", "R?", "P...",
+    "TargetEnum",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
 }
 VARIADIC_TYPES = {
@@ -310,7 +311,10 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} references unknown capabilities")
         require(isinstance(operation["ownership"], dict) and operation["ownership"],
                 f"operation {spelling} lacks ownership contract")
-        require(operation["profile_dependency"] in {"none", "pointer_width"},
+        require(operation["profile_dependency"] in {
+            "none", "pointer_width", "operating_system", "architecture", "native_abi",
+            "endianness",
+        },
                 f"operation {spelling} has unknown profile dependency")
         require(isinstance(operation["materialization"], str) and operation["materialization"],
                 f"operation {spelling} lacks materialization intent")
@@ -397,6 +401,14 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         require(isinstance(value, bool) and not arguments,
                 f"KAT {case['id']} bool constant is malformed")
         return {"value": value}
+    if spelling == "core.constant.target_enum":
+        enum_type = immediates.get("type")
+        value = immediates.get("value")
+        domains = {"TargetOs": 5, "TargetArch": 5, "TargetAbi": 9, "TargetEndian": 2}
+        require(enum_type in domains and isinstance(value, int) and 1 <= value <= domains[enum_type],
+                f"KAT {case['id']} target enum constant is malformed")
+        require(not arguments, f"KAT {case['id']} target enum constant has operands")
+        return {"value": value}
     if spelling in {"core.add.i64", "core.sub.i64", "core.mul.i64"}:
         require(len(arguments) == 2, f"KAT {case['id']} arithmetic arity is not two")
         left = parse_i64(arguments[0], f"KAT {case['id']} lhs")
@@ -441,18 +453,38 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         }
         require(predicate in predicates, f"KAT {case['id']} compare predicate is invalid")
         return {"value": predicates[predicate](left, right)}
+    if spelling == "core.compare.target_enum":
+        require(len(arguments) == 2, f"KAT {case['id']} target enum compare arity is not two")
+        enum_type = immediates.get("type")
+        predicate = immediates.get("predicate")
+        domains = {"TargetOs": 5, "TargetArch": 5, "TargetAbi": 9, "TargetEndian": 2}
+        require(enum_type in domains and predicate in {"eq", "ne"},
+                f"KAT {case['id']} target enum compare contract is malformed")
+        require(all(isinstance(value, int) and 1 <= value <= domains[enum_type]
+                    for value in arguments),
+                f"KAT {case['id']} target enum compare value is outside its domain")
+        equal = arguments[0] == arguments[1]
+        return {"value": equal if predicate == "eq" else not equal}
     if spelling == "core.trap":
         require(not arguments and immediates.get("trap") == "explicit-trap",
                 f"KAT {case['id']} explicit trap is malformed")
         return {"trap": "explicit-trap"}
-    if spelling == "core.target.pointer_width":
+    target_fields = {
+        "core.target.pointer_width": ("pointer_width", {32, 64}),
+        "core.target.operating_system": ("operating_system", set(range(1, 6))),
+        "core.target.architecture": ("architecture", set(range(1, 6))),
+        "core.target.native_abi": ("native_abi", set(range(1, 10))),
+        "core.target.endianness": ("endianness", {1, 2}),
+    }
+    if spelling in target_fields:
         require(not arguments, f"KAT {case['id']} target query must not have operands")
         profile = case.get("profile")
         require(isinstance(profile, dict), f"KAT {case['id']} profile must be an object")
-        width = profile.get("pointer_width")
-        if width not in {32, 64}:
+        field, valid_values = target_fields[spelling]
+        value = profile.get(field)
+        if value not in valid_values:
             return {"trap": "profile-unavailable"}
-        return {"value": str(width)}
+        return {"value": str(value)}
     raise CoreSpecError(f"KAT {case['id']} has no scalar oracle for {spelling}")
 
 

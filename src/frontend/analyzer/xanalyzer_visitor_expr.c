@@ -27,6 +27,7 @@
 #include "../../../stdlib/prelude/prelude.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../shared/xr_accessor_name.h"
+#include "../../shared/xr_target_query_registry_gen.h"
 #include <limits.h>
 #include <stdint.h>
 
@@ -1956,14 +1957,41 @@ static XrType *xa_target_query_member_type(XaInferContext *ctx, AstNode *node) {
                                              receiver->as.variable.symbol_id);
     XaSymbolLinks *links = symbol ? xa_analyzer_get_links(ctx->analyzer, symbol) : NULL;
     if (!symbol || !symbol->is_builtin || symbol->kind != XA_SYM_MODULE || !links ||
-        links->target_namespace_id != XA_TARGET_NAMESPACE_TARGET ||
-        strcmp(member->name, "pointerBits") != 0)
+        links->target_namespace_id != XA_TARGET_NAMESPACE_TARGET)
         return NULL;
 
-    XrType *result = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U16);
+    uint16_t query_id = XA_TARGET_QUERY_NONE;
+    const XrTargetQueryEnumDesc *enum_desc = NULL;
+    if (strcmp(member->name, "pointerBits") == 0)
+        query_id = XA_TARGET_QUERY_POINTER_BITS;
+    else {
+        for (size_t index = 0; index < XR_TARGET_QUERY_ENUM_COUNT; ++index) {
+            if (strcmp(member->name, xr_target_query_enum_rows[index].source_member) == 0) {
+                enum_desc = &xr_target_query_enum_rows[index];
+                query_id = enum_desc->query_id;
+                break;
+            }
+        }
+        if (!enum_desc)
+            return NULL;
+    }
+
+    XrType *result = NULL;
+    if (enum_desc) {
+        XaSymbol *enum_symbol = xa_scope_lookup(ctx->analyzer->global_scope, enum_desc->type_name);
+        XrType *canonical = enum_symbol ? xa_analyzer_get_type(ctx->analyzer, enum_symbol) : NULL;
+        if (!enum_symbol || !enum_symbol->is_builtin || enum_symbol->kind != XA_SYM_ENUM ||
+            !canonical || canonical->kind != XR_KIND_ENUM ||
+            !canonical->enum_type.enum_name ||
+            strcmp(canonical->enum_type.enum_name, enum_desc->type_name) != 0)
+            return xr_type_new_error(ctx->analyzer->isolate);
+        result = xr_type_copy(ctx->analyzer->isolate, canonical);
+    } else {
+        result = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U16);
+    }
     XaTargetQueryFact fact = {
         .namespace_id = XA_TARGET_NAMESPACE_TARGET,
-        .query_id = XA_TARGET_QUERY_POINTER_BITS,
+        .query_id = query_id,
         .result_native_type = XR_NATIVE_U16,
         .complete = 1,
     };

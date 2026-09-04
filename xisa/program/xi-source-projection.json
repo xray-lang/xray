@@ -226,6 +226,34 @@
       "projection_kind": "target-query",
       "core_operation": "core.target.pointer_width",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.target.operating.system",
+      "result_type": "TargetOs",
+      "projection_kind": "target-query",
+      "core_operation": "core.target.operating_system",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.target.architecture",
+      "result_type": "TargetArch",
+      "projection_kind": "target-query",
+      "core_operation": "core.target.architecture",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.target.native.abi",
+      "result_type": "TargetAbi",
+      "projection_kind": "target-query",
+      "core_operation": "core.target.native_abi",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.target.endianness",
+      "result_type": "TargetEndian",
+      "projection_kind": "target-query",
+      "core_operation": "core.target.endianness",
+      "immediate_u32": 0
     }
   ],
   "semantic_mappings": [

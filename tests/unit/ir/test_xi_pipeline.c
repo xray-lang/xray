@@ -1937,6 +1937,127 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     xi_canonical_program_test_fixture_cleanup(&fixture);
 }
 
+TEST(e2e_program_target_os_member_equality_is_executable) {
+    static const char source[] =
+        "fn is_darwin() -> bool { return target.os == TargetOs.Darwin }\n";
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-target-os-equality", source));
+
+    XiFunc *entry = NULL;
+    bool saw_query = false;
+    bool saw_member = false;
+    bool saw_equal = false;
+    for (uint16_t function_index = 0u;
+         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+        XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
+        if (function && !function->has_receiver && function->nparams == 0u)
+            entry = function;
+        for (uint32_t block_index = 0u; function && block_index < function->nblocks;
+             ++block_index) {
+            XiBlock *block = function->blocks[block_index];
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
+                 ++value_index) {
+                XiValue *value = block->values[value_index];
+                saw_query = saw_query || (value && value->op == XI_TARGET_OPERATING_SYSTEM);
+                saw_member = saw_member ||
+                             (value && value->op == XI_CONST && value->type &&
+                              value->type->kind == XR_KIND_ENUM && value->type->enum_type.enum_name &&
+                              strcmp(value->type->enum_type.enum_name, "TargetOs") == 0 &&
+                              value->aux == NULL && value->aux_int == XR_TARGET_OS_MACOS);
+                saw_equal = saw_equal || (value && value->op == XI_EQ);
+            }
+        }
+    }
+    PIPELINE_TEST_REQUIRE(entry != NULL && saw_query && saw_member && saw_equal);
+
+    XrCoreIrKey semantic_profile = xr_core_ir_key(
+        "target-os-equality-profile", strlen("target-os-equality-profile"));
+    const XiFunc *module_roots[] = {fixture.pipeline.ir};
+    XrProgramFromXiInput input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = entry,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &artifact, diagnostic,
+                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
+        validated, XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM));
+    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
+        validated, XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM));
+    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
+        validated, XR_CORE_OP_CORE_COMPARE_TARGET_ENUM));
+
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(fixture.profile);
+    PIPELINE_TEST_REQUIRE(machine != NULL);
+    bool expected = machine->operating_system == XR_TARGET_OS_MACOS;
+    XrReferenceProfile profile = {
+        .pointer_width = (uint16_t) (machine->data_layout.pointer.size * 8u),
+        .operating_system = machine->operating_system,
+        .architecture = machine->architecture,
+        .native_abi = machine->native_abi,
+        .endianness = machine->data_layout.endian,
+    };
+    uint32_t entry_function = xr_validated_program_entry_function(validated);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate(validated, entry_function, NULL, 0u, &profile, NULL);
+    PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_BOOL);
+    PIPELINE_TEST_REQUIRE(reference.value.as.boolean == expected);
+
+    XrExecutionBindingInput execution_input = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = validated,
+        .profile = fixture.profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
+                                                       &execution_diagnostic) == XR_EXECUTION_OK);
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
+                          XR_VM_CODE_OK);
+    XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry_function, NULL, 0u);
+    PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(vm.value.kind == XR_VM_VALUE_BOOL);
+    PIPELINE_TEST_REQUIRE(vm.value.as.boolean == expected);
+    xr_vm_code_free(vm_code);
+
+    XrBackendIR *backend_ir = NULL;
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendOptions backend_options = xr_backend_default_options();
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(instance, &backend_options, &backend_ir,
+                                              &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated,
+                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "UINT16_C(3)") != NULL);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, " == ") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
+}
+
 TEST(e2e_program_target_query_closes_interface_slot_contract) {
     static const char source[] =
         "interface PointerWidth { width() -> u16 }\n"
@@ -4417,6 +4538,7 @@ int main(int argc, char **argv) {
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
     run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
+    run_e2e_program_target_os_member_equality_is_executable();
     run_e2e_program_target_query_closes_interface_slot_contract();
     run_e2e_program_move_direct_signatures_are_published_before_bodies();
     run_e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in();

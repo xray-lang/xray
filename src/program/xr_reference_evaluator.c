@@ -12,6 +12,7 @@
 
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
+#include "../runtime/abi/xr_target_machine_facts.h"
 #include "xr_validated_program_internal.h"
 
 #include <limits.h>
@@ -102,6 +103,14 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
             return value.kind == XR_REFERENCE_VALUE_U32;
         case XR_CORE_TYPE_U16:
             return value.kind == XR_REFERENCE_VALUE_U16;
+        case XR_CORE_TYPE_TARGET_OS:
+            return value.kind == XR_REFERENCE_VALUE_TARGET_OS;
+        case XR_CORE_TYPE_TARGET_ARCH:
+            return value.kind == XR_REFERENCE_VALUE_TARGET_ARCH;
+        case XR_CORE_TYPE_TARGET_ABI:
+            return value.kind == XR_REFERENCE_VALUE_TARGET_ABI;
+        case XR_CORE_TYPE_TARGET_ENDIAN:
+            return value.kind == XR_REFERENCE_VALUE_TARGET_ENDIAN;
         case XR_CORE_TYPE_ERROR:
             return value.kind == XR_REFERENCE_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
@@ -491,6 +500,17 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value.as.boolean = constant->value.boolean;
                     break;
                 }
+                case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
+                    produced.as.value.kind =
+                        instruction->result_type_id == XR_CORE_TYPE_TARGET_OS
+                            ? XR_REFERENCE_VALUE_TARGET_OS
+                        : instruction->result_type_id == XR_CORE_TYPE_TARGET_ARCH
+                            ? XR_REFERENCE_VALUE_TARGET_ARCH
+                        : instruction->result_type_id == XR_CORE_TYPE_TARGET_ABI
+                            ? XR_REFERENCE_VALUE_TARGET_ABI
+                            : XR_REFERENCE_VALUE_TARGET_ENDIAN;
+                    produced.as.value.as.target_enum = (uint16_t) instruction->immediate.u32;
+                    break;
                 case XR_CORE_OP_CORE_ADD_I64:
                 case XR_CORE_OP_CORE_SUB_I64:
                 case XR_CORE_OP_CORE_MUL_I64: {
@@ -562,6 +582,17 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     }
                     produced.as.value.kind = XR_REFERENCE_VALUE_BOOL;
                     produced.as.value.as.boolean = comparison;
+                    break;
+                }
+                case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM: {
+                    uint16_t left =
+                        values[instruction->operands[0]].as.value.as.target_enum;
+                    uint16_t right =
+                        values[instruction->operands[1]].as.value.as.target_enum;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_BOOL;
+                    produced.as.value.as.boolean = instruction->immediate.u32 == 0u
+                                                        ? left == right
+                                                        : left != right;
                     break;
                 }
                 case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
@@ -771,6 +802,42 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     }
                     produced.as.value.kind = XR_REFERENCE_VALUE_U16;
                     produced.as.value.as.u16 = context->profile.pointer_width;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:
+                    if (context->profile.operating_system <= XR_TARGET_OS_NONE ||
+                        context->profile.operating_system >= XR_TARGET_OS_COUNT) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_REFERENCE_VALUE_TARGET_OS;
+                    produced.as.value.as.target_enum = context->profile.operating_system;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
+                    if (context->profile.architecture <= XR_TARGET_ARCH_NONE ||
+                        context->profile.architecture >= XR_TARGET_ARCH_COUNT) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_REFERENCE_VALUE_TARGET_ARCH;
+                    produced.as.value.as.target_enum = context->profile.architecture;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
+                    if (context->profile.native_abi <= XR_TARGET_ABI_NONE ||
+                        context->profile.native_abi >= XR_TARGET_ABI_COUNT) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_REFERENCE_VALUE_TARGET_ABI;
+                    produced.as.value.as.target_enum = context->profile.native_abi;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
+                    if (context->profile.endianness != XR_TARGET_ENDIAN_LITTLE &&
+                        context->profile.endianness != XR_TARGET_ENDIAN_BIG) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_REFERENCE_VALUE_TARGET_ENDIAN;
+                    produced.as.value.as.target_enum = context->profile.endianness;
                     break;
                 case XR_CORE_OP_CORE_CALLABLE_PACK: {
                     XrReferenceCallableValue *carrier = allocate_callable(context);

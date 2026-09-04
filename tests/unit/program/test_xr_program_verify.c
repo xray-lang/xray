@@ -6,6 +6,7 @@
 #include "program/xr_program.h"
 #include "program/xr_program_verify.h"
 #include "program/xr_reference_evaluator.h"
+#include "runtime/abi/xr_target_machine_facts.h"
 #include "xr_program_existential_fixture.h"
 #include "xr_program_callable_fixture.h"
 #include "xr_program_invoke_fixture.h"
@@ -418,169 +419,156 @@ static void test_parameter_modes_and_value_categories(void) {
     xr_program_artifact_free(&ref);
 }
 
-static XrProgramBuildStatus write_nested_type(uint16_t child_type, XrCoreIrTypeKind kind,
-                                              XrProgramArtifact *artifact) {
-    enum { NESTED_TYPE = 73 };
-    uint16_t child[] = {child_type};
-    XrCoreIrVariantInput variant = {
-        .payload_types = child,
-        .payload_count = 1u,
+static void test_target_profile_queries_are_exact_logical_scalars(void) {
+    struct TargetQueryCase {
+        uint16_t operation;
+        uint16_t result_type;
+        uint32_t capability;
+        XrReferenceValueKind value_kind;
+        uint16_t expected;
+    } cases[] = {
+        {XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM, XR_CORE_TYPE_TARGET_OS,
+         XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM, XR_REFERENCE_VALUE_TARGET_OS,
+         XR_TARGET_OS_WASI},
+        {XR_CORE_OP_CORE_TARGET_ARCHITECTURE, XR_CORE_TYPE_TARGET_ARCH,
+         XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE, XR_REFERENCE_VALUE_TARGET_ARCH,
+         XR_TARGET_ARCH_WASM32},
+        {XR_CORE_OP_CORE_TARGET_NATIVE_ABI, XR_CORE_TYPE_TARGET_ABI,
+         XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI, XR_REFERENCE_VALUE_TARGET_ABI,
+         XR_TARGET_ABI_WASM},
+        {XR_CORE_OP_CORE_TARGET_ENDIANNESS, XR_CORE_TYPE_TARGET_ENDIAN,
+         XR_CORE_CAPABILITY_PROFILE_ENDIANNESS, XR_REFERENCE_VALUE_TARGET_ENDIAN,
+         XR_TARGET_ENDIAN_LITTLE},
     };
-    XrCoreIrTypeInput type = {
-        .key = key("reserved-runtime:nested"),
-        .local_id = NESTED_TYPE,
-        .kind = kind,
-    };
-    if (kind == XR_CORE_IR_TYPE_AGGREGATE) {
-        type.field_types = child;
-        type.field_count = 1u;
-    } else if (kind == XR_CORE_IR_TYPE_VARIANT) {
-        type.variants = &variant;
-        type.variant_count = 1u;
-    } else {
-        type.view_element_type = child_type;
-        type.view_capability = XR_CORE_IR_VIEW_READ;
+    XrReferenceProfile profile = {.pointer_width = 32u,
+                                  .operating_system = XR_TARGET_OS_WASI,
+                                  .architecture = XR_TARGET_ARCH_WASM32,
+                                  .native_abi = XR_TARGET_ABI_WASM,
+                                  .endianness = XR_TARGET_ENDIAN_LITTLE};
+    for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        XrCoreIrKey value = key("target-query:value");
+        XrCoreIrKey returned[] = {value};
+        XrCoreIrInstructionInput instructions[] = {
+            {.operation_id = cases[index].operation,
+             .result = value,
+             .result_type_id = cases[index].result_type,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+            {.operation_id = XR_CORE_OP_CORE_RETURN,
+             .result_type_id = XR_CORE_TYPE_VOID,
+             .operands = returned,
+             .operand_count = 1u,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        };
+        XrCoreIrKey block_key = key("target-query:block");
+        XrCoreIrBlockInput block = {.key = block_key,
+                                    .instructions = instructions,
+                                    .instruction_count = 2u};
+        XrCoreIrFunctionInput function = {
+            .key = key("target-query:function"),
+            .result_type_id = cases[index].result_type,
+            .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_TARGET_QUERY,
+            .capability_mask = cases[index].capability,
+            .entry_block = block_key,
+            .blocks = &block,
+            .block_count = 1u,
+            .flags = XR_PROGRAM_FUNCTION_ENTRY,
+        };
+        XrProgramArtifact artifact = {0};
+        CHECK(write_one_function(NULL, 0u, &function, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = validate_ok(&artifact);
+        if (program) {
+            XrReferenceOutcome result = xr_reference_evaluate(program, 0u, NULL, 0u, &profile,
+                                                               NULL);
+            CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+            CHECK(result.value.kind == cases[index].value_kind);
+            CHECK(result.value.as.target_enum == cases[index].expected);
+            xr_validated_program_free(program);
+        }
+        xr_program_artifact_free(&artifact);
+
+        instructions[0].result_type_id =
+            cases[(index + 1u) % (sizeof(cases) / sizeof(cases[0]))].result_type;
+        CHECK(write_one_function(NULL, 0u, &function, &artifact) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+        instructions[0].result_type_id = cases[index].result_type;
+
+        function.capability_mask = 0u;
+        CHECK(write_one_function(NULL, 0u, &function, &artifact) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_CAPABILITY);
+        xr_program_artifact_free(&artifact);
     }
-    XrCoreIrInstructionInput instruction = {
-        .operation_id = XR_CORE_OP_CORE_TRAP,
-        .result_type_id = XR_CORE_TYPE_VOID,
-        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
-        .immediate.u32 = XR_REFERENCE_TRAP_EXPLICIT,
+
+    XrCoreIrKey queried = key("target-enum-equality:query");
+    XrCoreIrKey wasi = key("target-enum-equality:wasi");
+    XrCoreIrKey equal = key("target-enum-equality:equal");
+    XrCoreIrKey compare_operands[] = {queried, wasi};
+    XrCoreIrKey returned[] = {equal};
+    XrCoreIrInstructionInput equality_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM,
+         .result = queried,
+         .result_type_id = XR_CORE_TYPE_TARGET_OS,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM,
+         .result = wasi,
+         .result_type_id = XR_CORE_TYPE_TARGET_OS,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = XR_TARGET_OS_WASI},
+        {.operation_id = XR_CORE_OP_CORE_COMPARE_TARGET_ENUM,
+         .result = equal,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = compare_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = 0u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
     };
-    XrCoreIrKey block_key = key("reserved-runtime:block");
-    XrCoreIrBlockInput block = {
-        .key = block_key,
-        .instructions = &instruction,
-        .instruction_count = 1u,
+    XrCoreIrKey equality_block_key = key("target-enum-equality:block");
+    XrCoreIrBlockInput equality_block = {
+        .key = equality_block_key,
+        .instructions = equality_instructions,
+        .instruction_count = sizeof(equality_instructions) / sizeof(equality_instructions[0]),
     };
-    XrCoreIrFunctionInput function = {
-        .key = key("reserved-runtime:function"),
-        .result_type_id = XR_CORE_TYPE_VOID,
-        .effect_mask = XR_CORE_EFFECT_TRAP,
-        .entry_block = block_key,
-        .blocks = &block,
+    XrCoreIrFunctionInput equality_function = {
+        .key = key("target-enum-equality:function"),
+        .result_type_id = XR_CORE_TYPE_BOOL,
+        .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_TARGET_QUERY,
+        .capability_mask = XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM,
+        .entry_block = equality_block_key,
+        .blocks = &equality_block,
         .block_count = 1u,
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
-    XrCoreIrModuleInput module = {
-        .key = key("reserved-runtime:module"),
-        .functions = &function,
-        .function_count = 1u,
-    };
-    return write_typed_modules(&type, 1u, &module, 1u, artifact);
-}
-
-static bool nested_type_child_offset(const XrProgramArtifact *artifact, XrCoreIrTypeKind kind,
-                                     size_t *offset_out) {
-    XrProgramView view;
-    char diagnostic[256] = {0};
-    if (!artifact || !offset_out ||
-        xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, diagnostic,
-                                    sizeof(diagnostic)) != XR_PROGRAM_DECODE_OK)
-        return false;
-    const XrProgramSectionView *types = &view.sections[XR_PROGRAM_SECTION_TYPES - 1u];
-    size_t cursor = (size_t) types->offset;
-    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
-        XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT + 1u)
-        return false;
-    for (uint32_t builtin = 0u; builtin < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++builtin) {
-        for (uint32_t column = 0u; column < 4u; ++column)
-            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
-    }
-    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
-        XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
-        return false;
-    uint64_t encoded_kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
-    uint64_t expected_kind = kind == XR_CORE_IR_TYPE_AGGREGATE ? XR_PROGRAM_TYPE_KIND_AGGREGATE
-                             : kind == XR_CORE_IR_TYPE_VARIANT ? XR_PROGRAM_TYPE_KIND_VARIANT
-                                                               : XR_PROGRAM_TYPE_KIND_VIEW;
-    if (encoded_kind != expected_kind)
-        return false;
-    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* ownership */
-    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* copy contract */
-    if (cursor > artifact->size || artifact->size - cursor < XR_CORE_IR_KEY_SIZE)
-        return false;
-    cursor += XR_CORE_IR_KEY_SIZE;
-    if (kind == XR_CORE_IR_TYPE_AGGREGATE) {
-        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* nominal kind */
-        if (test_take_uvar(artifact->bytes, artifact->size, &cursor) != 1u)
-            return false;
-    } else if (kind == XR_CORE_IR_TYPE_VARIANT) {
-        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* nominal kind */
-        if (test_take_uvar(artifact->bytes, artifact->size, &cursor) != 1u ||
-            test_take_uvar(artifact->bytes, artifact->size, &cursor) != 1u)
-            return false;
-    }
-    *offset_out = cursor;
-    return test_take_uvar(artifact->bytes, artifact->size, &cursor) == XR_CORE_TYPE_U16;
-}
-
-static void test_reserved_target_types_are_not_executable(void) {
-    const uint8_t reserved_types[] = {
-        XR_CORE_TYPE_TARGET_OS,
-        XR_CORE_TYPE_TARGET_ARCH,
-        XR_CORE_TYPE_TARGET_ABI,
-        XR_CORE_TYPE_TARGET_ENDIAN,
-    };
-    const XrCoreIrTypeKind nested_kinds[] = {
-        XR_CORE_IR_TYPE_AGGREGATE,
-        XR_CORE_IR_TYPE_VARIANT,
-        XR_CORE_IR_TYPE_VIEW,
-    };
-    XrProgramArtifact signature = {0};
-    CHECK(build_typed_mode_artifact(XR_PARAM_READ, XR_CORE_IR_VALUE, true, XR_CORE_TYPE_I64,
-                                    XR_CORE_TYPE_I64, XR_CORE_TYPE_I64, XR_CORE_TYPE_I64,
-                                    &signature) ==
+    XrProgramArtifact equality_artifact = {0};
+    CHECK(write_one_function(NULL, 0u, &equality_function, &equality_artifact) ==
           XR_PROGRAM_BUILD_OK);
-    XrValidatedProgram *signature_program = validate_ok(&signature);
-    xr_validated_program_free(signature_program);
-    ModeFixtureOffsets offsets;
-    CHECK(mode_fixture_offsets(&signature, &offsets));
-    uint32_t non_entry = offsets.entry_block == 0u ? 1u : 0u;
-    for (size_t type_index = 0u;
-         type_index < sizeof(reserved_types) / sizeof(reserved_types[0]); ++type_index) {
-        uint8_t reserved_type = reserved_types[type_index];
-        expect_mutated_verify(&signature, offsets.parameter_type, reserved_type,
-                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
-                              XR_PROGRAM_DIAGNOSTIC_TYPE);
-        expect_mutated_verify(&signature, offsets.result_type, reserved_type,
-                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
-                              XR_PROGRAM_DIAGNOSTIC_FUNCTION);
-        expect_mutated_verify(&signature, offsets.argument_types[non_entry], reserved_type,
-                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
-                              XR_PROGRAM_DIAGNOSTIC_VALUE_DEFINITION);
-
-        XrProgramArtifact rejected = {0};
-        CHECK(build_typed_mode_artifact(XR_PARAM_READ, XR_CORE_IR_VALUE, false, reserved_type,
-                                        XR_CORE_TYPE_VOID, reserved_type, XR_CORE_TYPE_I64,
-                                        &rejected) == XR_PROGRAM_BUILD_INVALID_INPUT);
-        CHECK(build_typed_mode_artifact(XR_PARAM_READ, XR_CORE_IR_VALUE, false,
-                                        XR_CORE_TYPE_I64, reserved_type, XR_CORE_TYPE_I64,
-                                        XR_CORE_TYPE_I64,
-                                        &rejected) == XR_PROGRAM_BUILD_INVALID_INPUT);
-        CHECK(build_typed_mode_artifact(XR_PARAM_READ, XR_CORE_IR_VALUE, true,
-                                        XR_CORE_TYPE_I64, XR_CORE_TYPE_VOID, XR_CORE_TYPE_I64,
-                                        reserved_type,
-                                        &rejected) == XR_PROGRAM_BUILD_INVALID_INPUT);
-
-        for (size_t kind_index = 0u;
-             kind_index < sizeof(nested_kinds) / sizeof(nested_kinds[0]); ++kind_index) {
-            XrProgramArtifact nested = {0};
-            CHECK(write_nested_type(reserved_type, nested_kinds[kind_index], &rejected) ==
-                  XR_PROGRAM_BUILD_INVALID_INPUT);
-            CHECK(write_nested_type(XR_CORE_TYPE_U16, nested_kinds[kind_index], &nested) ==
-                  XR_PROGRAM_BUILD_OK);
-            XrValidatedProgram *nested_program = validate_ok(&nested);
-            xr_validated_program_free(nested_program);
-            size_t child_offset = 0u;
-            CHECK(nested_type_child_offset(&nested, nested_kinds[kind_index], &child_offset));
-            expect_mutated_verify(&nested, child_offset, reserved_type,
-                                  XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
-                                  XR_PROGRAM_DIAGNOSTIC_TYPE);
-            xr_program_artifact_free(&nested);
-        }
+    XrValidatedProgram *equality_program = validate_ok(&equality_artifact);
+    if (equality_program) {
+        XrReferenceOutcome result =
+            xr_reference_evaluate(equality_program, 0u, NULL, 0u, &profile, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_BOOL);
+        CHECK(result.value.as.boolean);
+        xr_validated_program_free(equality_program);
     }
-    xr_program_artifact_free(&signature);
+    xr_program_artifact_free(&equality_artifact);
+
+    equality_instructions[1].immediate.u32 = 0u;
+    CHECK(write_one_function(NULL, 0u, &equality_function, &equality_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&equality_artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&equality_artifact);
+    equality_instructions[1].immediate.u32 = XR_TARGET_OS_WASI;
+
+    equality_instructions[1].result_type_id = XR_CORE_TYPE_TARGET_ARCH;
+    CHECK(write_one_function(NULL, 0u, &equality_function, &equality_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&equality_artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&equality_artifact);
 }
 
 static XrProgramArtifact build_aggregate_variant_artifact(bool wrong_variant,
@@ -3383,7 +3371,7 @@ int main(void) {
     test_affine_owner_domain();
     test_optional_owner_contract();
     test_parameter_modes_and_value_categories();
-    test_reserved_target_types_are_not_executable();
+    test_target_profile_queries_are_exact_logical_scalars();
     test_terminal_operations();
     test_sealed_invoke_and_cleanup_cfg();
     test_typed_panic_invoke_and_cleanup_cfg();

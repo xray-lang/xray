@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "078a77adec5006dfeb82420942eccffffdb7b785c636fcc76044ccb70cc98268",
+  "canonical_fingerprint": "0c9466bc4d5c3f5959049247fe11d64b0c511bb23f6be53ac572d9295bd47096",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -4089,6 +4089,94 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.tail.call"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.target.architecture",
+      "owner_id": "123f0b192e00b9b7bb3b7be632852578",
+      "owner_id_hi": "0x123f0b192e00b9b7",
+      "owner_id_lo": "0xbb3b7be632852578",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.target.architecture"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.target.endianness",
+      "owner_id": "b024de4e204fd633e19c388eb97e5228",
+      "owner_id_hi": "0xb024de4e204fd633",
+      "owner_id_lo": "0xe19c388eb97e5228",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.target.endianness"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.target.native.abi",
+      "owner_id": "17f2358033c342fc37dbf0156f3a1e03",
+      "owner_id_hi": "0x17f2358033c342fc",
+      "owner_id_lo": "0x37dbf0156f3a1e03",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.target.native.abi"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.target.operating.system",
+      "owner_id": "8b6c286b5c2d12f7365898930a698455",
+      "owner_id_hi": "0x8b6c286b5c2d12f7",
+      "owner_id_lo": "0x365898930a698455",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.target.operating.system"
       ],
       "consumers": [
         "semantic-plan"
@@ -12672,6 +12760,102 @@
       "owner_id": "123ea72109f7a9eaa4b4c4b3c25273e4",
       "owner_id_hi": "0x123ea72109f7a9ea",
       "owner_id_lo": "0xa4b4c4b3c25273e4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.target.operating.system",
+      "operation_id": "8b6c286b5c2d12f7365898930a698455",
+      "operation_id_hi": "0x8b6c286b5c2d12f7",
+      "operation_id_lo": "0x365898930a698455",
+      "owner": "xi.target.operating.system",
+      "owner_id": "8b6c286b5c2d12f7365898930a698455",
+      "owner_id_hi": "0x8b6c286b5c2d12f7",
+      "owner_id_lo": "0x365898930a698455",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.target.architecture",
+      "operation_id": "123f0b192e00b9b7bb3b7be632852578",
+      "operation_id_hi": "0x123f0b192e00b9b7",
+      "operation_id_lo": "0xbb3b7be632852578",
+      "owner": "xi.target.architecture",
+      "owner_id": "123f0b192e00b9b7bb3b7be632852578",
+      "owner_id_hi": "0x123f0b192e00b9b7",
+      "owner_id_lo": "0xbb3b7be632852578",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.target.native.abi",
+      "operation_id": "17f2358033c342fc37dbf0156f3a1e03",
+      "operation_id_hi": "0x17f2358033c342fc",
+      "operation_id_lo": "0x37dbf0156f3a1e03",
+      "owner": "xi.target.native.abi",
+      "owner_id": "17f2358033c342fc37dbf0156f3a1e03",
+      "owner_id_hi": "0x17f2358033c342fc",
+      "owner_id_lo": "0x37dbf0156f3a1e03",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.target.endianness",
+      "operation_id": "b024de4e204fd633e19c388eb97e5228",
+      "operation_id_hi": "0xb024de4e204fd633",
+      "operation_id_lo": "0xe19c388eb97e5228",
+      "owner": "xi.target.endianness",
+      "owner_id": "b024de4e204fd633e19c388eb97e5228",
+      "owner_id_hi": "0xb024de4e204fd633",
+      "owner_id_lo": "0xe19c388eb97e5228",
       "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [

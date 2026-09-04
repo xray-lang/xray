@@ -181,6 +181,7 @@ static bool build_analyzed_global_evidence_from_source(const char *source, XgGlo
         xa_analyzer_free(analyzer);
         xg_global_evidence_free(out);
         memset(out, 0, sizeof(*out));
+        xr_program_destroy(ast);
     } else {
         *out_analyzer = analyzer;
         if (out_ast)
@@ -206,7 +207,7 @@ TEST(global_evidence_publishes_exact_target_pointer_bits_query) {
     ASSERT_EQ_UINT(query->result_native_type, XR_NATIVE_U16);
     ASSERT_EQ_UINT(query->contract_complete, 1);
     ASSERT_EQ_UINT(query->result_type_key,
-                   xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16));
+                   xg_target_query_result_type_key(XG_TARGET_QUERY_POINTER_BITS));
     ASSERT_EQ_PTR(xg_global_evidence_find_target_query(&evidence, query->use_id), query);
     ASSERT_EQ_PTR(xg_global_evidence_find_target_query_at(
                       &evidence, query->owner_func_id, query->source_node_id,
@@ -263,7 +264,7 @@ TEST(global_evidence_rejects_ambiguous_target_query_identity) {
     first.source_node_id = 11;
     first.source_span_id = 5;
     first.body_ordinal = 1;
-    first.result_type_key = xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16);
+    first.result_type_key = xg_target_query_result_type_key(XG_TARGET_QUERY_POINTER_BITS);
     first.namespace_id = XG_TARGET_NAMESPACE_TARGET;
     first.query_kind = XG_TARGET_QUERY_POINTER_BITS;
     first.result_native_type = XR_NATIVE_U16;
@@ -298,7 +299,7 @@ TEST(global_evidence_rejects_ambiguous_target_query_identity) {
     xg_global_evidence_free(&evidence);
 }
 
-TEST(global_evidence_rejects_missing_target_query_fact_and_ignores_shadow) {
+TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow) {
     setup_parser_session();
     const char *source = "var bits: u16 = target.pointerBits\n";
     XgGlobalEvidence analyzerless = {0};
@@ -337,16 +338,15 @@ TEST(global_evidence_rejects_missing_target_query_fact_and_ignores_shadow) {
     XgGlobalEvidence shadow = {0};
     XaAnalyzer *shadow_analyzer = NULL;
     AstNode *shadow_ast = NULL;
-    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
+    ASSERT_FALSE(build_analyzed_global_evidence_from_source(
         "fn read() -> i64 {\n"
         "    var target = {pointerBits: 7}\n"
         "    return target.pointerBits\n"
         "}\n",
         &shadow, &shadow_analyzer, &shadow_ast));
     ASSERT_EQ_UINT(shadow.ntarget_queries, 0);
-    xg_global_evidence_free(&shadow);
-    xa_analyzer_free(shadow_analyzer);
-    xr_program_destroy(shadow_ast);
+    ASSERT_NULL(shadow_analyzer);
+    ASSERT_NULL(shadow_ast);
     teardown_parser_session();
 }
 
@@ -14563,7 +14563,7 @@ RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_module_summary_requires_typed_identity);
 RUN_TEST(global_evidence_publishes_exact_target_pointer_bits_query);
 RUN_TEST(global_evidence_rejects_ambiguous_target_query_identity);
-RUN_TEST(global_evidence_rejects_missing_target_query_fact_and_ignores_shadow);
+RUN_TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow);
 RUN_TEST(global_evidence_closes_target_query_contract_over_interface_witnesses);
 RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_decl_kind_capabilities_are_disjoint);

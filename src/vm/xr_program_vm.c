@@ -63,6 +63,10 @@ struct XrVmCode {
     XrFingerprint private_digest;
     XrVmCodeOptions options;
     uint16_t pointer_width;
+    uint16_t operating_system;
+    uint16_t architecture;
+    uint16_t native_abi;
+    uint16_t endianness;
     XrVmFixedFunction *fixed_functions;
     size_t private_size;
 };
@@ -174,6 +178,14 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_U32;
         case XR_CORE_TYPE_U16:
             return value.kind == XR_VM_VALUE_U16;
+        case XR_CORE_TYPE_TARGET_OS:
+            return value.kind == XR_VM_VALUE_TARGET_OS;
+        case XR_CORE_TYPE_TARGET_ARCH:
+            return value.kind == XR_VM_VALUE_TARGET_ARCH;
+        case XR_CORE_TYPE_TARGET_ABI:
+            return value.kind == XR_VM_VALUE_TARGET_ABI;
+        case XR_CORE_TYPE_TARGET_ENDIAN:
+            return value.kind == XR_VM_VALUE_TARGET_ENDIAN;
         case XR_CORE_TYPE_ERROR:
             return value.kind == XR_VM_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
@@ -609,6 +621,17 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.as.boolean = constant->value.boolean;
                     break;
                 }
+                case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
+                    produced.as.value.kind =
+                        instruction.result_type_id == XR_CORE_TYPE_TARGET_OS
+                            ? XR_VM_VALUE_TARGET_OS
+                        : instruction.result_type_id == XR_CORE_TYPE_TARGET_ARCH
+                            ? XR_VM_VALUE_TARGET_ARCH
+                        : instruction.result_type_id == XR_CORE_TYPE_TARGET_ABI
+                            ? XR_VM_VALUE_TARGET_ABI
+                            : XR_VM_VALUE_TARGET_ENDIAN;
+                    produced.as.value.as.target_enum = (uint16_t) instruction.immediate.u32;
+                    break;
                 case XR_CORE_OP_CORE_ADD_I64:
                 case XR_CORE_OP_CORE_SUB_I64:
                 case XR_CORE_OP_CORE_MUL_I64: {
@@ -679,6 +702,15 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     }
                     produced.as.value.kind = XR_VM_VALUE_BOOL;
                     produced.as.value.as.boolean = comparison;
+                    break;
+                }
+                case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM: {
+                    uint16_t left = values[instruction.operands[0]].as.value.as.target_enum;
+                    uint16_t right = values[instruction.operands[1]].as.value.as.target_enum;
+                    produced.as.value.kind = XR_VM_VALUE_BOOL;
+                    produced.as.value.as.boolean = instruction.immediate.u32 == 0u
+                                                        ? left == right
+                                                        : left != right;
                     break;
                 }
                 case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
@@ -877,6 +909,42 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     }
                     produced.as.value.kind = XR_VM_VALUE_U16;
                     produced.as.value.as.u16 = context->code->pointer_width;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:
+                    if (context->code->operating_system <= XR_TARGET_OS_NONE ||
+                        context->code->operating_system >= XR_TARGET_OS_COUNT) {
+                        result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_VM_VALUE_TARGET_OS;
+                    produced.as.value.as.target_enum = context->code->operating_system;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
+                    if (context->code->architecture <= XR_TARGET_ARCH_NONE ||
+                        context->code->architecture >= XR_TARGET_ARCH_COUNT) {
+                        result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_VM_VALUE_TARGET_ARCH;
+                    produced.as.value.as.target_enum = context->code->architecture;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
+                    if (context->code->native_abi <= XR_TARGET_ABI_NONE ||
+                        context->code->native_abi >= XR_TARGET_ABI_COUNT) {
+                        result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_VM_VALUE_TARGET_ABI;
+                    produced.as.value.as.target_enum = context->code->native_abi;
+                    break;
+                case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
+                    if (context->code->endianness != XR_TARGET_ENDIAN_LITTLE &&
+                        context->code->endianness != XR_TARGET_ENDIAN_BIG) {
+                        result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_VM_VALUE_TARGET_ENDIAN;
+                    produced.as.value.as.target_enum = context->code->endianness;
                     break;
                 case XR_CORE_OP_CORE_CALLABLE_PACK: {
                     XrVmCallableValue *carrier = allocate_callable(context);
@@ -1134,6 +1202,11 @@ static void compute_private_digest(XrVmCode *code) {
     xr_sha256_update(&context, &code->options.decode_policy, sizeof(code->options.decode_policy));
     xr_sha256_update(&context, &code->options.quickening_policy,
                      sizeof(code->options.quickening_policy));
+    hash_u32(&context, code->pointer_width);
+    hash_u32(&context, code->operating_system);
+    hash_u32(&context, code->architecture);
+    hash_u32(&context, code->native_abi);
+    hash_u32(&context, code->endianness);
     hash_u64(&context, (uint64_t) code->private_size);
     xr_sha256_final(&context, code->private_digest.bytes);
 }
@@ -1197,6 +1270,10 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
     code->cache_key = xr_execution_instance_cache_key(instance);
     code->options = selected;
     code->pointer_width = (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8));
+    code->operating_system = machine->operating_system;
+    code->architecture = machine->architecture;
+    code->native_abi = machine->native_abi;
+    code->endianness = machine->data_layout.endian;
     if (selected.decode_policy == XR_VM_DECODE_FIXED_ROWS && !fixed_view_build(code)) {
         xr_vm_code_free(code);
         (void) xr_execution_lease_release(&lease);

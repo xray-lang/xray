@@ -2697,6 +2697,54 @@
   :targets (aot-verify)
   :lowering-policy verifier-only)
 
+(define-xi-op xi.target.operating.system
+  :class constant
+  :arity 0
+  :own-use borrow
+  :speculation safe
+  :vn-kind none
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-verify)
+  :lowering-policy verifier-only)
+
+(define-xi-op xi.target.architecture
+  :class constant
+  :arity 0
+  :own-use borrow
+  :speculation safe
+  :vn-kind none
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-verify)
+  :lowering-policy verifier-only)
+
+(define-xi-op xi.target.native.abi
+  :class constant
+  :arity 0
+  :own-use borrow
+  :speculation safe
+  :vn-kind none
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-verify)
+  :lowering-policy verifier-only)
+
+(define-xi-op xi.target.endianness
+  :class constant
+  :arity 0
+  :own-use borrow
+  :speculation safe
+  :vn-kind none
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-verify)
+  :lowering-policy verifier-only)
+
 ; Every operation belongs to exactly one language-semantic owner category.
 ; These groups deliberately exclude target support, lowering policy, provider
 ; spelling and C representation. xisagen rejects missing, unknown or duplicate
@@ -2749,6 +2797,10 @@
     xi.value.product.project
     xi.sum.inject
     xi.target.pointer.bits
+    xi.target.operating.system
+    xi.target.architecture
+    xi.target.native.abi
+    xi.target.endianness
     xi.call
     xi.call.method
     xi.call.method.direct

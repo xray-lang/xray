@@ -784,9 +784,13 @@ typedef enum {
      * Some with one non-null T operand. */
     XI_SUM_INJECT,
 
-    /* Compiler-owned target.pointerBits query. The source occurrence is
+    /* Compiler-owned target profile queries. The source occurrence is
      * frozen in Xglobal and carried by xg_target_query_* metadata. */
     XI_TARGET_POINTER_BITS,
+    XI_TARGET_OPERATING_SYSTEM,
+    XI_TARGET_ARCHITECTURE,
+    XI_TARGET_NATIVE_ABI,
+    XI_TARGET_ENDIANNESS,
 
     XI_OP_COUNT /* sentinel */
 } XiOp;

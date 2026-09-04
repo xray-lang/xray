@@ -1,0 +1,150 @@
+{
+  "schema": "xray-target-query-enums/1",
+  "queries": [
+    {
+      "query_id": 2,
+      "query_name": "OPERATING_SYSTEM",
+      "source_member": "os",
+      "type_name": "TargetOs",
+      "core_type_id": 7,
+      "runtime_prefix": "OS",
+      "members": [
+        {
+          "name": "Windows",
+          "value": 1,
+          "runtime_symbol": "XR_TARGET_OS_WINDOWS"
+        },
+        {
+          "name": "Linux",
+          "value": 2,
+          "runtime_symbol": "XR_TARGET_OS_LINUX"
+        },
+        {
+          "name": "Darwin",
+          "value": 3,
+          "runtime_symbol": "XR_TARGET_OS_MACOS"
+        },
+        {
+          "name": "Wasi",
+          "value": 4,
+          "runtime_symbol": "XR_TARGET_OS_WASI"
+        },
+        {
+          "name": "Freestanding",
+          "value": 5,
+          "runtime_symbol": "XR_TARGET_OS_FREESTANDING"
+        }
+      ]
+    },
+    {
+      "query_id": 3,
+      "query_name": "ARCHITECTURE",
+      "source_member": "arch",
+      "type_name": "TargetArch",
+      "core_type_id": 8,
+      "runtime_prefix": "ARCH",
+      "members": [
+        {
+          "name": "X86_64",
+          "value": 1,
+          "runtime_symbol": "XR_TARGET_ARCH_X86_64"
+        },
+        {
+          "name": "Aarch64",
+          "value": 2,
+          "runtime_symbol": "XR_TARGET_ARCH_AARCH64"
+        },
+        {
+          "name": "PowerPc64",
+          "value": 3,
+          "runtime_symbol": "XR_TARGET_ARCH_POWERPC64"
+        },
+        {
+          "name": "LoongArch64",
+          "value": 4,
+          "runtime_symbol": "XR_TARGET_ARCH_LOONGARCH64"
+        },
+        {
+          "name": "Wasm32",
+          "value": 5,
+          "runtime_symbol": "XR_TARGET_ARCH_WASM32"
+        }
+      ]
+    },
+    {
+      "query_id": 4,
+      "query_name": "NATIVE_ABI",
+      "source_member": "abi",
+      "type_name": "TargetAbi",
+      "core_type_id": 9,
+      "runtime_prefix": "ABI",
+      "members": [
+        {
+          "name": "Win64X86_64",
+          "value": 1,
+          "runtime_symbol": "XR_TARGET_ABI_WIN64_X86_64"
+        },
+        {
+          "name": "Win64Aarch64",
+          "value": 2,
+          "runtime_symbol": "XR_TARGET_ABI_WIN64_AARCH64"
+        },
+        {
+          "name": "SysVX86_64",
+          "value": 3,
+          "runtime_symbol": "XR_TARGET_ABI_SYSV_X86_64"
+        },
+        {
+          "name": "Aapcs64",
+          "value": 4,
+          "runtime_symbol": "XR_TARGET_ABI_AAPCS64"
+        },
+        {
+          "name": "DarwinX86_64",
+          "value": 5,
+          "runtime_symbol": "XR_TARGET_ABI_DARWIN_X86_64"
+        },
+        {
+          "name": "DarwinAarch64",
+          "value": 6,
+          "runtime_symbol": "XR_TARGET_ABI_DARWIN_AARCH64"
+        },
+        {
+          "name": "Ppc64ElfV2",
+          "value": 7,
+          "runtime_symbol": "XR_TARGET_ABI_PPC64_ELFV2"
+        },
+        {
+          "name": "LoongArchLp64d",
+          "value": 8,
+          "runtime_symbol": "XR_TARGET_ABI_LOONGARCH_LP64D"
+        },
+        {
+          "name": "Wasm",
+          "value": 9,
+          "runtime_symbol": "XR_TARGET_ABI_WASM"
+        }
+      ]
+    },
+    {
+      "query_id": 5,
+      "query_name": "ENDIANNESS",
+      "source_member": "endian",
+      "type_name": "TargetEndian",
+      "core_type_id": 10,
+      "runtime_prefix": "ENDIAN",
+      "members": [
+        {
+          "name": "Little",
+          "value": 1,
+          "runtime_symbol": "XR_TARGET_ENDIAN_LITTLE"
+        },
+        {
+          "name": "Big",
+          "value": 2,
+          "runtime_symbol": "XR_TARGET_ENDIAN_BIG"
+        }
+      ]
+    }
+  ]
+}

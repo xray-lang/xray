@@ -238,6 +238,34 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         UINT32_C(0),
         XR_PROGRAM_XI_PROJECTION_TARGET_QUERY,
     },
+    {
+        XI_TARGET_OPERATING_SYSTEM,
+        XR_CORE_TYPE_TARGET_OS,
+        XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_TARGET_QUERY,
+    },
+    {
+        XI_TARGET_ARCHITECTURE,
+        XR_CORE_TYPE_TARGET_ARCH,
+        XR_CORE_OP_CORE_TARGET_ARCHITECTURE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_TARGET_QUERY,
+    },
+    {
+        XI_TARGET_NATIVE_ABI,
+        XR_CORE_TYPE_TARGET_ABI,
+        XR_CORE_OP_CORE_TARGET_NATIVE_ABI,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_TARGET_QUERY,
+    },
+    {
+        XI_TARGET_ENDIANNESS,
+        XR_CORE_TYPE_TARGET_ENDIAN,
+        XR_CORE_OP_CORE_TARGET_ENDIANNESS,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_TARGET_QUERY,
+    },
 };
 
 static const XrProgramXiSemanticProjectionRow

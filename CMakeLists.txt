@@ -311,6 +311,7 @@ configure_file(
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
 set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
+set(TARGETQUERYGEN ${CMAKE_SOURCE_DIR}/tools/targetquerygen/targetquerygen.py)
 set(PROGRAMSEMCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_semantics.py)
 set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contracts.py)
 set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contracts.py)
@@ -589,6 +590,20 @@ add_custom_target(gen-core-spec
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-operations.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-coverage.json
     COMMENT "corespecgen: verifying canonical CoreSpec projections"
+    VERBATIM
+)
+
+# Compiler-facing TargetOs/TargetArch/TargetAbi/TargetEndian declarations and
+# the lightweight runtime ABI values are two projections of one registry.
+# This read-only edge rejects either stale projection before compilation.
+add_custom_target(gen-target-query-registry
+    COMMAND ${XRAY_PYTHON} ${TARGETQUERYGEN}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${TARGETQUERYGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/target/query-enums.json
+            ${CMAKE_SOURCE_DIR}/src/shared/xr_target_query_values_gen.h
+            ${CMAKE_SOURCE_DIR}/src/shared/xr_target_query_registry_gen.h
+    COMMENT "targetquerygen: verifying target enum value and compiler projections"
     VERBATIM
 )
 
@@ -1668,7 +1683,8 @@ endif()
 add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
+    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema
+    check-xr-program-semantics
     check-xr-execution-contracts check-xr-program-vm-contracts
     check-xr-program-aot-contracts)
 
@@ -1677,13 +1693,14 @@ add_dependencies(xray_core_objs
 add_library(xray_stdlib_bootstrap_core OBJECT src/module/stdlib_embedded.c)
 add_dependencies(xray_stdlib_bootstrap_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-stdlib-embedded-sources)
+    gen-native-type-defs gen-target-query-registry gen-stdlib-embedded-sources)
 
 # Stage 2: the generated table. This is the core library everything else links.
 add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
+    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema
+    check-xr-program-semantics
     check-xr-execution-contracts check-xr-program-vm-contracts
     check-xr-program-aot-contracts)
 
@@ -4932,6 +4949,18 @@ if(BUILD_TESTS)
     )
     set_tests_properties(core_spec_registry_self_test PROPERTIES
         LABELS "meta;contracts;core-spec;mutation;task-295"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME target_query_registry
+        COMMAND ${XRAY_PYTHON} ${TARGETQUERYGEN}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_query_registry PROPERTIES
+        LABELS "meta;contracts;target-machine;target-query;task-293"
         PROCESSORS 1
         TIMEOUT 30
     )

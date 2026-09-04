@@ -147,9 +147,9 @@ The three governed performance fixture files are explicitly checked out with
 LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
-anchor-sha256: .gitattributes aac648b589bf1619791bd0e1dd107b124a9a39e0f85f799bd91454f7e143c3ff
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json cb05e4be379fffe7181b2863eb4bad608f09ababf0da1da04ac601b6cec6c2b7
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 74899a127d466db90246f769c4b181b00cf861452d1c779c55a54dc4607f1800
+anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 2a8e290c709bfa123397ef852949eb4a7dadd12f5ed8b30071cc96f3376824a6
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json e6f2b86ab3732d23bdbd3fd86f4bbe636770696c8b35a9dcbdbe239ca9a83ac7
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json a1b272985a73b80df6eab458fff3a221f08af8c32488ee199cb48633552c1916
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: contracts/target-machine/migration-source-classification.json e0adb045a60f4b5d4c5a5f243b6a43cb217236190a4d2163eab2368f8663cacc

@@ -29,9 +29,12 @@
 #include "xi_tbaa.h"
 #include "../analysis/xglobal_summary.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/class/xclass_info.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../frontend/analyzer/xa_effect_db.h"
+#include "../frontend/analyzer/xanalyzer_symbol.h"
 #include "../shared/xr_array_core.h"
+#include "../shared/xr_target_query_registry_gen.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -524,6 +527,20 @@ static bool verify_existential_metadata_contract(VerifyCtx *ctx, const XiFunc *f
     return true;
 }
 
+static const XrTargetQueryEnumDesc *verified_target_enum_type(const XrType *type) {
+    if (!type || type->kind != XR_KIND_ENUM || type->is_nullable ||
+        !type->enum_type.enum_name || !type->enum_type.nominal_ref)
+        return NULL;
+    const XrTargetQueryEnumDesc *desc =
+        xr_target_query_enum_by_type_name(type->enum_type.enum_name);
+    const XrClassInfo *nominal = type->enum_type.nominal_ref;
+    return desc && nominal->nominal_kind == XA_NOMINAL_ENUM && nominal->declaration_symbol &&
+                   nominal->declaration_symbol->is_builtin && nominal->declaration_symbol->name &&
+                   strcmp(nominal->declaration_symbol->name, desc->type_name) == 0
+               ? desc
+               : NULL;
+}
+
 static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
                                          const XiValue *value) {
     bool carries_contract = value &&
@@ -536,7 +553,7 @@ static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const 
                              value->xg_target_query_complete != 0);
     if (!value)
         return true;
-    if (value->op != XI_TARGET_POINTER_BITS) {
+    if (value->op < XI_TARGET_POINTER_BITS || value->op > XI_TARGET_ENDIANNESS) {
         if (carries_contract) {
             verr(ctx, "func '%s': v%u %s in b%u carries target-query metadata", f->name,
                  value->id, xi_op_name(value->op), blk->id);
@@ -544,16 +561,61 @@ static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const 
         }
         return true;
     }
-    if (!value->type || value->type->kind != XR_KIND_INT || value->type->is_nullable ||
-        value->type->scalar_rep != XR_NATIVE_U16 || value->nargs != 0 || value->aux != NULL ||
+    uint8_t expected_query = XG_TARGET_QUERY_NONE;
+    const char *expected_enum = NULL;
+    switch (value->op) {
+        case XI_TARGET_POINTER_BITS:
+            expected_query = XG_TARGET_QUERY_POINTER_BITS;
+            break;
+        case XI_TARGET_OPERATING_SYSTEM:
+            expected_query = XG_TARGET_QUERY_OPERATING_SYSTEM;
+            expected_enum = "TargetOs";
+            break;
+        case XI_TARGET_ARCHITECTURE:
+            expected_query = XG_TARGET_QUERY_ARCHITECTURE;
+            expected_enum = "TargetArch";
+            break;
+        case XI_TARGET_NATIVE_ABI:
+            expected_query = XG_TARGET_QUERY_NATIVE_ABI;
+            expected_enum = "TargetAbi";
+            break;
+        case XI_TARGET_ENDIANNESS:
+            expected_query = XG_TARGET_QUERY_ENDIANNESS;
+            expected_enum = "TargetEndian";
+            break;
+        default:
+            break;
+    }
+    const XrTargetQueryEnumDesc *verified_enum = verified_target_enum_type(value->type);
+    bool type_matches = expected_enum
+                            ? verified_enum &&
+                                  strcmp(verified_enum->type_name, expected_enum) == 0
+                            : value->type && value->type->kind == XR_KIND_INT &&
+                                  value->type->scalar_rep == XR_NATIVE_U16;
+    if (!type_matches || value->type->is_nullable || value->nargs != 0 || value->aux != NULL ||
         value->aux_int != 0 || value->xg_target_query_use_id == XG_NO_ID ||
         value->xg_target_source_node_id == 0 || value->xg_target_body_ordinal == 0 ||
         value->xg_target_namespace_id != XG_TARGET_NAMESPACE_TARGET ||
-        value->xg_target_query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+        value->xg_target_query_kind != expected_query ||
         value->xg_target_result_native_type != XR_NATIVE_U16 ||
         value->xg_target_query_complete != 1) {
-        verr(ctx, "func '%s': v%u XI_TARGET_POINTER_BITS in b%u lacks an exact target query "
+        verr(ctx, "func '%s': v%u %s in b%u lacks an exact target query "
                   "contract",
+             f->name, value->id, xi_op_name(value->op), blk->id);
+        return false;
+    }
+    return true;
+}
+
+static bool verify_target_enum_constant_contract(VerifyCtx *ctx, const XiFunc *f,
+                                                 const XiBlock *blk, const XiValue *value) {
+    const XrTargetQueryEnumDesc *desc = value ? verified_target_enum_type(value->type) : NULL;
+    if (!desc || value->op != XI_CONST)
+        return true;
+    if (value->nargs != 0u || value->aux != NULL || value->aux_int <= 0 ||
+        value->aux_int > UINT16_MAX ||
+        !xr_target_query_enum_value_valid(desc->core_type_id, (uint16_t) value->aux_int)) {
+        verr(ctx, "func '%s': v%u target enum constant in b%u is outside the generated domain",
              f->name, value->id, blk->id);
         return false;
     }
@@ -644,6 +706,8 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
     if (!verify_existential_metadata_contract(ctx, f, blk, v))
         return;
     if (!verify_target_query_contract(ctx, f, blk, v))
+        return;
+    if (!verify_target_enum_constant_contract(ctx, f, blk, v))
         return;
 
     // Assertion semantics belong only to an arena-owned typed plan.

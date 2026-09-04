@@ -24,6 +24,7 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../shared/xr_exact_scalar_registry.h"
+#include "../shared/xr_target_query_registry_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
@@ -2382,6 +2383,21 @@ static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const X
     if (sel->kind == XA_SEL_ENUM_MEMBER && sel->target_symbol &&
         sel->target_symbol->kind == XA_SYM_ENUM && ma->name) {
         const char *enum_name = sel->target_symbol->name;
+        const XrTargetQueryEnumDesc *target_enum =
+            xr_target_query_enum_by_type_name(enum_name);
+        const XrTargetQueryEnumMemberDesc *target_member =
+            xr_target_query_enum_member(target_enum, ma->name);
+        if (target_enum && target_member && sel->target_symbol->is_builtin) {
+            struct XrType *result_type =
+                sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
+            XiValue *value = xi_value_new(l->func, l->cur_block, XI_CONST, result_type, 0);
+            if (value) {
+                value->aux_int = target_member->value;
+                value->line = (uint32_t) node->line;
+            }
+            *out = value;
+            return true;
+        }
         XiValue *enum_val =
             xi_lower_enum_namespace_value(l, sel->target_symbol, enum_name, (int) node->line);
         if (!enum_val)
@@ -2564,17 +2580,39 @@ static XiValue *lower_target_query(XiLower *l, AstNode *node, bool *out_recogniz
     uint32_t source_node_id = 0;
     XrType *result_type;
     bool has_fact;
+    uint8_t query_kind = XG_TARGET_QUERY_NONE;
+    XiOp operation = XI_OP_COUNT;
+    const char *expected_enum = NULL;
 
     if (out_recognized)
         *out_recognized = false;
     if (!l || !node || node->type != AST_MEMBER_ACCESS)
         return NULL;
     has_fact = xa_typed_program_target_query(l->typed_program, node, &fact);
+    if (has_fact)
+        query_kind = (uint8_t) fact.query_id;
     if (l->global_evidence && l->func && l->func->xg_body_func_id != XG_NO_ID) {
         source_node_id = xi_lower_source_node_id(l, node);
-        row = xg_global_evidence_find_target_query_at(
-            l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
-            XG_TARGET_QUERY_POINTER_BITS);
+        if (has_fact) {
+            row = xg_global_evidence_find_target_query_at(
+                l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
+                query_kind);
+        } else {
+            for (uint8_t candidate = XG_TARGET_QUERY_POINTER_BITS;
+                 candidate <= XG_TARGET_QUERY_ENDIANNESS; ++candidate) {
+                const XgTargetQuerySummary *candidate_row =
+                    xg_global_evidence_find_target_query_at(
+                        l->global_evidence, (XgFuncId) l->func->xg_body_func_id,
+                        source_node_id, candidate);
+                if (candidate_row) {
+                    if (row) {
+                        l->had_error = true;
+                        return NULL;
+                    }
+                    row = candidate_row;
+                }
+            }
+        }
     }
     if (!has_fact) {
         if (row) {
@@ -2587,20 +2625,48 @@ static XiValue *lower_target_query(XiLower *l, AstNode *node, bool *out_recogniz
     if (out_recognized)
         *out_recognized = true;
     result_type = xi_lower_node_type(l, node);
+    switch ((XgTargetQueryKind) query_kind) {
+        case XG_TARGET_QUERY_POINTER_BITS:
+            operation = XI_TARGET_POINTER_BITS;
+            break;
+        case XG_TARGET_QUERY_OPERATING_SYSTEM:
+            operation = XI_TARGET_OPERATING_SYSTEM;
+            expected_enum = "TargetOs";
+            break;
+        case XG_TARGET_QUERY_ARCHITECTURE:
+            operation = XI_TARGET_ARCHITECTURE;
+            expected_enum = "TargetArch";
+            break;
+        case XG_TARGET_QUERY_NATIVE_ABI:
+            operation = XI_TARGET_NATIVE_ABI;
+            expected_enum = "TargetAbi";
+            break;
+        case XG_TARGET_QUERY_ENDIANNESS:
+            operation = XI_TARGET_ENDIANNESS;
+            expected_enum = "TargetEndian";
+            break;
+        default:
+            break;
+    }
+    bool result_type_matches =
+        expected_enum ? (result_type && result_type->kind == XR_KIND_ENUM &&
+                         result_type->enum_type.enum_name &&
+                         strcmp(result_type->enum_type.enum_name, expected_enum) == 0)
+                      : (result_type && result_type->kind == XR_KIND_INT &&
+                         result_type->scalar_rep == XR_NATIVE_U16);
     if (!row || source_node_id == 0 ||
         xg_global_evidence_find_target_query(l->global_evidence, row->use_id) != row ||
         fact.namespace_id != XA_TARGET_NAMESPACE_TARGET ||
-        fact.query_id != XA_TARGET_QUERY_POINTER_BITS || fact.result_native_type != XR_NATIVE_U16 ||
-        fact.complete != 1 || row->namespace_id != XG_TARGET_NAMESPACE_TARGET ||
-        row->query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+        fact.query_id != query_kind || fact.result_native_type != XR_NATIVE_U16 ||
+        fact.complete != 1 || operation == XI_OP_COUNT ||
+        row->namespace_id != XG_TARGET_NAMESPACE_TARGET || row->query_kind != query_kind ||
         row->result_native_type != XR_NATIVE_U16 || row->contract_complete != 1 ||
-        row->result_type_key != xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16) ||
-        !result_type || result_type->kind != XR_KIND_INT || result_type->is_nullable ||
-        result_type->scalar_rep != XR_NATIVE_U16) {
+        row->result_type_key != xg_target_query_result_type_key(query_kind) ||
+        !result_type_matches || result_type->is_nullable) {
         l->had_error = true;
         return NULL;
     }
-    XiValue *value = xi_value_new(l->func, l->cur_block, XI_TARGET_POINTER_BITS, result_type, 0);
+    XiValue *value = xi_value_new(l->func, l->cur_block, operation, result_type, 0);
     if (!value) {
         l->had_error = true;
         return NULL;

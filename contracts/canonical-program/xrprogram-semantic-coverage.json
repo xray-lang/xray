@@ -1,7 +1,7 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "a304efb9298a78e4174710284b475c7207aa77289919e2b8947067cc38f0c18b",
+  "core_spec_semantic_sha256": "ed30fc17eaf149086dbd9ed3c000386fffa2df785892b3db83ccb2961c91ce25",
   "program_schema_sha256": "7d0b33c0aff340b56adbf507b54252ad04ad75f6c5607db5000fd1b4890e1604",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
@@ -10,7 +10,7 @@
     "call-depth",
     "aggregate-value-cells"
   ],
-  "operation_count": 37,
+  "operation_count": 43,
   "operations": [
     {
       "stable_id": 1,
@@ -23,6 +23,14 @@
     {
       "stable_id": 2,
       "spelling": "core.constant.bool",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 3,
+      "spelling": "core.constant.target_enum",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",
@@ -63,6 +71,14 @@
     {
       "stable_id": 24,
       "spelling": "core.compare.i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 25,
+      "spelling": "core.compare.target_enum",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",
@@ -175,6 +191,38 @@
     {
       "stable_id": 64,
       "spelling": "core.target.pointer_width",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 65,
+      "spelling": "core.target.operating_system",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 66,
+      "spelling": "core.target.architecture",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 67,
+      "spelling": "core.target.native_abi",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 68,
+      "spelling": "core.target.endianness",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",

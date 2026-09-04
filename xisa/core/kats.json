@@ -50,6 +50,51 @@
       }
     },
     {
+      "id": "constant-target-os-wasi",
+      "operation": "core.constant.target_enum",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "type": "TargetOs",
+        "value": 4
+      },
+      "expect": {
+        "value": 4
+      }
+    },
+    {
+      "id": "compare-target-os-equal",
+      "operation": "core.compare.target_enum",
+      "kind": "scalar",
+      "arguments": [
+        4,
+        4
+      ],
+      "immediates": {
+        "type": "TargetOs",
+        "predicate": "eq"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-target-arch-not-equal",
+      "operation": "core.compare.target_enum",
+      "kind": "scalar",
+      "arguments": [
+        1,
+        5
+      ],
+      "immediates": {
+        "type": "TargetArch",
+        "predicate": "ne"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
       "id": "add-checked-basic",
       "operation": "core.add.i64",
       "kind": "scalar",
@@ -946,6 +991,158 @@
       "arguments": [],
       "immediates": {},
       "profile": {},
+      "expect": {
+        "trap": "profile-unavailable"
+      }
+    },
+    {
+      "id": "target-operating-system-windows",
+      "operation": "core.target.operating_system",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "operating_system": 1
+      },
+      "expect": {
+        "value": "1"
+      }
+    },
+    {
+      "id": "target-operating-system-wasi",
+      "operation": "core.target.operating_system",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "operating_system": 4
+      },
+      "expect": {
+        "value": "4"
+      }
+    },
+    {
+      "id": "target-operating-system-missing",
+      "operation": "core.target.operating_system",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {},
+      "expect": {
+        "trap": "profile-unavailable"
+      }
+    },
+    {
+      "id": "target-architecture-x86-64",
+      "operation": "core.target.architecture",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "architecture": 1
+      },
+      "expect": {
+        "value": "1"
+      }
+    },
+    {
+      "id": "target-architecture-wasm32",
+      "operation": "core.target.architecture",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "architecture": 5
+      },
+      "expect": {
+        "value": "5"
+      }
+    },
+    {
+      "id": "target-architecture-invalid",
+      "operation": "core.target.architecture",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "architecture": 7
+      },
+      "expect": {
+        "trap": "profile-unavailable"
+      }
+    },
+    {
+      "id": "target-native-abi-win64-x86-64",
+      "operation": "core.target.native_abi",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "native_abi": 1
+      },
+      "expect": {
+        "value": "1"
+      }
+    },
+    {
+      "id": "target-native-abi-wasm",
+      "operation": "core.target.native_abi",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "native_abi": 9
+      },
+      "expect": {
+        "value": "9"
+      }
+    },
+    {
+      "id": "target-native-abi-missing",
+      "operation": "core.target.native_abi",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {},
+      "expect": {
+        "trap": "profile-unavailable"
+      }
+    },
+    {
+      "id": "target-endianness-little",
+      "operation": "core.target.endianness",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "endianness": 1
+      },
+      "expect": {
+        "value": "1"
+      }
+    },
+    {
+      "id": "target-endianness-big",
+      "operation": "core.target.endianness",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "endianness": 2
+      },
+      "expect": {
+        "value": "2"
+      }
+    },
+    {
+      "id": "target-endianness-invalid",
+      "operation": "core.target.endianness",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "endianness": 0
+      },
       "expect": {
         "trap": "profile-unavailable"
       }

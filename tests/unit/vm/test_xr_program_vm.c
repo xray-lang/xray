@@ -637,6 +637,85 @@ static XrValidatedProgram *build_control_program(void) {
     return validate_fixture(constants, sizeof(constants) / sizeof(constants[0]), &function, 1);
 }
 
+static XrValidatedProgram *build_target_query_program(uint16_t operation_id, uint16_t result_type,
+                                                       uint32_t capability) {
+    XrCoreIrKey value = fixture_key("vm-target-query:value");
+    XrCoreIrKey returned[] = {value};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = operation_id,
+         .result = value,
+         .result_type_id = result_type,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("vm-target-query:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key, .instructions = instructions, .instruction_count = 2u};
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("vm-target-query:function"),
+        .result_type_id = result_type,
+        .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_TARGET_QUERY,
+        .capability_mask = capability,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_fixture(NULL, 0u, &function, 1u);
+}
+
+static XrValidatedProgram *build_target_enum_equality_program(void) {
+    XrCoreIrKey queried = fixture_key("vm-target-enum:query");
+    XrCoreIrKey wasi = fixture_key("vm-target-enum:wasi");
+    XrCoreIrKey equal = fixture_key("vm-target-enum:equal");
+    XrCoreIrKey compare_operands[] = {queried, wasi};
+    XrCoreIrKey returned[] = {equal};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM,
+         .result = queried,
+         .result_type_id = XR_CORE_TYPE_TARGET_OS,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM,
+         .result = wasi,
+         .result_type_id = XR_CORE_TYPE_TARGET_OS,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = XR_TARGET_OS_WASI},
+        {.operation_id = XR_CORE_OP_CORE_COMPARE_TARGET_ENUM,
+         .result = equal,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = compare_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = 0u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("vm-target-enum:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("vm-target-enum:function"),
+        .result_type_id = XR_CORE_TYPE_BOOL,
+        .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_TARGET_QUERY,
+        .capability_mask = XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_fixture(NULL, 0u, &function, 1u);
+}
+
 static XrValidatedProgram *build_call_program(void) {
     XrCoreIrConstantInput constant = {
         .key = fixture_key("call:42"),
@@ -944,6 +1023,12 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
         case XR_REFERENCE_VALUE_U16:
             REQUIRE(reference.as.u16 == vm.as.u16);
             break;
+        case XR_REFERENCE_VALUE_TARGET_OS:
+        case XR_REFERENCE_VALUE_TARGET_ARCH:
+        case XR_REFERENCE_VALUE_TARGET_ABI:
+        case XR_REFERENCE_VALUE_TARGET_ENDIAN:
+            REQUIRE(reference.as.target_enum == vm.as.target_enum);
+            break;
         case XR_REFERENCE_VALUE_ERROR:
             REQUIRE(reference.as.error == vm.as.error);
             break;
@@ -994,7 +1079,17 @@ static XrVmOutcome execute_differential(XrValidatedProgram *program, XrInstance 
         !fingerprint_equal(xr_vm_code_private_digest(baseline), xr_vm_code_private_digest(fixed)));
 
     uint32_t entry = xr_validated_program_entry_function(program);
-    XrReferenceProfile profile = {.pointer_width = pointer_width};
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(instance, &lease));
+    const XrTargetMachineFacts *machine =
+        xr_target_profile_machine_facts(xr_execution_lease_profile(&lease));
+    REQUIRE(machine != NULL);
+    XrReferenceProfile profile = {.pointer_width = pointer_width,
+                                  .operating_system = machine->operating_system,
+                                  .architecture = machine->architecture,
+                                  .native_abi = machine->native_abi,
+                                  .endianness = machine->data_layout.endian};
+    REQUIRE(xr_execution_lease_release(&lease));
     XrReferenceOutcome reference =
         xr_reference_evaluate(program, entry, reference_arguments, argument_count, &profile, NULL);
     XrVmOutcome baseline_result =
@@ -1040,6 +1135,9 @@ static void run_program(XrValidatedProgram *program, bool ilp32,
             REQUIRE(result.value.as.u32 == (uint32_t) expected_value);
         else if (expected_value_kind == XR_VM_VALUE_U16)
             REQUIRE(result.value.as.u16 == (uint16_t) expected_value);
+        else if (expected_value_kind >= XR_VM_VALUE_TARGET_OS &&
+                 expected_value_kind <= XR_VM_VALUE_TARGET_ENDIAN)
+            REQUIRE(result.value.as.target_enum == (uint16_t) expected_value);
     } else if (expected_kind == XR_VM_OUTCOME_ERROR) {
         REQUIRE(result.error_value.kind == XR_VM_VALUE_ERROR);
         REQUIRE(result.error_value.as.error == (uint32_t) expected_value);
@@ -1174,6 +1272,41 @@ static void test_operation_semantics(void) {
     run_program(control, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U16, 64u);
     run_program(control, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U16, 32u);
 
+    XrValidatedProgram *operating_system = build_target_query_program(
+        XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM, XR_CORE_TYPE_TARGET_OS,
+        XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM);
+    run_program(operating_system, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_OS, XR_TARGET_OS_WINDOWS);
+    run_program(operating_system, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_OS, XR_TARGET_OS_WASI);
+    XrValidatedProgram *architecture = build_target_query_program(
+        XR_CORE_OP_CORE_TARGET_ARCHITECTURE, XR_CORE_TYPE_TARGET_ARCH,
+        XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE);
+    run_program(architecture, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_ARCH, XR_TARGET_ARCH_X86_64);
+    run_program(architecture, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_ARCH, XR_TARGET_ARCH_WASM32);
+    XrValidatedProgram *native_abi = build_target_query_program(
+        XR_CORE_OP_CORE_TARGET_NATIVE_ABI, XR_CORE_TYPE_TARGET_ABI,
+        XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI);
+    run_program(native_abi, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_ABI, XR_TARGET_ABI_WIN64_X86_64);
+    run_program(native_abi, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_ABI, XR_TARGET_ABI_WASM);
+    XrValidatedProgram *endianness = build_target_query_program(
+        XR_CORE_OP_CORE_TARGET_ENDIANNESS, XR_CORE_TYPE_TARGET_ENDIAN,
+        XR_CORE_CAPABILITY_PROFILE_ENDIANNESS);
+    run_program(endianness, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_ENDIAN, XR_TARGET_ENDIAN_LITTLE);
+    run_program(endianness, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_TARGET_ENDIAN, XR_TARGET_ENDIAN_LITTLE);
+
+    XrValidatedProgram *target_enum_equality = build_target_enum_equality_program();
+    run_program(target_enum_equality, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_BOOL, 0u);
+    run_program(target_enum_equality, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_BOOL, 1u);
+
     XrValidatedProgram *call = build_call_program();
     run_program(call, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
 
@@ -1194,6 +1327,11 @@ static void test_operation_semantics(void) {
     xr_validated_program_free(local_ref);
     xr_validated_program_free(call);
     xr_validated_program_free(control);
+    xr_validated_program_free(target_enum_equality);
+    xr_validated_program_free(endianness);
+    xr_validated_program_free(native_abi);
+    xr_validated_program_free(architecture);
+    xr_validated_program_free(operating_system);
     xr_validated_program_free(affine);
     xr_validated_program_free(scalar);
     xr_validated_program_free(variant_trap);
