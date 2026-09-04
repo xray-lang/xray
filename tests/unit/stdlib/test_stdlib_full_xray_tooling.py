@@ -411,6 +411,22 @@ class NativeLeafAllowlistTest(unittest.TestCase):
         self.assertIn("contradicts the .def return_ownership", reason)
         self.assertEqual(1, len(defects))
 
+    def test_borrowed_parameter_ownership_uses_the_def_grammar(self) -> None:
+        body = GOOD_LEAF_RECORD.replace('ownership = "none"',
+                                        'ownership = "borrowed_param:12"')
+        records, defects = self.load(body)
+        self.assertEqual([], defects)
+        leaf_class, _reason, classification_defects = inventory.classify_leaf(
+            "os", "__getpid", def_entry(return_ownership="borrowed_param:12"), records
+        )
+        self.assertEqual("host_abi_leaf", leaf_class)
+        self.assertEqual([], classification_defects)
+
+        _records, malformed_defects = self.load(
+            body.replace("borrowed_param:12", "borrowed_param:-1")
+        )
+        self.assertTrue(any("is not one of" in item for item in malformed_defects))
+
     def test_a_yieldable_leaf_must_declare_that_it_suspends(self) -> None:
         records, _ = self.load(GOOD_LEAF_RECORD)
         leaf_class, reason, _defects = inventory.classify_leaf(

@@ -108,6 +108,11 @@ LEAF_OWNERSHIP = {
     "borrowed_static": "the return borrows storage with static lifetime",
 }
 
+
+def leaf_ownership_is_valid(value: str) -> bool:
+    """Keep allowlist ownership aligned with the `.def` ownership grammar."""
+    return value in LEAF_OWNERSHIP or re.fullmatch(r"borrowed_param:[0-9]+", value) is not None
+
 # Effect is a comma-separated token sequence. `nothrow` is exclusive: a leaf
 # that cannot throw and cannot suspend has nothing else to state.
 LEAF_EFFECT_TOKENS = {
@@ -572,10 +577,10 @@ def leaf_record_errors(record: LeafRecord, raw: dict[str, Any]) -> list[str]:
             f"class {record.leaf_class or '<empty>'!r} is not one of "
             f"{sorted(LEAF_CLASSES)}"
         )
-    if record.ownership not in LEAF_OWNERSHIP:
+    if not leaf_ownership_is_valid(record.ownership):
         errors.append(
             f"ownership {record.ownership or '<empty>'!r} is not one of "
-            f"{sorted(LEAF_OWNERSHIP)}"
+            f"{sorted(LEAF_OWNERSHIP)} or borrowed_param:<nonnegative ordinal>"
         )
     tokens = record.effect_tokens
     if not tokens:
