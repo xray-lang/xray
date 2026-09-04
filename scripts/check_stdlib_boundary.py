@@ -267,10 +267,11 @@ def check_builtin_schema(root: Path) -> list[str]:
     if not re.search(r"(?m)^class\s+Iterator<T>\s*\{", text):
         errors.append("stdlib/types/iterator.xr must declare class Iterator<T>")
     declared = set(re.findall(r"(?m)^\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", text))
-    expected = {"hasNext", "next", "nth"}
+    expected = {"hasNext", "next", "nth", "iterator", "toString"}
     if declared != expected:
         errors.append(
-            "Iterator declaration methods must be exactly hasNext/next/nth; got "
+            "Iterator declaration methods must be exactly "
+            "hasNext/next/nth/iterator/toString; got "
             + ", ".join(sorted(declared))
         )
 
@@ -282,11 +283,10 @@ def check_builtin_schema(root: Path) -> list[str]:
         implementation,
         re.S,
     )
-    implemented = set(re.findall(r'\{"([A-Za-z_][A-Za-z0-9_]*)"', table_match.group("body"))) if table_match else set()
-    if implemented != expected:
+    if table_match:
         errors.append(
-            "compiler Iterator method table must match stdlib/types/iterator.xr; got "
-            + ", ".join(sorted(implemented))
+            "compiler must not register a second Iterator interface method table; "
+            "stdlib/types/iterator.xr owns the sealed native class surface"
         )
 
     items = api_inventory(root).get("items", [])

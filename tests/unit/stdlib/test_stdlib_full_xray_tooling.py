@@ -42,8 +42,8 @@ def valid_plan() -> completion.PlanIdentity:
         {
             "psc_schema": 9,
             "semantic_schema": 45,
-            "target_schema": 56,
-            "xtp_schema": 56,
+            "target_schema": 57,
+            "xtp_schema": 57,
             "module_count": 3,
             "dependency_count": 2,
             "program_fingerprint": "1" * 64,
@@ -65,7 +65,7 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
         schemas, errors = probe.source_schema_authority(ROOT)
         self.assertEqual([], errors)
         self.assertEqual(
-            (9, 45, 56, 56),
+            (9, 45, 57, 57),
             (
                 schemas.psc_schema,
                 schemas.semantic_schema,
@@ -85,14 +85,14 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
                     f"psc={'1' * 64} gci={'3' * 32}"
                 ),
                 *(
-                    f"target-plan module={index} schema=56 fingerprint={target} "
+                    f"target-plan module={index} schema=57 fingerprint={target} "
                     f"semantic={semantic} profile={'7' * 64}"
                     for index in range(3)
                 ),
             ]
         )
         observation = probe.parse_aot_plan_observation(
-            stdout, probe.SchemaAuthority(9, 45, 56, 56)
+            stdout, probe.SchemaAuthority(9, 45, 57, 57)
         )
         self.assertEqual(3, observation.module_count)
         self.assertEqual(2, observation.dependency_count)
@@ -248,35 +248,26 @@ class StrictProbeReaderTest(unittest.TestCase):
 
 
 class InventoryTraceTest(unittest.TestCase):
-    def test_sync_manual_native_classes_are_traceable(self) -> None:
+    def test_sync_source_classes_need_no_manual_native_export_rows(self) -> None:
         manifest = inventory.load_manifest(ROOT)
         sync_module = next(
             module for module in manifest.modules if module["name"] == "sync"
         )
         traced = inventory.manual_native_class_exports(sync_module)
-        self.assertEqual(
-            {"CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"},
-            set(traced),
-        )
+        self.assertEqual({}, traced)
         modules, rows, defects = inventory.build_rows(ROOT)
         self.assertFalse(any("sync." in item for item in defects))
-        sync_rows = {
-            row.symbol: row
-            for row in rows
-            if row.module == "sync" and row.kind == "manual-native-class"
-        }
-        self.assertEqual(set(traced), set(sync_rows))
-        self.assertTrue(
-            all(
-                row.semantic_source == "stdlib/stdlib_boundary.toml"
-                for row in sync_rows.values()
-            )
+        self.assertFalse(
+            any(row.module == "sync" and row.kind == "manual-native-class" for row in rows)
         )
+        source_classes = {
+            row.symbol.split(".", 1)[0]
+            for row in rows
+            if row.module == "sync" and row.kind == "type" and row.xray_body
+        }
         self.assertTrue(
-            all(
-                row.vm_binding == f"{traced[row.symbol][1]}:{row.symbol}"
-                for row in sync_rows.values()
-            )
+            {"CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"}
+            <= source_classes
         )
         self.assertTrue(any(module.name == "sync" for module in modules))
 

@@ -85,7 +85,6 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
                 "os",
                 "regex",
                 "runtime",
-                "sync",
                 "sys",
                 "test_yield",
                 "time",
