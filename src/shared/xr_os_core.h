@@ -92,10 +92,6 @@ static inline int64_t xr_os_core_getpid(void) {
 #endif
 }
 
-static inline int64_t xr_os_core_cpu_count(long raw_count) {
-    return raw_count > 0 ? (int64_t) raw_count : 1;
-}
-
 static inline int64_t xr_os_core_memory_bytes(uint64_t units, uint64_t unit_size) {
     if (units == 0 || unit_size == 0)
         return 0;

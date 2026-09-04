@@ -188,12 +188,9 @@ static XrValue os_environ_block(XrVMRuntime *X, XrValue *args, int argc) {
 // exit(code) - Exit program
 static XrValue os_exit(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
-
-    int code = 0;
-    if (argc >= 1 && XR_IS_INT(args[0])) {
-        code = (int) XR_TO_INT(args[0]);
-    }
-
+    if (argc != 1 || !XR_IS_INT(args[0]))
+        return xr_null();
+    int code = (int) XR_TO_INT(args[0]);
     exit(code);
     return xr_null();  // Never reached
 }
@@ -312,7 +309,7 @@ static XrValue os_cpuCount(XrVMRuntime *X, XrValue *args, int argc) {
     GetSystemInfo(&si);
     return xr_int(si.dwNumberOfProcessors);
 #else
-    return xr_int(xr_os_core_cpu_count(sysconf(_SC_NPROCESSORS_ONLN)));
+    return xr_int((int64_t) sysconf(_SC_NPROCESSORS_ONLN));
 #endif
 }
 
@@ -462,16 +459,11 @@ static XrValue os_ppid(XrVMRuntime *X, XrValue *args, int argc) {
 // kill(pid, signal) - Send signal to process
 static XrValue os_kill(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    if (!XR_IS_INT(args[0]))
+    if (argc != 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
         return xr_bool(false);
 
     int pid = (int) XR_TO_INT(args[0]);
-    int sig = SIGTERM;  // default signal
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        sig = (int) XR_TO_INT(args[1]);
-    }
+    int sig = (int) XR_TO_INT(args[1]);
 
 #ifdef XR_OS_WINDOWS
     return xr_bool(false);
@@ -647,12 +639,11 @@ fail:
 // exec(cmd) - Execute shell command, return ExecResult handle
 // (Json with fixed shape: stdout, stderr, exitCode).
 static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
+    if (argc != 1)
         return xr_null();
     const char *cmd = xrs_string_arg(args[0], NULL);
-    if (!cmd)
+    if (!cmd || cmd[0] == '\0')
         return xr_null();
-    XR_DCHECK(cmd[0] != '\0', "os_exec: command string must be non-empty");
 
 #ifdef XR_OS_WINDOWS
     // Windows: simplified via _popen (stdout only)
@@ -777,307 +768,21 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
 #endif
 }
 
-#ifdef XR_OS_WINDOWS
-// Escape one argument per the CommandLineToArgvW contract: a run of
-// backslashes is only doubled before a literal quote or the closing quote.
-static void win_append_escaped_arg(char *buf, size_t *pos, const char *arg) {
-    size_t backslashes = 0;
-    for (const char *p = arg; *p; p++) {
-        if (*p == '\\') {
-            backslashes++;
-            buf[(*pos)++] = '\\';
-        } else if (*p == '"') {
-            for (size_t k = 0; k < backslashes; k++)
-                buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '"';
-            backslashes = 0;
-        } else {
-            backslashes = 0;
-            buf[(*pos)++] = *p;
-        }
-    }
-    for (size_t k = 0; k < backslashes; k++)
-        buf[(*pos)++] = '\\';
-}
-
-static char *win_build_command_line(const char *const *argv, int count) {
-    size_t cap = 1;
-    for (int i = 0; i < count; i++)
-        cap += strlen(argv[i]) * 2 + 3;
-    char *buf = (char *) xr_malloc(cap);
-    if (!buf)
-        return NULL;
-    size_t pos = 0;
-    for (int i = 0; i < count; i++) {
-        if (i > 0)
-            buf[pos++] = ' ';
-        buf[pos++] = '"';
-        win_append_escaped_arg(buf, &pos, argv[i]);
-        buf[pos++] = '"';
-    }
-    buf[pos] = '\0';
-    return buf;
-}
-#endif
-
-// spawn(program, args) - Execute a program WITHOUT a shell (argv array, no
-// interpolation), returning the same {stdout, stderr, exitCode} shape as
-// exec(). This is the injection-safe way to run subprocesses: unlike exec(),
-// arguments are passed verbatim to the program and are never parsed by a shell.
-static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *program = xrs_string_arg(args[0], NULL);
-    if (!program || program[0] == '\0')
-        return xr_null();
-
-    // args[1] (optional) is Array<string> holding the arguments after the
-    // program name. Omitted / null means no extra arguments.
-    XrArray *arg_arr = NULL;
-    int extra = 0;
-    if (argc >= 2 && XR_IS_ARRAY(args[1])) {
-        arg_arr = XR_TO_ARRAY(args[1]);
-        extra = arg_arr->length;
-    } else if (argc >= 2 && !XR_IS_NULL(args[1])) {
-        return xr_null();  // args must be an Array<string> (or omitted)
-    }
-    if (extra < 0 || (size_t) extra > (SIZE_MAX / sizeof(char *)) - 2)
-        return xr_null();
-
-    // argv = [program, extra..., NULL]
-    const char **spawn_argv = (const char **) xr_malloc(sizeof(char *) * ((size_t) extra + 2));
-    if (!spawn_argv)
-        return xr_null();
-    spawn_argv[0] = program;
-    for (int i = 0; i < extra; i++) {
-        const char *s = xrs_string_arg(xr_array_get(arg_arr, i), NULL);
-        if (!s) {
-            xr_free(spawn_argv);
-            return xr_null();  // every argument must be a string
-        }
-        spawn_argv[i + 1] = s;
-    }
-    spawn_argv[extra + 1] = NULL;
-
-#ifdef XR_OS_WINDOWS
-    char *cmdline = win_build_command_line(spawn_argv, extra + 1);
-    xr_free(spawn_argv);
-    if (!cmdline)
-        return xr_null();
-
-    SECURITY_ATTRIBUTES sa;
-    ZeroMemory(&sa, sizeof(sa));
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-
-    HANDLE out_rd = NULL, out_wr = NULL, err_rd = NULL, err_wr = NULL;
-    if (!CreatePipe(&out_rd, &out_wr, &sa, 0) || !CreatePipe(&err_rd, &err_wr, &sa, 0)) {
-        if (out_rd)
-            CloseHandle(out_rd);
-        if (out_wr)
-            CloseHandle(out_wr);
-        if (err_rd)
-            CloseHandle(err_rd);
-        if (err_wr)
-            CloseHandle(err_wr);
-        xr_free(cmdline);
-        return xr_null();
-    }
-    // The parent's read ends must NOT be inherited by the child.
-    SetHandleInformation(out_rd, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(err_rd, HANDLE_FLAG_INHERIT, 0);
-
-    STARTUPINFOA si;
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = out_wr;
-    si.hStdError = err_wr;
-    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-
-    PROCESS_INFORMATION pi;
-    ZeroMemory(&pi, sizeof(pi));
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
-    xr_free(cmdline);
-    // Close the child's write ends in the parent so reads see EOF at exit.
-    CloseHandle(out_wr);
-    CloseHandle(err_wr);
-    if (!ok) {
-        CloseHandle(out_rd);
-        CloseHandle(err_rd);
-        return xr_null();
-    }
-    CloseHandle(pi.hThread);
-
-    // Poll both pipes with PeekNamedPipe to drain without deadlocking on a
-    // full pipe buffer (a single blocking ReadFile on one pipe could stall
-    // while the child blocks writing the other).
-    char *out_buf = (char *) xr_malloc(1);
-    char *err_buf = (char *) xr_malloc(1);
-    size_t out_len = 0, err_len = 0, out_cap = 1, err_cap = 1;
-    if (out_buf)
-        out_buf[0] = '\0';
-    if (err_buf)
-        err_buf[0] = '\0';
-    bool out_open = true, err_open = true;
-    char tmp[4096];
-    while (out_open || err_open) {
-        bool progressed = false;
-        HANDLE handles[2] = {out_rd, err_rd};
-        char **bufs[2] = {&out_buf, &err_buf};
-        size_t *lens[2] = {&out_len, &err_len};
-        size_t *caps[2] = {&out_cap, &err_cap};
-        bool *opens[2] = {&out_open, &err_open};
-        for (int i = 0; i < 2; i++) {
-            if (!*opens[i])
-                continue;
-            DWORD avail = 0;
-            if (!PeekNamedPipe(handles[i], NULL, 0, NULL, &avail, NULL)) {
-                *opens[i] = false;  // pipe closed (child exited)
-                continue;
-            }
-            if (avail == 0)
-                continue;
-            DWORD got = 0;
-            if (!ReadFile(handles[i], tmp, sizeof(tmp), &got, NULL) || got == 0) {
-                *opens[i] = false;
-                continue;
-            }
-            progressed = true;
-            if (*lens[i] + got + 1 > *caps[i]) {
-                size_t nc = *caps[i];
-                while (*lens[i] + got + 1 > nc)
-                    nc *= 2;
-                char *g = (char *) xr_realloc(*bufs[i], nc);
-                if (!g) {
-                    *opens[i] = false;
-                    continue;
-                }
-                *bufs[i] = g;
-                *caps[i] = nc;
-            }
-            memcpy(*bufs[i] + *lens[i], tmp, got);
-            *lens[i] += got;
-            (*bufs[i])[*lens[i]] = '\0';
-        }
-        if (!progressed)
-            Sleep(1);
-    }
-
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD code = 0;
-    GetExitCodeProcess(pi.hProcess, &code);
-    CloseHandle(pi.hProcess);
-    CloseHandle(out_rd);
-    CloseHandle(err_rd);
-
-    XrObjectInstance *json = os_exec_result_new(X);
-    XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, out_buf ? out_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, err_buf ? err_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int((int) code));
-    xr_free(out_buf);
-    xr_free(err_buf);
-    return xr_object_instance_value(json);
-#else
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0) {
-        xr_free(spawn_argv);
-        return xr_null();
-    }
-    if (pipe(stderr_pipe) != 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        xr_free(spawn_argv);
-        return xr_null();
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[0]);
-        close(stderr_pipe[1]);
-        xr_free(spawn_argv);
-        return xr_null();
-    }
-
-    if (pid == 0) {
-        // Child: wire up pipes and exec the program directly (no shell).
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stderr_pipe[1], STDERR_FILENO);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
-        execvp(program, (char *const *) spawn_argv);
-        _exit(127);  // exec failed (e.g. program not found)
-    }
-
-    // Parent
-    close(stdout_pipe[1]);
-    close(stderr_pipe[1]);
-    xr_free(spawn_argv);
-
-    char *stdout_buf = NULL;
-    char *stderr_buf = NULL;
-    bool read_ok = read_exec_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
-
-    int status = 0;
-    pid_t waited;
-    do {
-        waited = waitpid(pid, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    if (waited < 0)
-        status = -1;
-    if (!read_ok) {
-        xr_free(stdout_buf);
-        xr_free(stderr_buf);
-        return xr_null();
-    }
-    int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
-
-    XrObjectInstance *json = os_exec_result_new(X);
-    XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int(exit_code));
-    xr_free(stdout_buf);
-    xr_free(stderr_buf);
-    return xr_object_instance_value(json);
-#endif
-}
-
 /* ========== Platform Information ========== */
 
 // Report host facts used by the public Xray wrappers. The ladders themselves
 // are shared with the AOT runtime in xr_os_core.h so the two agree by
 // construction.
-static const char *get_platform(void) {
-    return xr_os_core_platform();
-}
-
-static const char *get_arch(void) {
-    return xr_os_core_arch();
-}
-
 static XrValue os_platform(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    return xrs_string_value_c(X, get_platform());
+    return xrs_string_value_c(X, xr_os_core_platform());
 }
 
 static XrValue os_arch(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    return xrs_string_value_c(X, get_arch());
+    return xrs_string_value_c(X, xr_os_core_arch());
 }
 
 /* ========== Module Loading ========== */

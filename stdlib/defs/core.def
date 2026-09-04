@@ -867,7 +867,7 @@ module os {
   }
 
   fn __exit {
-    signature: "(code?: i64): ()"
+    signature: "(code: i64): ()"
     doc: "Exit process"
     vm: "os_exit"
     aot: "xrt_os_exit"
@@ -993,19 +993,7 @@ module os {
   }
 
   fn __kill {
-    signature: "(pid: i64, signal?: i64): bool"
-    doc: "Send signal to process"
-    vm: "os_kill"
-    aot: "xrt_os_kill"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __kill {
-    signature: "(pid: i64, signal?: i64): bool"
+    signature: "(pid: i64, signal: i64): bool"
     doc: "Send signal to process"
     vm: "os_kill"
     aot: "xrt_os_kill_signal"
@@ -1103,17 +1091,6 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __spawn {
-    signature: "(program: string, args: Array<string>): __ExecResult?"
-    doc: "Execute a program without a shell (injection-safe argv)"
-    vm: "os_spawn"
-    argc: 2
-    arg_spec: "sv"
-    aot_direct: false
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
 }
 
 module io {

@@ -239,6 +239,20 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             self.assertNotIn(legacy_owner, binding)
             self.assertNotIn(legacy_owner, definitions)
 
+    def test_os_process_surface_has_one_source_model(self) -> None:
+        source = (ROOT / "stdlib/os/os.xr").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/os/os.c").read_text(encoding="utf-8")
+        aot = (ROOT / "src/aot/xrt_os.h").read_text(encoding="utf-8")
+        sys_source = (ROOT / "stdlib/sys/sys.xr").read_text(encoding="utf-8")
+        self.assertNotIn("export fn spawn(", source)
+        self.assertNotIn("fn __spawn {", definitions)
+        self.assertNotIn("os_spawn", binding)
+        self.assertIn("static spawn(program: string", sys_source)
+        self.assertEqual(1, definitions.count("  fn __kill {"))
+        self.assertNotIn("xrt_os_kill(XrValue", aot)
+        self.assertIn("if (count > 0) { return count }", source)
+
     def test_exact_aot_runtime_adapters_do_not_allow_module_helper_families(self) -> None:
         manifest = load_manifest(ROOT)
         allowed = {

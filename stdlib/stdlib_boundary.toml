@@ -324,7 +324,7 @@ policy = "xray_semantic"
 semantic_source = "stdlib/os/os.xr"
 public_native = []
 private_native_sources = ["stdlib/os/*.c"]
-private_native_reason = "Private environment, process and platform syscall primitives consumed by os.xr"
+private_native_reason = "Private environment, shell-process, platform and scheduler leaves consumed by os.xr"
 perf_suite = "stdlib/os"
 
 [[module]]

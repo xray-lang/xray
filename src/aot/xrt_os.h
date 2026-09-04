@@ -203,7 +203,7 @@ static inline XrValue xrt_os_cpu_count(void) {
     GetSystemInfo(&si);
     return XR_FROM_INT((int64_t) si.dwNumberOfProcessors);
 #else
-    return XR_FROM_INT(xr_os_core_cpu_count(sysconf(_SC_NPROCESSORS_ONLN)));
+    return XR_FROM_INT((int64_t) sysconf(_SC_NPROCESSORS_ONLN));
 #endif
 }
 
@@ -291,10 +291,6 @@ static inline XrValue xrt_os_kill_signal(XrValue pid_value, XrValue sig_value) {
 #else
     return XR_FROM_BOOL(kill((pid_t) XR_TO_INT(pid_value), (int) XR_TO_INT(sig_value)) == 0);
 #endif
-}
-
-static inline XrValue xrt_os_kill(XrValue pid_value) {
-    return xrt_os_kill_signal(pid_value, XR_FROM_INT(SIGTERM));
 }
 
 static inline XrValue xrt_os_total_memory(void) {

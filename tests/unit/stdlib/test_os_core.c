@@ -51,12 +51,6 @@ TEST(os_core_arch_matches_target) {
 #endif
 }
 
-TEST(os_core_cpu_count_normalizes_invalid_raw_values) {
-    ASSERT_EQ_INT(xr_os_core_cpu_count(8), 8);
-    ASSERT_EQ_INT(xr_os_core_cpu_count(0), 1);
-    ASSERT_EQ_INT(xr_os_core_cpu_count(-4), 1);
-}
-
 TEST(os_core_memory_bytes_converts_units) {
     ASSERT_EQ_INT(xr_os_core_memory_bytes(128, 4096), 524288);
     ASSERT_EQ_INT(xr_os_core_memory_bytes(0, 4096), 0);
