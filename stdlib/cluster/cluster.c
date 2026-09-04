@@ -19,7 +19,6 @@
 #include "../../src/io/xnet_handle.h"
 #include "../../src/io/xnet_provider.h"
 #include "../../src/io/xcluster_discovery_provider.h"
-#include "../../src/runtime/object/xbuffer.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
@@ -387,12 +386,11 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         !XR_IS_INT(args[9]))
         return xr_bool(false);
 
-    int64_t packed_limits_value = XR_TO_INT(args[8]);
-    uint64_t packed_limits = packed_limits_value > 0 ? (uint64_t) packed_limits_value : 0;
-    uint64_t output_queue_high_watermark = packed_limits >> 32;
-    uint32_t topic_fanout_max = (uint32_t) packed_limits;
+    int64_t output_queue_high_watermark_value = XR_TO_INT(args[8]);
+    uint64_t output_queue_high_watermark =
+        output_queue_high_watermark_value > 0 ? (uint64_t) output_queue_high_watermark_value : 0;
     if (output_queue_high_watermark == 0 || output_queue_high_watermark > SIZE_MAX ||
-        topic_fanout_max == 0 || XR_TO_INT(args[9]) <= 0)
+        XR_TO_INT(args[9]) <= 0)
         return xr_bool(false);
 
     /* Xray owns the validated configuration and start ordering. This leaf
@@ -435,10 +433,9 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         cluster->tls_enabled = true;
     }
 
-    cluster->topics = xr_topic_registry_new_vm(X, topic_fanout_max);
     cluster->monitors = xr_monitor_registry_new();
     cluster->tombstones = xr_tombstone_registry_new(16, XR_TO_INT(args[9]));
-    if (!cluster->topics || !cluster->monitors || !cluster->tombstones) {
+    if (!cluster->monitors || !cluster->tombstones) {
         cluster_runtime_release(cluster);
         return xr_bool(false);
     }
@@ -542,28 +539,6 @@ static XrValue cluster_observe_heartbeat_fn(XrVMRuntime *X, XrValue *args, int a
     xr_amutex_unlock(&cluster->nodes_lock);
     cluster_runtime_release(cluster);
     return xr_bool(observed);
-}
-
-static XrValue cluster_deliver_inbound_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_ARRAY(args[1]))
-        return xr_null();
-    XrArray *envelope = XR_TO_ARRAY(args[1]);
-    if (envelope->elem_type != XR_ELEM_U8 || envelope->length < 0 ||
-        (envelope->length > 0 && !envelope->data))
-        return xr_null();
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_null();
-    if (!atomic_load(&cluster->running)) {
-        cluster_runtime_release(cluster);
-        return xr_null();
-    }
-    (void) xr_topic_registry_deliver(cluster->topics, XR_TO_STRING(args[0])->data,
-                                     (const uint8_t *) envelope->data,
-                                     (uint32_t) envelope->length);
-    cluster_runtime_release(cluster);
-    return xr_null();
 }
 
 static XrValue cluster_broadcast_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -673,59 +648,6 @@ static XrValue cluster_notify_node_down_fn(XrVMRuntime *X, XrValue *args, int ar
     return xr_null();
 }
 
-static XrValue cluster_publish_local_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0]))
-        return xr_null();
-    const uint8_t *envelope = NULL;
-    size_t envelope_len = 0;
-    if (!xr_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
-        return xr_null();
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_null();
-    if (!atomic_load(&cluster->running)) {
-        cluster_runtime_release(cluster);
-        return xr_null();
-    }
-    XrObjectInstance *result = xr_stdlib_record_new(X, "cluster", "__ClusterDeliveryStats");
-    if (!result) {
-        cluster_runtime_release(cluster);
-        return xr_null();
-    }
-    XrString *topic = XR_TO_STRING(args[0]);
-    XrTopicDeliveryStats stats =
-        xr_topic_registry_deliver(cluster->topics, topic->data, envelope, (uint32_t) envelope_len);
-    xr_object_instance_set_by_key(X, result, "accepted", xr_int(stats.accepted));
-    xr_object_instance_set_by_key(X, result, "full", xr_int(stats.full));
-    xr_object_instance_set_by_key(X, result, "stopped", xr_int(stats.stopped));
-    xr_object_instance_set_by_key(X, result, "resource", xr_int(stats.resource));
-    cluster_runtime_release(cluster);
-    return xr_object_instance_value(result);
-}
-
-// xray binding: cluster.listen(pattern)
-static XrValue cluster_listen_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]))
-        return xr_null();
-
-    /* listen() in cluster.xr rejects a capacity outside the bound before this
-     * leaf is reached, so the bound is not restated here. */
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_null();
-    XrString *pattern_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = xr_topic_registry_subscribe(cluster->topics, pattern_str->data,
-                                                (uint32_t) XR_TO_INT(args[1]));
-    if (!ch) {
-        cluster_runtime_release(cluster);
-        return xr_null();
-    }
-    cluster_runtime_release(cluster);
-    return xr_value_from_channel(ch);
-}
-
 /* ========== Cluster Info API ========== */
 
 static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -822,9 +744,6 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
         cluster_runtime_release(c);
         return xr_null();
     }
-
-    // Listener count is diagnostic and may be momentarily stale.
-    xr_object_instance_set_by_key(X, info, "listeners", xr_int(xr_topic_registry_count(c->topics)));
 
     /*
      * Tombstone snapshot — number of nodes in the recently-dead

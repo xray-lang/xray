@@ -17,9 +17,7 @@ from stdlibgen import parse_defs  # noqa: E402
 SOURCE_OWNED_LEAVES = {
     "__start",
     "__stop",
-    "__publishLocal",
     "__broadcast",
-    "__listen",
 }
 
 RETIRED_STANDALONE_FILES = (
@@ -27,6 +25,8 @@ RETIRED_STANDALONE_FILES = (
     "src/aot/xrt_cluster.h",
     "src/coro/xcluster_blocking_runtime.c",
     "src/coro/xcluster_blocking_runtime.h",
+    "src/coro/xtopic_registry.c",
+    "src/coro/xtopic_registry.h",
     "src/io/xcluster_blocking.c",
     "src/io/xcluster_blocking.h",
 )

@@ -120,7 +120,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
     {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, missedHeartbeats: i64, samples: i64, mean: f64, variance: f64, detectorLastHeartbeatMs: i64 }", "Private metrics and raw failure-detector storage for one connected peer", NULL, 0},
-    {"__ClusterRuntimeSnapshot", XLSP_SYM_CLASS, "type __ClusterRuntimeSnapshot = { nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64 }", "Private snapshot of mutable native peer registries and counters", NULL, 0},
+    {"__ClusterRuntimeSnapshot", XLSP_SYM_CLASS, "type __ClusterRuntimeSnapshot = { nodes: Array<__ClusterNodeSnapshot>, deadNodes: i64 }", "Private snapshot of mutable native peer state and tombstone counters", NULL, 0},
     {"__ClusterHealthPeerSnapshot", XLSP_SYM_CLASS, "type __ClusterHealthPeerSnapshot = { peerGeneration: i64, lastReceivedAtMs: i64, missedHeartbeats: i64, samples: i64, mean: f64, variance: f64, detectorLastHeartbeatMs: i64 }", "Private scalar snapshot of one connected peer's failure detector state", NULL, 0},
     {"__ClusterDeliveryStats", XLSP_SYM_CLASS, "type __ClusterDeliveryStats = { accepted: i64, full: i64, stopped: i64, resource: i64 }", "Private raw admission outcomes from cluster channel and queue providers", NULL, 0},
 };

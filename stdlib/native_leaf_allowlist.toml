@@ -68,7 +68,7 @@ class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills mutable peer metrics and registry counters; cluster.xr combines them with its source-owned immutable configuration"
+provider = "declaration only (stdlib/defs/core.def). The VM fills mutable peer metrics and the tombstone counter; cluster.xr combines them with its source-owned immutable configuration and topic listener count"
 deletion_trigger = "when the locked peer table can be iterated as ordinary Xray-owned state"
 
 [[leaf]]
@@ -88,8 +88,8 @@ class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills accepted, full, stopped and resource counts from synchronized topic channels or one locked peer-queue traversal; cluster.xr alone maps those facts to ClusterDelivery"
-deletion_trigger = "when topic channels and peer output queues are ordinary Xray-owned values and source can count their admissions directly"
+provider = "declaration only (stdlib/defs/core.def). cluster.xr fills local topic-channel counts directly; the VM fills only one locked peer-queue traversal; cluster.xr maps both facts to ClusterDelivery"
+deletion_trigger = "when peer output queues are ordinary Xray-owned values and source can count their admissions directly"
 
 [[leaf]]
 module = "cluster"
@@ -108,7 +108,7 @@ class = "runtime_leaf"
 abi = "none; reads cluster runtime state under its own mutexes and atomics"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the native node table under nodes_lock, synchronized topic and tombstone registries, atomic peer counters, and raw detector storage. cluster.xr owns identity, running state, detector math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
+provider = "the native node table under nodes_lock, synchronized tombstone registry, atomic peer counters, and raw detector storage. cluster.xr owns identity, running state, topic listener state, detector math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
 deletion_trigger = "when the peer table, metrics and synchronized registries are Xray-owned values"
 
 [[leaf]]
@@ -193,16 +193,6 @@ deletion_trigger = "when the peer health table is ordinary synchronized Xray sta
 
 [[leaf]]
 module = "cluster"
-symbol = "__deliverInbound"
-class = "runtime_leaf"
-abi = "none; copies bytes into matching synchronized subscription channels"
-ownership = "none"
-effect = "nothrow"
-provider = "the native synchronized topic registry. The result is intentionally discarded because cluster.xr owns protocol decoding, validation and inbound dispatch order"
-deletion_trigger = "when the synchronized topic index is ordinary Xray-owned state"
-
-[[leaf]]
-module = "cluster"
 symbol = "__broadcast"
 class = "runtime_leaf"
 abi = "none; enqueues one source-encoded frame for connected peers, optionally excluding one generation, and returns raw traversal counts"
@@ -243,16 +233,6 @@ deletion_trigger = "when the synchronized monitor index is ordinary Xray-owned s
 
 [[leaf]]
 module = "cluster"
-symbol = "__listen"
-class = "runtime_leaf"
-abi = "none; constructs a bounded channel and registers a topic subscription"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through the backend-neutral synchronized trie in src/coro/xtopic_registry.c. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen(); AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
-deletion_trigger = "when cluster.xr can construct a Channel and register a topic pattern directly, which needs the channel constructor and the topic table to be surfaces Xray source can name"
-
-[[leaf]]
-module = "cluster"
 symbol = "__registerNodeMonitor"
 class = "runtime_leaf"
 abi = "none; registers one source-constructed channel for a normalized node-down target"
@@ -283,22 +263,12 @@ deletion_trigger = "when cluster.xr can retain channels in a synchronized map di
 
 [[leaf]]
 module = "cluster"
-symbol = "__publishLocal"
-class = "runtime_leaf"
-abi = "none; copies one validated buffer into matching local subscription channels"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the Xray channel subsystem through src/coro/xtopic_registry.c's synchronized trie projection. The leaf returns accepted, full, stopped and resource counts; cluster.xr owns validation, publication order, fanout limit and result precedence; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
-deletion_trigger = "when cluster.xr can construct Channels and hold a synchronized topic index directly"
-
-[[leaf]]
-module = "cluster"
 symbol = "__start"
 class = "runtime_leaf"
 abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the native cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
+provider = "the native cluster runtime's TLS contexts and synchronized node/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, topic registry and routing, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence and output-queue high watermark; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
 deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values"
 
 [[leaf]]

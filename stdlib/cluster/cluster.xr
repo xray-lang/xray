@@ -39,6 +39,7 @@
 
 import crypto
 import math
+import mem
 import net
 import { DialOptions, NetError, UdpFrom } from net
 import time
@@ -94,10 +95,6 @@ export const ENVELOPE_HEADER_SIZE = 64
 export const SUBSCRIPTION_CAPACITY_MAX = 1048576
 export const TOPIC_DELIVERY_FANOUT_MAX = 256
 export const OUTPUT_QUEUE_HIGH_WATERMARK_BYTES = 4194304
-// The private start leaf is intentionally scalar-only. Pack its two u32
-// resource limits into one i64 transport word; their values and policy remain
-// source-owned while the provider only projects the two machine fields.
-const _START_LIMITS_RADIX = 4294967296
 const _PEER_READ_STALE = 1
 const _PEER_READ_RUNTIME_STOPPED = 2
 const _PEER_READ_EOF = 3
@@ -166,6 +163,15 @@ type _ClusterSourceState = {
     tlsServerReady: bool,
 }
 
+// Topic routing is ordinary source state. Holding the Channel in this record
+// gives the registry its own strong reference, while temporary delivery
+// snapshots keep each target alive after the registry lock is released.
+type _TopicSubscription = {
+    runtimeToken: i64,
+    pattern: string,
+    notifications: Channel<Buffer>,
+}
+
 // Source-owned loops use generation tokens so a retiring coroutine cannot
 // affect a later start on the same isolate. Discovery has a separate token
 // because callers may enable or restart it independently of cluster startup.
@@ -178,6 +184,8 @@ const _runtimeActiveToken: Atomic<i64> = Atomic<i64>(0)
 // notification leaf. This closes the check/call window without moving active
 // generation or notification policy into the provider.
 const _runtimeDecisionLock: Atomic<bool> = Atomic<bool>(false)
+const _topicStateLock: Atomic<bool> = Atomic<bool>(false)
+var _topicSubscriptions: Array<_TopicSubscription> = []
 // The protected section only copies or swaps one small record and never
 // suspends, so a lock-free flag preserves the synchronous public query surface
 // without exposing ordinary mutable module state across worker coroutines.
@@ -196,6 +204,25 @@ fn _lockRuntimeDecision() {
         var (_, acquired) = _runtimeDecisionLock.compareExchange(false, true)
         if (acquired) { return }
     }
+}
+
+fn _lockTopicState() {
+    while (true) {
+        var (_, acquired) = _topicStateLock.compareExchange(false, true)
+        if (acquired) { return }
+    }
+}
+
+// Retirement first makes new registrations fail their locked token recheck;
+// closing and clearing under the same registry lock then makes the cutover
+// atomic for collectors already holding or about to acquire that lock.
+fn _closeTopicSubscriptions() {
+    _lockTopicState()
+    for (var i = 0; i < len(_topicSubscriptions); i++) {
+        _topicSubscriptions[i].notifications.close()
+    }
+    _topicSubscriptions = []
+    _topicStateLock.store(false)
 }
 
 fn _retireRuntimeGeneration(token: i64) -> bool {
@@ -607,7 +634,7 @@ fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
     if (frame!.kind == FRAME_TRANSPORT_ENVELOPE) {
         var transport = decodeTransportFrame(wire)
         if (transport == null) { return true }
-        __deliverInbound(transport!.topic, transport!.envelope)
+        _deliverTopic(transport!.topic, transport!.envelope)
         if (transport!.hopLimit > 0) {
             var forward = encodeTransportFrame(transport!.hopLimit - 1, transport!.topic,
                                                transport!.envelope)
@@ -1113,6 +1140,7 @@ fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: stri
 
 fn _stopFailedHealthGeneration(token: i64) {
     if (!_retireRuntimeGeneration(token)) { return }
+    _closeTopicSubscriptions()
     __stop()
     _clearSourceState()
 }
@@ -1182,6 +1210,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
     }
     if (!__trackListener(listener)) {
         _retireRuntimeGeneration(token)
+        _closeTopicSubscriptions()
         net.close(listener)
         __stop()
         _clearSourceState()
@@ -1511,6 +1540,118 @@ export fn topicMatches(pattern: string, topic: string) -> bool {
     return ti == len(t)
 }
 
+fn _registerTopicSubscription(pattern: string, capacity: i64) -> Channel<Buffer>? {
+    var token = _runtimeActiveToken.load()
+    if (token == 0) { return null }
+    var notifications = Channel<Buffer>(capacity)
+
+    _lockTopicState()
+    if (_runtimeActiveToken.load() != token) {
+        _topicStateLock.store(false)
+        notifications.close()
+        return null
+    }
+    var subscription: _TopicSubscription = {
+        runtimeToken: token,
+        pattern: pattern,
+        notifications: notifications,
+    }
+    _topicSubscriptions.push(subscription)
+    _topicStateLock.store(false)
+    return notifications
+}
+
+// Pruning and target retention share one critical section. The returned array
+// owns independent shared Channel references, so delivery can wake consumers
+// without holding the source registry lock.
+fn _topicTargets(topic: string, token: i64,
+                 full: ref i64, stopped: ref i64) -> Array<Channel<Buffer>> {
+    var retained: Array<_TopicSubscription> = []
+    var targets: Array<Channel<Buffer>> = []
+    _lockTopicState()
+    for (var i = 0; i < len(_topicSubscriptions); i++) {
+        var subscription = _topicSubscriptions[i]
+        if (subscription.runtimeToken != token || subscription.notifications.isClosed) {
+            if (subscription.runtimeToken == token &&
+                topicMatches(subscription.pattern, topic)) {
+                stopped = stopped + 1
+            }
+            subscription.notifications.close()
+            continue
+        }
+        retained.push(subscription)
+        if (!topicMatches(subscription.pattern, topic)) { continue }
+        if (len(targets) >= TOPIC_DELIVERY_FANOUT_MAX) {
+            full = full + 1
+            continue
+        }
+        targets.push(subscription.notifications)
+    }
+    _topicSubscriptions = retained
+    _topicStateLock.store(false)
+    return targets
+}
+
+fn _bufferFromBytes(source: Array<u8>) -> Buffer {
+    var out = mem.alloc(len(source))
+    if (len(source) > 0) {
+        unsafe {
+            mem.withSliceMut<u8>(out.borrowPtr(), len(out), ref out,
+                fn(target: ref Slice<u8>) {
+                    var bytes: Slice<u8> = source[:]
+                    target.copyFrom(bytes)
+                })
+        }
+    }
+    return out
+}
+
+fn _deliverTopic(topic: string, envelope: Array<u8>) -> __ClusterDeliveryStats? {
+    var token = _runtimeActiveToken.load()
+    if (token == 0) { return null }
+    var full = 0
+    var stopped = 0
+    var targets = _topicTargets(topic, token, ref full, ref stopped)
+    if (_runtimeActiveToken.load() != token) { return null }
+
+    var accepted = 0
+    for (var i = 0; i < len(targets); i++) {
+        var payload = _bufferFromBytes(envelope)
+        match (targets[i].trySend(move payload)) {
+            SendResult.Sent -> { accepted = accepted + 1 }
+            SendResult.Closed -> { stopped = stopped + 1 }
+            SendResult.Full -> { full = full + 1 }
+            SendResult.Timeout -> { full = full + 1 }
+        }
+    }
+    var stats: __ClusterDeliveryStats = {
+        accepted: accepted,
+        full: full,
+        stopped: stopped,
+        resource: 0,
+    }
+    return stats
+}
+
+fn _topicListenerCount() -> i64 {
+    var token = _runtimeActiveToken.load()
+    if (token == 0) { return 0 }
+    var retained: Array<_TopicSubscription> = []
+    _lockTopicState()
+    for (var i = 0; i < len(_topicSubscriptions); i++) {
+        var subscription = _topicSubscriptions[i]
+        if (subscription.runtimeToken == token && !subscription.notifications.isClosed) {
+            retained.push(subscription)
+        } else {
+            subscription.notifications.close()
+        }
+    }
+    _topicSubscriptions = retained
+    var count = len(_topicSubscriptions)
+    _topicStateLock.store(false)
+    return count
+}
+
 // ========== Node identity and membership ==========
 
 // Identity and immutable configuration remain in the module that validated
@@ -1613,7 +1754,7 @@ export fn info() -> ClusterInfo? {
         port: state.port,
         running: true,
         nodes: nodes,
-        listeners: snapshot.listeners,
+        listeners: _topicListenerCount(),
         deadNodes: snapshot.deadNodes,
         heartbeatIntervalMs: state.heartbeatIntervalMs,
         heartbeatTimeoutMs: state.heartbeatTimeoutMs,
@@ -1727,7 +1868,7 @@ export fn start(config: ClusterConfig) -> bool {
         certFile,
         keyFile,
         insecure,
-        OUTPUT_QUEUE_HIGH_WATERMARK_BYTES * _START_LIMITS_RADIX + TOPIC_DELIVERY_FANOUT_MAX,
+        OUTPUT_QUEUE_HIGH_WATERMARK_BYTES,
         TOMBSTONE_RETENTION_MS
     )
     var state: _ClusterSourceState = {
@@ -1757,6 +1898,7 @@ export fn join(addr: string) -> bool {
 export fn stop() {
     _discoveryActiveToken.store(0)
     _retireCurrentRuntimeGeneration()
+    _closeTopicSubscriptions()
     _clearSourceState()
     __stop()
 }
@@ -1770,7 +1912,7 @@ export fn stop() {
 export fn listen(pattern: string, capacity: i64 = 1024) -> Channel<Buffer>? {
     if (!validTopicPattern(pattern)) { return null }
     if (capacity <= 0 || capacity > SUBSCRIPTION_CAPACITY_MAX) { return null }
-    return __listen(pattern, capacity)
+    return _registerTopicSubscription(pattern, capacity)
 }
 
 // Queue and channel providers report only why each admission succeeded or
@@ -1818,7 +1960,7 @@ export fn send(topic: string, envelope: move Buffer,
         return ClusterDelivery.InvalidEnvelope
     }
     var remoteWire = encodeTransportFrame(hopLimit, topic, envelopeBytes)
-    var local = _deliveryFromStats(__publishLocal(topic, envelope))
+    var local = _deliveryFromStats(_deliverTopic(topic, envelopeBytes))
     var remote = remoteWire == null ? ClusterDelivery.InvalidEnvelope
                                     : _deliveryFromStats(__broadcast(0, remoteWire!))
     return _combinePublicationDelivery(local, remote)

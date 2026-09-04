@@ -73,8 +73,8 @@ fn test_cluster_transports_only_opaque_envelopes() {
     var overflow = envelope(8)
     assert(cluster.send("service.echo", move overflow) == ClusterDelivery.Overloaded)
 
-    inbox.close()
     cluster.stop()
+    assert(inbox.isClosed)
     var unavailable = envelope(3)
     assert(cluster.send("service.echo", move unavailable) == ClusterDelivery.Unavailable)
 }

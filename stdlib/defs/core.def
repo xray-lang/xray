@@ -2029,9 +2029,9 @@ module cluster {
   }
 
   object __ClusterRuntimeSnapshot {
-    fields: "const nodes: Array<__ClusterNodeSnapshot>, const listeners: i64, const deadNodes: i64"
+    fields: "const nodes: Array<__ClusterNodeSnapshot>, const deadNodes: i64"
     exact: true
-    doc: "Private snapshot of mutable native peer registries and counters"
+    doc: "Private snapshot of mutable native peer state and tombstone counters"
   }
 
   object __ClusterHealthPeerSnapshot {
@@ -2047,8 +2047,8 @@ module cluster {
   }
 
   fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool"
-    doc: "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration"
+    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64, tombstoneRetentionMs: i64): bool"
+    doc: "Open cluster TLS contexts and synchronized provider registries from source-normalized scalar configuration"
     vm: "cluster_start_primitive"
     argc: 10
     arg_spec: "svsvsssvvv"
@@ -2191,18 +2191,6 @@ module cluster {
     layer: "runtime"
   }
 
-  fn __deliverInbound {
-    signature: "(topic: string, envelope: Array<u8>): ()"
-    doc: "Offer one source-decoded envelope to the synchronized topic registry and discard delivery observations"
-    vm: "cluster_deliver_inbound_fn"
-    argc: 2
-    arg_spec: "sv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-  }
-
   fn __broadcast {
     signature: "(excludedPeerGeneration: i64, wire: Array<u8>): __ClusterDeliveryStats?"
     doc: "Return raw admission outcomes after one locked peer broadcast"
@@ -2328,31 +2316,4 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn __publishLocal {
-    signature: "(topic: string, envelope: Buffer): __ClusterDeliveryStats?"
-    doc: "Return raw channel admission outcomes for one validated local publication"
-    vm: "cluster_publish_local_primitive"
-    argc: 2
-    arg_spec: "sv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-    effect: "nothrow"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __listen {
-    signature: "(pattern: string, capacity: i64): Channel<Buffer>?"
-    doc: "Create a bounded receiver for opaque canonical service envelopes"
-    vm: "cluster_listen_fn"
-    argc: 2
-    arg_spec: "sv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-    caps: "channel"
-  }
 }

@@ -646,8 +646,8 @@ TEST(cluster_phi_projection_uses_bounded_history) {
  * WHY THIS CASE EXISTS:
  *   stdlib/cluster/cluster.xr is the normative statement of the cluster wire
  *   format and is compiled by both the VM and the AOT backend;
- *   xcluster_wire.h, cluster_internal.h and xtopic_registry.h are the native
- *   reader-loop projection of the same numbers. Nothing in the build makes one
+ *   xcluster_wire.h and cluster_internal.h are the native reader-loop
+ *   projection of the same numbers. Nothing in the build makes one
  *   derive from the other, so the two can drift silently. The literals below
  *   are transcribed from the `export const` block of cluster.xr on purpose —
  *   they are not spelled with the C macros — which makes this case the one
@@ -680,23 +680,6 @@ TEST(cluster_wire_constants_match_the_xray_surface) {
     ASSERT_EQ_INT(XR_FRAME_CORO_MONITOR, 0x08);
     ASSERT_EQ_INT(XR_FRAME_CORO_DEMONITOR, 0x09);
     ASSERT_EQ_INT(XR_FRAME_CORO_EXIT, 0x0A);
-}
-
-TEST(cluster_topic_projection_matches_the_xray_surface) {
-    ASSERT_TRUE(xr_topic_name_valid("events.user"));
-    ASSERT_FALSE(xr_topic_name_valid(""));
-    ASSERT_FALSE(xr_topic_name_valid("events..user"));
-    ASSERT_FALSE(xr_topic_name_valid("events.*"));
-    ASSERT_FALSE(
-        xr_topic_name_valid("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
-
-    ASSERT_TRUE(xr_topic_pattern_matches("events.*", "events.user"));
-    ASSERT_FALSE(xr_topic_pattern_matches("events.*", "events.user.login"));
-    ASSERT_TRUE(xr_topic_pattern_matches("events.>", "events.user"));
-    ASSERT_TRUE(xr_topic_pattern_matches("events.>", "events.user.login"));
-    ASSERT_FALSE(xr_topic_pattern_matches("events.>", "events"));
-    ASSERT_FALSE(xr_topic_pattern_matches("events.>.tail", "events.user.tail"));
 }
 
 TEST(cluster_output_queue_reports_admission_reasons) {
@@ -750,7 +733,6 @@ RUN_TEST(cluster_coro_frames_round_trip);
 RUN_TEST(cluster_frame_decoders_reject_truncated_payloads);
 RUN_TEST(cluster_phi_projection_uses_bounded_history);
 RUN_TEST(cluster_wire_constants_match_the_xray_surface);
-RUN_TEST(cluster_topic_projection_matches_the_xray_surface);
 RUN_TEST(cluster_output_queue_reports_admission_reasons);
 RUN_TEST(cluster_tombstone_projection_expires_and_refreshes);
 

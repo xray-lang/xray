@@ -29,7 +29,6 @@
 #include "../../src/coro/xmonitor_registry.h"
 #include "../../src/coro/xphi_detector.h"
 #include "../../src/coro/xtombstone_registry.h"
-#include "../../src/coro/xtopic_registry.h"
 #include "../../src/io/xcluster_wire.h"
 #include "../../src/io/xcluster_peer_transport.h"
 #include "../../src/io/xcluster_auth.h"
@@ -117,9 +116,6 @@ typedef struct XrCluster {
     // Connected nodes (linked list, protected by nodes_lock)
     XrClusterNode *nodes;
     XrAdaptiveMutex nodes_lock;
-
-    /* Synchronized channel index for the topic policy owned by cluster.xr. */
-    XrTopicRegistry *topics;
 
     /* Provider capacity selected by cluster.xr. */
     size_t output_queue_high_watermark;
@@ -243,7 +239,6 @@ static inline void cluster_runtime_release(XrCluster *cluster) {
 
     XR_DCHECK(cluster->nodes == NULL, "cluster release requires a detached node list");
     XR_DCHECK(cluster->listener == NULL, "cluster release requires a detached listener");
-    xr_topic_registry_destroy(cluster->topics);
     xr_monitor_registry_destroy(cluster->monitors);
     xr_tombstone_registry_destroy(cluster->tombstones);
     if (cluster->tls_client_ctx)
