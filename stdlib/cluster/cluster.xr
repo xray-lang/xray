@@ -245,6 +245,13 @@ fn _bytes(text: string) -> Array<u8> {
     return out
 }
 
+fn _materializeBuffer(buffer: Buffer) -> Array<u8> {
+    var count = len(buffer.asBytes())
+    var out = Array<u8>(count)
+    for (var i = 0; i < count; i++) { out[i] = buffer.asBytes()[i] }
+    return out
+}
+
 fn _copyBytes(src: Array<u8>, start: i64, end: i64) -> Array<u8>? {
     if (start < 0 || end < start || end > len(src)) { return null }
     var out = Array<u8>(end - start)
@@ -532,8 +539,9 @@ fn _dispatchInbound() {
         if (transport == null) { return }
         __deliverInbound(transport!.topic, transport!.envelope)
         if (transport!.hopLimit > 0) {
-            __forwardInbound(peerGeneration, transport!.topic, transport!.envelope,
-                             transport!.hopLimit - 1)
+            var forward = encodeTransportFrame(transport!.hopLimit - 1, transport!.topic,
+                                               transport!.envelope)
+            if (forward != null) { __forwardInbound(peerGeneration, forward!) }
         }
         return
     }
@@ -1657,10 +1665,13 @@ export fn send(topic: string, envelope: move Buffer,
                hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT) -> ClusterDelivery {
     if (!validTopicName(topic)) { return ClusterDelivery.InvalidTopic }
     if (hopLimit < 0 || hopLimit > TOPIC_MAX_HOP_LIMIT) { return ClusterDelivery.InvalidTopic }
-    if (len(envelope.asBytes()) < ENVELOPE_HEADER_SIZE) {
+    var envelopeBytes = _materializeBuffer(envelope)
+    if (len(envelopeBytes) < ENVELOPE_HEADER_SIZE) {
         return ClusterDelivery.InvalidEnvelope
     }
+    var remoteWire = encodeTransportFrame(hopLimit, topic, envelopeBytes)
     var local = _deliveryFromCode(__publishLocal(topic, envelope))
-    var remote = _deliveryFromCode(__publishRemote(topic, move envelope, hopLimit))
+    var remote = remoteWire == null ? ClusterDelivery.InvalidEnvelope
+                                    : _deliveryFromCode(__publishRemote(remoteWire!))
     return _combinePublicationDelivery(local, remote)
 }

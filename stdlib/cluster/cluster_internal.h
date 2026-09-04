@@ -135,9 +135,6 @@ typedef struct XrClusterNode {
 void cluster_node_retain(XrClusterNode *node);
 void cluster_node_shutdown(XrClusterNode *node);
 void cluster_node_release(XrClusterNode *node);
-int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
-                                      uint8_t topic_len, const uint8_t *envelope,
-                                      uint32_t envelope_len);
 bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrValue inbound_handler,
                            XrValue outbound_handler);
 XrValue cluster_take_inbound_frame_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
@@ -256,8 +253,7 @@ void cluster_health_tick(XrCluster *cluster, const uint8_t *heartbeat_wire,
 #define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)
 
 XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster, uint64_t excluded_generation,
-                                              uint8_t hop_limit, const char *topic,
-                                              const uint8_t *envelope, uint32_t envelope_length);
+                                              const uint8_t *wire, uint32_t wire_length);
 
 /* ========== Remote Coroutine Monitoring ========== */
 

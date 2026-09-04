@@ -93,33 +93,6 @@ void cluster_node_release(XrClusterNode *node) {
     }
 }
 
-int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
-                                      uint8_t topic_len, const uint8_t *envelope,
-                                      uint32_t envelope_len) {
-    if (!node || atomic_load(&node->shutdown_started) || !node->conn ||
-        node->state == XR_NODE_CLOSING || !topic || topic_len == 0 || !envelope)
-        return -1;
-
-    size_t frame_len = (size_t) XR_FRAME_HEADER_SIZE + 3u + topic_len + envelope_len;
-    if (frame_len > UINT32_MAX)
-        return -1;
-    uint8_t *frame = (uint8_t *) xr_malloc(frame_len);
-    if (!frame)
-        return -1;
-    int wrote = cluster_frame_write_transport(frame, frame_len, hop_limit, topic, topic_len,
-                                              envelope, envelope_len);
-    if (wrote < 0) {
-        xr_free(frame);
-        return -1;
-    }
-    int rc = xr_cluster_output_queue_push_owned(node->outq, frame, (uint32_t) wrote);
-    if (rc != 0) {
-        xr_free(frame);
-        return -1;
-    }
-    return 0;
-}
-
 /* ========== Writer Coroutine ========== */
 
 typedef struct XrWriterContext {

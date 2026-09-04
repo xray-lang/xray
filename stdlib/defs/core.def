@@ -2191,11 +2191,11 @@ module cluster {
   }
 
   fn __forwardInbound {
-    signature: "(peerGeneration: i64, topic: string, envelope: Array<u8>, hopLimit: i64): i64"
-    doc: "Broadcast one source-authorized envelope while excluding its peer generation"
+    signature: "(peerGeneration: i64, wire: Array<u8>): i64"
+    doc: "Broadcast one source-encoded frame while excluding its peer generation"
     vm: "cluster_forward_inbound_fn"
-    argc: 4
-    arg_spec: "vsvv"
+    argc: 2
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2300,11 +2300,11 @@ module cluster {
   }
 
   fn __publishRemote {
-    signature: "(topic: string, envelope: move Buffer, hopLimit: i64): i64"
-    doc: "Broadcast one validated opaque service envelope to connected native transports"
+    signature: "(wire: Array<u8>): i64"
+    doc: "Broadcast one source-encoded transport frame to connected native transports"
     vm: "cluster_publish_remote_primitive"
-    argc: 3
-    arg_spec: "svv"
+    argc: 1
+    arg_spec: "v"
     ret: "i64"
     aot_direct: false
     link_object: false

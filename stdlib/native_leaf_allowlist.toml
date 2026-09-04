@@ -205,10 +205,10 @@ deletion_trigger = "when the synchronized topic index is ordinary Xray-owned sta
 module = "cluster"
 symbol = "__forwardInbound"
 class = "runtime_leaf"
-abi = "none; enqueues a source-authorized envelope for all connected peers except one generation"
+abi = "none; enqueues one source-encoded frame for all connected peers except one generation"
 ownership = "none"
 effect = "nothrow"
-provider = "the locked native peer registry and output queues. cluster.xr owns hop decrement and split-horizon policy"
+provider = "the locked native peer registry and output queues. cluster.xr owns complete frame construction, hop decrement and split-horizon policy"
 deletion_trigger = "when peer output queues are ordinary Xray-owned values"
 
 [[leaf]]
@@ -275,10 +275,10 @@ deletion_trigger = "when cluster.xr can construct Channels and hold a synchroniz
 module = "cluster"
 symbol = "__publishRemote"
 class = "runtime_leaf"
-abi = "none on the publishing call itself: it enqueues one framed buffer per connected peer and signals the provider writer"
+abi = "none on the publishing call itself: it enqueues one source-encoded frame per connected peer and signals the provider writer"
 ownership = "none"
 effect = "nothrow"
-provider = "the native peer output queue. cluster.xr owns validation, local-versus-remote publication order, hop budget and result precedence; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
+provider = "the native peer output queue. cluster.xr owns complete frame construction, validation, local-versus-remote publication order, hop budget and result precedence; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
 deletion_trigger = "when per-node transport queues are surfaces cluster.xr can name and enqueue into"
 
 [[leaf]]
