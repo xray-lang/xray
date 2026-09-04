@@ -296,21 +296,18 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http2", "__send", "(handle: i64, data: Array<u8>, offset: i64): i64", "Perform one TLS write from offset and answer its accepted byte count", "h2_send", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes once; empty on EOF and null on transport failure", "h2_recv", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", "h2_close", "normal", "", "", "v", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool", "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration", "cluster_start_primitive", "normal", "", "xrt_cluster_start", "svsvsssvvvvvvvv", "value", "", "cluster.__start", "", "runtime", "method", XR_CAP_CHANNEL, 15, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"cluster", "__healthTick", "(): bool", "Project one source-scheduled health tick onto the locked peer registry", "cluster_health_tick_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool", "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration", "cluster_start_primitive", "normal", "", "xrt_cluster_start", "svsvsssvvv", "value", "", "cluster.__start", "", "runtime", "method", XR_CAP_CHANNEL, 10, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"cluster", "__healthTick", "(heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64): bool", "Project one source-scheduled health tick onto the locked peer registry", "cluster_health_tick_fn", "normal", "", "", "vvvv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 4, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__trackListener", "(listener: NetListener): bool", "Borrow the source-owned listener so native stop can wake its pending accept", "cluster_track_listener_fn", "normal", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_NETPOLL, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__handshakeConfig", "(): __ClusterHandshakeConfig?", "Snapshot runtime-owned authentication and TLS readiness for source-owned handshakes", "cluster_handshake_config_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__recentlyDeparted", "(name: string): bool", "Project whether a node name is present in the locked recent-departure registry", "cluster_recently_departed_fn", "normal", "", "", "s", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", "cluster_join_tls_fn", "yieldable", "", "", "vsv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", "cluster_accept_tls_fn", "yieldable", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64): bool", "Transfer an authenticated socket into the locked cluster node registry and start its transport providers", "cluster_adopt_peer_fn", "normal", "", "", "vssvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_CHANNEL, 5, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__nodes", "(): Array<string>?", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64): bool", "Transfer an authenticated socket into the locked cluster node registry and start its transport providers", "cluster_adopt_peer_fn", "normal", "", "", "vssvvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_CHANNEL, 6, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__registerNodeMonitor", "(name: string, notifications: Channel<string>): bool", "Register one source-constructed notification channel for a normalized node target", "cluster_register_node_monitor_fn", "normal", "", "", "sv", "value", "", "", "", "runtime", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__registerCoroutineMonitor", "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool", "Register one source-constructed channel and enqueue its normalized remote monitor request", "cluster_register_coro_monitor_fn", "normal", "", "", "ssv", "value", "", "", "", "runtime", "", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__discoveryOpen", "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?", "Open one IPv4 multicast UDP handle for the source-owned discovery loop", "xr_cluster_discovery_socket_open", "normal", "", "", "svvv", "value", "", "", "", "runtime", "", 0, 4, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "xrt_cluster_stop", "", "value", "", "cluster.__stop", "", "runtime", "method", XR_CAP_CHANNEL, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"cluster", "__info", "(): __ClusterSnapshot?", "Read one private scalar cluster runtime snapshot", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read mutable peer-registry and delivery-counter state", "cluster_runtime_snapshot_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__publishLocal", "(topic: string, envelope: Buffer): i64", "Offer one validated opaque service envelope to the synchronized local subscription registry", "cluster_publish_local_primitive", "normal", "", "xrt_cluster_publish_local", "sv", "i64", "", "cluster.__publishLocal", "", "runtime", "method", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"cluster", "__publishRemote", "(topic: string, envelope: move Buffer, hopLimit: i64): i64", "Broadcast one validated opaque service envelope to connected native transports", "cluster_publish_remote_primitive", "normal", "", "xrt_cluster_publish_remote", "svv", "i64", "", "cluster.__publishRemote", "", "runtime", "method", XR_CAP_CHANNEL, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"cluster", "__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "xrt_cluster_listen", "sv", "value", "", "cluster.__listen", "", "runtime", "method", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -320,12 +317,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterTlsSnapshot[] = {
-    {"cluster", "__ClusterTlsSnapshot", "enabled", "bool", true},
-    {"cluster", "__ClusterTlsSnapshot", "clientReady", "bool", true},
-    {"cluster", "__ClusterTlsSnapshot", "serverReady", "bool", true},
-};
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterNodeSnapshot[] = {
     {"cluster", "__ClusterNodeSnapshot", "name", "string", true},
@@ -346,23 +337,10 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
     {"cluster", "__ClusterNodeSnapshot", "missedHeartbeats", "i64", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterSnapshot[] = {
-    {"cluster", "__ClusterSnapshot", "self", "string", true},
-    {"cluster", "__ClusterSnapshot", "port", "i64", true},
-    {"cluster", "__ClusterSnapshot", "running", "bool", true},
-    {"cluster", "__ClusterSnapshot", "nodes", "Array<__ClusterNodeSnapshot>", true},
-    {"cluster", "__ClusterSnapshot", "listeners", "i64", true},
-    {"cluster", "__ClusterSnapshot", "deadNodes", "i64", true},
-    {"cluster", "__ClusterSnapshot", "heartbeatIntervalMs", "i64", true},
-    {"cluster", "__ClusterSnapshot", "heartbeatTimeoutMs", "i64", true},
-    {"cluster", "__ClusterSnapshot", "maxMissedHeartbeats", "i64", true},
-    {"cluster", "__ClusterSnapshot", "tls", "__ClusterTlsSnapshot", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterHandshakeConfig[] = {
-    {"cluster", "__ClusterHandshakeConfig", "secret", "string", true},
-    {"cluster", "__ClusterHandshakeConfig", "tlsEnabled", "bool", true},
-    {"cluster", "__ClusterHandshakeConfig", "tlsServerReady", "bool", true},
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot[] = {
+    {"cluster", "__ClusterRuntimeSnapshot", "nodes", "Array<__ClusterNodeSnapshot>", true},
+    {"cluster", "__ClusterRuntimeSnapshot", "listeners", "i64", true},
+    {"cluster", "__ClusterRuntimeSnapshot", "deadNodes", "i64", true},
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
@@ -387,10 +365,8 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlo
 };
 
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"cluster", "__ClusterTlsSnapshot", "Private scalar TLS state read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterTlsSnapshot, 3, true},
     {"cluster", "__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
-    {"cluster", "__ClusterSnapshot", "Private scalar snapshot read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterSnapshot, 10, true},
-    {"cluster", "__ClusterHandshakeConfig", "Private immutable configuration needed by source-owned cluster handshakes", xr_stdlib_object_fields_cluster___ClusterHandshakeConfig, 3, true},
+    {"cluster", "__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot, 3, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},

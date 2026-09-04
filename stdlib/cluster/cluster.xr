@@ -129,6 +129,18 @@ const _CLUSTER_PROTOCOL_FLAGS = 0x01
 const _HANDSHAKE_FRAME_BODY_MAX = 513
 const _ACCEPT_POLL_MS = 500
 
+type _ClusterSourceState = {
+    selfName: string,
+    port: i64,
+    secret: string,
+    heartbeatIntervalMs: i64,
+    heartbeatTimeoutMs: i64,
+    maxMissedHeartbeats: i64,
+    tlsEnabled: bool,
+    tlsClientReady: bool,
+    tlsServerReady: bool,
+}
+
 // Source-owned loops use generation tokens so a retiring coroutine cannot
 // affect a later start on the same isolate. Discovery has a separate token
 // because callers may enable or restart it independently of cluster startup.
@@ -137,6 +149,42 @@ const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
 const _runtimeNextToken: Atomic<i64> = Atomic<i64>(0)
 const _runtimeActiveToken: Atomic<i64> = Atomic<i64>(0)
+// The protected section only copies or swaps one small record and never
+// suspends, so a lock-free flag preserves the synchronous public query surface
+// without exposing ordinary mutable module state across worker coroutines.
+const _sourceStateLock: Atomic<bool> = Atomic<bool>(false)
+var _sourceState: _ClusterSourceState? = null
+
+fn _lockSourceState() {
+    while (true) {
+        var (_, acquired) = _sourceStateLock.compareExchange(false, true)
+        if (acquired) { return }
+    }
+}
+
+fn _sourceStateSnapshot() -> _ClusterSourceState? {
+    _lockSourceState()
+    var state = copy(_sourceState)
+    _sourceStateLock.store(false)
+    return state
+}
+
+fn _installSourceState(state: _ClusterSourceState) -> bool {
+    _lockSourceState()
+    if (_sourceState != null) {
+        _sourceStateLock.store(false)
+        return false
+    }
+    _sourceState = state
+    _sourceStateLock.store(false)
+    return true
+}
+
+fn _clearSourceState() {
+    _lockSourceState()
+    _sourceState = null
+    _sourceStateLock.store(false)
+}
 
 // ========== Wire protocol ===========
 
@@ -692,6 +740,9 @@ fn _dialJoinPeer(host: string, port: i64, timeoutMs: i64) -> NetConn? {
 }
 
 fn _joinPeer(host: string, port: i64) -> bool {
+    var source = _sourceStateSnapshot()
+    if (source == null) { return false }
+    var config = source!
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     var pending = _dialJoinPeer(host, port, HANDSHAKE_TIMEOUT_MS)
     if (pending == null) { return false }
@@ -702,12 +753,7 @@ fn _joinPeer(host: string, port: i64) -> bool {
         return false
     }
 
-    var config = __handshakeConfig()
-    if (config == null) {
-        net.close(live)
-        return false
-    }
-    if (config!.tlsEnabled && __joinTls(live, host, deadline) != 0) {
+    if (config.tlsEnabled && __joinTls(live, host, deadline) != 0) {
         // The TLS provider consumes the failed socket, matching net.upgradeTLS.
         return false
     }
@@ -736,13 +782,13 @@ fn _joinPeer(host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    var expected = computeHandshakeProof(config!.secret, nonce!)
+    var expected = computeHandshakeProof(config.secret, nonce!)
     if (expected == null || !handshakeProofEqual(expected!, ack!.proof)) {
         net.close(live)
         return false
     }
 
-    var doneProof = computeHandshakeProof(config!.secret, ack!.nonce)
+    var doneProof = computeHandshakeProof(config.secret, ack!.nonce)
     if (doneProof == null) {
         net.close(live)
         return false
@@ -756,22 +802,23 @@ fn _joinPeer(host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    return __adoptPeer(move live, ack!.name, host, port, ack!.flags)
+    return __adoptPeer(move live, ack!.name, host, port, ack!.flags,
+                       config.heartbeatIntervalMs)
 }
 
-fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
+fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: string,
+                      tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     if (_runtimeActiveToken.load() != token || !net.setDeadline(conn, deadline)) {
         net.close(conn)
         return
     }
 
-    var config = __handshakeConfig()
-    if (config == null || (config!.tlsEnabled && !config!.tlsServerReady)) {
+    if (tlsEnabled && !tlsServerReady) {
         net.close(conn)
         return
     }
-    if (config!.tlsEnabled && __acceptTls(conn, deadline) != 0) {
+    if (tlsEnabled && __acceptTls(conn, deadline) != 0) {
         // The TLS provider closes the failed handle.
         return
     }
@@ -796,13 +843,13 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
         net.close(conn)
         return
     }
-    var proof = computeHandshakeProof(config!.secret, request!.nonce)
+    var proof = computeHandshakeProof(secret, request!.nonce)
     if (proof == null) {
         net.close(conn)
         return
     }
     var ackValue: ClusterHandshakeAck = {
-        name: self(), nonce: nonce!, proof: proof!, flags: _CLUSTER_PROTOCOL_FLAGS,
+        name: selfName, nonce: nonce!, proof: proof!, flags: _CLUSTER_PROTOCOL_FLAGS,
     }
     var ack = encodeHandshakeAck(ackValue)
     if (ack == null || net.writeBytes(conn, ack!) != len(ack!)) {
@@ -816,7 +863,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
         return
     }
     var done = decodeHandshakeDone(doneFrame!.payload)
-    var expected = computeHandshakeProof(config!.secret, nonce!)
+    var expected = computeHandshakeProof(secret, nonce!)
     if (done == null || expected == null || !handshakeProofEqual(done!, expected!)) {
         net.close(conn)
         return
@@ -825,13 +872,14 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
         net.close(conn)
         return
     }
-    __adoptPeer(move conn, request!.name, "", 0, request!.flags)
+    __adoptPeer(move conn, request!.name, "", 0, request!.flags, heartbeatIntervalMs)
 }
 
 // Keep the affine connection inside a single-iteration frame. A loop-carried
 // local would have one source identity on both sides of its back edge, which
 // cannot be consumed by one iteration and then reused by the next.
-fn _acceptOne(listener: NetListener, token: i64) -> bool {
+fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: string,
+              tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) -> bool {
     if (!net.setAcceptDeadline(listener, time.monotonic() + _ACCEPT_POLL_MS)) {
         if (_runtimeActiveToken.load() != token) { return false }
         time.sleep(10)
@@ -849,32 +897,35 @@ fn _acceptOne(listener: NetListener, token: i64) -> bool {
         net.close(live)
         return false
     }
-    go _serveAcceptedPeer(move live, token)
+    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady,
+                          heartbeatIntervalMs)
     return true
 }
 
-fn _acceptLoop(listener: NetListener, token: i64) {
+fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: string,
+               tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
     var live = listener
     defer { net.close(live) }
-    while (_runtimeActiveToken.load() == token && _acceptOne(live, token)) {}
+    while (_runtimeActiveToken.load() == token &&
+           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady,
+                      heartbeatIntervalMs)) {}
 }
 
-fn _healthLoop(token: i64, tickMs: i64) {
+fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
+               maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64) {
     while (_runtimeActiveToken.load() == token) {
         time.sleep(tickMs)
         if (_runtimeActiveToken.load() != token) { return }
-        if (!__healthTick()) {
+        if (!__healthTick(heartbeatTimeoutMs, maxMissedHeartbeats,
+                          phiMinSamples, phiThreshold)) {
             var (_, released) = _runtimeActiveToken.compareExchange(token, 0)
+            _clearSourceState()
             return
         }
     }
 }
 
-fn _scheduleHealthLoop(token: i64, tickMs: i64) {
-    go _healthLoop(token, tickMs)
-}
-
-fn _activateClusterSource(started: bool, secret: string, tickMs: i64,
+fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64,
                           pending: move NetListener?) -> bool {
     if (pending == null) { return false }
     const listener: NetListener = pending!
@@ -883,17 +934,23 @@ fn _activateClusterSource(started: bool, secret: string, tickMs: i64,
         net.close(listener)
         return false
     }
-    _discoveryHashBits.store(discoveryClusterHash(secret) as i64)
+    if (!_installSourceState(state)) {
+        net.close(listener)
+        __stop()
+        return false
+    }
+    _discoveryHashBits.store(discoveryClusterHash(state.secret) as i64)
     var token = _runtimeNextToken.fetchAdd(1) + 1
     var (_, acquired) = _runtimeActiveToken.compareExchange(0, token)
     if (!acquired) {
         net.close(listener)
         __stop()
+        _clearSourceState()
         return false
     }
-    _scheduleHealthLoop(token, tickMs)
-    var config = __handshakeConfig()
-    if (config == null || (config!.tlsEnabled && !config!.tlsServerReady)) {
+    go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats,
+                   PHI_MIN_SAMPLES, PHI_THRESHOLD)
+    if (state.tlsEnabled && !state.tlsServerReady) {
         net.close(listener)
         return true
     }
@@ -901,12 +958,14 @@ fn _activateClusterSource(started: bool, secret: string, tickMs: i64,
         _runtimeActiveToken.store(0)
         net.close(listener)
         __stop()
+        _clearSourceState()
         return false
     }
     // Tracking intentionally establishes a borrowed provider alias used only
     // to wake stop.  Transfer a retained listener reference to the accept
     // coroutine; that coroutine remains the sole closer.
-    go _acceptLoop(listener, token)
+    go _acceptLoop(listener, token, state.selfName, state.secret, state.tlsEnabled,
+                   state.tlsServerReady, state.heartbeatIntervalMs)
     return true
 }
 
@@ -1228,15 +1287,23 @@ export fn topicMatches(pattern: string, topic: string) -> bool {
 
 // ========== Node identity and membership ==========
 
-// Node identity, membership, discovery, status and delivery are published over
-// private runtime leaves. The leaves carry no cluster policy of their own: what
-// counts as a legal name, a legal topic, a legal address or a legal capacity is
-// decided above them, in this file.
-export fn self() -> string { return __self() }
+// Identity and immutable configuration remain in the module that validated
+// them. The native runtime only snapshots mutable peer registries and counters.
+export fn self() -> string {
+    var state = _sourceStateSnapshot()
+    return state == null ? "" : state!.selfName
+}
 
 // A node that has not joined a cluster has no membership to report, which is a
 // different answer from an empty cluster and is reported as one.
-export fn nodes() -> Array<string>? { return __nodes() }
+export fn nodes() -> Array<string>? {
+    if (_sourceStateSnapshot() == null) { return null }
+    var raw = __runtimeSnapshot()
+    if (raw == null) { return null }
+    var names: Array<string> = []
+    for (var i = 0; i < len(raw!.nodes); i++) { names.push(raw!.nodes[i].name) }
+    return names
+}
 
 export fn discover() -> bool {
     var snapshot = info()
@@ -1285,8 +1352,11 @@ fn _nodeStateFromCode(code: i64) -> ClusterNodeState {
 }
 
 export fn info() -> ClusterInfo? {
-    var raw = __info()
+    var maybeState = _sourceStateSnapshot()
+    if (maybeState == null) { return null }
+    var raw = __runtimeSnapshot()
     if (raw == null) { return null }
+    var state = maybeState!
     var snapshot = raw!
     var nodes: Array<ClusterNodeInfo> = []
     for (var i = 0; i < len(snapshot.nodes); i++) {
@@ -1312,20 +1382,20 @@ export fn info() -> ClusterInfo? {
         nodes.push(publicNode)
     }
     var tls: ClusterTlsStatus = {
-        enabled: snapshot.tls.enabled,
-        clientReady: snapshot.tls.clientReady,
-        serverReady: snapshot.tls.serverReady,
+        enabled: state.tlsEnabled,
+        clientReady: state.tlsClientReady,
+        serverReady: state.tlsServerReady,
     }
     var result: ClusterInfo = {
-        self: snapshot.self,
-        port: snapshot.port,
-        running: snapshot.running,
+        self: state.selfName,
+        port: state.port,
+        running: true,
         nodes: nodes,
         listeners: snapshot.listeners,
         deadNodes: snapshot.deadNodes,
-        heartbeatIntervalMs: snapshot.heartbeatIntervalMs,
-        heartbeatTimeoutMs: snapshot.heartbeatTimeoutMs,
-        maxMissedHeartbeats: snapshot.maxMissedHeartbeats,
+        heartbeatIntervalMs: state.heartbeatIntervalMs,
+        heartbeatTimeoutMs: state.heartbeatTimeoutMs,
+        maxMissedHeartbeats: state.maxMissedHeartbeats,
         tls: tls,
     }
     return result
@@ -1370,6 +1440,7 @@ fn _clusterListener(port: i64) -> NetListener? {
 // schedule is passed down because the locked health projection needs the same
 // thresholds, while its cadence remains entirely source-owned.
 export fn start(config: ClusterConfig) -> bool {
+    if (_sourceStateSnapshot() != null) { return false }
     if (!validNodeName(config.name)) { return false }
     if (config.port < 0 || config.port > 65535) { return false }
     var interval = config.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS
@@ -1417,15 +1488,21 @@ export fn start(config: ClusterConfig) -> bool {
         certFile,
         keyFile,
         insecure,
-        interval,
-        timeout,
-        missed,
-        PHI_MIN_SAMPLES,
-        PHI_THRESHOLD,
         OUTPUT_QUEUE_HIGH_WATERMARK_BYTES * _START_LIMITS_RADIX + TOPIC_DELIVERY_FANOUT_MAX,
         TOMBSTONE_RETENTION_MS
     )
-    return _activateClusterSource(started, secret, tick, move listener)
+    var state: _ClusterSourceState = {
+        selfName: config.name,
+        port: port,
+        secret: secret,
+        heartbeatIntervalMs: interval,
+        heartbeatTimeoutMs: timeout,
+        maxMissedHeartbeats: missed,
+        tlsEnabled: tlsEnabled,
+        tlsClientReady: tlsEnabled,
+        tlsServerReady: tlsEnabled && len(certFile) > 0,
+    }
+    return _activateClusterSource(started, state, tick, move listener)
 }
 
 // The address is parsed here and the leaf is handed a host and a port, so the
@@ -1441,6 +1518,7 @@ export fn join(addr: string) -> bool {
 export fn stop() {
     _discoveryActiveToken.store(0)
     _runtimeActiveToken.store(0)
+    _clearSourceState()
     __stop()
 }
 

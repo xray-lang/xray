@@ -25,10 +25,7 @@ XR_FUNC XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue po
                                   const char *secret, int64_t secret_len, XrValue tls_enabled,
                                   const char *ca_file, int64_t ca_file_len, const char *cert_file,
                                   int64_t cert_file_len, const char *key_file, int64_t key_file_len,
-                                  XrValue insecure, XrValue heartbeat_interval_ms,
-                                  XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats,
-                                  XrValue phi_min_samples, XrValue phi_threshold,
-                                  XrValue queue_and_topic_limits,
+                                  XrValue insecure, XrValue queue_and_topic_limits,
                                   XrValue tombstone_retention_ms);
 XR_FUNC XrValue xrt_cluster_join(const char *host, int64_t host_len, XrValue port);
 XR_FUNC XrValue xrt_cluster_stop(void);

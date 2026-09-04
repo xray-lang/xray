@@ -48,22 +48,8 @@ schema = 1
 # cluster -- the distributed-node runtime
 # ============================================================================
 #
-# Five of these ten leaves have no `aot:` binding at all. That is not a
-# fallback: the code generator fails the compilation with "unsupported AOT
-# stdlib call" when a reachable call site needs one, so a program that touches
-# cluster.self(), nodes(), discover(), info() or monitor() cannot be compiled
-# ahead of time. Their deletion triggers say so, because "add the missing
-# binding" is a decidable condition and a real prerequisite for this module.
-
-[[leaf]]
-module = "cluster"
-symbol = "__ClusterTlsSnapshot"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills it from the cluster TLS runtime state before cluster.xr constructs the public ClusterTlsStatus value; there is no AOT binding"
-deletion_trigger = "when cluster runtime state is exposed through scalar accessor leaves, so cluster.xr can assemble the TLS snapshot without a native record class"
+# Leaves without an `aot:` binding are hard refusals, not fallbacks: the code
+# generator reports an unsupported stdlib call when one is reachable.
 
 [[leaf]]
 module = "cluster"
@@ -77,23 +63,13 @@ deletion_trigger = "when the cluster node table and counters are exposed through
 
 [[leaf]]
 module = "cluster"
-symbol = "__ClusterSnapshot"
+symbol = "__ClusterRuntimeSnapshot"
 class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills it from runtime-owned cluster state before cluster.xr constructs the public ClusterInfo value; there is no AOT binding"
-deletion_trigger = "when cluster runtime state is exposed through scalar accessor leaves, so cluster.xr can assemble the diagnostic snapshot without a native record class"
-
-[[leaf]]
-module = "cluster"
-symbol = "__ClusterHandshakeConfig"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills the immutable record from runtime authentication and TLS readiness before cluster.xr performs either handshake direction"
-deletion_trigger = "when cluster runtime configuration is stored directly in module-level Xray state instead of the native cluster object"
+provider = "declaration only (stdlib/defs/core.def). The VM fills mutable peer metrics and registry counters; cluster.xr combines them with its source-owned immutable configuration"
+deletion_trigger = "when the locked peer table can be iterated as ordinary Xray-owned state"
 
 [[leaf]]
 module = "cluster"
@@ -107,23 +83,13 @@ deletion_trigger = "when the portable socket layer can construct a multicast Net
 
 [[leaf]]
 module = "cluster"
-symbol = "__info"
+symbol = "__runtimeSnapshot"
 class = "runtime_leaf"
 abi = "none; reads cluster runtime state under its own mutexes and atomics"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_info_fn): the node table under nodes_lock, the synchronized tombstone registry, relaxed atomic counters, and whether the TLS contexts are non-NULL. It does not call OpenSSL. There is no AOT binding"
-deletion_trigger = "when the cluster runtime's node tables and counters are reachable from cluster.xr through smaller accessor leaves; this leaf currently returns only private __Cluster*Snapshot records and cluster.xr alone maps them into the public ClusterInfo graph"
-
-[[leaf]]
-module = "cluster"
-symbol = "__handshakeConfig"
-class = "runtime_leaf"
-abi = "none; reads three immutable fields from the running cluster object"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the VM cluster runtime configuration (stdlib/cluster/cluster.c cluster_handshake_config_fn). It only snapshots the secret, TLS switch and server-context readiness; cluster.xr owns both handshake directions"
-deletion_trigger = "when the secret and TLS switch passed to cluster.start can live in module-level Xray state"
+provider = "the native node table under nodes_lock, synchronized topic and tombstone registries, and atomic peer counters. cluster.xr owns identity, running state, health configuration and TLS posture, and constructs the public ClusterInfo graph"
+deletion_trigger = "when the peer table, metrics and synchronized registries are Xray-owned values"
 
 [[leaf]]
 module = "cluster"
@@ -162,7 +128,7 @@ class = "runtime_leaf"
 abi = "none; transfers an opaque NetConn body into the synchronized cluster node registry and scheduler-owned reader and writer coroutines"
 ownership = "none"
 effect = "nothrow"
-provider = "the native NetConn representation, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it"
+provider = "the native NetConn representation, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it, together with the source-owned heartbeat interval needed to initialize the peer detector"
 deletion_trigger = "when the live cluster node registry, output queue and transport coroutine lifecycle are expressible as Xray-owned module state"
 
 [[leaf]]
@@ -197,26 +163,6 @@ deletion_trigger = "when cluster.xr can retain the channel in a synchronized map
 
 [[leaf]]
 module = "cluster"
-symbol = "__nodes"
-class = "runtime_leaf"
-abi = "none; reads the node table under nodes_lock and interns the names"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_nodes), allocating the result array on the coroutine heap. There is no AOT binding"
-deletion_trigger = "when the cluster runtime's node table is reachable from cluster.xr through a smaller accessor leaf, so building the name array stops being a C-side operation"
-
-[[leaf]]
-module = "cluster"
-symbol = "__self"
-class = "runtime_leaf"
-abi = "none; reads the node's own configured name"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_self), returning an interned string. There is no AOT binding"
-deletion_trigger = "when cluster.xr holds the node name it passed to cluster.__start rather than reading it back out of the C runtime -- which needs module-level state that survives across calls, the same capability blockers/a-stdlib-module-const-from-native-leaf.md is about"
-
-[[leaf]]
-module = "cluster"
 symbol = "__publishLocal"
 class = "runtime_leaf"
 abi = "none; copies one validated buffer into matching local subscription channels"
@@ -242,7 +188,7 @@ class = "runtime_leaf"
 abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows; standalone AOT additionally installs its opaque blocking cluster service"
 ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns the listener, heartbeat and accept coroutines, validation, cadence, output-queue high watermark and topic fanout limit. The AOT ABI leaf still installs the separate blocking service and declines TLS"
+provider = "the VM cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit. The AOT ABI leaf still installs the separate blocking service and declines TLS"
 deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values and standalone AOT no longer installs a separate cluster service"
 
 [[leaf]]
@@ -252,7 +198,7 @@ class = "runtime_leaf"
 abi = "none; iterates the locked peer registry and enqueues heartbeat frames"
 ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster peer registry, output queues, phi detector and tombstone/monitor registries. cluster.xr owns the loop generation, cadence and stop decision; this leaf projects exactly one tick"
+provider = "the VM cluster peer registry, output queues, phi detector and tombstone/monitor registries. cluster.xr passes every health threshold, owns the loop generation, cadence and stop decision, and this leaf projects exactly one tick"
 deletion_trigger = "when peer transport state, health observations and synchronized tombstone/monitor registries are Xray-owned values"
 
 [[leaf]]
@@ -269,11 +215,11 @@ deletion_trigger = "when source module state can retain and synchronously close 
 module = "cluster"
 symbol = "__stop"
 class = "runtime_leaf"
-abi = "close(2) on peer transports, OpenSSL SSL_CTX_free(3), and a secure wipe of the shared secret (memset_s / explicit_bzero / a volatile loop); standalone AOT also closes its blocking listener"
+abi = "close(2) on peer transports and OpenSSL SSL_CTX_free(3); standalone AOT also closes its blocking listener"
 ownership = "none"
 effect = "nothrow"
-provider = "the cluster runtime's synchronized peer teardown and TLS/secret cleanup on the VM, and AOT service-slot removal followed by blocking service and peer teardown. Source already stops and owns its listener and long-lived coroutines"
-deletion_trigger = "when peer registries and TLS contexts are Xray-owned; secure secret erasure may remain a smaller leaf because ordinary stores can be elided"
+provider = "the cluster runtime's synchronized peer teardown and TLS cleanup on the VM, and AOT service-slot removal followed by blocking service and peer teardown. Source already clears its configuration and stops and owns its listener and long-lived coroutines"
+deletion_trigger = "when peer registries and TLS contexts are Xray-owned values"
 
 # ============================================================================
 # crypto

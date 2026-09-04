@@ -31,8 +31,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__trackListener", cluster_track_listener_fn);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__handshakeConfig", cluster_handshake_config_fn);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__recentlyDeparted", cluster_recently_departed_fn);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__joinTls", cluster_join_tls_fn);
@@ -40,10 +38,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     XRS_EXPORT_YIELDABLE(module, isolate, "__acceptTls", cluster_accept_tls_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__adoptPeer", cluster_adopt_peer_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__self", cluster_self);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__nodes", cluster_nodes);
     expected_count++;
     XRS_EXPORT(module, isolate, "__registerNodeMonitor", cluster_register_node_monitor_fn);
     expected_count++;
@@ -53,7 +47,7 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__info", cluster_info_fn);
+    XRS_EXPORT(module, isolate, "__runtimeSnapshot", cluster_runtime_snapshot_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__publishLocal", cluster_publish_local_primitive);
     expected_count++;

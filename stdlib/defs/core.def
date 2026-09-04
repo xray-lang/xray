@@ -2022,36 +2022,24 @@ module http2 {
 }
 
 module cluster {
-  object __ClusterTlsSnapshot {
-    fields: "const enabled: bool, const clientReady: bool, const serverReady: bool"
-    exact: true
-    doc: "Private scalar TLS state read from the cluster runtime"
-  }
-
   object __ClusterNodeSnapshot {
     fields: "const name: string, const host: string, const port: i64, const state: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const phi: f64, const missedHeartbeats: i64"
     exact: true
     doc: "Private scalar snapshot for one remote cluster node"
   }
 
-  object __ClusterSnapshot {
-    fields: "const self: string, const port: i64, const running: bool, const nodes: Array<__ClusterNodeSnapshot>, const listeners: i64, const deadNodes: i64, const heartbeatIntervalMs: i64, const heartbeatTimeoutMs: i64, const maxMissedHeartbeats: i64, const tls: __ClusterTlsSnapshot"
+  object __ClusterRuntimeSnapshot {
+    fields: "const nodes: Array<__ClusterNodeSnapshot>, const listeners: i64, const deadNodes: i64"
     exact: true
-    doc: "Private scalar snapshot read from the cluster runtime"
-  }
-
-  object __ClusterHandshakeConfig {
-    fields: "const secret: string, const tlsEnabled: bool, const tlsServerReady: bool"
-    exact: true
-    doc: "Private immutable configuration needed by source-owned cluster handshakes"
+    doc: "Private snapshot of mutable native peer registries and counters"
   }
 
   fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool"
+    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool"
     doc: "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration"
     vm: "cluster_start_primitive"
-    argc: 15
-    arg_spec: "svsvsssvvvvvvvv"
+    argc: 10
+    arg_spec: "svsvsssvvv"
     aot: "xrt_cluster_start"
     aot_direct: true
     link_object: true
@@ -2060,11 +2048,11 @@ module cluster {
   }
 
   fn __healthTick {
-    signature: "(): bool"
+    signature: "(heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64): bool"
     doc: "Project one source-scheduled health tick onto the locked peer registry"
     vm: "cluster_health_tick_fn"
-    argc: 0
-    arg_spec: ""
+    argc: 4
+    arg_spec: "vvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2081,18 +2069,6 @@ module cluster {
     link_object: false
     layer: "runtime"
     caps: "netpoll"
-  }
-
-  fn __handshakeConfig {
-    signature: "(): __ClusterHandshakeConfig?"
-    doc: "Snapshot runtime-owned authentication and TLS readiness for source-owned handshakes"
-    vm: "cluster_handshake_config_fn"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
   }
 
   fn __recentlyDeparted {
@@ -2133,39 +2109,15 @@ module cluster {
   }
 
   fn __adoptPeer {
-    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64): bool"
+    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64): bool"
     doc: "Transfer an authenticated socket into the locked cluster node registry and start its transport providers"
     vm: "cluster_adopt_peer_fn"
-    argc: 5
-    arg_spec: "vssvv"
+    argc: 6
+    arg_spec: "vssvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "coro,channel"
-  }
-
-  fn __self {
-    signature: "(): string"
-    doc: "Get own node name"
-    vm: "cluster_self"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-  }
-
-  fn __nodes {
-    signature: "(): Array<string>?"
-    doc: "List cluster node names"
-    vm: "cluster_nodes"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
   }
 
   fn __registerNodeMonitor {
@@ -2215,10 +2167,10 @@ module cluster {
     caps: "channel"
   }
 
-  fn __info {
-    signature: "(): __ClusterSnapshot?"
-    doc: "Read one private scalar cluster runtime snapshot"
-    vm: "cluster_info_fn"
+  fn __runtimeSnapshot {
+    signature: "(): __ClusterRuntimeSnapshot?"
+    doc: "Read mutable peer-registry and delivery-counter state"
+    vm: "cluster_runtime_snapshot_fn"
     argc: 0
     arg_spec: ""
     aot_direct: false

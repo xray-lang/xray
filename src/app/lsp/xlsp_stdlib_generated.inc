@@ -119,12 +119,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"ClusterNodeState", XLSP_SYM_CLASS, "type ClusterNodeState", "Enum type", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
-    {"__ClusterTlsSnapshot", XLSP_SYM_CLASS, "type __ClusterTlsSnapshot = { enabled: bool, clientReady: bool, serverReady: bool }", "Private scalar TLS state read from the cluster runtime", NULL, 0},
     {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, state: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Private scalar snapshot for one remote cluster node", NULL, 0},
-    {"__ClusterSnapshot", XLSP_SYM_CLASS, "type __ClusterSnapshot = { self: string, port: i64, running: bool, nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: __ClusterTlsSnapshot }", "Private scalar snapshot read from the cluster runtime", NULL, 0},
-    {"__ClusterHandshakeConfig", XLSP_SYM_CLASS, "type __ClusterHandshakeConfig = { secret: string, tlsEnabled: bool, tlsServerReady: bool }", "Private immutable configuration needed by source-owned cluster handshakes", NULL, 0},
+    {"__ClusterRuntimeSnapshot", XLSP_SYM_CLASS, "type __ClusterRuntimeSnapshot = { nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64 }", "Private snapshot of mutable native peer registries and counters", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 92
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 90
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

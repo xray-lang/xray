@@ -19,7 +19,9 @@
 
 #include <string.h>
 
-void cluster_health_tick(XrCluster *cluster) {
+void cluster_health_tick(XrCluster *cluster, int64_t heartbeat_timeout_ms,
+                         int64_t max_missed_heartbeats, int64_t phi_min_samples,
+                         double phi_threshold) {
     if (!cluster)
         return;
     enum {
@@ -39,11 +41,11 @@ void cluster_health_tick(XrCluster *cluster) {
             (void) cluster_node_send_ping(node);
 
         bool dead = false;
-        if (node->phi.sample_count >= cluster->phi_min_samples) {
-            dead = xr_phi_detector_value(&node->phi, now) > cluster->phi_threshold;
-        } else if (now - node->last_heartbeat_recv > cluster->heartbeat_timeout_ms) {
+        if (node->phi.sample_count >= phi_min_samples) {
+            dead = xr_phi_detector_value(&node->phi, now) > phi_threshold;
+        } else if (now - node->last_heartbeat_recv > heartbeat_timeout_ms) {
             node->missed_heartbeats++;
-            dead = (int64_t) node->missed_heartbeats >= cluster->max_missed_heartbeats;
+            dead = (int64_t) node->missed_heartbeats >= max_missed_heartbeats;
         }
         if (!dead)
             continue;

@@ -26,10 +26,8 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
                           const char *secret, int64_t secret_len, XrValue tls_enabled,
                           const char *ca_file, int64_t ca_file_len, const char *cert_file,
                           int64_t cert_file_len, const char *key_file, int64_t key_file_len,
-                          XrValue insecure, XrValue heartbeat_interval_ms,
-                          XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats,
-                          XrValue phi_min_samples, XrValue phi_threshold,
-                          XrValue queue_and_topic_limits, XrValue tombstone_retention_ms) {
+                          XrValue insecure, XrValue queue_and_topic_limits,
+                          XrValue tombstone_retention_ms) {
     (void) ca_file;
     (void) ca_file_len;
     (void) cert_file;
@@ -39,11 +37,8 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
     (void) insecure;
     XrAotRuntime *aot = xr_aot_runtime_current();
     if (!aot || name_len < 0 || secret_len < 0 || !XR_IS_INT(port_value) ||
-        !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled) || !XR_IS_INT(heartbeat_interval_ms) ||
-        !XR_IS_INT(heartbeat_timeout_ms) || !XR_IS_INT(max_missed_heartbeats) ||
-        !XR_IS_INT(phi_min_samples) || !XR_IS_FLOAT(phi_threshold) ||
-        !XR_IS_INT(queue_and_topic_limits) ||
-        !XR_IS_INT(tombstone_retention_ms))
+        !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled) ||
+        !XR_IS_INT(queue_and_topic_limits) || !XR_IS_INT(tombstone_retention_ms))
         return XR_FALSE_VAL;
     int64_t port = XR_TO_INT(port_value);
     int64_t packed_limits_value = XR_TO_INT(queue_and_topic_limits);

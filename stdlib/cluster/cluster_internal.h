@@ -152,9 +152,6 @@ bool cluster_node_is_slow(XrClusterNode *node);
 typedef struct XrCluster {
     _Atomic(uint32_t) ref_count;
     _Atomic(bool) stop_started;
-    char self_name[XR_NODE_NAME_MAX + 1];
-    uint16_t listen_port;
-    char secret[XR_CLUSTER_SECRET_MAX + 1];
     struct XrVMRuntime *isolate;
     struct XrNetListener *listener; /* borrowed while the source accept loop owns it */
 
@@ -166,14 +163,8 @@ typedef struct XrCluster {
     /* Synchronized channel index for the topic policy owned by cluster.xr. */
     XrTopicRegistry *topics;
 
-    // Heartbeat configuration
-    int64_t heartbeat_interval_ms;
-    int64_t heartbeat_timeout_ms;
-    int64_t max_missed_heartbeats;
-    int64_t phi_min_samples;
-    double phi_threshold;
+    /* Provider capacity selected by cluster.xr. */
     size_t output_queue_high_watermark;
-
     XrTombstoneRegistry *tombstones;
     XrMonitorRegistry *monitors;
 
@@ -265,7 +256,9 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
 
 /* ========== Health & Robustness ========== */
 
-void cluster_health_tick(XrCluster *cluster);
+void cluster_health_tick(XrCluster *cluster, int64_t heartbeat_timeout_ms,
+                         int64_t max_missed_heartbeats, int64_t phi_min_samples,
+                         double phi_threshold);
 
 /* ========== Topic Pub/Sub ========== */
 
