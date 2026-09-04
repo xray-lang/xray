@@ -118,11 +118,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"ClusterNodeState", XLSP_SYM_CLASS, "type ClusterNodeState", "Enum type", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
-    {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { peerGeneration: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, lastReceivedAtMs: i64 }", "Private metrics and raw transport-health facts for one connected peer", NULL, 0},
-    {"__ClusterRuntimeSnapshot", XLSP_SYM_CLASS, "type __ClusterRuntimeSnapshot = { nodes: Array<__ClusterNodeSnapshot> }", "Private snapshot of mutable native peer state", NULL, 0},
-    {"__ClusterHealthPeerSnapshot", XLSP_SYM_CLASS, "type __ClusterHealthPeerSnapshot = { peerGeneration: i64, lastReceivedAtMs: i64 }", "Private scalar snapshot of one connected peer's raw transport-health facts", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 90
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 87
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

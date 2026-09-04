@@ -80,24 +80,6 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "http2.__recv") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "cluster.__start") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__healthSnapshot") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__applyHealthDecision") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__adoptPeer") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__readPeer") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "cluster.__writePeer") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "cluster.__peerEnqueue") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__detachPeer") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__stop") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
     return 0;
 }
 

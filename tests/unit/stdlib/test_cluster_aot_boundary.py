@@ -24,12 +24,17 @@ RETIRED_STANDALONE_FILES = (
     "src/aot/xrt_cluster.h",
     "src/coro/xcluster_blocking_runtime.c",
     "src/coro/xcluster_blocking_runtime.h",
+    "src/coro/xcluster_output_queue.c",
+    "src/coro/xcluster_output_queue.h",
     "src/coro/xphi_detector.c",
     "src/coro/xphi_detector.h",
     "src/coro/xtopic_registry.c",
     "src/coro/xtopic_registry.h",
     "src/io/xcluster_blocking.c",
     "src/io/xcluster_blocking.h",
+    "src/io/xcluster_peer_transport.c",
+    "src/io/xcluster_peer_transport.h",
+    "stdlib/cluster/cluster_node.c",
 )
 
 
@@ -58,38 +63,43 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         ):
             self.assertNotIn("xrt_cluster_", (ROOT / relative).read_text(), relative)
 
-    def test_phi_state_and_heartbeat_admission_are_source_owned(self) -> None:
+    def test_peer_transport_and_health_are_source_owned(self) -> None:
         cluster_c = (ROOT / "stdlib/cluster/cluster.c").read_text()
         cluster_h = (ROOT / "stdlib/cluster/cluster_internal.h").read_text()
         cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
-        health_snapshot = cluster_c.split(
-            "static XrValue cluster_health_snapshot_fn", 1
-        )[1].split("static XrValue cluster_health_apply_fn", 1)[0]
-        health_apply = cluster_c.split(
-            "static XrValue cluster_health_apply_fn", 1
-        )[1].split("static XrValue cluster_adopt_peer_fn", 1)[0]
-        observe_heartbeat = cluster_c.split(
-            "static XrValue cluster_observe_heartbeat_fn", 1
-        )[1].split("static XrValue cluster_detach_peer_fn", 1)[0]
+        core_def = (ROOT / "stdlib/defs/core.def").read_text()
 
         self.assertNotIn("XrPhiDetector", cluster_h)
+        self.assertNotIn("XrClusterNode", cluster_h)
         self.assertNotIn("last_heartbeat_sent", cluster_h)
         self.assertNotIn("missed_heartbeats", cluster_h)
         self.assertNotIn("missed_heartbeats", cluster_c)
-        self.assertNotIn("xr_cluster_output_queue", health_snapshot)
-        self.assertNotIn("next_missed", health_apply)
-        self.assertNotIn("disconnect", health_apply)
-        self.assertNotIn("missed", observe_heartbeat)
-        self.assertIn("node->last_heartbeat_recv == expected_last_received", health_apply)
-        self.assertIn("node->last_heartbeat_recv = connected_at_ms", cluster_c)
+        self.assertNotIn("xcluster_output_queue", cluster_c)
+        self.assertNotIn("xcluster_peer_transport", cluster_c)
         self.assertIn("var _phiPeerStates: Array<_PhiPeerState>", cluster_xr)
-        self.assertIn("adoptedAtMs: i64", cluster_xr)
-        self.assertIn("missedHeartbeats: i64", cluster_xr)
+        self.assertIn("var _peerTransports: Array<_PeerTransportState>", cluster_xr)
+        self.assertIn("committed: bool", cluster_xr)
+        self.assertIn("endpoint!.ready.trySend(1)", cluster_xr)
+        self.assertIn("fn _readPeerFrame(runtimeToken: i64, peerGeneration: i64,", cluster_xr)
+        self.assertIn("peer.queuedBytes >= OUTPUT_QUEUE_HIGH_WATERMARK_BYTES", cluster_xr)
+        self.assertIn("Coro.yield()", cluster_xr)
+        self.assertIn("kind == FRAME_CORO_EXIT", cluster_xr)
         self.assertIn("fn _advanceMissedHeartbeat", cluster_xr)
-        self.assertIn("var peers = __healthSnapshot()", cluster_xr)
+        self.assertIn("var peers = _peerTransportHealthSnapshots(token)", cluster_xr)
         self.assertIn(
             "_enqueueControlFrame(peer.peerGeneration, heartbeat!)", cluster_xr
         )
+        for retired in (
+            "__adoptPeer",
+            "__readPeer",
+            "__writePeer",
+            "__peerEnqueue",
+            "__broadcast",
+            "__healthSnapshot",
+            "__applyHealthDecision",
+            "__runtimeSnapshot",
+        ):
+            self.assertNotIn(f"fn {retired} ", core_def, retired)
 
     def test_tls_context_policy_and_lifetime_are_source_owned(self) -> None:
         cluster_c = (ROOT / "stdlib/cluster/cluster.c").read_text()

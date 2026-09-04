@@ -53,143 +53,23 @@ schema = 1
 
 [[leaf]]
 module = "cluster"
-symbol = "__ClusterNodeSnapshot"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills metrics, peer generation and raw receive facts from one connected runtime-owned peer; cluster.xr joins them with its generation-keyed detector registry and constructs ClusterNodeInfo; there is no AOT binding"
-deletion_trigger = "when the cluster node table and counters are exposed through scalar accessor leaves, so cluster.xr can assemble each node snapshot without a native record class"
-
-[[leaf]]
-module = "cluster"
-symbol = "__ClusterRuntimeSnapshot"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills mutable peer metrics; cluster.xr combines them with source-owned immutable configuration, topic listener count and recent-departure state"
-deletion_trigger = "when the locked peer table can be iterated as ordinary Xray-owned state"
-
-[[leaf]]
-module = "cluster"
-symbol = "__ClusterHealthPeerSnapshot"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM copies one peer generation plus its raw last-receive timestamp under nodes_lock; cluster.xr joins it with source-owned adopted-at, missed-heartbeat and detector state and computes removal decisions; there is no AOT binding"
-deletion_trigger = "when the locked peer table and raw transport-health facts can be enumerated as ordinary Xray-owned state without a native record class"
-
-[[leaf]]
-module = "cluster"
-symbol = "__runtimeSnapshot"
-class = "runtime_leaf"
-abi = "none; reads cluster runtime state under its own mutexes and atomics"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the native node table under nodes_lock, atomic peer counters, and raw receive facts. cluster.xr owns identity, running state, topic listeners, monitor channels, recent departures, all detector storage and math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
-deletion_trigger = "when the peer table and metrics are Xray-owned values"
-
-[[leaf]]
-module = "cluster"
-symbol = "__adoptPeer"
-class = "runtime_leaf"
-abi = "none; transfers an opaque NetConn body into the generation-keyed resource registry and scheduler-owned reader and writer coroutines"
-ownership = "none"
-effect = "nothrow"
-provider = "the native NetConn representation, sole peer-resource factory, generation-keyed locked resource table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). cluster.xr supplies the reserved generation, connected timestamp and source-owned reader and writer dispatchers"
-deletion_trigger = "when the live cluster node registry, output queue and transport coroutine lifecycle are expressible as Xray-owned module state"
-
-[[leaf]]
-module = "cluster"
-symbol = "__peerEnqueue"
-class = "runtime_leaf"
-abi = "none; selects a live peer by generation and copies one complete frame into its synchronized output queue"
-ownership = "none"
-effect = "nothrow"
-provider = "the locked native peer registry and output queue, returning distinct accepted, full, stopped, resource and invalid admission facts. cluster.xr exclusively owns frame encoding and the resulting disconnect or drop decision"
-deletion_trigger = "when peer output queues are ordinary Xray-owned values"
-
-[[leaf]]
-module = "cluster"
-symbol = "__readPeer"
-class = "host_abi_leaf"
-abi = "recv(2), TLS read, scheduler netpoll wait and owned VM C-function callback; retains the runtime and generation-selected opaque peer across one source-bounded framed read"
-ownership = "none"
-effect = "nothrow"
-provider = "src/io/xcluster_peer_transport.c starts one runtime-owned C-function coroutine whose exactly-once context destructor releases the callback, peer/runtime lease and partial framing buffer on completion, synchronous park failure or cancellation. The callback receives wire bytes or distinct stopped, EOF, socket-I/O, provider-error, unsafe-length, capacity, resource, cancellation and invalid-caller-limit facts. cluster.xr alone chooses resubmission, decoding, dispatch and disconnect"
-deletion_trigger = "when the peer socket is an ordinary Xray-owned NetConn"
-
-[[leaf]]
-module = "cluster"
-symbol = "__writePeer"
-class = "host_abi_leaf"
-abi = "send(2), TLS write, scheduler netpoll wait and owned VM C-function callback; drains one batch from the generation-selected opaque peer queue"
-ownership = "none"
-effect = "nothrow"
-provider = "src/io/xcluster_peer_transport.c starts one runtime-owned C-function coroutine whose exactly-once context destructor releases the callback, peer/runtime lease and any detached batch on completion, synchronous park failure or cancellation. It reports distinct drained, full, stopped, resource, closed, socket-I/O, provider-error and cancellation facts; one locked take reports full or stopped without detaching queued frames. cluster.xr owns writer resubmission, fairness, slow-consumer handling and generation-safe disconnect policy"
-deletion_trigger = "when the peer socket and output queue are ordinary Xray-owned values"
-
-[[leaf]]
-module = "cluster"
-symbol = "__observeHeartbeat"
-class = "runtime_leaf"
-abi = "none; updates the selected peer's raw last-receive and RTT facts under the registry lock"
-ownership = "none"
-effect = "nothrow"
-provider = "the locked native peer registry only. cluster.xr owns decoding, observation timing, adopted-at and missed-heartbeat state, the generation-keyed PhiDetector registry and every detector update"
-deletion_trigger = "when the peer transport-health facts are ordinary synchronized Xray state"
-
-[[leaf]]
-module = "cluster"
-symbol = "__detachPeer"
-class = "runtime_leaf"
-abi = "none; atomically detaches one generation from the locked resource registry and shuts down its socket and queue"
-ownership = "none"
-effect = "nothrow"
-provider = "the native peer resource registry and opaque transport resources. The leaf reports only whether the generation was detached; cluster.xr owns identity and exclusively decides which terminal reader or writer event closes the peer and whether node-down notification follows"
-deletion_trigger = "when the peer registry and transport resources are ordinary Xray-owned values"
-
-[[leaf]]
-module = "cluster"
 symbol = "__start"
 class = "runtime_leaf"
-abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
+abi = "none; publishes one isolate-local provider lifecycle slot"
 ownership = "none"
 effect = "nothrow"
-provider = "the native cluster runtime's TLS contexts and synchronized peer state plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, topic routing, monitor and recent-departure registries, channels, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
-deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values"
-
-[[leaf]]
-module = "cluster"
-symbol = "__healthSnapshot"
-class = "runtime_leaf"
-abi = "none; iterates the locked peer registry and returns raw receive counters"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the VM cluster peer registry and raw last-receive counters. cluster.xr constructs and enqueues the heartbeat wire and owns queue-refusal handling, detector storage, observation history, math, cadence, thresholds, missed-heartbeat policy and removal decisions"
-deletion_trigger = "when peer transport-health facts are Xray-owned values"
-
-[[leaf]]
-module = "cluster"
-symbol = "__applyHealthDecision"
-class = "runtime_leaf"
-abi = "none; compare one locked peer generation and raw last-receive timestamp, then detach on an exact match"
-ownership = "none"
-effect = "nothrow"
-provider = "the VM peer resource registry. cluster.xr owns adopted-at, missed-heartbeat and identity state, supplies the exact generation and raw receive timestamp only after deciding removal, and completes tombstone and monitor effects when this leaf confirms the generation-safe detach"
-deletion_trigger = "when peer transport state is Xray-owned"
+provider = "the generic provider lifecycle slot only. cluster.xr owns identity, membership, listener, TLS resources, peer NetConn endpoints, framed I/O, byte-budget queue admission, per-frame fairness, metrics, health, topic and monitor state"
+deletion_trigger = "when source module state has an isolate-lifecycle finalizer independent of a native provider slot"
 
 [[leaf]]
 module = "cluster"
 symbol = "__stop"
 class = "runtime_leaf"
-abi = "close(2) on peer transports and OpenSSL SSL_CTX_free(3); standalone AOT also closes its blocking listener"
+abi = "none; atomically detaches the isolate-local provider lifecycle slot"
 ownership = "none"
 effect = "nothrow"
-provider = "the cluster runtime's synchronized peer teardown and TLS cleanup on the VM, and AOT service-slot removal followed by blocking service and peer teardown. Source already clears its configuration and stops and owns its listener and long-lived coroutines"
-deletion_trigger = "when peer registries and TLS contexts are Xray-owned values"
+provider = "the generic provider lifecycle slot only. cluster.xr atomically retires source state, closes source channels and listener, shuts down every source-owned peer NetConn and owns all teardown policy"
+deletion_trigger = "when source module state has an isolate-lifecycle finalizer independent of a native provider slot"
 
 # ============================================================================
 # crypto

@@ -152,25 +152,14 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NULL(xa_builtin_get_object_shape("ws", "WsConnectOptions"));
     ASSERT_NULL(xa_builtin_get_module_func_signature("ws", "connect"));
 
-    const XaBuiltinObjectShape *cluster_config =
-        xa_builtin_get_object_shape("cluster", "ClusterConfig");
-    const XaBuiltinObjectShape *cluster_info =
-        xa_builtin_get_object_shape("cluster", "ClusterInfo");
-    const XaBuiltinObjectShape *cluster_snapshot =
-        xa_builtin_get_object_shape("cluster", "__ClusterSnapshot");
-    ASSERT_NULL(cluster_config);
-    ASSERT_NULL(cluster_info);
-    ASSERT_NOT_NULL(cluster_snapshot);
-    ASSERT_TRUE(cluster_snapshot->is_exact);
-    ASSERT_EQ_INT(cluster_snapshot->field_count, 10);
-    ASSERT_TRUE(strcmp(cluster_snapshot->fields[4].name, "listeners") == 0);
-    ASSERT_TRUE(strcmp(cluster_snapshot->fields[5].name, "deadNodes") == 0);
-
-    XrClass *cluster_snapshot_class =
-        xr_stdlib_record_class_get(iso, "cluster", "__ClusterSnapshot");
-    ASSERT_NOT_NULL(cluster_snapshot_class);
-    ASSERT_TRUE(cluster_snapshot_class ==
-                xr_stdlib_record_class_get(iso, "cluster", "__ClusterSnapshot"));
+    /* Peer records, metrics, framing and queues are pure cluster.xr state.
+     * Native metadata therefore exposes neither public source records nor a
+     * private transport snapshot shape. */
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterConfig"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterInfo"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterNodeSnapshot"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterRuntimeSnapshot"));
+    ASSERT_NULL(xr_stdlib_record_class_get(iso, "cluster", "__ClusterNodeSnapshot"));
 
     const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
     ASSERT_NULL(cluster_state);
@@ -179,53 +168,25 @@ TEST(native_module_object_and_enum_metadata) {
     const char *cluster_start_signature = xa_builtin_get_module_func_signature("cluster", "start");
     const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
     const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
-    const XaBuiltinMember *cluster_info_primitive = find_module_member("cluster", "__info");
     ASSERT_NULL(cluster_start_signature);
     ASSERT_NOT_NULL(cluster_start_primitive);
     ASSERT_TRUE(cluster_start_primitive->is_internal);
     ASSERT_NULL(cluster_info_signature);
-    ASSERT_NOT_NULL(cluster_info_primitive);
-    ASSERT_TRUE(cluster_info_primitive->is_internal);
+    ASSERT_NULL(find_module_member("cluster", "__info"));
     ASSERT_NULL(find_module_member("cluster", "__registerNodeMonitor"));
     ASSERT_NULL(find_module_member("cluster", "__registerCoroutineMonitor"));
-    ASSERT_NULL(find_module_member("cluster", "__broadcast"));
     ASSERT_NULL(find_module_member("cluster", "__peerName"));
     ASSERT_NULL(find_module_member("cluster", "__peerGeneration"));
-    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterDeliveryStats"));
-    const XaBuiltinMember *cluster_adopt = find_module_member("cluster", "__adoptPeer");
-    const XaBuiltinMember *cluster_detach = find_module_member("cluster", "__detachPeer");
-    const XaBuiltinMember *cluster_health_apply =
-        find_module_member("cluster", "__applyHealthDecision");
-    ASSERT_NOT_NULL(cluster_adopt);
-    ASSERT_NOT_NULL(cluster_detach);
-    ASSERT_NOT_NULL(cluster_health_apply);
+    ASSERT_NULL(find_module_member("cluster", "__readPeer"));
+    ASSERT_NULL(find_module_member("cluster", "__writePeer"));
+    ASSERT_NULL(find_module_member("cluster", "__peerEnqueue"));
+    ASSERT_NULL(find_module_member("cluster", "__broadcast"));
     XrType *cluster_start_fn =
         xa_builtin_parse_full_signature(iso, cluster_start_primitive->signature);
-    XrType *cluster_info_fn =
-        xa_builtin_parse_full_signature(iso, cluster_info_primitive->signature);
-    XrType *cluster_adopt_fn = xa_builtin_parse_full_signature(iso, cluster_adopt->signature);
-    XrType *cluster_detach_fn = xa_builtin_parse_full_signature(iso, cluster_detach->signature);
-    XrType *cluster_health_apply_fn =
-        xa_builtin_parse_full_signature(iso, cluster_health_apply->signature);
     ASSERT_NOT_NULL(cluster_start_fn);
-    ASSERT_NOT_NULL(cluster_info_fn);
-    ASSERT_NOT_NULL(cluster_adopt_fn);
-    ASSERT_NOT_NULL(cluster_detach_fn);
-    ASSERT_NOT_NULL(cluster_health_apply_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 16);
-    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRING);
-    ASSERT_EQ_INT(cluster_start_fn->function.params[1].type->kind, XR_KIND_INT);
+    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 0);
     ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);
-    ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
-    ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
-    ASSERT_EQ_INT(cluster_adopt_fn->function.param_count, 5);
-    ASSERT_EQ_INT(cluster_adopt_fn->function.return_type->kind, XR_KIND_BOOL);
-    ASSERT_EQ_INT(cluster_detach_fn->function.param_count, 1);
-    ASSERT_EQ_INT(cluster_detach_fn->function.return_type->kind, XR_KIND_BOOL);
-    ASSERT_EQ_INT(cluster_health_apply_fn->function.param_count, 2);
-    ASSERT_EQ_INT(cluster_health_apply_fn->function.return_type->kind, XR_KIND_BOOL);
 
     /* Whole-input buffering and path metadata projections are io.xr policy.
      * The native registry retains only the descriptor read and stat leaves. */

@@ -2091,131 +2091,15 @@ module http2 {
 }
 
 module cluster {
-  object __ClusterNodeSnapshot {
-    fields: "const peerGeneration: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const lastReceivedAtMs: i64"
-    exact: true
-    doc: "Private metrics and raw transport-health facts for one connected peer"
-  }
-
-  object __ClusterRuntimeSnapshot {
-    fields: "const nodes: Array<__ClusterNodeSnapshot>"
-    exact: true
-    doc: "Private snapshot of mutable native peer state"
-  }
-
-  object __ClusterHealthPeerSnapshot {
-    fields: "const peerGeneration: i64, const lastReceivedAtMs: i64"
-    exact: true
-    doc: "Private scalar snapshot of one connected peer's raw transport-health facts"
-  }
-
   fn __start {
-    signature: "(outputQueueHighWatermark: i64): bool"
-    doc: "Open the native peer resource registry with source-selected queue capacity"
+    signature: "(): bool"
+    doc: "Publish the isolate lifecycle slot for the source-owned cluster runtime"
     vm: "cluster_start_primitive"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-  }
-
-  fn __healthSnapshot {
-    signature: "(): Array<__ClusterHealthPeerSnapshot>?"
-    doc: "Snapshot locked raw peer health facts without applying heartbeat queue policy"
-    vm: "cluster_health_snapshot_fn"
     argc: 0
     arg_spec: ""
     aot_direct: false
     link_object: false
     layer: "runtime"
-    caps: "channel"
-    return_ownership: "fresh"
-  }
-
-  fn __applyHealthDecision {
-    signature: "(peerGeneration: i64, expectedLastReceivedAtMs: i64): bool"
-    doc: "Compare one generation and raw receive timestamp, then detach the exact unhealthy peer resource"
-    vm: "cluster_health_apply_fn"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-  }
-
-  fn __adoptPeer {
-    signature: "(conn: move NetConn, peerGeneration: i64, connectedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool"
-    doc: "Transfer a source-identified socket into the locked resource registry and start generation-keyed source transport loops"
-    vm: "cluster_adopt_peer_fn"
-    argc: 5
-    arg_spec: "vvvvv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,channel"
-  }
-
-  fn __readPeer {
-    signature: "(peerGeneration: i64, maxFramePayload: i64, callback: fn(peerGeneration: i64, wire: Array<u8>?, reason: i64): ()): i64"
-    doc: "Start one owned peer read and deliver wire bytes or an orthogonal raw reason to the source callback"
-    vm: "cluster_peer_read_fn"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-  }
-
-  fn __writePeer {
-    signature: "(peerGeneration: i64, callback: fn(peerGeneration: i64, reason: i64): ()): i64"
-    doc: "Start one owned peer write and deliver an orthogonal raw queue, socket, provider or cancellation reason to the source callback"
-    vm: "cluster_peer_write_fn"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-  }
-
-  fn __peerEnqueue {
-    signature: "(peerGeneration: i64, wire: Array<u8>): i64"
-    doc: "Return the raw accepted, full, stopped, resource or invalid result of one peer queue admission"
-    vm: "cluster_peer_enqueue_fn"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-  }
-
-  fn __observeHeartbeat {
-    signature: "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool"
-    doc: "Generation-check one source-decoded heartbeat and update only raw last-receive and RTT facts"
-    vm: "cluster_observe_heartbeat_fn"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __detachPeer {
-    signature: "(peerGeneration: i64): bool"
-    doc: "Atomically detach one peer generation and close its opaque transport resources"
-    vm: "cluster_detach_peer_fn"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-    effect: "nothrow"
   }
 
   fn __stop {
@@ -2227,19 +2111,6 @@ module cluster {
     aot_direct: false
     link_object: false
     layer: "runtime"
-    caps: "channel"
-  }
-
-  fn __runtimeSnapshot {
-    signature: "(): __ClusterRuntimeSnapshot?"
-    doc: "Read connected peer metrics and raw transport-health facts"
-    vm: "cluster_runtime_snapshot_fn"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
   }
 
 }

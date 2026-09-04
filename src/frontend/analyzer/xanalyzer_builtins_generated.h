@@ -80,55 +80,12 @@ static const XaBuiltinEnum g_gen_Coro_enums[] = {
 };
 #define GEN_CORO_ENUM_COUNT 3
 
-// cluster.__ClusterNodeSnapshot object fields
-static const XaBuiltinObjectField g_gen_cluster___clusternodesnapshot_object_fields[] = {
-    {"peerGeneration", "i64"},
-    {"framesSent", "i64"},
-    {"framesReceived", "i64"},
-    {"bytesSent", "i64"},
-    {"bytesReceived", "i64"},
-    {"sendErrors", "i64"},
-    {"slowConsumerEvents", "i64"},
-    {"rttMs", "i64"},
-    {"outQueueBytes", "i64"},
-    {"outQueueFrames", "i64"},
-    {"slow", "bool"},
-    {"lastReceivedAtMs", "i64"},
-};
-
-// cluster.__ClusterRuntimeSnapshot object fields
-static const XaBuiltinObjectField g_gen_cluster___clusterruntimesnapshot_object_fields[] = {
-    {"nodes", "Array<__ClusterNodeSnapshot>"},
-};
-
-// cluster.__ClusterHealthPeerSnapshot object fields
-static const XaBuiltinObjectField g_gen_cluster___clusterhealthpeersnapshot_object_fields[] = {
-    {"peerGeneration", "i64"},
-    {"lastReceivedAtMs", "i64"},
-};
-
-static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
-    {"__ClusterNodeSnapshot", "Private metrics and raw transport-health facts for one connected peer", g_gen_cluster___clusternodesnapshot_object_fields, 12, true},
-    {"__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer state", g_gen_cluster___clusterruntimesnapshot_object_fields, 1, true},
-    {"__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's raw transport-health facts", g_gen_cluster___clusterhealthpeersnapshot_object_fields, 2, true},
-};
-#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 3
-
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"__start", "(outputQueueHighWatermark: i64): bool", "Open the native peer resource registry with source-selected queue capacity", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__healthSnapshot", "(): Array<__ClusterHealthPeerSnapshot>?", "Snapshot locked raw peer health facts without applying heartbeat queue policy", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64): bool", "Compare one generation and raw receive timestamp, then detach the exact unhealthy peer resource", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__adoptPeer", "(conn: move NetConn, peerGeneration: i64, connectedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer a source-identified socket into the locked resource registry and start generation-keyed source transport loops", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__readPeer", "(peerGeneration: i64, maxFramePayload: i64, callback: fn(peerGeneration: i64, wire: Array<u8>?, reason: i64): ()): i64", "Start one owned peer read and deliver wire bytes or an orthogonal raw reason to the source callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__writePeer", "(peerGeneration: i64, callback: fn(peerGeneration: i64, reason: i64): ()): i64", "Start one owned peer write and deliver an orthogonal raw queue, socket, provider or cancellation reason to the source callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__peerEnqueue", "(peerGeneration: i64, wire: Array<u8>): i64", "Return the raw accepted, full, stopped, resource or invalid result of one peer queue admission", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__observeHeartbeat", "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool", "Generation-check one source-decoded heartbeat and update only raw last-receive and RTT facts", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__detachPeer", "(peerGeneration: i64): bool", "Atomically detach one peer generation and close its opaque transport resources", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__start", "(): bool", "Publish the isolate lifecycle slot for the source-owned cluster runtime", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics and raw transport-health facts", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 11
+#define GEN_CLUSTER_FUNCTION_COUNT 2
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
@@ -388,7 +345,7 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT, NULL, 0},
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_object_shapes, GEN_CLUSTER_OBJECT_SHAPE_COUNT, NULL, 0, NULL, 0},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},

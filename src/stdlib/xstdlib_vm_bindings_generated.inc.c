@@ -27,25 +27,7 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     (void) expected_count;
     XRS_EXPORT(module, isolate, "__start", cluster_start_primitive);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__healthSnapshot", cluster_health_snapshot_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__applyHealthDecision", cluster_health_apply_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__adoptPeer", cluster_adopt_peer_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__readPeer", cluster_peer_read_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__writePeer", cluster_peer_write_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__peerEnqueue", cluster_peer_enqueue_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__observeHeartbeat", cluster_observe_heartbeat_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__detachPeer", cluster_detach_peer_fn);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__runtimeSnapshot", cluster_runtime_snapshot_fn);
     expected_count++;
     return module->export_count == expected_count;
 }

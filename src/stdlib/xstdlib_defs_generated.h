@@ -301,47 +301,14 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http2", "__send", "(handle: i64, data: Array<u8>, offset: i64): i64", "Perform one TLS write from offset and answer its accepted byte count", "h2_send", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes once; empty on EOF and null on transport failure", "h2_recv", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", "h2_close", "normal", "", "", "v", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__start", "(outputQueueHighWatermark: i64): bool", "Open the native peer resource registry with source-selected queue capacity", "cluster_start_primitive", "normal", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__healthSnapshot", "(): Array<__ClusterHealthPeerSnapshot>?", "Snapshot locked raw peer health facts without applying heartbeat queue policy", "cluster_health_snapshot_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64): bool", "Compare one generation and raw receive timestamp, then detach the exact unhealthy peer resource", "cluster_health_apply_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__adoptPeer", "(conn: move NetConn, peerGeneration: i64, connectedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer a source-identified socket into the locked resource registry and start generation-keyed source transport loops", "cluster_adopt_peer_fn", "normal", "", "", "vvvvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_CHANNEL, 5, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__readPeer", "(peerGeneration: i64, maxFramePayload: i64, callback: fn(peerGeneration: i64, wire: Array<u8>?, reason: i64): ()): i64", "Start one owned peer read and deliver wire bytes or an orthogonal raw reason to the source callback", "cluster_peer_read_fn", "normal", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__writePeer", "(peerGeneration: i64, callback: fn(peerGeneration: i64, reason: i64): ()): i64", "Start one owned peer write and deliver an orthogonal raw queue, socket, provider or cancellation reason to the source callback", "cluster_peer_write_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__peerEnqueue", "(peerGeneration: i64, wire: Array<u8>): i64", "Return the raw accepted, full, stopped, resource or invalid result of one peer queue admission", "cluster_peer_enqueue_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__observeHeartbeat", "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool", "Generation-check one source-decoded heartbeat and update only raw last-receive and RTT facts", "cluster_observe_heartbeat_fn", "normal", "", "", "vvv", "value", "", "", "", "runtime", "", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__detachPeer", "(peerGeneration: i64): bool", "Atomically detach one peer generation and close its opaque transport resources", "cluster_detach_peer_fn", "normal", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics and raw transport-health facts", "cluster_runtime_snapshot_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__start", "(): bool", "Publish the isolate lifecycle slot for the source-owned cluster runtime", "cluster_start_primitive", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterNodeSnapshot[] = {
-    {"cluster", "__ClusterNodeSnapshot", "peerGeneration", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "framesSent", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "framesReceived", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "bytesSent", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "bytesReceived", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "sendErrors", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "slowConsumerEvents", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "rttMs", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "outQueueBytes", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "outQueueFrames", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "slow", "bool", true},
-    {"cluster", "__ClusterNodeSnapshot", "lastReceivedAtMs", "i64", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot[] = {
-    {"cluster", "__ClusterRuntimeSnapshot", "nodes", "Array<__ClusterNodeSnapshot>", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot[] = {
-    {"cluster", "__ClusterHealthPeerSnapshot", "peerGeneration", "i64", true},
-    {"cluster", "__ClusterHealthPeerSnapshot", "lastReceivedAtMs", "i64", true},
-};
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
     {"Coro", "CoroStats", "active", "i64", true},
@@ -365,9 +332,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlo
 };
 
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"cluster", "__ClusterNodeSnapshot", "Private metrics and raw transport-health facts for one connected peer", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 12, true},
-    {"cluster", "__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer state", xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot, 1, true},
-    {"cluster", "__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's raw transport-health facts", xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot, 2, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
