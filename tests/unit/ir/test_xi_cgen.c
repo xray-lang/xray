@@ -3032,7 +3032,7 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
                 .param_count = 2,
                 .min_params = 2,
                 .return_type = &bool_type,
-                .throw_effect = XR_FN_EFFECT_NO_THROW,
+                .throw_effect = XR_FN_EFFECT_MAY_THROW,
             },
     };
 
