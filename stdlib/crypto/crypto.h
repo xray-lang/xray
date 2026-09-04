@@ -5,34 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * crypto.h - Cryptographic functions for xray
+ * crypto.h - Runtime cryptographic support used by private providers
  *
  * KEY CONCEPT:
- *   Pure C implementation of cryptographic primitives without external
- *   dependencies. Provides hash functions, HMAC, AES encryption, and
- *   cryptographically secure random number generation.
- *
- * XRAY API (script level):
- *   Hash functions (return hex string):
- *     - crypto.md5(data)              MD5 hash (128-bit, 32 hex chars)
- *     - crypto.sha1(data)             SHA-1 hash (160-bit, 40 hex chars)
- *     - crypto.sha256(data)           SHA-256 hash (256-bit, 64 hex chars)
- *     - crypto.sha512(data)           SHA-512 hash (512-bit, 128 hex chars)
- *
- *   HMAC (keyed-hash message authentication code):
- *     - crypto.hmac(algorithm, key, data)
- *       algorithm: "md5" | "sha1" | "sha256" | "sha512"
- *
- *   Security utilities:
- *     - crypto.timingSafeEqual(a, b)  Constant-time string comparison
- *
- *   Random generation:
- *     - crypto.randomBytes(length)    Cryptographically secure random bytes (hex)
- *     - crypto.uuid()                 Generate UUID v4
- *
- *   AES encryption (AES-256-CBC, key hashed via SHA-256, random IV):
- *     - crypto.encrypt(key, plaintext)    Returns hex-encoded iv+ciphertext
- *     - crypto.decrypt(key, ciphertext)   Returns decrypted plaintext or null
+ *   The Xray-facing algorithms are defined only by stdlib/crypto/crypto.xr.
+ *   This header exposes runtime/toolchain primitives used by private native
+ *   leaves and internal cluster authentication.
  */
 
 #ifndef XR_STDLIB_CRYPTO_H
@@ -41,8 +19,8 @@
 #include "../../src/base/xdefs.h"
 #include "../../src/shared/xr_crypto_core.h"
 
-/* Hash/AES context structs live in xr_crypto_core.h so VM stdlib and
- * freestanding AOT helpers share one declaration surface. */
+/* Runtime helpers live in xr_crypto_core.h so private providers and
+ * freestanding AOT support share one declaration surface. */
 
 /* ========== Hash Functions ========== */
 
@@ -127,10 +105,5 @@ XR_FUNC void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output);
 // Use this to scrub keys, nonces, and handshake proofs before the
 // buffer falls out of scope.
 XR_FUNC void xr_secure_wipe(void *ptr, size_t len);
-
-/* ========== Module Loading ========== */
-
-struct XrVMRuntime;
-struct XrModule;
 
 #endif  // XR_STDLIB_CRYPTO_H

@@ -1228,6 +1228,7 @@ endfunction()
 
 file(GLOB BASE_SRC CONFIGURE_DEPENDS "src/base/*.c")
 list(APPEND BASE_SRC
+    "src/shared/xr_crypto_core.c"
     "src/shared/xr_unicode_grapheme_data.c"
     "src/shared/xr_unicode_grapheme.c"
     "src/shared/xr_http_url.c"
@@ -1692,9 +1693,9 @@ add_library(xray_aot_core STATIC
     src/base/xsha256.c
     src/base/xunicode.c
     src/shared/xr_compress_engine.c
-    stdlib/crypto/crypto.c
+    src/shared/xr_crypto_core.c
 )
-target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1 XR_CRYPTO_CORE_ONLY=1)
+target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1)
 target_include_directories(xray_aot_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set(XRAY_RT_CORO_SOURCES

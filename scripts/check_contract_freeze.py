@@ -380,10 +380,9 @@ CONTRACT_SPECS = (
             "src/stdlib/xstdlib_vm_fastpath.c",
             "include/xray_hosted_fragment_runtime.h",
             "tools/stdlibgen/generate_vm_fastpaths.py",
-            # compress used to publish its typed errors from C. It states them
-            # in compress.xr now -- `throw CompressionError.InvalidData` -- so
-            # there is no C translation unit of its own left to freeze.
-            "stdlib/crypto/crypto.c",
+            # Compress and crypto used to publish typed errors from C. Their
+            # Xray modules now state those errors directly, so neither private
+            # provider translation unit belongs to this contract.
             "stdlib/net/net.c",
             "tests/unit/runtime/test_execution_error_channel.c",
             "tests/unit/vm/test_vm_exception.c",
