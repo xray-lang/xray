@@ -91,6 +91,7 @@ export class CountdownLatch {
                 current, next, Ordering.AcquireRelease)
             if (changed) { return next }
         }
+        return 0
     }
 
     tryWait() -> bool { return this.remaining == 0 && !this.isClosed }
@@ -148,7 +149,7 @@ export class WorkQueue<T> {
     shardCount: i64 { fn() { return this._shards } }
     isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
 
-    push(value: T, shard: i64 = -1) -> bool {
+    ref push(value: T, shard: i64 = -1) -> bool {
         if (this.isClosed) { return false }
         this._lock.lock()
         defer { this._lock.unlock() }
@@ -157,7 +158,7 @@ export class WorkQueue<T> {
         return true
     }
 
-    pushRange(start: i64, count: i64, shardStart: i64 = -1) -> i64 {
+    ref pushRange(start: i64, count: i64, shardStart: i64 = -1) -> i64 {
         var accepted = 0
         for (var offset = 0; offset < count; offset++) {
             if (!this.push((start + offset) as T, shardStart + offset)) { break }
@@ -166,14 +167,14 @@ export class WorkQueue<T> {
         return accepted
     }
 
-    tryPop(workerId: i64 = -1) -> (T?, bool) {
+    ref tryPop(workerId: i64 = -1) -> (T?, bool) {
         this._lock.lock()
         defer { this._lock.unlock() }
         var value = this._items.shift()
         return (value, value != null)
     }
 
-    pop(workerId: i64 = -1) -> T? {
+    ref pop(workerId: i64 = -1) -> T? {
         while (true) {
             var (value, found) = this.tryPop(workerId)
             if (found) { return value }
@@ -210,7 +211,7 @@ export class ResultGroup {
     batchSize: i64 { fn() { return this._batchSize } }
     isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
 
-    add(value: i64) -> bool {
+    ref add(value: i64) -> bool {
         if (this.isClosed) { return false }
         this._lock.lock()
         defer { this._lock.unlock() }
@@ -222,20 +223,20 @@ export class ResultGroup {
         return true
     }
 
-    private _flushLocked() {
+    private ref _flushLocked() {
         if (this._count == 0) { return }
         this._ready.push(this._sum)
         this._sum = 0
         this._count = 0
     }
 
-    flush() {
+    ref flush() {
         this._lock.lock()
         defer { this._lock.unlock() }
         this._flushLocked()
     }
 
-    reset(count: i64) -> bool {
+    ref reset(count: i64) -> bool {
         if (count <= 0 || this.pendingCount != 0 || this.isClosed) { return false }
         this._lock.lock()
         defer { this._lock.unlock() }
@@ -243,7 +244,7 @@ export class ResultGroup {
         return true
     }
 
-    tryRecv() -> (i64?, bool) {
+    ref tryRecv() -> (i64?, bool) {
         this._lock.lock()
         defer { this._lock.unlock() }
         var value = this._ready.shift()
@@ -252,7 +253,7 @@ export class ResultGroup {
         return (value, true)
     }
 
-    recv() -> i64? {
+    ref recv() -> i64? {
         while (true) {
             var (value, found) = this.tryRecv()
             if (found) { return value }
@@ -262,7 +263,7 @@ export class ResultGroup {
         return null
     }
 
-    close() {
+    ref close() {
         this._lock.lock()
         this._flushLocked()
         this._closed.store(true, Ordering.Release)
