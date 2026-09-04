@@ -24,14 +24,24 @@
 typedef struct XrClusterOutputBatch XrClusterOutputBatch;
 typedef struct XrClusterOutputQueue XrClusterOutputQueue;
 
+typedef enum XrClusterOutputPushResult {
+    XR_CLUSTER_OUTPUT_ACCEPTED = 0,
+    XR_CLUSTER_OUTPUT_FULL = 1,
+    XR_CLUSTER_OUTPUT_STOPPED = 2,
+    XR_CLUSTER_OUTPUT_RESOURCE_UNAVAILABLE = 3,
+    XR_CLUSTER_OUTPUT_INVALID = 4,
+} XrClusterOutputPushResult;
+
 XR_FUNC XrClusterOutputQueue *xr_cluster_output_queue_new(size_t high_watermark);
 XR_FUNC void xr_cluster_output_queue_stop(XrClusterOutputQueue *queue);
 XR_FUNC void xr_cluster_output_queue_destroy(XrClusterOutputQueue *queue);
-XR_FUNC int xr_cluster_output_queue_push_copy(XrClusterOutputQueue *queue, const uint8_t *data,
-                                              uint32_t length);
+XR_FUNC XrClusterOutputPushResult xr_cluster_output_queue_push_copy(XrClusterOutputQueue *queue,
+                                                                    const uint8_t *data,
+                                                                    uint32_t length);
 /* The queue consumes data only when this operation succeeds. */
-XR_FUNC int xr_cluster_output_queue_push_owned(XrClusterOutputQueue *queue, uint8_t *data,
-                                               uint32_t length);
+XR_FUNC XrClusterOutputPushResult xr_cluster_output_queue_push_owned(XrClusterOutputQueue *queue,
+                                                                     uint8_t *data,
+                                                                     uint32_t length);
 XR_FUNC XrClusterOutputBatch *xr_cluster_output_queue_take_all(XrClusterOutputQueue *queue);
 XR_FUNC const uint8_t *xr_cluster_output_batch_data(const XrClusterOutputBatch *batch);
 XR_FUNC uint32_t xr_cluster_output_batch_length(const XrClusterOutputBatch *batch);

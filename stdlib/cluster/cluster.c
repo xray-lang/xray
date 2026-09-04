@@ -26,10 +26,13 @@
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/coro/xchannel.h"
+#include "../../src/coro/xcoroutine.h"
+#include "../../src/coro/xworker.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/vm/xvm_closure.h"
+#include "../../src/vm/xvm_coro_api.h"
 #include "../../src/base/xchecks.h"
 
 #include <string.h>
@@ -223,9 +226,6 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
         xr_net_conn_close(handle);
         return xr_bool(false);
     }
-    atomic_store(&node->writer_running, false);
-    atomic_store(&node->writer_exited, false);
-    atomic_store(&node->reader_running, false);
     xr_phi_detector_init(&node->phi, (double) heartbeat_interval_ms);
 
     node->conn = xr_io_conn_take_net_handle(handle, XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
@@ -270,13 +270,32 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
         cluster_node_release(node);
         return xr_bool(false);
     }
-    if (!cluster_node_start_io(cluster, node, args[6], args[7])) {
+    XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
+    XrValue generation = xr_int((int64_t) node->generation_token);
+    const uint8_t arg_mode = XR_TRANSFER_SHARE;
+    XrCoroutine *writer = runtime ? xr_coro_create_vm_closure_owned(
+                                        X, outbound_handler, &generation, &arg_mode, 1,
+                                        "cluster_writer", NULL, 0)
+                                  : NULL;
+    XrCoroutine *reader = writer ? xr_coro_create_vm_closure_owned(
+                                       X, inbound_handler, &generation, &arg_mode, 1,
+                                       "cluster_reader", NULL, 0)
+                                 : NULL;
+    if (!reader) {
+        if (writer)
+            xr_coro_destroy(writer);
         if (cluster_node_remove(cluster, node)) {
             cluster_node_shutdown(node);
             cluster_node_release(node);
         }
         return xr_bool(false);
     }
+
+    /* Source supplied both loops after admission. This leaf only publishes
+     * their scheduler shells as one batch so neither transport direction can
+     * monopolize the adopting worker's local run-next slot. */
+    XrCoroutine *io_coros[2] = {writer, reader};
+    xr_runtime_spawn_batch(runtime, io_coros, 2);
     return xr_bool(true);
 }
 
@@ -393,30 +412,24 @@ static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
 static XrValue cluster_peer_enqueue_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_ARRAY(args[1]))
-        return xr_bool(false);
+        return xr_int(XR_CLUSTER_OUTPUT_INVALID);
     XrArray *wire = XR_TO_ARRAY(args[1]);
     if (wire->elem_type != XR_ELEM_U8 || wire->length < 0 || (wire->length > 0 && !wire->data))
-        return xr_bool(false);
-    XrCluster *cluster = (XrCluster *) X->cluster;
-    if (!cluster)
-        return xr_bool(false);
-    uint64_t generation = (uint64_t) XR_TO_INT(args[0]);
-    XrClusterNode *node = NULL;
-    xr_amutex_lock(&cluster->nodes_lock);
-    for (XrClusterNode *candidate = cluster->nodes; candidate; candidate = candidate->next) {
-        if (candidate->generation_token == generation && candidate->state == XR_NODE_CONNECTED) {
-            cluster_node_retain(candidate);
-            node = candidate;
-            break;
-        }
+        return xr_int(XR_CLUSTER_OUTPUT_INVALID);
+    XrCluster *cluster = NULL;
+    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
+    if (!cluster || !atomic_load(&cluster->running)) {
+        cluster_runtime_release(cluster);
+        return xr_int(XR_CLUSTER_OUTPUT_STOPPED);
     }
-    xr_amutex_unlock(&cluster->nodes_lock);
+    XrClusterNode *node = cluster_node_acquire(cluster, (uint64_t) XR_TO_INT(args[0]));
+    cluster_runtime_release(cluster);
     if (!node)
-        return xr_bool(false);
-    bool queued = xr_cluster_output_queue_push_copy(node->outq, (const uint8_t *) wire->data,
-                                                    (uint32_t) wire->length) == 0;
+        return xr_int(XR_CLUSTER_OUTPUT_STOPPED);
+    XrClusterOutputPushResult queued = xr_cluster_output_queue_push_copy(
+        node->outq, (const uint8_t *) wire->data, (uint32_t) wire->length);
     cluster_node_release(node);
-    return xr_bool(queued);
+    return xr_int(queued);
 }
 
 static XrValue cluster_observe_heartbeat_fn(XrVMRuntime *X, XrValue *args, int argc) {
