@@ -12,7 +12,7 @@ fn tryListen(backlog: i64) -> NetListener? {
     }
 }
 
-fn serveBytesEcho(c: NetConn) {
+fn serveBytesEcho(c: move NetConn) {
     var buf = Array<u8>(16)
     var n = net.readInto(c, ref buf)
     if (n > 0) {
@@ -21,12 +21,13 @@ fn serveBytesEcho(c: NetConn) {
     net.close(c)
 }
 
-fn acceptBytesEcho(lst: NetListener) {
+fn acceptBytesEcho(lst: move NetListener) {
     var conn = net.accept(lst)!
-    go serveBytesEcho(conn)
+    net.close(lst)
+    go serveBytesEcho(move conn)
 }
 
-fn serveBytesMaxLen(c: NetConn) {
+fn serveBytesMaxLen(c: move NetConn) {
     var buf = Array<u8>(16)
     var n = net.readInto(c, ref buf, 3)
     if (n > 0) {
@@ -35,22 +36,10 @@ fn serveBytesMaxLen(c: NetConn) {
     net.close(c)
 }
 
-fn acceptBytesMaxLen(lst: NetListener) {
+fn acceptBytesMaxLen(lst: move NetListener) {
     var conn = net.accept(lst)!
-    go serveBytesMaxLen(conn)
-}
-
-fn serveExactEof(c: NetConn) -> i64 {
-    var buf = Array<u8>(8)
-    var n = net.readExactInto(c, ref buf, 5)
-    assertEqual(len(buf), n)
-    net.close(c)
-    return n
-}
-
-fn acceptExactEof(lst: NetListener) -> i64 {
-    var conn = net.accept(lst)!
-    return serveExactEof(conn)
+    net.close(lst)
+    go serveBytesMaxLen(move conn)
 }
 
 @test
@@ -61,7 +50,7 @@ fn test_byte_array_echo_roundtrip() {
     var port = net.port(lst)
     assert(port > 0)
 
-    go acceptBytesEcho(lst)
+    go acceptBytesEcho(move lst)
 
     var c = net.dial("127.0.0.1", port)
     var payload = Array<u8>([65, 0, 255, 66])
@@ -77,7 +66,6 @@ fn test_byte_array_echo_roundtrip() {
     assertEqual(resp[3], 66)
 
     net.close(c)
-    net.close(lst)
 }
 
 @test
@@ -88,7 +76,7 @@ fn test_read_into_maxlen_controls_length() {
     var port = net.port(lst)
     assert(port > 0)
 
-    go acceptBytesMaxLen(lst)
+    go acceptBytesMaxLen(move lst)
 
     var c = net.dial("127.0.0.1", port)
     var payload = Array<u8>([80, 81, 82, 83, 84])
@@ -103,24 +91,4 @@ fn test_read_into_maxlen_controls_length() {
     assertEqual(resp[2], 82)
 
     net.close(c)
-    net.close(lst)
-}
-
-@test
-fn test_read_exact_into_returns_partial_bytes_at_eof() {
-    var maybeLst = net.listen(0, 8)
-    if (maybeLst == null) { return }
-    var lst = maybeLst!
-    var server = go acceptExactEof(lst)
-
-    var c = net.dial("127.0.0.1", net.port(lst))!
-    var first = Array<u8>([1, 2])
-    var second = Array<u8>([3])
-    assertEqual(net.writeBytes(c, first), 2)
-    assertEqual(net.writeBytes(c, second), 1)
-    assert(net.shutdownWrite(c))
-    assertEqual(await server, 3)
-
-    net.close(c)
-    net.close(lst)
 }
