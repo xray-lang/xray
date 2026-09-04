@@ -6,11 +6,15 @@ parallel.forEach(0..5, (i) -> { seen.add(i, Ordering.Relaxed) }, Options(2))
 var mapped = parallel.map(0..4, (i) -> i * i, Options(2))
 var total = parallel.reduce(0..5, 10, (i) -> i, (a, b) -> a + b, Options(2))
 assert(seen.load(Ordering.Relaxed) == 10)
-assert(mapped == [0, 1, 4, 9])
+assert(len(mapped) == 4 && mapped[0] == 0 && mapped[1] == 1 &&
+       mapped[2] == 4 && mapped[3] == 9)
 assert(total == 20)
 print("{\"case\":\"parallel-combinators\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
 
 var single = parallel.map(0..6, (i) -> i + 1, Options(1))
 var batched = parallel.map(0..6, (i) -> i + 1, Options(3))
-assert(single == batched)
+assert(len(single) == len(batched))
+for (var i = 0; i < len(single); i++) {
+    assert(single[i] == batched[i])
+}
 print("{\"case\":\"batch-equivalence\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
