@@ -3003,11 +3003,13 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
     static XrType bool_type = {
         .kind = XR_KIND_BOOL,
         .id = 1904,
+        .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
     };
     static XrType net_conn_type = {
         .kind = XR_KIND_INSTANCE,
         .id = 1905,
+        .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
         .instance =
             {
@@ -3022,6 +3024,7 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
     static XrType native_function = {
         .kind = XR_KIND_FUNCTION,
         .id = 1906,
+        .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
         .function =
             {
