@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Seeded cross-oracle fuzzing for task-200 native binary stdlib baselines.
+"""Seeded cross-oracle fuzzing for binary stdlib algorithms.
 
-This harness intentionally targets the current native-backed compress and
-crypto surface before the Slice<u8>/Array<u8> API switch. It compares the
-stable parts of that surface against Python's zlib, hashlib, hmac, and shape
-checks so later task-200 work can distinguish intentional API convergence from
-semantic drift.
+Compress is source-only Xray; crypto still owns private provider leaves.  This
+harness groups them by byte-oriented behavior, not by implementation strategy,
+and compares both against Python's zlib, hashlib, hmac, and shape checks under
+the VM and native AOT backends.
 """
 
 from __future__ import annotations
@@ -272,7 +271,7 @@ def main() -> int:
     if ok:
         modes = "VM" if args.vm_only else "VM/AOT"
         print(
-            f"OK: {args.count} seeded native binary stdlib cases match Python and "
+            f"OK: {args.count} seeded binary stdlib algorithm cases match Python and "
             f"{modes} (seed={args.seed})"
         )
     elif not args.keep_dir:

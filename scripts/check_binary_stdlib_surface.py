@@ -177,11 +177,8 @@ GENERATED_METADATA_FILES = {
     Path("src/app/lsp/xlsp_stdlib_generated.inc"),
     Path("src/app/mcp/xmcp_knowledge_generated.c"),
 }
-NATIVE_BINARY_DIR_PREFIXES = (
-    "stdlib/compress/",
+NATIVE_PROVIDER_DIR_PREFIXES = (
     "stdlib/crypto/",
-    "stdlib/net/",
-    "stdlib/ws/",
 )
 SCRIPT_REL_PATH = Path("scripts/check_binary_stdlib_surface.py")
 
@@ -280,7 +277,7 @@ def classify_line(rel_path: Path, lineno: int, line: str) -> list[Hit]:
         hits.append(Hit("CONSUMER_OLD_BINARY_API_CALL", rel_str, lineno, stripped))
     if rel_path in GENERATED_METADATA_FILES and GENERATED_STALE_RE.search(line):
         hits.append(Hit("GENERATED_METADATA_STALE_BINARY_SURFACE", rel_str, lineno, stripped))
-    if rel_str.startswith(NATIVE_BINARY_DIR_PREFIXES) and NATIVE_STRING_CREATOR_RE.search(line):
+    if rel_str.startswith(NATIVE_PROVIDER_DIR_PREFIXES) and NATIVE_STRING_CREATOR_RE.search(line):
         hits.append(Hit("NATIVE_ARBITRARY_STRING_CREATOR", rel_str, lineno, stripped))
     return hits
 

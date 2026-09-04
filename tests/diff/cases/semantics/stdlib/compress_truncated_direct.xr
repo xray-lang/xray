@@ -1,5 +1,5 @@
 // Legacy task-200 oracle: truncated compressed payloads must report
-// decompression failure through the converged typed native error channel.
+// decompression failure through the converged typed stdlib error channel.
 //
 // The coder speaks bytes end to end, so truncation is a byte-level cut on the
 // Array<u8> payload rather than a rune-level cut on a string.

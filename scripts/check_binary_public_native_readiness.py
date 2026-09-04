@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Verify task-256's terminal built-in stdlib and L2 native boundary.
+"""Verify the provider-backed portion of binary-stdlib and L2 readiness.
 
-The retained cluster/http2/compress/crypto modules share Xray's release and
-installation unit.  They have one physical home under ``stdlib/`` and one bare
-module name; package aliases and package-loader fallbacks are forbidden.
+Of the former cluster/http2/compress/crypto migration group, only crypto still
+requires a private host provider and belongs to this gate.  The source-only
+modules are governed by the ordinary stdlib source/contract checks and must not
+be described as retained native modules here.  L2 io/os/net keep their separate
+zero-public-native boundary checks.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -21,8 +22,7 @@ from gen_api_inventory import collect_def_stdlib, collect_pure_stdlib  # noqa: E
 from stdlib_manifest import def_public_symbols, load_manifest, load_toml  # noqa: E402
 
 
-RETAINED_STDLIB_MODULES = {"cluster", "http2", "compress", "crypto"}
-TERMINAL_STDLIB_MODULE_COUNT = 33
+NATIVE_PROVIDER_MODULES = {"crypto"}
 L2_PUBLIC_NATIVE = {
     "io": set(),
     "os": set(),
@@ -30,11 +30,6 @@ L2_PUBLIC_NATIVE = {
 }
 CONTRACT_FILES = ("contract.toml", "cases.jsonl", "diff_cases.txt")
 ABI_EVIDENCE = {
-    "tests/unit/api/test_compress_native_error_abi.py": (
-        "stdlib/compress/compress.xr",
-        "CompressionError.InvalidData",
-        "test_vm_native_aot_typed_catch_parity",
-    ),
     "tests/unit/api/test_crypto_native_error_abi.py": (
         "stdlib/crypto/crypto.c",
         "CryptoError.InvalidLength",
@@ -49,10 +44,6 @@ ABI_EVIDENCE = {
         'id = "net.server-lifecycle.contract"',
     ),
 }
-FORBIDDEN_PACKAGE_IMPORT = re.compile(
-    r"(?m)^\s*import\s+(?:\{[^}\n]+\}\s+from\s+)?"
-    r"(?:[\"'])?xray/(?:cluster|http2|compress|crypto)\b"
-)
 
 
 @dataclass(frozen=True)
@@ -72,7 +63,7 @@ def result(category: str, subject: str, failures: list[str]) -> CheckResult:
         category,
         subject,
         not failures,
-        "cutover verified" if not failures else "; ".join(failures),
+        "readiness verified" if not failures else "; ".join(failures),
     )
 
 
@@ -85,16 +76,12 @@ def check_boundary(
 
     failures: list[str] = []
     actual = set(modules)
-    missing = RETAINED_STDLIB_MODULES - actual
+    missing = NATIVE_PROVIDER_MODULES - actual
     if missing:
-        failures.append(f"missing retained stdlib modules: {sorted(missing)}")
-    if len(actual) != TERMINAL_STDLIB_MODULE_COUNT:
-        failures.append(
-            f"terminal stdlib module count must be {TERMINAL_STDLIB_MODULE_COUNT}, got {len(actual)}"
-        )
-    results.append(result("BUILTIN_STDLIB_SET", "stdlib/stdlib_boundary.toml", failures))
+        failures.append(f"missing native-provider stdlib modules: {sorted(missing)}")
+    results.append(result("NATIVE_PROVIDER_SET", "stdlib/stdlib_boundary.toml", failures))
 
-    for module in sorted(RETAINED_STDLIB_MODULES):
+    for module in sorted(NATIVE_PROVIDER_MODULES):
         entry = modules.get(module)
         failures = []
         if entry is None:
@@ -105,19 +92,18 @@ def check_boundary(
             semantic_source = root / str(entry.get("semantic_source", ""))
             if not semantic_source.is_file():
                 failures.append("semantic_source is missing")
-            # A completed migration has no native payload. Every other retained
-            # module must keep its declared private implementation reachable.
             private_sources = [
                 path
                 for pattern in entry.get("private_native_sources", ())
                 for path in root.glob(str(pattern))
             ]
             if entry.get("def_migration_complete"):
-                if entry.get("private_native_sources"):
-                    failures.append("completed migration must not declare private native sources")
-            elif not private_sources:
+                failures.append("native-provider module cannot declare migration complete")
+            if entry.get("aot_helper_forbidden"):
+                failures.append("native-provider module cannot forbid its provider helper")
+            if not private_sources:
                 failures.append("private native sources are missing")
-        results.append(result("BUILTIN_STDLIB_MODULE", module, failures))
+        results.append(result("NATIVE_PROVIDER_MODULE", module, failures))
 
     for module, expected in L2_PUBLIC_NATIVE.items():
         entry = modules.get(module)
@@ -145,31 +131,28 @@ def check_module_payloads(root: Path) -> list[CheckResult]:
     modules = load_boundary_modules(root)
     public_symbols = def_public_symbols(root)
     results: list[CheckResult] = []
-    for module in sorted(RETAINED_STDLIB_MODULES):
+    for module in sorted(NATIVE_PROVIDER_MODULES):
         entry = modules.get(module, {})
         failures: list[str] = []
         module_dir = root / "stdlib" / module
         if not module_dir.is_dir():
             failures.append(f"missing stdlib/{module}")
-        if not entry.get("private_native_sources") and not entry.get("def_migration_complete"):
+        if not entry.get("private_native_sources"):
             failures.append("private_native_sources must be declared")
         declared = set(entry.get("public_native", ()))
-        # A module that still publishes native symbols has to declare them in
-        # core.def. One whose public_native is empty has finished its cutover,
-        # which is the outcome this readiness check exists to reach, so absent
-        # declarations are the goal rather than a gap. Either way the manifest
-        # and core.def have to say the same thing.
+        # Private providers may expose no public native surface.  The boundary
+        # manifest and core.def must nevertheless agree exactly.
         if declared and not public_symbols.get(module):
             failures.append("core.def has no public declarations")
         if declared != public_symbols.get(module, set()):
             failures.append("public_native does not exactly match core.def")
-        results.append(result("BUILTIN_STDLIB_PAYLOAD", module, failures))
+        results.append(result("NATIVE_PROVIDER_PAYLOAD", module, failures))
     return results
 
 
 def check_contracts(root: Path) -> list[CheckResult]:
     results: list[CheckResult] = []
-    for module in sorted(RETAINED_STDLIB_MODULES):
+    for module in sorted(NATIVE_PROVIDER_MODULES):
         oracle = root / "tests" / "stdlib" / "contracts" / module
         failures = [name for name in CONTRACT_FILES if not (oracle / name).is_file()]
         detail = ["missing contract files: " + ", ".join(failures)] if failures else []
@@ -185,7 +168,7 @@ def check_contracts(root: Path) -> list[CheckResult]:
                 missing = [name for name in required if not (oracle / name).is_file()]
                 if missing:
                     detail.append("missing executable legacy oracle files: " + ", ".join(missing))
-        results.append(result("BUILTIN_STDLIB_CONTRACT", module, detail))
+        results.append(result("NATIVE_PROVIDER_CONTRACT", module, detail))
     return results
 
 
@@ -193,7 +176,7 @@ def check_perf_manifest(root: Path) -> list[CheckResult]:
     data = load_toml(root / "tests/benchmarks/stdlib/manifest.toml")
     benchmarks = data.get("benchmark", ())
     results: list[CheckResult] = []
-    for module in sorted(RETAINED_STDLIB_MODULES):
+    for module in sorted(NATIVE_PROVIDER_MODULES):
         suite = f"stdlib/{module}"
         matches = [b for b in benchmarks if b.get("module") == module and b.get("suite") == suite]
         failures = []
@@ -202,14 +185,14 @@ def check_perf_manifest(root: Path) -> list[CheckResult]:
         for bench in matches:
             if bench.get("compare") != ["vm", "aot"] or "wall_ns" not in bench.get("metrics", ()):
                 failures.append(f"{bench.get('id')}: must compare VM/AOT wall_ns")
-        results.append(result("BUILTIN_STDLIB_PERF", module, failures))
+        results.append(result("NATIVE_PROVIDER_PERF", module, failures))
     return results
 
 
 def check_api_classification(root: Path) -> list[CheckResult]:
     items = [*collect_def_stdlib(root), *collect_pure_stdlib(root)]
     results: list[CheckResult] = []
-    for module in sorted(RETAINED_STDLIB_MODULES):
+    for module in sorted(NATIVE_PROVIDER_MODULES):
         owned = [
             item
             for item in items
@@ -223,35 +206,8 @@ def check_api_classification(root: Path) -> list[CheckResult]:
             if entry.get("category") != "stdlib-module" or entry.get("doc_surface") != "stdlib":
                 failures.append(f"misclassified API: {entry.get('qualified')}")
                 break
-        results.append(result("BUILTIN_STDLIB_API", module, failures))
+        results.append(result("NATIVE_PROVIDER_API", module, failures))
     return results
-
-
-def check_import_cutover(root: Path) -> list[CheckResult]:
-    failures: list[str] = []
-    for base in ("stdlib", "tests"):
-        for path in sorted((root / base).rglob("*.xr")):
-            match = FORBIDDEN_PACKAGE_IMPORT.search(path.read_text(encoding="utf-8"))
-            if match:
-                failures.append(f"{path.relative_to(root)}:{match.group(0).strip()}")
-    return [result("CANONICAL_STDLIB_IMPORTS", "bare module names", failures[:20])]
-
-
-def check_physical_cutover(root: Path) -> list[CheckResult]:
-    failures = [
-        f"missing stdlib/{name}"
-        for name in sorted(RETAINED_STDLIB_MODULES)
-        if not (root / "stdlib" / name).is_dir()
-    ]
-    failures.extend(str(path.relative_to(root)) for path in (root / "stdlib/http").glob("http2*"))
-    package_root = root / "packages" / "official"
-    if package_root.exists():
-        failures.extend(str(path.relative_to(root)) for path in package_root.rglob("*") if path.is_file())
-    markers = ("packages/official", "XR_PACKAGE_", "XR_OFFICIAL_PACKAGE", "official-package")
-    for relpath in ("CMakeLists.txt", "src/module/xmodule.c", "scripts/generate_stdlib_embedded.py"):
-        text = (root / relpath).read_text(encoding="utf-8")
-        failures.extend(f"{relpath}: {marker}" for marker in markers if marker in text)
-    return [result("PHYSICAL_STDLIB_CUTOVER", "one built-in stdlib tree", failures)]
 
 
 def check_abi_evidence(root: Path) -> list[CheckResult]:
@@ -264,7 +220,7 @@ def check_abi_evidence(root: Path) -> list[CheckResult]:
         else:
             text = path.read_text(encoding="utf-8")
             failures.extend(f"missing anchor {anchor!r}" for anchor in anchors if anchor not in text)
-        results.append(result("BINARY_ABI_EVIDENCE", path_text, failures))
+        results.append(result("NATIVE_PROVIDER_ABI_EVIDENCE", path_text, failures))
     return results
 
 
@@ -275,8 +231,6 @@ def build_results(root: Path) -> list[CheckResult]:
         *check_contracts(root),
         *check_perf_manifest(root),
         *check_api_classification(root),
-        *check_import_cutover(root),
-        *check_physical_cutover(root),
         *check_abi_evidence(root),
     ]
 
@@ -291,7 +245,7 @@ def main() -> int:
     if args.json:
         print(json.dumps([asdict(item) for item in results], indent=2, sort_keys=True))
     else:
-        print("Task 256 built-in stdlib and public-native readiness")
+        print("Binary-stdlib and L2 native-provider readiness")
         for item in results:
             print(f"{item.category}: {'ok' if item.ok else 'blocked'}: {item.subject}: {item.detail}")
     return 0 if all(item.ok for item in results) else 1

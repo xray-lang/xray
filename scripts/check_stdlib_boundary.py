@@ -195,7 +195,7 @@ def def_native_classes(root: Path) -> dict[str, set[str]]:
 
 
 def check_builtin_distribution(root: Path) -> list[str]:
-    """Keep the retained native-library modules inside the one stdlib boundary.
+    """Keep provider-backed and source-only modules in their exact boundaries.
 
     ws and http2 left this set once their connection layers became pure Xray:
     they now have no core.def binding blocks and, like http, are loaded from
@@ -261,6 +261,24 @@ def check_builtin_distribution(root: Path) -> list[str]:
         for marker in forbidden:
             if marker in text:
                 errors.append(f"{label}: removed official-package marker remains: {marker}")
+
+    package_import = re.compile(
+        r"(?m)^\s*import\s+(?:\{[^}\n]+\}\s+from\s+)?"
+        rf"(?:[\"'])?xray/(?:{'|'.join(sorted(expected | source_only))})\b"
+    )
+    for base in ("stdlib", "tests"):
+        for path in sorted((root / base).rglob("*.xr")):
+            match = package_import.search(path.read_text(encoding="utf-8"))
+            if match:
+                errors.append(
+                    f"{path.relative_to(root)}: removed package import remains: "
+                    f"{match.group(0).strip()}"
+                )
+
+    errors.extend(
+        f"obsolete nested http2 path remains: {path.relative_to(root)}"
+        for path in (root / "stdlib/http").glob("http2*")
+    )
     package_root = root / "packages" / "official"
     if package_root.exists() and any(path.is_file() for path in package_root.rglob("*")):
         errors.append("packages/official must contain no files after the atomic stdlib cutover")

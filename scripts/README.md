@@ -13,6 +13,7 @@
 | `scripts/check_temp_workarounds.py` | `DEFENSIVE-TEMP[NNN]` 标签 ↔ `tests/known_temp_workarounds.md` 双向对账 | 无 | 任一不一致=非0 | < 10s |
 | `scripts/check_stdlib_surface_uniqueness.py` | 151 R3：不同 public stdlib surface 不得绑定同一 VM/AOT helper | `--root <repo>`；可选 `--list-known` | 新重复=1；仅命中已登记债务=0 | < 1s |
 | `scripts/check_binary_stdlib_surface.py` | 200：binary stdlib 的 string-binary 签名、旧别名、null sentinel、Array-owner 输入与消费者分类 inventory | `--root <repo>`；可选 `--json`、`--fail-on-public-residue` | 默认只输出 inventory=0，为 P0 固定基线；最终 public residue 可切换为失败 | < 2s |
+| `scripts/check_binary_public_native_readiness.py` | binary/L2 readiness 切片的 native-provider 边界：provider-backed crypto 与 L2 io/os/net；source-only cluster/http2/compress 不属于此门禁 | `--root <repo>`；可选 `--json` | provider 清单、private payload、契约、VM/AOT 证据或零 public-native 边界漂移=1 | < 2s |
 | `scripts/check_binary_stdlib_kat_baseline.py` | 200：base64/compress/crypto KAT、AOT link-command 与现有 stdlib bench 入口覆盖检查 | `--root <repo>`；可选 `--json` | 关键 fixture 或 anchor 缺失=1 | < 1s |
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
@@ -66,8 +67,14 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 `PUBLIC_STRING_BINARY_UNION`、`PUBLIC_NULL_SENTINEL`、`PUBLIC_LEGACY_BINARY_ALIAS`、
 `PUBLIC_ARRAY_OWNER_INPUT`、`PUBLIC_DOMAIN_BOOL_SENTINEL`、`CONSUMER_OLD_BINARY_API_CALL`、
 `NATIVE_ARBITRARY_STRING_CREATOR` 和 `GENERATED_METADATA_STALE_BINARY_SURFACE`。默认模式只打印
-inventory 并返回 0，便于 P0 固定当前 string-binary public surface、consumer、native creator 与
+inventory 并返回 0，便于 P0 固定当前 string-binary public surface、consumer、provider creator 与
 generated docs baseline；后续 200 P2-P6 可按类别逐步增加 fail gate。
+
+### `check_binary_public_native_readiness.py`
+
+只审计仍保留 host provider 的 stdlib 边界：crypto 的 private provider payload、契约/API/perf 与
+ABI 证据，以及 L2 io/os/net 的零 public-native 表面。cluster、http2、compress 已完全由 Xray
+source 实现，由通用 stdlib source/contract 门禁负责，不进入 native-provider readiness 分类。
 
 ### `check_binary_stdlib_kat_baseline.py`
 

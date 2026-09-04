@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_stdlib_boundary import (  # noqa: E402
+    check_builtin_distribution,
     check_dynamic,
     check_error_model_policy,
     check_fastpaths,
@@ -85,6 +86,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             self.assertIn(name, source_modules(ROOT))
             self.assertNotIn(name, native_entry_binder_modules(ROOT))
             self.assertEqual([], module.get("public_native", []))
+        self.assertEqual([], check_builtin_distribution(ROOT))
 
     def test_module_native_entries_are_bound_by_a_generated_binder(self) -> None:
         manifest = load_manifest(ROOT)
