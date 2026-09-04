@@ -24,7 +24,7 @@ class string {
     slice(start: i64, end?: i64) -> string
     sliceBytes(start: i64, end: i64) -> string
     toString() -> string
-    split(separator: string, limit?: i64) -> Array<string>
+    split(separator: string) -> Array<string>
     replace(search: string, replacement: string) -> string
     replaceAll(search: string, replacement: string) -> string
     repeat(count: i64) -> string

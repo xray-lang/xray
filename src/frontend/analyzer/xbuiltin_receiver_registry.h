@@ -17,8 +17,10 @@
 #include <string.h>
 
 #include "../../runtime/value/xtype.h"
+#include "../../ir/xi_method_symbol.h"
 
 typedef enum {
+    XA_BUILTIN_RECEIVER_STRING,
     XA_BUILTIN_RECEIVER_EXACT_INTEGER,
     XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER,
     XA_BUILTIN_RECEIVER_U8_ARRAY,
@@ -33,6 +35,7 @@ typedef enum {
     XA_BUILTIN_TYPE_BOOL,
     XA_BUILTIN_TYPE_INT,
     XA_BUILTIN_TYPE_STRING,
+    XA_BUILTIN_TYPE_ARRAY_OF_STRING,
     XA_BUILTIN_TYPE_U8,
     XA_BUILTIN_TYPE_U8_ARRAY,
     XA_BUILTIN_TYPE_U8_SLICE,
@@ -79,6 +82,11 @@ typedef enum {
     XA_BUILTIN_UNSAFE_NONE,
     XA_BUILTIN_UNSAFE_REQUIRED,
 } XaBuiltinMethodUnsafeRequirement;
+
+typedef enum XaBuiltinMethodEmissionClass {
+    XA_BUILTIN_EMISSION_INTRINSIC = 0,
+    XA_BUILTIN_EMISSION_RUNTIME_HELPER,
+} XaBuiltinMethodEmissionClass;
 
 typedef enum XaBuiltinMethodMemoryEffect {
     XA_BUILTIN_MEMORY_STABLE_READ = 0,
@@ -194,7 +202,12 @@ typedef enum {
                                     min_params, type_params, effect, receiver_mode, allocation,    \
                                     unsafe_requirement, lowering)                                  \
     XA_BUILTIN_RECEIVER_METHOD_##id,
+#define XB_RUNTIME_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,     \
+                                   min_params, type_params, effect, receiver_mode, allocation,     \
+                                   unsafe_requirement, lowering, method_symbol)                    \
+    XA_BUILTIN_RECEIVER_METHOD_##id,
 #include "xbuiltin_receiver_method.def"
+#undef XB_RUNTIME_RECEIVER_METHOD
 #undef XB_RECEIVER_VARIADIC_METHOD
 #undef XB_RECEIVER_METHOD
     XA_BUILTIN_RECEIVER_METHOD_COUNT,
@@ -219,6 +232,8 @@ typedef struct XaBuiltinReceiverMethodSpec {
     XaBuiltinMethodAllocation allocation;
     XaBuiltinMethodUnsafeRequirement unsafe_requirement;
     const char *lowering;
+    XaBuiltinMethodEmissionClass emission_class;
+    XiMethodSymbolId method_symbol;
 } XaBuiltinReceiverMethodSpec;
 
 static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
@@ -239,7 +254,9 @@ static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
      receiver_mode,                                                                                \
      allocation,                                                                                   \
      unsafe_requirement,                                                                           \
-     lowering},
+     lowering,                                                                                     \
+     XA_BUILTIN_EMISSION_INTRINSIC,                                                                \
+     XI_METHOD_SYMBOL_INVALID},
 #define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
                                     min_params, type_params, effect, receiver_mode, allocation,    \
                                     unsafe_requirement, lowering)                                  \
@@ -257,8 +274,31 @@ static const XaBuiltinReceiverMethodSpec xa_builtin_receiver_methods[] = {
      receiver_mode,                                                                                \
      allocation,                                                                                   \
      unsafe_requirement,                                                                           \
-     lowering},
+     lowering,                                                                                     \
+     XA_BUILTIN_EMISSION_INTRINSIC,                                                                \
+     XI_METHOD_SYMBOL_INVALID},
+#define XB_RUNTIME_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,     \
+                                   min_params, type_params, effect, receiver_mode, allocation,     \
+                                   unsafe_requirement, lowering, method_symbol)                    \
+    {XA_BUILTIN_RECEIVER_METHOD_##id,                                                              \
+     #id,                                                                                          \
+     source_name,                                                                                  \
+     receiver,                                                                                     \
+     result,                                                                                       \
+     {p0, p1, p2},                                                                                 \
+     param_count,                                                                                  \
+     min_params,                                                                                   \
+     false,                                                                                        \
+     type_params,                                                                                  \
+     effect,                                                                                       \
+     receiver_mode,                                                                                \
+     allocation,                                                                                   \
+     unsafe_requirement,                                                                           \
+     lowering,                                                                                     \
+     XA_BUILTIN_EMISSION_RUNTIME_HELPER,                                                           \
+     method_symbol},
 #include "xbuiltin_receiver_method.def"
+#undef XB_RUNTIME_RECEIVER_METHOD
 #undef XB_RECEIVER_VARIADIC_METHOD
 #undef XB_RECEIVER_METHOD
 };
@@ -273,6 +313,47 @@ xa_builtin_receiver_method_by_id(XaBuiltinReceiverMethodId method_id) {
         return NULL;
     const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[method_id];
     return spec->method_id == method_id ? spec : NULL;
+}
+
+static inline bool xa_builtin_receiver_matches_type(const XrType *receiver,
+                                                    XaBuiltinReceiverKind kind);
+
+/* Runtime-helper members form a closed sub-family of the receiver registry.
+ * The stable method symbol is executable identity; source text is checked only
+ * as diagnostic metadata owned by the same generated row. */
+static inline bool
+xa_builtin_runtime_receiver_method_spec_is_valid(const XaBuiltinReceiverMethodSpec *spec) {
+    const char *display = spec ? xi_method_symbol_display_name(spec->method_symbol) : NULL;
+    if (!spec || spec->emission_class != XA_BUILTIN_EMISSION_RUNTIME_HELPER ||
+        spec->method_symbol == XI_METHOD_SYMBOL_INVALID || !spec->source_name ||
+        spec->is_variadic || spec->param_count < 0 ||
+        spec->param_count > XA_BUILTIN_RECEIVER_METHOD_MAX_PARAMS ||
+        spec->min_params != spec->param_count || !display ||
+        strcmp(spec->source_name, display) != 0)
+        return false;
+    for (int i = spec->param_count; i < XA_BUILTIN_RECEIVER_METHOD_MAX_PARAMS; i++)
+        if (spec->params[i] != XA_BUILTIN_TYPE_NONE)
+            return false;
+    return true;
+}
+
+static inline const XaBuiltinReceiverMethodSpec *
+xa_builtin_runtime_receiver_method_by_symbol(const XrType *receiver, XiMethodSymbolId symbol,
+                                             uint16_t argument_count) {
+    if (!receiver || symbol == XI_METHOD_SYMBOL_INVALID)
+        return NULL;
+    const XaBuiltinReceiverMethodSpec *found = NULL;
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (!xa_builtin_runtime_receiver_method_spec_is_valid(spec) ||
+            spec->method_symbol != symbol || spec->param_count != argument_count ||
+            !xa_builtin_receiver_matches_type(receiver, spec->receiver))
+            continue;
+        if (found)
+            return NULL;
+        found = spec;
+    }
+    return found;
 }
 
 /* Root-relative memory effects are keyed by the sealed receiver-method ID,
@@ -332,6 +413,8 @@ static inline bool xa_builtin_type_is_pod_span_elem(const XrType *type) {
 static inline bool xa_builtin_receiver_matches_type(const XrType *receiver,
                                                     XaBuiltinReceiverKind kind) {
     switch (kind) {
+        case XA_BUILTIN_RECEIVER_STRING:
+            return receiver && receiver->kind == XR_KIND_STRING && !receiver->is_nullable;
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
@@ -422,6 +505,8 @@ xa_builtin_receiver_method_documentation_group(const XaBuiltinReceiverMethodSpec
     if (!spec)
         return XA_BUILTIN_DOC_GROUP_GENERAL;
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_STRING:
+            return XA_BUILTIN_DOC_GROUP_GENERAL;
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
             return XA_BUILTIN_DOC_GROUP_EXACT_INTEGER;

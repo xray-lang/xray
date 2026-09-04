@@ -51,6 +51,7 @@
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_view_origin.h"
 #include "../runtime/value/xtransfer_mode.h"
+#include "xi_method_symbol.h"
 
 /* Forward declarations for types defined in other modules */
 struct XrType;
@@ -98,16 +99,6 @@ typedef enum XiArrayHofKind {
     XI_ARRAY_HOF_REDUCE,
     XI_ARRAY_HOF_COUNT,
 } XiArrayHofKind;
-
-/* Stable method identities generated from the dispatch-symbol registry.
- * Selector text remains diagnostic metadata; compiler authorities compare
- * these typed IDs so a fabricated spelling cannot acquire builtin semantics. */
-typedef enum XiMethodSymbolId {
-    XI_METHOD_SYMBOL_INVALID = 0,
-#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) XI_METHOD_SYMBOL_##aot_name = id,
-#include "xi_method_sym.def"
-#undef XI_METHOD_SYM
-} XiMethodSymbolId;
 
 /* ========== IR Stage ========== */
 

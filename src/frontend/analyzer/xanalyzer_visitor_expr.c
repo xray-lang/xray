@@ -398,6 +398,8 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
     if (!spec)
         return "receiver";
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_STRING:
+            return "string";
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return "integer";
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
@@ -428,6 +430,8 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
             return xr_type_new_int(X);
         case XA_BUILTIN_TYPE_STRING:
             return xr_type_new_string(X);
+        case XA_BUILTIN_TYPE_ARRAY_OF_STRING:
+            return xr_type_new_array(X, xr_type_new_string(X));
         case XA_BUILTIN_TYPE_U8:
             return xr_type_new_int_width(X, XR_NATIVE_U8);
         case XA_BUILTIN_TYPE_U8_ARRAY:

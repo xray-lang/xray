@@ -13,6 +13,8 @@
  *                      receiver_mode, allocation, unsafe_requirement, lowering)
  *   XB_RECEIVER_VARIADIC_METHOD(...) uses the same fields and marks the
  *                      final parameter as variadic rest input.
+ *   XB_RUNTIME_RECEIVER_METHOD(...) adds a final stable XiMethodSymbolId and
+ *                      marks the row as a runtime-helper dispatch authority.
  */
 
 #ifndef XB_RECEIVER_METHOD
@@ -21,6 +23,23 @@
 #ifndef XB_RECEIVER_VARIADIC_METHOD
 #error "Define XB_RECEIVER_VARIADIC_METHOD before including xbuiltin_receiver_method.def"
 #endif
+#ifndef XB_RUNTIME_RECEIVER_METHOD
+#define XB_RUNTIME_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
+                                   min_params, type_params, effect, receiver_mode, allocation,   \
+                                   unsafe_requirement, lowering, method_symbol)                  \
+    XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params,   \
+                       type_params, effect, receiver_mode, allocation, unsafe_requirement,       \
+                       lowering)
+#define XB_RUNTIME_RECEIVER_METHOD_LOCAL 1
+#endif
+
+/* --- String runtime methods --- */
+XB_RUNTIME_RECEIVER_METHOD(STRING_SPLIT, "split", XA_BUILTIN_RECEIVER_STRING,
+                           XA_BUILTIN_TYPE_ARRAY_OF_STRING, XA_BUILTIN_TYPE_STRING,
+                           XA_BUILTIN_TYPE_NONE, XA_BUILTIN_TYPE_NONE, 1, 1,
+                           XA_BUILTIN_TYPE_PARAMS_NONE, XA_BUILTIN_EFFECT_READS_RECEIVER,
+                           XR_PARAM_READ, XA_BUILTIN_ALLOCATION_MAY_HEAP, XA_BUILTIN_UNSAFE_NONE,
+                           "runtime.method", XI_METHOD_SYMBOL_SPLIT)
 
 /* --- Exact-width integer methods ---
  *
@@ -292,3 +311,8 @@ XB_RECEIVER_METHOD(POD_SLICE_GET, "get", XA_BUILTIN_RECEIVER_POD_SLICE,
                    XA_BUILTIN_TYPE_NONE, 1, 1, XA_BUILTIN_TYPE_PARAMS_NONE,
                    XA_BUILTIN_EFFECT_READS_RECEIVER, XR_PARAM_READ, XA_BUILTIN_ALLOCATION_NO_HEAP,
                    XA_BUILTIN_UNSAFE_REQUIRED, "slice.get")
+
+#ifdef XB_RUNTIME_RECEIVER_METHOD_LOCAL
+#undef XB_RUNTIME_RECEIVER_METHOD_LOCAL
+#undef XB_RUNTIME_RECEIVER_METHOD
+#endif

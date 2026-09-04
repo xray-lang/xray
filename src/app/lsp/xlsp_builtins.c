@@ -165,6 +165,7 @@ static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec
         return;
     }
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_STRING:
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
             xlsp_type_label(type, buf, buf_size);
@@ -211,6 +212,9 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             break;
         case XA_BUILTIN_TYPE_STRING:
             snprintf(buf, buf_size, "string");
+            break;
+        case XA_BUILTIN_TYPE_ARRAY_OF_STRING:
+            snprintf(buf, buf_size, "Array<string>");
             break;
         case XA_BUILTIN_TYPE_U8:
             snprintf(buf, buf_size, "u8");
@@ -275,6 +279,16 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
             snprintf(buf, buf_size, "Iterator<(i64, %s)>", elem);
             break;
+        case XA_BUILTIN_TYPE_ITERATOR_OF_MAP_ENTRY_TUPLE: {
+            const char *key = receiver && receiver->kind == XR_KIND_MAP
+                                  ? xr_type_to_string(receiver->map.key_type)
+                                  : NULL;
+            const char *value = receiver && receiver->kind == XR_KIND_MAP
+                                    ? xr_type_to_string(receiver->map.value_type)
+                                    : NULL;
+            snprintf(buf, buf_size, "Iterator<(%s, %s)>", key ? key : "?", value ? value : "?");
+            break;
+        }
         case XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
             snprintf(buf, buf_size, "Array<(i64, %s)>", elem);
