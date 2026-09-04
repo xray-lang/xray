@@ -1970,6 +1970,11 @@ endif()
 # OpenSSL support
 # - WebSocket stdlib needs libcrypto (SHA1 for handshake) even without TLS
 # - Full TLS needs both libssl and libcrypto
+set(XRAY_RUNTIME_TLS_ENABLED OFF)
+# The installed AOT SDK carries verified TLS archives beside xray_rt_coro;
+# selecting shared provider libraries here would make native output depend on
+# the build machine's prefix or loader configuration.
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 if(APPLE)
     # Respect a release/toolchain-provided root first, then cover both native
     # Homebrew layouts for developer builds. Do not force the arm64 prefix on
@@ -1982,10 +1987,6 @@ if(APPLE)
             endif()
         endforeach()
     endif()
-    # Native packages cannot depend on a user's Homebrew prefix.  Link OpenSSL
-    # into the Xray executable; provider-specific AOT dependencies remain
-    # explicit in the generated link manifest.
-    set(OPENSSL_USE_STATIC_LIBS TRUE)
 endif()
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)
@@ -1998,12 +1999,29 @@ if(OpenSSL_FOUND)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
     if(ENABLE_TLS)
+        set(XRAY_RUNTIME_TLS_ENABLED ON)
+        set(XRAY_RUNTIME_TLS_SSL_FILE
+            "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_ssl${CMAKE_STATIC_LIBRARY_SUFFIX}")
+        set(XRAY_RUNTIME_TLS_CRYPTO_FILE
+            "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_crypto${CMAKE_STATIC_LIBRARY_SUFFIX}")
+        file(TO_CMAKE_PATH "${OPENSSL_SSL_LIBRARY}" XRAY_RUNTIME_TLS_SSL_SOURCE)
+        file(TO_CMAKE_PATH "${OPENSSL_CRYPTO_LIBRARY}" XRAY_RUNTIME_TLS_CRYPTO_SOURCE)
+        add_compile_definitions(
+            XRT_TLS_SSL_LIBRARY="${XRAY_RUNTIME_TLS_SSL_SOURCE}"
+            XRT_TLS_CRYPTO_LIBRARY="${XRAY_RUNTIME_TLS_CRYPTO_SOURCE}"
+        )
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            string(APPEND XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON ",\"dl\"")
+        endif()
         target_link_libraries(xray_core_objs PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
+        target_include_directories(xray_rt_coro PRIVATE ${OPENSSL_INCLUDE_DIR})
+        target_link_libraries(xray_rt_coro PUBLIC OpenSSL::SSL OpenSSL::Crypto)
         target_compile_definitions(xray_core_objs PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_core PUBLIC XR_ENABLE_TLS=1)
+        target_compile_definitions(xray_rt_coro PRIVATE XR_ENABLE_TLS=1)
     endif()
 else()
     message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
@@ -5981,6 +5999,18 @@ install(TARGETS xray_aot_core xray_rt_coro
     ARCHIVE DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
     COMPONENT XraySDK
 )
+if(XRAY_RUNTIME_TLS_ENABLED)
+    install(FILES "${OPENSSL_SSL_LIBRARY}"
+        DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
+        RENAME "${XRAY_RUNTIME_TLS_SSL_FILE}"
+        COMPONENT XraySDK
+    )
+    install(FILES "${OPENSSL_CRYPTO_LIBRARY}"
+        DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
+        RENAME "${XRAY_RUNTIME_TLS_CRYPTO_FILE}"
+        COMPONENT XraySDK
+    )
+endif()
 
 # Apple's post-install ranlib stamps each archive table of contents with the
 # current time, so an installed archive is not a function of its members and a

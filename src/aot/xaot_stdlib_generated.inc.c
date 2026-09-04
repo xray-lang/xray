@@ -46,6 +46,18 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
 static const char *xaot_stdlib_generated_define_for_symbol(const char *symbol) {
     if (!symbol)
         return NULL;
+    if (strcmp(symbol, "net.__hasTLS") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__newTlsClientContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__newTlsServerContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__tlsClientHandshakeWithContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__tlsServerHandshakeWithContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__tlsHandshake") == 0)
+        return "XRT_ENABLE_TLS";
     return NULL;
 }
 
@@ -71,6 +83,8 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
     if (strcmp(symbol, "net.__tlsClientHandshakeWithContext") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__tlsServerHandshakeWithContext") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__tlsHandshake") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__udpSendTo") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;

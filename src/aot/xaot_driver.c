@@ -1033,6 +1033,9 @@ static void features_add_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
     if (!fs || !symbol || !symbol[0] || strlen(symbol) >= XAOT_STDLIB_SYMBOL_NAME_MAX)
         return;
     features_apply_generated_stdlib_caps(fs, symbol);
+    const char *generated_define = xaot_stdlib_generated_define_for_symbol(symbol);
+    if (generated_define && strcmp(generated_define, "XRT_ENABLE_TLS") == 0)
+        fs->need_tls = true;
     for (uint16_t i = 0; i < fs->n_stdlib_symbols; i++) {
         if (strcmp(fs->stdlib_symbols[i], symbol) == 0)
             return;
@@ -1322,21 +1325,6 @@ static bool stdlib_symbol_is_sys_dylib(const char *symbol) {
 }
 #endif
 
-static bool add_stdlib_platform_system_lib_manifest_entries(XaotLinkManifest *manifest,
-                                                            const XaotFeatureSet *features) {
-#if defined(XR_OS_LINUX)
-    for (uint16_t i = 0; features && i < features->n_stdlib_symbols; i++) {
-        if (stdlib_symbol_is_sys_dylib(features->stdlib_symbols[i])) {
-            return xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "dl");
-        }
-    }
-#else
-    (void) manifest;
-    (void) features;
-#endif
-    return true;
-}
-
 static bool xaot_target_is_windows(const XaotTarget *target) {
     if (target && target->os && strcmp(target->os, "windows") == 0)
         return true;
@@ -1345,6 +1333,31 @@ static bool xaot_target_is_windows(const XaotTarget *target) {
 #else
     return false;
 #endif
+}
+
+static bool add_stdlib_platform_system_lib_manifest_entries(XaotLinkManifest *manifest,
+                                                            const XaotFeatureSet *features,
+                                                            const XaotTarget *target) {
+#if defined(XR_OS_LINUX)
+    for (uint16_t i = 0; features && i < features->n_stdlib_symbols; i++) {
+        if (stdlib_symbol_is_sys_dylib(features->stdlib_symbols[i])) {
+            if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "dl"))
+                return false;
+        }
+    }
+#endif
+#if defined(XR_ENABLE_TLS)
+    if (features && features->need_tls) {
+        if (xaot_target_is_windows(target) &&
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "crypt32"))
+            return false;
+    }
+#else
+    (void) manifest;
+    (void) features;
+    (void) target;
+#endif
+    return true;
 }
 
 static bool add_target_platform_system_lib_manifest_entries(XaotLinkManifest *manifest,
@@ -1397,6 +1410,10 @@ static bool add_stdlib_generated_define_manifest_entries(XaotLinkManifest *manif
                                                          const XaotFeatureSet *features) {
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
         const char *define = xaot_stdlib_generated_define_for_symbol(features->stdlib_symbols[i]);
+#if !defined(XR_ENABLE_TLS)
+        if (define && strcmp(define, "XRT_ENABLE_TLS") == 0)
+            continue;
+#endif
         if (define && !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, define))
             return false;
     }
@@ -1409,6 +1426,26 @@ static bool add_runtime_cap(XaotLinkManifest *manifest, const char *cap) {
 
 static bool add_aot_runtime_archive(XaotLinkManifest *manifest) {
     return xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_OBJECT, "xray_rt_coro");
+}
+
+static bool add_tls_runtime_manifest_entries(const XaotFeatureSet *features,
+                                             const XaotTarget *target, XaotLinkManifest *manifest) {
+#if defined(XR_ENABLE_TLS)
+    if (!features || !features->need_tls)
+        return true;
+    if (!add_runtime_cap(manifest, "tls") || !add_aot_runtime_archive(manifest) ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_OBJECT, "xray_tls_ssl") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_OBJECT, "xray_tls_crypto"))
+        return false;
+    if (!xaot_target_is_windows(target) &&
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "pthread"))
+        return false;
+#else
+    (void) features;
+    (void) target;
+    (void) manifest;
+#endif
+    return true;
 }
 
 static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
@@ -1592,13 +1629,16 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
         goto done;
     }
 
+    if (!add_tls_runtime_manifest_entries(features, target, manifest))
+        goto done;
+
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
     if (!add_extern_dylib_manifest_entries(manifest, features))
         goto done;
     if (!add_target_platform_system_lib_manifest_entries(manifest, target))
         goto done;
-    if (!add_stdlib_platform_system_lib_manifest_entries(manifest, features))
+    if (!add_stdlib_platform_system_lib_manifest_entries(manifest, features, target))
         goto done;
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;

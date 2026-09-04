@@ -48,6 +48,7 @@ typedef struct {
 } XrTlsAlpnPolicy;
 
 static int tls_alpn_policy_index = -1;
+static CRYPTO_ONCE tls_init_once = CRYPTO_ONCE_STATIC_INIT;
 
 static void tls_alpn_policy_destroy(XrTlsAlpnPolicy *policy) {
     if (!policy)
@@ -85,18 +86,15 @@ bool xr_tls_is_available(void) {
 
 /* ========== Global Initialization ========== */
 
-static int tls_initialized = 0;
-
-void xr_tls_init(void) {
-    if (tls_initialized)
-        return;
-
+static void tls_init_once_run(void) {
     // OpenSSL 1.1.0+ auto-initializes, but explicit call is safer
     OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
 
     tls_alpn_policy_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, tls_alpn_policy_ex_free);
+}
 
-    tls_initialized = 1;
+void xr_tls_init(void) {
+    (void) CRYPTO_THREAD_run_once(&tls_init_once, tls_init_once_run);
 }
 
 /* ========== TLS Context ========== */
@@ -132,7 +130,10 @@ XrTlsContext *xr_tls_context_new_client(void) {
                 const unsigned char *der = pCtx->pbCertEncoded;
                 X509 *x509 = d2i_X509(NULL, &der, (long) pCtx->cbCertEncoded);
                 if (x509) {
-                    X509_STORE_add_cert(store, x509);
+                    if (X509_STORE_add_cert(store, x509) != 1)
+                        /* Duplicate roots are common; every ignored failure
+                         * must leave the thread-local OpenSSL queue clean. */
+                        ERR_clear_error();
                     X509_free(x509);
                 }
             }
@@ -362,6 +363,7 @@ XrTlsError xr_tls_conn_handshake_client(struct XrVMRuntime *X, XrTlsConn *conn) 
         return XR_TLS_ERR_INIT;
 
     while (1) {
+        ERR_clear_error();
         int ret = SSL_connect(conn->ssl);
         if (ret == 1)
             return XR_TLS_OK;
@@ -402,6 +404,9 @@ int xr_tls_conn_read(struct XrVMRuntime *X, XrTlsConn *conn, void *buf, size_t l
         return -1;
 
     while (1) {
+        ERR_clear_error();
+        if (len > (size_t) INT_MAX)
+            len = (size_t) INT_MAX;
         int ret = SSL_read(conn->ssl, buf, (int) len);
         if (ret > 0)
             return ret;
@@ -443,6 +448,9 @@ int xr_tls_conn_write(struct XrVMRuntime *X, XrTlsConn *conn, const void *buf, s
         return -1;
 
     while (1) {
+        ERR_clear_error();
+        if (len > (size_t) INT_MAX)
+            len = (size_t) INT_MAX;
         int ret = SSL_write(conn->ssl, buf, (int) len);
         if (ret > 0)
             return ret;
@@ -482,6 +490,7 @@ int xr_tls_conn_handshake_try(XrTlsConn *conn) {
     if (!conn || !conn->ssl)
         return -1;
 
+    ERR_clear_error();
     int ret = SSL_connect(conn->ssl);
     if (ret == 1)
         return 0;  // success
@@ -501,6 +510,7 @@ int xr_tls_conn_handshake_server_try(XrTlsConn *conn) {
     if (!conn || !conn->ssl)
         return -1;
 
+    ERR_clear_error();
     int ret = SSL_accept(conn->ssl);
     if (ret == 1)
         return 0;
@@ -520,11 +530,12 @@ int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len) {
     if (!conn || !conn->ssl)
         return -3;
 
+    ERR_clear_error();
+    if (len > (size_t) INT_MAX)
+        len = (size_t) INT_MAX;
     int ret = SSL_read(conn->ssl, buf, (int) len);
     if (ret > 0)
         return ret;
-    if (ret == 0)
-        return 0;  // EOF
 
     int err = SSL_get_error(conn->ssl, ret);
     switch (err) {
@@ -543,6 +554,9 @@ int xr_tls_conn_write_try(XrTlsConn *conn, const void *buf, size_t len) {
     if (!conn || !conn->ssl)
         return -3;
 
+    ERR_clear_error();
+    if (len > (size_t) INT_MAX)
+        len = (size_t) INT_MAX;
     int ret = SSL_write(conn->ssl, buf, (int) len);
     if (ret > 0)
         return ret;

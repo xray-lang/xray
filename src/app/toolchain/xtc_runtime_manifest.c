@@ -291,6 +291,27 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
         }
         out->artifact_count++;
     }
+#if defined(XRT_TLS_SSL_LIBRARY) && defined(XRT_TLS_CRYPTO_LIBRARY)
+    static const struct {
+        const char *id;
+        const char *path;
+    } tls_artifacts[] = {
+        {"xray-tls-ssl", XRT_TLS_SSL_LIBRARY},
+        {"xray-tls-crypto", XRT_TLS_CRYPTO_LIBRARY},
+    };
+    for (size_t i = 0; i < sizeof(tls_artifacts) / sizeof(tls_artifacts[0]); i++) {
+        XrRuntimeArtifact *artifact = &out->artifacts[out->artifact_count];
+        snprintf(artifact->id, sizeof(artifact->id), "%s-%s-v1", tls_artifacts[i].id, target->name);
+        snprintf(artifact->kind, sizeof(artifact->kind), "%s", "static-library");
+        snprintf(artifact->path, sizeof(artifact->path), "%s", tls_artifacts[i].path);
+        if (!xtc_sha256_file(artifact->path, artifact->sha256)) {
+            xtc_runtime_error(err, err_size, "build-tree TLS runtime artifact is missing: %s",
+                              artifact->path);
+            return false;
+        }
+        out->artifact_count++;
+    }
+#endif
 #if defined(XR_OS_WINDOWS)
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "ws2_32");
@@ -303,6 +324,10 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
              "%s", "m");
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "pthread");
+#if defined(XR_OS_LINUX) && defined(XRT_TLS_SSL_LIBRARY)
+    snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
+             "%s", "dl");
+#endif
 #endif
     uint8_t digest[32];
     char identity[512];

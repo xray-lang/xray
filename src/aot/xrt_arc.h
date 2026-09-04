@@ -149,6 +149,7 @@ static inline void xrt_aot_class_type_set(XrObjHeader *hdr, uint16_t type_id) {
 #define XRT_ARC_KIND_ITERATOR 15u
 #define XRT_ARC_KIND_TUPLE 16u
 #define XRT_ARC_KIND_ENUM_BOX 17u
+#define XRT_ARC_KIND_TLS_CONTEXT 18u
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -524,13 +525,14 @@ static inline int xrt_arc_value_has_header(XrValue v) {
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
     if (v.tag == XR_TAG_PTR)
         return v.heap_type == XR_TINSTANCE || v.heap_type == XR_TENUM_DESCRIPTOR;
-    return v.tag == XR_TAG_STRBUF || v.tag == XR_TAG_CLOSURE ||
-           v.tag == XR_TAG_CELL || v.tag == XR_TAG_ITERATOR || v.tag == XR_TAG_AGG_REF ||
-           v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK ||
-           v.tag == XR_TAG_SYS_CONDVAR || v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE ||
-           v.tag == XR_TAG_THREAD || v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN_STORAGE ||
-           v.tag == XR_TAG_NET_LISTENER_STORAGE || v.tag == XR_TAG_RANGE || v.tag == XR_TAG_TUPLE ||
-           v.tag == XR_TAG_ENUM || v.tag == XR_TAG_BIGINT;
+    return v.tag == XR_TAG_STRBUF || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
+           v.tag == XR_TAG_ITERATOR || v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX ||
+           v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
+           v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||
+           v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN_STORAGE ||
+           v.tag == XR_TAG_NET_LISTENER_STORAGE || v.tag == XR_TAG_TLS_CONTEXT_STORAGE ||
+           v.tag == XR_TAG_RANGE || v.tag == XR_TAG_TUPLE || v.tag == XR_TAG_ENUM ||
+           v.tag == XR_TAG_BIGINT;
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {

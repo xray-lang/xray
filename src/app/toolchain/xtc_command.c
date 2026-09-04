@@ -457,6 +457,7 @@ static const XtcWindowsMsvcSystemLibrary *windows_msvc_system_library(const char
         {"ws2_32", "ws2_32.lib", "ws2_32"},
         {"bcrypt", "bcrypt.lib", "bcrypt"},
         {"api-ms-win-core-synch-l1-2-0", "synchronization.lib", "synchronization"},
+        {"crypt32", "crypt32.lib", "crypt32"},
         /* The Universal CRT owns the C math entry points for the MSVC ABI;
          * Windows does not ship a separate libm import library. */
         {"m", "libucrt.lib", "libucrt"},

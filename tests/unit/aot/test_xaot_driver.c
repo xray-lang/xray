@@ -967,6 +967,64 @@ static bool manifest_has_runtime_cap(const XaotLinkManifest *manifest, const cha
     return false;
 }
 
+static bool manifest_has_runtime_object(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_runtime_objects; i++) {
+        if (manifest->runtime_objects[i] && strcmp(manifest->runtime_objects[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool manifest_has_system_lib(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_system_libs; i++) {
+        if (manifest->system_libs[i] && strcmp(manifest->system_libs[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void test_net_tls_link_manifest_tracks_built_runtime(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-net-tls-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path, "import net\nprint(net.hasTLS())\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(!manifest_has_system_lib(&result.link_manifest, "ssl"));
+    ASSERT_TRUE(!manifest_has_system_lib(&result.link_manifest, "crypto"));
+#if defined(XR_ENABLE_TLS)
+    ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "tls"));
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRT_ENABLE_TLS"));
+    ASSERT_TRUE(manifest_has_runtime_object(&result.link_manifest, "xray_rt_coro"));
+    ASSERT_TRUE(manifest_has_runtime_object(&result.link_manifest, "xray_tls_ssl"));
+    ASSERT_TRUE(manifest_has_runtime_object(&result.link_manifest, "xray_tls_crypto"));
+#else
+    ASSERT_TRUE(!manifest_has_runtime_cap(&result.link_manifest, "tls"));
+    ASSERT_TRUE(!manifest_has_define(&result.link_manifest, "XRT_ENABLE_TLS"));
+    ASSERT_TRUE(!manifest_has_runtime_object(&result.link_manifest, "xray_tls_ssl"));
+    ASSERT_TRUE(!manifest_has_runtime_object(&result.link_manifest, "xray_tls_crypto"));
+#endif
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 static bool dump_line_contains(const char *dump, const char *anchor, const char *needle) {
     const char *line;
     const char *end;
@@ -1543,6 +1601,7 @@ int main(void) {
     test_driver_analyzes_aggregate_layout_with_selected_target();
     test_driver_analyzes_riscv64_layout_with_selected_target();
     test_spawn_target_contributes_artifact_runtime_capabilities();
+    test_net_tls_link_manifest_tracks_built_runtime();
     test_driver_hosted_fragment_borrows_runtime_ownership();
     test_driver_validates_freestanding_runtime_provider();
     test_driver_rejects_package_summary_graph_without_program_authority();

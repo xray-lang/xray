@@ -218,6 +218,13 @@ static void net_conn_set_error(XrNetConn *c, uint8_t kind, int err) {
     c->last_errno = err;
 }
 
+static void net_conn_close_with_error(XrNetConn *c, uint8_t kind, int err) {
+    if (!c)
+        return;
+    xr_net_conn_close(c);
+    net_conn_set_error(c, kind, err);
+}
+
 static void net_listener_set_error(XrNetListener *l, uint8_t kind, int err) {
     if (!l)
         return;
@@ -817,9 +824,7 @@ static XrCFuncResult net_read_into_step(XrVMRuntime *X, NetReadIntoState *state,
                 return net_read_into_error(state, result);
             }
             int wait_mode = (n == -1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-            int64_t deadline = (wait_mode == XR_WAIT_READ && state->conn)
-                                   ? state->conn->read_deadline_ms
-                                   : (state->conn ? state->conn->write_deadline_ms : 0);
+            int64_t deadline = state->conn ? state->conn->read_deadline_ms : 0;
             return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline),
                                    net_read_into_continue, state, result);
         }
@@ -921,8 +926,7 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
             return net_read_into_value(conn, buf, -1, result);
         }
         int wait_mode = (n == -1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-        int64_t deadline =
-            (wait_mode == XR_WAIT_READ) ? conn->read_deadline_ms : conn->write_deadline_ms;
+        int64_t deadline = conn->read_deadline_ms;
         return net_read_into_wait(X, conn, buf, read_len, 0, false, true, wait_mode, deadline,
                                   result);
     }
@@ -1043,9 +1047,7 @@ static XrCFuncResult net_write_step(XrVMRuntime *X, NetWriteState *state, XrValu
             }
             // -1=WANT_WRITE, -2=WANT_READ
             int wait_mode = (n == -1) ? XR_WAIT_WRITE : XR_WAIT_READ;
-            int64_t deadline = (wait_mode == XR_WAIT_WRITE && state->conn)
-                                   ? state->conn->write_deadline_ms
-                                   : (state->conn ? state->conn->read_deadline_ms : 0);
+            int64_t deadline = state->conn ? state->conn->write_deadline_ms : 0;
             return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline),
                                    net_write_continue, state, result);
         }
@@ -1166,8 +1168,7 @@ static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, in
                 return XR_CFUNC_DONE;
             }
             int wait_mode = (n == -1) ? XR_WAIT_WRITE : XR_WAIT_READ;
-            int64_t deadline =
-                (wait_mode == XR_WAIT_WRITE) ? conn->write_deadline_ms : conn->read_deadline_ms;
+            int64_t deadline = conn->write_deadline_ms;
             return net_write_wait(X, conn, raw, len, written, true, wait_mode, deadline, result);
         }
         net_conn_clear_error(conn);
@@ -1509,11 +1510,9 @@ static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState
 static XrCFuncResult net_tls_handshake_fail(NetTlsHandshakeState *state, uint8_t code,
                                             XrValue *result) {
     XrNetConn *conn = unwrap_conn(state->handle);
-    net_conn_set_error(conn, code, 0);
     xr_tls_conn_close(state->tls);
     xr_tls_conn_free(state->tls);
-    if (conn)
-        xr_net_conn_close(conn);
+    net_conn_close_with_error(conn, code, code == XR_NETERR_TIMEOUT ? XR_ETIMEDOUT : 0);
     xr_free(state);
     *result = xr_int(code);
     return XR_CFUNC_DONE;
@@ -1572,30 +1571,26 @@ static XrCFuncResult net_tls_handshake_with_context(XrVMRuntime *X, XrValue *arg
     }
     XrNetConn *conn = unwrap_conn(args[0]);
     if (!conn || conn->closed || conn->fd < 0 || conn->kind != XR_NETCONN_TCP) {
-        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
-        if (conn)
-            xr_net_conn_close(conn);
+        net_conn_close_with_error(conn, XR_NETERR_INVALID, 0);
         *result = xr_int(XR_NETERR_INVALID);
         return XR_CFUNC_DONE;
     }
 
     if (!context) {
-        net_conn_set_error(conn, XR_NETERR_TLS, 0);
-        xr_net_conn_close(conn);
+        net_conn_close_with_error(conn, XR_NETERR_TLS, 0);
         *result = xr_int(XR_NETERR_TLS);
         return XR_CFUNC_DONE;
     }
     XrTlsConn *tls = xr_tls_conn_new(context, conn->fd);
     if (!tls) {
-        net_conn_set_error(conn, XR_NETERR_TLS, 0);
-        xr_net_conn_close(conn);
+        net_conn_close_with_error(conn, XR_NETERR_TLS, 0);
         *result = xr_int(XR_NETERR_TLS);
         return XR_CFUNC_DONE;
     }
     if (!server && xr_tls_conn_set_hostname(tls, XR_STRING_CHARS(XR_TO_STRING(args[1]))) != 0) {
         xr_tls_conn_close(tls);
         xr_tls_conn_free(tls);
-        xr_net_conn_close(conn);
+        net_conn_close_with_error(conn, XR_NETERR_TLS, 0);
         *result = xr_int(XR_NETERR_TLS);
         return XR_CFUNC_DONE;
     }
@@ -1605,7 +1600,7 @@ static XrCFuncResult net_tls_handshake_with_context(XrVMRuntime *X, XrValue *arg
     if (!state) {
         xr_tls_conn_close(tls);
         xr_tls_conn_free(tls);
-        xr_net_conn_close(conn);
+        net_conn_close_with_error(conn, XR_NETERR_TLS, 0);
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
     }
@@ -1628,9 +1623,7 @@ static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, 
     XrArray *alpn = net_as_bytes(args[3]);
     if (!net_alpn_wire_valid(alpn)) {
         XrNetConn *conn = unwrap_conn(args[0]);
-        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
-        if (conn)
-            xr_net_conn_close(conn);
+        net_conn_close_with_error(conn, XR_NETERR_INVALID, 0);
         *result = xr_int(XR_NETERR_INVALID);
         return XR_CFUNC_DONE;
     }
@@ -1665,8 +1658,7 @@ static XrCFuncResult net_tls_client_handshake_context_yieldable(XrVMRuntime *X, 
 #else
     (void) X;
     XrNetConn *conn = nargs > 1 ? unwrap_conn(args[1]) : NULL;
-    if (conn)
-        xr_net_conn_close(conn);
+    net_conn_close_with_error(conn, XR_NETERR_TLS, 0);
     *result = xr_int(XR_NETERR_TLS);
     return XR_CFUNC_DONE;
 #endif
@@ -1683,8 +1675,7 @@ static XrCFuncResult net_tls_server_handshake_context_yieldable(XrVMRuntime *X, 
 #else
     (void) X;
     XrNetConn *conn = nargs > 1 ? unwrap_conn(args[1]) : NULL;
-    if (conn)
-        xr_net_conn_close(conn);
+    net_conn_close_with_error(conn, XR_NETERR_TLS, 0);
     *result = xr_int(XR_NETERR_TLS);
     return XR_CFUNC_DONE;
 #endif

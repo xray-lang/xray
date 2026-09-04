@@ -817,6 +817,9 @@ typedef enum {
     CG_CORO_NET_ACCEPT,
     CG_CORO_NET_READ_INTO,
     CG_CORO_NET_WRITE_BYTES,
+    CG_CORO_NET_TLS_HANDSHAKE,
+    CG_CORO_NET_TLS_CLIENT_CONTEXT,
+    CG_CORO_NET_TLS_SERVER_CONTEXT,
 } CgCoroNetCallKind;
 static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
@@ -1079,6 +1082,41 @@ static uint32_t cg_coro_static_cleanup_capacity(const XiFunc *f) {
     return count;
 }
 
+static bool cg_coro_func_has_net_wait(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (cg_coro_net_call_kind(ctx, f, blk->values[vi]) != CG_CORO_NET_NONE)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_coro_func_has_child_frame(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (cg_coro_call_needs_child_frame(ctx, f, blk->values[vi]))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_coro_func_needs_cancel_cleanup(XiCgenCtx *ctx, const XiFunc *f) {
+    return cg_coro_static_cleanup_capacity(f) > 0 || cg_coro_func_has_net_wait(ctx, f) ||
+           cg_coro_func_has_child_frame(ctx, f);
+}
+
 static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
     size_t size = 0;
     size_t max_align = 1;
@@ -1091,6 +1129,10 @@ static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
         cg_coro_layout_add(&size, &max_align, sizeof(bool), _Alignof(bool));
         cg_coro_layout_add(&size, &max_align, sizeof(uint32_t) * cleanup_capacity,
                            _Alignof(uint32_t));
+    }
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        cg_coro_layout_add(&size, &max_align, sizeof(XrValue), _Alignof(XrValue));
+        cg_coro_layout_add(&size, &max_align, sizeof(bool), _Alignof(bool));
     }
     if (cg_func_frame_needs_cl(f))
         cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
@@ -2031,6 +2073,10 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    bool cleanup_cancel;\n");
         fprintf(out, "    uint32_t cleanup_entries[%u];\n", cleanup_capacity);
     }
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        fprintf(out, "    XrValue net_pending_handle;\n");
+        fprintf(out, "    bool net_pending_tls_handshake;\n");
+    }
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_closure_t *_cl;\n");
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++)
@@ -2113,6 +2159,10 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    f->cleanup_dispatch = 0;\n");
         fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
         fprintf(out, "    f->cleanup_cancel = false;\n");
+    }
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        fprintf(out, "    f->net_pending_handle = XR_NULL_VAL;\n");
+        fprintf(out, "    f->net_pending_tls_handshake = false;\n");
     }
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    f->_cl = _cl;\n");
@@ -2585,8 +2635,63 @@ static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, 
     CG_NET_MEMBER("__accept", CG_CORO_NET_ACCEPT);
     CG_NET_MEMBER("__readInto", CG_CORO_NET_READ_INTO);
     CG_NET_MEMBER("__writeBytes", CG_CORO_NET_WRITE_BYTES);
+    CG_NET_MEMBER("__tlsHandshake", CG_CORO_NET_TLS_HANDSHAKE);
+    CG_NET_MEMBER("__tlsClientHandshakeWithContext", CG_CORO_NET_TLS_CLIENT_CONTEXT);
+    CG_NET_MEMBER("__tlsServerHandshakeWithContext", CG_CORO_NET_TLS_SERVER_CONTEXT);
 #undef CG_NET_MEMBER
     return CG_CORO_NET_NONE;
+}
+
+static bool cg_coro_net_is_tls_handshake(CgCoroNetCallKind kind) {
+    return kind == CG_CORO_NET_TLS_HANDSHAKE || kind == CG_CORO_NET_TLS_CLIENT_CONTEXT ||
+           kind == CG_CORO_NET_TLS_SERVER_CONTEXT;
+}
+
+static uint16_t cg_coro_net_conn_arg_index(CgCoroNetCallKind kind) {
+    return kind == CG_CORO_NET_TLS_CLIENT_CONTEXT || kind == CG_CORO_NET_TLS_SERVER_CONTEXT ? 2u
+                                                                                            : 1u;
+}
+
+static void emit_coro_net_storage_arg(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                      uint16_t arg_index) {
+    fprintf(out, "xrt_source_provider_storage(");
+    emit_value_as_rep_ctx(ctx, out, v->args[arg_index], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+static void emit_coro_net_pending_begin(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                        CgCoroNetCallKind kind) {
+    fprintf(out, "        if (XR_IS_NULL(f->net_pending_handle)) {\n");
+    fprintf(out, "            f->net_pending_handle = ");
+    emit_coro_net_storage_arg(ctx, out, v, cg_coro_net_conn_arg_index(kind));
+    fprintf(out, ";\n");
+    fprintf(out, "            xrt_retain(f->net_pending_handle);\n");
+    fprintf(out, "            f->net_pending_tls_handshake = %s;\n",
+            cg_coro_net_is_tls_handshake(kind) ? "true" : "false");
+    fprintf(out, "        }\n");
+}
+
+static void emit_coro_net_pending_end(FILE *out, const char *indent) {
+    fprintf(out, "%sxrt_release(f->net_pending_handle);\n", indent);
+    fprintf(out, "%sf->net_pending_handle = XR_NULL_VAL;\n", indent);
+    fprintf(out, "%sf->net_pending_tls_handshake = false;\n", indent);
+}
+
+static void emit_coro_net_pending_failure(FILE *out, const char *indent, const char *result_name) {
+    fprintf(out, "%sif (f->net_pending_tls_handshake) {\n", indent);
+    fprintf(out, "%s    (void)xrt_net_tls_handshake_abort(f->net_pending_handle,\n", indent);
+    fprintf(out,
+            "%s        %s.kind == XR_AOT_RUN_CANCELLED ? XRT_NETERR_CANCELLED : "
+            "XRT_NETERR_IO);\n",
+            indent, result_name);
+    fprintf(out, "%s} else {\n", indent);
+    fprintf(out,
+            "%s    xrt_net_mark_error(f->net_pending_handle,\n"
+            "%s        %s.kind == XR_AOT_RUN_CANCELLED ? XRT_NETERR_CANCELLED : "
+            "XRT_NETERR_IO);\n",
+            indent, indent, result_name);
+    fprintf(out, "%s}\n", indent);
+    emit_coro_net_pending_end(out, indent);
 }
 
 static void emit_coro_net_timeout_result(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -2594,17 +2699,23 @@ static void emit_coro_net_timeout_result(XiCgenCtx *ctx, FILE *out, const XiFunc
                                          const char *wait_name, const char *done_label) {
     (void) f;
     fprintf(out, "    if (XR_TO_INT(%s.value) == XR_AOT_IO_WAIT_TIMEOUT) {\n", wait_name);
-    fprintf(out, "        xrt_net_mark_timeout(");
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ");\n");
+    if (cg_coro_net_is_tls_handshake(kind)) {
+        fprintf(out,
+                "        XrValue _net_timeout_value_%u = "
+                "xrt_net_tls_handshake_abort(f->net_pending_handle, XRT_NETERR_TIMEOUT);\n",
+                v->id);
+    } else {
+        fprintf(out, "        xrt_net_mark_error(f->net_pending_handle, XRT_NETERR_TIMEOUT);\n");
+    }
     if (kind == CG_CORO_NET_WRITE_BYTES) {
         fprintf(out,
                 "        XrValue _net_timeout_value_%u = "
                 "XR_FROM_INT(f->net_progress_%u > 0 ? f->net_progress_%u : -1);\n",
                 v->id, v->id, v->id);
-    } else {
+    } else if (!cg_coro_net_is_tls_handshake(kind)) {
         fprintf(out, "        XrValue _net_timeout_value_%u = XR_NULL_VAL;\n", v->id);
     }
+    emit_coro_net_pending_end(out, "        ");
     char timeout_value[64];
     snprintf(timeout_value, sizeof(timeout_value), "_net_timeout_value_%u", v->id);
     emit_assign_from_xrvalue_temp_ctx(ctx, out, v, timeout_value);
@@ -2621,7 +2732,10 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     uint16_t argc = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
     bool arity_ok = (kind == CG_CORO_NET_ACCEPT && argc == 1) ||
                     (kind == CG_CORO_NET_READ_INTO && argc == 3) ||
-                    (kind == CG_CORO_NET_WRITE_BYTES && argc == 2);
+                    (kind == CG_CORO_NET_WRITE_BYTES && argc == 2) ||
+                    (kind == CG_CORO_NET_TLS_HANDSHAKE && argc == 4) ||
+                    (kind == CG_CORO_NET_TLS_CLIENT_CONTEXT && argc == 4) ||
+                    (kind == CG_CORO_NET_TLS_SERVER_CONTEXT && argc == 3);
     if (!arity_ok) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT net I/O call arity %u\n",
@@ -2641,25 +2755,60 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     snprintf(resume_name, sizeof(resume_name), "_net_resume_%u", v->id);
 
     fprintf(out, "%s:;\n    {\n", retry_label);
+    emit_coro_net_pending_begin(ctx, out, v, kind);
     if (kind == CG_CORO_NET_ACCEPT) {
         fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_accept_try(", v->id);
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
         fprintf(out, ");\n");
     } else if (kind == CG_CORO_NET_READ_INTO) {
         fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_read_into_try(", v->id);
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
         fprintf(out, ");\n");
-    } else {
+    } else if (kind == CG_CORO_NET_WRITE_BYTES) {
         fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_write_bytes_try(", v->id);
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ", f->net_progress_%u);\n", v->id);
         fprintf(out, "        f->net_progress_%u = _net_%u.progress;\n", v->id, v->id);
+    } else if (kind == CG_CORO_NET_TLS_HANDSHAKE) {
+        fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_tls_handshake_try(", v->id);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
+        for (uint16_t arg = 2; arg <= 4; arg++) {
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[arg], XR_REP_TAGGED);
+        }
+        fprintf(out, ");\n");
+    } else if (kind == CG_CORO_NET_TLS_CLIENT_CONTEXT) {
+        fprintf(out,
+                "        xrt_net_try_result_t _net_%u = "
+                "xrt_net_tls_client_handshake_context_try(",
+                v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_coro_net_storage_arg(ctx, out, v, 2);
+        fprintf(out, ", xr_str_data(");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+        fprintf(out, "), xr_str_len(");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+        fprintf(out, "), ");
+        emit_value_as_rep_ctx(ctx, out, v->args[4], XR_REP_TAGGED);
+        fprintf(out, ");\n");
+    } else {
+        fprintf(out,
+                "        xrt_net_try_result_t _net_%u = "
+                "xrt_net_tls_server_handshake_context_try(",
+                v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_coro_net_storage_arg(ctx, out, v, 2);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+        fprintf(out, ");\n");
     }
     fprintf(out, "        if (_net_%u.state != XRT_NET_TRY_DONE) {\n", v->id);
     fprintf(out, "            f->state = %d;\n", sid);
@@ -2668,10 +2817,17 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
             "_net_%u.state == XRT_NET_TRY_WAIT_READ ? XR_AOT_IO_EVENT_READ : "
             "XR_AOT_IO_EVENT_WRITE, _net_%u.timeout_ms);\n",
             wait_name, v->id, v->id, v->id);
+    fprintf(out,
+            "            if (%s.kind == XR_AOT_RUN_ERROR || "
+            "%s.kind == XR_AOT_RUN_CANCELLED) {\n",
+            wait_name, wait_name);
+    emit_coro_net_pending_failure(out, "                ", wait_name);
+    fprintf(out, "                return %s;\n            }\n", wait_name);
     fprintf(out, "            if (%s.kind != XR_AOT_RUN_DONE) return %s;\n", wait_name, wait_name);
     fprintf(out, "            f->state = 0;\n");
     emit_coro_net_timeout_result(ctx, out, f, v, kind, wait_name, done_label);
     fprintf(out, "            goto %s;\n        }\n", retry_label);
+    emit_coro_net_pending_end(out, "        ");
     char result_name[48];
     snprintf(result_name, sizeof(result_name), "_net_%u.value", v->id);
     emit_assign_from_xrvalue_temp_ctx(ctx, out, v, result_name);
@@ -2681,6 +2837,10 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
 
     fprintf(out, "S%d:;\n    f->state = 0;\n    {\n", sid);
     fprintf(out, "        XrAotResult %s = xr_aot_io_wait_resume(ctx);\n", resume_name);
+    fprintf(out, "        if (%s.kind == XR_AOT_RUN_ERROR || %s.kind == XR_AOT_RUN_CANCELLED) {\n",
+            resume_name, resume_name);
+    emit_coro_net_pending_failure(out, "            ", resume_name);
+    fprintf(out, "            return %s;\n        }\n", resume_name);
     fprintf(out, "        if (%s.kind != XR_AOT_RUN_DONE) return %s;\n", resume_name, resume_name);
     emit_coro_net_timeout_result(ctx, out, f, v, kind, resume_name, done_label);
     fprintf(out, "    }\n    goto %s;\n%s:;\n", retry_label, done_label);
@@ -4788,6 +4948,49 @@ static void emit_coro_direct_call_frame_release(XiCgenCtx *ctx, FILE *out, const
     }
 }
 
+static void emit_coro_direct_call_frame_cleanup(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const char *prefix) {
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            const XaotCallableInvokePlan *switch_plan = cg_coro_callable_target_switch_plan(ctx, v);
+            if (switch_plan) {
+                const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+                fprintf(out, "    if (f->call_frame_%u) {\n", v->id);
+                fprintf(out, "        switch (f->call_target_id_%u) {\n", v->id);
+                for (uint16_t ti = 0; ti < switch_plan->target_count; ti++) {
+                    const XaotCallableTargetCase *target =
+                        xaot_bundle_callable_target_case(bundle, switch_plan, ti);
+                    if (!target || !target->target_func ||
+                        (target->effect_bits & XG_BODY_MAY_SUSPEND) == 0)
+                        continue;
+                    const char *target_prefix = cg_module_prefix_for_func(ctx, target->target_func);
+                    fprintf(out, "            case %uu: if (", target->target_id);
+                    emit_fname_suffix(ctx, out, target_prefix, target->target_func, "_aot_desc");
+                    fprintf(out, ".run_pending_cleanup) ");
+                    emit_fname_suffix(ctx, out, target_prefix, target->target_func, "_aot_desc");
+                    fprintf(out, ".run_pending_cleanup(f->call_frame_%u, ctx); break;\n", v->id);
+                }
+                fprintf(out, "            default: break;\n");
+                fprintf(out, "        }\n    }\n");
+                continue;
+            }
+            CgStaticFunctionCall call = cg_coro_direct_suspend_call_target_info(ctx, f, v);
+            if (!call.func)
+                continue;
+            const char *target_prefix = call.prefix ? call.prefix : prefix;
+            fprintf(out, "    if (f->call_frame_%u && ", v->id);
+            emit_fname_suffix(ctx, out, target_prefix, call.func, "_aot_desc");
+            fprintf(out, ".run_pending_cleanup)\n        ");
+            emit_fname_suffix(ctx, out, target_prefix, call.func, "_aot_desc");
+            fprintf(out, ".run_pending_cleanup(f->call_frame_%u, ctx);\n", v->id);
+        }
+    }
+}
+
 /* One child-frame pointer slot per direct suspend-call site; each such pointer
  * is both a GC root and an ARC release in the parent frame. */
 static uint32_t cg_coro_direct_call_frame_count(XiCgenCtx *ctx, const XiFunc *f) {
@@ -4835,7 +5038,8 @@ static uint16_t cg_coro_plan_slot_physical_release_width(XiCgenCtx *ctx, const X
  * frame_root survives the storage filter, plus the direct suspend-call pointers.
  * Matches what emit_coro_frame_value_visit traces by construction. */
 static uint32_t cg_coro_plan_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const XiCoroPlan *plan) {
-    uint32_t count = cg_coro_direct_call_frame_count(ctx, f);
+    uint32_t count =
+        cg_coro_direct_call_frame_count(ctx, f) + (cg_coro_func_has_net_wait(ctx, f) ? 1u : 0u);
     if (!plan)
         return count;
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
@@ -4885,8 +5089,9 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
  * suspend-call pointers.  Matches emit_coro_frame_arc_release by construction. */
 static uint32_t cg_coro_plan_frame_releases(XiCgenCtx *ctx, const XiFunc *f,
                                             const XiCoroPlan *plan) {
-    uint32_t count =
-        (cg_func_frame_needs_cl(f) ? 1u : 0u) + cg_coro_direct_call_frame_count(ctx, f);
+    uint32_t count = (cg_func_frame_needs_cl(f) ? 1u : 0u) +
+                     cg_coro_direct_call_frame_count(ctx, f) +
+                     (cg_coro_func_has_net_wait(ctx, f) ? 1u : 0u);
     if (!plan)
         return count;
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
@@ -5056,7 +5261,10 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         fprintf(out, "        return _result;\n");
         fprintf(out, "    }\n");
         fprintf(out, "}\n\n");
+    }
 
+    bool needs_cancel_cleanup = cg_coro_func_needs_cancel_cleanup(ctx, f);
+    if (needs_cancel_cleanup) {
         fprintf(out, "%svoid ", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_run_cleanup");
         fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
@@ -5065,13 +5273,28 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         fprintf(out, " *f = (");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
         fprintf(out, " *)raw_frame;\n");
-        fprintf(out, "    if (!f || f->cleanup_depth == 0)\n        return;\n");
-        fprintf(out, "    f->cleanup_cancel = true;\n");
-        fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
-        fprintf(out, "    f->cleanup_dispatch = f->cleanup_entries[--f->cleanup_depth];\n");
-        fprintf(out, "    (void)");
-        emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
-        fprintf(out, "(raw_frame, ctx);\n");
+        fprintf(out, "    if (!f)\n        return;\n");
+        emit_coro_direct_call_frame_cleanup(ctx, out, f, prefix);
+        if (cg_coro_func_has_net_wait(ctx, f)) {
+            fprintf(out, "    if (!XR_IS_NULL(f->net_pending_handle)) {\n"
+                         "        if (f->net_pending_tls_handshake)\n"
+                         "            (void)xrt_net_tls_handshake_abort(f->net_pending_handle, "
+                         "XRT_NETERR_CANCELLED);\n"
+                         "        else\n"
+                         "            xrt_net_mark_error(f->net_pending_handle, "
+                         "XRT_NETERR_CANCELLED);\n");
+            emit_coro_net_pending_end(out, "        ");
+            fprintf(out, "    }\n");
+        }
+        if (cleanup_capacity > 0) {
+            fprintf(out, "    if (f->cleanup_depth == 0)\n        return;\n");
+            fprintf(out, "    f->cleanup_cancel = true;\n");
+            fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
+            fprintf(out, "    f->cleanup_dispatch = f->cleanup_entries[--f->cleanup_depth];\n");
+            fprintf(out, "    (void)");
+            emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
+            fprintf(out, "(raw_frame, ctx);\n");
+        }
         fprintf(out, "}\n\n");
     }
 
@@ -5084,6 +5307,9 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " *)frame;\n");
     fprintf(out, "    if (!f)\n        return;\n");
+    if (cg_coro_func_has_net_wait(ctx, f))
+        fprintf(out, "    if (!XR_IS_NULL(f->net_pending_handle))\n"
+                     "        xr_aot_trace_frame_value(visitor, f->net_pending_handle);\n");
     emit_coro_frame_value_visit(ctx, out, f, "xr_aot_trace_frame_value", true);
     emit_coro_direct_call_frame_trace(ctx, out, f, prefix);
     fprintf(out, "}\n\n");
@@ -5098,6 +5324,17 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, " *)frame;\n");
     fprintf(out, "    (void)heap;\n");
     fprintf(out, "    if (!f)\n        return;\n");
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        fprintf(out,
+                "    if (!XR_IS_NULL(f->net_pending_handle)) {\n"
+                "        if (f->net_pending_tls_handshake)\n"
+                "            (void)xrt_net_tls_handshake_abort(f->net_pending_handle, "
+                "XRT_NETERR_CANCELLED);\n"
+                "        else\n"
+                "            xrt_net_mark_error(f->net_pending_handle, XRT_NETERR_CANCELLED);\n");
+        emit_coro_net_pending_end(out, "        ");
+        fprintf(out, "    }\n");
+    }
     emit_coro_direct_call_frame_release(ctx, out, f, prefix);
     emit_coro_frame_arc_release(ctx, out, f);
     if (cg_func_frame_needs_cl(f))
@@ -5124,7 +5361,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, ",\n");
     fprintf(out, "    .run_pending_cleanup = ");
-    if (cleanup_capacity > 0)
+    if (needs_cancel_cleanup)
         emit_fname_suffix(ctx, out, prefix, f, "_aot_run_cleanup");
     else
         fprintf(out, "NULL");

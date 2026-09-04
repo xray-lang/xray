@@ -284,6 +284,7 @@ baseline:
 #define XR_TAG_BIGINT 35       /* AOT static BigInt literal view */
 #define XR_TAG_NET_CONN_STORAGE 36     /* AOT net.__NetConnStorage resource */
 #define XR_TAG_NET_LISTENER_STORAGE 37 /* AOT net.__NetListenerStorage resource */
+#define XR_TAG_TLS_CONTEXT_STORAGE 38  /* AOT net.__TlsContextStorage resource */
 
 typedef struct XrAotEnumBox {
     XrObjHeader hdr;

@@ -7276,6 +7276,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_NET_LISTENER:
             xrt_net_destroy_builtin(obj);
             break;
+        case XRT_ARC_KIND_TLS_CONTEXT:
+            xrt_net_destroy_tls_context_builtin(obj);
+            break;
 #ifdef XRT_ENABLE_SYS_THREAD
         /* xrt_thread_destroy_builtin calls the extern
          * xr_thread_detach, which only links when the coro runtime archive is
@@ -7620,6 +7623,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
         case XR_TAG_REGEX:
         case XR_TAG_NET_CONN_STORAGE:
         case XR_TAG_NET_LISTENER_STORAGE:
+        case XR_TAG_TLS_CONTEXT_STORAGE:
             xrt_retain(val);
             return val;
         default:

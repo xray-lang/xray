@@ -1,0 +1,13 @@
+import net
+import { NetConn, TlsClientContext, TlsServerContext } from net
+
+fn upgradeClient(context: TlsClientContext, conn: NetConn) {
+    context.upgrade(conn, "localhost", 1000)
+}
+
+fn acceptServer(context: TlsServerContext, conn: NetConn) {
+    context.accept(conn, 1000)
+}
+
+print(typeName(upgradeClient))
+print(typeName(acceptServer))

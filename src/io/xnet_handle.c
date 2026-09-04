@@ -207,6 +207,7 @@ void xr_net_conn_close(XrNetConn *c) {
         return;
 #ifdef XR_ENABLE_TLS
     if (c->tls_state) {
+        xr_tls_conn_close((XrTlsConn *) c->tls_state);
         xr_tls_conn_free((XrTlsConn *) c->tls_state);
         c->tls_state = NULL;
     }

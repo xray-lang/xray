@@ -535,6 +535,10 @@ static const char *xaot_verified_runtime_path(const XrToolchainSelection *plan,
         id_prefix = "xray-rt-coro-";
     else if (strcmp(logical_name, "xray_aot_core") == 0)
         id_prefix = "xray-aot-core-";
+    else if (strcmp(logical_name, "xray_tls_ssl") == 0)
+        id_prefix = "xray-tls-ssl-";
+    else if (strcmp(logical_name, "xray_tls_crypto") == 0)
+        id_prefix = "xray-tls-crypto-";
     else
         return NULL;
     size_t prefix_len = strlen(id_prefix);

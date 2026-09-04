@@ -479,9 +479,25 @@ TEST(build_tree_runtime_manifest_matches_host_platform) {
     ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_GCC, NULL, &runtime,
                                           &reason, err, sizeof(err)));
     ASSERT_STR_EQ(runtime.object_format, "elf");
-    ASSERT_EQ_INT(runtime.system_library_count, 2);
+    ASSERT_EQ_INT(runtime.system_library_count,
+#if defined(XR_OS_LINUX) && defined(XRT_TLS_SSL_LIBRARY)
+                  3
+#else
+                  2
+#endif
+    );
     ASSERT_STR_EQ(runtime.system_libraries[0], "m");
     ASSERT_STR_EQ(runtime.system_libraries[1], "pthread");
+#if defined(XR_OS_LINUX) && defined(XRT_TLS_SSL_LIBRARY)
+    ASSERT_STR_EQ(runtime.system_libraries[2], "dl");
+#endif
+#endif
+#if defined(XRT_TLS_SSL_LIBRARY) && defined(XRT_TLS_CRYPTO_LIBRARY)
+    ASSERT_EQ_INT(runtime.artifact_count, 4);
+    ASSERT_TRUE(xtc_runtime_artifact_find(&runtime, "xray-tls-ssl-") != NULL);
+    ASSERT_TRUE(xtc_runtime_artifact_find(&runtime, "xray-tls-crypto-") != NULL);
+#else
+    ASSERT_EQ_INT(runtime.artifact_count, 2);
 #endif
     ASSERT_EQ_INT(reason, XR_TOOLCHAIN_REASON_NONE);
 }
