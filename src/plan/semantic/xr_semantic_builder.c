@@ -15,6 +15,7 @@
 #include "xr_semantic_coroutine_lifecycle_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_string_runes_shape.h"
+#include "xr_semantic_builtin_runtime_method_shape.h"
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_iterator_rune_nth_shape.h"
@@ -5004,6 +5005,13 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!xr_semantic_string_runes_is_exact(ctx->plan, record, NULL))
             return fail(ctx, "XR_SEM_0019", "String.runes authority is not exact");
     }
+    const XaBuiltinReceiverMethodSpec *builtin_runtime_method =
+        xr_semantic_builtin_runtime_method_live_spec(value);
+    if (builtin_runtime_method) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD;
+        record->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] =
+            builtin_runtime_method->method_id;
+    }
     if (xi_iterator_rune_has_next_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_ITERATOR_RUNE_HAS_NEXT;
         if (!xr_semantic_iterator_rune_has_next_is_exact(ctx->plan, record, NULL))
@@ -5198,6 +5206,9 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!append_operation_allocation_identity(ctx, record))
             return false;
     }
+    if (record->intrinsic_kind == XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD &&
+        !xr_semantic_builtin_runtime_method_is_exact(ctx->plan, record, NULL, NULL))
+        return fail(ctx, "XR_SEM_0019", "builtin runtime method authority is not exact");
     return append_call_target(ctx, value, index);
 }
 

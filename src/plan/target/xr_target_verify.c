@@ -42,6 +42,7 @@
 #include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
+#include "../semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_nth_shape.h"
@@ -4198,7 +4199,9 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             operation_is_exact_json_namespace_value(semantic, operation, NULL) ||
             xr_semantic_panic_info_constructor_is_exact(semantic, operation, NULL) ||
             xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL) ||
-            xr_semantic_dynamic_value_is_exact(semantic, operation) || exact_array_member_result ||
+            xr_semantic_dynamic_value_is_exact(semantic, operation) ||
+            xr_semantic_builtin_runtime_method_is_exact(semantic, operation, NULL, NULL) ||
+            exact_array_member_result ||
             (exact_direct_callees && exact_direct_callees[operation->result_value] != 0) ||
             (exact_go_callees && exact_go_callees[operation->result_value] != 0) ||
             (operation->opcode == XI_GO && operation->operand_count != 0 && semantic_operands &&
@@ -4317,10 +4320,11 @@ static bool verify_value_binding(
     bool exact_local_address =
         xr_semantic_local_addr_is_exact(semantic, operation, NULL) ||
         semantic_direct_local_scalar_ref_address_is_exact_verify(semantic, operation);
-    bool exact_dynamic_value = xr_semantic_dynamic_value_is_exact(semantic, operation) &&
-                               operation->result_value == semantic_value &&
-                               operation->result_type == semantic_type &&
-                               operation->function == semantic_function;
+    bool exact_dynamic_value =
+        (xr_semantic_dynamic_value_is_exact(semantic, operation) ||
+         xr_semantic_builtin_runtime_method_is_exact(semantic, operation, NULL, NULL)) &&
+        operation->result_value == semantic_value && operation->result_type == semantic_type &&
+        operation->function == semantic_function;
     bool exact_native_direct_fresh =
         xr_semantic_native_direct_fresh_result_is_exact(semantic, operation, NULL) && operation &&
         operation->result_value == semantic_value && operation->result_type == semantic_type &&
@@ -6306,6 +6310,13 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             }
             expected_calls++;
         }
+        if (xr_semantic_builtin_runtime_method_is_exact(semantic, operation, NULL, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (xr_semantic_string_runes_is_exact(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -6628,6 +6639,18 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         uint32_t string_runes_receiver = XR_SEMANTIC_INDEX_NONE;
         bool string_runes = !semantic_target && xr_semantic_string_runes_is_exact(
                                                     semantic, operation, &string_runes_receiver);
+        const XaBuiltinReceiverMethodSpec *builtin_runtime_spec = NULL;
+        uint32_t builtin_runtime_receiver = XR_SEMANTIC_INDEX_NONE;
+        bool builtin_runtime_method =
+            !semantic_target &&
+            xr_semantic_builtin_runtime_method_is_exact(semantic, operation, &builtin_runtime_spec,
+                                                        &builtin_runtime_receiver);
+        XrStableId builtin_runtime_identity = {{0}};
+        if (builtin_runtime_method &&
+            !xr_builtin_runtime_method_identity(builtin_runtime_spec, &builtin_runtime_identity)) {
+            valid = false;
+            break;
+        }
         uint32_t iterator_rune_has_next_receiver = XR_SEMANTIC_INDEX_NONE;
         bool iterator_rune_has_next =
             !semantic_target && xr_semantic_iterator_rune_has_next_is_exact(
@@ -6789,7 +6812,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             direct_adt_enum_result || direct_class_instance_result || json_namespace_value ||
             string_utf8_static || source_string_result || class_construction ||
             adt_enum_constructor || array_intrinsic || array_fill || panic_info_constructor ||
-            container_copy || native_direct_fresh_result) {
+            container_copy || native_direct_fresh_result || builtin_runtime_method) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -6877,10 +6900,11 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             (native_target_leaf
                  ? (native_target_leaf_entry && !stable_id_is_zero(call->native_callee_identity) &&
                     call->native_leaf == native_target_leaf_entry->target_leaf)
-             : native_direct ? (!stable_id_is_zero(call->native_callee_identity) &&
-                                call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)
-                             : (stable_id_is_zero(call->native_callee_identity) &&
-                                call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)) &&
+             : native_direct || builtin_runtime_method
+                 ? (!stable_id_is_zero(call->native_callee_identity) &&
+                    call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)
+                 : (stable_id_is_zero(call->native_callee_identity) &&
+                    call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)) &&
             call->result_mode ==
                 (direct_aggregate_result ? XR_TARGET_CALL_CALLER_STORAGE : XR_TARGET_CALL_VALUE) &&
             /* Receiver-aliasing StringBuilder append preserves a borrowed
@@ -6897,7 +6921,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                          json_namespace_value || string_utf8_static || class_construction ||
                          adt_enum_constructor || array_intrinsic || panic_info_constructor ||
                          container_copy || map_entries_iterator || map_entry_iterator_next ||
-                         native_direct_fresh_result ||
+                         native_direct_fresh_result || builtin_runtime_method ||
                          (array_hof && array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE)
                      ? XR_TARGET_CALL_RETURN_OWNED
                  : string_byte_slice_view ? XR_TARGET_CALL_BORROW
@@ -7929,6 +7953,28 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                 plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
                 plan->slots[result->slot].ownership ==
                     (borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED);
+            if (!valid)
+                break;
+        } else if (builtin_runtime_method) {
+            valid = result_type && !suspends &&
+                    reconstruct_call_identity("xray-target-builtin-runtime-method-v1",
+                                              operation->id, builtin_runtime_identity,
+                                              builtin_runtime_receiver, &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    xr_stable_id_equal(call->native_callee_identity, builtin_runtime_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
+                    call->flags == 0 &&
+                    call->calling_convention == XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD &&
+                    call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result &&
+                    result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
             if (!valid)
                 break;
         } else if (string_runes) {

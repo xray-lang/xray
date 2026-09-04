@@ -435,6 +435,10 @@ add_xray_unit_test(test_xi_own ir/test_xi_own.c)
 add_xray_unit_test(test_xi_arc_verify ir/test_xi_arc_verify.c)
 add_xray_unit_test(test_xi_source_move_verify ir/test_xi_source_move_verify.c)
 add_xray_unit_test(test_semantic_plan plan/test_semantic_plan.c)
+add_test(NAME test_semantic_builtin_runtime_method_authority
+    COMMAND $<TARGET_FILE:test_semantic_plan> builtin-runtime-method-authority)
+set_tests_properties(test_semantic_builtin_runtime_method_authority PROPERTIES
+    LABELS "semantic;typed-plan;runtime-method")
 add_xray_unit_test(test_program_semantic_closure plan/test_program_semantic_closure.c)
 add_test(NAME test_program_semantic_call_locator
     COMMAND $<TARGET_FILE:test_program_semantic_closure>)
@@ -718,6 +722,10 @@ add_test(NAME test_target_iterator_rune_nth_argument_authority
     COMMAND $<TARGET_FILE:test_target_plan> iterator-rune-nth-argument-authority)
 add_test(NAME test_target_source_class_array_fill_authority
     COMMAND $<TARGET_FILE:test_target_plan> source-class-array-fill-authority)
+add_test(NAME test_target_builtin_runtime_method_authority
+    COMMAND $<TARGET_FILE:test_target_plan> builtin-runtime-method-authority)
+set_tests_properties(test_target_builtin_runtime_method_authority PROPERTIES
+    LABELS "target-machine;aot;typed-plan;runtime-method")
 add_xray_unit_test(test_xtp_format plan/test_xtp_format.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xtp_resource_stress

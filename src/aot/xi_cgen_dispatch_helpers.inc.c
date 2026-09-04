@@ -10629,6 +10629,13 @@ static bool xicgen_key_access_runtime_method_preflight(XiCgenCtx *ctx, FILE *out
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs,
                                        const XaotMethodDispatchPlan *dispatch_plan) {
+    XiMethodSymbolId builtin_runtime_symbol = XI_METHOD_SYMBOL_INVALID;
+    CgValueEmissionStatus builtin_runtime_authority =
+        cg_builtin_runtime_method_target_authority(ctx, f, v, &builtin_runtime_symbol);
+    if (builtin_runtime_authority == CG_VALUE_EMISSION_ERROR) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (xicgen_emit_int_numeric_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
@@ -10671,7 +10678,8 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    int sym = cg_method_sym(method);
+    int sym = builtin_runtime_authority == CG_VALUE_EMISSION_FOUND ? (int) builtin_runtime_symbol
+                                                                   : cg_method_sym(method);
     if (xicgen_emit_stringbuilder_method(ctx, out, f, v, method, nargs))
         return;
     /* string.copyArray<u8>(): the VM dispatches this by name (no stable method-symbol

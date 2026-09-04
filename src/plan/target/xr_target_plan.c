@@ -1186,6 +1186,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         bool stringbuilder_append_rune =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE;
         bool string_runes = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_RUNES;
+        bool builtin_runtime_method =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD;
         bool iterator_rune_has_next =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_HAS_NEXT;
         bool iterator_rune_next =
@@ -1240,7 +1242,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         if (!semantic ||
             (!direct_local && !program_direct && !channel_close && !source_export &&
              !stringbuilder_constructor && !string_byte_slice_view && !stringbuilder_append_rune &&
-             !string_runes && !iterator_rune_has_next && !iterator_rune_next &&
+             !string_runes && !builtin_runtime_method && !iterator_rune_has_next &&
+             !iterator_rune_next &&
              !iterator_rune_nth && !rune_to_uint32 && !rune_to_string && !rune_is_whitespace &&
              !string_slice_range && !string_utf8_static && !stringbuilder_to_string &&
              !stringbuilder_append_string && !stringbuilder_clear && !json_namespace_value &&
@@ -1255,7 +1258,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              plan->calls[i].semantic_call_target >= xr_semantic_plan_call_target_count(semantic)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
-              stringbuilder_clear || string_runes || iterator_rune_has_next || iterator_rune_next ||
+              stringbuilder_clear || string_runes || builtin_runtime_method ||
+              iterator_rune_has_next || iterator_rune_next ||
               iterator_rune_nth || rune_to_uint32 || rune_to_string || rune_is_whitespace ||
               string_slice_range || string_utf8_static || json_namespace_value ||
               array_member_scalar || native_module_scalar || native_target_leaf ||

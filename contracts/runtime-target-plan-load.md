@@ -61,7 +61,7 @@ roots, or general product activation.
    type identity and rejects incomplete or mutated representation facts; no Xi
    type, name, or legacy plan can authorize it. The
    aggregate family admits the bounded leaf-value direct-local family only
-   through SemanticPlan 46 program provenance and typed type, field, function,
+   through SemanticPlan 49 program provenance and typed type, field, function,
    and call bindings. It derives field geometry from the verified target profile
    and declaration ordinals, binds caller and callee to one trivial aggregate
    representation, and records the return in caller storage with no adapter or
@@ -272,11 +272,11 @@ roots, or general product activation.
    authority. Builder and verifier derive that judgement independently from
    SemanticPlan, while String and other reference-capable children continue to
    fail closed at this element-indexing boundary.
-5. Runtime loading accepts only an XTP v56 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v60 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V56 is a breaking hard cutover from
-   v55 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 47,
-   TargetProfile schema 3, TargetPlan schema 59, program-provenance schema 5,
+   independent TargetPlan verification. V60 is a breaking hard cutover from
+   v59 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 49,
+   TargetProfile schema 5, TargetPlan schema 60, program-provenance schema 5,
    and exact PSC v9 provenance, typed program bindings, and the direct-local
    scalar-ref v1 call-row interpretation; no compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
@@ -340,7 +340,7 @@ roots, or general product activation.
    therefore remains fail closed for cross-module artifacts. The bounded scalar
    module-graph family instead uses the same public TargetPlan loader with
    PROGRAM_MODULE_SET authority, which selects the unique program-graph
-   materializer. TargetPlan schema 59 carries one program-graph row and canonical
+   materializer. TargetPlan schema 60 carries one program-graph row and canonical
    module partitions over global TargetPlan tables; each partition identifies
    its SemanticPlan through the full canonical program module set and records
    pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 216-byte rows and has

@@ -14,6 +14,7 @@
 #include "../../../src/base/xsha256.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_source_class_field_shape.h"
@@ -1435,6 +1436,36 @@ static XrSemanticPlan *build_string_runes_leading_type_semantic(void) {
     if (!built)
         fprintf(stderr, "String.runes leading-type semantic failed: %s\n", error);
     REQUIRE(built && semantic);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_builtin_runtime_string_split_semantic(void) {
+    XiFunc *function =
+        xi_func_new("target_builtin_runtime_string_split", &stub_target_string_array);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *receiver = xi_const_str(function, entry, "a,,b,", &stub_exact_string);
+    XiValue *separator = xi_const_str(function, entry, ",", &stub_exact_string);
+    XiValue *split = xi_value_new(function, entry, XI_CALL_METHOD, &stub_target_string_array, 2);
+    REQUIRE(receiver != NULL && separator != NULL && split != NULL);
+    split->args[0] = receiver;
+    split->args[1] = separator;
+    split->aux = (void *) "split";
+    split->aux_int = (int64_t) XI_METHOD_SYMBOL_SPLIT << 1;
+    split->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    xi_block_set_return(entry, split);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime String.split SemanticPlan failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
     xi_func_free(function);
     return semantic;
 }
@@ -5196,7 +5227,7 @@ static void test_imported_source_class_constructor_authority(void) {
             semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
             semantic_target->callable_type == operation->result_type &&
             xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
-            strstr(semantic_target->canonical_key, "call-target-v10:schema=48:") != NULL &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=49:") != NULL &&
             xr_semantic_imported_class_construction_authority_source_class(
                 semantic, dependency, &semantic->dependencies[0], source_export, operation,
                 &constructor) == 0 &&
@@ -9300,6 +9331,80 @@ static void test_string_runes_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_builtin_runtime_string_split_call_authority(void) {
+    XrSemanticPlan *semantic = build_builtin_runtime_string_split_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime String.split TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    XrTargetCallRecord *call =
+        find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, call->semantic_operation);
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    XrStableId method_identity;
+    XrTargetValueRepRecord *result =
+        operation
+            ? (XrTargetValueRepRecord *) xr_target_plan_value_rep(plan, operation->result_value)
+            : NULL;
+    XrTargetSlotRecord *slot =
+        result && result->slot < plan->slots_count ? &plan->slots[result->slot] : NULL;
+    REQUIRE(operation != NULL &&
+            xr_semantic_builtin_runtime_method_is_exact(semantic, operation, &spec, &receiver) &&
+            spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_STRING_SPLIT &&
+            xr_builtin_runtime_method_identity(spec, &method_identity) &&
+            call->target_kind == XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD &&
+            call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE && call->argument_count == 0 &&
+            call->flags == 0 && call->result_mode == XR_TARGET_CALL_VALUE &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            xr_stable_id_equal(call->native_callee_identity, method_identity) && result != NULL &&
+            result->slot == call->result_slot && slot != NULL &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            slot->ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    XrStableId saved_identity = call->identity;
+    call->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->identity = saved_identity;
+
+    XrStableId saved_method_identity = call->native_callee_identity;
+    call->native_callee_identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->native_callee_identity = saved_method_identity;
+
+    uint8_t saved_convention = call->calling_convention;
+    call->calling_convention = XR_TARGET_CALL_CONVENTION_STRING_RUNES;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->calling_convention = saved_convention;
+
+    uint8_t saved_kind = call->target_kind;
+    call->target_kind = XR_TARGET_CALL_TARGET_STRING_RUNES;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = saved_kind;
+
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_BORROW;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_ownership;
+
+    uint8_t saved_slot_ownership = slot->ownership;
+    slot->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    slot->ownership = saved_slot_ownership;
+
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_string_slice_range_call_authority(void) {
     XrSemanticPlan *semantic = build_string_slice_range_semantic(false);
     XrTargetProfile *profile = build_profile(0);
@@ -10962,6 +11067,11 @@ int main(int argc, char **argv) {
         puts("String.runes result authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "builtin-runtime-method-authority") == 0) {
+        test_builtin_runtime_string_split_call_authority();
+        puts("Builtin runtime method TargetPlan authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "stringbuilder-authority") == 0) {
         test_stringbuilder_constructor_call_authority();
         test_stringbuilder_append_rune_call_authority();
@@ -11043,6 +11153,7 @@ int main(int argc, char **argv) {
     test_stringbuilder_append_string_call_authority();
     test_stringbuilder_clear_call_authority();
     test_string_runes_call_authority();
+    test_builtin_runtime_string_split_call_authority();
     test_string_slice_range_call_authority();
     test_string_slice_optional_parameter_authority();
     test_iterator_rune_has_next_call_authority();

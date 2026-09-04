@@ -64,6 +64,7 @@
 #include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../plan/semantic/xr_semantic_native_leaf_shape.h"
+#include "../plan/semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../plan/target/xr_target_capability.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_escape.h"
@@ -3182,6 +3183,104 @@ static bool cg_array_reserve_target_authority(XiCgenCtx *ctx, const XiFunc *func
            match->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
            match->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
            match->result_ownership == XR_TARGET_CALL_NONE;
+}
+
+/* Runtime receiver helpers are executable only when the unique typed registry
+ * row has survived both immutable plans. The live Xi node is compared after
+ * those plans are found; it may confirm the row but can never select it. */
+static CgValueEmissionStatus
+cg_builtin_runtime_method_target_authority(XiCgenCtx *ctx, const XiFunc *function,
+                                           const XiValue *value, XiMethodSymbolId *out_symbol) {
+    if (out_symbol)
+        *out_symbol = XI_METHOD_SYMBOL_INVALID;
+    if (!ctx || !function || !value || !out_symbol || !function->semantic_plan)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    const XrSemanticOperationRecord *operation =
+        cg_semantic_operation_for_value(ctx, function, value);
+    const XaBuiltinReceiverMethodSpec *live_spec =
+        xr_semantic_builtin_runtime_method_live_spec(value);
+    if ((!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD) &&
+        !live_spec)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method SemanticPlan authority is missing");
+
+    const CgValueEmissionRegistryEntry *entry = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        if (ctx->value_emission_registry[i].semantic_plan != function->semantic_plan)
+            continue;
+        if (entry)
+            return cg_value_emission_fail(
+                ctx, "builtin runtime method SemanticPlan authority is duplicated");
+        entry = &ctx->value_emission_registry[i];
+    }
+    if (!entry || !entry->target_plan || !xr_target_plan_is_verified(entry->target_plan))
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method TargetPlan authority is missing");
+
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(function->semantic_plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        if (xr_semantic_plan_operation(function->semantic_plan, i) != operation)
+            continue;
+        if (operation_index != XR_SEMANTIC_INDEX_NONE)
+            return cg_value_emission_fail(
+                ctx, "builtin runtime method operation identity is duplicated");
+        operation_index = i;
+    }
+    const XaBuiltinReceiverMethodSpec *semantic_spec = NULL;
+    uint32_t semantic_receiver = XR_SEMANTIC_INDEX_NONE;
+    XrStableId method_identity;
+    if (operation_index == XR_SEMANTIC_INDEX_NONE || !live_spec ||
+        !xr_semantic_builtin_runtime_method_is_exact(function->semantic_plan, operation,
+                                                     &semantic_spec, &semantic_receiver) ||
+        live_spec->method_id != semantic_spec->method_id ||
+        !xr_builtin_runtime_method_identity(semantic_spec, &method_identity) ||
+        value->nargs != (uint16_t) (semantic_spec->param_count + 1) || !value->args)
+        return cg_value_emission_fail(ctx, "builtin runtime method typed authority is not exact");
+
+    uint32_t frozen_operand_count = 0;
+    const XrSemanticOperandRecord *frozen_operands =
+        xr_semantic_plan_operands(function->semantic_plan, &frozen_operand_count);
+    if (!frozen_operands || operation->operand_begin > frozen_operand_count ||
+        operation->operand_count > frozen_operand_count - operation->operand_begin)
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method operand authority is incomplete");
+    for (uint16_t i = 0; i < value->nargs; i++) {
+        uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+        if (!value->args[i] ||
+            !cg_value_semantic_id(ctx, function, value->args[i], &semantic_value) ||
+            semantic_value != frozen_operands[operation->operand_begin + i].value)
+            return cg_value_emission_fail(
+                ctx, "builtin runtime method live operands disagree with SemanticPlan");
+    }
+    if (semantic_receiver != frozen_operands[operation->operand_begin].value)
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method receiver authority is incomplete");
+
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(entry->target_plan, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return cg_value_emission_fail(ctx,
+                                          "builtin runtime method TargetPlan row is duplicated");
+        call = &calls[i];
+    }
+    if (!call || call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->result_value != operation->result_value || call->argument_count != 0 ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD ||
+        call->target_kind != XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+        !xr_stable_id_equal(call->native_callee_identity, method_identity))
+        return cg_value_emission_fail(ctx, "builtin runtime method TargetPlan row is not exact");
+    *out_symbol = semantic_spec->method_symbol;
+    return CG_VALUE_EMISSION_FOUND;
 }
 
 /* Resolve a C-emission recipe operand back to the unique frozen Xi member.

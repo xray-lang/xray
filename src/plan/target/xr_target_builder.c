@@ -45,6 +45,7 @@
 #include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
+#include "../semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../semantic/xr_semantic_map_entry_iterator_shape.h"
@@ -6992,10 +6993,13 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
     bool exact_dynamic = xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation);
     bool exact_native_fresh =
         xr_semantic_native_direct_fresh_result_is_exact(builder->semantic_plan, operation, NULL);
+    bool exact_builtin_runtime =
+        xr_semantic_builtin_runtime_method_is_exact(builder->semantic_plan, operation, NULL, NULL);
     bool exact_map_iterator_result =
         xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL, NULL) ||
         xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation, NULL);
-    if ((!exact_dynamic && !exact_native_fresh && !exact_map_iterator_result) ||
+    if ((!exact_dynamic && !exact_native_fresh && !exact_builtin_runtime &&
+         !exact_map_iterator_result) ||
         operation->result_value >= analysis->total_values)
         return fail(error, error_size, "XR_TARGET_1001", "dynamic value authority is incomplete");
     /* A value an earlier family already bound is not this family's to claim:
@@ -7363,6 +7367,8 @@ static bool builder_add_dynamic_value_storage(XrTargetPlanBuilder *builder, char
         else if (xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation) ||
                  xr_semantic_native_direct_fresh_result_is_exact(builder->semantic_plan, operation,
                                                                  NULL) ||
+                 xr_semantic_builtin_runtime_method_is_exact(builder->semantic_plan, operation,
+                                                             NULL, NULL) ||
                  xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL,
                                                            NULL) ||
                  xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation,
@@ -10023,6 +10029,41 @@ static bool collect_string_runes_call_intent(XrTargetPlanBuilder *builder, uint3
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_builtin_runtime_method_call_intent(XrTargetPlanBuilder *builder,
+                                                       uint32_t operation_index,
+                                                       const XrSemanticOperationRecord *operation,
+                                                       char *error, size_t error_size) {
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    XrStableId method_identity;
+    if (!xr_semantic_builtin_runtime_method_is_exact(builder->semantic_plan, operation, &spec,
+                                                     &receiver) ||
+        !xr_builtin_runtime_method_identity(spec, &method_identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "builtin runtime method dispatch authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .native_callee_identity = method_identity,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD,
+        .target_kind = XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD,
+    };
+    if (!stable_identity_from_pair("xray-target-builtin-runtime-method-v1", operation->id,
+                                   method_identity, receiver, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "builtin runtime method call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_iterator_rune_has_next_call_intent(XrTargetPlanBuilder *builder,
                                                        uint32_t operation_index,
                                                        const XrSemanticOperationRecord *operation,
@@ -11951,6 +11992,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_stringbuilder_append_rune_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_stringbuilder_append_rune_call_intent(builder, i, operation, error,
                                                                   error_size);
+        } else if (xr_semantic_builtin_runtime_method_is_exact(plan, operation, NULL, NULL)) {
+            valid = collect_builtin_runtime_method_call_intent(builder, i, operation, error,
+                                                               error_size);
         } else if (xr_semantic_string_runes_is_exact(plan, operation, NULL)) {
             valid = collect_string_runes_call_intent(builder, i, operation, error, error_size);
         } else if (xr_semantic_iterator_rune_has_next_is_exact(plan, operation, NULL)) {

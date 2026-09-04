@@ -27,12 +27,14 @@
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_array_member_shape.h"
+#include "../../plan/semantic/xr_semantic_array_index_shape.h"
 #include "../../plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
 #include "../../plan/semantic/xr_semantic_cleanup_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../plan/semantic/xr_semantic_task_shape.h"
 #include "../../plan/semantic/xr_semantic_string_runes_shape.h"
+#include "../../plan/semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_nth_shape.h"
@@ -4855,6 +4857,10 @@ static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t se
         operation_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
+    const XaBuiltinReceiverMethodSpec *runtime_spec = NULL;
+    uint32_t runtime_receiver = XR_SEMANTIC_INDEX_NONE;
+    bool runtime_method = xr_semantic_builtin_runtime_method_is_exact(
+        ctx->semantic, operation, &runtime_spec, &runtime_receiver);
     const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
     if (!operation || !verify_target_function_index(ctx, operation->function, &target_function))
@@ -4862,10 +4868,11 @@ static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t se
     bool native_direct_fresh = operation && oracle_native_direct_fresh_result_call(
                                                 ctx, operation_index, semantic_value, binding);
     if (!operation || operation->result_value != semantic_value ||
-        (!xr_semantic_dynamic_value_is_exact(ctx->semantic, operation) && !native_direct_fresh))
+        (!xr_semantic_dynamic_value_is_exact(ctx->semantic, operation) && !native_direct_fresh &&
+         !runtime_method))
         return false;
     uint8_t expected_ownership =
-        !native_direct_fresh && xr_semantic_dynamic_value_is_borrowed(operation)
+        !native_direct_fresh && !runtime_method && xr_semantic_dynamic_value_is_borrowed(operation)
             ? XR_TARGET_OWNERSHIP_BORROWED
             : XR_TARGET_OWNERSHIP_OWNED;
     const XrTargetMachineRepRecord *register_rep =
@@ -4876,6 +4883,40 @@ static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t se
     const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
     const XrTargetSlotRecord *slot =
         binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    const XrTargetCallRecord *runtime_call = NULL;
+    XrStableId runtime_method_identity = {{0}};
+    XrStableId expected_runtime_call_identity = {{0}};
+    if (runtime_method) {
+        uint32_t call_count = 0;
+        const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
+        for (uint32_t i = 0; calls && i < call_count; i++) {
+            if (calls[i].semantic_operation != operation_index)
+                continue;
+            if (runtime_call)
+                return false;
+            runtime_call = &calls[i];
+        }
+        if (!runtime_call ||
+            !xr_builtin_runtime_method_identity(runtime_spec, &runtime_method_identity) ||
+            !aot_pair_identity("xray-target-builtin-runtime-method-v1", operation->id,
+                               runtime_method_identity, runtime_receiver,
+                               &expected_runtime_call_identity) ||
+            !xr_stable_id_equal(runtime_call->identity, expected_runtime_call_identity) ||
+            !xr_stable_id_equal(runtime_call->native_callee_identity, runtime_method_identity) ||
+            runtime_call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+            runtime_call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+            runtime_call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+            runtime_call->source_export != XR_SEMANTIC_INDEX_NONE ||
+            !aot_stable_id_is_zero(runtime_call->source_export_identity) ||
+            !aot_stable_id_is_zero(runtime_call->source_callee_identity) ||
+            runtime_call->result_value != semantic_value || runtime_call->argument_count != 0 ||
+            runtime_call->adapter_count != 0 || runtime_call->flags != 0 ||
+            runtime_call->calling_convention != XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD ||
+            runtime_call->target_kind != XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD ||
+            runtime_call->result_mode != XR_TARGET_CALL_VALUE ||
+            runtime_call->result_ownership != XR_TARGET_CALL_RETURN_OWNED)
+            return false;
+    }
     if (!binding || !register_rep || !memory_rep || !slot ||
         binding->semantic_value != semantic_value ||
         register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
@@ -4890,6 +4931,8 @@ static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t se
                            : XR_TARGET_SLOT_TEMPORARY) ||
         slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
         slot->root_kind != XR_TARGET_ROOT_DYNAMIC || slot->ownership != expected_ownership)
+        return false;
+    if (runtime_method && runtime_call->result_slot != binding->slot)
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -6824,6 +6867,52 @@ static bool tagged_value_temporary_rows_are_exact(const VerifyAuthority *ctx,
            slot->ownership == ownership;
 }
 
+/* An INDEX_GET over a managed Array lane borrows the exact tagged element the
+ * Array owns. SemanticPlan proves Array<T> -> borrowed T, the Array carrier
+ * oracle proves the concrete receiver origin, and TargetPlan binds the result
+ * to a borrowed dynamic temporary. Keeping this as the definition-side peer of
+ * oracle_array_element_access_is_exact means every managed Array producer --
+ * including a typed runtime-method result -- reaches subsequent consumers
+ * through the same family rather than through an opcode fallback. */
+static bool oracle_dynamic_array_index_result_storage(const VerifyAuthority *ctx,
+                                                      uint32_t semantic_value, XrRep *out_storage,
+                                                      uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !xr_semantic_array_index_tagged_read_is_exact(ctx->semantic, operation, NULL, NULL) ||
+        !oracle_array_element_access_is_exact(ctx, operation_index) ||
+        !tagged_value_temporary_rows_are_exact(ctx, semantic_value, operation, operation_index,
+                                               XR_TARGET_OWNERSHIP_BORROWED))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool oracle_dynamic_string_array_index_result_storage(const VerifyAuthority *ctx,
+                                                             uint32_t semantic_value,
+                                                             XrRep *out_storage,
+                                                             uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    return operation &&
+           xr_semantic_tagged_string_type_is_exact(
+               xr_semantic_plan_type(ctx->semantic, operation->result_type)) &&
+           oracle_dynamic_array_index_result_storage(ctx, semantic_value, out_storage,
+                                                     out_machine_kind);
+}
+
 /* Every operation that can introduce a payload-enum carrier in this function:
  * construction and a direct-local result own the carrier, while a shared read
  * borrows it. All three must agree with the same dynamic TargetPlan rows. */
@@ -8684,6 +8773,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (xr_semantic_number_parse_error_member_access_is_exact(ctx->semantic, operation,
                                                                       NULL, NULL, NULL))
                 return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
+            if (oracle_dynamic_array_index_result_storage(ctx, semantic_value, out_storage,
+                                                          out_machine_kind))
+                return true;
             break;
         case XI_ARRAY_NEW:
             if (oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
@@ -8833,6 +8925,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                                                            out_machine_kind);
             break;
         case XI_CALL_METHOD:
+            if (xr_semantic_builtin_runtime_method_is_exact(ctx->semantic, operation, NULL, NULL))
+                return oracle_dynamic_value_storage(ctx, semantic_value, out_storage,
+                                                    out_machine_kind);
             if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
                 operation->operand_count == 4 &&
                 operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1) {
@@ -9977,6 +10072,27 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF)
                 return oracle_array_hof_use_storage(ctx, operation_index, operand_index,
                                                     source_value, out_storage);
+            if (operation->opcode == XI_CALL_METHOD) {
+                const XaBuiltinReceiverMethodSpec *runtime_spec = NULL;
+                XaBuiltinMethodTypeKind operand_type = XA_BUILTIN_TYPE_NONE;
+                XrRep result_storage = XR_REP_VOID;
+                XrRep source_storage = XR_REP_VOID;
+                uint16_t source_kind = XR_MACHINE_REP_COUNT;
+                if (xr_semantic_builtin_runtime_method_is_exact(ctx->semantic, operation,
+                                                                &runtime_spec, NULL)) {
+                    if (!xr_semantic_builtin_runtime_method_operand_type(
+                            runtime_spec, operand_index, &operand_type) ||
+                        operand_type != XA_BUILTIN_TYPE_STRING ||
+                        !oracle_dynamic_value_storage(ctx, operation->result_value, &result_storage,
+                                                      &ignored_kind) ||
+                        !oracle_definition_storage(ctx, source_value, &source_storage,
+                                                   &source_kind) ||
+                        source_storage != XR_REP_TAGGED || source_kind != XR_MACHINE_REP_DYN_VALUE)
+                        return false;
+                    *out_storage = XR_REP_TAGGED;
+                    return true;
+                }
+            }
             if (operation->opcode == XI_CALL_METHOD &&
                 xr_semantic_string_slice_range_is_exact(ctx->semantic, operation, NULL, NULL,
                                                         NULL)) {
@@ -10688,12 +10804,20 @@ static bool oracle_array_produced_tagged_carrier_storage(const VerifyAuthority *
         operation_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
+    const XaBuiltinReceiverMethodSpec *runtime_spec = NULL;
+    bool runtime_array =
+        operation &&
+        xr_semantic_builtin_runtime_method_is_exact(ctx->semantic, operation, &runtime_spec,
+                                                    NULL) &&
+        runtime_spec->result == XA_BUILTIN_TYPE_ARRAY_OF_STRING &&
+        aot_array_type_is_exact(ctx->semantic, operation->result_type, false, NULL) &&
+        oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind);
     bool typed_array_join =
         operation && operation->opcode == XI_PHI &&
         aot_array_type_is_exact(ctx->semantic, operation->result_type, false, NULL) &&
         xr_semantic_dynamic_value_is_exact(ctx->semantic, operation) &&
         oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind);
-    return typed_array_join ||
+    return runtime_array || typed_array_join ||
            oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
                                                    out_machine_kind) ||
            oracle_dynamic_array_intrinsic_storage(ctx, semantic_value, out_storage,
@@ -10792,6 +10916,8 @@ static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                              out_machine_kind) ||
            oracle_dynamic_string_shared_read_storage(ctx, semantic_value, out_storage,
                                                      out_machine_kind) ||
+           oracle_dynamic_string_array_index_result_storage(ctx, semantic_value, out_storage,
+                                                            out_machine_kind) ||
            oracle_direct_local_string_value_parameter_storage(ctx, semantic_value, out_storage,
                                                               out_machine_kind) ||
            oracle_dynamic_merge_carrier_storage(ctx, semantic_value, XR_KIND_STRING, out_storage,

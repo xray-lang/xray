@@ -26,6 +26,7 @@
 #include "xr_semantic_plan_internal.h"
 #include "xr_program_semantic_closure.h"
 #include "xr_semantic_string_runes_shape.h"
+#include "xr_semantic_builtin_runtime_method_shape.h"
 #include "xr_semantic_string_shape.h"
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
@@ -1821,6 +1822,16 @@ static bool verify_string_runes(const XrSemanticPlan *plan,
            report(error, error_size, "XR_SEM_0019", "String.runes authority is not exact");
 }
 
+static bool verify_builtin_runtime_method(const XrSemanticPlan *plan,
+                                          const XrSemanticOperationRecord *operation, char *error,
+                                          size_t error_size) {
+    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+        return true;
+    return xr_semantic_builtin_runtime_method_is_exact(plan, operation, NULL, NULL) ||
+           report(error, error_size, "XR_SEM_0019",
+                  "builtin runtime method authority is not exact");
+}
+
 static bool verify_iterator_rune_has_next(const XrSemanticPlan *plan,
                                           const XrSemanticOperationRecord *operation, char *error,
                                           size_t error_size) {
@@ -2696,6 +2707,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_string_byte_slice_view(plan, operation, error, error_size))
             return false;
         if (!verify_string_runes(plan, operation, error, error_size))
+            return false;
+        if (!verify_builtin_runtime_method(plan, operation, error, error_size))
             return false;
         if (!verify_iterator_rune_has_next(plan, operation, error, error_size))
             return false;

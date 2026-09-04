@@ -2751,11 +2751,11 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * frozen digest e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93.
      * BorrowOriginSet then made the normalized borrowed-result origin set part
      * of function type identity and changed String.bytes to a const view. */
-    if (strcmp(semantic_hex, "e0c47d6929ecf85920c8d6c9d4ae097854b6134e5a2927bb0ba20134834991dc") !=
+    if (strcmp(semantic_hex, "8820bc051c7a71bc2917115b7490284fe5325029a6ca5cc68afb4c2ad100591f") !=
         0)
         fprintf(stderr, "  SemanticPlan KAT drift: actual=%s\n", semantic_hex);
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "e0c47d6929ecf85920c8d6c9d4ae097854b6134e5a2927bb0ba20134834991dc") == 0,
+                        "8820bc051c7a71bc2917115b7490284fe5325029a6ca5cc68afb4c2ad100591f") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;
