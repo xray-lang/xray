@@ -3125,8 +3125,6 @@ TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
     TEST_REQUIRE(contains(code, "XR_FROM_INT(INT64_C(2))"),
                  "native-direct scalar argument crosses the provider ABI as a tagged value");
     xr_free(code);
-    module->init = NULL;
-    xi_module_free(module);
     xi_func_free(ir);
 
     ir = native_direct_managed_scalar_fixture(&ref, &module);
@@ -3159,8 +3157,6 @@ TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
     xi_cgen_ctx_free(ctx);
     test_c_emission_registry_free(&emission_registry);
     test_aot_plan_free(&plan);
-    module->init = NULL;
-    xi_module_free(module);
     xi_func_free(ir);
 }
 
