@@ -88,8 +88,8 @@ class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills raw detector storage from one connected peer; cluster.xr computes phi, timeout, missed-heartbeat, and disconnect decisions"
-deletion_trigger = "when peer detector storage is ordinary Xray-owned synchronized state"
+provider = "declaration only (stdlib/defs/core.def). The VM copies one peer generation and scalar detector storage under nodes_lock; cluster.xr computes phi, missed-heartbeat progression and removal decisions; there is no AOT binding"
+deletion_trigger = "when the locked peer table and detector storage can be enumerated as ordinary Xray-owned state without a native record class"
 
 [[leaf]]
 module = "cluster"

@@ -209,6 +209,17 @@ static inline void cluster_runtime_retain(XrCluster *cluster) {
         atomic_fetch_add(&cluster->ref_count, 1);
 }
 
+/* Keep slot lookup and the strong-reference increment in one critical
+ * section. The macro expands only where XrVMRuntime is complete and avoids a
+ * cluster-specific dependency in the core runtime layer. */
+#define XR_CLUSTER_RUNTIME_ACQUIRE(isolate, out_cluster)                                         \
+    do {                                                                                         \
+        xr_amutex_lock(&(isolate)->cluster_slot_lock);                                            \
+        (out_cluster) = (XrCluster *) (isolate)->cluster;                                         \
+        cluster_runtime_retain(out_cluster);                                                      \
+        xr_amutex_unlock(&(isolate)->cluster_slot_lock);                                          \
+    } while (0)
+
 static inline void cluster_runtime_release(XrCluster *cluster) {
     if (!cluster)
         return;
