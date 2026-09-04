@@ -2034,6 +2034,12 @@ module cluster {
     doc: "Private snapshot of mutable native peer registries and counters"
   }
 
+  object __ClusterInboundFrame {
+    fields: "const peerGeneration: i64, const receivedAtMs: i64, const wire: Array<u8>"
+    exact: true
+    doc: "Private borrowed projection of the complete frame owned by the current native reader"
+  }
+
   fn __start {
     signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool"
     doc: "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration"
@@ -2108,15 +2114,86 @@ module cluster {
   }
 
   fn __adoptPeer {
-    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64): bool"
-    doc: "Transfer an authenticated socket into the locked cluster node registry and start its transport providers"
+    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(): ()): bool"
+    doc: "Transfer an authenticated socket into the locked cluster node registry and start its framed reader with a source dispatcher"
     vm: "cluster_adopt_peer_fn"
-    argc: 6
-    arg_spec: "vssvvv"
+    argc: 7
+    arg_spec: "vssvvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "coro,channel"
+  }
+
+  fn __takeInboundFrame {
+    signature: "(): __ClusterInboundFrame?"
+    doc: "Borrow the complete bounded frame and peer generation owned by the current reader callback"
+    vm: "cluster_take_inbound_frame_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
+  fn __peerEnqueue {
+    signature: "(peerGeneration: i64, wire: Array<u8>): bool"
+    doc: "Enqueue one source-encoded wire frame for the current peer generation"
+    vm: "cluster_peer_enqueue_fn"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "channel"
+  }
+
+  fn __observeHeartbeat {
+    signature: "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool"
+    doc: "Project one source-decoded heartbeat observation onto locked peer health state"
+    vm: "cluster_observe_heartbeat_fn"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __deliverInbound {
+    signature: "(topic: string, envelope: Array<u8>): i64"
+    doc: "Offer one source-decoded envelope to the synchronized topic registry"
+    vm: "cluster_deliver_inbound_fn"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "channel"
+  }
+
+  fn __forwardInbound {
+    signature: "(peerGeneration: i64, topic: string, envelope: Array<u8>, hopLimit: i64): i64"
+    doc: "Broadcast one source-authorized envelope while excluding its peer generation"
+    vm: "cluster_forward_inbound_fn"
+    argc: 4
+    arg_spec: "vsvv"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "channel"
+  }
+
+  fn __notifyRemoteMonitor {
+    signature: "(peerGeneration: i64, coroutineName: string, reason: string): bool"
+    doc: "Publish one source-decoded remote exit through the synchronized monitor registry"
+    vm: "cluster_notify_remote_monitor_fn"
+    argc: 3
+    arg_spec: "vss"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "channel"
   }
 
   fn __registerNodeMonitor {

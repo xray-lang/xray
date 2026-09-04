@@ -454,6 +454,11 @@ XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc, voi
     return coro;
 }
 
+void *xr_coro_vm_cfunc_context(XrCoroutine *coro) {
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    return state && state->entry_type == XR_CORO_ENTRY_CFUNC ? state->entry_context : NULL;
+}
+
 static void vm_backend_reset_execution_state(XrCoroutine *coro, XrVMRuntime *X) {
     if (!coro)
         return;
@@ -504,8 +509,7 @@ static bool vm_entry_transfer_arg(XrCoroutine *coro, XrVMRuntime *X, XrValue val
         if (XR_IS_STRING(value)) {
             if (!xr_value_runtime_string_is_shared(value))
                 return false;
-            if (xr_runtime_object_header_retain(
-                    xr_value_runtime_object_header(value)) !=
+            if (xr_runtime_object_header_retain(xr_value_runtime_object_header(value)) !=
                 XR_RUNTIME_ABI_OK)
                 return false;
             *out = value;
@@ -1145,8 +1149,7 @@ static XrVMResult run_cfunc_first_exec(XrVMRuntime *isolate, XrCoroutine *coro,
     coro_ctx->stack_top = coro_ctx->stack + 1;
 
     XrValue cfunc_result = xr_null();
-    XrCFuncResult status =
-        vm_state->entry.cfunc(isolate, vm_state->entry_context, &cfunc_result);
+    XrCFuncResult status = vm_state->entry.cfunc(isolate, vm_state->entry_context, &cfunc_result);
     switch (status) {
         case XR_CFUNC_DONE:
             coro_ctx->stack[0] = cfunc_result;

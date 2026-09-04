@@ -133,6 +133,66 @@ deletion_trigger = "when the live cluster node registry, output queue and transp
 
 [[leaf]]
 module = "cluster"
+symbol = "__peerEnqueue"
+class = "runtime_leaf"
+abi = "none; selects a live peer by generation and copies one complete frame into its synchronized output queue"
+ownership = "none"
+effect = "nothrow"
+provider = "the locked native peer registry and output queue. cluster.xr exclusively owns frame encoding and the decision to send"
+deletion_trigger = "when peer output queues are ordinary Xray-owned values"
+
+[[leaf]]
+module = "cluster"
+symbol = "__takeInboundFrame"
+class = "runtime_leaf"
+abi = "none; projects the frame retained by the currently executing VM C-function reader"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the VM coroutine owned-context ABI. cluster.xr owns all decoding and dispatch after taking the complete frame"
+deletion_trigger = "when socket reader state is directly expressible as a source coroutine value"
+
+[[leaf]]
+module = "cluster"
+symbol = "__observeHeartbeat"
+class = "runtime_leaf"
+abi = "none; updates the selected native peer detector under the registry lock"
+ownership = "none"
+effect = "nothrow"
+provider = "the native phi detector and locked peer registry. cluster.xr owns decoding, RTT calculation and observation timing"
+deletion_trigger = "when the peer health table is ordinary synchronized Xray state"
+
+[[leaf]]
+module = "cluster"
+symbol = "__deliverInbound"
+class = "runtime_leaf"
+abi = "none; copies bytes into matching synchronized subscription channels"
+ownership = "none"
+effect = "nothrow"
+provider = "the native synchronized topic registry. cluster.xr owns protocol decoding, validation and dispatch order"
+deletion_trigger = "when the synchronized topic index is ordinary Xray-owned state"
+
+[[leaf]]
+module = "cluster"
+symbol = "__forwardInbound"
+class = "runtime_leaf"
+abi = "none; enqueues a source-authorized envelope for all connected peers except one generation"
+ownership = "none"
+effect = "nothrow"
+provider = "the locked native peer registry and output queues. cluster.xr owns hop decrement and split-horizon policy"
+deletion_trigger = "when peer output queues are ordinary Xray-owned values"
+
+[[leaf]]
+module = "cluster"
+symbol = "__notifyRemoteMonitor"
+class = "runtime_leaf"
+abi = "none; looks up a peer generation and sends one notification through the synchronized monitor registry"
+ownership = "none"
+effect = "nothrow"
+provider = "the native monitor channel registry. cluster.xr owns exit decoding and notification selection"
+deletion_trigger = "when the synchronized monitor index is ordinary Xray-owned state"
+
+[[leaf]]
+module = "cluster"
 symbol = "__listen"
 class = "runtime_leaf"
 abi = "none; constructs a bounded channel and registers a topic subscription"

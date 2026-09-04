@@ -29,9 +29,10 @@ XR_FUNC XrCoroutine *xr_coro_create_vm_closure_owned(XrVMRuntime *X, XrClosure *
                                                      const char *file, int line);
 /* The returned coroutine owns context on every path, including construction
  * failure, cancellation before first execution, recycling and destruction. */
-XR_FUNC XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc,
-                                             void *context, XrCoroContextDestroy destroy_context,
+XR_FUNC XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc, void *context,
+                                             XrCoroContextDestroy destroy_context,
                                              const char *name);
+XR_FUNC void *xr_coro_vm_cfunc_context(XrCoroutine *coro);
 XR_FUNC XrCoroRunKind xr_vm_coro_run_to_completion(XrCoroutine *coro, XrValue *out);
 
 /*

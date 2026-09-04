@@ -19,7 +19,7 @@
 
 #include <string.h>
 
-XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster, XrClusterNode *excluded_node,
+XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster, uint64_t excluded_generation,
                                               uint8_t hop_limit, const char *topic,
                                               const uint8_t *envelope, uint32_t envelope_length) {
     if (!cluster || !topic || !envelope)
@@ -29,7 +29,8 @@ XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster, XrClusterNode 
     int accepted = 0;
     xr_amutex_lock(&cluster->nodes_lock);
     for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
-        if (node == excluded_node || node->state != XR_NODE_CONNECTED)
+        if ((excluded_generation != 0 && node->generation_token == excluded_generation) ||
+            node->state != XR_NODE_CONNECTED)
             continue;
         connected++;
         if (cluster_node_send_transport_frame(node, hop_limit, topic, topic_length, envelope,
@@ -42,18 +43,4 @@ XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster, XrClusterNode 
     if (connected > 0)
         return XR_CLUSTER_DELIVERY_OVERLOADED;
     return XR_CLUSTER_DELIVERY_DISCONNECTED;
-}
-
-void cluster_transport_handle_frame(XrCluster *cluster, XrClusterNode *source, const char *topic,
-                                    const uint8_t *envelope, uint32_t envelope_length,
-                                    uint8_t hop_limit) {
-    if (!cluster || !topic || !envelope || envelope_length < XR_CLUSTER_ENVELOPE_HEADER_SIZE ||
-        !xr_topic_name_valid(topic))
-        return;
-
-    (void) xr_topic_registry_deliver(cluster->topics, topic, envelope, envelope_length);
-    if (hop_limit == 0)
-        return;
-    (void) cluster_transport_broadcast(cluster, source, (uint8_t) (hop_limit - 1), topic, envelope,
-                                       envelope_length);
 }

@@ -485,6 +485,69 @@ export fn decodeCoroExit(payload: Array<u8>) -> ClusterCoroExit? {
     return result
 }
 
+// The native reader owns only socket framing. Every protocol decision after a
+// complete bounded frame reaches this source callback, keyed by a unique peer
+// generation so a delayed continuation cannot address a replacement peer.
+fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
+    const notifications = Coro.monitor(name)
+    var reason = match (notifications.recv()) {
+        Recv.Value { value: value } -> value
+        _ -> "noproc"
+    }
+    var exited: ClusterCoroExit = { name: name, reason: reason }
+    var response = encodeCoroExit(exited)
+    if (response != null) { __peerEnqueue(peerGeneration, response!) }
+}
+
+fn _dispatchInbound() {
+    var inbound = __takeInboundFrame()
+    if (inbound == null) { return }
+    var peerGeneration = inbound!.peerGeneration
+    var receivedAtMs = inbound!.receivedAtMs
+    var wire = inbound!.wire
+    var frame = decodeFrame(wire)
+    if (frame == null) { return }
+    if (frame!.kind == FRAME_HEARTBEAT_PING) {
+        var timestamp = decodeHeartbeat(frame!.payload)
+        if (timestamp == null) { return }
+        var response = encodeHeartbeat(FRAME_HEARTBEAT_PONG, timestamp!)
+        if (response != null) { __peerEnqueue(peerGeneration, response!) }
+        __observeHeartbeat(peerGeneration, receivedAtMs, -1)
+        return
+    }
+    if (frame!.kind == FRAME_HEARTBEAT_PONG) {
+        var timestamp = decodeHeartbeat(frame!.payload)
+        if (timestamp != null) {
+            var rtt = receivedAtMs - timestamp!
+            __observeHeartbeat(peerGeneration, receivedAtMs, rtt < 0 ? 0 : rtt)
+        }
+        return
+    }
+    if (frame!.kind == FRAME_TRANSPORT_ENVELOPE) {
+        var transport = decodeTransportFrame(wire)
+        if (transport == null) { return }
+        __deliverInbound(transport!.topic, transport!.envelope)
+        if (transport!.hopLimit > 0) {
+            __forwardInbound(peerGeneration, transport!.topic, transport!.envelope,
+                             transport!.hopLimit - 1)
+        }
+        return
+    }
+    if (frame!.kind == FRAME_CORO_MONITOR) {
+        var name = decodeCoroMonitor(frame!.payload)
+        if (name != null) { go _forwardRemoteMonitor(peerGeneration, name!) }
+        return
+    }
+    if (frame!.kind == FRAME_CORO_EXIT) {
+        var exited = decodeCoroExit(frame!.payload)
+        if (exited != null) {
+            __notifyRemoteMonitor(peerGeneration, exited!.name, exited!.reason)
+        }
+    }
+    // CORO_DEMONITOR is deliberately a no-op until remote monitor identity is
+    // part of the wire contract; the protocol has no safe removal key today.
+}
+
 // HMAC-SHA256 is provided by crypto.xr; cluster owns the proof construction
 // and fixed sizes. No native cluster authentication policy remains.
 export fn computeHandshakeProof(secret: string, nonce: Array<u8>) -> Array<u8>? {
@@ -803,7 +866,7 @@ fn _joinPeer(host: string, port: i64) -> bool {
         return false
     }
     return __adoptPeer(move live, ack!.name, host, port, ack!.flags,
-                       config.heartbeatIntervalMs)
+                       config.heartbeatIntervalMs, _dispatchInbound)
 }
 
 fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: string,
@@ -872,7 +935,8 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    __adoptPeer(move conn, request!.name, "", 0, request!.flags, heartbeatIntervalMs)
+    __adoptPeer(move conn, request!.name, "", 0, request!.flags, heartbeatIntervalMs,
+                _dispatchInbound)
 }
 
 // Keep the affine connection inside a single-iteration frame. A loop-carried

@@ -39,6 +39,18 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__adoptPeer", cluster_adopt_peer_fn);
     expected_count++;
+    XRS_EXPORT(module, isolate, "__takeInboundFrame", cluster_take_inbound_frame_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__peerEnqueue", cluster_peer_enqueue_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__observeHeartbeat", cluster_observe_heartbeat_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__deliverInbound", cluster_deliver_inbound_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__forwardInbound", cluster_forward_inbound_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__notifyRemoteMonitor", cluster_notify_remote_monitor_fn);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__registerNodeMonitor", cluster_register_node_monitor_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__registerCoroutineMonitor", cluster_register_coro_monitor_fn);

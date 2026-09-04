@@ -117,6 +117,7 @@ typedef struct XrClusterNode {
     int64_t last_heartbeat_recv;
     uint32_t flags;
     uint32_t missed_heartbeats;
+    uint64_t generation_token;
 
     struct XrVMRuntime *isolate;
 
@@ -144,7 +145,8 @@ int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, co
                                       uint8_t topic_len, const uint8_t *envelope,
                                       uint32_t envelope_len);
 int cluster_node_send_ping(XrClusterNode *node);
-bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node);
+bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrValue inbound_handler);
+XrValue cluster_take_inbound_frame_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
 bool cluster_node_is_slow(XrClusterNode *node);
 
 /* ========== Cluster State ========== */
@@ -152,6 +154,7 @@ bool cluster_node_is_slow(XrClusterNode *node);
 typedef struct XrCluster {
     _Atomic(uint32_t) ref_count;
     _Atomic(bool) stop_started;
+    _Atomic(uint64_t) next_peer_generation;
     struct XrVMRuntime *isolate;
     struct XrNetListener *listener; /* borrowed while the source accept loop owns it */
 
@@ -247,13 +250,6 @@ bool cluster_node_add(XrCluster *c, XrClusterNode *node);
 // Detach the list-owned reference. The caller releases it when true.
 bool cluster_node_remove(XrCluster *c, XrClusterNode *node);
 
-/* ========== Frame Processing ========== */
-
-// Process one fully decoded frame. Socket framing is owned by the yieldable
-// native reader backend in cluster_node.c.
-void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type,
-                           const uint8_t *payload, uint32_t payload_len);
-
 /* ========== Health & Robustness ========== */
 
 void cluster_health_tick(XrCluster *cluster, int64_t heartbeat_timeout_ms,
@@ -264,36 +260,14 @@ void cluster_health_tick(XrCluster *cluster, int64_t heartbeat_timeout_ms,
 
 #define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)
 
-XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster,
-                                              struct XrClusterNode *excluded_node,
+XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster, uint64_t excluded_generation,
                                               uint8_t hop_limit, const char *topic,
                                               const uint8_t *envelope, uint32_t envelope_length);
-
-/*
- * Handle an incoming opaque envelope frame from a remote node.
- *
- *   from       — the XrClusterNode the frame arrived from, used for
- *                split-horizon so we never echo the frame back to
- *                its sender. NULL is legal (locally-injected test
- *                frames etc.) but in production always non-NULL.
- *   hop_limit  — the hop count encoded in the frame's fixed header.
- *                0 means "deliver locally only, do not re-forward"
- *                Non-zero causes a decrement and a re-send to every
- *                other connected peer.
- *
- * The envelope is delivered to local listeners regardless of hop_limit.
- */
-void cluster_transport_handle_frame(XrCluster *c, struct XrClusterNode *from, const char *topic,
-                                    const uint8_t *envelope, uint32_t envelope_len,
-                                    uint8_t hop_limit);
 
 /* ========== Remote Coroutine Monitoring ========== */
 
 bool cluster_monitor_register_remote(XrCluster *cluster, const char *node_name,
                                      const char *coroutine_name, struct XrChannel *channel);
-
-void cluster_monitor_handle_coro_request(XrCluster *cluster, struct XrClusterNode *node,
-                                         const char *coroutine_name);
 
 /* ========== Cluster Info API ========== */
 
