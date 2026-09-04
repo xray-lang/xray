@@ -43,7 +43,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"decodeHandshakeDone", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): Array<u8>?", "", NULL, 0},
     {"encodeHeartbeat", XLSP_SYM_FUNCTION, "fn(kind: i64, timestampMs: i64): Array<u8>?", "", NULL, 0},
     {"decodeHeartbeat", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): i64?", "", NULL, 0},
-    {"encodeCoroMonitor", XLSP_SYM_FUNCTION, "fn(kind: i64, name: string): Array<u8>?", "", NULL, 0},
+    {"encodeCoroMonitor", XLSP_SYM_FUNCTION, "fn(name: string): Array<u8>?", "", NULL, 0},
     {"decodeCoroMonitor", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): string?", "", NULL, 0},
     {"encodeCoroExit", XLSP_SYM_FUNCTION, "fn(value: ClusterCoroExit): Array<u8>?", "", NULL, 0},
     {"decodeCoroExit", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>): ClusterCoroExit?", "", NULL, 0},
@@ -93,7 +93,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"FRAME_HEARTBEAT_PONG", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"FRAME_TRANSPORT_ENVELOPE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"FRAME_CORO_MONITOR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
-    {"FRAME_CORO_DEMONITOR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"FRAME_CORO_EXIT", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"ENVELOPE_HEADER_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"SUBSCRIPTION_CAPACITY_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
@@ -124,7 +123,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterHealthPeerSnapshot", XLSP_SYM_CLASS, "type __ClusterHealthPeerSnapshot = { peerGeneration: i64, lastReceivedAtMs: i64, missedHeartbeats: i64, samples: i64, mean: f64, variance: f64, detectorLastHeartbeatMs: i64 }", "Private scalar snapshot of one connected peer's failure detector state", NULL, 0},
     {"__ClusterDeliveryStats", XLSP_SYM_CLASS, "type __ClusterDeliveryStats = { accepted: i64, full: i64, stopped: i64, resource: i64 }", "Private raw admission outcomes from cluster channel and queue providers", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 92
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 91
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

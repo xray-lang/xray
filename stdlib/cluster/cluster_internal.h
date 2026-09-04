@@ -26,7 +26,6 @@
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xcluster_output_queue.h"
 #include "../../src/coro/xyieldable.h"
-#include "../../src/coro/xmonitor_registry.h"
 #include "../../src/coro/xphi_detector.h"
 #include "../../src/coro/xtombstone_registry.h"
 #include "../../src/io/xcluster_peer_transport.h"
@@ -117,7 +116,6 @@ typedef struct XrCluster {
     /* Provider capacity selected by cluster.xr. */
     size_t output_queue_high_watermark;
     XrTombstoneRegistry *tombstones;
-    XrMonitorRegistry *monitors;
 
     // Running state
     _Atomic(bool) running;
@@ -220,10 +218,10 @@ static inline void cluster_runtime_retain(void *provider) {
 
 /* The generic isolate boundary keeps slot lookup and the strong-reference
  * increment in one critical section. */
-#define XR_CLUSTER_RUNTIME_ACQUIRE(isolate, out_cluster)                                         \
-    do {                                                                                         \
-        (out_cluster) = (XrCluster *) xr_isolate_provider_acquire(                                \
-            (isolate), &(isolate)->cluster, cluster_runtime_retain);                              \
+#define XR_CLUSTER_RUNTIME_ACQUIRE(isolate, out_cluster)                                           \
+    do {                                                                                           \
+        (out_cluster) = (XrCluster *) xr_isolate_provider_acquire((isolate), &(isolate)->cluster,  \
+                                                                  cluster_runtime_retain);         \
     } while (0)
 
 static inline void cluster_runtime_release(XrCluster *cluster) {
@@ -236,7 +234,6 @@ static inline void cluster_runtime_release(XrCluster *cluster) {
 
     XR_DCHECK(cluster->nodes == NULL, "cluster release requires a detached node list");
     XR_DCHECK(cluster->listener == NULL, "cluster release requires a detached listener");
-    xr_monitor_registry_destroy(cluster->monitors);
     xr_tombstone_registry_destroy(cluster->tombstones);
     if (cluster->tls_client_ctx)
         xr_tls_context_free(cluster->tls_client_ctx);

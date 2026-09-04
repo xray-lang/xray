@@ -108,7 +108,7 @@ class = "runtime_leaf"
 abi = "none; reads cluster runtime state under its own mutexes and atomics"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the native node table under nodes_lock, synchronized tombstone registry, atomic peer counters, and raw detector storage. cluster.xr owns identity, running state, topic listener state, detector math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
+provider = "the native node table under nodes_lock, synchronized tombstone registry, atomic peer counters, and raw detector storage. cluster.xr owns identity, running state, topic listeners, monitor channels, detector math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
 deletion_trigger = "when the peer table, metrics and synchronized registries are Xray-owned values"
 
 [[leaf]]
@@ -203,13 +203,23 @@ deletion_trigger = "when peer output queues are ordinary Xray-owned values"
 
 [[leaf]]
 module = "cluster"
-symbol = "__notifyRemoteMonitor"
+symbol = "__peerName"
 class = "runtime_leaf"
-abi = "none; looks up a peer generation and sends one notification through the synchronized monitor registry"
+abi = "none; copies the connected peer name selected by one exact generation under the native node lock"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the locked opaque peer registry only. cluster.xr owns remote monitor lifetime, matching, result delivery and requester-disappearance policy"
+deletion_trigger = "when the peer registry is ordinary Xray-owned state"
+
+[[leaf]]
+module = "cluster"
+symbol = "__peerGeneration"
+class = "runtime_leaf"
+abi = "none; returns the connected peer generation selected by one exact name under the native node lock"
 ownership = "none"
 effect = "nothrow"
-provider = "the native monitor channel registry. cluster.xr owns exit decoding and notification selection"
-deletion_trigger = "when the synchronized monitor index is ordinary Xray-owned state"
+provider = "the locked opaque peer registry only. cluster.xr owns remote monitor registration, rollback and notification policy"
+deletion_trigger = "when the peer registry is ordinary Xray-owned state"
 
 [[leaf]]
 module = "cluster"
@@ -223,52 +233,12 @@ deletion_trigger = "when the peer registry and transport resources are ordinary 
 
 [[leaf]]
 module = "cluster"
-symbol = "__notifyNodeDown"
-class = "runtime_leaf"
-abi = "none; publishes one source-selected node name through the synchronized monitor registry"
-ownership = "none"
-effect = "nothrow"
-provider = "the native monitor channel registry. cluster.xr checks its source generation token and exclusively selects the notification effect"
-deletion_trigger = "when the synchronized monitor index is ordinary Xray-owned state"
-
-[[leaf]]
-module = "cluster"
-symbol = "__registerNodeMonitor"
-class = "runtime_leaf"
-abi = "none; registers one source-constructed channel for a normalized node-down target"
-ownership = "none"
-effect = "nothrow"
-provider = "the locked channel index in src/coro/xmonitor_registry.c. cluster.xr constructs the channel, chooses its capacity and validates the target. There is no AOT binding"
-deletion_trigger = "when a synchronized map of channel values is directly expressible in Xray source"
-
-[[leaf]]
-module = "cluster"
-symbol = "__registerCoroutineMonitor"
-class = "runtime_leaf"
-abi = "none; stores a source-constructed channel and returns the selected live peer generation"
-ownership = "none"
-effect = "nothrow"
-provider = "the locked peer registry plus the locked channel index in src/coro/xmonitor_registry.c. cluster.xr constructs the channel, encodes the request, enqueues by returned peer generation and owns failure rollback. There is no AOT binding"
-deletion_trigger = "when cluster.xr can retain channels in a synchronized map and select a live peer generation directly"
-
-[[leaf]]
-module = "cluster"
-symbol = "__unregisterCoroutineMonitor"
-class = "runtime_leaf"
-abi = "none; removes one exact source-owned channel registration"
-ownership = "none"
-effect = "nothrow"
-provider = "the locked channel index in src/coro/xmonitor_registry.c. cluster.xr invokes it only to roll back a registration whose source-encoded request could not enter the selected peer queue. There is no AOT binding"
-deletion_trigger = "when cluster.xr can retain channels in a synchronized map directly"
-
-[[leaf]]
-module = "cluster"
 symbol = "__start"
 class = "runtime_leaf"
 abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the native cluster runtime's TLS contexts and synchronized node/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, topic registry and routing, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence and output-queue high watermark; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
+provider = "the native cluster runtime's TLS contexts and synchronized node/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, topic routing, monitor channels, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
 deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values"
 
 [[leaf]]
@@ -286,10 +256,10 @@ module = "cluster"
 symbol = "__applyHealthDecision"
 class = "runtime_leaf"
 abi = "none; compare-and-apply against one locked peer generation and its observed health state"
-ownership = "none"
+ownership = "fresh"
 effect = "nothrow"
-provider = "the VM cluster peer registry plus synchronized tombstone and monitor registries. cluster.xr supplies the exact observed generation and state, next counter, removal decision and timestamp; stale decisions are rejected"
-deletion_trigger = "when peer transport state and synchronized tombstone and monitor registries are Xray-owned values"
+provider = "the VM cluster peer registry plus synchronized tombstone registry. cluster.xr supplies the exact observed generation and state, next counter, removal decision and timestamp; stale decisions are rejected and a successful detach returns an owned peer name for source monitor notification"
+deletion_trigger = "when peer transport state and the synchronized tombstone registry are Xray-owned values"
 
 [[leaf]]
 module = "cluster"

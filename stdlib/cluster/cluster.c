@@ -138,7 +138,7 @@ static XrValue cluster_health_snapshot_fn(XrVMRuntime *X, XrValue *args, int arg
 static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 6 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
         !XR_IS_INT(args[3]) || !XR_IS_BOOL(args[4]) || !XR_IS_INT(args[5]))
-        return xr_bool(false);
+        return xr_null();
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
     int64_t expected_missed = XR_TO_INT(args[2]);
@@ -146,14 +146,14 @@ static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) 
     if (!cluster || expected_missed < 0 || expected_missed > UINT32_MAX || next_missed < 0 ||
         next_missed > UINT32_MAX) {
         cluster_runtime_release(cluster);
-        return xr_bool(false);
+        return xr_null();
     }
 
     uint64_t generation = (uint64_t) XR_TO_INT(args[0]);
     int64_t expected_last_received = XR_TO_INT(args[1]);
     bool disconnect = XR_TO_BOOL(args[4]);
     XrClusterNode *detached = NULL;
-    bool applied = false;
+    XrValue detached_name = xr_null();
     xr_amutex_lock(&cluster->nodes_lock);
     XrClusterNode **cursor = &cluster->nodes;
     while (*cursor) {
@@ -162,13 +162,15 @@ static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) 
             node->last_heartbeat_recv == expected_last_received &&
             node->missed_heartbeats == (uint32_t) expected_missed) {
             if (disconnect) {
-                *cursor = node->next;
-                node->next = NULL;
-                detached = node;
+                detached_name = xrs_string_value_c(X, node->name);
+                if (!XR_IS_NULL(detached_name)) {
+                    *cursor = node->next;
+                    node->next = NULL;
+                    detached = node;
+                }
             } else {
                 node->missed_heartbeats = (uint32_t) next_missed;
             }
-            applied = true;
             break;
         }
         cursor = &node->next;
@@ -177,12 +179,11 @@ static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) 
 
     if (detached) {
         (void) xr_tombstone_registry_add(cluster->tombstones, detached->name, XR_TO_INT(args[5]));
-        xr_monitor_registry_notify_node(cluster->monitors, cluster->isolate, detached->name);
         cluster_node_shutdown(detached);
         cluster_node_release(detached);
     }
     cluster_runtime_release(cluster);
-    return xr_bool(applied);
+    return detached_name;
 }
 
 static XrValue cluster_track_listener_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -439,9 +440,8 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         cluster->tls_enabled = true;
     }
 
-    cluster->monitors = xr_monitor_registry_new();
     cluster->tombstones = xr_tombstone_registry_new(16, XR_TO_INT(args[9]));
-    if (!cluster->monitors || !cluster->tombstones) {
+    if (!cluster->tombstones) {
         cluster_runtime_release(cluster);
         return xr_bool(false);
     }
@@ -577,33 +577,46 @@ static XrValue cluster_broadcast_fn(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_object_instance_value(result);
 }
 
-static XrValue cluster_notify_remote_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]))
-        return xr_bool(false);
+static XrValue cluster_peer_name_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_null();
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
     if (!cluster)
-        return xr_bool(false);
+        return xr_null();
     uint64_t generation = (uint64_t) XR_TO_INT(args[0]);
-    XrClusterNode *node = NULL;
+    XrValue name = xr_null();
     xr_amutex_lock(&cluster->nodes_lock);
-    for (XrClusterNode *candidate = cluster->nodes; candidate; candidate = candidate->next) {
-        if (candidate->generation_token == generation && candidate->state == XR_NODE_CONNECTED) {
-            cluster_node_retain(candidate);
-            node = candidate;
+    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
+        if (node->generation_token == generation && node->state == XR_NODE_CONNECTED) {
+            name = xrs_string_value_c(X, node->name);
             break;
         }
     }
     xr_amutex_unlock(&cluster->nodes_lock);
-    if (!node) {
-        cluster_runtime_release(cluster);
-        return xr_bool(false);
-    }
-    xr_monitor_registry_notify_remote(cluster->monitors, cluster->isolate, node->name,
-                                      XR_TO_STRING(args[1])->data, XR_TO_STRING(args[2])->data);
-    cluster_node_release(node);
     cluster_runtime_release(cluster);
-    return xr_bool(true);
+    return name;
+}
+
+static XrValue cluster_peer_generation_fn(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_int(0);
+    XrCluster *cluster = NULL;
+    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
+    if (!cluster)
+        return xr_int(0);
+    XrString *name = XR_TO_STRING(args[0]);
+    uint64_t generation = 0;
+    xr_amutex_lock(&cluster->nodes_lock);
+    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
+        if (node->state == XR_NODE_CONNECTED && strcmp(node->name, name->data) == 0) {
+            generation = node->generation_token;
+            break;
+        }
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    cluster_runtime_release(cluster);
+    return xr_int((int64_t) generation);
 }
 
 static XrValue cluster_detach_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -639,19 +652,6 @@ static XrValue cluster_detach_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
     cluster_runtime_release(cluster);
     return name;
-}
-
-static XrValue cluster_notify_node_down_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0]))
-        return xr_null();
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_null();
-    xr_monitor_registry_notify_node(cluster->monitors, cluster->isolate,
-                                    XR_TO_STRING(args[0])->data);
-    cluster_runtime_release(cluster);
-    return xr_null();
 }
 
 /* ========== Cluster Info API ========== */
@@ -765,69 +765,6 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
     XrValue result = xr_object_instance_value(info);
     cluster_runtime_release(c);
     return result;
-}
-
-static XrValue cluster_register_node_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0]) || !xr_value_is_channel(args[1]))
-        return xr_bool(false);
-
-    XrString *name = XR_TO_STRING(args[0]);
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    bool registered = cluster && xr_monitor_registry_add_node(cluster->monitors, name->data,
-                                                               xr_value_to_channel(args[1]));
-    cluster_runtime_release(cluster);
-    return xr_bool(registered);
-}
-
-static XrValue cluster_register_coro_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) ||
-        !xr_value_is_channel(args[2]))
-        return xr_int(0);
-
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_int(0);
-    XrString *node_name = XR_TO_STRING(args[0]);
-    uint64_t generation = 0;
-    xr_amutex_lock(&cluster->nodes_lock);
-    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
-        if (node->state == XR_NODE_CONNECTED && strcmp(node->name, node_name->data) == 0) {
-            generation = node->generation_token;
-            break;
-        }
-    }
-    xr_amutex_unlock(&cluster->nodes_lock);
-    if (generation == 0) {
-        cluster_runtime_release(cluster);
-        return xr_int(0);
-    }
-
-    XrString *coroutine_name = XR_TO_STRING(args[1]);
-    if (!xr_monitor_registry_add_remote(cluster->monitors, node_name->data, coroutine_name->data,
-                                        xr_value_to_channel(args[2]))) {
-        cluster_runtime_release(cluster);
-        return xr_int(0);
-    }
-    cluster_runtime_release(cluster);
-    return xr_int((int64_t) generation);
-}
-
-static XrValue cluster_unregister_coro_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) ||
-        !xr_value_is_channel(args[2]))
-        return xr_bool(false);
-
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_bool(false);
-    bool removed = xr_monitor_registry_remove_remote(
-        cluster->monitors, XR_TO_STRING(args[0])->data, XR_TO_STRING(args[1])->data,
-        xr_value_to_channel(args[2]));
-    cluster_runtime_release(cluster);
-    return xr_bool(removed);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_CLUSTER 1

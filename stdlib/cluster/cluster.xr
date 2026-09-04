@@ -84,7 +84,6 @@ export const FRAME_HEARTBEAT_PING = 0x05
 export const FRAME_HEARTBEAT_PONG = 0x06
 export const FRAME_TRANSPORT_ENVELOPE = 0x07
 export const FRAME_CORO_MONITOR = 0x08
-export const FRAME_CORO_DEMONITOR = 0x09
 export const FRAME_CORO_EXIT = 0x0A
 
 // An envelope is opaque to the transport, but it is not shapeless: the service
@@ -152,6 +151,7 @@ const _DISCOVERY_ANNOUNCEMENT_MAX_SIZE = 128
 const _CLUSTER_PROTOCOL_FLAGS = 0x01
 const _HANDSHAKE_FRAME_BODY_MAX = 513
 const _ACCEPT_POLL_MS = 500
+const _REMOTE_MONITOR_POLL_MS = 500
 
 type _ClusterSourceState = {
     selfName: string,
@@ -174,6 +174,29 @@ type _TopicSubscription = {
     notifications: Channel<Buffer>,
 }
 
+type _NodeMonitor = {
+    target: string,
+    notifications: Channel<string>,
+}
+
+type _RemoteMonitor = {
+    id: i64,
+    peerGeneration: i64,
+    coroutineName: string,
+    notifications: Channel<string>,
+}
+
+type _RemoteMonitorRegistration = {
+    id: i64,
+    peerGeneration: i64,
+}
+
+type _NodeDownMonitors = {
+    nodeOneShot: Array<Channel<string>>,
+    nodeStreams: Array<Channel<string>>,
+    remote: Array<Channel<string>>,
+}
+
 // Source-owned loops use generation tokens so a retiring coroutine cannot
 // affect a later start on the same isolate. Discovery has a separate token
 // because callers may enable or restart it independently of cluster startup.
@@ -182,6 +205,7 @@ const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
 const _runtimeNextToken: Atomic<i64> = Atomic<i64>(0)
 const _runtimeActiveToken: Atomic<i64> = Atomic<i64>(0)
+const _monitorNextId: Atomic<i64> = Atomic<i64>(0)
 // Serializes source generation retirement with the non-suspending node-down
 // notification leaf. This closes the check/call window without moving active
 // generation or notification policy into the provider.
@@ -193,6 +217,10 @@ var _topicSubscriptions: Array<_TopicSubscription> = []
 // without exposing ordinary mutable module state across worker coroutines.
 const _sourceStateLock: Atomic<bool> = Atomic<bool>(false)
 var _sourceState: _ClusterSourceState? = null
+const _monitorStateLock: Atomic<bool> = Atomic<bool>(false)
+var _monitorRuntimeToken = 0
+var _nodeMonitors: Array<_NodeMonitor> = []
+var _remoteMonitors: Array<_RemoteMonitor> = []
 
 fn _lockSourceState() {
     while (true) {
@@ -215,6 +243,13 @@ fn _lockTopicState() {
     }
 }
 
+fn _lockMonitorState() {
+    while (true) {
+        var (_, acquired) = _monitorStateLock.compareExchange(false, true)
+        if (acquired) { return }
+    }
+}
+
 // Retirement first makes new registrations fail their locked token recheck.
 // Detaching the complete registry under the lock makes the cutover atomic;
 // closing the detached channels afterwards keeps wakeups out of the spinlock.
@@ -228,6 +263,49 @@ fn _closeTopicSubscriptions() {
     }
 }
 
+fn _closeChannels(channels: Array<Channel<string>>) {
+    for (var i = 0; i < len(channels); i++) { channels[i].close() }
+}
+
+fn _clearMonitorStateLocked(token: i64) {
+    _lockMonitorState()
+    if (_monitorRuntimeToken != token) {
+        _monitorStateLock.store(false)
+        return
+    }
+    var channels: Array<Channel<string>> = []
+    for (var i = 0; i < len(_nodeMonitors); i++) {
+        channels.push(_nodeMonitors[i].notifications)
+    }
+    for (var i = 0; i < len(_remoteMonitors); i++) {
+        channels.push(_remoteMonitors[i].notifications)
+    }
+    _nodeMonitors = []
+    _remoteMonitors = []
+    _monitorRuntimeToken = 0
+    _monitorStateLock.store(false)
+    _closeChannels(channels)
+}
+
+fn _activateRuntimeGeneration(token: i64) -> bool {
+    _lockRuntimeDecision()
+    if (_runtimeActiveToken.load() != 0) {
+        _runtimeDecisionLock.store(false)
+        return false
+    }
+    _lockMonitorState()
+    if (_monitorRuntimeToken != 0 || len(_nodeMonitors) != 0 || len(_remoteMonitors) != 0) {
+        _monitorStateLock.store(false)
+        _runtimeDecisionLock.store(false)
+        return false
+    }
+    _monitorRuntimeToken = token
+    _monitorStateLock.store(false)
+    _runtimeActiveToken.store(token)
+    _runtimeDecisionLock.store(false)
+    return true
+}
+
 fn _retireRuntimeGeneration(token: i64) -> bool {
     _lockRuntimeDecision()
     if (_runtimeActiveToken.load() != token) {
@@ -235,20 +313,168 @@ fn _retireRuntimeGeneration(token: i64) -> bool {
         return false
     }
     _runtimeActiveToken.store(0)
+    _clearMonitorStateLocked(token)
     _runtimeDecisionLock.store(false)
     return true
 }
 
 fn _retireCurrentRuntimeGeneration() {
     _lockRuntimeDecision()
+    var token = _runtimeActiveToken.load()
     _runtimeActiveToken.store(0)
+    if (token != 0) { _clearMonitorStateLocked(token) }
     _runtimeDecisionLock.store(false)
 }
 
-fn _notifyNodeDownIfCurrent(token: i64, name: string) {
+fn _takeNodeDownMonitors(token: i64, peerGeneration: i64,
+                         name: string) -> _NodeDownMonitors? {
+    _lockMonitorState()
+    if (_monitorRuntimeToken != token) {
+        _monitorStateLock.store(false)
+        return null
+    }
+    var nodeOneShot: Array<Channel<string>> = []
+    var nodeStreams: Array<Channel<string>> = []
+    var retainedNode: Array<_NodeMonitor> = []
+    for (var i = 0; i < len(_nodeMonitors); i++) {
+        var entry = _nodeMonitors[i]
+        if (entry.target == "*") {
+            nodeStreams.push(entry.notifications)
+            retainedNode.push(entry)
+        } else if (entry.target == name) {
+            nodeOneShot.push(entry.notifications)
+        } else {
+            retainedNode.push(entry)
+        }
+    }
+    var remote: Array<Channel<string>> = []
+    var retainedRemote: Array<_RemoteMonitor> = []
+    for (var i = 0; i < len(_remoteMonitors); i++) {
+        var entry = _remoteMonitors[i]
+        if (entry.peerGeneration == peerGeneration) {
+            remote.push(entry.notifications)
+        } else {
+            retainedRemote.push(entry)
+        }
+    }
+    _nodeMonitors = retainedNode
+    _remoteMonitors = retainedRemote
+    _monitorStateLock.store(false)
+    return { nodeOneShot: nodeOneShot, nodeStreams: nodeStreams, remote: remote }
+}
+
+fn _publishOneShot(channels: Array<Channel<string>>, result: string) {
+    for (var i = 0; i < len(channels); i++) {
+        channels[i].trySend(result)
+        channels[i].close()
+    }
+}
+
+fn _notifyNodeDownIfCurrent(token: i64, peerGeneration: i64, name: string) {
     _lockRuntimeDecision()
-    if (_runtimeActiveToken.load() == token) { __notifyNodeDown(name) }
+    var targets = _runtimeActiveToken.load() == token
+        ? _takeNodeDownMonitors(token, peerGeneration, name)
+        : null
     _runtimeDecisionLock.store(false)
+    if (targets == null) { return }
+    for (var i = 0; i < len(targets!.nodeStreams); i++) {
+        targets!.nodeStreams[i].trySend(name)
+    }
+    _publishOneShot(targets!.nodeOneShot, name)
+    _publishOneShot(targets!.remote, "nodedown")
+}
+
+fn _registerNodeMonitor(token: i64, target: string,
+                        notifications: Channel<string>) -> bool {
+    _lockMonitorState()
+    if (_monitorRuntimeToken != token) {
+        _monitorStateLock.store(false)
+        return false
+    }
+    _nodeMonitors.push({ target: target, notifications: notifications })
+    _monitorStateLock.store(false)
+    return true
+}
+
+fn _registerRemoteMonitor(token: i64, nodeName: string, coroutineName: string,
+                          notifications: Channel<string>) -> _RemoteMonitorRegistration? {
+    var peerGeneration = __peerGeneration(nodeName)
+    if (peerGeneration == 0) { return null }
+    var id = _monitorNextId.fetchAdd(1) + 1
+    if (id <= 0) { return null }
+    _lockMonitorState()
+    if (_monitorRuntimeToken != token) {
+        _monitorStateLock.store(false)
+        return null
+    }
+    _remoteMonitors.push({
+        id: id,
+        peerGeneration: peerGeneration,
+        coroutineName: coroutineName,
+        notifications: notifications,
+    })
+    _monitorStateLock.store(false)
+    var current = __peerName(peerGeneration)
+    if (current == null || current! != nodeName) {
+        _unregisterRemoteMonitor(token, id)
+        return null
+    }
+    return { id: id, peerGeneration: peerGeneration }
+}
+
+fn _unregisterRemoteMonitor(token: i64, id: i64) -> bool {
+    _lockMonitorState()
+    if (_monitorRuntimeToken != token) {
+        _monitorStateLock.store(false)
+        return false
+    }
+    var removed = false
+    var retained: Array<_RemoteMonitor> = []
+    for (var i = 0; i < len(_remoteMonitors); i++) {
+        var entry = _remoteMonitors[i]
+        if (!removed && entry.id == id) {
+            removed = true
+        } else {
+            retained.push(entry)
+        }
+    }
+    _remoteMonitors = retained
+    _monitorStateLock.store(false)
+    return removed
+}
+
+fn _takeRemoteExitMonitors(token: i64, peerGeneration: i64,
+                           coroutineName: string) -> Array<Channel<string>> {
+    _lockMonitorState()
+    var matched: Array<Channel<string>> = []
+    if (_monitorRuntimeToken != token) {
+        _monitorStateLock.store(false)
+        return matched
+    }
+    var retained: Array<_RemoteMonitor> = []
+    for (var i = 0; i < len(_remoteMonitors); i++) {
+        var entry = _remoteMonitors[i]
+        if (entry.peerGeneration == peerGeneration && entry.coroutineName == coroutineName) {
+            matched.push(entry.notifications)
+        } else {
+            retained.push(entry)
+        }
+    }
+    _remoteMonitors = retained
+    _monitorStateLock.store(false)
+    return matched
+}
+
+fn _notifyRemoteExit(peerGeneration: i64, coroutineName: string, reason: string) {
+    var token = _runtimeActiveToken.load()
+    if (token == 0 || __peerName(peerGeneration) == null) { return }
+    var matched = _takeRemoteExitMonitors(token, peerGeneration, coroutineName)
+    _publishOneShot(matched, reason)
+}
+
+fn _peerIdentityCurrent(peerGeneration: i64, expectedName: string) -> bool {
+    var current = __peerName(peerGeneration)
+    return current != null && current! == expectedName
 }
 
 fn _sourceStateSnapshot() -> _ClusterSourceState? {
@@ -541,13 +767,12 @@ export fn decodeHeartbeat(payload: Array<u8>) -> i64? {
     return _readU64(payload, 0) as i64
 }
 
-export fn encodeCoroMonitor(kind: i64, name: string) -> Array<u8>? {
-    if ((kind != FRAME_CORO_MONITOR && kind != FRAME_CORO_DEMONITOR) ||
-        !_validName(name, CORO_NAME_MAX)) { return null }
+export fn encodeCoroMonitor(name: string) -> Array<u8>? {
+    if (!_validName(name, CORO_NAME_MAX)) { return null }
     var nameBytes = _bytes(name)
     var payload: Array<u8> = [len(nameBytes) as u8]
     _appendBytes(ref payload, nameBytes)
-    return encodeFrame(kind, payload)
+    return encodeFrame(FRAME_CORO_MONITOR, payload)
 }
 
 export fn decodeCoroMonitor(payload: Array<u8>) -> string? {
@@ -585,14 +810,33 @@ export fn decodeCoroExit(payload: Array<u8>) -> ClusterCoroExit? {
 // complete bounded frame reaches this source callback, keyed by a unique peer
 // generation so a delayed continuation cannot address a replacement peer.
 fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
+    var requester = __peerName(peerGeneration)
+    if (requester == null) { return }
+    var requesterName = requester!
     const notifications = Coro.monitor(name)
-    var reason = match (notifications.recv()) {
-        Recv.Value { value: value } -> value
-        _ -> "noproc"
+    defer { notifications.close() }
+    while (true) {
+        match (notifications.recvTimeout(_REMOTE_MONITOR_POLL_MS)) {
+            Recv.Value { value: reason } -> {
+                if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
+                var exited: ClusterCoroExit = { name: name, reason: reason }
+                var response = encodeCoroExit(exited)
+                if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
+                return
+            }
+            Recv.Closed -> {
+                if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
+                var exited: ClusterCoroExit = { name: name, reason: "noproc" }
+                var response = encodeCoroExit(exited)
+                if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
+                return
+            }
+            Recv.Timeout -> {
+                if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
+            }
+            Recv.Empty -> {}
+        }
     }
-    var exited: ClusterCoroExit = { name: name, reason: reason }
-    var response = encodeCoroExit(exited)
-    if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
 }
 
 // Detachment is generation-keyed and returns the detached node name as a raw
@@ -602,7 +846,7 @@ fn _disconnectPeer(peerGeneration: i64) {
     var token = _runtimeActiveToken.load()
     if (token == 0) { return }
     var name = __detachPeer(peerGeneration)
-    if (name != null) { _notifyNodeDownIfCurrent(token, name!) }
+    if (name != null) { _notifyNodeDownIfCurrent(token, peerGeneration, name!) }
 }
 
 fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
@@ -653,12 +897,10 @@ fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
     if (frame!.kind == FRAME_CORO_EXIT) {
         var exited = decodeCoroExit(frame!.payload)
         if (exited != null) {
-            __notifyRemoteMonitor(peerGeneration, exited!.name, exited!.reason)
+            _notifyRemoteExit(peerGeneration, exited!.name, exited!.reason)
         }
         return true
     }
-    // CORO_DEMONITOR is deliberately a no-op until remote monitor identity is
-    // part of the wire contract; the protocol has no safe removal key today.
     return true
 }
 
@@ -1176,8 +1418,11 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
             if (dead || expiredDuringWarmup) {
                 var nextMissed = expiredDuringWarmup ? peer.missedHeartbeats + 1
                                                      : peer.missedHeartbeats
-                __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs,
-                                      peer.missedHeartbeats, nextMissed, dead, sentAtMs)
+                var name = __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs,
+                                                 peer.missedHeartbeats, nextMissed, dead, sentAtMs)
+                if (name != null) {
+                    _notifyNodeDownIfCurrent(token, peer.peerGeneration, name!)
+                }
             }
         }
     }
@@ -1199,8 +1444,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
     }
     _discoveryHashBits.store(discoveryClusterHash(state.secret) as i64)
     var token = _runtimeNextToken.fetchAdd(1) + 1
-    var (_, acquired) = _runtimeActiveToken.compareExchange(0, token)
-    if (!acquired) {
+    if (!_activateRuntimeGeneration(token)) {
         net.close(listener)
         __stop()
         _clearSourceState()
@@ -1772,10 +2016,12 @@ export fn info() -> ClusterInfo? {
 // The source wrapper owns target validation and dispatches to exact node and
 // coroutine leaves, so the native boundary has no optional-argument policy.
 export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
+    var token = _runtimeActiveToken.load()
+    if (token == 0) { return null }
     if (coroName == null) {
         if (name != "*" && !validNodeName(name)) { return null }
         var notifications = Channel<string>(NODE_MONITOR_CAPACITY)
-        if (!__registerNodeMonitor(name, notifications)) {
+        if (!_registerNodeMonitor(token, name, notifications)) {
             notifications.close()
             return null
         }
@@ -1783,16 +2029,17 @@ export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
     }
     if (!validNodeName(name) || !validCoroutineName(coroName!)) { return null }
     var notifications = Channel<string>(COROUTINE_MONITOR_CAPACITY)
-    var request = encodeCoroMonitor(FRAME_CORO_MONITOR, coroName!)
+    var request = encodeCoroMonitor(coroName!)
     if (request == null) {
         notifications.close()
         return null
     }
-    var peerGeneration = __registerCoroutineMonitor(name, coroName!, notifications)
-    if (peerGeneration == 0) {
+    var registration = _registerRemoteMonitor(token, name, coroName!, notifications)
+    if (registration == null) {
         notifications.close()
         return null
     }
+    var peerGeneration = registration!.peerGeneration
     var admission = __peerEnqueue(peerGeneration, request!)
     if (admission != _PEER_QUEUE_ACCEPTED) {
         if (admission == _PEER_QUEUE_FULL ||
@@ -1800,7 +2047,7 @@ export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
             admission == _PEER_QUEUE_INVALID) {
             _disconnectPeer(peerGeneration)
         }
-        __unregisterCoroutineMonitor(name, coroName!, notifications)
+        _unregisterRemoteMonitor(token, registration!.id)
         notifications.close()
         return null
     }

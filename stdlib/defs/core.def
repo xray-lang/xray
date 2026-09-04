@@ -2072,8 +2072,8 @@ module cluster {
   }
 
   fn __applyHealthDecision {
-    signature: "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool, markedAtMs: i64): bool"
-    doc: "Compare and apply one source-owned health decision to the locked peer generation"
+    signature: "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool, markedAtMs: i64): string?"
+    doc: "Compare and apply one source-owned health decision, returning only the generation-safe detached peer name"
     vm: "cluster_health_apply_fn"
     argc: 6
     arg_spec: "vvvvvv"
@@ -2081,6 +2081,7 @@ module cluster {
     link_object: false
     layer: "runtime"
     caps: "channel"
+    return_ownership: "fresh"
   }
 
   fn __trackListener {
@@ -2206,16 +2207,30 @@ module cluster {
     allocation: "may_heap"
   }
 
-  fn __notifyRemoteMonitor {
-    signature: "(peerGeneration: i64, coroutineName: string, reason: string): bool"
-    doc: "Publish one source-decoded remote exit through the synchronized monitor registry"
-    vm: "cluster_notify_remote_monitor_fn"
-    argc: 3
-    arg_spec: "vss"
+  fn __peerName {
+    signature: "(peerGeneration: i64): string?"
+    doc: "Look up the connected peer name for one exact generation"
+    vm: "cluster_peer_name_fn"
+    argc: 1
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
-    caps: "channel"
+    return_ownership: "fresh"
+    effect: "nothrow"
+    allocation: "may_heap"
+  }
+
+  fn __peerGeneration {
+    signature: "(name: string): i64"
+    doc: "Look up the connected peer generation for one exact name"
+    vm: "cluster_peer_generation_fn"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    effect: "nothrow"
   }
 
   fn __detachPeer {
@@ -2231,53 +2246,6 @@ module cluster {
     effect: "nothrow"
     allocation: "may_heap"
     return_ownership: "fresh"
-  }
-
-  fn __notifyNodeDown {
-    signature: "(name: string): ()"
-    doc: "Publish a source-selected node-down notification through the synchronized monitor registry"
-    vm: "cluster_notify_node_down_fn"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "channel"
-    effect: "nothrow"
-    allocation: "may_heap"
-  }
-
-  fn __registerNodeMonitor {
-    signature: "(name: string, notifications: Channel<string>): bool"
-    doc: "Register one source-constructed notification channel for a normalized node target"
-    vm: "cluster_register_node_monitor_fn"
-    argc: 2
-    arg_spec: "sv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __registerCoroutineMonitor {
-    signature: "(nodeName: string, coroutineName: string, notifications: Channel<string>): i64"
-    doc: "Register one source-constructed channel for a connected peer and return its generation"
-    vm: "cluster_register_coro_monitor_fn"
-    argc: 3
-    arg_spec: "ssv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __unregisterCoroutineMonitor {
-    signature: "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool"
-    doc: "Remove one remote monitor registration after source-owned request delivery fails"
-    vm: "cluster_unregister_coro_monitor_fn"
-    argc: 3
-    arg_spec: "ssv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
   }
 
   fn __discoveryOpen {
