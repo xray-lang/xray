@@ -797,10 +797,9 @@ TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&ctx), 0);
     ASSERT_TRUE(xr_aot_root_descriptor_begin(runtime));
 
-    XrAotRuntimeInfo active = xr_aot_runtime_info(&ctx);
-    ASSERT_GE(active.live_bytes, 0);
-    ASSERT_GE(active.live_objects, 0);
-    ASSERT_GE(active.finalizer_count, 0);
+    ASSERT_GE(xr_aot_runtime_live_bytes(&ctx), 0);
+    ASSERT_GE(xr_aot_runtime_live_objects(&ctx), 0);
+    ASSERT_GE(xr_aot_runtime_finalizer_count(&ctx), 0);
 
     ASSERT_TRUE(xr_aot_root_descriptor_end(runtime));
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&ctx), 0);
@@ -809,6 +808,7 @@ TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
     memset(&detached, 0, sizeof(detached));
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&detached), 0);
     ASSERT_EQ_INT(xr_aot_runtime_live_objects(&detached), 0);
+    ASSERT_EQ_INT(xr_aot_runtime_finalizer_count(&detached), 0);
 
     xr_aot_runtime_delete(runtime);
 }
@@ -1031,8 +1031,7 @@ TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
     };
     XrCopyContext copy;
     xr_copy_context_init_core(&copy, core, NULL);
-    XrValue bridged = xr_deep_copy_with_ctx(
-        &copy, (XrValue) {.tag = 14, .ptr = &literal});
+    XrValue bridged = xr_deep_copy_with_ctx(&copy, (XrValue) {.tag = 14, .ptr = &literal});
     xr_copy_context_cleanup(&copy);
 
     ASSERT_TRUE(XR_IS_STRING(bridged));
@@ -1042,14 +1041,12 @@ TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
     size_t object_size = (size_t) xr_runtime_string_object_allocation_bytes(5);
     XrString *materialized = (XrString *) xr_calloc(1, object_size);
     ASSERT_NOT_NULL(materialized);
-    ASSERT_EQ_INT(xr_runtime_string_object_init(
-                      materialized, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL, 5,
-                      5, 0, XR_RUNTIME_STRING_TRAIT_LOCAL),
+    ASSERT_EQ_INT(xr_runtime_string_object_init(materialized, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+                                                5, 5, 0, XR_RUNTIME_STRING_TRAIT_LOCAL),
                   XR_RUNTIME_ABI_OK);
     memcpy(materialized->data, chars, sizeof(chars));
     xr_copy_context_init_core(&copy, core, NULL);
-    bridged = xr_deep_copy_with_ctx(
-        &copy, (XrValue) {.tag = 19, .ptr = materialized});
+    bridged = xr_deep_copy_with_ctx(&copy, (XrValue) {.tag = 19, .ptr = materialized});
     xr_copy_context_cleanup(&copy);
     ASSERT_TRUE(XR_IS_STRING(bridged));
     ASSERT_EQ_INT((int) XR_TO_STRING(bridged)->length, 5);
@@ -1057,8 +1054,7 @@ TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
 
     materialized->reserved16 = 1;
     xr_copy_context_init_core(&copy, core, NULL);
-    bridged = xr_deep_copy_with_ctx(
-        &copy, (XrValue) {.tag = 19, .ptr = materialized});
+    bridged = xr_deep_copy_with_ctx(&copy, (XrValue) {.tag = 19, .ptr = materialized});
     xr_copy_context_cleanup(&copy);
     ASSERT_TRUE(XR_IS_NULL(bridged));
     xr_free(materialized);

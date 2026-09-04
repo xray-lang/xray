@@ -1,5 +1,5 @@
-// runtime — reclamation-domain introspection composed in Xray over three
-// private counter reads.
+// runtime — reclamation-domain introspection composed in Xray over private
+// scalar counter reads.
 //
 // Reclamation is per-coroutine reference counting and nothing else, so there is
 // no collection event to observe or control; this module reports state and
@@ -15,29 +15,23 @@ export final class RuntimeInfo {
     liveKB: f64
     liveObjects: i64
     finalizerCount: i64
-    blocks: i64
-    freeBlocks: i64
-    fullBlocks: i64
 
-    constructor(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64,
-                blocks: i64, freeBlocks: i64, fullBlocks: i64) {
+    constructor(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64) {
         this.liveBytes = liveBytes
         this.liveKB = liveKB
         this.liveObjects = liveObjects
         this.finalizerCount = finalizerCount
-        this.blocks = blocks
-        this.freeBlocks = freeBlocks
-        this.fullBlocks = fullBlocks
     }
 }
 
-// A typed snapshot of the current execution-local reclamation domain. The
-// kilobyte reading is the byte count scaled here, not a second thing to read.
+// A typed view of the current execution-local reclamation domain. The scalar
+// reads are deliberately assembled here: native code exposes counters, never
+// an Xray object shape. The kilobyte reading is derived from the captured byte
+// count rather than fetched independently.
 export fn info() -> RuntimeInfo {
-    var raw = __stats()
-    return RuntimeInfo(raw.liveBytes, (raw.liveBytes.toF64()) / BYTES_PER_KB,
-                       raw.liveObjects, raw.finalizerCount,
-                       raw.blocks, raw.freeBlocks, raw.fullBlocks)
+    var bytes = __liveBytes()
+    return RuntimeInfo(bytes, (bytes.toF64()) / BYTES_PER_KB,
+                       __liveObjects(), __finalizerCount())
 }
 
 // Live memory bytes in the current execution-local reclamation domain.
@@ -48,6 +42,11 @@ export fn liveBytes() -> i64 {
 // Live object count in the same domain.
 export fn liveObjects() -> i64 {
     return __liveObjects()
+}
+
+// Registered finalizers in the current execution-local reclamation domain.
+export fn finalizerCount() -> i64 {
+    return __finalizerCount()
 }
 
 // Live bytes held by SYNC_SHARED system-heap objects. This is the one domain a

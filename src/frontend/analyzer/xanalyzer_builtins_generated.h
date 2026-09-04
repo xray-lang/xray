@@ -484,26 +484,11 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 };
 #define GEN_REGEX_FUNCTION_COUNT 5
 
-// runtime.__RuntimeStats object fields
-static const XaBuiltinObjectField g_gen_runtime___runtimestats_object_fields[] = {
-    {"liveBytes", "i64"},
-    {"liveObjects", "i64"},
-    {"finalizerCount", "i64"},
-    {"blocks", "i64"},
-    {"freeBlocks", "i64"},
-    {"fullBlocks", "i64"},
-};
-
-static const XaBuiltinObjectShape g_gen_runtime_object_shapes[] = {
-    {"__RuntimeStats", "Raw counters read in one pass from the current execution-local reclamation domain", g_gen_runtime___runtimestats_object_fields, 6, true},
-};
-#define GEN_RUNTIME_OBJECT_SHAPE_COUNT 1
-
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
-    {"__stats", "(): __RuntimeStats", "Read the current execution-local reclamation domain counters", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__liveBytes", "(): i64", "Live memory bytes in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__liveObjects", "(): i64", "Live object count in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__finalizerCount", "(): i64", "Registered finalizers in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__sharedLiveBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__staticAllocBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
@@ -570,7 +555,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT, g_gen_net_classes, GEN_NET_CLASS_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_regex_classes, GEN_REGEX_CLASS_COUNT},
-    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_object_shapes, GEN_RUNTIME_OBJECT_SHAPE_COUNT, NULL, 0, NULL, 0},
+    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_sys_classes, GEN_SYS_CLASS_COUNT},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
 };

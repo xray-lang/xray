@@ -266,9 +266,9 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"io", "__makeTempDir", "(root: string): string?", "Create a uniquely named directory inside the given root", "io_make_temp_dir", "normal", "", "xrt_io_make_temp_dir", "s", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", "io_make_temp_file", "normal", "", "xrt_io_make_temp_file", "s", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", "io_utime_now", "normal", "", "xrt_io_utime_now", "p", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"runtime", "__stats", "(): __RuntimeStats", "Read the current execution-local reclamation domain counters", "runtime_stats", "normal", "", "xr_aot_runtime_info", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"runtime", "__liveBytes", "(): i64", "Live memory bytes in the current execution-local reclamation domain", "runtime_live_bytes", "normal", "", "xr_aot_runtime_live_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"runtime", "__liveObjects", "(): i64", "Live object count in the current execution-local reclamation domain", "runtime_live_objects", "normal", "", "xr_aot_runtime_live_objects", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"runtime", "__finalizerCount", "(): i64", "Registered finalizers in the current execution-local reclamation domain", "runtime_finalizer_count", "normal", "", "xr_aot_runtime_finalizer_count", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"runtime", "__sharedLiveBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide)", "runtime_shared_bytes", "normal", "", "xr_aot_runtime_shared_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"runtime", "__staticAllocBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide)", "runtime_static_bytes", "normal", "", "xr_aot_runtime_static_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"mem", "__fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", "mem_fence", "normal", "", "xrt_mem_fence", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -339,15 +339,6 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_runtime___RuntimeStats[] = {
-    {"runtime", "__RuntimeStats", "liveBytes", "i64", true},
-    {"runtime", "__RuntimeStats", "liveObjects", "i64", true},
-    {"runtime", "__RuntimeStats", "finalizerCount", "i64", true},
-    {"runtime", "__RuntimeStats", "blocks", "i64", true},
-    {"runtime", "__RuntimeStats", "freeBlocks", "i64", true},
-    {"runtime", "__RuntimeStats", "fullBlocks", "i64", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
     {"Coro", "CoroStats", "active", "i64", true},
     {"Coro", "CoroStats", "blocked", "i64", true},
@@ -413,7 +404,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_Cluster
 };
 
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"runtime", "__RuntimeStats", "Raw counters read in one pass from the current execution-local reclamation domain", xr_stdlib_object_fields_runtime___RuntimeStats, 6, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},

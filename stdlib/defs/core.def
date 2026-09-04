@@ -1810,26 +1810,6 @@ module io {
 }
 
 module runtime {
-  object __RuntimeStats {
-    fields: "const liveBytes: i64, const liveObjects: i64, const finalizerCount: i64, const blocks: i64, const freeBlocks: i64, const fullBlocks: i64"
-    exact: true
-    doc: "Raw counters read in one pass from the current execution-local reclamation domain"
-  }
-
-  fn __stats {
-    signature: "(): __RuntimeStats"
-    doc: "Read the current execution-local reclamation domain counters"
-    vm: "runtime_stats"
-    aot: "xr_aot_runtime_info"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-    visibility: "internal"
-  }
-
   fn __liveBytes {
     signature: "(): i64"
     doc: "Live memory bytes in the current execution-local reclamation domain"
@@ -1848,6 +1828,19 @@ module runtime {
     doc: "Live object count in the current execution-local reclamation domain"
     vm: "runtime_live_objects"
     aot: "xr_aot_runtime_live_objects"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    visibility: "internal"
+  }
+
+  fn __finalizerCount {
+    signature: "(): i64"
+    doc: "Registered finalizers in the current execution-local reclamation domain"
+    vm: "runtime_finalizer_count"
+    aot: "xr_aot_runtime_finalizer_count"
     argc: 0
     arg_spec: ""
     aot_direct: false

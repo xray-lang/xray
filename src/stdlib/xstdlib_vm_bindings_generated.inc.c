@@ -420,11 +420,11 @@ XR_FUNC bool xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule 
         return false;
     size_t expected_count = 0;
     (void) expected_count;
-    XRS_EXPORT(module, isolate, "__stats", runtime_stats);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__liveBytes", runtime_live_bytes);
     expected_count++;
     XRS_EXPORT(module, isolate, "__liveObjects", runtime_live_objects);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__finalizerCount", runtime_finalizer_count);
     expected_count++;
     XRS_EXPORT(module, isolate, "__sharedLiveBytes", runtime_shared_bytes);
     expected_count++;

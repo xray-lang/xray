@@ -40,7 +40,7 @@
 // bugs during the May 2026 burn-in.
 
 import runtime
-// @test runtime.info exposes the full RC introspection key set
+// @test runtime.info exposes the backend-independent RC counter set
 @test
 fn test_mem_info_keys() {
     var info = runtime.info()
@@ -49,10 +49,7 @@ fn test_mem_info_keys() {
     assert(info.liveKB >= 0.0)
     assert(info.liveObjects >= 0)
     assert(info.finalizerCount >= 0)
-    // Region block stats
-    assert(info.blocks >= 0)
-    assert(info.freeBlocks >= 0)
-    assert(info.fullBlocks >= 0)
+    assert(runtime.finalizerCount() >= 0)
 }
 
 

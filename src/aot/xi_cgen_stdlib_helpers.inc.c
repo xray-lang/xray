@@ -307,56 +307,6 @@ static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *ou
     return false;
 }
 
-static const char *const cg_runtime_stats_object_fields[] = {
-    "liveBytes", "liveObjects", "finalizerCount", "blocks", "freeBlocks", "fullBlocks"};
-
-static void cg_emit_runtime_stats_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                        const XiValue *v, const char *aot_ctx) {
-    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
-    const XrAggregateLayout *layout = cg_value_struct_layout(ctx, f, v);
-    if (layout && layout->field_count == 6 && plan && cg_value_rep_is_struct_aggregate(plan->rep) &&
-        plan->rep.c_type) {
-        char fields[6][128];
-        for (uint16_t i = 0; i < 6; i++)
-            cg_struct_field_c_name(layout, i, fields[i], sizeof(fields[i]));
-        fprintf(out,
-                "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
-                "(%s){ .%s = _ri.live_bytes, .%s = _ri.live_objects, "
-                ".%s = _ri.finalizer_count, .%s = _ri.blocks, "
-                ".%s = _ri.free_blocks, .%s = _ri.full_blocks }; })",
-                aot_ctx, plan->rep.c_type, fields[0], fields[1], fields[2], fields[3], fields[4],
-                fields[5]);
-        return;
-    }
-
-    if (cg_value_plan_storage_rep(ctx, v) != XR_REP_TAGGED) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: runtime.__stats has no verified AOT object layout\n");
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    const XrType *shape_type =
-        v && XR_TYPE_HAS_OBJECT_SHAPE(v->type) && v->type->object.field_count == 6 ? v->type : NULL;
-    int shape_id = cg_intern_object_shape_parts(ctx, 6, cg_runtime_stats_object_fields, shape_type,
-                                                XR_OBJECT_DOMAIN_STRUCT);
-    if (shape_id < 0) {
-        ctx->error = true;
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    fprintf(out,
-            "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
-            "XrValue _riv = xrt_object_new_shape(&_xobj_shape_%d); "
-            "xrt_object_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
-            "xrt_object_set_field(_riv, 1, XR_FROM_INT(_ri.live_objects)); "
-            "xrt_object_set_field(_riv, 2, XR_FROM_INT(_ri.finalizer_count)); "
-            "xrt_object_set_field(_riv, 3, XR_FROM_INT(_ri.blocks)); "
-            "xrt_object_set_field(_riv, 4, XR_FROM_INT(_ri.free_blocks)); "
-            "xrt_object_set_field(_riv, 5, XR_FROM_INT(_ri.full_blocks)); "
-            "_riv; })",
-            aot_ctx, shape_id);
-}
-
 static bool cg_emit_runtime_control_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                          const XiValue *v, const char *method, uint16_t argc) {
     /* Only this module's private leaves are answered here.  Its public surface
@@ -366,15 +316,13 @@ static bool cg_emit_runtime_control_call(XiCgenCtx *ctx, FILE *out, const XiFunc
         return false;
 
     const char *aot_ctx = xicgen_aot_context_expr(ctx, f);
-    if (strcmp(method, "__stats") == 0) {
-        cg_emit_runtime_stats_value(ctx, out, f, v, aot_ctx);
-        return true;
-    }
     const char *helper = NULL;
     if (strcmp(method, "__liveBytes") == 0)
         helper = "xr_aot_runtime_live_bytes";
     else if (strcmp(method, "__liveObjects") == 0)
         helper = "xr_aot_runtime_live_objects";
+    else if (strcmp(method, "__finalizerCount") == 0)
+        helper = "xr_aot_runtime_finalizer_count";
     else if (strcmp(method, "__sharedLiveBytes") == 0)
         helper = "xr_aot_runtime_shared_bytes";
     else if (strcmp(method, "__staticAllocBytes") == 0)

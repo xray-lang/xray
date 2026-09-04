@@ -1394,22 +1394,12 @@ deletion_trigger = "rewriting it would fork a shared definition: several hundred
 
 [[leaf]]
 module = "runtime"
-symbol = "__RuntimeStats"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def, exact shape with liveBytes, liveObjects, finalizerCount, blocks, freeBlocks and fullBlocks). VM instantiates the generated record class; AOT interns an object shape in the code generator and sets the six fields positionally. The field order agrees; the shape carriers do not"
-deletion_trigger = "when runtime.__stats is deleted, or when a .def entry can declare its return as a type runtime.xr owns, so the six counters stop needing a native record shape"
-
-[[leaf]]
-module = "runtime"
 symbol = "__liveBytes"
 class = "runtime_leaf"
 abi = "none; reads a live-byte counter"
 ownership = "none"
 effect = "nothrow"
-provider = "the reclamation domain. The VM reads xr_coro_ensure_heap(coro)->totalbytes; AOT (src/coro/xaot_runtime.c xr_aot_runtime_live_bytes) prefers the execution arena's live_bytes and falls back to that same coroutine-heap counter only when the arena is absent, so the two are not always the same counter"
+provider = "the reclamation domain. The VM reads the TLS-active execution allocation context's local_heap->totalbytes; AOT (src/coro/xaot_runtime.c xr_aot_runtime_live_bytes) prefers the execution arena's live_bytes and falls back to its coroutine-heap counter when the arena is absent"
 deletion_trigger = "when the reclamation domain's counters are readable from Xray source, which needs the runtime to expose the domain as a value rather than as ambient per-coroutine state"
 
 [[leaf]]
@@ -1420,6 +1410,16 @@ abi = "none; reads a live-object counter"
 ownership = "none"
 effect = "nothrow"
 provider = "the reclamation domain. The VM reads heap->object_count; AOT (src/coro/xaot_runtime.c xr_aot_runtime_live_objects) prefers the execution arena's live_objects with the same fallback as __liveBytes"
+deletion_trigger = "when the reclamation domain's counters are readable from Xray source, which needs the runtime to expose the domain as a value rather than as ambient per-coroutine state"
+
+[[leaf]]
+module = "runtime"
+symbol = "__finalizerCount"
+class = "runtime_leaf"
+abi = "none; reads a registered-finalizer counter"
+ownership = "none"
+effect = "nothrow"
+provider = "the reclamation domain. The VM reads heap->finalizer_count; AOT (src/coro/xaot_runtime.c xr_aot_runtime_finalizer_count) prefers the execution arena's finalizer_count with the same fallback as __liveBytes"
 deletion_trigger = "when the reclamation domain's counters are readable from Xray source, which needs the runtime to expose the domain as a value rather than as ambient per-coroutine state"
 
 [[leaf]]
@@ -1441,16 +1441,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "src/runtime/mem/xsystem_heap.c xr_sysheap_static_alloc_bytes_total. Both backends call it; the AOT wrapper forwards directly"
 deletion_trigger = "when the module-static arena's counter is readable from Xray source; it is process-wide state with no coroutine-local form, so it needs a runtime surface of its own"
-
-[[leaf]]
-module = "runtime"
-symbol = "__stats"
-class = "runtime_leaf"
-abi = "none; one pass over the reclamation domain's counters"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the reclamation domain. The VM reads totalbytes, object_count and finalizer_count and then xr_region_get_stats for the block counts; AOT (src/coro/xaot_runtime.c xr_aot_runtime_info) fills only the first three from the execution arena and leaves blocks, freeBlocks and fullBlocks at zero unless it takes the coroutine-heap fallback"
-deletion_trigger = "when the individual counters are readable from Xray source, so runtime.xr can assemble the snapshot itself and choose which fields it wants -- which also removes the AOT path's three permanently-zero fields"
 
 # ============================================================================
 # sys -- processes, pipes, signals and dynamic libraries

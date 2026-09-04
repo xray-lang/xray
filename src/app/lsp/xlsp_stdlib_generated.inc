@@ -529,10 +529,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
     {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "", NULL, 0},
     {"liveBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"liveObjects", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"finalizerCount", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"sharedBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"staticBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo", "Class type", NULL, 0},
-    {"__RuntimeStats", XLSP_SYM_CLASS, "type __RuntimeStats = { liveBytes: i64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }", "Raw counters read in one pass from the current execution-local reclamation domain", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 7
 

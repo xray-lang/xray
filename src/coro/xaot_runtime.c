@@ -102,6 +102,15 @@ int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx) {
     return heap ? (int64_t) heap->object_count : 0;
 }
 
+int64_t xr_aot_runtime_finalizer_count(const XrAotContext *ctx) {
+    const XrAotCoroState *state = aot_context_state(ctx);
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    if (ops && ops->execution_arena_finalizer_count && state->execution_arena)
+        return ops->execution_arena_finalizer_count(state->execution_arena);
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    return heap ? (int64_t) heap->finalizer_count : 0;
+}
+
 /* Process-global by design (see xsystem_heap.h): the counters are the same
  * ones the VM natives read, so the two backends report identical semantics. */
 int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx) {
@@ -112,32 +121,6 @@ int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx) {
 int64_t xr_aot_runtime_static_bytes(const XrAotContext *ctx) {
     (void) ctx;
     return (int64_t) xr_sysheap_static_alloc_bytes_total();
-}
-
-XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
-    XrAotRuntimeInfo info = {0};
-    const XrAotCoroState *state = aot_context_state(ctx);
-    const XrAotValueOps *ops = aot_state_value_ops(state);
-    if (ops && ops->execution_arena_live_bytes && ops->execution_arena_live_objects &&
-        state->execution_arena) {
-        info.live_bytes = ops->execution_arena_live_bytes(state->execution_arena);
-        info.live_objects = ops->execution_arena_live_objects(state->execution_arena);
-        if (ops->execution_arena_finalizer_count)
-            info.finalizer_count = ops->execution_arena_finalizer_count(state->execution_arena);
-        return info;
-    }
-    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
-    if (!heap)
-        return info;
-    XrRegionStats stats = {0};
-    xr_region_get_stats(&heap->region, &stats);
-    info.live_bytes = heap->totalbytes;
-    info.live_objects = (int64_t) heap->object_count;
-    info.finalizer_count = (int64_t) heap->finalizer_count;
-    info.blocks = (int64_t) stats.total_blocks;
-    info.free_blocks = (int64_t) stats.free_blocks;
-    info.full_blocks = (int64_t) stats.full_blocks;
-    return info;
 }
 
 static void aot_drop_coro_locals(XrCoroutine *coro, XrAotRuntime *runtime) {

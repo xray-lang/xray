@@ -1,7 +1,6 @@
-// The snapshot is one counter read shaped in Xray; the kilobyte reading is the
-// byte count scaled here rather than a second thing the host reports. These
-// pin that relation and the agreement between the snapshot and the scalar
-// readings, which is what having one owner is supposed to buy.
+// The runtime exposes only scalar leaves; Xray owns the public object shape and
+// the byte-to-kilobyte derivation. These pin that ownership split and the fact
+// that all scalar reads address the same execution-local domain.
 
 import runtime
 
@@ -17,9 +16,6 @@ fn test_a_snapshot_reports_a_live_domain() {
     assert(i.liveBytes > 0)
     assert(i.liveObjects > 0)
     assert(i.finalizerCount >= 0)
-    assert(i.blocks >= 0)
-    assert(i.freeBlocks >= 0)
-    assert(i.fullBlocks >= 0)
 }
 
 @test
@@ -32,6 +28,7 @@ fn test_scalar_readings_agree_with_the_snapshot() {
     assert(i.liveBytes >= before / 2)
     assert(i.liveBytes <= after * 2 + 4096)
     assert(runtime.liveObjects() > 0)
+    assert(runtime.finalizerCount() >= 0)
 }
 
 @test

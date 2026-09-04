@@ -181,15 +181,6 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
-typedef struct XrAotRuntimeInfo {
-    int64_t live_bytes;
-    int64_t live_objects;
-    int64_t finalizer_count;
-    int64_t blocks;
-    int64_t free_blocks;
-    int64_t full_blocks;
-} XrAotRuntimeInfo;
-
 typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
 /* Optional hook; when present, it releases owned fields and frees the frame. */
@@ -296,9 +287,9 @@ XR_FUNC XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg);
 XR_FUNC void xr_aot_runtime_delete(XrAotRuntime *runtime);
 XR_FUNC int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx);
+XR_FUNC int64_t xr_aot_runtime_finalizer_count(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_static_bytes(const XrAotContext *ctx);
-XR_FUNC XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_test_yield_simple(void);
 XR_FUNC int64_t xr_aot_test_yield_add(int64_t a, int64_t b);
 XR_FUNC int64_t xr_aot_test_yield_sync(void);
