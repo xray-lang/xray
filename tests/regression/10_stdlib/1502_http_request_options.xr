@@ -115,7 +115,7 @@ fn assert_binary_response(framing: string) {
     go serve_binary_response(lst, framing)
 
     var resp = http.request({
-        url: "http://127.0.0.1:" + string(lst.port()) + "/binary",
+        url: "http://127.0.0.1:" + string(net.port(lst)) + "/binary",
         timeoutMs: 1000
     })
 
@@ -184,7 +184,7 @@ fn test_request_preserves_custom_method_token() {
     go capture_request_line(lst, lines)
 
     var resp = http.request({
-        url: "http://127.0.0.1:" + string(lst.port()) + "/custom",
+        url: "http://127.0.0.1:" + string(net.port(lst)) + "/custom",
         method: HttpMethod("propfind")
     })
 
@@ -202,7 +202,7 @@ fn test_request_defaults_identity_accept_encoding() {
     go capture_request_raw(lst, requests)
 
     var resp = http.request({
-        url: "http://127.0.0.1:" + string(lst.port()) + "/encoding"
+        url: "http://127.0.0.1:" + string(net.port(lst)) + "/encoding"
     })
 
     var raw = recv_line(requests)
@@ -222,7 +222,7 @@ fn test_request_ignores_no_body_status_payload() {
     )
 
     var resp = http.request({
-        url: "http://127.0.0.1:" + string(lst.port()) + "/empty"
+        url: "http://127.0.0.1:" + string(net.port(lst)) + "/empty"
     })
 
     assert(resp.isSuccess())
@@ -257,7 +257,7 @@ fn test_request_body_is_written_as_bytes() {
     headers.add("Content-Type", "application/octet-stream")
 
     var resp = http.request({
-        url: "http://127.0.0.1:" + string(lst.port()) + "/bytes",
+        url: "http://127.0.0.1:" + string(net.port(lst)) + "/bytes",
         method: HttpMethod.post(),
         headers: headers,
         body: Array<u8>([0x78, 0x72]),

@@ -40,10 +40,6 @@ static void xr_stdlib_vm_register_net_conn_class_generated(XrVMRuntime *X) {
     XrClassBuilder *builder = xr_class_builder_new(X, "NetConn", NULL);
     XR_CHECK(builder != NULL, "xr_stdlib_vm_register_net_conn_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, xr_netconn_body_desc());
-    xr_class_builder_add_method(builder, "fd", conn_method_fd, 0, 0);
-    xr_class_builder_add_method(builder, "close", conn_method_close, 0, 0);
-    xr_class_builder_add_method(builder, "isClosed", conn_method_is_closed, 0, 0);
-    xr_class_builder_add_method(builder, "isTLS", conn_method_is_tls, 0, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "xr_stdlib_vm_register_net_conn_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
@@ -61,10 +57,6 @@ static void xr_stdlib_vm_register_net_listener_class_generated(XrVMRuntime *X) {
     XrClassBuilder *builder = xr_class_builder_new(X, "NetListener", NULL);
     XR_CHECK(builder != NULL, "xr_stdlib_vm_register_net_listener_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, xr_netlistener_body_desc());
-    xr_class_builder_add_method(builder, "fd", listener_method_fd, 0, 0);
-    xr_class_builder_add_method(builder, "port", listener_method_port, 0, 0);
-    xr_class_builder_add_method(builder, "close", listener_method_close, 0, 0);
-    xr_class_builder_add_method(builder, "isClosed", listener_method_is_closed, 0, 0);
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "xr_stdlib_vm_register_net_listener_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;

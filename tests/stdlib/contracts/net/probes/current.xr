@@ -43,7 +43,7 @@ fn copyClient(port: i64) -> bool {
 fn run() {
     var highListener = net.listen(0, 8)
     var highServerTask = go highServer(highListener)
-    var highClientTask = go highClient(highListener.port())
+    var highClientTask = go highClient(net.port(highListener))
     var highOk = await highClientTask
     highOk = (await highServerTask) && highOk
     net.close(highListener)
@@ -51,7 +51,7 @@ fn run() {
 
     var copyListener = net.listen(0, 8)
     var copyServerTask = go copyServer(copyListener)
-    var copyClientTask = go copyClient(copyListener.port())
+    var copyClientTask = go copyClient(net.port(copyListener))
     var copyOk = await copyClientTask
     copyOk = (await copyServerTask) && copyOk
     net.close(copyListener)

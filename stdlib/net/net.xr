@@ -9,6 +9,8 @@
 // results (byte counts, null on timeout) with lastError for the reason,
 // so poll-style loops stay exception-free.
 
+import time
+
 // Portable error codes stored by the native layer (net.__lastCode). The
 // numbering mirrors XrNetErrorKind and is a frozen contract with the
 // primitives; classification to NetError happens only here.
@@ -27,6 +29,9 @@ const _DEFAULT_BACKLOG: i64 = 1024
 const _DEFAULT_COPY_BUFFER: i64 = 65536
 const _MIN_COPY_BUFFER: i64 = 1024
 const _MAX_COPY_BUFFER: i64 = 1048576
+const _DIRECTION_READ: i64 = 0
+const _DIRECTION_WRITE: i64 = 1
+const _DIRECTION_BOTH: i64 = 2
 
 export enum NetError {
     Timeout,
@@ -124,9 +129,9 @@ fn _dialTcp(host: string, port: i64, deadline: i64) -> NetConn {
     if (len(addrs) == 0) { throw NetError.Dns }
     var lastCode = _CODE_IO
     for (var i = 0; i < len(addrs); i++) {
-        var remaining = deadline - __nowMs()
+        var remaining = deadline - time.monotonic()
         if (remaining <= 0) { throw NetError.Timeout }
-        var conn = __connectFd(addrs[i], port, remaining)
+        var conn = __connectFd(addrs[i], port, deadline)
         if (conn != null) { return conn! }
         lastCode = __lastConnectCode()
         if (lastCode == _CODE_TIMEOUT || lastCode == _CODE_CANCELLED) { throw _classify(lastCode) }
@@ -151,7 +156,7 @@ export fn dial(host: string, port: i64, options: DialOptions? = null) -> NetConn
     var opts = options ?? DialOptions()
     if (port < 0 || port > 65535 || opts.timeoutMs <= 0) { throw NetError.Invalid }
     if (opts.tls && !__hasTLS()) { throw NetError.Tls }
-    var deadline = __nowMs() + opts.timeoutMs
+    var deadline = time.monotonic() + opts.timeoutMs
     if (opts.tls) { return _dialTls(host, port, deadline) }
     return _dialTcp(host, port, deadline)
 }
@@ -166,7 +171,7 @@ export fn dialEndpoint(endpoint: Endpoint, options: DialOptions? = null) -> NetC
 export fn upgradeTLS(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS) {
     if (timeoutMs <= 0) { throw NetError.Invalid }
     if (!__hasTLS()) { throw NetError.Tls }
-    var code = __tlsHandshake(conn, hostname, __nowMs() + timeoutMs)
+    var code = __tlsHandshake(conn, hostname, time.monotonic() + timeoutMs)
     if (code != 0) { throw _classify(code) }
 }
 
@@ -216,22 +221,34 @@ export fn writeBytes(conn: NetConn, data: Array<u8>) -> i64 {
     return __writeBytes(conn, data)
 }
 
-export fn shutdownRead(conn: NetConn) -> bool { return __shutdownRead(conn) }
-export fn shutdownWrite(conn: NetConn) -> bool { return __shutdownWrite(conn) }
-export fn shutdown(conn: NetConn) -> bool { return __shutdown(conn) }
+export fn shutdownRead(conn: NetConn) -> bool {
+    return __shutdownDirection(conn, _DIRECTION_READ)
+}
+
+export fn shutdownWrite(conn: NetConn) -> bool {
+    return __shutdownDirection(conn, _DIRECTION_WRITE)
+}
+
+export fn shutdown(conn: NetConn) -> bool {
+    return __shutdownDirection(conn, _DIRECTION_BOTH)
+}
+
 export fn close(handle: NetConn | NetListener) { __close(handle) }
 export fn fd(handle: NetConn | NetListener) -> i64 { return __fd(handle) }
+export fn isClosed(handle: NetConn | NetListener) -> bool { return __fd(handle) < 0 }
+export fn isTLS(conn: NetConn) -> bool { return __connIsTLS(conn) }
+export fn port(listener: NetListener) -> i64 { return __listenerPort(listener) }
 
 export fn setReadDeadline(conn: NetConn, deadline: i64) -> bool {
-    return __setReadDeadline(conn, deadline)
+    return __setDeadlineDirection(conn, deadline, _DIRECTION_READ)
 }
 
 export fn setWriteDeadline(conn: NetConn, deadline: i64) -> bool {
-    return __setWriteDeadline(conn, deadline)
+    return __setDeadlineDirection(conn, deadline, _DIRECTION_WRITE)
 }
 
 export fn setDeadline(conn: NetConn, deadline: i64) -> bool {
-    return __setDeadline(conn, deadline)
+    return __setDeadlineDirection(conn, deadline, _DIRECTION_BOTH)
 }
 
 export fn setAcceptDeadline(listener: NetListener, deadline: i64) -> bool {
@@ -264,7 +281,7 @@ fn _pump(src: NetConn, dst: NetConn, bufferSize: i64, halfCloseOnEof: bool) -> i
         var n = __readInto(src, buffer, bufferSize)
         if (n < 0) { return total }
         if (n == 0) {
-            if (halfCloseOnEof) { __shutdownWrite(dst) }
+            if (halfCloseOnEof) { shutdownWrite(dst) }
             return total
         }
         var sent = __writeBytes(dst, buffer)
@@ -288,8 +305,8 @@ fn _pumpAndHalfClose(src: NetConn, dst: NetConn) -> i64 {
 // runs the ordinary source pump, and EOF half-closes the peer write side so
 // request/response protocols can drain without closing either handle.
 export fn copyBidirectional(a: NetConn, b: NetConn) -> CopyBidirectionalResult {
-    if (a.isClosed() || b.isClosed()) { throw NetError.Closed }
-    if (a.fd() == b.fd()) { throw NetError.Invalid }
+    if (isClosed(a) || isClosed(b)) { throw NetError.Closed }
+    if (fd(a) == fd(b)) { throw NetError.Invalid }
     const left = a
     const right = b
     var first = 0
@@ -312,6 +329,11 @@ export fn udpBind(port: i64, address: string = "") -> NetConn {
     return conn!
 }
 
+fn _deadlineFromTimeout(timeoutMs: i64) -> i64 {
+    if (timeoutMs < 0) { return 0 }
+    return time.monotonic() + timeoutMs
+}
+
 // Resolve once, send one datagram. Argument and resolution failures throw;
 // socket-layer failures return -1 with the reason on lastError(handle).
 export fn sendTo(handle: NetConn, data: Array<u8>, host: string, port: i64,
@@ -319,7 +341,7 @@ export fn sendTo(handle: NetConn, data: Array<u8>, host: string, port: i64,
     if (port < 0 || port > 65535) { throw NetError.Invalid }
     var addrs = __resolveAll(host)
     if (len(addrs) == 0) { throw NetError.Dns }
-    return __udpSendTo(handle, data, addrs[0], port, timeoutMs)
+    return __udpSendTo(handle, data, addrs[0], port, _deadlineFromTimeout(timeoutMs))
 }
 
 // Receive one datagram into the caller buffer. A negative timeout waits
@@ -327,7 +349,7 @@ export fn sendTo(handle: NetConn, data: Array<u8>, host: string, port: i64,
 // The sender identity is read back from the handle, so recvFrom assumes one
 // reader per UDP socket.
 export fn recvFrom(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1) -> UdpFrom? {
-    var n = __udpRecvInto(handle, buffer, timeoutMs)
+    var n = __udpRecvInto(handle, buffer, _deadlineFromTimeout(timeoutMs))
     if (n < 0) { return null }
     return UdpFrom(n, __udpFromHost(handle), __udpFromPort(handle))
 }

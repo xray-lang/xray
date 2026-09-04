@@ -1655,46 +1655,6 @@ module net {
     builtin_kind: "XR_BK_NETLISTENER"
   }
 
-  class_method NetConn.fd {
-    vm: "conn_method_fd"
-    argc: 0
-  }
-
-  class_method NetConn.close {
-    vm: "conn_method_close"
-    argc: 0
-  }
-
-  class_method NetConn.isClosed {
-    vm: "conn_method_is_closed"
-    argc: 0
-  }
-
-  class_method NetConn.isTLS {
-    vm: "conn_method_is_tls"
-    argc: 0
-  }
-
-  class_method NetListener.fd {
-    vm: "listener_method_fd"
-    argc: 0
-  }
-
-  class_method NetListener.port {
-    vm: "listener_method_port"
-    argc: 0
-  }
-
-  class_method NetListener.close {
-    vm: "listener_method_close"
-    argc: 0
-  }
-
-  class_method NetListener.isClosed {
-    vm: "listener_method_is_closed"
-    argc: 0
-  }
-
   fn __resolveAll {
     signature: "(host: string): Array<string>"
     doc: "Resolve every address for a host, RFC 8305 interleaved; empty on failure"
@@ -1711,8 +1671,8 @@ module net {
   }
 
   fn __connectFd {
-    signature: "(addr: string, port: i64, timeoutMs: i64): NetConn?"
-    doc: "Connect one literal address; null on failure with the code on __lastConnectCode"
+    signature: "(addr: string, port: i64, deadlineMs: i64): NetConn?"
+    doc: "Connect one literal address under an absolute deadline; null on failure with the code on __lastConnectCode"
     vm: "net_connect_fd_yieldable"
     vm_binding: "yieldable"
     argc: 3
@@ -1723,18 +1683,6 @@ module net {
     layer: "runtime"
     caps: "coro,netpoll"
     return_ownership: "fresh"
-  }
-
-  fn __nowMs {
-    signature: "(): i64"
-    doc: "Monotonic clock in milliseconds for net's own deadline arithmetic"
-    vm: "net_now_ms_fn"
-    argc: 0
-    arg_spec: ""
-    aot: "xrt_net_now_ms_fn"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
   }
 
   fn __lastConnectCode {
@@ -1805,37 +1753,13 @@ module net {
     caps: "coro,netpoll"
   }
 
-  fn __shutdownRead {
-    signature: "(conn: NetConn): bool"
-    doc: "Shut down the read side"
-    vm: "net_shutdown_read"
-    argc: 1
-    arg_spec: "v"
-    aot: "xrt_net_shutdown_read"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __shutdownWrite {
-    signature: "(conn: NetConn): bool"
-    doc: "Shut down the write side"
-    vm: "net_shutdown_write"
-    argc: 1
-    arg_spec: "v"
-    aot: "xrt_net_shutdown_write"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __shutdown {
-    signature: "(conn: NetConn): bool"
-    doc: "Shut down both directions"
-    vm: "net_shutdown_conn"
-    argc: 1
-    arg_spec: "v"
-    aot: "xrt_net_shutdown"
+  fn __shutdownDirection {
+    signature: "(conn: NetConn, direction: i64): bool"
+    doc: "Shut down the selected socket direction (0 read, 1 write, 2 both)"
+    vm: "net_shutdown_direction"
+    argc: 2
+    arg_spec: "vv"
+    aot: "xrt_net_shutdown_direction"
     aot_direct: true
     link_object: false
     layer: "runtime"
@@ -1866,37 +1790,37 @@ module net {
     layer: "runtime"
   }
 
-  fn __setReadDeadline {
-    signature: "(conn: NetConn, deadline: i64): bool"
-    doc: "Absolute monotonic read deadline in ms; 0 clears"
-    vm: "net_set_read_deadline"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_net_set_read_deadline"
+  fn __connIsTLS {
+    signature: "(conn: NetConn): bool"
+    doc: "Read whether a connection handle currently owns a TLS transport"
+    vm: "net_conn_is_tls"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_is_tls"
     aot_direct: true
     link_object: false
     layer: "runtime"
   }
 
-  fn __setWriteDeadline {
-    signature: "(conn: NetConn, deadline: i64): bool"
-    doc: "Absolute monotonic write deadline in ms; 0 clears"
-    vm: "net_set_write_deadline"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_net_set_write_deadline"
+  fn __listenerPort {
+    signature: "(listener: NetListener): i64"
+    doc: "Read the bound port cached on a listener handle"
+    vm: "net_listener_port"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_listener_port"
     aot_direct: true
     link_object: false
     layer: "runtime"
   }
 
-  fn __setDeadline {
-    signature: "(conn: NetConn, deadline: i64): bool"
-    doc: "Set both read and write deadlines"
-    vm: "net_set_deadline"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_net_set_deadline"
+  fn __setDeadlineDirection {
+    signature: "(conn: NetConn, deadline: i64, direction: i64): bool"
+    doc: "Set the selected absolute monotonic deadline (0 read, 1 write, 2 both)"
+    vm: "net_set_deadline_direction"
+    argc: 3
+    arg_spec: "vvv"
+    aot: "xrt_net_set_deadline_direction"
     aot_direct: true
     link_object: false
     layer: "runtime"
@@ -1978,8 +1902,8 @@ module net {
   }
 
   fn __udpSendTo {
-    signature: "(conn: NetConn, data: Array<u8>, addr: string, port: i64, timeoutMs: i64): i64"
-    doc: "Send one datagram to a literal address; bytes sent or -1 with a stored code"
+    signature: "(conn: NetConn, data: Array<u8>, addr: string, port: i64, deadlineMs: i64): i64"
+    doc: "Send one datagram to a literal address under an absolute deadline; bytes sent or -1 with a stored code"
     vm: "net_udp_send_to_yieldable"
     vm_binding: "yieldable"
     argc: 5
@@ -1992,8 +1916,8 @@ module net {
   }
 
   fn __udpRecvInto {
-    signature: "(conn: NetConn, buffer: Array<u8>, timeoutMs: i64): i64"
-    doc: "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code"
+    signature: "(conn: NetConn, buffer: Array<u8>, deadlineMs: i64): i64"
+    doc: "Receive one datagram into a caller buffer under an absolute deadline; bytes received, or -1 with a stored code"
     vm: "net_udp_recv_into_yieldable"
     vm_binding: "yieldable"
     argc: 3

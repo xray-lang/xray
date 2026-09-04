@@ -57,7 +57,7 @@ fn sendRaw(port: i64, request: string) -> string {
 
 export fn runHttpStaticRouteFullParse() {
     var probe = net.listen(0, 1)
-    const port = probe.port()
+    const port = net.port(probe)
     net.close(probe)
 
     const running = Atomic(true)

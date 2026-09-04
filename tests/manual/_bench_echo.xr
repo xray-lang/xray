@@ -44,7 +44,7 @@ fn bench_echo() {
     var conns = 100
     var rounds = 500
     var lst = net.listen(0, 128)
-    var port = lst.port()
+    var port = net.port(lst)
 
     const ready = Channel(1)
     go server(lst, ready)

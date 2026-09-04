@@ -44,7 +44,7 @@ fn bench_echo_hi() {
     var conns = 1000
     var rounds = 50
     var lst = net.listen(0, 1024)!
-    var port = lst.port()
+    var port = net.port(lst)
 
     const ready = Channel(1)
     go server(lst, ready)

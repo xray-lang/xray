@@ -7869,48 +7869,6 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
             emit_typed_array_predicate_hof_expr(ctx, out, f, prefix, v, "xrt_array_some_typed"));
 }
 
-static bool xicgen_emit_net_handle_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                          const XiValue *v, const char *method, uint16_t nargs) {
-    if (!method || nargs != 0 || !v || v->nargs < 1)
-        return false;
-    const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
-    const XrType *recv_type = v->args[0] ? v->args[0]->type : NULL;
-    if (!recv_class && recv_type && recv_type->kind == XR_KIND_INSTANCE)
-        recv_class = recv_type->instance.class_name;
-    if (!recv_class)
-        return false;
-
-    const char *helper = NULL;
-    if (strcmp(recv_class, "NetConn") == 0) {
-        if (strcmp(method, "fd") == 0)
-            helper = "xrt_net_fd";
-        else if (strcmp(method, "close") == 0)
-            helper = "xrt_net_close";
-        else if (strcmp(method, "isClosed") == 0)
-            helper = "xrt_net_is_closed";
-        else if (strcmp(method, "isTLS") == 0)
-            helper = "xrt_net_is_tls";
-    } else if (strcmp(recv_class, "NetListener") == 0) {
-        if (strcmp(method, "fd") == 0)
-            helper = "xrt_net_fd";
-        else if (strcmp(method, "port") == 0)
-            helper = "xrt_net_listener_port";
-        else if (strcmp(method, "close") == 0)
-            helper = "xrt_net_close";
-        else if (strcmp(method, "isClosed") == 0)
-            helper = "xrt_net_is_closed";
-    }
-    if (!helper)
-        return false;
-
-    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
-    fprintf(out, "%s(", helper);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ")");
-    emit_conversion_suffix(out, conv_suffix);
-    return true;
-}
-
 static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                     const char *method) {
     XrCValueEmissionView constructor = {0};
@@ -11432,8 +11390,6 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
     uint16_t nargs = (uint16_t) (v->nargs - 1);
     if (xicgen_emit_typed_array_method(ctx, out, f, v, prefix, method, nargs))
-        return;
-    if (xicgen_emit_net_handle_method(ctx, out, f, v, method, nargs))
         return;
     if (xicgen_emit_enum_method(ctx, out, f, v, method))
         return;

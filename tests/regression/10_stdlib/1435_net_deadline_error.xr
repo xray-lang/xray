@@ -70,10 +70,11 @@ fn test_read_deadline_timeout() {
     const maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     const lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     go acceptSlowWrite(lst)
 
     var c = net.dial("127.0.0.1", port)
+    assert(!net.isTLS(c))
     assert(net.setReadDeadline(c, time.monotonic() + 20))
 
     // readBytes returns null for both EOF and error; a deadline elapse is
@@ -92,7 +93,7 @@ fn test_closed_handle_error() {
     const maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     const lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     go acceptAndClose(lst)
 
     var c = net.dial("127.0.0.1", port)

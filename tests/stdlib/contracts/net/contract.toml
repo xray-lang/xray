@@ -1,6 +1,6 @@
 schema = 1
 module = "net"
-contract_revision = 2
+contract_revision = 3
 legacy_commit = "b6955520e9bc142e23e3a7486c00dbcaf4a55127"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/net/legacy_expected.jsonl"
@@ -48,7 +48,8 @@ intentional_semantic_changes = [
   "UdpPacket is removed; recvFrom fills a caller buffer and returns UdpFrom sender identity under an explicit timeoutMs",
   "sendTo takes Array<u8> payloads and an explicit timeoutMs",
   "copyBidirectional throws NetError only for argument validation (Closed, Invalid); a per-direction I/O error ends that direction and the byte counts are still returned",
-  "NetError gains Cancelled so cooperative cancellation is distinct from Closed"
+  "NetError gains Cancelled so cooperative cancellation is distinct from Closed",
+  "NetConn and NetListener expose no native instance methods; handle state, lifecycle, direction, and deadline policy are source-owned net module functions"
 ]
 # Byte-first convergence roadmap:
 #   converged byte read: readBytes returns Array<u8>

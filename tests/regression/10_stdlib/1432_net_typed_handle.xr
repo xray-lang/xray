@@ -1,9 +1,9 @@
 // 1432_net_typed_handle.xr
-// Typed native handle (XrNetConn / XrNetListener) methods.
+// Typed native handles behind source-owned net module operations.
 //
 // Covers:
-//   - listener.fd() / listener.port() / listener.close() / listener.isClosed()
-//   - module-level net.close / net.fd interoperate with typed handles
+//   - net.fd / net.port / net.close / net.isClosed
+//   - inferred and explicit NetListener values cross the private leaf boundary
 //
 // net.listen throws NetError on setup failure, so the environment-dependent
 // skip folds the throw back into null here.
@@ -20,66 +20,62 @@ fn tryListen(backlog: i64) -> NetListener? {
 }
 
 @test
-fn test_listener_methods() {
+fn test_listener_operations() {
     // listen on an ephemeral port (0 -> kernel picks)
     var listener = tryListen(16)
     if (listener == null) { return }
 
-    // method-style accessors
-    const fd = listener!.fd()
+    const fd = net.fd(listener!)
     assert(fd >= 0)
-    assert(listener!.port() > 0)
-    assert(!listener!.isClosed())
+    assert(net.port(listener!) > 0)
+    assert(!net.isClosed(listener!))
 
-    // close() is idempotent
-    listener!.close()
-    assert(listener!.isClosed())
-    assert(listener!.fd() == -1)
+    // net.close is idempotent
+    net.close(listener!)
+    assert(net.isClosed(listener!))
+    assert(net.fd(listener!) == -1)
 
     // Calling close again is a no-op
-    listener!.close()
-    assert(listener!.isClosed())
+    net.close(listener!)
+    assert(net.isClosed(listener!))
 }
 
 @test
-fn test_module_and_method_interop() {
-    // The module-level function (net.fd) and the typed method must agree
-    // both before and after close.
+fn test_module_operations_are_consistent() {
     var listener = tryListen(1)
     if (listener == null) { return }
 
-    assert(net.fd(listener!) == listener!.fd())
+    assert(net.fd(listener!) >= 0)
 
     net.close(listener!)
-    assert(listener!.isClosed())
-    assert(listener!.fd() == -1)
+    assert(net.isClosed(listener!))
     assert(net.fd(listener!) == -1)
 }
 
 // ============================================================
-// Method dispatch via type inference
+// Module operations via type inference
 // ============================================================
 
 @test
-fn test_method_dispatch_via_inference() {
+fn test_operations_via_inference() {
     var listener = tryListen(1)
     if (listener == null) { return }
 
     var l = listener!
-    assert(l.fd() >= 0)
-    assert(l.port() > 0)
+    assert(net.fd(l) >= 0)
+    assert(net.port(l) > 0)
 
-    l.close()
-    assert(l.isClosed())
+    net.close(l)
+    assert(net.isClosed(l))
 }
 
 // ============================================================
-// Method dispatch via explicit typed annotations
+// Module operations via explicit typed annotations
 //
 // NetConn / NetListener are registered as prelude entries with the
 // XrClasses pre-installed by xr_prelude_register_all_native_types, so a
 // user-side NetListener? / NetListener annotation type-checks and
-// dispatches methods through the same path that inference uses.
+// crosses the same private provider boundary that inference uses.
 // ============================================================
 
 @test
@@ -88,10 +84,10 @@ fn test_explicit_typed_listener() {
     if (listener == null) { return }
 
     var l: NetListener = listener!
-    assert(l.fd() >= 0)
-    assert(l.port() > 0)
-    assert(!l.isClosed())
+    assert(net.fd(l) >= 0)
+    assert(net.port(l) > 0)
+    assert(!net.isClosed(l))
 
-    l.close()
-    assert(l.isClosed())
+    net.close(l)
+    assert(net.isClosed(l))
 }

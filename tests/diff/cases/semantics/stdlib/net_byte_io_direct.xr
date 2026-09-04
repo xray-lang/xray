@@ -19,7 +19,7 @@ fn echoThree(conn: move NetConn) -> i64 {
 
 fn main() {
     var listener = net.listen(0, 1)
-    const port = listener.port()
+    const port = net.port(listener)
     var client = net.dial("127.0.0.1", port)
     var accepted = net.accept(listener)!
     var server = go echoThree(move accepted)

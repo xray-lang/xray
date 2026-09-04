@@ -39,7 +39,7 @@ fn startEchoServer(port: i64, running: Atomic<bool>) {
 fn pickPort() -> i64 {
     try {
         var lst = net.listen(0, 1)
-        var p = lst.port()
+        var p = net.port(lst)
         net.close(lst)
         return p
     } catch (e) {

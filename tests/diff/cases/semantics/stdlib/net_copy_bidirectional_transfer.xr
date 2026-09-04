@@ -12,7 +12,7 @@ fn bridgeOnce(a: move NetConn, b: move NetConn) -> CopyBidirectionalResult {
 
 fn main() {
     var listener = net.listen(0, 2)
-    const port = listener.port()
+    const port = net.port(listener)
     var left = net.dial("127.0.0.1", port)
     var acceptedA = net.accept(listener)!
     var right = net.dial("127.0.0.1", port)

@@ -126,7 +126,7 @@ fn test_connect_rejects_missing_upgrade_response_header() {
     var maybeLst = tryListen(0, 8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
 
     go serveMissingUpgradeResponse(lst)
 

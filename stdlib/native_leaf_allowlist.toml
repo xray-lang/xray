@@ -771,12 +771,22 @@ deletion_trigger = "when Xray source can issue the connect(2) call itself and aw
 
 [[leaf]]
 module = "net"
+symbol = "__connIsTLS"
+class = "runtime_leaf"
+abi = "none; reads the transport-kind field of a runtime-owned connection handle"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_conn_is_tls; AOT src/aot/xrt_net.h xrt_net_is_tls"
+deletion_trigger = "when the connection handle representation is declared in Xray, so the TLS transport tag is an ordinary field read"
+
+[[leaf]]
+module = "net"
 symbol = "__fd"
 class = "runtime_leaf"
 abi = "none; reads the descriptor field of a runtime-owned socket handle, answering -1 once the handle is closed"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_fd_handle -> handle_get_fd; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
+provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
 deletion_trigger = "when the socket handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call"
 
 [[leaf]]
@@ -831,13 +841,13 @@ deletion_trigger = "when Xray source can issue the socket(2)/bind(2)/listen(2) s
 
 [[leaf]]
 module = "net"
-symbol = "__nowMs"
-class = "host_abi_leaf"
-abi = "clock_gettime(2) CLOCK_MONOTONIC; on Windows QueryPerformanceCounter on the VM and GetTickCount64 on AOT"
+symbol = "__listenerPort"
+class = "runtime_leaf"
+abi = "none; reads the bound-port field of a runtime-owned listener handle"
 ownership = "none"
 effect = "nothrow"
-provider = "kernel clock via libc. VM stdlib/net/net.c -> src/os/os_time.h xr_time_monotonic_ns; AOT src/aot/xrt_net.h inlines clock_gettime. Equivalent on POSIX; different clock sources and resolutions on Windows"
-deletion_trigger = "when net.xr reads the monotonic clock through time.__monotonicNanos instead of its own copy, which needs the multi-module program authority that blockers/a-stdlib-multi-module-program-authority.md tracks"
+provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_listener_port; AOT src/aot/xrt_net.h xrt_net_listener_port"
+deletion_trigger = "when the listener handle representation is declared in Xray, so the port cached after bind is an ordinary field read"
 
 [[leaf]]
 module = "net"
@@ -871,63 +881,23 @@ deletion_trigger = "when the socket handle's representation is declared in Xray,
 
 [[leaf]]
 module = "net"
-symbol = "__setDeadline"
+symbol = "__setDeadlineDirection"
 class = "runtime_leaf"
-abi = "none; writes both the read and the write deadline fields on the connection handle"
+abi = "none; writes the selected read, write, or both deadline fields on the connection handle"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_deadline; AOT src/aot/xrt_net.h xrt_net_set_deadline"
-deletion_trigger = "when the socket handle's representation is declared in Xray; this leaf is already only the pair of the two single-sided setters and would go with them"
-
-[[leaf]]
-module = "net"
-symbol = "__setReadDeadline"
-class = "runtime_leaf"
-abi = "none; writes the read-deadline field on the connection handle"
-ownership = "none"
-effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_read_deadline; AOT src/aot/xrt_net.h xrt_net_set_read_deadline"
+provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_deadline_direction; AOT src/aot/xrt_net.h xrt_net_set_deadline_direction"
 deletion_trigger = "when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call"
 
 [[leaf]]
 module = "net"
-symbol = "__setWriteDeadline"
-class = "runtime_leaf"
-abi = "none; writes the write-deadline field on the connection handle"
-ownership = "none"
-effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_write_deadline; AOT src/aot/xrt_net.h xrt_net_set_write_deadline"
-deletion_trigger = "when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call"
-
-[[leaf]]
-module = "net"
-symbol = "__shutdown"
+symbol = "__shutdownDirection"
 class = "host_abi_leaf"
-abi = "shutdown(2) with SHUT_RDWR"
+abi = "shutdown(2) with SHUT_RD, SHUT_WR, or SHUT_RDWR selected by the primitive direction argument"
 ownership = "none"
 effect = "nothrow"
-provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_conn, which also records the errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown, which returns only a bool"
-deletion_trigger = "when Xray source can issue the shutdown(2) call itself; the leaf is already the minimal form of this boundary"
-
-[[leaf]]
-module = "net"
-symbol = "__shutdownRead"
-class = "host_abi_leaf"
-abi = "shutdown(2) with SHUT_RD"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_read; AOT src/aot/xrt_net.h xrt_net_shutdown_read"
-deletion_trigger = "when Xray source can issue the shutdown(2) call itself, at which point the three direction-specific leaves collapse into one call with a direction argument"
-
-[[leaf]]
-module = "net"
-symbol = "__shutdownWrite"
-class = "host_abi_leaf"
-abi = "shutdown(2) with SHUT_WR"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_write; AOT src/aot/xrt_net.h xrt_net_shutdown_write"
-deletion_trigger = "when Xray source can issue the shutdown(2) call itself, at which point the three direction-specific leaves collapse into one call with a direction argument"
+provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_direction records errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown_direction returns only a bool"
+deletion_trigger = "when Xray source can issue shutdown(2) itself; the public direction-specific API is already source-owned and this is the single remaining syscall boundary"
 
 [[leaf]]
 module = "net"

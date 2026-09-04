@@ -86,7 +86,7 @@ fn test_net_handles_positive() {
     if (maybeLst == null) { return }
     var lst = maybeLst!
     assertEqual(isListener(lst), true)
-    var port = lst.port()
+    var port = net.port(lst)
     go acceptOne(lst)
     var c = net.dial("127.0.0.1", port)!
     assertEqual(isConn(c), true)

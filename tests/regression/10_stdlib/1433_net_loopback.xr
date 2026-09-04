@@ -46,7 +46,7 @@ fn test_loopback_echo() {
     var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     assert(port > 0)
 
     // dial / accept are yieldable; their results must be delivered to the
@@ -78,7 +78,7 @@ fn test_loopback_binary_high_bytes() {
     var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     assert(port > 0)
 
     var c = net.dial("127.0.0.1", port)
@@ -107,7 +107,7 @@ fn test_native_copy_self_loopback() {
     var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     assert(port > 0)
 
     var c = net.dial("127.0.0.1", port)
@@ -132,7 +132,7 @@ fn test_native_copy_loopback() {
     var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     assert(port > 0)
 
     var src = net.dial("127.0.0.1", port)

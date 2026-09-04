@@ -171,11 +171,6 @@ static int64_t net_timeout_until(int64_t deadline_ms) {
     return remaining <= 0 ? 1 : remaining;
 }
 
-/* Relative timeout parameter to absolute deadline; <0 means no deadline. */
-static int64_t net_deadline_from_timeout(int64_t timeout_ms) {
-    return timeout_ms < 0 ? 0 : net_now_ms() + timeout_ms;
-}
-
 static void net_conn_clear_error(XrNetConn *c) {
     if (!c)
         return;
@@ -244,22 +239,6 @@ static XrValue make_udp_handle(XrVMRuntime *X, int fd) {
     if (!c)
         return XR_NULL_VAL;
     return XR_FROM_PTR(c);
-}
-
-/*
- * fd/tls accessors accept either an XrNetConn or an XrNetListener
- * because net.fd / net.close treat them uniformly. Returns -1 when
- * the handle is unknown or already closed.
- */
-static int handle_get_fd(XrVMRuntime *X, XrValue handle) {
-    (void) X;
-    XrNetConn *c = unwrap_conn(handle);
-    if (c)
-        return c->closed ? -1 : c->fd;
-    XrNetListener *l = unwrap_listener(handle);
-    if (l)
-        return l->closed ? -1 : l->fd;
-    return -1;
 }
 
 static inline XrArray *net_as_bytes(XrValue v) {
@@ -465,7 +444,7 @@ static XrCFuncResult net_connect_fd_step(XrVMRuntime *X, NetConnectState *state,
 }
 
 /*
- * net.__connectFd(addrLiteral, port, timeoutMs) -> NetConn?
+ * net.__connectFd(addrLiteral, port, deadlineMs) -> NetConn?
  * Yieldable: non-blocking connect to ONE literal address. Name resolution and
  * multi-address fallback are net.xr policy; an unresolvable input here is an
  * invalid-argument code. Null result carries its code on __lastConnectCode.
@@ -479,7 +458,7 @@ static XrCFuncResult net_connect_fd_yieldable(XrVMRuntime *X, XrValue *args, int
         return (net_connect_fail(X, NULL, XR_NETERR_INVALID, result), XR_CFUNC_DONE);
     const char *addr_text = XR_STRING_CHARS(XR_TO_STRING(args[0]));
     int port_num = (int) XR_TO_INT(args[1]);
-    int64_t timeout_ms = (int64_t) XR_TO_INT(args[2]);
+    int64_t deadline_ms = (int64_t) XR_TO_INT(args[2]);
     if (port_num < 0 || port_num > 65535)
         return (net_connect_fail(X, NULL, XR_NETERR_INVALID, result), XR_CFUNC_DONE);
 
@@ -524,7 +503,7 @@ static XrCFuncResult net_connect_fd_yieldable(XrVMRuntime *X, XrValue *args, int
             XrUringReq req = {.kind = XR_URING_OP_CONNECT,
                               .addr = &state->addr,
                               .addrlen = state->addrlen,
-                              .timeout_ms = timeout_ms};
+                              .timeout_ms = net_timeout_until(deadline_ms)};
             if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, net_connect_fd_complete, state,
                                       result, &cr))
                 return cr;
@@ -545,7 +524,7 @@ static XrCFuncResult net_connect_fd_yieldable(XrVMRuntime *X, XrValue *args, int
         net_connect_fail(X, state, net_error_from_errno(xr_get_socket_error()), result);
         return XR_CFUNC_DONE;
     }
-    return xr_yield_for_io(X, fd, XR_WAIT_WRITE, timeout_ms < 0 ? -1 : timeout_ms,
+    return xr_yield_for_io(X, fd, XR_WAIT_WRITE, net_timeout_until(deadline_ms),
                            net_connect_fd_continue, state, result);
 }
 
@@ -1202,33 +1181,25 @@ static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, in
 
 // ========== TCP half-close ==========
 
-static XrValue net_shutdown_mode(XrVMRuntime *X, XrValue *args, int nargs, int mode) {
+static XrValue net_shutdown_direction(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
-    if (nargs < 1)
+    if (nargs < 2 || !XR_IS_INT(args[1]))
+        return xr_bool(false);
+    int64_t direction = (int64_t) XR_TO_INT(args[1]);
+    if (direction < 0 || direction > 2)
         return xr_bool(false);
     XrNetConn *c = unwrap_conn(args[0]);
     if (!c || c->closed || c->fd < 0) {
         net_conn_set_error(c, XR_NETERR_CLOSED, 0);
         return xr_bool(false);
     }
+    int mode = direction == 0 ? XR_SHUT_RD : direction == 1 ? XR_SHUT_WR : XR_SHUT_RDWR;
     if (shutdown(c->fd, mode) == 0) {
         net_conn_clear_error(c);
         return xr_bool(true);
     }
     net_conn_set_error(c, net_error_from_errno(errno), errno);
     return xr_bool(false);
-}
-
-static XrValue net_shutdown_read(XrVMRuntime *X, XrValue *args, int nargs) {
-    return net_shutdown_mode(X, args, nargs, XR_SHUT_RD);
-}
-
-static XrValue net_shutdown_write(XrVMRuntime *X, XrValue *args, int nargs) {
-    return net_shutdown_mode(X, args, nargs, XR_SHUT_WR);
-}
-
-static XrValue net_shutdown_conn(XrVMRuntime *X, XrValue *args, int nargs) {
-    return net_shutdown_mode(X, args, nargs, XR_SHUT_RDWR);
 }
 
 // ========== net.__listenFd ==========
@@ -1292,53 +1263,51 @@ static XrValue net_close_handle(XrVMRuntime *X, XrValue *args, int nargs) {
 }
 
 static XrValue net_fd_handle(XrVMRuntime *X, XrValue *args, int nargs) {
+    (void) X;
     if (nargs < 1)
         return xr_int(-1);
-    return xr_int(handle_get_fd(X, args[0]));
+    XrNetConn *c = unwrap_conn(args[0]);
+    if (c)
+        return xr_int(c->closed ? -1 : c->fd);
+    XrNetListener *l = unwrap_listener(args[0]);
+    if (l)
+        return xr_int(l->closed ? -1 : l->fd);
+    return xr_int(-1);
+}
+
+static XrValue net_conn_is_tls(XrVMRuntime *X, XrValue *args, int nargs) {
+    (void) X;
+    if (nargs < 1)
+        return xr_bool(false);
+    XrNetConn *c = unwrap_conn(args[0]);
+    return xr_bool(c && c->kind == XR_NETCONN_TLS);
+}
+
+static XrValue net_listener_port(XrVMRuntime *X, XrValue *args, int nargs) {
+    (void) X;
+    if (nargs < 1)
+        return xr_int(-1);
+    XrNetListener *l = unwrap_listener(args[0]);
+    return xr_int(l ? l->port : -1);
 }
 
 // ========== Deadline and diagnostic error primitives ==========
 
-static XrValue net_set_read_deadline(XrVMRuntime *X, XrValue *args, int nargs) {
+static XrValue net_set_deadline_direction(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
-    if (nargs < 2 || !XR_IS_INT(args[1]))
+    if (nargs < 3 || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return xr_bool(false);
     XrNetConn *c = unwrap_conn(args[0]);
     if (!c || c->closed)
         return xr_bool(false);
     int64_t deadline = (int64_t) XR_TO_INT(args[1]);
-    if (deadline < 0)
+    int64_t direction = (int64_t) XR_TO_INT(args[2]);
+    if (deadline < 0 || direction < 0 || direction > 2)
         return xr_bool(false);
-    c->read_deadline_ms = deadline;
-    return xr_bool(true);
-}
-
-static XrValue net_set_write_deadline(XrVMRuntime *X, XrValue *args, int nargs) {
-    (void) X;
-    if (nargs < 2 || !XR_IS_INT(args[1]))
-        return xr_bool(false);
-    XrNetConn *c = unwrap_conn(args[0]);
-    if (!c || c->closed)
-        return xr_bool(false);
-    int64_t deadline = (int64_t) XR_TO_INT(args[1]);
-    if (deadline < 0)
-        return xr_bool(false);
-    c->write_deadline_ms = deadline;
-    return xr_bool(true);
-}
-
-static XrValue net_set_deadline(XrVMRuntime *X, XrValue *args, int nargs) {
-    (void) X;
-    if (nargs < 2 || !XR_IS_INT(args[1]))
-        return xr_bool(false);
-    XrNetConn *c = unwrap_conn(args[0]);
-    if (!c || c->closed)
-        return xr_bool(false);
-    int64_t deadline = (int64_t) XR_TO_INT(args[1]);
-    if (deadline < 0)
-        return xr_bool(false);
-    c->read_deadline_ms = deadline;
-    c->write_deadline_ms = deadline;
+    if (direction != 1)
+        c->read_deadline_ms = deadline;
+    if (direction != 0)
+        c->write_deadline_ms = deadline;
     return xr_bool(true);
 }
 
@@ -1367,13 +1336,6 @@ static XrValue net_last_code(XrVMRuntime *X, XrValue *args, int nargs) {
     if (l)
         return xr_int(l->last_error);
     return xr_int(XR_NETERR_INVALID);
-}
-
-static XrValue net_now_ms_fn(XrVMRuntime *X, XrValue *args, int nargs) {
-    (void) X;
-    (void) args;
-    (void) nargs;
-    return xr_int(net_now_ms());
 }
 
 static XrValue net_last_connect_code(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -1633,7 +1595,7 @@ static XrCFuncResult net_udp_send_step(XrVMRuntime *X, NetUdpSendState *state, X
 }
 
 /*
- * net.__udpSendTo(conn, data, addrLiteral, port, timeoutMs) -> int
+ * net.__udpSendTo(conn, data, addrLiteral, port, deadlineMs) -> int
  * Yieldable single datagram send. The destination must be a literal address;
  * hostname resolution is net.xr policy.
  */
@@ -1657,7 +1619,7 @@ static XrCFuncResult net_udp_send_to_yieldable(XrVMRuntime *X, XrValue *args, in
     }
     const char *addr_text = XR_STRING_CHARS(XR_TO_STRING(args[2]));
     int port_num = (int) XR_TO_INT(args[3]);
-    int64_t timeout_ms = (int64_t) XR_TO_INT(args[4]);
+    int64_t deadline_ms = (int64_t) XR_TO_INT(args[4]);
     if (port_num < 0 || port_num > 65535 || !net_is_literal_ip(addr_text)) {
         net_conn_set_error(conn, XR_NETERR_INVALID, 0);
         *result = xr_int(-1);
@@ -1682,7 +1644,7 @@ static XrCFuncResult net_udp_send_to_yieldable(XrVMRuntime *X, XrValue *args, in
     // Zero-copy: the array storage stays pinned while this coroutine is parked.
     state->data = (const char *) xr_array_raw_u8(data);
     state->len = (size_t) data->length;
-    state->deadline_ms = net_deadline_from_timeout(timeout_ms);
+    state->deadline_ms = deadline_ms;
     memset(&state->addr, 0, sizeof(state->addr));
     if (resolved.family == AF_INET) {
         resolved.addr.v4.sin_port = htons((uint16_t) port_num);
@@ -1757,7 +1719,7 @@ static XrCFuncResult net_udp_recv_step(XrVMRuntime *X, NetUdpRecvState *state, X
 }
 
 /*
- * net.__udpRecvInto(conn, buffer, timeoutMs) -> int
+ * net.__udpRecvInto(conn, buffer, deadlineMs) -> int
  * Yieldable single datagram receive into a caller buffer. Returns the byte
  * count and records the sender on the handle; -1 means timeout, cancellation,
  * or a socket error with the code stored.
@@ -1789,7 +1751,7 @@ static XrCFuncResult net_udp_recv_into_yieldable(XrVMRuntime *X, XrValue *args, 
     state->fd = conn->fd;
     state->conn = conn;
     state->buf = buf;
-    state->deadline_ms = net_deadline_from_timeout((int64_t) XR_TO_INT(args[2]));
+    state->deadline_ms = (int64_t) XR_TO_INT(args[2]);
     return net_udp_recv_step(X, state, result);
 }
 
@@ -1812,82 +1774,6 @@ static XrValue net_udp_from_port(XrVMRuntime *X, XrValue *args, int nargs) {
 #define XR_STDLIB_VM_BIND_MODULE_NET 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_NET
-
-/* ========== Native-type instance methods (synchronous) ==========
- *
- * Yieldable operations (read / write / accept) stay as module-level
- * cfuncs because the native-type method table currently only carries
- * the synchronous XrCFunctionPtr signature. Once the dispatcher grows
- * a yieldable variant, the matching wrappers can move here.
- */
-
-static XrValue conn_method_fd(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetConn *c = unwrap_conn(self);
-    return xr_int(c ? c->fd : -1);
-}
-
-static XrValue conn_method_close(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetConn *c = unwrap_conn(self);
-    if (c)
-        xr_net_conn_close(c);
-    return XR_NULL_VAL;
-}
-
-static XrValue conn_method_is_closed(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetConn *c = unwrap_conn(self);
-    return xr_bool(!c || c->closed);
-}
-
-static XrValue conn_method_is_tls(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetConn *c = unwrap_conn(self);
-    return xr_bool(c && c->kind == XR_NETCONN_TLS);
-}
-
-static XrValue listener_method_fd(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetListener *l = unwrap_listener(self);
-    return xr_int(l ? l->fd : -1);
-}
-
-static XrValue listener_method_port(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetListener *l = unwrap_listener(self);
-    return xr_int(l ? l->port : -1);
-}
-
-static XrValue listener_method_close(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetListener *l = unwrap_listener(self);
-    if (l)
-        xr_net_listener_close(l);
-    return XR_NULL_VAL;
-}
-
-static XrValue listener_method_is_closed(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
-    (void) X;
-    (void) args;
-    (void) n;
-    XrNetListener *l = unwrap_listener(self);
-    return xr_bool(!l || l->closed);
-}
 
 #define XR_STDLIB_VM_BIND_CLASS_NET_CONN 1
 #define XR_STDLIB_VM_BIND_CLASS_NET_LISTENER 1

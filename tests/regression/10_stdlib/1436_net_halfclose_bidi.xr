@@ -57,7 +57,7 @@ fn test_shutdown_write_allows_response() {
     var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     go acceptReadUntilEof(lst)
 
     var c = net.dial("127.0.0.1", port)
@@ -83,7 +83,7 @@ fn test_copy_bidirectional_proxy_echo() {
     var maybeUpstreamLst = tryListen(8)
     if (maybeUpstreamLst == null) { return }
     var upstreamLst = maybeUpstreamLst!
-    var upstreamPort = upstreamLst.port()
+    var upstreamPort = net.port(upstreamLst)
     go serveUpstreamEcho(upstreamLst)
 
     var maybeProxyLst = tryListen(8)
@@ -92,7 +92,7 @@ fn test_copy_bidirectional_proxy_echo() {
         return
     }
     var proxyLst = maybeProxyLst!
-    var proxyPort = proxyLst.port()
+    var proxyPort = net.port(proxyLst)
     go serveProxyOnce(proxyLst, upstreamPort)
 
     var c = net.dial("127.0.0.1", proxyPort)

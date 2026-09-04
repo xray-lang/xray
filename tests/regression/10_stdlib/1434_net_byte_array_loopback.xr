@@ -58,7 +58,7 @@ fn test_byte_array_echo_roundtrip() {
     var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     assert(port > 0)
 
     go acceptBytesEcho(lst)
@@ -84,7 +84,7 @@ fn test_read_into_maxlen_controls_length() {
     var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    var port = lst.port()
+    var port = net.port(lst)
     assert(port > 0)
 
     go acceptBytesMaxLen(lst)
@@ -111,7 +111,7 @@ fn test_read_exact_into_returns_partial_bytes_at_eof() {
     var lst = maybeLst!
     var server = go acceptExactEof(lst)
 
-    var c = net.dial("127.0.0.1", lst.port())!
+    var c = net.dial("127.0.0.1", net.port(lst))!
     var first = Array<u8>([1, 2])
     var second = Array<u8>([3])
     assertEqual(net.writeBytes(c, first), 2)

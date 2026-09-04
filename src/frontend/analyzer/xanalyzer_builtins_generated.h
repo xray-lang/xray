@@ -277,33 +277,30 @@ static const XaBuiltinClass g_gen_net_classes[] = {
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
     {"__resolveAll", "(host: string): Array<string>", "Resolve every address for a host, RFC 8305 interleaved; empty on failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__connectFd", "(addr: string, port: i64, timeoutMs: i64): NetConn?", "Connect one literal address; null on failure with the code on __lastConnectCode", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__nowMs", "(): i64", "Monotonic clock in milliseconds for net's own deadline arithmetic", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__connectFd", "(addr: string, port: i64, deadlineMs: i64): NetConn?", "Connect one literal address under an absolute deadline; null on failure with the code on __lastConnectCode", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__lastConnectCode", "(): i64", "Portable error code from the most recent __connectFd on this worker; 0 when the last attempt connected", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listenFd", "(port: i64, backlog: i64, forceV4: bool): NetListener?", "Bind and listen; dual-stack preferred unless forceV4", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__readInto", "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeBytes", "(conn: NetConn, data: Array<u8>): i64", "Write the whole buffer; returns bytes written, -1 when nothing was sent", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdown", "(conn: NetConn): bool", "Shut down both directions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdownDirection", "(conn: NetConn, direction: i64): bool", "Shut down the selected socket direction (0 read, 1 write, 2 both)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener; idempotent", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fd", "(handle: NetConn | NetListener): i64", "Raw fd of a handle, -1 when closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setReadDeadline", "(conn: NetConn, deadline: i64): bool", "Absolute monotonic read deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setWriteDeadline", "(conn: NetConn, deadline: i64): bool", "Absolute monotonic write deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setDeadline", "(conn: NetConn, deadline: i64): bool", "Set both read and write deadlines", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__connIsTLS", "(conn: NetConn): bool", "Read whether a connection handle currently owns a TLS transport", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__listenerPort", "(listener: NetListener): i64", "Read the bound port cached on a listener handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setDeadlineDirection", "(conn: NetConn, deadline: i64, direction: i64): bool", "Set the selected absolute monotonic deadline (0 read, 1 write, 2 both)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__setAcceptDeadline", "(listener: NetListener, deadline: i64): bool", "Absolute monotonic accept deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__lastCode", "(handle: NetConn | NetListener): i64", "Portable error code of the last failed operation; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__lastErrno", "(handle: NetConn | NetListener): i64", "Raw errno captured for the last failed operation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__hasTLS", "(): bool", "Whether TLS support is compiled in", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__udpBind", "(port: i64, addr: string): NetConn?", "Bind a UDP socket; empty addr binds the wildcard address", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__udpSendTo", "(conn: NetConn, data: Array<u8>, addr: string, port: i64, timeoutMs: i64): i64", "Send one datagram to a literal address; bytes sent or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__udpRecvInto", "(conn: NetConn, buffer: Array<u8>, timeoutMs: i64): i64", "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpSendTo", "(conn: NetConn, data: Array<u8>, addr: string, port: i64, deadlineMs: i64): i64", "Send one datagram to a literal address under an absolute deadline; bytes sent or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpRecvInto", "(conn: NetConn, buffer: Array<u8>, deadlineMs: i64): i64", "Receive one datagram into a caller buffer under an absolute deadline; bytes received, or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_NET_FUNCTION_COUNT 26
+#define GEN_NET_FUNCTION_COUNT 23
 
 // os.__ExecResult handle fields
 static const XaBuiltinHandleField g_gen_os___execresult_fields[] = {

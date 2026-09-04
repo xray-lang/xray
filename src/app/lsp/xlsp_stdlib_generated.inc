@@ -454,6 +454,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"shutdown", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
     {"close", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): ()", "", NULL, 0},
     {"fd", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): i64", "", NULL, 0},
+    {"isClosed", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): bool", "", NULL, 0},
+    {"isTLS", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
+    {"port", XLSP_SYM_FUNCTION, "fn(listener: NetListener): i64", "", NULL, 0},
     {"setReadDeadline", XLSP_SYM_FUNCTION, "fn(conn: NetConn, deadline: i64): bool", "", NULL, 0},
     {"setWriteDeadline", XLSP_SYM_FUNCTION, "fn(conn: NetConn, deadline: i64): bool", "", NULL, 0},
     {"setDeadline", XLSP_SYM_FUNCTION, "fn(conn: NetConn, deadline: i64): bool", "", NULL, 0},
@@ -472,7 +475,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult", "Class type", NULL, 0},
     {"UdpFrom", XLSP_SYM_CLASS, "type UdpFrom", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 33
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 36
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {

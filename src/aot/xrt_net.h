@@ -157,13 +157,6 @@ static inline int64_t xrt_net_now_ms(void) {
 #endif
 }
 
-/* Absolute wait deadline for a caller-supplied timeout. Negative means wait
- * without limit (deadline 0 blocks forever in xrt_net_wait_fd); there is no
- * substituted default because the net module source owns default timeouts. */
-static inline int64_t xrt_net_deadline_from_timeout(int64_t timeout_ms) {
-    return timeout_ms < 0 ? 0 : xrt_net_now_ms() + timeout_ms;
-}
-
 static inline int xrt_net_deadline_timeout_ms(int64_t deadline_ms, struct timeval *tv) {
     if (deadline_ms <= 0)
         return -1;
@@ -566,17 +559,17 @@ static inline XrValue xrt_net_connect_fail(xr_socket_t fd, int code) {
 }
 
 /*
- * net.__connectFd(addrLiteral, port, timeoutMs) -> NetConn?
+ * net.__connectFd(addrLiteral, port, deadlineMs) -> NetConn?
  * Non-blocking connect to ONE literal address. Name resolution and
  * multi-address fallback are net module policy; a non-literal input is an
- * invalid-argument code, not a DNS failure. A negative timeout waits without
- * limit; the net module source owns default timeouts. Null result carries its
+ * invalid-argument code, not a DNS failure. A zero deadline waits without
+ * limit; the net module source owns timeout policy. Null result carries its
  * code on __lastConnectCode. The return is deliberately not `NetConn | int`:
  * a union of a builtin native class with a scalar forces module-wide runtime
  * discrimination that miscompiles suspended handle results in coroutine frames.
  */
 static inline XrValue xrt_net_connect_fd(XrValue addr_value, XrValue port_value,
-                                         XrValue timeout_value) {
+                                         XrValue deadline_value) {
     xrt_net_init_once();
     const char *addr_text = xrt_net_str_arg(addr_value);
     int64_t port_i = xrt_net_int_arg(port_value);
@@ -604,7 +597,7 @@ static inline XrValue xrt_net_connect_fd(XrValue addr_value, XrValue port_value,
 
     int err = xr_get_socket_error();
     if (err == XR_EINPROGRESS || err == XR_EWOULDBLOCK || err == XR_EAGAIN) {
-        int64_t deadline = xrt_net_deadline_from_timeout(xrt_net_int_arg(timeout_value));
+        int64_t deadline = xrt_net_int_arg(deadline_value);
         int ready = xrt_net_wait_fd(fd, false, deadline);
         if (ready == 0)
             return xrt_net_connect_fail(fd, XRT_NETERR_TIMEOUT);
@@ -619,11 +612,6 @@ static inline XrValue xrt_net_connect_fd(XrValue addr_value, XrValue port_value,
         }
     }
     return xrt_net_connect_fail(fd, xrt_net_error_from_errno(err));
-}
-
-/* net.__nowMs() -> int */
-static inline XrValue xrt_net_now_ms_fn(void) {
-    return XR_FROM_INT(xrt_net_now_ms());
 }
 
 /* net.__lastConnectCode() -> int */
@@ -851,31 +839,17 @@ static inline XrValue xrt_net_fd(XrValue handle_value) {
     return XR_FROM_INT((int64_t) base->fd);
 }
 
-static inline XrValue xrt_net_set_read_deadline(XrValue conn_value, XrValue deadline_value) {
+static inline XrValue xrt_net_set_deadline_direction(XrValue conn_value, XrValue deadline_value,
+                                                     XrValue direction_value) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     int64_t deadline = xrt_net_int_arg(deadline_value);
-    if (!conn || conn->base.closed || deadline < 0)
+    int64_t direction = xrt_net_int_arg(direction_value);
+    if (!conn || conn->base.closed || deadline < 0 || direction < 0 || direction > 2)
         return XR_FALSE_VAL;
-    conn->read_deadline_ms = deadline;
-    return XR_TRUE_VAL;
-}
-
-static inline XrValue xrt_net_set_write_deadline(XrValue conn_value, XrValue deadline_value) {
-    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
-    int64_t deadline = xrt_net_int_arg(deadline_value);
-    if (!conn || conn->base.closed || deadline < 0)
-        return XR_FALSE_VAL;
-    conn->write_deadline_ms = deadline;
-    return XR_TRUE_VAL;
-}
-
-static inline XrValue xrt_net_set_deadline(XrValue conn_value, XrValue deadline_value) {
-    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
-    int64_t deadline = xrt_net_int_arg(deadline_value);
-    if (!conn || conn->base.closed || deadline < 0)
-        return XR_FALSE_VAL;
-    conn->read_deadline_ms = deadline;
-    conn->write_deadline_ms = deadline;
+    if (direction != 1)
+        conn->read_deadline_ms = deadline;
+    if (direction != 0)
+        conn->write_deadline_ms = deadline;
     return XR_TRUE_VAL;
 }
 
@@ -980,13 +954,13 @@ static inline XrValue xrt_net_udp_bind(XrValue port_value, XrValue addr_value) {
 }
 
 /*
- * net.__udpSendTo(conn, data, addrLiteral, port, timeoutMs) -> int
+ * net.__udpSendTo(conn, data, addrLiteral, port, deadlineMs) -> int
  * Single datagram send to one literal address; bytes sent, or -1 with the
- * code stored on the conn. A negative timeout waits without limit.
+ * code stored on the conn. A zero deadline waits without limit.
  */
 static inline XrValue xrt_net_udp_send_to(XrValue conn_value, XrValue data_value,
                                           XrValue addr_value, XrValue port_value,
-                                          XrValue timeout_value) {
+                                          XrValue deadline_value) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
         if (conn)
@@ -1014,7 +988,7 @@ static inline XrValue xrt_net_udp_send_to(XrValue conn_value, XrValue data_value
         return XR_FROM_INT(-1);
     }
 
-    int64_t deadline = xrt_net_deadline_from_timeout(xrt_net_int_arg(timeout_value));
+    int64_t deadline = xrt_net_int_arg(deadline_value);
     for (;;) {
         ssize_t n = xrt_net_sendto(conn->base.fd, data->data, (size_t) data->length,
                                    (const struct sockaddr *) &addr, addrlen);
@@ -1037,13 +1011,13 @@ static inline XrValue xrt_net_udp_send_to(XrValue conn_value, XrValue data_value
 }
 
 /*
- * net.__udpRecvInto(conn, buffer, timeoutMs) -> int
+ * net.__udpRecvInto(conn, buffer, deadlineMs) -> int
  * Single datagram receive into a caller buffer; returns the byte count and
- * records the sender on the conn, or -1 with the code stored. A negative
- * timeout waits without limit.
+ * records the sender on the conn, or -1 with the code stored. A zero deadline
+ * waits without limit.
  */
 static inline XrValue xrt_net_udp_recv_into(XrValue conn_value, XrValue buffer_value,
-                                            XrValue timeout_value) {
+                                            XrValue deadline_value) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
         if (conn)
@@ -1061,7 +1035,7 @@ static inline XrValue xrt_net_udp_recv_into(XrValue conn_value, XrValue buffer_v
         return XR_FROM_INT(-1);
     }
 
-    int64_t deadline = xrt_net_deadline_from_timeout(xrt_net_int_arg(timeout_value));
+    int64_t deadline = xrt_net_int_arg(deadline_value);
     for (;;) {
         struct sockaddr_storage sender;
         socklen_t sender_len = sizeof(sender);
@@ -1127,35 +1101,20 @@ static inline XrValue xrt_net_listener_port(XrValue listener_value) {
     return XR_FROM_INT(listener ? listener->port : -1);
 }
 
-static inline XrValue xrt_net_is_closed(XrValue handle_value) {
-    xrt_net_handle_base_t *base = xrt_net_handle_base_ptr(handle_value);
-    return XR_FROM_BOOL(!base || base->closed);
-}
-
 static inline XrValue xrt_net_is_tls(XrValue conn_value) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     return XR_FROM_BOOL(conn && conn->conn_kind == XRT_NETCONN_TLS);
 }
 
-static inline XrValue xrt_net_shutdown_read(XrValue conn_value) {
+static inline XrValue xrt_net_shutdown_direction(XrValue conn_value, XrValue direction_value) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    int64_t direction = xrt_net_int_arg(direction_value);
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET)
         return XR_FALSE_VAL;
-    return XR_FROM_BOOL(shutdown(conn->base.fd, XR_SHUT_RD) == 0);
-}
-
-static inline XrValue xrt_net_shutdown_write(XrValue conn_value) {
-    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
-    if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET)
+    if (direction < 0 || direction > 2)
         return XR_FALSE_VAL;
-    return XR_FROM_BOOL(shutdown(conn->base.fd, XR_SHUT_WR) == 0);
-}
-
-static inline XrValue xrt_net_shutdown(XrValue conn_value) {
-    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
-    if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET)
-        return XR_FALSE_VAL;
-    return XR_FROM_BOOL(shutdown(conn->base.fd, XR_SHUT_RDWR) == 0);
+    int mode = direction == 0 ? XR_SHUT_RD : direction == 1 ? XR_SHUT_WR : XR_SHUT_RDWR;
+    return XR_FROM_BOOL(shutdown(conn->base.fd, mode) == 0);
 }
 
 /* ==========================================================================
