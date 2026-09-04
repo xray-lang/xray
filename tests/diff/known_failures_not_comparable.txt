@@ -43,13 +43,13 @@
 # reading and a lane that changes the multi-module program authority should
 # expect the XR_TARGET_1000 family to move as a block.
 #
-# --- what the 510 refusals are blocked on ------------------------------
+# --- what the 508 refusals are blocked on ------------------------------
 #
 # 43 distinct first refusals; 51 of the cases are refused by the VM too.
 #
-#    114  XR_TARGET_1003 call-shaped operation has no exact target authority
+#    113  XR_TARGET_1003 call-shaped operation has no exact target authority
 #     90  XR_TARGET_1000 product TargetPlan requires one canonical program authority
-#     67  XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+#     66  XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
 #     45  XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
 #     35  XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
 #     24  XR_TARGET_1003 direct-local signature or result storage is incomplete
@@ -78,8 +78,6 @@
 
 tests/diff/cases/basic/arrays.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
 tests/diff/cases/basic/closures.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
-tests/diff/cases/basic/range_precedence.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
-tests/diff/cases/basic/range_precedence_arithmetic.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
 tests/diff/cases/basic/ranges.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/basic/strings.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/limits/upval_capture_over_254.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete

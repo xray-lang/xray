@@ -12,6 +12,7 @@
 #define XR_SEMANTIC_BUILTIN_RUNTIME_METHOD_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_range_shape.h"
 #include "xr_semantic_string_shape.h"
 #include "../../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../../ir/xi_builtin_map_entry_iterator_shape.h"
@@ -68,6 +69,8 @@ static inline bool xr_semantic_builtin_runtime_method_receiver_type_is_exact(
         case XA_BUILTIN_RECEIVER_STRING:
             return xr_semantic_builtin_runtime_method_type_is_exact(plan, type,
                                                                     XA_BUILTIN_TYPE_STRING);
+        case XA_BUILTIN_RECEIVER_RANGE:
+            return xr_semantic_range_type_is_exact(type);
         default:
             return false;
     }
@@ -82,6 +85,11 @@ static inline bool xr_semantic_builtin_runtime_method_operand_type(
         switch (spec->receiver) {
             case XA_BUILTIN_RECEIVER_STRING:
                 *out_type = XA_BUILTIN_TYPE_STRING;
+                return true;
+            case XA_BUILTIN_RECEIVER_RANGE:
+                /* A nominal runtime receiver is carried as the tagged value
+                 * named by the registry row, not as its result component. */
+                *out_type = XA_BUILTIN_TYPE_RECEIVER;
                 return true;
             default:
                 return false;

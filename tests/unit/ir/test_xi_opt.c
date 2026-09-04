@@ -38,6 +38,13 @@ static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
 static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 14, .frozen = true};
 static XrType stub_task = {
     .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
+static XrType stub_range = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 13,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "Range"},
+};
 static XrType stub_task_array = {
     .kind = XR_KIND_ARRAY,
     .id = 12,
@@ -1691,6 +1698,38 @@ TEST(select_rep_box_const_for_return) {
     xi_func_free(f);
 }
 
+TEST(select_rep_range_bounds_use_native_i64) {
+    XiFunc *f = make_func("select_rep_range_bounds", &stub_void);
+    XiBlock *blk = f->entry;
+    XiValue *start = xi_const_int(f, blk, 2, &stub_int);
+    XiValue *end = xi_const_int(f, blk, 5, &stub_int);
+    XiValue *range = xi_value_new(f, blk, XI_RANGE, &stub_range, 2);
+    REQUIRE(start && end && range);
+    range->args[0] = start;
+    range->args[1] = end;
+
+    XiRepPolicy policy = xi_rep_policy_aot_transition();
+    XiRepAdapterKind kind = XI_REP_ADAPTER_COUNT;
+    uint16_t input = XR_REP_VOID;
+    uint16_t output = XR_REP_VOID;
+    REQUIRE(!xi_opt_rep_adapter_for_use(start, range, 0, &policy, &kind, &input, &output));
+    REQUIRE(kind == XI_REP_ADAPTER_NONE);
+    REQUIRE(!xi_opt_rep_adapter_for_use(end, range, 1, &policy, &kind, &input, &output));
+    REQUIRE(kind == XI_REP_ADAPTER_NONE);
+
+    XiOp saved_op = range->op;
+    range->op = XI_TUPLE_NEW;
+    REQUIRE(xi_opt_rep_adapter_for_use(start, range, 0, &policy, &kind, &input, &output));
+    REQUIRE(kind == XI_REP_ADAPTER_BOX && input == XR_REP_I64 && output == XR_REP_TAGGED);
+    range->op = saved_op;
+
+    xi_opt_select_rep_with_policy(f, &policy);
+    REQUIRE(range->args[0] == start && range->args[1] == end);
+    REQUIRE(count_rep_adapter(f, XI_BOX, start) == 0);
+    REQUIRE(count_rep_adapter(f, XI_BOX, end) == 0);
+    xi_func_free(f);
+}
+
 typedef enum SelectRepEnumOrdinalMutation {
     SELECT_REP_ENUM_ORDINAL_VALID,
     SELECT_REP_ENUM_ORDINAL_WITNESS_KIND,
@@ -2826,6 +2865,7 @@ int main(void) {
 
     /* SelectRepresentations */
     run_select_rep_box_const_for_return();
+    run_select_rep_range_bounds_use_native_i64();
     run_select_rep_enum_ordinal_requires_exact_native_witness();
     run_select_rep_unbox_param_for_arith();
     run_select_rep_identity_copy_preserves_source_carrier();

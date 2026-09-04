@@ -28,6 +28,7 @@ typedef enum {
     XA_BUILTIN_RECEIVER_MAP,
     XA_BUILTIN_RECEIVER_U8_SLICE,
     XA_BUILTIN_RECEIVER_POD_SLICE,
+    XA_BUILTIN_RECEIVER_RANGE,
 } XaBuiltinReceiverKind;
 
 typedef enum {
@@ -431,6 +432,8 @@ static inline bool xa_builtin_receiver_matches_type(const XrType *receiver,
         case XA_BUILTIN_RECEIVER_POD_SLICE:
             return receiver && XR_TYPE_IS_SLICE(receiver) && receiver->container.element_type &&
                    xa_builtin_type_is_pod_span_elem(receiver->container.element_type);
+        case XA_BUILTIN_RECEIVER_RANGE:
+            return xr_type_is_builtin_named_class(receiver, "Range");
     }
     return false;
 }
@@ -522,6 +525,8 @@ xa_builtin_receiver_method_documentation_group(const XaBuiltinReceiverMethodSpec
          * Saying so here rather than falling out of the switch keeps the
          * compiler able to name the next receiver kind that needs a group. */
         case XA_BUILTIN_RECEIVER_MAP:
+            return XA_BUILTIN_DOC_GROUP_GENERAL;
+        case XA_BUILTIN_RECEIVER_RANGE:
             return XA_BUILTIN_DOC_GROUP_GENERAL;
     }
     return XA_BUILTIN_DOC_GROUP_GENERAL;

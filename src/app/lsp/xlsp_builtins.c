@@ -168,6 +168,7 @@ static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec
         case XA_BUILTIN_RECEIVER_STRING:
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+        case XA_BUILTIN_RECEIVER_RANGE:
             xlsp_type_label(type, buf, buf_size);
             return;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:

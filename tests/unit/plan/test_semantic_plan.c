@@ -122,6 +122,23 @@ static XrType stub_string_array = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_string},
 };
+static XrType stub_range = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 34,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "Range"},
+};
+static XrClassInfo stub_shadow_range_class = {
+    .name = "Range",
+};
+static XrType stub_shadow_range = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 35,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "Range", .class_ref = &stub_shadow_range_class},
+};
 static XrType stub_unit = {
     .kind = XR_KIND_UNIT,
     .id = 4,
@@ -5415,6 +5432,89 @@ static void test_builtin_runtime_string_split_authority(void) {
     xr_semantic_plan_free(plan);
 }
 
+static XrSemanticPlan *build_builtin_runtime_range_to_string_plan(void) {
+    XiFunc *function = xi_func_new("builtin_runtime_range_to_string", &stub_string);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *start = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *end = xi_const_int(function, entry, 5, &stub_int);
+    XiValue *range = xi_value_new(function, entry, XI_RANGE, &stub_range, 2);
+    XiValue *to_string = xi_value_new(function, entry, XI_CALL_METHOD, &stub_string, 1);
+    REQUIRE(start != NULL && end != NULL && range != NULL && to_string != NULL);
+    range->args[0] = start;
+    range->args[1] = end;
+    to_string->args[0] = range;
+    to_string->aux = (void *) "toString";
+    to_string->aux_int = (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1;
+    to_string->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    xi_block_set_return(entry, to_string);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime Range.toString SemanticPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static void test_builtin_runtime_range_to_string_authority(void) {
+    XrSemanticPlan *plan = build_builtin_runtime_range_to_string_plan();
+    XrSemanticOperationRecord *range = NULL;
+    XrSemanticOperationRecord *to_string = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        XrSemanticOperationRecord *operation = &plan->operations[i];
+        if (operation->opcode == XI_RANGE)
+            range = operation;
+        if (operation->intrinsic_kind == XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+            to_string = operation;
+    }
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(range != NULL && xr_semantic_range_value_is_exact(plan, range));
+    REQUIRE(to_string != NULL &&
+            xr_semantic_builtin_runtime_method_is_exact(plan, to_string, &spec, &receiver) &&
+            spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_RANGE_TO_STRING &&
+            spec->method_symbol == XI_METHOD_SYMBOL_TOSTRING && receiver == range->result_value);
+    REQUIRE(!xa_builtin_receiver_matches_type(&stub_shadow_range, XA_BUILTIN_RECEIVER_RANGE));
+
+    uint32_t saved_registry_id =
+        to_string->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID];
+    to_string->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] =
+        XA_BUILTIN_RECEIVER_METHOD_STRING_SPLIT;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    to_string->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] = saved_registry_id;
+
+    uint32_t saved_receiver_type = plan->operands[to_string->operand_begin].type;
+    plan->operands[to_string->operand_begin].type = to_string->result_type;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->operands[to_string->operand_begin].type = saved_receiver_type;
+
+    const char *saved_metadata = plan->metadata[to_string->metadata_begin];
+    plan->metadata[to_string->metadata_begin] = "split";
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->metadata[to_string->metadata_begin] = saved_metadata;
+
+    uint32_t saved_range_type = range->result_type;
+    range->result_type = to_string->result_type;
+    expect_verify_failure(plan, "XR_SEM_0015");
+    range->result_type = saved_range_type;
+
+    int64_t saved_inclusive = range->semantic_immediate;
+    range->semantic_immediate = 2;
+    REQUIRE(!xr_semantic_range_value_is_exact(plan, range));
+    range->semantic_immediate = saved_inclusive;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+}
+
 static void test_semantic_side_table_partitions(void) {
     XrSemanticPlan *plan = build_entity_identity_plan();
     uint32_t child_type = XR_SEMANTIC_INDEX_NONE;
@@ -6651,6 +6751,7 @@ int main(int argc, char **argv) {
     }
     if (argc == 2 && strcmp(argv[1], "builtin-runtime-method-authority") == 0) {
         test_builtin_runtime_string_split_authority();
+        test_builtin_runtime_range_to_string_authority();
         puts("Builtin runtime method SemanticPlan authority tests passed");
         return 0;
     }
@@ -6667,6 +6768,7 @@ int main(int argc, char **argv) {
     test_non_singleton_borrow_origin_set_fails_scalar_projection();
     test_operation_registry();
     test_builtin_runtime_string_split_authority();
+    test_builtin_runtime_range_to_string_authority();
     test_immutable_owned_snapshot();
     test_string_builder_constructor_allocation_authority();
     test_string_byte_slice_view_authority();

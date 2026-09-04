@@ -7194,6 +7194,24 @@ static bool oracle_dynamic_string_convert_result_storage(const VerifyAuthority *
     return true;
 }
 
+/* A Range construction is an owned heap value whose only executable carrier
+ * is the tagged value bound by the dynamic storage family. Keep this producer
+ * proof separate from consumers so every Range operation asks for the same
+ * definition authority. */
+static bool oracle_range_tagged_carrier_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                                XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !ctx->operation_by_value)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    return operation && operation->result_value == semantic_value &&
+           xr_semantic_range_value_is_exact(ctx->semantic, operation) &&
+           oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind);
+}
+
 /* A length read borrows one container and yields the plain machine integer the
  * language types it. The receiver keeps the single tagged storage fact its own
  * family already proved: the owned array allocation, the string literal, or the
@@ -7226,7 +7244,9 @@ static bool oracle_length_read_is_exact(const VerifyAuthority *ctx, uint32_t ope
            (oracle_array_tagged_carrier_storage(ctx, container->value, &container_storage,
                                                 &container_kind) ||
             oracle_string_tagged_carrier_storage(ctx, container->value, &container_storage,
-                                                 &container_kind));
+                                                 &container_kind) ||
+            oracle_range_tagged_carrier_storage(ctx, container->value, &container_storage,
+                                                &container_kind));
 }
 
 /* One equality over two proved String values. String is immutable and shared,
@@ -10394,7 +10414,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                                                                 &runtime_spec, NULL)) {
                     if (!xr_semantic_builtin_runtime_method_operand_type(
                             runtime_spec, operand_index, &operand_type) ||
-                        operand_type != XA_BUILTIN_TYPE_STRING ||
+                        (operand_type != XA_BUILTIN_TYPE_STRING &&
+                         operand_type != XA_BUILTIN_TYPE_RECEIVER) ||
                         !oracle_dynamic_value_storage(ctx, operation->result_value, &result_storage,
                                                       &ignored_kind) ||
                         !oracle_definition_storage(ctx, source_value, &source_storage,
@@ -10765,6 +10786,26 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 definition_storage != XR_REP_TAGGED || definition_kind != XR_MACHINE_REP_DYN_VALUE)
                 return false;
             *out_storage = XR_REP_TAGGED;
+            return true;
+        }
+        case XI_RANGE: {
+            /* The owned Range result is tagged, but its shared semantic kernel
+             * consumes two native i64 bounds. Naming the constructor here
+             * prevents an unnecessary BOX whose generated-C recipe would then
+             * ignore. */
+            uint32_t range_operand_count = 0;
+            const XrSemanticOperandRecord *range_operands =
+                xr_semantic_plan_operands(ctx->semantic, &range_operand_count);
+            XrRep bound_storage = XR_REP_VOID;
+            uint16_t bound_kind = XR_MACHINE_REP_COUNT;
+            if (!xr_semantic_range_value_is_exact(ctx->semantic, operation) || operand_index >= 2 ||
+                !range_operands || operation->operand_begin > range_operand_count ||
+                operation->operand_count > range_operand_count - operation->operand_begin ||
+                range_operands[operation->operand_begin + operand_index].value != source_value ||
+                !oracle_machine_storage(ctx, source_value, &bound_storage, &bound_kind) ||
+                bound_storage != XR_REP_I64 || bound_kind != XR_MACHINE_REP_I64)
+                return false;
+            *out_storage = XR_REP_I64;
             return true;
         }
         case XI_LEN:

@@ -15,6 +15,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "xr_semantic_class_shape.h"
+#include "xr_semantic_range_shape.h"
 #include "xr_semantic_plan.h"
 #include <string.h>
 
@@ -394,6 +395,8 @@ static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan
     if (operation && operation->opcode == XI_AS &&
         xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE)
         return xr_semantic_dynamic_source_class_as_is_exact(plan, operation);
+    if (operation && operation->opcode == XI_RANGE)
+        return xr_semantic_range_value_is_exact(plan, operation);
     if (!xr_semantic_dynamic_value_producer_is_exact(operation) ||
         !xr_semantic_dynamic_value_common_is_exact(plan, operation))
         return false;

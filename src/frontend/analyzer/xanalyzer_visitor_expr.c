@@ -414,6 +414,8 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
             return "Slice<u8>";
         case XA_BUILTIN_RECEIVER_POD_SLICE:
             return xa_type_is_u8_slice_type(receiver) ? "Slice<u8>" : "Slice";
+        case XA_BUILTIN_RECEIVER_RANGE:
+            return "Range";
     }
     return "receiver";
 }

@@ -3500,6 +3500,12 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
              * canonical representation-selection boundary native so no BOX
              * adapter can mutate that authority. */
             return arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
+        case XI_RANGE:
+            /* Range owns its tagged heap result, but the shared range kernel
+             * consumes two native signed bounds. The representation selector
+             * must agree with generated C so it never inserts a BOX that the
+             * kernel immediately ignores. */
+            return arg_idx < 2 ? XR_REP_I64 : XR_REP_TAGGED;
         case XI_ASSERTION: {
             const XrAssertionPlan *assertion = xi_assertion_plan(user);
             if (!assertion || arg_idx >= assertion->arity)
