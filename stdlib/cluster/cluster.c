@@ -354,11 +354,13 @@ static XrCFuncResult cluster_accept_tls_fn(XrVMRuntime *X, XrValue *args, int ar
 static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *cluster = (XrCluster *) X->cluster;
     XrNetConn *handle = argc > 0 ? xr_net_conn_from_value(args[0]) : NULL;
-    XrClosure *handler =
+    XrClosure *inbound_handler =
         argc > 6 ? xr_closure_from_callback_arg(X, args[6], "cluster.__adoptPeer") : NULL;
-    if (!cluster || argc < 7 || !handle || !handler || !XR_IS_STRING(args[1]) ||
-        !XR_IS_STRING(args[2]) || !XR_IS_INT(args[3]) || !XR_IS_INT(args[4]) ||
-        !XR_IS_INT(args[5]) || !atomic_load(&cluster->running)) {
+    XrClosure *outbound_handler =
+        argc > 7 ? xr_closure_from_callback_arg(X, args[7], "cluster.__adoptPeer") : NULL;
+    if (!cluster || argc < 8 || !handle || !inbound_handler || !outbound_handler ||
+        !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) || !XR_IS_INT(args[3]) ||
+        !XR_IS_INT(args[4]) || !XR_IS_INT(args[5]) || !atomic_load(&cluster->running)) {
         if (handle)
             xr_net_conn_close(handle);
         return xr_bool(false);
@@ -407,7 +409,7 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
         cluster_node_release(node);
         return xr_bool(false);
     }
-    if (!cluster_node_start_io(cluster, node, args[6])) {
+    if (!cluster_node_start_io(cluster, node, args[6], args[7])) {
         if (cluster_node_remove(cluster, node)) {
             cluster_node_shutdown(node);
             cluster_node_release(node);

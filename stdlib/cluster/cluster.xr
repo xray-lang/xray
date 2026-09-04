@@ -622,6 +622,16 @@ export final class PhiDetector {
     }
 }
 
+// The writer reports only transport facts: the queue crossed its configured
+// high-watermark or the socket stopped accepting bytes. Detaching that peer is
+// a source policy decision and uses the same generation-safe path as inbound
+// termination, so a delayed callback cannot close a replacement connection.
+fn _dispatchOutbound() {
+    var event = __takeOutboundEvent()
+    if (event == null || event!.status == 0) { return }
+    __disconnectPeer(event!.peerGeneration)
+}
+
 // During detector warm-up the fixed timeout is deliberately conservative;
 // once three samples exist, phi alone decides liveness.
 export fn heartbeatIsDead(phi: f64, samples: i64, elapsedMs: i64,
@@ -870,7 +880,7 @@ fn _joinPeer(host: string, port: i64) -> bool {
         return false
     }
     return __adoptPeer(move live, ack!.name, host, port, ack!.flags,
-                       config.heartbeatIntervalMs, _dispatchInbound)
+                       config.heartbeatIntervalMs, _dispatchInbound, _dispatchOutbound)
 }
 
 fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: string,
@@ -940,7 +950,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         return
     }
     __adoptPeer(move conn, request!.name, "", 0, request!.flags, heartbeatIntervalMs,
-                _dispatchInbound)
+                _dispatchInbound, _dispatchOutbound)
 }
 
 // Keep the affine connection inside a single-iteration frame. A loop-carried

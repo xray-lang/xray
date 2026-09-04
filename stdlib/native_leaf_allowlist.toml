@@ -138,7 +138,7 @@ class = "runtime_leaf"
 abi = "none; transfers an opaque NetConn body into the synchronized cluster node registry and scheduler-owned reader and writer coroutines"
 ownership = "none"
 effect = "nothrow"
-provider = "the native NetConn representation, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it, together with the source-owned heartbeat interval needed to initialize the peer detector"
+provider = "the native NetConn representation, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it, together with source-owned reader and writer dispatchers"
 deletion_trigger = "when the live cluster node registry, output queue and transport coroutine lifecycle are expressible as Xray-owned module state"
 
 [[leaf]]
@@ -160,6 +160,16 @@ ownership = "fresh"
 effect = "nothrow"
 provider = "the VM coroutine owned-context ABI. cluster.xr owns decoding, dispatch, and terminal reader policy after taking the event"
 deletion_trigger = "when socket reader state is directly expressible as a source coroutine value"
+
+[[leaf]]
+module = "cluster"
+symbol = "__takeOutboundEvent"
+class = "runtime_leaf"
+abi = "none; projects the high-watermark or socket failure event retained by the currently executing VM C-function writer"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the VM coroutine owned-context ABI. cluster.xr exclusively owns the generation-safe disconnect decision after taking the event"
+deletion_trigger = "when socket writer state and the synchronized output queue are directly expressible as source coroutine values"
 
 [[leaf]]
 module = "cluster"
@@ -208,7 +218,7 @@ class = "runtime_leaf"
 abi = "none; detaches one generation from the locked registry and shuts down its socket and queue"
 ownership = "none"
 effect = "nothrow"
-provider = "the native peer registry and opaque transport resources. cluster.xr exclusively decides which terminal reader event closes the peer"
+provider = "the native peer registry and opaque transport resources. cluster.xr exclusively decides which terminal reader or writer event closes the peer"
 deletion_trigger = "when the peer registry and transport resources are ordinary Xray-owned values"
 
 [[leaf]]

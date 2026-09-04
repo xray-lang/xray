@@ -145,8 +145,10 @@ int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, co
                                       uint8_t topic_len, const uint8_t *envelope,
                                       uint32_t envelope_len);
 int cluster_node_send_ping(XrClusterNode *node);
-bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrValue inbound_handler);
+bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrValue inbound_handler,
+                           XrValue outbound_handler);
 XrValue cluster_take_inbound_frame_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
+XrValue cluster_take_outbound_event_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
 bool cluster_node_is_slow(XrClusterNode *node);
 
 /* ========== Cluster State ========== */

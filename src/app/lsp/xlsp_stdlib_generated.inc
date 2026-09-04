@@ -122,8 +122,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, state: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Private scalar snapshot for one remote cluster node", NULL, 0},
     {"__ClusterRuntimeSnapshot", XLSP_SYM_CLASS, "type __ClusterRuntimeSnapshot = { nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64 }", "Private snapshot of mutable native peer registries and counters", NULL, 0},
     {"__ClusterInboundFrame", XLSP_SYM_CLASS, "type __ClusterInboundFrame = { peerGeneration: i64, receivedAtMs: i64, status: i64, wire: Array<u8>? }", "Private projection of one complete frame or terminal reader event", NULL, 0},
+    {"__ClusterOutboundEvent", XLSP_SYM_CLASS, "type __ClusterOutboundEvent = { peerGeneration: i64, status: i64 }", "Private projection of one slow-consumer or terminal writer event", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 91
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 92
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

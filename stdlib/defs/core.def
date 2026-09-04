@@ -2040,6 +2040,12 @@ module cluster {
     doc: "Private projection of one complete frame or terminal reader event"
   }
 
+  object __ClusterOutboundEvent {
+    fields: "const peerGeneration: i64, const status: i64"
+    exact: true
+    doc: "Private projection of one slow-consumer or terminal writer event"
+  }
+
   fn __start {
     signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, queueAndTopicLimits: i64, tombstoneRetentionMs: i64): bool"
     doc: "Open cluster TLS contexts and synchronized registries from source-normalized scalar configuration"
@@ -2114,11 +2120,11 @@ module cluster {
   }
 
   fn __adoptPeer {
-    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(): ()): bool"
-    doc: "Transfer an authenticated socket into the locked cluster node registry and start its framed reader with a source dispatcher"
+    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(): (), outbound: fn(): ()): bool"
+    doc: "Transfer an authenticated socket into the locked cluster node registry and start framed transport with source dispatchers"
     vm: "cluster_adopt_peer_fn"
-    argc: 7
-    arg_spec: "vssvvvv"
+    argc: 8
+    arg_spec: "vssvvvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2129,6 +2135,18 @@ module cluster {
     signature: "(): __ClusterInboundFrame?"
     doc: "Borrow the complete bounded frame and peer generation owned by the current reader callback"
     vm: "cluster_take_inbound_frame_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
+  fn __takeOutboundEvent {
+    signature: "(): __ClusterOutboundEvent?"
+    doc: "Project the terminal event owned by the current writer callback"
+    vm: "cluster_take_outbound_event_fn"
     argc: 0
     arg_spec: ""
     aot_direct: false
