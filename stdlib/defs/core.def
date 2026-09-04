@@ -2096,18 +2096,6 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn __trackListener {
-    signature: "(listener: NetListener): bool"
-    doc: "Borrow the source-owned listener so native stop can wake its pending accept"
-    vm: "cluster_track_listener_fn"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "netpoll"
-  }
-
   fn __joinTls {
     signature: "(conn: NetConn, hostname: string, deadlineMs: i64): i64"
     doc: "Promote an outbound cluster socket with the cluster-specific TLS client context"

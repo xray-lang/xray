@@ -165,6 +165,11 @@ type _ClusterSourceState = {
     tlsServerReady: bool,
 }
 
+type _SourceListener = {
+    runtimeToken: i64,
+    listener: NetListener,
+}
+
 // Topic routing is ordinary source state. Holding the Channel in this record
 // gives the registry its own strong reference, while temporary delivery
 // snapshots keep each target alive after the registry lock is released.
@@ -233,6 +238,7 @@ var _phiPeerStates: Array<_PhiPeerState> = []
 // without exposing ordinary mutable module state across worker coroutines.
 const _sourceStateLock: Atomic<bool> = Atomic<bool>(false)
 var _sourceState: _ClusterSourceState? = null
+var _sourceListener: _SourceListener? = null
 const _monitorStateLock: Atomic<bool> = Atomic<bool>(false)
 var _monitorRuntimeToken = 0
 var _nodeMonitors: Array<_NodeMonitor> = []
@@ -593,6 +599,32 @@ fn _clearSourceState() {
     _lockSourceState()
     _sourceState = null
     _sourceStateLock.store(false)
+}
+
+fn _installSourceListener(runtimeToken: i64, listener: NetListener) -> bool {
+    _lockSourceState()
+    var installed = _sourceListener == null && _runtimeActiveToken.load() == runtimeToken
+    if (installed) {
+        _sourceListener = { runtimeToken: runtimeToken, listener: listener }
+    }
+    _sourceStateLock.store(false)
+    return installed
+}
+
+fn _takeSourceListener(runtimeToken: i64) -> NetListener? {
+    _lockSourceState()
+    var listener: NetListener? = null
+    if (_sourceListener != null && _sourceListener!.runtimeToken == runtimeToken) {
+        listener = _sourceListener!.listener
+        _sourceListener = null
+    }
+    _sourceStateLock.store(false)
+    return listener
+}
+
+fn _closeSourceListener(runtimeToken: i64) {
+    var listener = _takeSourceListener(runtimeToken)
+    if (listener != null) { net.close(listener!) }
 }
 
 // ========== Wire protocol ===========
@@ -1520,6 +1552,7 @@ fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: stri
 
 fn _stopFailedHealthGeneration(token: i64) {
     if (!_retireRuntimeGeneration(token)) { return }
+    _closeSourceListener(token)
     _closeTopicSubscriptions()
     _clearPhiPeerStates(token)
     __stop()
@@ -1592,12 +1625,12 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
         _clearSourceState()
         return false
     }
-    go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats)
     if (state.tlsEnabled && !state.tlsServerReady) {
         net.close(listener)
+        go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats)
         return true
     }
-    if (!__trackListener(listener)) {
+    if (!_installSourceListener(token, listener)) {
         _retireRuntimeGeneration(token)
         _closeTopicSubscriptions()
         _clearPhiPeerStates(token)
@@ -1606,9 +1639,9 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
         _clearSourceState()
         return false
     }
-    // Tracking intentionally establishes a borrowed provider alias used only
-    // to wake stop.  Transfer a retained listener reference to the accept
-    // coroutine; that coroutine remains the sole closer.
+    go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats)
+    // Source state retains a strong listener reference so stop can close it
+    // synchronously; the accept coroutine releases its own reference on exit.
     go _acceptLoop(listener, token, state.selfName, state.secret, state.tlsEnabled,
                    state.tlsServerReady)
     return true
@@ -2295,6 +2328,7 @@ export fn join(addr: string) -> bool {
 export fn stop() {
     _discoveryActiveToken.store(0)
     var retiredToken = _retireCurrentRuntimeGeneration()
+    if (retiredToken != 0) { _closeSourceListener(retiredToken) }
     _closeTopicSubscriptions()
     if (retiredToken != 0) { _clearPhiPeerStates(retiredToken) }
     _clearSourceState()

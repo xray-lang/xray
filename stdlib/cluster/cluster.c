@@ -150,28 +150,6 @@ static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) 
     return detached_name;
 }
 
-static XrValue cluster_track_listener_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    XrNetListener *listener = NULL;
-    if (argc > 0 && XR_IS_PTR(args[0]) && XR_HEAP_TYPE(args[0]) == XR_TINSTANCE) {
-        listener = (XrNetListener *) XR_VALUE_GCPTR(args[0]);
-        if (!listener->klass || listener->klass->builtin_kind != XR_BK_NETLISTENER)
-            listener = NULL;
-    }
-    if (!listener || xr_net_listener_is_closed(listener))
-        return xr_bool(false);
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_bool(false);
-    xr_amutex_lock(&cluster->nodes_lock);
-    bool tracked = atomic_load(&cluster->running) && cluster->listener == NULL;
-    if (tracked)
-        cluster->listener = listener;
-    xr_amutex_unlock(&cluster->nodes_lock);
-    cluster_runtime_release(cluster);
-    return xr_bool(tracked);
-}
-
 static XrCFuncResult cluster_join_tls_fn(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
@@ -423,17 +401,10 @@ static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     atomic_store(&cluster->running, false);
 
-    /* The source accept coroutine owns the listener. Closing the borrowed
-     * provider alias only wakes its pending accept; the coroutine drops the
-     * handle after observing the stopped generation. */
     xr_amutex_lock(&cluster->nodes_lock);
-    XrNetListener *listener = cluster->listener;
-    cluster->listener = NULL;
     XrClusterNode *node = cluster->nodes;
     cluster->nodes = NULL;
     xr_amutex_unlock(&cluster->nodes_lock);
-    if (listener)
-        xr_net_listener_close(listener);
     while (node) {
         XrClusterNode *next = node->next;
         node->next = NULL;

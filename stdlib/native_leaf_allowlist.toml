@@ -243,16 +243,6 @@ deletion_trigger = "when peer transport state is Xray-owned"
 
 [[leaf]]
 module = "cluster"
-symbol = "__trackListener"
-class = "runtime_leaf"
-abi = "none; borrows one opaque NetListener until cluster stop closes it"
-ownership = "borrowed_param:0"
-effect = "nothrow"
-provider = "the VM cluster runtime stores a non-owning pointer while the source accept coroutine owns the handle. Stop closes it through the generic net provider to wake a pending accept immediately, then clears the pointer before the source coroutine drops its owner"
-deletion_trigger = "when source module state can retain and synchronously close the active listener from cluster.stop"
-
-[[leaf]]
-module = "cluster"
 symbol = "__stop"
 class = "runtime_leaf"
 abi = "close(2) on peer transports and OpenSSL SSL_CTX_free(3); standalone AOT also closes its blocking listener"

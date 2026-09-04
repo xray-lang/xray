@@ -103,7 +103,6 @@ XrValue cluster_peer_write_fn(struct XrVMRuntime *isolate, XrValue *args, int ar
 typedef struct XrCluster {
     _Atomic(uint32_t) ref_count;
     struct XrVMRuntime *isolate;
-    struct XrNetListener *listener; /* borrowed while the source accept loop owns it */
 
     // Connected nodes (linked list, protected by nodes_lock)
     XrClusterNode *nodes;
@@ -227,7 +226,6 @@ static inline void cluster_runtime_release(XrCluster *cluster) {
         return;
 
     XR_DCHECK(cluster->nodes == NULL, "cluster release requires a detached node list");
-    XR_DCHECK(cluster->listener == NULL, "cluster release requires a detached listener");
     if (cluster->tls_client_ctx)
         xr_tls_context_free(cluster->tls_client_ctx);
     if (cluster->tls_server_ctx)

@@ -133,7 +133,6 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__start", "(tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64): bool", "Open cluster TLS contexts and native peer provider state from source-normalized scalar configuration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__healthSnapshot", "(): Array<__ClusterHealthPeerSnapshot>?", "Snapshot locked raw peer health facts without applying heartbeat queue policy", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool): string?", "Compare and apply one source-owned health decision, returning only the generation-safe detached peer name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__trackListener", "(listener: NetListener): bool", "Borrow the source-owned listener so native stop can wake its pending accept", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -148,7 +147,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics and raw transport-health facts", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 17
+#define GEN_CLUSTER_FUNCTION_COUNT 16
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
