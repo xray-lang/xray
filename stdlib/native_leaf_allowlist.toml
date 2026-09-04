@@ -68,7 +68,7 @@ class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills mutable peer metrics and the tombstone counter; cluster.xr combines them with its source-owned immutable configuration and topic listener count"
+provider = "declaration only (stdlib/defs/core.def). The VM fills mutable peer metrics; cluster.xr combines them with source-owned immutable configuration, topic listener count and recent-departure state"
 deletion_trigger = "when the locked peer table can be iterated as ordinary Xray-owned state"
 
 [[leaf]]
@@ -108,18 +108,8 @@ class = "runtime_leaf"
 abi = "none; reads cluster runtime state under its own mutexes and atomics"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the native node table under nodes_lock, synchronized tombstone registry, atomic peer counters, and raw detector storage. cluster.xr owns identity, running state, topic listeners, monitor channels, detector math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
-deletion_trigger = "when the peer table, metrics and synchronized registries are Xray-owned values"
-
-[[leaf]]
-module = "cluster"
-symbol = "__recentlyDeparted"
-class = "runtime_leaf"
-abi = "none; queries the synchronized tombstone registry at the current monotonic time"
-ownership = "none"
-effect = "nothrow"
-provider = "the locked runtime tombstone registry (stdlib/cluster/cluster.c cluster_recently_departed_fn). cluster.xr decides that a live tombstone refuses publication"
-deletion_trigger = "when the shared tombstone registry and its synchronization are representable as module-level Xray state"
+provider = "the native node table under nodes_lock, atomic peer counters, and raw detector storage. cluster.xr owns identity, running state, topic listeners, monitor channels, recent departures, detector math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
+deletion_trigger = "when the peer table and metrics are Xray-owned values"
 
 [[leaf]]
 module = "cluster"
@@ -238,7 +228,7 @@ class = "runtime_leaf"
 abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the native cluster runtime's TLS contexts and synchronized node/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, topic routing, monitor channels, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
+provider = "the native cluster runtime's TLS contexts and synchronized peer state plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, topic routing, monitor and recent-departure registries, channels, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
 deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values"
 
 [[leaf]]
@@ -258,8 +248,8 @@ class = "runtime_leaf"
 abi = "none; compare-and-apply against one locked peer generation and its observed health state"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the VM cluster peer registry plus synchronized tombstone registry. cluster.xr supplies the exact observed generation and state, next counter, removal decision and timestamp; stale decisions are rejected and a successful detach returns an owned peer name for source monitor notification"
-deletion_trigger = "when peer transport state and the synchronized tombstone registry are Xray-owned values"
+provider = "the VM cluster peer registry. cluster.xr supplies the exact observed generation and state, next counter and removal decision; stale decisions are rejected and a successful detach returns an owned peer name for source-owned recent-departure and monitor notification policy"
+deletion_trigger = "when peer transport state is Xray-owned"
 
 [[leaf]]
 module = "cluster"

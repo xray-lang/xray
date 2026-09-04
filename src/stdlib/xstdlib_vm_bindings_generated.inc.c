@@ -33,8 +33,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__trackListener", cluster_track_listener_fn);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__recentlyDeparted", cluster_recently_departed_fn);
-    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__joinTls", cluster_join_tls_fn);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__acceptTls", cluster_accept_tls_fn);

@@ -221,6 +221,7 @@ const _monitorStateLock: Atomic<bool> = Atomic<bool>(false)
 var _monitorRuntimeToken = 0
 var _nodeMonitors: Array<_NodeMonitor> = []
 var _remoteMonitors: Array<_RemoteMonitor> = []
+var _recentDepartures: Array<_RecentDeparture> = []
 
 fn _lockSourceState() {
     while (true) {
@@ -282,6 +283,7 @@ fn _clearMonitorStateLocked(token: i64) {
     }
     _nodeMonitors = []
     _remoteMonitors = []
+    _recentDepartures = []
     _monitorRuntimeToken = 0
     _monitorStateLock.store(false)
     _closeChannels(channels)
@@ -294,7 +296,8 @@ fn _activateRuntimeGeneration(token: i64) -> bool {
         return false
     }
     _lockMonitorState()
-    if (_monitorRuntimeToken != 0 || len(_nodeMonitors) != 0 || len(_remoteMonitors) != 0) {
+    if (_monitorRuntimeToken != 0 || len(_nodeMonitors) != 0 || len(_remoteMonitors) != 0 ||
+        len(_recentDepartures) != 0) {
         _monitorStateLock.store(false)
         _runtimeDecisionLock.store(false)
         return false
@@ -326,13 +329,68 @@ fn _retireCurrentRuntimeGeneration() {
     _runtimeDecisionLock.store(false)
 }
 
+fn _pruneRecentDeparturesLocked(nowMs: i64) {
+    var retained: Array<_RecentDeparture> = []
+    for (var i = 0; i < len(_recentDepartures); i++) {
+        var entry = _recentDepartures[i]
+        if (tombstoneIsLive(entry.markedAtMs, nowMs)) { retained.push(entry) }
+    }
+    _recentDepartures = retained
+}
+
+fn _recordRecentDepartureLocked(name: string, markedAtMs: i64) {
+    _pruneRecentDeparturesLocked(markedAtMs)
+    var retained: Array<_RecentDeparture> = []
+    for (var i = 0; i < len(_recentDepartures); i++) {
+        var entry = _recentDepartures[i]
+        if (entry.name != name) { retained.push(entry) }
+    }
+    retained.push({ name: name, markedAtMs: markedAtMs })
+    _recentDepartures = retained
+}
+
+fn _recentlyDeparted(name: string) -> bool {
+    _lockMonitorState()
+    if (_monitorRuntimeToken == 0) {
+        _monitorStateLock.store(false)
+        return true
+    }
+    _pruneRecentDeparturesLocked(time.monotonic())
+    var found = false
+    for (var i = 0; i < len(_recentDepartures); i++) {
+        if (_recentDepartures[i].name == name) { found = true }
+    }
+    _monitorStateLock.store(false)
+    return found
+}
+
+fn _recentDepartureSnapshot(nowMs: i64) -> Array<string> {
+    _lockMonitorState()
+    _pruneRecentDeparturesLocked(nowMs)
+    var names: Array<string> = []
+    for (var i = 0; i < len(_recentDepartures); i++) {
+        names.push(_recentDepartures[i].name)
+    }
+    _monitorStateLock.store(false)
+    return names
+}
+
+fn _recentDepartureCount(nowMs: i64) -> i64 {
+    _lockMonitorState()
+    _pruneRecentDeparturesLocked(nowMs)
+    var count = len(_recentDepartures)
+    _monitorStateLock.store(false)
+    return count
+}
+
 fn _takeNodeDownMonitors(token: i64, peerGeneration: i64,
-                         name: string) -> _NodeDownMonitors? {
+                         name: string, markedAtMs: i64) -> _NodeDownMonitors? {
     _lockMonitorState()
     if (_monitorRuntimeToken != token) {
         _monitorStateLock.store(false)
         return null
     }
+    _recordRecentDepartureLocked(name, markedAtMs)
     var nodeOneShot: Array<Channel<string>> = []
     var nodeStreams: Array<Channel<string>> = []
     var retainedNode: Array<_NodeMonitor> = []
@@ -370,10 +428,11 @@ fn _publishOneShot(channels: Array<Channel<string>>, result: string) {
     }
 }
 
-fn _notifyNodeDownIfCurrent(token: i64, peerGeneration: i64, name: string) {
+fn _notifyNodeDownIfCurrent(token: i64, peerGeneration: i64,
+                            name: string, markedAtMs: i64) {
     _lockRuntimeDecision()
     var targets = _runtimeActiveToken.load() == token
-        ? _takeNodeDownMonitors(token, peerGeneration, name)
+        ? _takeNodeDownMonitors(token, peerGeneration, name, markedAtMs)
         : null
     _runtimeDecisionLock.store(false)
     if (targets == null) { return }
@@ -538,14 +597,9 @@ export type ClusterDiscoveryAnnouncement = {
     clusterHash: u64,
 }
 
-type _DiscoveryTombstone = {
+type _RecentDeparture = {
     name: string,
     markedAtMs: i64,
-}
-
-type _DiscoveryTombstoneSet = {
-    entries: Array<_DiscoveryTombstone>,
-    names: Array<string>,
 }
 
 type _DiscoveryDatagram = {
@@ -846,7 +900,9 @@ fn _disconnectPeer(peerGeneration: i64) {
     var token = _runtimeActiveToken.load()
     if (token == 0) { return }
     var name = __detachPeer(peerGeneration)
-    if (name != null) { _notifyNodeDownIfCurrent(token, peerGeneration, name!) }
+    if (name != null) {
+        _notifyNodeDownIfCurrent(token, peerGeneration, name!, time.monotonic())
+    }
 }
 
 fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
@@ -1105,45 +1161,6 @@ fn _releaseDiscovery(token: i64) {
     var (_, released) = _discoveryActiveToken.compareExchange(token, 0)
 }
 
-fn _drainDiscoveryTombstones(notifications: Channel<string>,
-                             tombstones: Array<_DiscoveryTombstone>,
-                             nowMs: i64) -> Array<_DiscoveryTombstone> {
-    var current: Array<_DiscoveryTombstone> = []
-    for (var i = 0; i < len(tombstones); i++) { current.push(tombstones[i]) }
-    while (true) {
-        match (notifications.tryRecv()) {
-            Recv.Value { value: departed } -> {
-                var retained: Array<_DiscoveryTombstone> = []
-                for (var i = 0; i < len(current); i++) {
-                    var entry = current[i]
-                    if (entry.name != departed && tombstoneIsLive(entry.markedAtMs, nowMs)) {
-                        retained.push(entry)
-                    }
-                }
-                retained.push({ name: departed, markedAtMs: nowMs })
-                current = retained
-            }
-            _ -> { break }
-        }
-    }
-    return current
-}
-
-fn _liveDiscoveryTombstones(tombstones: Array<_DiscoveryTombstone>,
-                            nowMs: i64) -> _DiscoveryTombstoneSet {
-    var retained: Array<_DiscoveryTombstone> = []
-    var names: Array<string> = []
-    for (var i = 0; i < len(tombstones); i++) {
-        var entry = tombstones[i]
-        if (tombstoneIsLive(entry.markedAtMs, nowMs)) {
-            retained.push(entry)
-            names.push(entry.name)
-        }
-    }
-    var result: _DiscoveryTombstoneSet = { entries: retained, names: names }
-    return result
-}
-
 fn _hexNibble(c: rune) -> i64 {
     var n = c.toUInt32()
     if (n >= 48 && n <= 57) { return (n - 48) as i64 }
@@ -1191,7 +1208,7 @@ fn _readHandshakeFrame(conn: NetConn) -> ClusterFrame? {
 }
 
 fn _mayPublishPeer(name: string) -> bool {
-    if (name == self() || __recentlyDeparted(name)) { return false }
+    if (name == self() || _recentlyDeparted(name)) { return false }
     var connected = nodes()
     if (connected == null) { return false }
     for (var i = 0; i < len(connected!); i++) {
@@ -1419,9 +1436,9 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
                 var nextMissed = expiredDuringWarmup ? peer.missedHeartbeats + 1
                                                      : peer.missedHeartbeats
                 var name = __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs,
-                                                 peer.missedHeartbeats, nextMissed, dead, sentAtMs)
+                                                 peer.missedHeartbeats, nextMissed, dead)
                 if (name != null) {
-                    _notifyNodeDownIfCurrent(token, peer.peerGeneration, name!)
+                    _notifyNodeDownIfCurrent(token, peer.peerGeneration, name!, sentAtMs)
                 }
             }
         }
@@ -1491,21 +1508,18 @@ fn _receiveDiscoveryDatagram(conn: NetConn, waitMs: i64) -> _DiscoveryDatagram? 
     return datagram
 }
 
-fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName: string,
-                  expectedHash: u64, announcement: move Array<u8>, token: i64) {
+fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
+                  announcement: move Array<u8>, token: i64) {
     var live = socket
     var wire = announcement
     defer {
         net.close(live)
-        notifications.close()
         _releaseDiscovery(token)
     }
 
-    var tombstones: Array<_DiscoveryTombstone> = []
     var nextAnnouncementMs = 0
     while (_discoveryActiveToken.load() == token) {
         var nowMs = time.monotonic()
-        tombstones = _drainDiscoveryTombstones(notifications, tombstones, nowMs)
         if (nowMs >= nextAnnouncementMs) {
             try {
                 net.sendTo(live, wire, DISCOVERY_MULTICAST_GROUP,
@@ -1525,13 +1539,10 @@ fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName
         if (_discoveryActiveToken.load() != token) { return }
 
         nowMs = time.monotonic()
-        tombstones = _drainDiscoveryTombstones(notifications, tombstones, nowMs)
         var candidate = decodeDiscoveryAnnouncement(datagram!.bytes)
         var connected = nodes()
         if (candidate == null || connected == null) { continue }
-        var tombstoneSet = _liveDiscoveryTombstones(tombstones, nowMs)
-        tombstones = tombstoneSet.entries
-        var departed = tombstoneSet.names
+        var departed = _recentDepartureSnapshot(nowMs)
         if (shouldJoinDiscoveredNode(selfName, connected!, departed, candidate!, expectedHash)) {
             var peerHost = copy(datagram!.sender.host)
             var peerPort = candidate!.port
@@ -1951,19 +1962,11 @@ export fn discover() -> bool {
         _releaseDiscovery(token)
         return false
     }
-    var notifications = monitor("*")
-    if (notifications == null) {
-        net.close(socket!)
-        _releaseDiscovery(token)
-        return false
-    }
-
     var live: NetConn = socket!
     socket = null
-    const sharedNotifications: Channel<string> = notifications!
     var wire: Array<u8> = announcement!
     announcement = null
-    go _discoveryLoop(move live, sharedNotifications, snapshot!.self, hash, move wire, token)
+    go _discoveryLoop(move live, snapshot!.self, hash, move wire, token)
     return true
 }
 
@@ -2012,7 +2015,7 @@ export fn info() -> ClusterInfo? {
         running: true,
         nodes: nodes,
         listeners: _topicListenerCount(),
-        deadNodes: snapshot.deadNodes,
+        deadNodes: _recentDepartureCount(observedAtMs),
         heartbeatIntervalMs: state.heartbeatIntervalMs,
         heartbeatTimeoutMs: state.heartbeatTimeoutMs,
         maxMissedHeartbeats: state.maxMissedHeartbeats,
@@ -2128,8 +2131,7 @@ export fn start(config: ClusterConfig) -> bool {
         certFile,
         keyFile,
         insecure,
-        OUTPUT_QUEUE_HIGH_WATERMARK_BYTES,
-        TOMBSTONE_RETENTION_MS
+        OUTPUT_QUEUE_HIGH_WATERMARK_BYTES
     )
     var state: _ClusterSourceState = {
         selfName: config.name,

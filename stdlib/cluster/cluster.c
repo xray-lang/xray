@@ -46,20 +46,6 @@ static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc);
  * numeric token. Zero permanently marks process-lifetime exhaustion. */
 static _Atomic(uint64_t) cluster_next_peer_generation = 1;
 
-static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0]))
-        return xr_bool(true);
-    XrCluster *cluster = NULL;
-    XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
-    if (!cluster)
-        return xr_bool(true);
-    XrString *name = XR_TO_STRING(args[0]);
-    bool contained = xr_tombstone_registry_contains(cluster->tombstones, name->data,
-                                                     (int64_t) xr_time_monotonic_ms());
-    cluster_runtime_release(cluster);
-    return xr_bool(contained);
-}
-
 static XrValue cluster_health_snapshot_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]))
         return xr_null();
@@ -136,8 +122,8 @@ static XrValue cluster_health_snapshot_fn(XrVMRuntime *X, XrValue *args, int arg
 }
 
 static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 6 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
-        !XR_IS_INT(args[3]) || !XR_IS_BOOL(args[4]) || !XR_IS_INT(args[5]))
+    if (argc < 5 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
+        !XR_IS_INT(args[3]) || !XR_IS_BOOL(args[4]))
         return xr_null();
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
@@ -178,7 +164,6 @@ static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) 
     xr_amutex_unlock(&cluster->nodes_lock);
 
     if (detached) {
-        (void) xr_tombstone_registry_add(cluster->tombstones, detached->name, XR_TO_INT(args[5]));
         cluster_node_shutdown(detached);
         cluster_node_release(detached);
     }
@@ -387,22 +372,20 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 10 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (argc < 9 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
-        !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]) ||
-        !XR_IS_INT(args[9]))
+        !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]))
         return xr_bool(false);
 
     int64_t output_queue_high_watermark_value = XR_TO_INT(args[8]);
     uint64_t output_queue_high_watermark =
         output_queue_high_watermark_value > 0 ? (uint64_t) output_queue_high_watermark_value : 0;
-    if (output_queue_high_watermark == 0 || output_queue_high_watermark > SIZE_MAX ||
-        XR_TO_INT(args[9]) <= 0)
+    if (output_queue_high_watermark == 0 || output_queue_high_watermark > SIZE_MAX)
         return xr_bool(false);
 
     /* Xray owns the validated configuration and start ordering. This leaf
-     * materializes only resources that source cannot represent: TLS contexts,
-     * locked registries and the isolate-local provider slot. */
+     * materializes only TLS contexts, the locked peer table and the
+     * isolate-local provider slot. */
     XrCluster *cluster = (XrCluster *) xr_calloc(1, sizeof(*cluster));
     if (!cluster)
         return xr_bool(false);
@@ -440,11 +423,6 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         cluster->tls_enabled = true;
     }
 
-    cluster->tombstones = xr_tombstone_registry_new(16, XR_TO_INT(args[9]));
-    if (!cluster->tombstones) {
-        cluster_runtime_release(cluster);
-        return xr_bool(false);
-    }
     cluster->output_queue_high_watermark = (size_t) output_queue_high_watermark;
     atomic_store(&cluster->running, true);
     bool published =
@@ -750,17 +728,6 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
         cluster_runtime_release(c);
         return xr_null();
     }
-
-    /*
-     * Tombstone snapshot — number of nodes in the recently-dead
-     * table. A non-zero value across successive calls means we have
-     * peers that left the cluster within the source-selected retention window
-     * and will be refused if they try to rejoin. Useful for correlating split
-     * brain scenarios.
-     */
-    xr_object_instance_set_by_key(
-        X, info, "deadNodes",
-        xr_int(xr_tombstone_registry_count(c->tombstones, (int64_t) xr_time_monotonic_ms())));
 
     XrValue result = xr_object_instance_value(info);
     cluster_runtime_release(c);

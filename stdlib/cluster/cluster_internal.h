@@ -27,7 +27,6 @@
 #include "../../src/coro/xcluster_output_queue.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xphi_detector.h"
-#include "../../src/coro/xtombstone_registry.h"
 #include "../../src/io/xcluster_peer_transport.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
@@ -115,8 +114,6 @@ typedef struct XrCluster {
 
     /* Provider capacity selected by cluster.xr. */
     size_t output_queue_high_watermark;
-    XrTombstoneRegistry *tombstones;
-
     // Running state
     _Atomic(bool) running;
 
@@ -234,7 +231,6 @@ static inline void cluster_runtime_release(XrCluster *cluster) {
 
     XR_DCHECK(cluster->nodes == NULL, "cluster release requires a detached node list");
     XR_DCHECK(cluster->listener == NULL, "cluster release requires a detached listener");
-    xr_tombstone_registry_destroy(cluster->tombstones);
     if (cluster->tls_client_ctx)
         xr_tls_context_free(cluster->tls_client_ctx);
     if (cluster->tls_server_ctx)
