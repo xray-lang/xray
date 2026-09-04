@@ -440,6 +440,12 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
         case XR_CORE_IR_IMMEDIATE_TYPE:
             output->immediate.type_id = input->immediate.type_id;
             break;
+        case XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION:
+            output->immediate.provider_operation.contract_id =
+                input->immediate.provider_operation.contract_id;
+            output->immediate.provider_operation.operation_id =
+                input->immediate.provider_operation.operation_id;
+            break;
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -1660,6 +1666,82 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
     return XR_PROGRAM_BUILD_OK;
 }
 
+static bool provider_operation_flat_index(const XrCoreIrProgram *program,
+                                          XrStableId contract_id,
+                                          XrStableId operation_id,
+                                          size_t *index_out) {
+    size_t flat_index = 0u;
+    for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
+        const XrCoreIrProviderRequirement *requirement = &program->provider_requirements[provider];
+        for (uint32_t operation = 0; operation < requirement->operation_count; ++operation) {
+            if (stable_id_compare(requirement->contract_id, contract_id) == 0 &&
+                stable_id_compare(requirement->operation_ids[operation], operation_id) == 0) {
+                if (index_out)
+                    *index_out = flat_index;
+                return true;
+            }
+            ++flat_index;
+        }
+    }
+    return false;
+}
+
+static XrProgramBuildStatus validate_provider_call_requirements(const XrCoreIrProgram *program,
+                                                                char *diagnostic,
+                                                                size_t diagnostic_size) {
+    size_t operation_count = 0u;
+    for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
+        uint32_t count = program->provider_requirements[provider].operation_count;
+        if (count > SIZE_MAX - operation_count)
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        operation_count += count;
+    }
+    uint8_t *used = operation_count ? xr_calloc(operation_count, sizeof(*used)) : NULL;
+    if (operation_count && !used)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    for (uint32_t module = 0; module < program->module_count; ++module) {
+        const XrCoreIrModule *module_row = &program->modules[module];
+        for (uint32_t function = 0; function < module_row->function_count; ++function) {
+            const XrCoreIrFunction *function_row = &module_row->functions[function];
+            for (uint32_t block = 0; block < function_row->block_count; ++block) {
+                const XrCoreIrBlock *block_row = &function_row->blocks[block];
+                for (uint32_t instruction = 0; instruction < block_row->instruction_count;
+                     ++instruction) {
+                    const XrCoreIrInstruction *row = &block_row->instructions[instruction];
+                    if (row->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL)
+                        continue;
+                    if (row->immediate_kind != XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION) {
+                        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                                  "provider call lacks provider operation identity");
+                        xr_free(used);
+                        return XR_PROGRAM_BUILD_INVALID_INPUT;
+                    }
+                    size_t flat_index = 0u;
+                    if (!provider_operation_flat_index(
+                            program, row->immediate.provider_operation.contract_id,
+                            row->immediate.provider_operation.operation_id, &flat_index)) {
+                        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                                  "provider call is absent from requirements");
+                        xr_free(used);
+                        return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
+                    }
+                    used[flat_index] = 1u;
+                }
+            }
+        }
+    }
+    for (size_t index = 0; index < operation_count; ++index) {
+        if (used[index] != 0u)
+            continue;
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "provider requirement has no encoded call");
+        xr_free(used);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    xr_free(used);
+    return XR_PROGRAM_BUILD_OK;
+}
+
 XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
                                               XrCoreIrProgram **program_out, char *diagnostic,
                                               size_t diagnostic_size) {
@@ -1795,6 +1877,11 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
     }
     XrProgramBuildStatus status = validate_program(program, diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK) {
+        xr_core_ir_program_free(program);
+        return status;
+    }
+    status = validate_provider_call_requirements(program, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK) {
         xr_core_ir_program_free(program);
         return status;

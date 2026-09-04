@@ -1855,6 +1855,40 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "id": "provider-call-valid",
+      "operation": "core.provider.call",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "i64",
+        "result_type": "i64",
+        "operand_category": "value",
+        "result_category": "value",
+        "operand_ownership": "non-owner",
+        "result_ownership": "non-owner",
+        "provider_requirement": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "provider-call-missing-requirement",
+      "operation": "core.provider.call",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "i64",
+        "result_type": "i64",
+        "operand_category": "value",
+        "result_category": "value",
+        "operand_ownership": "non-owner",
+        "result_ownership": "non-owner",
+        "provider_requirement": false
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

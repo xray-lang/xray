@@ -45,6 +45,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
         case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
+        case XR_CORE_OP_CORE_PROVIDER_CALL:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
@@ -401,6 +402,10 @@ static void hash_immediate(XrSHA256Context *context, const XrBackendInstruction 
         case XR_CORE_IR_IMMEDIATE_TYPE:
             hash_u16(context, instruction->immediate.type_id);
             return;
+        case XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION:
+            hash_u32(context, instruction->immediate.provider_operation.requirement_index);
+            hash_u32(context, instruction->immediate.provider_operation.operation_index);
+            return;
     }
 }
 
@@ -498,17 +503,26 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INSTANCE_UNAVAILABLE, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INSTANCE_UNAVAILABLE;
     }
-    const XrValidatedProgram *program = xr_execution_lease_program(&lease);
-    const XrTargetProfile *profile = xr_execution_lease_profile(&lease);
+    XrValidatedProgram *program = xr_execution_lease_retain_program(&lease);
+    XrTargetProfile *profile = xr_execution_lease_retain_profile(&lease);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
+    if (!program || !profile || !machine) {
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+        (void) xr_execution_lease_release(&lease);
+        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INSTANCE_UNAVAILABLE, 0u, 0u, 0u, 0u);
+        return XR_BACKEND_INSTANCE_UNAVAILABLE;
+    }
     XrBackendIR *ir = xr_calloc(1u, sizeof(*ir));
     if (!ir) {
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
         (void) xr_execution_lease_release(&lease);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
         return XR_BACKEND_OUT_OF_MEMORY;
     }
-    ir->program = xr_validated_program_retain(program);
-    ir->profile = xr_target_profile_retain(profile);
+    ir->program = program;
+    ir->profile = profile;
     ir->execution_id = xr_execution_instance_id(instance);
     ir->backend_id = xr_backend_compute_id();
     ir->optimization_policy_id = xr_backend_compute_optimization_policy_id(options);
@@ -520,7 +534,7 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
     ir->operating_system = machine ? machine->operating_system : 0u;
     ir->architecture = machine ? machine->architecture : 0u;
     ir->native_abi = machine ? machine->native_abi : 0u;
-    ir->endianness = machine ? machine->data_layout.endian : 0u;
+    ir->endianness = machine ? (uint16_t) machine->data_layout.endian : 0u;
     ir->constant_count = program->constant_count;
     if (program->function_count > options->max_functions ||
         (ir->pointer_width != 32u && ir->pointer_width != 64u)) {

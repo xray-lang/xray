@@ -770,6 +770,7 @@ add_xr_program_aot_native_case(operating_system operating-system 4)
 add_xr_program_aot_native_case(architecture architecture 5)
 add_xr_program_aot_native_case(native_abi native-abi 9)
 add_xr_program_aot_native_case(endianness endianness 1)
+add_xr_program_aot_native_case(provider_call provider-call 42)
 
 set(XR_PROGRAM_AOT_INVOKE_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_sealed_invoke.c)

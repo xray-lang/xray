@@ -60,6 +60,15 @@ typedef struct XrReferenceBudget {
     uint32_t max_call_depth;
 } XrReferenceBudget;
 
+typedef bool (*XrReferenceProviderCallI64)(void *context, uint32_t requirement_index,
+                                           uint32_t operation_index, int64_t argument,
+                                           int64_t *result_out);
+
+typedef struct XrReferenceProviderBinding {
+    void *context;
+    XrReferenceProviderCallI64 call_i64;
+} XrReferenceProviderBinding;
+
 typedef enum XrReferenceOutcomeKind {
     XR_REFERENCE_OUTCOME_RETURN = 0,
     XR_REFERENCE_OUTCOME_TRAP,
@@ -77,6 +86,7 @@ typedef enum XrReferenceTrap {
     XR_REFERENCE_TRAP_EXPLICIT = 4,
     XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE = 5,
     XR_REFERENCE_TRAP_VARIANT_TAG_MISMATCH = 6,
+    XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED = 7,
 } XrReferenceTrap;
 
 typedef struct XrReferenceOutcome {
@@ -92,5 +102,9 @@ XR_FUNC XrReferenceBudget xr_reference_default_budget(void);
 XR_FUNC XrReferenceOutcome xr_reference_evaluate(
     const XrValidatedProgram *program, uint32_t function_id, const XrReferenceValue *arguments,
     uint32_t argument_count, const XrReferenceProfile *profile, const XrReferenceBudget *budget);
+XR_FUNC XrReferenceOutcome xr_reference_evaluate_bound(
+    const XrValidatedProgram *program, uint32_t function_id, const XrReferenceValue *arguments,
+    uint32_t argument_count, const XrReferenceProfile *profile, const XrReferenceBudget *budget,
+    const XrReferenceProviderBinding *providers);
 
 #endif /* XR_REFERENCE_EVALUATOR_H */

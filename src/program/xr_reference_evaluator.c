@@ -23,6 +23,7 @@ typedef struct XrReferenceCallableValue XrReferenceCallableValue;
 
 typedef struct EvalContext {
     const XrValidatedProgram *program;
+    const XrReferenceProviderBinding *providers;
     XrReferenceProfile profile;
     XrReferenceBudget budget;
     uint64_t steps;
@@ -839,6 +840,21 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value.kind = XR_REFERENCE_VALUE_TARGET_ENDIAN;
                     produced.as.value.as.target_enum = context->profile.endianness;
                     break;
+                case XR_CORE_OP_CORE_PROVIDER_CALL: {
+                    int64_t provider_result = 0;
+                    if (!context->providers || !context->providers->call_i64 ||
+                        !context->providers->call_i64(
+                            context->providers->context,
+                            instruction->immediate.provider_operation.requirement_index,
+                            instruction->immediate.provider_operation.operation_index,
+                            values[instruction->operands[0]].as.value.as.i64, &provider_result)) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_REFERENCE_VALUE_I64;
+                    produced.as.value.as.i64 = provider_result;
+                    break;
+                }
                 case XR_CORE_OP_CORE_CALLABLE_PACK: {
                     XrReferenceCallableValue *carrier = allocate_callable(context);
                     if (!carrier) {
@@ -1040,13 +1056,14 @@ XrReferenceBudget xr_reference_default_budget(void) {
     return budget;
 }
 
-XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint32_t function_id,
-                                         const XrReferenceValue *arguments, uint32_t argument_count,
-                                         const XrReferenceProfile *profile,
-                                         const XrReferenceBudget *budget) {
+XrReferenceOutcome xr_reference_evaluate_bound(
+    const XrValidatedProgram *program, uint32_t function_id, const XrReferenceValue *arguments,
+    uint32_t argument_count, const XrReferenceProfile *profile, const XrReferenceBudget *budget,
+    const XrReferenceProviderBinding *providers) {
     XrReferenceBudget selected = budget ? *budget : xr_reference_default_budget();
     EvalContext context = {
         .program = program,
+        .providers = providers,
         .profile = profile ? *profile : (XrReferenceProfile) {0},
         .budget = selected,
     };
@@ -1085,4 +1102,12 @@ XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     free_aggregates(&context);
     return result;
+}
+
+XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint32_t function_id,
+                                         const XrReferenceValue *arguments, uint32_t argument_count,
+                                         const XrReferenceProfile *profile,
+                                         const XrReferenceBudget *budget) {
+    return xr_reference_evaluate_bound(program, function_id, arguments, argument_count, profile,
+                                       budget, NULL);
 }

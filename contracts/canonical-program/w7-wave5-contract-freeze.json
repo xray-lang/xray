@@ -539,28 +539,82 @@
           "evidence": []
         },
         "corespec": {
-          "status": "ABSENT_CANONICAL",
-          "evidence": []
+          "status": "CANONICAL_COMPLETE",
+          "evidence": [
+            {
+              "path": "xisa/core/registry.json",
+              "tokens": [
+                "\"spelling\": \"core.provider.call\"",
+                "\"profile_dependency\": \"provider_contract\""
+              ]
+            }
+          ]
         },
         "program": {
-          "status": "ABSENT_PROVIDER_REQUIREMENT_TABLE",
-          "evidence": []
+          "status": "CANONICAL_COMPLETE",
+          "evidence": [
+            {
+              "path": "xisa/program/schema.json",
+              "tokens": [
+                "provider_operation_immediate_contract"
+              ]
+            },
+            {
+              "path": "src/program/xr_program_encode.c",
+              "tokens": [
+                "XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION",
+                "provider_operation_index"
+              ]
+            }
+          ]
         },
         "verifier": {
-          "status": "ABSENT_PROVIDER_CALL_VERIFICATION",
-          "evidence": []
+          "status": "CANONICAL_COMPLETE",
+          "evidence": [
+            {
+              "path": "src/program/xr_program_verify.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
+                "verify_provider_requirements_are_exact"
+              ]
+            }
+          ]
         },
         "reference": {
-          "status": "ABSENT_PROVIDER_CALL_EXECUTION",
-          "evidence": []
+          "status": "CANONICAL_COMPLETE",
+          "evidence": [
+            {
+              "path": "src/program/xr_reference_evaluator.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
+                "XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED"
+              ]
+            }
+          ]
         },
         "vm": {
-          "status": "ABSENT_PROVIDER_CALL_EXECUTION",
-          "evidence": []
+          "status": "CANONICAL_COMPLETE",
+          "evidence": [
+            {
+              "path": "src/vm/xr_program_vm.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
+                "xr_execution_lease_provider_call_i64"
+              ]
+            }
+          ]
         },
         "aot": {
-          "status": "ABSENT_PROVIDER_CALL_EXECUTION",
-          "evidence": []
+          "status": "CANONICAL_COMPLETE",
+          "evidence": [
+            {
+              "path": "src/aot/program/xr_backend_ir_emit_c.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
+                "XrAotProviderCallI64"
+              ]
+            }
+          ]
         },
         "legacy_owner": {
           "status": "FOUNDATION_PROFILE_AND_INSTANCE_AUTHORITY",

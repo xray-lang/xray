@@ -68,12 +68,22 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
     XrCoreIrKey value_40 = key("helper:value:40");
     XrCoreIrKey value_2 = key("helper:value:2");
     XrCoreIrKey value_sum = key("helper:value:sum");
+    XrCoreIrKey value_provider_a = key("helper:value:provider-a");
+    XrCoreIrKey value_provider_b = key("helper:value:provider-b");
+    XrCoreIrKey value_provider_c = key("helper:value:provider-c");
     XrCoreIrKey value_call = key("main:value:call");
     XrCoreIrKey helper_key = key("function:helper:i64");
     XrCoreIrKey main_key = key("function:main:i64");
     XrCoreIrKey add_operands[] = {value_40, value_2};
-    XrCoreIrKey helper_return_operands[] = {value_sum};
+    XrCoreIrKey provider_a_operands[] = {value_sum};
+    XrCoreIrKey provider_b_operands[] = {value_provider_a};
+    XrCoreIrKey provider_c_operands[] = {value_provider_b};
+    XrCoreIrKey helper_return_operands[] = {value_provider_c};
     XrCoreIrKey main_return_operands[] = {value_call};
+    XrStableId contract_a = stable_id("provider-contract:a");
+    XrStableId contract_b = stable_id("provider-contract:b");
+    XrStableId operation_a = stable_id("provider-operation:a");
+    XrStableId operation_b = stable_id("provider-operation:b");
     XrCoreIrInstructionInput helper_instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = value_40,
@@ -92,6 +102,30 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
          .operand_count = 2,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
          .immediate.u32 = 0},
+        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
+         .result = value_provider_a,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = provider_a_operands,
+         .operand_count = 1,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
+         .immediate.provider_operation = {.contract_id = contract_a,
+                                          .operation_id = operation_a}},
+        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
+         .result = value_provider_b,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = provider_b_operands,
+         .operand_count = 1,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
+         .immediate.provider_operation = {.contract_id = contract_a,
+                                          .operation_id = operation_b}},
+        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
+         .result = value_provider_c,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = provider_c_operands,
+         .operand_count = 1,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
+         .immediate.provider_operation = {.contract_id = contract_b,
+                                          .operation_id = operation_a}},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = helper_return_operands,
@@ -130,6 +164,8 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
     XrCoreIrFunctionInput helper = {
         .key = helper_key,
         .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_PROVIDER_CALL,
+        .capability_mask = XR_CORE_CAPABILITY_PROVIDER_BINDING,
         .entry_block = helper_block_key,
         .blocks = helper_blocks,
         .block_count = 1,
@@ -137,6 +173,8 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
     XrCoreIrFunctionInput main = {
         .key = main_key,
         .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_PROVIDER_CALL,
+        .capability_mask = XR_CORE_CAPABILITY_PROVIDER_BINDING,
         .entry_block = main_block_key,
         .blocks = main_blocks,
         .block_count = 1,
@@ -159,10 +197,6 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
     }
     XrCoreIrKey profile = key(profile_name);
     uint16_t features[] = {XR_CORE_FEATURE_CORE_BASE};
-    XrStableId contract_a = stable_id("provider-contract:a");
-    XrStableId contract_b = stable_id("provider-contract:b");
-    XrStableId operation_a = stable_id("provider-operation:a");
-    XrStableId operation_b = stable_id("provider-operation:b");
     XrStableId operations_ab[] = {operation_a, operation_b};
     XrStableId operations_ba[] = {operation_b, operation_a};
     XrCoreIrProviderRequirementInput forward_requirements[] = {
@@ -227,8 +261,8 @@ static void test_determinism_roundtrip_and_identity(void) {
 
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
-    CHECK(first.size == 343u);
-    CHECK(strcmp(id_hex, "1dde4857de270e7a241db40071a4a0685198c111d9e0bd1b46362c1c2623dc38") == 0);
+    CHECK(first.size == 379u);
+    CHECK(strcmp(id_hex, "f94f45c0bc11136512b189a28290de0631196eb13d4efc582a2b10a59576f6e1") == 0);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
 
     xr_program_artifact_free(&reencoded);

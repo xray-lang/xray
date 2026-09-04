@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 43u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 44u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -85,6 +85,8 @@ static void test_operation_metadata(void) {
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT);
     const XrCoreOperationSpec *variant =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_PROJECT);
+    const XrCoreOperationSpec *provider =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL);
 
     CHECK(constant != NULL);
     CHECK(constant->operand_arity == 0u);
@@ -147,6 +149,13 @@ static void test_operation_metadata(void) {
     CHECK(variant->operand_arity == 1u);
     CHECK(variant->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
     CHECK(variant->effect_mask == UINT32_C(1));
+
+    CHECK(provider != NULL);
+    CHECK(provider->operand_arity == 1u);
+    CHECK(provider->result_type == XR_CORE_TYPE_I64);
+    CHECK(provider->effect_mask ==
+          (XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_PROVIDER_CALL));
+    CHECK(provider->capability_mask == XR_CORE_CAPABILITY_PROVIDER_BINDING);
 }
 
 int main(void) {
