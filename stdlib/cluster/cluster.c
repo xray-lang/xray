@@ -443,7 +443,7 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
 int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
                           const XrClusterTlsOptions *tls, int64_t heartbeat_interval_ms,
                           int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
-                          double phi_threshold) {
+                          double phi_threshold, uint32_t topic_delivery_fanout_max) {
     if (X->cluster)
         return -1;  // already running
     if (!name)
@@ -483,12 +483,9 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
 
     xr_amutex_init(&c->nodes_lock);
     xr_amutex_init(&c->dead_nodes_lock);
-    xr_amutex_init(&c->topics_lock);
 
-    /* Topic routing trie — allocated eagerly so subscribe never has to
-     * worry about a NULL root under the lock. Failure here is fatal to
-     * start: pub/sub is a first-class feature, not a best-effort add-on. */
-    if (cluster_topics_init(c) != 0) {
+    c->topics = xr_topic_registry_new(topic_delivery_fanout_max);
+    if (!c->topics) {
         if (c->tls_client_ctx)
             xr_tls_context_free(c->tls_client_ctx);
         if (c->tls_server_ctx)
@@ -522,6 +519,7 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
             xr_tls_context_free(c->tls_client_ctx);
         if (c->tls_server_ctx)
             xr_tls_context_free(c->tls_server_ctx);
+        xr_topic_registry_destroy(c->topics);
         xr_secure_wipe(c->secret, sizeof(c->secret));
         xr_free(c);
         return -1;
@@ -586,7 +584,8 @@ static void cluster_runtime_destroy(XrCluster *c) {
     XR_DCHECK(c->nodes == NULL, "cluster destroy requires a detached node list");
 
     cluster_discovery_stop(c);
-    cluster_topics_destroy(c);
+    xr_topic_registry_destroy(c->topics);
+    c->topics = NULL;
 
     xr_amutex_lock(&c->monitors_lock);
     XrNodeMonitor *mon = c->monitors;
@@ -1101,10 +1100,11 @@ static bool cluster_binding_text_fits(const XrString *text, size_t max_length, b
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 12 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (argc < 13 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
         !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]) ||
-        !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]) || !XR_IS_FLOAT(args[11]))
+        !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]) || !XR_IS_FLOAT(args[11]) ||
+        !XR_IS_INT(args[12]))
         return xr_bool(false);
 
     /* The port range is cluster.xr's rule, checked in start() before this leaf
@@ -1140,8 +1140,13 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         tls_ptr = &tls_opts;
     }
 
+    int64_t fanout_max = XR_TO_INT(args[12]);
+    if (fanout_max <= 0 || fanout_max > UINT32_MAX)
+        return xr_bool(false);
+
     int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]),
-                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_FLOAT(args[11]));
+                                   XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_FLOAT(args[11]),
+                                   (uint32_t) fanout_max);
     return xr_bool(rc == 0);
 }
 
@@ -1324,20 +1329,37 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
     }
 }
 
-// xray binding: cluster.send(topic, move envelope)
-static XrValue cluster_send_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[2]))
+static XrValue cluster_publish_local_primitive(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_STRING(args[0]))
         return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);
-
     const uint8_t *envelope = NULL;
     size_t envelope_len = 0;
     if (!xr_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
         return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
-
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster || !atomic_load(&cluster->running))
+        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
     XrString *topic = XR_TO_STRING(args[0]);
-    XrClusterDelivery delivery = cluster_transport_send(
-        X, topic->data, envelope, (uint32_t) envelope_len, (uint8_t) XR_TO_INT(args[2]));
-    return xr_int((int64_t) delivery);
+    return xr_int((int64_t) xr_topic_registry_deliver(cluster->topics, X, topic->data, envelope,
+                                                      (uint32_t) envelope_len));
+}
+
+static XrValue cluster_publish_remote_primitive(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[2]))
+        return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);
+    const uint8_t *envelope = NULL;
+    size_t envelope_len = 0;
+    XrString *topic = XR_TO_STRING(args[0]);
+    if (topic->length == 0 || topic->length > XR_TOPIC_PATTERN_MAX ||
+        !xr_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX ||
+        envelope_len > XR_FRAME_MAX_PAYLOAD - 2u - topic->length)
+        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster || !atomic_load(&cluster->running))
+        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+    return xr_int((int64_t) cluster_transport_broadcast(cluster, NULL, (uint8_t) XR_TO_INT(args[2]),
+                                                        topic->data, envelope,
+                                                        (uint32_t) envelope_len));
 }
 
 // xray binding: cluster.listen(pattern)
@@ -1347,8 +1369,12 @@ static XrValue cluster_listen_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
     /* listen() in cluster.xr rejects a capacity outside the bound before this
      * leaf is reached, so the bound is not restated here. */
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster)
+        return xr_null();
     XrString *pattern_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = cluster_transport_listen(X, pattern_str->data, (uint32_t) XR_TO_INT(args[1]));
+    XrChannel *ch = xr_topic_registry_subscribe(cluster->topics, X, pattern_str->data,
+                                                (uint32_t) XR_TO_INT(args[1]));
     if (!ch)
         return xr_null();
     return xr_value_from_channel(ch);
@@ -1456,7 +1482,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
 
     // Listener count is diagnostic and may be momentarily stale.
-    xr_object_instance_set_by_key(X, info, "listeners", xr_int(c->topic_sub_count));
+    xr_object_instance_set_by_key(X, info, "listeners", xr_int(xr_topic_registry_count(c->topics)));
 
     /*
      * Tombstone snapshot — number of nodes in the recently-dead

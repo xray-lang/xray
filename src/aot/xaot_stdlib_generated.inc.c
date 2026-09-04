@@ -46,8 +46,10 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "cluster.__join";
     if (strcmp(symbol, "cluster.__stop") == 0)
         return "cluster.__stop";
-    if (strcmp(symbol, "cluster.__send") == 0)
-        return "cluster.__send";
+    if (strcmp(symbol, "cluster.__publishLocal") == 0)
+        return "cluster.__publishLocal";
+    if (strcmp(symbol, "cluster.__publishRemote") == 0)
+        return "cluster.__publishRemote";
     if (strcmp(symbol, "cluster.__listen") == 0)
         return "cluster.__listen";
     return NULL;
@@ -92,7 +94,9 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__stop") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__send") == 0)
+    if (strcmp(symbol, "cluster.__publishLocal") == 0)
+        return XAOT_STDLIB_CAP_CHANNEL;
+    if (strcmp(symbol, "cluster.__publishRemote") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__listen") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;

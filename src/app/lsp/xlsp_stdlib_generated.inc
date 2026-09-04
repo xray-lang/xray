@@ -95,6 +95,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"FRAME_CORO_EXIT", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"ENVELOPE_HEADER_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"SUBSCRIPTION_CAPACITY_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"TOPIC_DELIVERY_FANOUT_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"HEARTBEAT_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"HEARTBEAT_TIMEOUT_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"MAX_MISSED_HEARTBEATS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
@@ -114,7 +115,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, state: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Private scalar snapshot for one remote cluster node", NULL, 0},
     {"__ClusterSnapshot", XLSP_SYM_CLASS, "type __ClusterSnapshot = { self: string, port: i64, running: bool, nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: __ClusterTlsSnapshot }", "Private scalar snapshot read from the cluster runtime", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 82
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 83
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

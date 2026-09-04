@@ -89,6 +89,7 @@ export const ENVELOPE_HEADER_SIZE = 64
 // A subscription channel is bounded. Zero would drop every message and the
 // upper bound is what the channel subsystem will allocate.
 export const SUBSCRIPTION_CAPACITY_MAX = 1048576
+export const TOPIC_DELIVERY_FANOUT_MAX = 256
 
 // The heartbeat schedule. These are the values a node runs with; the leaf is
 // told them rather than holding a second copy.
@@ -873,7 +874,7 @@ export fn start(config: ClusterConfig) -> bool {
     if (!_fitsCString(secret, SHARED_SECRET_MAX_BYTES, true)) { return false }
     if (config.tls == null) {
         return __start(config.name, config.port, secret, false, "", "", "", false, interval,
-                       timeout, missed, PHI_THRESHOLD)
+                       timeout, missed, PHI_THRESHOLD, TOPIC_DELIVERY_FANOUT_MAX)
     }
     var tls = config.tls!
     var caFile = tls.caFile ?? ""
@@ -895,7 +896,8 @@ export fn start(config: ClusterConfig) -> bool {
         interval,
         timeout,
         missed,
-        PHI_THRESHOLD
+        PHI_THRESHOLD,
+        TOPIC_DELIVERY_FANOUT_MAX
     )
 }
 
@@ -928,6 +930,39 @@ export fn listen(pattern: string, capacity: i64 = 1024) -> Channel<Buffer>? {
 // the caller misspelled is wrong whether or not this node is running, so it is
 // reported as InvalidTopic even after stop(), where the leaf used to answer
 // Unavailable and hide the mistake.
+fn _deliveryFromCode(code: i64) -> ClusterDelivery {
+    if (code == 0) { return ClusterDelivery.Accepted }
+    if (code == 1) { return ClusterDelivery.InvalidTopic }
+    if (code == 2) { return ClusterDelivery.InvalidEnvelope }
+    if (code == 3) { return ClusterDelivery.Unavailable }
+    if (code == 4) { return ClusterDelivery.Overloaded }
+    return ClusterDelivery.Disconnected
+}
+
+// One publication has two independent destinations. Success wins because at
+// least one subscriber accepted the envelope; overload wins over a completely
+// disconnected route, and caller errors remain errors even if another route
+// could not observe them.
+fn _combinePublicationDelivery(local: ClusterDelivery,
+                               remote: ClusterDelivery) -> ClusterDelivery {
+    if (local == ClusterDelivery.InvalidTopic || remote == ClusterDelivery.InvalidTopic) {
+        return ClusterDelivery.InvalidTopic
+    }
+    if (local == ClusterDelivery.InvalidEnvelope || remote == ClusterDelivery.InvalidEnvelope) {
+        return ClusterDelivery.InvalidEnvelope
+    }
+    if (local == ClusterDelivery.Accepted || remote == ClusterDelivery.Accepted) {
+        return ClusterDelivery.Accepted
+    }
+    if (local == ClusterDelivery.Overloaded || remote == ClusterDelivery.Overloaded) {
+        return ClusterDelivery.Overloaded
+    }
+    if (local == ClusterDelivery.Unavailable || remote == ClusterDelivery.Unavailable) {
+        return ClusterDelivery.Unavailable
+    }
+    return ClusterDelivery.Disconnected
+}
+
 export fn send(topic: string, envelope: move Buffer,
                hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT) -> ClusterDelivery {
     if (!validTopicName(topic)) { return ClusterDelivery.InvalidTopic }
@@ -935,11 +970,7 @@ export fn send(topic: string, envelope: move Buffer,
     if (len(envelope.asBytes()) < ENVELOPE_HEADER_SIZE) {
         return ClusterDelivery.InvalidEnvelope
     }
-    var code = __send(topic, move envelope, hopLimit)
-    if (code == 0) { return ClusterDelivery.Accepted }
-    if (code == 1) { return ClusterDelivery.InvalidTopic }
-    if (code == 2) { return ClusterDelivery.InvalidEnvelope }
-    if (code == 3) { return ClusterDelivery.Unavailable }
-    if (code == 4) { return ClusterDelivery.Overloaded }
-    return ClusterDelivery.Disconnected
+    var local = _deliveryFromCode(__publishLocal(topic, envelope))
+    var remote = _deliveryFromCode(__publishRemote(topic, move envelope, hopLimit))
+    return _combinePublicationDelivery(local, remote)
 }

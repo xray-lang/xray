@@ -122,7 +122,7 @@ class = "runtime_leaf"
 abi = "none; constructs a bounded channel and registers a topic subscription"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through cluster_transport_listen on the VM and xrt_cluster_listen on AOT. The channel itself is shared; the subscription table is a trie on the VM and a linked list on AOT. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen(): the three copies of those two rules -- the VM binding, the VM transport and the AOT entry point -- are gone"
+provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through src/coro/xtopic_registry.c xr_topic_registry_subscribe on the VM and xrt_cluster_listen on AOT. The channel itself is shared; the subscription table is a trie on the VM and a linked list on AOT. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen()"
 deletion_trigger = "when cluster.xr can construct a Channel and register a topic pattern directly, which needs the channel constructor and the topic table to be surfaces Xray source can name"
 
 [[leaf]]
@@ -167,13 +167,23 @@ deletion_trigger = "when cluster.xr holds the node name it passed to cluster.__s
 
 [[leaf]]
 module = "cluster"
-symbol = "__send"
+symbol = "__publishLocal"
 class = "runtime_leaf"
-abi = "none on the sending call itself: it moves buffer ownership, matches the topic trie and enqueues. The only host call is a write(2) on the node's notify pipe; the network bytes leave later on a writer coroutine"
+abi = "none; copies one validated buffer into matching local subscription channels"
 ownership = "none"
 effect = "nothrow"
-provider = "the cluster transport's own queues and the Xray channel subsystem. VM stdlib/cluster/cluster_topic.c cluster_transport_send; AOT stdlib/cluster/cluster_aot.c xrt_cluster_send, an independent lock-and-list implementation over OS threads. The leaf returns only a private integer code; cluster.xr alone maps it to ClusterDelivery. The two providers still share the topic matching in cluster_topic_core.h and the native reader-loop projection in src/io/xcluster_wire.c. One divergence is left and is not this leaf's to close: the VM re-forwards a received envelope to every other peer with the hop count decremented (cluster_topic.c cluster_transport_handle_frame) while the AOT reader delivers locally and never reads the hop byte at all (cluster_aot.c aot_cluster_process_transport), so a three-node chain reaches its far end on one backend and not the other"
-deletion_trigger = "when the topic table and the per-node outbound queue are surfaces Xray source can name, so cluster.xr can do the match and the enqueue itself"
+provider = "the Xray channel subsystem. The VM uses src/coro/xtopic_registry.c's synchronized trie projection and AOT uses stdlib/cluster/cluster_aot.c's synchronized subscription index. cluster.xr owns validation, publication order, fanout limit and result precedence"
+deletion_trigger = "when cluster.xr can construct Channels and hold a synchronized topic index directly"
+
+[[leaf]]
+module = "cluster"
+symbol = "__publishRemote"
+class = "runtime_leaf"
+abi = "none on the publishing call itself: it enqueues one framed buffer per connected peer and signals the writer through its notify pipe"
+ownership = "none"
+effect = "nothrow"
+provider = "the cluster transport output queues in stdlib/cluster/cluster_topic.c and stdlib/cluster/cluster_aot.c. cluster.xr owns validation, local-versus-remote publication order, hop budget and result precedence"
+deletion_trigger = "when per-node transport queues are surfaces cluster.xr can name and enqueue into"
 
 [[leaf]]
 module = "cluster"
@@ -182,7 +192,7 @@ class = "runtime_leaf"
 abi = "socket(2), setsockopt(2) SO_REUSEADDR and IPV6_V6ONLY, bind(2), listen(2) for the node listener; OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray scheduler, which the leaf asks to publish the heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT (stdlib/cluster/cluster_aot.c xrt_cluster_start) discards all six TLS arguments and returns false outright when tlsEnabled is set, and runs its accept loop on an OS thread instead. The node name, the port range and the health policy are cluster.xr's: start() refuses an illegal name or port before the leaf is reached, and passes the heartbeat schedule plus PHI_THRESHOLD down rather than letting either backend default them"
+provider = "the Xray scheduler, which the leaf asks to publish the heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT (stdlib/cluster/cluster_aot.c xrt_cluster_start) discards all six TLS arguments and returns false outright when tlsEnabled is set, and runs its accept loop on an OS thread instead. The node name, port range, health policy and topic delivery fanout limit are cluster.xr's and are passed down as normalized scalars"
 deletion_trigger = "when cluster.xr can publish its own coroutines and build its own listener over net's leaves, and the AOT half stops declining TLS so both backends start the same node"
 
 [[leaf]]

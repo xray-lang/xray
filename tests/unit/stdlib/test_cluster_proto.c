@@ -19,8 +19,6 @@
 #include "../test_framework.h"
 #include "../../../stdlib/cluster/cluster_internal.h"
 #include "../../../src/io/xdiscovery_announcement.h"
-/* XR_CLUSTER_TOPIC_PATTERN_MAX lives here; cluster_internal.h does not pull it in. */
-#include "../../../stdlib/cluster/cluster_topic_core.h"
 
 #include <string.h>
 
@@ -541,7 +539,7 @@ TEST(cluster_phi_projection_uses_bounded_history) {
  * WHY THIS CASE EXISTS:
  *   stdlib/cluster/cluster.xr is the normative statement of the cluster wire
  *   format and is compiled by both the VM and the AOT backend;
- *   xcluster_wire.h, cluster_internal.h and cluster_topic_core.h are the native
+ *   xcluster_wire.h, cluster_internal.h and xtopic_registry.h are the native
  *   reader-loop projection of the same numbers. Nothing in the build makes one
  *   derive from the other, so the two can drift silently. The literals below
  *   are transcribed from the `export const` block of cluster.xr on purpose —
@@ -557,8 +555,7 @@ TEST(cluster_wire_constants_match_the_xray_surface) {
     ASSERT_EQ_INT(XR_ADDRESS_HOST_MAX, 255);
     ASSERT_EQ_INT(XR_CLUSTER_SECRET_MAX, 63);
 
-    /* cluster.xr states one TOPIC_PATTERN_MAX; C spells it twice. */
-    ASSERT_EQ_INT(XR_CLUSTER_TOPIC_PATTERN_MAX, 127);
+    /* cluster.xr states TOPIC_PATTERN_MAX; the inbound projection mirrors it. */
     ASSERT_EQ_INT(XR_TOPIC_PATTERN_MAX, 127);
 
     ASSERT_EQ_INT(XR_CORO_NAME_MAX, 127);
@@ -581,6 +578,23 @@ TEST(cluster_wire_constants_match_the_xray_surface) {
     ASSERT_EQ_INT(XR_FRAME_CORO_EXIT, 0x0A);
 }
 
+TEST(cluster_topic_projection_matches_the_xray_surface) {
+    ASSERT_TRUE(xr_topic_name_valid("events.user"));
+    ASSERT_FALSE(xr_topic_name_valid(""));
+    ASSERT_FALSE(xr_topic_name_valid("events..user"));
+    ASSERT_FALSE(xr_topic_name_valid("events.*"));
+    ASSERT_FALSE(
+        xr_topic_name_valid("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+
+    ASSERT_TRUE(xr_topic_pattern_matches("events.*", "events.user"));
+    ASSERT_FALSE(xr_topic_pattern_matches("events.*", "events.user.login"));
+    ASSERT_TRUE(xr_topic_pattern_matches("events.>", "events.user"));
+    ASSERT_TRUE(xr_topic_pattern_matches("events.>", "events.user.login"));
+    ASSERT_FALSE(xr_topic_pattern_matches("events.>", "events"));
+    ASSERT_FALSE(xr_topic_pattern_matches("events.>.tail", "events.user.tail"));
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Cluster transport protocol");
@@ -596,5 +610,6 @@ RUN_TEST(cluster_frame_decoders_reject_truncated_payloads);
 RUN_TEST(cluster_discovery_announcement_is_byte_exact);
 RUN_TEST(cluster_phi_projection_uses_bounded_history);
 RUN_TEST(cluster_wire_constants_match_the_xray_surface);
+RUN_TEST(cluster_topic_projection_matches_the_xray_surface);
 
 TEST_MAIN_END()

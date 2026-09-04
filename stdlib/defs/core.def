@@ -2041,11 +2041,11 @@ module cluster {
   }
 
   fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiThreshold: f64): bool"
+    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiThreshold: f64, topicDeliveryFanoutMax: i64): bool"
     doc: "Start the backend-neutral cluster runtime from normalized scalar configuration and the health policy cluster.xr decides"
     vm: "cluster_start_primitive"
-    argc: 12
-    arg_spec: "svsvsssvvvvv"
+    argc: 13
+    arg_spec: "svsvsssvvvvvv"
     aot: "xrt_cluster_start"
     aot_direct: true
     link_object: true
@@ -2151,13 +2151,29 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn __send {
+  fn __publishLocal {
+    signature: "(topic: string, envelope: Buffer): i64"
+    doc: "Offer one validated opaque service envelope to the synchronized local subscription registry"
+    vm: "cluster_publish_local_primitive"
+    argc: 2
+    arg_spec: "sv"
+    aot: "xrt_cluster_publish_local"
+    ret: "i64"
+    aot_direct: true
+    link_object: true
+    layer: "runtime"
+    caps: "channel"
+    effect: "nothrow"
+    allocation: "may_heap"
+  }
+
+  fn __publishRemote {
     signature: "(topic: string, envelope: move Buffer, hopLimit: i64): i64"
-    doc: "Hand one canonical opaque service envelope to the transport and return a private delivery code"
-    vm: "cluster_send_primitive"
+    doc: "Broadcast one validated opaque service envelope to connected native transports"
+    vm: "cluster_publish_remote_primitive"
     argc: 3
     arg_spec: "svv"
-    aot: "xrt_cluster_send"
+    aot: "xrt_cluster_publish_remote"
     ret: "i64"
     aot_direct: true
     link_object: true

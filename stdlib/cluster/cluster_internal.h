@@ -24,6 +24,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xphi_detector.h"
+#include "../../src/coro/xtopic_registry.h"
 #include "../../src/io/xcluster_wire.h"
 #include "../../src/io/xcluster_auth.h"
 #include "../../src/module/xmodule.h"
@@ -217,10 +218,6 @@ typedef struct XrRemoteCoroMonitor XrRemoteCoroMonitor;
 
 /* ========== Cluster State ========== */
 
-#define XR_TOPIC_PATTERN_MAX 127
-
-struct XrTopicTrieNode;  // forward decl — definition in cluster_topic.c
-
 typedef struct XrCluster {
     _Atomic(uint32_t) ref_count;
     _Atomic(bool) stop_started;
@@ -235,24 +232,8 @@ typedef struct XrCluster {
     int node_count;
     XrAdaptiveMutex nodes_lock;
 
-    /*
-     * Topic Pub/Sub registry.
-     *
-     * Route lookups go through a NATS-style segment trie (see
-     * cluster_topic.c) instead of the old flat hash of subscriptions.
-     * The trie makes send() cost O(topic_depth) instead of
-     * O(total_subscriptions) — critical for applications that maintain
-     * thousands of subscriptions of which only a handful match any
-     * given message. The root node is embedded to keep the hot path
-     * a single dereference.
-     *
-     * topic_root is always live between start_ex and stop; stop
-     * recursively destroys the tree and resets it back to an empty
-     * root.
-     */
-    struct XrTopicTrieNode *topic_root;  // trie root; NULL before init
-    int topic_sub_count;
-    XrAdaptiveMutex topics_lock;
+    /* Synchronized channel index for the topic policy owned by cluster.xr. */
+    XrTopicRegistry *topics;
 
     // Heartbeat configuration
     int64_t heartbeat_interval_ms;
@@ -381,7 +362,8 @@ typedef struct XrClusterTlsOptions {
 int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
                           const char *secret, const XrClusterTlsOptions *tls,
                           int64_t heartbeat_interval_ms, int64_t heartbeat_timeout_ms,
-                          int64_t max_missed_heartbeats, double phi_threshold);
+                          int64_t max_missed_heartbeats, double phi_threshold,
+                          uint32_t topic_delivery_fanout_max);
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
 
@@ -444,25 +426,12 @@ void cluster_monitor_fire(XrCluster *c, const char *node_name);
 
 /* ========== Topic Pub/Sub ========== */
 
-typedef struct XrTopicSubscription {
-    char pattern[XR_TOPIC_PATTERN_MAX + 1];  // e.g. "events.*" or "chat.room1"
-    struct XrChannel *notify_ch;             // Delivers published values
-    struct XrTopicSubscription *next;        // Hash chain
-} XrTopicSubscription;
-
-// Listen on a topic pattern. Returns a Channel that receives opaque Buffer values.
-// Supports wildcard: "*" matches one segment, ">" matches remaining segments.
-// Example: "events.*" matches "events.user" but not "events.user.login"
-//          "events.>" matches "events.user" and "events.user.login"
 #define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)
 
-struct XrChannel *cluster_transport_listen(struct XrVMRuntime *X, const char *pattern,
-                                           uint32_t capacity);
-
-// Send an opaque canonical envelope to matching local listeners and peers.
-XrClusterDelivery cluster_transport_send(struct XrVMRuntime *X, const char *topic,
-                                         const uint8_t *envelope, uint32_t envelope_len,
-                                         uint8_t hop_limit);
+XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster,
+                                              struct XrClusterNode *excluded_node,
+                                              uint8_t hop_limit, const char *topic,
+                                              const uint8_t *envelope, uint32_t envelope_length);
 
 /*
  * Handle an incoming opaque envelope frame from a remote node.
@@ -481,21 +450,6 @@ XrClusterDelivery cluster_transport_send(struct XrVMRuntime *X, const char *topi
 void cluster_transport_handle_frame(XrCluster *c, struct XrClusterNode *from, const char *topic,
                                     const uint8_t *envelope, uint32_t envelope_len,
                                     uint8_t hop_limit);
-
-// Deliver to local subscribers matching the topic
-XrClusterDelivery cluster_transport_deliver_local(XrCluster *c, const char *topic,
-                                                  const uint8_t *envelope, uint32_t envelope_len);
-
-/*
- * Topic trie lifecycle. cluster_topics_init must be called once
- * after topics_lock is initialised and before any subscribe path is
- * exposed. cluster_topics_destroy closes every subscriber channel,
- * recursively frees the trie, and resets topic_root to NULL — call it
- * exactly once from cluster_runtime_stop (the function tolerates a NULL
- * root, so double-stop is safe).
- */
-int cluster_topics_init(XrCluster *c);
-void cluster_topics_destroy(XrCluster *c);
 
 /* ========== Remote Coroutine Monitoring ========== */
 

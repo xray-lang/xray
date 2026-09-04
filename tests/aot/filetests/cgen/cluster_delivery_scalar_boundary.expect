@@ -1,4 +1,5 @@
-c_contains=xrt_cluster_send(
+c_contains=xrt_cluster_publish_local(
+c_contains=xrt_cluster_publish_remote(
 c_contains=_xaot_stdlib_enum_box_
 c_contains=xrt_enum_scalar_box(&_xaot_stdlib_enum_layout_
 c_contains=invalid direct stdlib enum ordinal
