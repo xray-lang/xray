@@ -159,16 +159,8 @@ static bool cluster_inbound_reset_read(XrInboundContext *ctx, XrInboundPhase pha
 }
 
 static XrCFuncResult cluster_inbound_complete(XrInboundContext *ctx) {
-    XrFrameHandshakeDone done;
-    if (cluster_frame_decode_handshake_done(ctx->payload, ctx->payload_len, &done) != 0)
-        return XR_CFUNC_DONE;
-
-    uint8_t expected_proof[XR_PROOF_SIZE];
-    xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->ack.nonce, expected_proof);
-    bool proof_ok = xr_cluster_auth_proof_equal(done.proof, expected_proof);
-    xr_secure_wipe(expected_proof, sizeof(expected_proof));
-    xr_secure_wipe(&done, sizeof(done));
-    if (!proof_ok)
+    if (!xr_cluster_handshake_server_accept_done(ctx->cluster->secret, &ctx->ack, ctx->payload,
+                                                 ctx->payload_len))
         return XR_CFUNC_DONE;
 
     XrClusterNode *node =
@@ -267,17 +259,12 @@ static XrCFuncResult cluster_inbound_drive(XrVMRuntime *X, XrInboundContext *ctx
         if (ctx->phase == XR_INBOUND_READ_DONE_PAYLOAD)
             return cluster_inbound_complete(ctx);
 
-        if (cluster_frame_decode_handshake_req(ctx->payload, ctx->payload_len, &ctx->request) != 0)
-            return XR_CFUNC_DONE;
-
-        memset(&ctx->ack, 0, sizeof(ctx->ack));
-        ctx->ack.version = XR_CLUSTER_HANDSHAKE_VERSION;
-        strncpy(ctx->ack.name, ctx->cluster->self_name, XR_NODE_NAME_MAX);
-        xr_random_bytes(ctx->ack.nonce, XR_NONCE_SIZE);
-        xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->request.nonce, ctx->ack.proof);
-        ctx->ack.flags = 0x01;
-        int frame_len =
-            cluster_frame_encode_handshake_ack(ctx->write_buf, sizeof(ctx->write_buf), &ctx->ack);
+        uint8_t nonce[XR_NONCE_SIZE];
+        xr_random_bytes(nonce, sizeof(nonce));
+        int frame_len = xr_cluster_handshake_server_accept_request(
+            ctx->cluster->self_name, ctx->cluster->secret, 0x01, nonce, ctx->payload,
+            ctx->payload_len, &ctx->request, &ctx->ack, ctx->write_buf, sizeof(ctx->write_buf));
+        xr_secure_wipe(nonce, sizeof(nonce));
         if (frame_len <= 0)
             return XR_CFUNC_DONE;
         ctx->write_len = (size_t) frame_len;
@@ -844,13 +831,12 @@ static int cluster_join_open_next(XrJoinContext *ctx) {
 static bool cluster_join_prepare_request(XrJoinContext *ctx) {
     if (ctx->write_len != 0)
         return true;
-    memset(&ctx->request, 0, sizeof(ctx->request));
-    ctx->request.version = XR_CLUSTER_HANDSHAKE_VERSION;
-    strncpy(ctx->request.name, ctx->cluster->self_name, XR_NODE_NAME_MAX);
-    xr_random_bytes(ctx->request.nonce, XR_NONCE_SIZE);
-    ctx->request.flags = 0x01;
+    uint8_t nonce[XR_NONCE_SIZE];
+    xr_random_bytes(nonce, sizeof(nonce));
     int frame_len =
-        cluster_frame_encode_handshake_req(ctx->write_buf, sizeof(ctx->write_buf), &ctx->request);
+        xr_cluster_handshake_client_start(ctx->cluster->self_name, 0x01, nonce, &ctx->request,
+                                          ctx->write_buf, sizeof(ctx->write_buf));
+    xr_secure_wipe(nonce, sizeof(nonce));
     if (frame_len < 0)
         return false;
     ctx->write_len = (size_t) frame_len;
@@ -886,23 +872,14 @@ static XrCFuncResult cluster_join_wait(XrVMRuntime *X, XrJoinContext *ctx, int e
 }
 
 static bool cluster_join_verify_ack(XrJoinContext *ctx) {
-    if (cluster_frame_decode_handshake_ack(ctx->payload, ctx->payload_len, &ctx->ack) != 0)
+    int frame_len = xr_cluster_handshake_client_accept_ack(
+        ctx->cluster->secret, &ctx->request, ctx->payload, ctx->payload_len, &ctx->ack, &ctx->done,
+        ctx->write_buf, sizeof(ctx->write_buf));
+    if (frame_len < 0)
         return false;
-    uint8_t expected_proof[XR_PROOF_SIZE];
-    xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->request.nonce, expected_proof);
-    bool valid = xr_cluster_auth_proof_equal(ctx->ack.proof, expected_proof);
-    xr_secure_wipe(expected_proof, sizeof(expected_proof));
-    if (!valid)
-        return false;
-
     strncpy(ctx->node->name, ctx->ack.name, XR_NODE_NAME_MAX);
     ctx->node->name[XR_NODE_NAME_MAX] = '\0';
     ctx->node->flags = ctx->ack.flags;
-    xr_cluster_auth_compute_proof(ctx->cluster->secret, ctx->ack.nonce, ctx->done.proof);
-    int frame_len =
-        cluster_frame_encode_handshake_done(ctx->write_buf, sizeof(ctx->write_buf), &ctx->done);
-    if (frame_len < 0)
-        return false;
     ctx->write_len = (size_t) frame_len;
     ctx->write_used = 0;
     ctx->phase = XR_JOIN_WRITE_DONE;

@@ -29,6 +29,7 @@
 #include "../../src/coro/xtopic_registry.h"
 #include "../../src/io/xcluster_wire.h"
 #include "../../src/io/xcluster_auth.h"
+#include "../../src/io/xcluster_handshake.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/io/xnet_transport.h"

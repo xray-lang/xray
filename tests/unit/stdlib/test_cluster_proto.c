@@ -280,6 +280,68 @@ TEST(cluster_handshake_done_round_trips) {
         -1);
 }
 
+TEST(cluster_handshake_projection_shares_one_proof_flow) {
+    static const char secret[] = "projection-secret";
+    uint8_t client_nonce[XR_NONCE_SIZE];
+    uint8_t server_nonce[XR_NONCE_SIZE];
+    for (size_t i = 0; i < XR_NONCE_SIZE; i++) {
+        client_nonce[i] = (uint8_t) (0x10 + i);
+        server_nonce[i] = (uint8_t) (0x80 + i);
+    }
+
+    XrFrameHandshakeReq request;
+    XrFrameHandshakeAck ack;
+    XrFrameHandshakeDone done;
+    uint8_t request_frame[256] = {0};
+    uint8_t ack_frame[256] = {0};
+    uint8_t done_frame[64] = {0};
+
+    int request_length = xr_cluster_handshake_client_start(
+        "client", 0x01020304u, client_nonce, &request, request_frame, sizeof(request_frame));
+    ASSERT_TRUE(request_length > 0);
+    ASSERT_STR_EQ(request.name, "client");
+    ASSERT_EQ_UINT(request.flags, 0x01020304u);
+
+    uint8_t type = 0;
+    uint32_t payload_length = 0;
+    ASSERT_EQ_INT(
+        cluster_frame_read_header(request_frame, (size_t) request_length, &type, &payload_length),
+        0);
+    ASSERT_EQ_INT(type, XR_FRAME_HANDSHAKE_REQ);
+    int ack_length = xr_cluster_handshake_server_accept_request(
+        "server", secret, 0xA0B0C0D0u, server_nonce, request_frame + XR_FRAME_HEADER_SIZE + 1,
+        payload_length, &request, &ack, ack_frame, sizeof(ack_frame));
+    ASSERT_TRUE(ack_length > 0);
+    ASSERT_STR_EQ(ack.name, "server");
+    ASSERT_EQ_UINT(ack.flags, 0xA0B0C0D0u);
+
+    ASSERT_EQ_INT(cluster_frame_read_header(ack_frame, (size_t) ack_length, &type, &payload_length),
+                  0);
+    ASSERT_EQ_INT(type, XR_FRAME_HANDSHAKE_ACK);
+    int done_length = xr_cluster_handshake_client_accept_ack(
+        secret, &request, ack_frame + XR_FRAME_HEADER_SIZE + 1, payload_length, &ack, &done,
+        done_frame, sizeof(done_frame));
+    ASSERT_TRUE(done_length > 0);
+
+    ASSERT_EQ_INT(
+        cluster_frame_read_header(done_frame, (size_t) done_length, &type, &payload_length), 0);
+    ASSERT_EQ_INT(type, XR_FRAME_HANDSHAKE_DONE);
+    ASSERT_TRUE(xr_cluster_handshake_server_accept_done(
+        secret, &ack, done_frame + XR_FRAME_HEADER_SIZE + 1, payload_length));
+
+    done_frame[XR_FRAME_HEADER_SIZE + 1] ^= 0x01;
+    ASSERT_FALSE(xr_cluster_handshake_server_accept_done(
+        secret, &ack, done_frame + XR_FRAME_HEADER_SIZE + 1, payload_length));
+
+    ASSERT_EQ_INT(cluster_frame_read_header(ack_frame, (size_t) ack_length, &type, &payload_length),
+                  0);
+    ack_frame[XR_FRAME_HEADER_SIZE + 1 + 2 + strlen("server") + XR_NONCE_SIZE] ^= 0x01;
+    ASSERT_EQ_INT(xr_cluster_handshake_client_accept_ack(
+                      secret, &request, ack_frame + XR_FRAME_HEADER_SIZE + 1, payload_length, &ack,
+                      &done, done_frame, sizeof(done_frame)),
+                  -1);
+}
+
 /*
  * heartbeat := i64be(timestampMs) — shared by HEARTBEAT_PING and HEARTBEAT_PONG.
  */
@@ -646,6 +708,7 @@ RUN_TEST(cluster_frame_header_is_big_endian_length_prefix);
 RUN_TEST(cluster_handshake_req_round_trips);
 RUN_TEST(cluster_handshake_ack_round_trips);
 RUN_TEST(cluster_handshake_done_round_trips);
+RUN_TEST(cluster_handshake_projection_shares_one_proof_flow);
 RUN_TEST(cluster_heartbeat_round_trips);
 RUN_TEST(cluster_coro_frames_round_trip);
 RUN_TEST(cluster_frame_decoders_reject_truncated_payloads);

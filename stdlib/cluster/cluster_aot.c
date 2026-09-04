@@ -19,15 +19,14 @@
 #include "../../src/coro/xaot_coro.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xtopic_registry.h"
+#include "../../src/io/xcluster_blocking.h"
 #include "../../src/os/os_net.h"
-#include "../../src/os/os_random.h"
 #include "../../src/runtime/core/xr_runtime_core.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #define XR_AOT_CLUSTER_QUEUE_HIGH_WATERMARK (4u * 1024u * 1024u)
-#define XR_AOT_CLUSTER_IO_TIMEOUT_MS 5000
 #define XR_AOT_CLUSTER_ACCEPT_POLL_MS 100
 
 typedef struct XrAotClusterFrame {
@@ -87,71 +86,6 @@ static bool aot_cluster_copy_text(char *target, size_t capacity, const char *sou
         return false;
     memcpy(target, source, (size_t) length);
     target[length] = '\0';
-    return true;
-}
-
-static int aot_cluster_wait_socket(xr_socket_t socket, bool read_ready, int timeout_ms) {
-    fd_set read_set;
-    fd_set write_set;
-    FD_ZERO(&read_set);
-    FD_ZERO(&write_set);
-    if (read_ready)
-        FD_SET(socket, &read_set);
-    else
-        FD_SET(socket, &write_set);
-    struct timeval timeout = {
-        .tv_sec = timeout_ms / 1000,
-        .tv_usec = (timeout_ms % 1000) * 1000,
-    };
-    int result = select((int) socket + 1, read_ready ? &read_set : NULL,
-                        read_ready ? NULL : &write_set, NULL, &timeout);
-    return result > 0 ? 0 : -1;
-}
-
-static bool aot_cluster_read_all(xr_socket_t socket, uint8_t *data, size_t length) {
-    size_t offset = 0;
-    while (offset < length) {
-        if (aot_cluster_wait_socket(socket, true, XR_AOT_CLUSTER_IO_TIMEOUT_MS) != 0)
-            return false;
-        ssize_t count = xr_socket_recv(socket, data + offset, length - offset);
-        if (count <= 0)
-            return false;
-        offset += (size_t) count;
-    }
-    return true;
-}
-
-static bool aot_cluster_write_all(xr_socket_t socket, const uint8_t *data, size_t length) {
-    size_t offset = 0;
-    while (offset < length) {
-        if (aot_cluster_wait_socket(socket, false, XR_AOT_CLUSTER_IO_TIMEOUT_MS) != 0)
-            return false;
-        ssize_t count = xr_socket_send(socket, data + offset, length - offset);
-        if (count <= 0)
-            return false;
-        offset += (size_t) count;
-    }
-    return true;
-}
-
-static bool aot_cluster_read_frame(xr_socket_t socket, uint8_t *type, uint8_t **payload,
-                                   uint32_t *payload_length) {
-    uint8_t header[XR_FRAME_HEADER_SIZE + 1];
-    if (!type || !payload || !payload_length ||
-        !aot_cluster_read_all(socket, header, sizeof(header)) ||
-        cluster_frame_read_header(header, sizeof(header), type, payload_length) != 0)
-        return false;
-    *payload = NULL;
-    if (*payload_length == 0)
-        return true;
-    uint8_t *owned = (uint8_t *) xr_malloc(*payload_length);
-    if (!owned)
-        return false;
-    if (!aot_cluster_read_all(socket, owned, *payload_length)) {
-        xr_free(owned);
-        return false;
-    }
-    *payload = owned;
     return true;
 }
 
@@ -315,7 +249,8 @@ static void *aot_cluster_writer_main(void *argument) {
         XrAotClusterFrame *frame = aot_cluster_node_take_frame(node);
         if (!frame)
             break;
-        bool written = aot_cluster_write_all(node->socket, frame->data, frame->length);
+        bool written = xr_cluster_blocking_write_all(node->socket, frame->data, frame->length,
+                                                     XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
         aot_cluster_frame_free(frame);
         if (!written)
             break;
@@ -359,7 +294,8 @@ static void *aot_cluster_reader_main(void *argument) {
         uint8_t frame_type = 0;
         uint8_t *payload = NULL;
         uint32_t payload_length = 0;
-        if (!aot_cluster_read_frame(node->socket, &frame_type, &payload, &payload_length))
+        if (!xr_cluster_blocking_read_frame(node->socket, &frame_type, &payload, &payload_length,
+                                            XR_CLUSTER_HANDSHAKE_TIMEOUT_MS))
             break;
         aot_cluster_process_frame(node, frame_type, payload, payload_length);
         xr_free(payload);
@@ -389,52 +325,6 @@ static void aot_cluster_add_node(XrAotClusterState *cluster, XrAotClusterNode *n
     xr_mutex_unlock(&cluster->nodes_lock);
 }
 
-static bool aot_cluster_server_handshake(XrAotClusterState *cluster, xr_socket_t socket,
-                                         char *peer_name) {
-    uint8_t type = 0;
-    uint8_t *payload = NULL;
-    uint32_t payload_length = 0;
-    XrFrameHandshakeReq request = {0};
-    if (!aot_cluster_read_frame(socket, &type, &payload, &payload_length) ||
-        type != XR_FRAME_HANDSHAKE_REQ ||
-        cluster_frame_decode_handshake_req(payload, payload_length, &request) != 0) {
-        xr_free(payload);
-        return false;
-    }
-    xr_free(payload);
-
-    XrFrameHandshakeAck ack = {0};
-    ack.version = XR_CLUSTER_HANDSHAKE_VERSION;
-    strncpy(ack.name, cluster->self_name, XR_NODE_NAME_MAX);
-    xr_random_bytes(ack.nonce, XR_NONCE_SIZE);
-    xr_cluster_auth_compute_proof(cluster->secret, request.nonce, ack.proof);
-    ack.flags = 0x01;
-    uint8_t frame[512];
-    int frame_length = cluster_frame_encode_handshake_ack(frame, sizeof(frame), &ack);
-    if (frame_length <= 0 || !aot_cluster_write_all(socket, frame, (size_t) frame_length))
-        return false;
-
-    payload = NULL;
-    payload_length = 0;
-    XrFrameHandshakeDone done = {0};
-    if (!aot_cluster_read_frame(socket, &type, &payload, &payload_length) ||
-        type != XR_FRAME_HANDSHAKE_DONE ||
-        cluster_frame_decode_handshake_done(payload, payload_length, &done) != 0) {
-        xr_free(payload);
-        return false;
-    }
-    xr_free(payload);
-    uint8_t expected[XR_PROOF_SIZE];
-    xr_cluster_auth_compute_proof(cluster->secret, ack.nonce, expected);
-    bool accepted = xr_cluster_auth_proof_equal(done.proof, expected);
-    memset(expected, 0, sizeof(expected));
-    if (accepted) {
-        strncpy(peer_name, request.name, XR_NODE_NAME_MAX);
-        peer_name[XR_NODE_NAME_MAX] = '\0';
-    }
-    return accepted;
-}
-
 static void *aot_cluster_accept_main(void *argument) {
     XrAotClusterState *cluster = (XrAotClusterState *) argument;
     while (atomic_load_explicit(&cluster->running, memory_order_acquire)) {
@@ -442,7 +332,7 @@ static void *aot_cluster_accept_main(void *argument) {
          * interrupt a blocking accept() on every supported OS. Poll with a
          * bounded timeout so stop can flip running and join this thread before
          * it closes the descriptor, avoiding both shutdown hangs and fd reuse. */
-        if (aot_cluster_wait_socket(cluster->listen_socket, true, XR_AOT_CLUSTER_ACCEPT_POLL_MS) !=
+        if (xr_cluster_blocking_wait(cluster->listen_socket, true, XR_AOT_CLUSTER_ACCEPT_POLL_MS) !=
             0)
             continue;
         if (!atomic_load_explicit(&cluster->running, memory_order_acquire))
@@ -451,7 +341,8 @@ static void *aot_cluster_accept_main(void *argument) {
         if (socket == XR_INVALID_SOCKET)
             break;
         char peer_name[XR_NODE_NAME_MAX + 1] = {0};
-        if (!aot_cluster_server_handshake(cluster, socket, peer_name) ||
+        if (!xr_cluster_blocking_server_handshake(socket, cluster->self_name, cluster->secret, 0x01,
+                                                  peer_name) ||
             !atomic_load_explicit(&cluster->running, memory_order_acquire)) {
             xr_closesocket(socket);
             continue;
@@ -525,46 +416,6 @@ static xr_socket_t aot_cluster_connect(const char *host, uint16_t port) {
     }
     freeaddrinfo(resolved);
     return connected;
-}
-
-static bool aot_cluster_client_handshake(XrAotClusterState *cluster, xr_socket_t socket,
-                                         char *peer_name) {
-    XrFrameHandshakeReq request = {0};
-    request.version = XR_CLUSTER_HANDSHAKE_VERSION;
-    strncpy(request.name, cluster->self_name, XR_NODE_NAME_MAX);
-    xr_random_bytes(request.nonce, XR_NONCE_SIZE);
-    request.flags = 0x01;
-    uint8_t frame[512];
-    int frame_length = cluster_frame_encode_handshake_req(frame, sizeof(frame), &request);
-    if (frame_length <= 0 || !aot_cluster_write_all(socket, frame, (size_t) frame_length))
-        return false;
-
-    uint8_t type = 0;
-    uint8_t *payload = NULL;
-    uint32_t payload_length = 0;
-    XrFrameHandshakeAck ack = {0};
-    if (!aot_cluster_read_frame(socket, &type, &payload, &payload_length) ||
-        type != XR_FRAME_HANDSHAKE_ACK ||
-        cluster_frame_decode_handshake_ack(payload, payload_length, &ack) != 0) {
-        xr_free(payload);
-        return false;
-    }
-    xr_free(payload);
-    uint8_t expected[XR_PROOF_SIZE];
-    xr_cluster_auth_compute_proof(cluster->secret, request.nonce, expected);
-    bool accepted = xr_cluster_auth_proof_equal(ack.proof, expected);
-    memset(expected, 0, sizeof(expected));
-    if (!accepted)
-        return false;
-
-    XrFrameHandshakeDone done = {0};
-    xr_cluster_auth_compute_proof(cluster->secret, ack.nonce, done.proof);
-    frame_length = cluster_frame_encode_handshake_done(frame, sizeof(frame), &done);
-    if (frame_length <= 0 || !aot_cluster_write_all(socket, frame, (size_t) frame_length))
-        return false;
-    strncpy(peer_name, ack.name, XR_NODE_NAME_MAX);
-    peer_name[XR_NODE_NAME_MAX] = '\0';
-    return true;
 }
 
 static XrAotClusterState *aot_cluster_acquire(XrAotRuntime **runtime_out) {
@@ -709,7 +560,8 @@ XrValue xrt_cluster_join(const char *host_text, int64_t host_len, XrValue port_v
         return XR_FALSE_VAL;
     }
     char peer_name[XR_NODE_NAME_MAX + 1] = {0};
-    if (!aot_cluster_client_handshake(cluster, socket, peer_name)) {
+    if (!xr_cluster_blocking_client_handshake(socket, cluster->self_name, cluster->secret, 0x01,
+                                              peer_name)) {
         xr_closesocket(socket);
         aot_cluster_release(runtime);
         return XR_FALSE_VAL;

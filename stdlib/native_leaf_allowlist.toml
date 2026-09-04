@@ -112,7 +112,7 @@ class = "host_abi_leaf"
 abi = "getaddrinfo(3), socket(2), non-blocking connect(2), getsockopt(2) SO_ERROR, send/recv; OpenSSL SSL_do_handshake(3) when TLS is on; the platform CSPRNG for the handshake nonce"
 ownership = "none"
 effect = "suspends"
-provider = "kernel connect(2) plus, on the VM, the Xray netpoll for the wait and OpenSSL for the handshake (stdlib/cluster/cluster.c cluster_join). AOT (stdlib/cluster/cluster_aot.c xrt_cluster_join) uses a blocking connect(2) with a select(2) timeout, two OS threads per node, no netpoll and no TLS. The leaf takes a host and a port, not an address: the grammar is parseAddress in cluster.xr, which both backends compile, and neither half parses one any more"
+provider = "kernel connect(2) plus, on the VM, the Xray netpoll for the wait and OpenSSL for the handshake (stdlib/cluster/cluster.c cluster_join). AOT uses the blocking socket provider in src/io/xcluster_blocking.c, while both backends share the allocation-free handshake projection in src/io/xcluster_handshake.c; it still uses two OS threads per node, no netpoll and no TLS. The leaf takes a host and a port, not an address: the grammar is parseAddress in cluster.xr, which both backends compile, and neither half parses one any more"
 deletion_trigger = "when cluster.xr can reach a peer over net.__connectFd and net.__tlsHandshake instead of the module's own socket path, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
 
 [[leaf]]
@@ -192,7 +192,7 @@ class = "runtime_leaf"
 abi = "socket(2), setsockopt(2) SO_REUSEADDR and IPV6_V6ONLY, bind(2), listen(2) for the node listener; OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray scheduler, which the leaf asks to publish the heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT (stdlib/cluster/cluster_aot.c xrt_cluster_start) discards all six TLS arguments and returns false outright when tlsEnabled is set, and runs its accept loop on an OS thread instead. The node name, port range, heartbeat cadence and thresholds, topic fanout limit, and tombstone retention are cluster.xr's and are passed down as normalized scalars"
+provider = "the Xray scheduler, which the leaf asks to publish heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT discards all six TLS arguments, returns false outright when tlsEnabled is set, and runs its accept loop over src/io/xcluster_blocking.c on an OS thread; its handshake state projection is the same src/io/xcluster_handshake.c used by the VM. The node name, port range, heartbeat cadence and thresholds, topic fanout limit, and tombstone retention are cluster.xr's and are passed down as normalized scalars"
 deletion_trigger = "when cluster.xr can publish its own coroutines and build its own listener over net's leaves, and the AOT half stops declining TLS so both backends start the same node"
 
 [[leaf]]
