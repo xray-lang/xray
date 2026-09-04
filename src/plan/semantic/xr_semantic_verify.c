@@ -18,6 +18,7 @@
 #include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_class_seal_shape.h"
 #include "xr_semantic_class_shape.h"
+#include "xr_semantic_source_class_field_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
 #include "xr_semantic_enum_shape.h"
 #include "xr_semantic_graph.h"
@@ -2729,6 +2730,14 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             !xr_semantic_array_index_read_is_exact(plan, operation, NULL, NULL))
             return report(error, error_size, "XR_SEM_0019",
                           "Array index read lacks exact element and borrow authority");
+        if (operation->opcode == XI_LOAD_FIELD && operation->operand_count == 1 &&
+            operation->operand_begin < plan->operand_count &&
+            xr_semantic_class_instance_type_source_class(
+                plan, xr_semantic_plan_type(plan, plan->operands[operation->operand_begin].type)) !=
+                XR_SEMANTIC_INDEX_NONE &&
+            !xr_semantic_source_class_field_read_is_exact(plan, operation, NULL))
+            return report(error, error_size, "XR_SEM_0019",
+                          "source-class field read lacks exact layout and borrow authority");
         if (!verify_native_module_scalar_call(plan, operation, error, error_size))
             return false;
         if (!verify_native_target_leaf_scalar_call(plan, operation, error, error_size))

@@ -1281,16 +1281,16 @@ xr_semantic_class_ref_parameter_load_source_class(const XrSemanticPlan *plan,
         plan, xr_semantic_plan_type(plan, parameter->type));
 }
 
-/* The declaration whose instance a field read borrows from, or NONE. The read
- * is the generated field load: one borrowed plain operand, one metadata name,
- * and no allocation, constant, callee or view of its own. Which field the name
- * selects is the frontend's proof and is already frozen in the result type; what
- * this judgement adds is that the receiver is an instance this family named, so
- * the read borrows from a proved allocation rather than from an open object. */
-static inline uint32_t
-xr_semantic_class_field_read_source_class(const XrSemanticPlan *plan,
-                                          const XrSemanticOperationRecord *operation) {
+/* The receiver half of an evidence-backed source-class field read.  The Xg
+ * field id is the pointer-free class-layout identity selected by lowering; the
+ * metadata name remains its serialized source spelling, never the authority
+ * for choosing storage. */
+static inline const XrSemanticOperandRecord *
+xr_semantic_class_field_read_receiver_is_exact(const XrSemanticPlan *plan,
+                                               const XrSemanticOperationRecord *operation) {
     XrStableId zero = {{0}};
+    uint32_t metadata_count = 0;
+    const char *const *metadata = plan ? xr_semantic_plan_metadata(plan, &metadata_count) : NULL;
     if (!plan || xr_semantic_plan_source_class_count(plan) == 0 || !operation ||
         operation->opcode != XI_LOAD_FIELD || operation->operand_count != 1 ||
         operation->metadata_count != 1 || operation->semantic_immediate < 0 ||
@@ -1306,22 +1306,37 @@ xr_semantic_class_field_read_source_class(const XrSemanticPlan *plan,
         operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
         operation->parameter_ownership != 0 || operation->result_alias_operand != -1 ||
         operation->return_parameter != -1 || operation->view_complete != 0 ||
-        operation->view_source_operand != -1 || operation->view_source_parameter != -1)
-        return XR_SEMANTIC_INDEX_NONE;
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
+        operation->metadata_begin >= metadata_count || !metadata ||
+        !metadata[operation->metadata_begin] || !metadata[operation->metadata_begin][0] ||
+        operation->evidence[0] != 0 || operation->evidence[1] != 0 || operation->evidence[2] != 0 ||
+        operation->evidence[3] != 0 || operation->evidence[4] != 0 || operation->evidence[5] == 0 ||
+        operation->evidence[6] != 0 || operation->evidence[7] != XR_SEMANTIC_INDEX_NONE)
+        return NULL;
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     if (!operands || operation->operand_begin >= operand_count)
-        return XR_SEMANTIC_INDEX_NONE;
+        return NULL;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     if (receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
         receiver->transfer_mode != 0 || receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
         receiver->parameter_mode != 0 || receiver->access != 0 || receiver->origin != 0 ||
         receiver->lifetime != 0 || receiver->escape != 0 || receiver->flags != 0)
+        return NULL;
+    return receiver;
+}
+
+/* The declaration whose instance a field read borrows from, or NONE. The
+ * receiver must be a parameter binding, ref load, or exact class allocation;
+ * producer-specific result families compose the receiver row above with their
+ * independently verified storage instead. */
+static inline uint32_t
+xr_semantic_class_field_read_source_class(const XrSemanticPlan *plan,
+                                          const XrSemanticOperationRecord *operation) {
+    const XrSemanticOperandRecord *receiver =
+        xr_semantic_class_field_read_receiver_is_exact(plan, operation);
+    if (!receiver)
         return XR_SEMANTIC_INDEX_NONE;
-    /* A receiver bound on entry is proved from the parameter table: the
-     * declaration is either the member's own identity or the row the parameter
-     * was declared with, and neither reaches this operand through a defining
-     * operation. */
     if (xr_semantic_class_parameter_for_value(plan, receiver->value) != XR_SEMANTIC_INDEX_NONE)
         return xr_semantic_class_receiver_parameter_source_class(plan, operation->function,
                                                                  receiver);
@@ -1337,9 +1352,7 @@ xr_semantic_class_field_read_source_class(const XrSemanticPlan *plan,
     if (receiver_class == XR_SEMANTIC_INDEX_NONE &&
         !xr_semantic_class_instance_value_is_exact(plan, definition, &receiver_class))
         return XR_SEMANTIC_INDEX_NONE;
-    if (receiver_class != source_class)
-        return XR_SEMANTIC_INDEX_NONE;
-    return source_class;
+    return receiver_class == source_class ? source_class : XR_SEMANTIC_INDEX_NONE;
 }
 
 #endif  // XR_SEMANTIC_CLASS_SHAPE_H
