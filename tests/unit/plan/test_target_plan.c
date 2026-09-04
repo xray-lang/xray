@@ -9,6 +9,7 @@
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
+#include "../../../src/frontend/analyzer/xa_ownership.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xsha256.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
@@ -17,6 +18,7 @@
 #include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_owner_transfer_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_rune_to_string_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
@@ -523,6 +525,8 @@ build_native_profile_with_provider_count(XrRuntimeTargetAuthority *authority,
     return profile;
 }
 
+static void set_single_parameter_ownership(XiFunc *function, XiOwnership ownership);
+
 static XrSemanticPlan *build_source_instance_method_semantic(void) {
     XiFunc *root = xi_func_new("target_source_instance_root", &stub_unit);
     XiFunc *callee = xi_func_new("wait", &stub_unit);
@@ -546,22 +550,51 @@ static XrSemanticPlan *build_source_instance_method_semantic(void) {
     REQUIRE(callee->params != NULL && caller->params != NULL);
     callee->params[0] = callee_this;
     caller->params[0] = caller_this;
-    callee->nparams = caller->nparams = 1;
-    XiValue *yield = xi_value_new(callee, callee_entry, XI_YIELD, &stub_unit, 0);
-    REQUIRE(yield != NULL);
-    xi_block_set_return(callee_entry, yield);
+    callee->nparams = callee->min_params = 1;
+    caller->nparams = caller->min_params = 1;
+    callee->has_receiver = true;
+    callee->receiver_mode = XR_PARAM_MOVE;
+    callee->receiver_borrowed = false;
+    caller->has_receiver = true;
+    caller->receiver_mode = XR_PARAM_MOVE;
+    caller->receiver_borrowed = false;
+    callee_this->transfer_mode = XR_TRANSFER_SHARE;
+    caller_this->transfer_mode = XR_TRANSFER_SHARE;
+    set_single_parameter_ownership(callee, XI_OWN_BORROWED);
+    set_single_parameter_ownership(caller, XI_OWN_OWNED);
+    xi_block_set_return(callee_entry, NULL);
+    XiValue *moved =
+        xi_value_new(caller, caller_entry, XI_SOURCE_MOVE, &stub_target_source_instance, 1);
     XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
-    REQUIRE(call != NULL);
-    call->args[0] = caller_this;
+    REQUIRE(moved != NULL && call != NULL);
+    moved->args[0] = caller_this;
+    moved->move_evidence_id = 1;
+    moved->move_source_root_id = 1;
+    moved->move_source_symbol_id = 1;
+    moved->move_storage_plan_id = 1;
+    moved->move_evidence_bits = XA_OWNERSHIP_EV_BINDING_LIVE | XA_OWNERSHIP_EV_ROOT_UNIQUE |
+                                XA_OWNERSHIP_EV_LOAN_FREE | XA_OWNERSHIP_EV_ALIAS_FREE |
+                                XA_OWNERSHIP_EV_ESCAPE_FREE | XA_OWNERSHIP_EV_CAPABILITY |
+                                XA_OWNERSHIP_EV_CFG_CONSISTENT | XA_OWNERSHIP_EV_STORAGE;
+    moved->move_source_capability = XA_CAP_MUTABLE;
+    moved->move_target_capability = XA_CAP_MUTABLE;
+    moved->move_source_domain = XR_STORAGE_TRANSFERABLE;
+    moved->move_target_domain = XR_STORAGE_TRANSFERABLE;
+    call->args[0] = moved;
     call->aux = "wait";
+    XiCallPlan call_plan = {
+        .receiver =
+            {
+                .param_mode = XR_PARAM_MOVE,
+                .access = XR_CALL_ARG_MOVE,
+                .origin_var_id = XI_NO_VAR_ID,
+            },
+        .has_receiver = true,
+        .verified = true,
+    };
+    call->call_plan = &call_plan;
     xi_block_set_return(caller_entry, call);
     xi_block_set_return(root_entry, NULL);
-    XiCoroSuspendPoint callee_point = {.state_id = 1, .op = yield, .kind = XI_CORO_SUSP_YIELD};
-    XiCoroSuspendPoint caller_point = {.state_id = 1, .op = call, .kind = XI_CORO_SUSP_CALL};
-    XiCoroPlan callee_coroutine = {.is_coroutine = true, .nstates = 1, .points = &callee_point};
-    XiCoroPlan caller_coroutine = {.is_coroutine = true, .nstates = 1, .points = &caller_point};
-    callee->coro_plan = &callee_coroutine;
-    caller->coro_plan = &caller_coroutine;
     root->stage = callee->stage = caller->stage = XI_STAGE_OPTIMIZED;
     XiModule *module =
         xi_module_new("pkg/target_source_instance.xr", "target_source_instance", root);
@@ -5883,14 +5916,19 @@ static void test_direct_local_class_argument_authority(void) {
                                                   : XR_SEM_OPERAND_BORROW) &&
                 xr_semantic_class_argument_source_class(semantic, callee->parameter_begin) !=
                     XR_SEMANTIC_INDEX_NONE &&
-                xr_semantic_class_parameter_call_transfer_is_exact(
-                    semantic, callee->parameter_begin, operand));
+                xr_semantic_class_call_parameter_source_class(semantic, callee->parameter_begin,
+                                                              operand) != XR_SEMANTIC_INDEX_NONE);
         uint8_t saved_action = operand->ownership_action;
         operand->ownership_action =
             saved_action == XR_SEM_OPERAND_CONSUME ? XR_SEM_OPERAND_BORROW : XR_SEM_OPERAND_CONSUME;
-        REQUIRE(!xr_semantic_class_parameter_call_transfer_is_exact(
-            semantic, callee->parameter_begin, operand));
+        REQUIRE(xr_semantic_class_call_parameter_source_class(semantic, callee->parameter_begin,
+                                                              operand) == XR_SEMANTIC_INDEX_NONE);
         operand->ownership_action = saved_action;
+        uint8_t saved_role = operand->role;
+        operand->role = XR_SEM_OPERAND_RECEIVER;
+        REQUIRE(xr_semantic_class_call_parameter_source_class(semantic, callee->parameter_begin,
+                                                              operand) == XR_SEMANTIC_INDEX_NONE);
+        operand->role = saved_role;
 
         bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
         if (!built)
@@ -5952,8 +5990,8 @@ static void test_direct_local_class_argument_authority(void) {
             ? &operands[operation->operand_begin + 1u]
             : NULL;
     REQUIRE(callee && operand &&
-            !xr_semantic_class_parameter_call_transfer_is_exact(scalar, callee->parameter_begin,
-                                                                operand));
+            xr_semantic_class_call_parameter_source_class(scalar, callee->parameter_begin,
+                                                          operand) == XR_SEMANTIC_INDEX_NONE);
     xr_semantic_plan_free(scalar);
 }
 
@@ -6161,13 +6199,72 @@ static void test_direct_local_raw_pointer_call_authority(void) {
     xr_semantic_plan_free(semantic);
 }
 
-static void test_source_instance_method_target_fails_closed(void) {
+static void test_source_instance_move_receiver_authority(void) {
     XrSemanticPlan *semantic = build_source_instance_method_semantic();
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
-    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
-    REQUIRE(plan == NULL);
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
+    const XrSemanticOperationRecord *call =
+        target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    const XrSemanticFunctionRecord *callee =
+        target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+    XrSemanticParameterRecord *parameter =
+        callee ? &semantic->parameters[callee->parameter_begin] : NULL;
+    XrSemanticOperandRecord *receiver = call && call->operand_begin < semantic->operand_count
+                                            ? &semantic->operands[call->operand_begin]
+                                            : NULL;
+    const XrSemanticOperationRecord *move =
+        receiver ? xr_semantic_unique_value_definition(semantic, receiver->value) : NULL;
+    XrSemanticOperandRecord *move_source = move && move->operand_begin < semantic->operand_count
+                                               ? &semantic->operands[move->operand_begin]
+                                               : NULL;
+    uint32_t moved_source = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(target && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL && call &&
+            callee && parameter && receiver && move && move_source &&
+            move->opcode == XI_SOURCE_MOVE && parameter->mode == XR_PARAM_MOVE &&
+            parameter->ownership == XI_OWN_BORROWED && receiver->role == XR_SEM_OPERAND_RECEIVER &&
+            receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+            receiver->access == XR_CALL_ARG_MOVE &&
+            xr_semantic_class_call_parameter_source_class(semantic, callee->parameter_begin,
+                                                          receiver) != XR_SEMANTIC_INDEX_NONE &&
+            xr_semantic_owner_transfer_is_exact(semantic, move, &moved_source) &&
+            moved_source == move_source->value);
+
+    uint8_t saved_role = receiver->role;
+    receiver->role = XR_SEM_OPERAND_ARGUMENT;
+    REQUIRE(xr_semantic_class_call_parameter_source_class(semantic, callee->parameter_begin,
+                                                          receiver) == XR_SEMANTIC_INDEX_NONE);
+    receiver->role = saved_role;
+    uint8_t saved_parameter_ownership = parameter->ownership;
+    parameter->ownership = XI_OWN_NONE;
+    REQUIRE(xr_semantic_class_call_parameter_source_class(semantic, callee->parameter_begin,
+                                                          receiver) == XR_SEMANTIC_INDEX_NONE);
+    parameter->ownership = saved_parameter_ownership;
+    uint8_t saved_move_action = move_source->ownership_action;
+    move_source->ownership_action = XR_SEM_OPERAND_BORROW;
+    REQUIRE(!xr_semantic_owner_transfer_is_exact(semantic, move, NULL));
+    move_source->ownership_action = saved_move_action;
+
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-instance move receiver TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && plan->calls_count == 1 && plan->call_arguments_count == 1 &&
+            (plan->completed_family_mask & XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE) != 0);
+    XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    REQUIRE(argument->semantic_value == move->result_value &&
+            argument->mode == XR_TARGET_CALL_VALUE && argument->ownership == XR_TARGET_CALL_READ &&
+            argument->flags == 0 && argument->caller_slot < plan->slots_count &&
+            argument->callee_slot < plan->slots_count &&
+            plan->slots[argument->caller_slot].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            plan->slots[argument->callee_slot].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+    uint8_t saved_argument_ownership = argument->ownership;
+    argument->ownership = XR_TARGET_CALL_CONSUME;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->ownership = saved_argument_ownership;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
 }
@@ -9683,6 +9780,11 @@ int main(int argc, char **argv) {
         puts("Direct-local class argument authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "source-instance-move-receiver-authority") == 0) {
+        test_source_instance_move_receiver_authority();
+        puts("Source-instance move receiver authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "direct-local-source-class-array-ref-authority") == 0) {
         test_direct_local_source_class_array_ref_authority();
         puts("Direct-local source-class Array ref authority tests passed");
@@ -9867,7 +9969,7 @@ int main(int argc, char **argv) {
     test_direct_local_source_class_array_ref_authority();
     test_direct_local_forwarded_source_class_ref_authority();
     test_direct_local_managed_aggregate_lifecycle_authority();
-    test_source_instance_method_target_fails_closed();
+    test_source_instance_move_receiver_authority();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();
     test_direct_local_value_aggregate_result_storage();

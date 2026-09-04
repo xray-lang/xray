@@ -55,7 +55,7 @@
 #include "../semantic/xr_semantic_array_member_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
-#include "../semantic/xr_semantic_owner_forward_shape.h"
+#include "../semantic/xr_semantic_owner_transfer_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_direct_callee_shape.h"
 #include "../semantic/xr_semantic_local_call_target_shape.h"
@@ -4061,7 +4061,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
                 operation->function) ||
             /* A transfer carries a dynamic value onward, so its result type is
              * exact for the same reason its source's was. */
-            xr_semantic_owner_forward_is_exact(semantic, operation, NULL) ||
+            xr_semantic_owner_transfer_is_exact(semantic, operation, NULL) ||
             xr_semantic_class_object_is_exact(semantic, operation) ||
             xr_semantic_class_instance_value_is_exact(semantic, operation, NULL) ||
             (operation->opcode == XI_CALL && imported_source_class_instance_storage_is_exact_verify(
@@ -4304,9 +4304,9 @@ static bool verify_value_binding(
     /* A copy that only renames its operand carries the source's binding, so the
      * result having one is expected rather than unexplained. Same statement of
      * the shape the builder used to give it that binding. */
-    uint32_t owner_forward_source = XR_SEMANTIC_INDEX_NONE;
-    bool exact_owner_forward =
-        xr_semantic_owner_forward_is_exact(semantic, operation, &owner_forward_source);
+    uint32_t owner_transfer_source = XR_SEMANTIC_INDEX_NONE;
+    bool exact_owner_transfer =
+        xr_semantic_owner_transfer_is_exact(semantic, operation, &owner_transfer_source);
     uint32_t identity_copy_source = XR_SEMANTIC_INDEX_NONE;
     bool exact_identity_copy =
         xr_semantic_identity_copy_is_exact(semantic, operation, &identity_copy_source);
@@ -4456,7 +4456,7 @@ static bool verify_value_binding(
                 exact_source_export_string_result || exact_stringbuilder ||
                 exact_stringbuilder_append || exact_stringbuilder_to_string ||
                 exact_stringbuilder_append_string || exact_stringbuilder_clear ||
-                exact_identity_copy || exact_owner_forward || exact_string_runes ||
+                exact_identity_copy || exact_owner_transfer || exact_string_runes ||
                 exact_map_entries_iterator || exact_map_entry_iterator_next ||
                 exact_string_slice_range || exact_rune_to_string || exact_json_namespace_value ||
                 exact_panic_info_constructor || exact_array_member_result || exact_direct_callee ||
@@ -4545,16 +4545,16 @@ static bool verify_value_binding(
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_DYNAMIC
                 ? 1
                 : -4;
-    } else if (exact_owner_forward) {
+    } else if (exact_owner_transfer) {
         /* A transfer holds what its source held, so the expected kind is the
          * source's. An unclaimed source leaves it unclaimed rather than
          * ineligible, matching what the builder does. */
-        const XrTargetValueRepRecord *forward_source =
-            owner_forward_source != XR_SEMANTIC_INDEX_NONE
-                ? verifier_value_rep(plan, view, owner_forward_source)
+        const XrTargetValueRepRecord *transfer_source =
+            owner_transfer_source != XR_SEMANTIC_INDEX_NONE
+                ? verifier_value_rep(plan, view, owner_transfer_source)
                 : NULL;
-        if (forward_source) {
-            expected_kind = plan->machine_reps[forward_source->register_rep].kind;
+        if (transfer_source) {
+            expected_kind = plan->machine_reps[transfer_source->register_rep].kind;
             expected_layout = verifier_layout_for_type(plan, view, semantic_type);
             eligibility = 1;
         } else {
@@ -6920,10 +6920,8 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                  * type row is the anonymous instance naming no declaration. */
                 bool argument_class_instance =
                     parameter && parameter->type == operand->type &&
-                    xr_semantic_class_instance_parameter_source_class(semantic, parameter_index) !=
-                        XR_SEMANTIC_INDEX_NONE &&
-                    xr_semantic_class_parameter_call_transfer_is_exact(semantic, parameter_index,
-                                                                       operand);
+                    xr_semantic_class_call_parameter_source_class(
+                        semantic, parameter_index, operand) != XR_SEMANTIC_INDEX_NONE;
                 uint8_t ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
                                         ? XR_TARGET_CALL_CONSUME
                                         : XR_TARGET_CALL_READ;

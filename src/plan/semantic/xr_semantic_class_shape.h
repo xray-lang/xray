@@ -244,7 +244,13 @@ static inline uint32_t xr_semantic_class_declared_receiver_source_class(const Xr
     bool borrowed = (parameter->flags & XR_SEM_PARAMETER_RECEIVER_BORROWED) != 0;
     if (source_kind == XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD) {
         if (parameter->mode == XR_PARAM_MOVE) {
-            if (borrowed || parameter->ownership != XI_OWN_OWNED)
+            /* MOVE is the caller's uniqueness contract. The callee's ARC
+             * summary independently decides whether the body takes that owner
+             * or only borrows it, so either RC ownership is exact here. The
+             * receiver-borrowed flag remains absent because it records the
+             * source receiver mode rather than the ARC refinement. */
+            if (borrowed ||
+                (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED))
                 return XR_SEMANTIC_INDEX_NONE;
         } else if (!borrowed || parameter->ownership != XI_OWN_BORROWED) {
             return XR_SEMANTIC_INDEX_NONE;
@@ -387,39 +393,55 @@ static inline uint32_t xr_semantic_class_instance_parameter_source_class(const X
     return xr_semantic_class_argument_source_class(plan, parameter_index);
 }
 
-/* A class parameter's ownership declaration and the call operand's action are
- * one transfer fact. An owned parameter receives the caller's reference and
- * therefore requires CONSUME; a borrowed parameter leaves responsibility with
- * the caller and therefore requires BORROW. Both use the shared READ carrier,
- * so a ref/writeback spelling cannot be admitted by an ownership match alone.
- * The class-instance judgement is part of this question: an ordinary scalar
- * with the same ownership numbers must not enter the class storage family. */
-static inline bool xr_semantic_class_parameter_call_transfer_is_exact(
-    const XrSemanticPlan *plan, uint32_t parameter_index, const XrSemanticOperandRecord *operand) {
+/* The declaration whose class instance crosses one call boundary, or NONE.
+ * Ordinary parameters transfer ownership at the call itself: owned consumes
+ * and borrowed borrows. A method receiver is different because XI_METHOD_ARGS
+ * always borrows operand zero. For a move receiver, XI_SOURCE_MOVE before
+ * the call performs the ownership transfer; the call then reads that fresh
+ * owner through MOVE access. This distinction is structural, not a selector
+ * exception, and keeps ordinary owned arguments on the consuming path.
+ *
+ * The parameter must be the declared self of a method before the receiver form
+ * is admitted. A non-instance parameter, an ordinary argument posing as a
+ * receiver, or a receiver with mismatched ownership therefore names no class. */
+static inline uint32_t
+xr_semantic_class_call_parameter_source_class(const XrSemanticPlan *plan, uint32_t parameter_index,
+                                              const XrSemanticOperandRecord *operand) {
     const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
-    if (!parameter || !operand ||
-        xr_semantic_class_instance_parameter_source_class(plan, parameter_index) ==
-            XR_SEMANTIC_INDEX_NONE ||
-        parameter->mode != operand->parameter_mode ||
+    uint32_t source_class =
+        xr_semantic_class_instance_parameter_source_class(plan, parameter_index);
+    if (!parameter || !operand || source_class == XR_SEMANTIC_INDEX_NONE ||
+        parameter->type != operand->type || parameter->mode != operand->parameter_mode ||
         parameter->transfer_mode != XR_TRANSFER_SHARE ||
         operand->transfer_mode != XR_TRANSFER_SHARE || operand->origin != XI_PLACE_ORIGIN_NONE ||
         operand->lifetime != XI_PLACE_LIFETIME_NONE || operand->escape != XI_PLACE_ESCAPE_NONE ||
         operand->flags != XR_SEM_OPERAND_CALL_CONTRACT)
-        return false;
-    bool method_receiver = xr_semantic_class_method_receiver_source_class(plan, parameter_index) !=
-                           XR_SEMANTIC_INDEX_NONE;
-    if (!method_receiver &&
-        (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN))
-        return false;
-    if (method_receiver && parameter->mode != XR_PARAM_MOVE && operand->access != XR_CALL_ARG_PLAIN)
-        return false;
-    if (method_receiver && parameter->mode == XR_PARAM_MOVE &&
-        operand->access != XR_CALL_ARG_PLAIN && operand->access != XR_CALL_ARG_MOVE)
-        return false;
-    return (parameter->ownership == XI_OWN_OWNED &&
-            operand->ownership_action == XR_SEM_OPERAND_CONSUME) ||
-           (parameter->ownership == XI_OWN_BORROWED &&
-            operand->ownership_action == XR_SEM_OPERAND_BORROW);
+        return XR_SEMANTIC_INDEX_NONE;
+    bool method_receiver =
+        xr_semantic_class_method_receiver_source_class(plan, parameter_index) == source_class;
+    if (method_receiver) {
+        if (operand->role != XR_SEM_OPERAND_RECEIVER || operand->parameter != -1 ||
+            operand->ownership_action != XR_SEM_OPERAND_BORROW)
+            return XR_SEMANTIC_INDEX_NONE;
+        if (parameter->mode == XR_PARAM_MOVE) {
+            if ((parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED) ||
+                (operand->access != XR_CALL_ARG_PLAIN && operand->access != XR_CALL_ARG_MOVE))
+                return XR_SEMANTIC_INDEX_NONE;
+        } else if (parameter->ownership != XI_OWN_BORROWED ||
+                   operand->access != XR_CALL_ARG_PLAIN) {
+            return XR_SEMANTIC_INDEX_NONE;
+        }
+        return source_class;
+    }
+    if (operand->role != XR_SEM_OPERAND_ARGUMENT || operand->parameter < 0 ||
+        parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN)
+        return XR_SEMANTIC_INDEX_NONE;
+    if ((parameter->ownership == XI_OWN_OWNED &&
+         operand->ownership_action != XR_SEM_OPERAND_CONSUME) ||
+        (parameter->ownership == XI_OWN_BORROWED &&
+         operand->ownership_action != XR_SEM_OPERAND_BORROW))
+        return XR_SEMANTIC_INDEX_NONE;
+    return source_class;
 }
 
 /* The one function the plan records as the constructor of `source_class`, or

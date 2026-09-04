@@ -54,7 +54,7 @@
 #include "../semantic/xr_semantic_native_leaf_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
-#include "../semantic/xr_semantic_owner_forward_shape.h"
+#include "../semantic/xr_semantic_owner_transfer_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_const_variant_shape.h"
 #include "../semantic/xr_semantic_direct_callee_shape.h"
@@ -6901,9 +6901,9 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
  * in what is held. Propagates rather than decides, so it runs after the
  * families that determine storage and declines a transfer whose source nothing
  * claimed. */
-static bool builder_add_owner_forward_storage(XrTargetPlanBuilder *builder, char *error,
-                                              size_t error_size) {
-    if (!builder_begin_family(builder, XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE, error, error_size))
+static bool builder_add_owner_transfer_storage(XrTargetPlanBuilder *builder, char *error,
+                                               size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE, error, error_size))
         return false;
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
     bool valid = true;
@@ -6912,7 +6912,7 @@ static bool builder_add_owner_forward_storage(XrTargetPlanBuilder *builder, char
             xr_semantic_plan_operation(builder->semantic_plan, i);
         uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
         if (!operation ||
-            !xr_semantic_owner_forward_is_exact(builder->semantic_plan, operation, &source_value))
+            !xr_semantic_owner_transfer_is_exact(builder->semantic_plan, operation, &source_value))
             continue;
         const XrTargetValueIntent *source_intent = NULL;
         bool result_claimed = false;
@@ -6939,7 +6939,7 @@ static bool builder_add_owner_forward_storage(XrTargetPlanBuilder *builder, char
                                 XR_TARGET_SLOT_TEMPORARY, operation->id, XR_SEMANTIC_INDEX_NONE,
                                 &slot_identity)) {
             valid = fail(error, error_size, "XR_TARGET_1001",
-                         "owner forward slot identity is incomplete");
+                         "owner transfer slot identity is incomplete");
             break;
         }
         XrTargetSlotIntent slot = {
@@ -6975,7 +6975,7 @@ static bool builder_add_owner_forward_storage(XrTargetPlanBuilder *builder, char
         builder->poisoned = true;
         return false;
     }
-    builder->completed_family_mask |= XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE;
+    builder->completed_family_mask |= XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE;
     return true;
 }
 
@@ -10717,11 +10717,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          * the constructor receiver. Asking only about the declared-parameter
          * form would refuse every `this`, whose type row is the anonymous
          * instance that names no declaration. */
-        bool exact_class_instance =
-            parameter && parameter->type == operand->type &&
-            xr_semantic_class_instance_parameter_source_class(plan, parameter_index) !=
-                XR_SEMANTIC_INDEX_NONE &&
-            xr_semantic_class_parameter_call_transfer_is_exact(plan, parameter_index, operand);
+        bool exact_class_instance = parameter && parameter->type == operand->type &&
+                                    xr_semantic_class_call_parameter_source_class(
+                                        plan, parameter_index, operand) != XR_SEMANTIC_INDEX_NONE;
         /* An Array handed over by value. It travels the plain argument path a
          * scalar takes -- the tagged value is copied, the allocation is shared
          * -- so it states no place and no element storage of its own. Whatever
@@ -16294,7 +16292,7 @@ static const XrTargetFamily k_target_families[] = {
     /* Propagates, so it runs after every family that decides storage and
      * before the call family that reads the result. */
     {"identity_copy_storage", builder_add_identity_copy_storage},
-    {"owner_forward_storage", builder_add_owner_forward_storage},
+    {"owner_transfer_storage", builder_add_owner_transfer_storage},
     {"calls_and_adapters", builder_add_calls_and_adapters},
     {"coroutine_state_calls", builder_add_coroutine_state_calls},
     {"dynamic_entry_expectations", builder_add_dynamic_entry_expectations},

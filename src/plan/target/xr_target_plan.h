@@ -76,7 +76,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE (UINT64_C(1) << 42)
 #define XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE (UINT64_C(1) << 43)
 #define XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE (UINT64_C(1) << 44)
-#define XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE (UINT64_C(1) << 45)
+#define XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE (UINT64_C(1) << 45)
 #define XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE (UINT64_C(1) << 46)
 #define XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE (UINT64_C(1) << 47)
 #define XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE (UINT64_C(1) << 48)
@@ -180,7 +180,8 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_PANIC_INFO_CONSTRUCTOR_STORAGE |                                 \
                  XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE |                                          \
                  XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE |                                  \
-                 XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE | XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE | \
+                 XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE |                                          \
+                 XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE |                                         \
                  XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE |                                          \
                  XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE))
 
