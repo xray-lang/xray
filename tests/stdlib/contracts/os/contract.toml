@@ -1,6 +1,6 @@
 schema = 1
 module = "os"
-contract_revision = 1
+contract_revision = 2
 legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/os/legacy_expected.jsonl"
@@ -15,7 +15,7 @@ legacy_public_surface = [
 ]
 intentional_semantic_changes = [
   "os is a permanent L2 syscall shell; the .def signatures are the typed contract",
-  "this contract is a behavior baseline lock, not a migration",
+  "exec captures bytes with independent bounds instead of assuming subprocess output is UTF-8 text",
 ]
 known_legacy_bugs = [
   "none recorded for the native baseline",
@@ -32,4 +32,4 @@ new_behavior = "platform/arch/cpuCount/env queries return consistent typed value
 [[legacy_behavior]]
 id = "exec-result"
 classification = "required"
-new_behavior = "exec returns a typed ExecResult with stdout/stderr/status identically on VM and AOT"
+new_behavior = "exec composes sys.Process and Pipe in Xray, captures stdout/stderr as bounded byte arrays, and reports independent truncation"

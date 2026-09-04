@@ -783,29 +783,11 @@
       "representation": "native",
       "signatures": [
         "xr_io_core_chmod_mode",
-        "xr_io_core_copy_stream",
         "xr_io_core_cstr_len",
-        "xr_io_core_is_dot_dir_entry",
-        "xr_io_core_is_sep",
-        "xr_io_core_join_child_len",
-        "xr_io_core_join_child_path",
         "xr_io_core_path_result_cstr_view",
         "xr_io_core_path_result_view",
-        "xr_io_core_prepare_sized_read",
-        "xr_io_core_read_all_stream_alloc",
-        "xr_io_core_read_dir",
-        "xr_io_core_read_dir_recursive",
-        "xr_io_core_read_dir_recursive_impl",
-        "xr_io_core_read_dir_recursive_visit",
-        "xr_io_core_read_dir_visit",
-        "xr_io_core_read_into",
-        "xr_io_core_read_lines_each",
-        "xr_io_core_read_sized_stream_alloc",
-        "xr_io_core_relative_path_from_base",
         "xr_io_core_stat_fields",
-        "xr_io_core_stat_perm_mode",
-        "xr_io_core_trim_line_end",
-        "xr_io_core_write_all"
+        "xr_io_core_stat_perm_mode"
       ],
       "status": "production",
       "test_callers": [
@@ -1035,8 +1017,7 @@
         "src/runtime/value/xf64_methods.h",
         "src/runtime/xstrbuf.c",
         "src/vm/xvm.c",
-        "src/vm/xvm_dispatch_arith.inc.c",
-        "stdlib/math/math.c"
+        "src/vm/xvm_dispatch_arith.inc.c"
       ],
       "profiles": [
         "vm",
@@ -1087,10 +1068,6 @@
       "representation": "native",
       "signatures": [
         "xr_os_core_arch",
-        "xr_os_core_cpu_count",
-        "xr_os_core_exec_buffer_append_raw",
-        "xr_os_core_exec_buffer_next_cap",
-        "xr_os_core_exec_windows_exit_code",
         "xr_os_core_getpid",
         "xr_os_core_loadavg_from_fixed",
         "xr_os_core_loadavg_set",
@@ -1322,32 +1299,6 @@
       "test_callers": [
         "tests/unit/stdlib/test_numeric_core.c"
       ]
-    },
-    {
-      "contains_tagged_value": false,
-      "header": "src/shared/xr_regex_core.h",
-      "id": "regex-flag-contract",
-      "owner": "shared-kernel",
-      "production_callers": [
-        "stdlib/regex/xregex_binding.c"
-      ],
-      "profiles": [
-        "vm",
-        "aot",
-        "hosted"
-      ],
-      "representation": "native",
-      "signatures": [
-        "xr_regex_core_escape",
-        "xr_regex_core_escape_len",
-        "xr_regex_core_int_arg",
-        "xr_regex_core_is_special",
-        "xr_regex_core_limit_arg",
-        "xr_regex_core_parse_flags",
-        "xr_regex_core_split_max_parts"
-      ],
-      "status": "production",
-      "test_callers": []
     },
     {
       "contains_tagged_value": false,

@@ -14,19 +14,12 @@
 
 #include "../common.h"
 #include "../../src/base/xplatform.h"
-#include "../../src/base/xmalloc.h"
-#include "../../src/base/xchecks.h"
-#include "../../src/runtime/object/xjson.h"
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/vm/xvm.h"           // xr_yieldable_cfunction_new
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 #include "../../src/os/os_fs.h"
-#include "../../src/os/os_proc.h"
 #include "../../src/shared/xr_os_core.h"
-#include "../../src/module/xstdlib_runtime_cache.h"
 
 #include <signal.h>
 #include <time.h>
@@ -37,10 +30,8 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #else
-#include <errno.h>
 #include <unistd.h>
 #include <pwd.h>
-#include <sys/wait.h>
 #endif
 
 #ifdef XR_OS_MACOS
@@ -478,140 +469,6 @@ static XrValue os_clock(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_float((double) clock() / CLOCKS_PER_SEC);
-}
-
-/* ========== Process Execution (P0) ========== */
-
-// exec(cmd) - Execute shell command, return ExecResult handle
-// (Json with fixed shape: stdout, stderr, exitCode).
-static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc != 1)
-        return xr_null();
-    const char *cmd = xrs_string_arg(args[0], NULL);
-    if (!cmd || cmd[0] == '\0')
-        return xr_null();
-
-#ifdef XR_OS_WINDOWS
-    // Windows: simplified via _popen (stdout only)
-    FILE *fp = _popen(cmd, "r");
-    if (!fp)
-        return xr_null();
-
-    char buf[4096];
-    size_t len = 0, cap = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
-    char *output = (char *) xr_malloc(cap);
-    if (!output) {
-        _pclose(fp);
-        return xr_null();
-    }
-    output[0] = '\0';
-
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
-        size_t new_cap = 0;
-        if (!xr_os_core_exec_buffer_next_cap(len, cap, n, &new_cap)) {
-            xr_free(output);
-            _pclose(fp);
-            return xr_null();
-        }
-        if (new_cap > cap) {
-            if (!XR_REALLOC(output, new_cap)) {
-                xr_free(output);
-                _pclose(fp);
-                return xr_null();
-            }
-            cap = new_cap;
-        }
-        if (!xr_os_core_exec_buffer_append_raw(output, &len, cap, buf, n)) {
-            xr_free(output);
-            _pclose(fp);
-            return xr_null();
-        }
-    }
-    // _pclose returns the same wait-style encoding as _cwait/_spawn; the
-    // decode (low-order byte, negative means close itself failed) is shared
-    // with the AOT runtime in xr_os_core.h.
-    int raw_status = _pclose(fp);
-    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
-
-    XrObjectInstance *json = xr_stdlib_record_new(X, "os", "__ExecResult");
-    XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, output));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int(exit_code));
-    xr_free(output);
-    return xr_object_instance_value(json);
-#else
-    // Unix: fork + exec + pipe for both stdout and stderr
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0)
-        return xr_null();
-    if (pipe(stderr_pipe) != 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        return xr_null();
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[0]);
-        close(stderr_pipe[1]);
-        return xr_null();
-    }
-
-    if (pid == 0) {
-        // Child process
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stderr_pipe[1], STDERR_FILENO);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
-        execl("/bin/sh", "sh", "-c", cmd, (char *) NULL);
-        _exit(127);
-    }
-
-    // Parent process
-    close(stdout_pipe[1]);
-    close(stderr_pipe[1]);
-
-    char *stdout_buf = NULL;
-    char *stderr_buf = NULL;
-    bool read_ok = xr_proc_capture_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
-
-    int status = 0;
-    pid_t waited;
-    do {
-        waited = waitpid(pid, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    if (waited < 0) {
-        status = -1;
-    }
-    if (!read_ok) {
-        xr_free(stdout_buf);
-        xr_free(stderr_buf);
-        return xr_null();
-    }
-    int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
-
-    XrObjectInstance *json = xr_stdlib_record_new(X, "os", "__ExecResult");
-    XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int(exit_code));
-
-    xr_free(stdout_buf);
-    xr_free(stderr_buf);
-    return xr_object_instance_value(json);
-#endif
 }
 
 /* ========== Platform Information ========== */

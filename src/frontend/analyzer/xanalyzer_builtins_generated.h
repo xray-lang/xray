@@ -244,18 +244,6 @@ static const XaBuiltinMember g_gen_net_functions[] = {
 };
 #define GEN_NET_FUNCTION_COUNT 28
 
-// os.__ExecResult handle fields
-static const XaBuiltinHandleField g_gen_os___execresult_fields[] = {
-    {"stdout", "string", true},
-    {"stderr", "string", true},
-    {"exitCode", "i64", true},
-};
-
-static const XaBuiltinHandle g_gen_os_handles[] = {
-    {"__ExecResult", g_gen_os___execresult_fields, 3, NULL, 0},
-};
-#define GEN_OS_HANDLE_COUNT 1
-
 // os module functions
 static const XaBuiltinMember g_gen_os_functions[] = {
     {"__platform", "(): string", "Host operating system name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
@@ -281,9 +269,8 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__clock", "(): f64", "Get process CPU time in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__exec", "(cmd: string): __ExecResult?", "Execute shell command", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_OS_FUNCTION_COUNT 24
+#define GEN_OS_FUNCTION_COUNT 23
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
@@ -344,7 +331,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_mem_classes, GEN_MEM_CLASS_COUNT},
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_net_classes, GEN_NET_CLASS_COUNT},
-    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},

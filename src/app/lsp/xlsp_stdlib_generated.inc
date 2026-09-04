@@ -511,11 +511,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
     {"loadavg", XLSP_SYM_FUNCTION, "fn(): Array<f64>", "", NULL, 0},
     {"clock", XLSP_SYM_FUNCTION, "fn(): f64", "", NULL, 0},
     {"sleep", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "", NULL, 0},
-    {"exec", XLSP_SYM_FUNCTION, "fn(command: string): ExecResult?", "", NULL, 0},
-    {"__ExecResult", XLSP_SYM_CLASS, "type __ExecResult", "Native handle type", NULL, 0},
+    {"exec", XLSP_SYM_FUNCTION, "fn(command: string, maxStdoutBytes?: i64, maxStderrBytes?: i64): ExecResult?", "", NULL, 0},
     {"ExecResult", XLSP_SYM_CLASS, "type ExecResult", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_OS_SYMBOL_COUNT 29
+#define GEN_XLSP_STDLIB_OS_SYMBOL_COUNT 28
 
 // parallel module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_parallel_symbols[] = {

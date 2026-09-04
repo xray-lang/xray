@@ -1,20 +1,63 @@
 // os — typed public process/environment surface over private platform syscalls.
 
-export final class ExecResult {
-    stdout: string
-    stderr: string
-    exitCode: i64
+import sys
+import { Pipe, ProcessOptions } from sys
 
-    constructor(stdout: string, stderr: string, exitCode: i64) {
+const EXEC_READ_CHUNK_BYTES: i64 = 65536
+const DEFAULT_EXEC_CAPTURE_BYTES: i64 = 16777216
+const MAX_EXEC_CAPTURE_BYTES: i64 = 2147483647
+
+export final class ExecResult {
+    stdout: Array<u8>
+    stderr: Array<u8>
+    exitCode: i64
+    stdoutTruncated: bool
+    stderrTruncated: bool
+
+    constructor(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64,
+                stdoutTruncated: bool, stderrTruncated: bool) {
         this.stdout = stdout
         this.stderr = stderr
         this.exitCode = exitCode
+        this.stdoutTruncated = stdoutTruncated
+        this.stderrTruncated = stderrTruncated
     }
 }
 
-fn _execResult(raw: __ExecResult?) -> ExecResult? {
-    if (raw == null) { return null }
-    return ExecResult(raw!.stdout, raw!.stderr, raw!.exitCode)
+final class _CapturedOutput {
+    bytes: Array<u8>
+    truncated: bool
+
+    constructor(bytes: Array<u8>, truncated: bool) {
+        this.bytes = bytes
+        this.truncated = truncated
+    }
+}
+
+// A capture limit bounds retained memory, not pipe progress. Once the limit is
+// reached the reader keeps draining so a child cannot deadlock on a full pipe.
+fn _capturePipe(pipe: move Pipe, maxBytes: i64) -> _CapturedOutput? {
+    defer { pipe.close() }
+    var out = Array<u8>()
+    var truncated = false
+    while (true) {
+        var chunk = pipe.read(EXEC_READ_CHUNK_BYTES)
+        if (chunk == null) { return null }
+        if (len(chunk!) == 0) { return _CapturedOutput(out, truncated) }
+
+        var available = maxBytes - len(out)
+        if (available <= 0) {
+            truncated = true
+            continue
+        }
+        var take = len(chunk!)
+        if (take > available) {
+            take = available
+            truncated = true
+        }
+        for (var i = 0; i < take; i++) { out.push(chunk![i]) }
+    }
+    return null
 }
 
 // Path separator and line ending are derived from the platform name rather
@@ -119,7 +162,61 @@ export fn sleep(ms: i64) {
     __sleep(ms)
 }
 
-export fn exec(command: string) -> ExecResult? {
-    if (len(command) == 0) { return null }
-    return _execResult(__exec(command))
+// Shell execution is source-owned composition over the typed process and pipe
+// resources. Both output streams are byte arrays: a child may emit embedded
+// NUL or invalid UTF-8, so decoding belongs to the caller's declared protocol.
+export fn exec(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES,
+               maxStderrBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES) -> ExecResult? {
+    if (len(command) == 0 || maxStdoutBytes < 0 || maxStderrBytes < 0 ||
+        maxStdoutBytes > MAX_EXEC_CAPTURE_BYTES || maxStderrBytes > MAX_EXEC_CAPTURE_BYTES) {
+        return null
+    }
+
+    var stdoutPipe = sys.Pipe.open()
+    if (stdoutPipe == null) { return null }
+
+    var stderrPipe = sys.Pipe.open()
+    if (stderrPipe == null) {
+        stdoutPipe!.close()
+        return null
+    }
+
+    var program = "/bin/sh"
+    var args: Array<string> = ["-c", command]
+    if (platform() == "windows") {
+        program = "cmd.exe"
+        args = ["/D", "/S", "/C", command]
+    }
+
+    var spawned = sys.Process.spawn(program, args,
+        ProcessOptions(null, null, null, stdoutPipe!.writeEnd(), stderrPipe!.writeEnd()))
+    if (spawned == null) {
+        stdoutPipe!.close()
+        stderrPipe!.close()
+        return null
+    }
+
+    // Process.spawn borrows redirection endpoints. The parent must close both
+    // write ends before waiting, otherwise EOF can never reach the readers.
+    var stdoutWriteClosed = stdoutPipe!.closeWrite()
+    var stderrWriteClosed = stderrPipe!.closeWrite()
+    var stdoutCapture: _CapturedOutput? = null
+    var stderrCapture: _CapturedOutput? = null
+    var exitCode = -1
+    var stdoutReady = stdoutPipe!
+    var stderrReady = stderrPipe!
+    scope {
+        var stdoutTask = go _capturePipe(move stdoutReady, maxStdoutBytes)
+        var stderrTask = go _capturePipe(move stderrReady, maxStderrBytes)
+        exitCode = spawned!.wait()
+        stdoutCapture = await stdoutTask
+        stderrCapture = await stderrTask
+    }
+
+    if (!stdoutWriteClosed || !stderrWriteClosed ||
+        stdoutCapture == null || stderrCapture == null) {
+        return null
+    }
+    return ExecResult(stdoutCapture!.bytes, stderrCapture!.bytes, exitCode,
+                      stdoutCapture!.truncated, stderrCapture!.truncated)
 }

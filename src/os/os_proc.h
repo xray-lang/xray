@@ -151,13 +151,6 @@ XR_FUNC int xr_proc_self_exe_path(char *buf, size_t size);
 // platforms where the query is unsupported.
 XR_FUNC bool xr_proc_debugger_attached(void);
 
-#if !defined(XR_OS_WINDOWS)
-// Drain a child's stdout/stderr descriptors without deadlocking on a full
-// sibling pipe. Successful outputs are xr_malloc-owned by the caller.
-XR_FUNC bool xr_proc_capture_pipes(int stdout_fd, int stderr_fd, char **stdout_data,
-                                   char **stderr_data);
-#endif
-
 #ifdef __cplusplus
 }
 #endif

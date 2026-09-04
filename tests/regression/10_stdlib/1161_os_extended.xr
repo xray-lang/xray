@@ -106,19 +106,18 @@ fn test_clock() {
 fn test_exec_echo() {
     var result = os.exec("echo hello")
     assert(result != null)
-    assertEqual(result!.stdout, "hello\n")
+    assertEqual(result!.stdout.toString(), "hello\n")
     assertEqual(result!.exitCode, 0)
+    assertEqual(result!.stdoutTruncated, false)
+    assertEqual(result!.stderrTruncated, false)
 }
 
 @test
 fn test_exec_stderr() {
-    // Windows _popen cannot capture stderr separately
-    if (os.platform() == "windows") {
-        return
-    }
     var result = os.exec("echo error_msg >&2")
     assert(result != null)
-    assertEqual(result!.stderr, "error_msg\n")
+    var expected = os.platform() == "windows" ? "error_msg\r\n" : "error_msg\n"
+    assertEqual(result!.stderr.toString(), expected)
     assertEqual(result!.exitCode, 0)
 }
 
@@ -139,8 +138,18 @@ fn test_exec_command_output() {
     } else {
         var result = os.exec("printf 'abc'")
         assert(result != null)
-        assertEqual(result!.stdout, "abc")
+        assertEqual(result!.stdout.toString(), "abc")
     }
+}
+
+@test
+fn test_exec_byte_capture_limits() {
+    var result = os.exec("printf 123456789", 4, 0)
+    assert(result != null)
+    assertEqual(result!.stdout.toString(), "1234")
+    assertEqual(result!.stdoutTruncated, true)
+    assertEqual(len(result!.stderr), 0)
+    assertEqual(result!.stderrTruncated, false)
 }
 
 // ===== Edge Cases =====

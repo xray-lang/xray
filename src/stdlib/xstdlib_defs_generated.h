@@ -222,7 +222,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"os", "__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", "os_loadavg", "normal", "", "xrt_os_loadavg", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"os", "__clock", "(): f64", "Get process CPU time in seconds", "os_clock", "normal", "", "xrt_os_clock", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"os", "__sleep", "(ms: i64): ()", "Sleep for milliseconds", "os_sleep", "yieldable", "", "xrt_os_sleep", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"os", "__exec", "(cmd: string): __ExecResult?", "Execute shell command", "os_exec", "normal", "", "xrt_os_exec", "s", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__chmod", "(path: Path, mode: i64): bool", "Change file permissions", "io_chmod", "normal", "", "xrt_io_chmod_value", "pv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__chdir", "(path: Path): bool", "Change working directory", "io_chdir", "normal", "", "xrt_io_chdir", "p", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", "io_cwd", "normal", "", "xrt_io_cwd", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -361,12 +360,6 @@ static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
 };
 #define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_os___ExecResult[] = {
-    {"os", "__ExecResult", "stdout", "string", true},
-    {"os", "__ExecResult", "stderr", "string", true},
-    {"os", "__ExecResult", "exitCode", "i64", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io___FileStat[] = {
     {"io", "__FileStat", "size", "i64", true},
     {"io", "__FileStat", "mode", "i64", true},
@@ -381,7 +374,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io___FileStat[]
 };
 
 static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
-    {"os", "__ExecResult", "Native handle type", xr_stdlib_handle_fields_os___ExecResult, 3},
     {"io", "__FileStat", "Native handle type", xr_stdlib_handle_fields_io___FileStat, 10},
 };
 #define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))

@@ -1,16 +1,16 @@
 {
   "schema": 1,
-  "base": "81c178f2050952ccf1f434bf1cada69fc785ef0d",
+  "base": "839d77369e995ecd7f98df1d9a4948dab3262a24",
   "counts": {
     "modules": 33,
     "production_modules": 31,
     "test_only_modules": 2,
     "symbols": 1629,
     "production_symbols": 1603,
-    "xray_body_symbols": 1438,
+    "xray_body_symbols": 1440,
     "handwritten_c_semantic_owner": 0,
-    "native_leaf_symbols": 161,
-    "production_native_leaf_symbols": 161,
+    "native_leaf_symbols": 159,
+    "production_native_leaf_symbols": 159,
     "unclassified_native_leaf": 0,
     "whole_module_native_policy": 0,
     "public_native_symbols": 0,
@@ -498,12 +498,12 @@
       "c_sources": [
         "stdlib/os/os.c"
       ],
-      "c_function_count": 24,
+      "c_function_count": 23,
       "enters_module_graph": true,
       "symbol_count": 57,
-      "xray_body_symbols": 32,
-      "handwritten_c_symbols": 24,
-      "native_leaf_symbols": 25,
+      "xray_body_symbols": 34,
+      "handwritten_c_symbols": 23,
+      "native_leaf_symbols": 23,
       "queue": "native-leaf-only",
       "queue_reason": "no handwritten C owner and no per-module loader",
       "probe": {}
@@ -8234,32 +8234,6 @@
     },
     {
       "module": "os",
-      "symbol": "__exec",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/os/os.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=pipe(2) twice, fork(2), dup2(2), fcntl(2) O_NONBLOCK, execl(3) of \"/bin/sh -c\", poll(2), read(2), waitpid(2) and close(2); Win32 _popen(3)/_pclose(3); ownership=fresh; effect=nothrow; provider=kernel process and pipe syscalls. VM stdlib/os/os.c read_exec_pipes; AOT src/aot/xrt_os.h xrt_os_read_exec_pipes. Line-for-line equivalent, two separate copies; deletion_trigger=when os.xr can build this out of sys.Process -- which already has the spawn, the pipes and the wait as separate leaves with AOT bindings -- so the drain loop and the shell invocation become Xray code; that needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md",
-      "plan_coverage": "native_binding",
-      "vm_binding": "os_exec",
-      "aot_binding": "xrt_os_exec",
-      "covered_c_deletion": "stdlib/os/os.c"
-    },
-    {
-      "module": "os",
-      "symbol": "__ExecResult",
-      "kind": "handle",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "native_leaf": true,
-      "leaf_class": "native_record_shape_leaf",
-      "leaf_reason": "abi=none; a record layout, not a call; ownership=none; effect=nothrow; provider=declaration only (stdlib/defs/core.def, fields stdout/stderr/exitCode). It is the return type of os.__exec. VM instantiates it through xr_stdlib_record_class_get(X, \"os\", \"__ExecResult\"); AOT builds an anonymous struct object instead; deletion_trigger=when os.__exec is decomposed over sys.Process and Pipe, or when a .def entry can declare its return as a type os.xr owns, so the three process-result fields stop needing a native record class",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "os",
       "symbol": "ExecResult.ExecResult",
       "kind": "type",
       "audience": "production",
@@ -8296,7 +8270,25 @@
     },
     {
       "module": "os",
+      "symbol": "ExecResult.stderrTruncated",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/os/os.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "os",
       "symbol": "ExecResult.stdout",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/os/os.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "os",
+      "symbol": "ExecResult.stdoutTruncated",
       "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/os/os.xr",

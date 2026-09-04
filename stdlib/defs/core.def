@@ -730,10 +730,6 @@ module regex {
 }
 
 module os {
-  handle __ExecResult {
-    fields: "const stdout: string, const stderr: string, const exitCode: i64"
-  }
-
   fn __platform {
     signature: "(): string"
     doc: "Host operating system name"
@@ -1020,19 +1016,6 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
-  }
-
-  fn __exec {
-    signature: "(cmd: string): __ExecResult?"
-    doc: "Execute shell command"
-    vm: "os_exec"
-    aot: "xrt_os_exec"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
   }
 
 }

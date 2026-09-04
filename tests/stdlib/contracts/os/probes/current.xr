@@ -9,7 +9,9 @@ print("{\"case\":\"query-parity\",\"outcome\":\"value\",\"value\":true,\"error\"
 
 var result = os.exec("printf xray-stdlib-oracle")
 assert(result != null)
-assert(result!.stdout == "xray-stdlib-oracle")
-assert(result!.stderr == "")
+assert(result!.stdout.toString() == "xray-stdlib-oracle")
+assert(len(result!.stderr) == 0)
 assert(result!.exitCode == 0)
+assert(!result!.stdoutTruncated)
+assert(!result!.stderrTruncated)
 print("{\"case\":\"exec-result\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"process\":\"exit-0\"}}")
