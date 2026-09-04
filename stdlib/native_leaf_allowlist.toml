@@ -168,7 +168,7 @@ class = "host_abi_leaf"
 abi = "recv(2), TLS read and scheduler netpoll wait; retains the runtime and generation-selected opaque peer across one source-bounded framed read"
 ownership = "fresh"
 effect = "suspends"
-provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the peer socket lease and source-sized framing buffer; it returns wire bytes or distinct stopped, EOF, I/O, unsafe-length, capacity, resource, cancellation and invalid-caller-limit facts. cluster.xr owns bounds, timestamps, decoding, dispatch, drop and disconnect policy"
+provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the peer socket lease and source-sized framing buffer; it returns wire bytes or distinct stopped, EOF, socket-I/O, provider-error, unsafe-length, capacity, resource, cancellation and invalid-caller-limit facts. cluster.xr owns bounds, timestamps, decoding, dispatch, drop and disconnect policy"
 deletion_trigger = "when the peer socket is an ordinary Xray-owned NetConn"
 
 [[leaf]]
@@ -178,7 +178,7 @@ class = "host_abi_leaf"
 abi = "send(2), TLS write and scheduler netpoll wait; drains one batch from the generation-selected opaque peer queue"
 ownership = "none"
 effect = "suspends"
-provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the runtime and peer socket lease, synchronized output queue and distinct drained, full, stopped, resource, closed, I/O and cancellation facts; a full queue is observed before any batch is detached. cluster.xr owns writer resubmission, fairness, slow-consumer handling, drop and generation-safe disconnect policy"
+provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the runtime and peer socket lease, synchronized output queue and distinct drained, full, stopped, resource, closed, socket-I/O, provider-error and cancellation facts; a full queue is observed before any batch is detached. cluster.xr owns writer resubmission, fairness, slow-consumer handling, drop and generation-safe disconnect policy"
 deletion_trigger = "when the peer socket and output queue are ordinary Xray-owned values"
 
 [[leaf]]

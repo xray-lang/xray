@@ -51,6 +51,7 @@ typedef enum XrClusterPeerReadEvent {
     XR_CLUSTER_PEER_READ_RESOURCE_UNAVAILABLE = 7,
     XR_CLUSTER_PEER_READ_CANCELLED = 8,
     XR_CLUSTER_PEER_READ_INVALID_LIMIT = 9,
+    XR_CLUSTER_PEER_READ_PROVIDER_ERROR = 10,
 } XrClusterPeerReadEvent;
 
 typedef enum XrClusterPeerWriteEvent {
@@ -63,6 +64,7 @@ typedef enum XrClusterPeerWriteEvent {
     XR_CLUSTER_PEER_WRITE_SOCKET_CLOSED = 6,
     XR_CLUSTER_PEER_WRITE_IO_ERROR = 7,
     XR_CLUSTER_PEER_WRITE_CANCELLED = 8,
+    XR_CLUSTER_PEER_WRITE_PROVIDER_ERROR = 9,
 } XrClusterPeerWriteEvent;
 
 /* Both entry points consume lease->owner on every return path. */

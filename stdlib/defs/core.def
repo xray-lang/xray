@@ -2146,7 +2146,7 @@ module cluster {
 
   fn __readPeer {
     signature: "(peerGeneration: i64, maxFramePayload: i64): Array<u8> | i64"
-    doc: "Suspend for one frame and return owned wire bytes or an orthogonal raw stale, stopped, EOF, I/O, wire-length, capacity, resource, cancellation or caller-limit reason"
+    doc: "Suspend for one frame and return owned wire bytes or an orthogonal raw stale, stopped, EOF, socket-I/O, provider, wire-length, capacity, resource, cancellation or caller-limit reason"
     vm: "cluster_peer_read_fn"
     vm_binding: "yieldable"
     argc: 2
@@ -2160,7 +2160,7 @@ module cluster {
 
   fn __writePeer {
     signature: "(peerGeneration: i64): i64"
-    doc: "Suspend while writing at most one queued batch and return an orthogonal raw stale, stopped, full, resource, socket, I/O or cancellation reason"
+    doc: "Suspend while writing at most one queued batch and return an orthogonal raw stale, stopped, full, resource, socket, socket-I/O, provider or cancellation reason"
     vm: "cluster_peer_write_fn"
     vm_binding: "yieldable"
     argc: 1

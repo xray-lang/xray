@@ -89,9 +89,14 @@ static XrCFuncResult peer_read_continue(XrVMRuntime *X, int status, XrValue resu
                                         void *context, XrValue *result) {
     (void) resume_value;
     XrClusterPeerIoOperation *operation = (XrClusterPeerIoOperation *) context;
-    if (!operation || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR) {
+    if (!operation) {
+        *result = xr_int(XR_CLUSTER_PEER_READ_PROVIDER_ERROR);
+        return XR_CFUNC_DONE;
+    }
+    if (status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR) {
         peer_io_operation_destroy(operation);
-        *result = xr_int(XR_CLUSTER_PEER_READ_CANCELLED);
+        *result = xr_int(status == XR_RESUME_CANCELLED ? XR_CLUSTER_PEER_READ_CANCELLED
+                                                      : XR_CLUSTER_PEER_READ_PROVIDER_ERROR);
         return XR_CFUNC_DONE;
     }
 
@@ -179,9 +184,14 @@ static XrCFuncResult peer_write_continue(XrVMRuntime *X, int status, XrValue res
                                          void *context, XrValue *result) {
     (void) resume_value;
     XrClusterPeerIoOperation *operation = (XrClusterPeerIoOperation *) context;
-    if (!operation || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR) {
+    if (!operation) {
+        *result = xr_int(XR_CLUSTER_PEER_WRITE_PROVIDER_ERROR);
+        return XR_CFUNC_DONE;
+    }
+    if (status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR) {
         peer_io_operation_destroy(operation);
-        *result = xr_int(XR_CLUSTER_PEER_WRITE_CANCELLED);
+        *result = xr_int(status == XR_RESUME_CANCELLED ? XR_CLUSTER_PEER_WRITE_CANCELLED
+                                                      : XR_CLUSTER_PEER_WRITE_PROVIDER_ERROR);
         return XR_CFUNC_DONE;
     }
 
