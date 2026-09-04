@@ -238,28 +238,8 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     }
     /* Atomic native type class (registered by xr_core_init). */
     XrClass *atomic_cls = xr_isolate_get_native_type_class(isolate, XR_TATOMIC);
-    XrClass *work_queue_cls = xr_isolate_get_native_type_class(isolate, XR_TWORKQUEUE);
-    XrClass *result_group_cls = xr_isolate_get_native_type_class(isolate, XR_TRESULTGROUP);
-    XrClass *countdown_latch_cls = xr_isolate_get_native_type_class(isolate, XR_TCOUNTDOWNLATCH);
-    XrClass *semaphore_cls = xr_isolate_get_native_type_class(isolate, XR_TSEMAPHORE);
-    XrClass *event_count_cls = xr_isolate_get_native_type_class(isolate, XR_TEVENTCOUNT);
     if (atomic_cls)
         bind_class_global(isolate, XR_GLOBAL_VAR_ATOMIC, atomic_cls);
-    if (work_queue_cls) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_WORKQUEUE, work_queue_cls);
-    }
-    if (result_group_cls) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_RESULTGROUP, result_group_cls);
-    }
-    if (countdown_latch_cls) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_COUNTDOWNLATCH, countdown_latch_cls);
-    }
-    if (semaphore_cls) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_SEMAPHORE, semaphore_cls);
-    }
-    if (event_count_cls) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_EVENTCOUNT, event_count_cls);
-    }
 }
 
 /* ========== Isolate installation ========== */
