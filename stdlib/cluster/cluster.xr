@@ -19,8 +19,10 @@
 //   failure-detector math and discovery admission policy live below in Xray.
 //
 // WIRE FORMAT
-//   Normative. src/io/xcluster_wire.c is the native reader-loop projection and
-//   tests/unit/stdlib/test_cluster_proto.c holds that projection to the byte.
+//   Normative. Native peer I/O reads only the bounded opaque frame bytes; it
+//   does not carry an encoder, decoder, authentication or dispatch projection.
+//   tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr
+//   pins this source implementation to byte-exact known answers.
 //
 //     frame     := u32be(1 + len(payload)) u8(type) payload
 //     transport := u8(hopLimit) u8(len(topic)) topic envelope

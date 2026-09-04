@@ -106,7 +106,7 @@ XR_FUNC XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_
 /* Move a script-visible stream handle into the cluster transport wrapper.
  * The handle is closed to further script I/O without closing its fd/TLS state;
  * the returned XrIOConn becomes their sole owner. */
-XR_FUNC XrIOConn *xr_io_conn_take_net_handle(struct XrNetConn *handle, int timeout_ms);
+XR_FUNC XrIOConn *xr_io_conn_take_net_handle(struct XrNetConn *handle);
 
 /* One non-blocking transport operation. A -1 result asks the caller to wait
  * for wait_events; -3 means the connection has failed or closed. */

@@ -308,7 +308,7 @@ XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_ms) {
     return conn;
 }
 
-XrIOConn *xr_io_conn_take_net_handle(XrNetConn *handle, int timeout_ms) {
+XrIOConn *xr_io_conn_take_net_handle(XrNetConn *handle) {
     if (!handle || handle->closed || handle->fd < 0 || handle->kind == XR_NETCONN_UDP)
         return NULL;
 
@@ -318,7 +318,9 @@ XrIOConn *xr_io_conn_take_net_handle(XrNetConn *handle, int timeout_ms) {
     conn->fd = handle->fd;
     conn->tls = (XrTlsConn *) handle->tls_state;
     conn->is_tls = handle->kind == XR_NETCONN_TLS;
-    conn->timeout_ms = timeout_ms > 0 ? timeout_ms : 30000;
+    /* Framed peer I/O waits directly on readiness and carries no second
+     * timeout policy after the source-owned handshake has completed. */
+    conn->timeout_ms = 0;
     conn->last_error = XR_NERR_OK;
     conn->X = handle->isolate;
 

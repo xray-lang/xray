@@ -274,8 +274,14 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
     atomic_store(&node->ref_count, 1);
     atomic_store(&node->shutdown_started, false);
-    strncpy(node->name, name->data, XR_NODE_NAME_MAX);
-    node->name[XR_NODE_NAME_MAX] = '\0';
+    if ((size_t) name->length >= sizeof(node->name)) {
+        xr_free(node);
+        xr_net_conn_close(handle);
+        cluster_runtime_release(cluster);
+        return xr_bool(false);
+    }
+    memcpy(node->name, name->data, name->length);
+    node->name[name->length] = '\0';
     strncpy(node->host, host->data, sizeof(node->host) - 1);
     node->port = (uint16_t) port;
     node->state = XR_NODE_IDLE;
@@ -288,7 +294,7 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
     xr_phi_detector_init(&node->phi, (double) heartbeat_interval_ms);
 
-    node->conn = xr_io_conn_take_net_handle(handle, XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
+    node->conn = xr_io_conn_take_net_handle(handle);
     if (!node->conn) {
         cluster_node_release(node);
         xr_net_conn_close(handle);

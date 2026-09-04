@@ -1,0 +1,191 @@
+// Byte-exact known answers for the Xray-owned cluster wire protocol.
+import cluster
+import {
+    ClusterCoroExit,
+    ClusterHandshakeAck,
+    ClusterHandshakeRequest,
+    FRAME_CORO_EXIT,
+    FRAME_CORO_MONITOR,
+    FRAME_HANDSHAKE_ERR,
+    FRAME_HEARTBEAT_PING,
+    PHI_WINDOW_SIZE,
+    PhiDetector
+} from cluster
+
+var raw = cluster.encodeFrame(FRAME_HANDSHAKE_ERR, Array<u8>([170, 187, 204]))
+assertEqual(len(raw!), 8)
+assertEqual(raw![0], 0)
+assertEqual(raw![1], 0)
+assertEqual(raw![2], 0)
+assertEqual(raw![3], 4)
+assertEqual(raw![4], 4)
+assertEqual(raw![5], 170)
+assertEqual(raw![6], 187)
+assertEqual(raw![7], 204)
+print(raw)
+var rawFrame = cluster.decodeFrame(raw!)
+print(rawFrame!.kind)
+print(rawFrame!.payload)
+print(cluster.decodeFrame(Array<u8>([0, 0, 0, 4, 4, 170, 187])) == null)
+print(cluster.decodeFrame(Array<u8>([0, 0, 0, 3, 4, 170, 187, 204])) == null)
+
+var envelope = Array<u8>(64)
+for (var i = 0; i < len(envelope); i++) { envelope[i] = i as u8 }
+var transportWire = cluster.encodeTransportFrame(3, "bench.payload", envelope)
+assertEqual(len(transportWire!), 84)
+assertEqual(transportWire![3], 80)
+assertEqual(transportWire![4], 7)
+assertEqual(transportWire![5], 3)
+assertEqual(transportWire![6], 13)
+assertEqual(transportWire![20], 0)
+assertEqual(transportWire![83], 63)
+print(transportWire)
+var transport = cluster.decodeTransportFrame(transportWire!)
+print(transport!.hopLimit)
+print(transport!.topic)
+print(len(transport!.envelope))
+print(transport!.envelope[0])
+print(transport!.envelope[63])
+print(cluster.encodeTransportFrame(3, "events.*", Array<u8>(64)) == null)
+print(cluster.encodeTransportFrame(3, "events.user", Array<u8>(63)) == null)
+
+var requestNonce = Array<u8>(16)
+for (var i = 0; i < len(requestNonce); i++) { requestNonce[i] = (16 + i) as u8 }
+var requestValue: ClusterHandshakeRequest = {
+    name: "node-alpha", nonce: requestNonce, flags: 16909060,
+}
+var requestWire = cluster.encodeHandshakeRequest(requestValue)
+assertEqual(len(requestWire!), 37)
+assertEqual(requestWire![3], 33)
+assertEqual(requestWire![4], 1)
+assertEqual(requestWire![5], 6)
+assertEqual(requestWire![6], 10)
+assertEqual(requestWire![33], 1)
+assertEqual(requestWire![34], 2)
+assertEqual(requestWire![35], 3)
+assertEqual(requestWire![36], 4)
+print(requestWire)
+var requestFrame = cluster.decodeFrame(requestWire!)
+var request = cluster.decodeHandshakeRequest(requestFrame!.payload)
+print(request!.name)
+print(request!.nonce)
+print(request!.flags)
+var invalidRequest = Array<u8>(23)
+invalidRequest[0] = 5
+invalidRequest[1] = 1
+invalidRequest[2] = 97
+print(cluster.decodeHandshakeRequest(invalidRequest) == null)
+var minimumRequest = Array<u8>(23)
+minimumRequest[0] = 6
+minimumRequest[1] = 1
+minimumRequest[2] = 97
+print(cluster.decodeHandshakeRequest(minimumRequest) != null)
+
+var ackNonce = Array<u8>(16)
+var ackProof = Array<u8>(32)
+for (var i = 0; i < len(ackNonce); i++) { ackNonce[i] = (32 + i) as u8 }
+for (var i = 0; i < len(ackProof); i++) { ackProof[i] = (128 + i) as u8 }
+var ackValue: ClusterHandshakeAck = {
+    name: "node-beta", nonce: ackNonce, proof: ackProof, flags: 168496141,
+}
+var ackWire = cluster.encodeHandshakeAck(ackValue)
+assertEqual(len(ackWire!), 68)
+assertEqual(ackWire![3], 64)
+assertEqual(ackWire![4], 2)
+assertEqual(ackWire![5], 6)
+assertEqual(ackWire![6], 9)
+assertEqual(ackWire![64], 10)
+assertEqual(ackWire![65], 11)
+assertEqual(ackWire![66], 12)
+assertEqual(ackWire![67], 13)
+print(ackWire)
+var ackFrame = cluster.decodeFrame(ackWire!)
+var ack = cluster.decodeHandshakeAck(ackFrame!.payload)
+print(ack!.name)
+print(ack!.nonce)
+print(ack!.proof)
+print(ack!.flags)
+var minimumAck = Array<u8>(55)
+minimumAck[0] = 6
+minimumAck[1] = 1
+minimumAck[2] = 97
+print(cluster.decodeHandshakeAck(minimumAck) != null)
+print(cluster.decodeHandshakeAck(Array<u8>(54)) == null)
+
+var doneProof = Array<u8>(32)
+for (var i = 0; i < len(doneProof); i++) { doneProof[i] = (192 + i) as u8 }
+var doneWire = cluster.encodeHandshakeDone(doneProof)
+assertEqual(len(doneWire!), 37)
+assertEqual(doneWire![3], 33)
+assertEqual(doneWire![4], 3)
+assertEqual(doneWire![5], 192)
+assertEqual(doneWire![36], 223)
+print(doneWire)
+var doneFrame = cluster.decodeFrame(doneWire!)
+print(cluster.decodeHandshakeDone(doneFrame!.payload))
+print(cluster.decodeHandshakeDone(Array<u8>(31)) == null)
+
+var heartbeatWire = cluster.encodeHeartbeat(FRAME_HEARTBEAT_PING, 72623859790382856)
+assertEqual(len(heartbeatWire!), 13)
+assertEqual(heartbeatWire![3], 9)
+assertEqual(heartbeatWire![4], 5)
+for (var i = 0; i < 8; i++) { assertEqual(heartbeatWire![5 + i], i + 1) }
+print(heartbeatWire)
+var heartbeatFrame = cluster.decodeFrame(heartbeatWire!)
+print(cluster.decodeHeartbeat(heartbeatFrame!.payload))
+print(cluster.decodeHeartbeat(Array<u8>(7)) == null)
+
+var monitorWire = cluster.encodeCoroMonitor(FRAME_CORO_MONITOR, "worker.alpha")
+assertEqual(len(monitorWire!), 18)
+assertEqual(monitorWire![3], 14)
+assertEqual(monitorWire![4], 8)
+assertEqual(monitorWire![5], 12)
+print(monitorWire)
+var monitorFrame = cluster.decodeFrame(monitorWire!)
+print(cluster.decodeCoroMonitor(monitorFrame!.payload))
+print(cluster.decodeCoroMonitor(Array<u8>([1])) == null)
+
+var exitValue: ClusterCoroExit = { name: "worker.alpha", reason: "normal" }
+var exitWire = cluster.encodeCoroExit(exitValue)
+assertEqual(len(exitWire!), 25)
+assertEqual(exitWire![3], 21)
+assertEqual(exitWire![4], 10)
+assertEqual(exitWire![5], 12)
+assertEqual(exitWire![18], 6)
+print(exitWire)
+var exitFrame = cluster.decodeFrame(exitWire!)
+var exited = cluster.decodeCoroExit(exitFrame!.payload)
+print(exited!.name)
+print(exited!.reason)
+print(cluster.decodeCoroExit(Array<u8>([1, 97, 1])) == null)
+
+var proofNonce = Array<u8>(16)
+for (var i = 0; i < len(proofNonce); i++) { proofNonce[i] = (16 + i) as u8 }
+var proof = cluster.computeHandshakeProof("projection-secret", proofNonce)
+var expectedProof = Array<u8>([222, 177, 211, 78, 112, 65, 67, 174,
+                               167, 103, 211, 72, 30, 103, 148, 119,
+                               237, 216, 38, 11, 128, 19, 186, 9,
+                               95, 142, 114, 104, 110, 215, 15, 176])
+print(proof)
+print(cluster.handshakeProofEqual(proof!, expectedProof))
+print(cluster.handshakeProofEqual(Array<u8>(31), Array<u8>(31)))
+
+var detector = PhiDetector(5000)
+detector.record(1000)
+detector.record(6000)
+detector.record(11000)
+print(detector.sampleCount)
+print(detector.value(11000) < 0.001)
+print(detector.value(16000) > 0.30 && detector.value(16000) < 0.31)
+for (var i = 0; i < PHI_WINDOW_SIZE + 20; i++) {
+    detector.record(16000 + i * 5000)
+}
+print(detector.sampleCount)
+print(detector.writeIndex)
+
+// Warm-up uses timeout/missed-heartbeat policy; after enough samples, phi is
+// the sole liveness signal even when the fixed timeout has not elapsed.
+print(cluster.heartbeatIsDead(99.0, 2, 14999, 2, 15000, 3))
+print(cluster.heartbeatIsDead(99.0, 3, 0, 0, 15000, 3))
+print(cluster.heartbeatIsDead(0.0, 2, 15001, 2, 15000, 3))
+print(cluster.heartbeatIsDead(0.0, 3, 99999, 99, 15000, 3))

@@ -29,10 +29,7 @@
 #include "../../src/coro/xmonitor_registry.h"
 #include "../../src/coro/xphi_detector.h"
 #include "../../src/coro/xtombstone_registry.h"
-#include "../../src/io/xcluster_wire.h"
 #include "../../src/io/xcluster_peer_transport.h"
-#include "../../src/io/xcluster_auth.h"
-#include "../../src/io/xcluster_handshake.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/io/xnet_transport.h"
@@ -58,8 +55,6 @@ typedef struct XrClusterDeliveryStats {
     int64_t resource;
 } XrClusterDeliveryStats;
 
-/* ========== Cluster Wire Protocol ========== */
-
 #define XR_ADDRESS_HOST_MAX 255
 /* ========== Node State ========== */
 
@@ -84,7 +79,9 @@ typedef struct XrNodeMetrics {
 typedef struct XrClusterNode {
     _Atomic(uint32_t) ref_count;
     _Atomic(bool) shutdown_started;
-    char name[XR_NODE_NAME_MAX + 1];
+    /* Source validates the protocol name limit before adoption. This larger
+     * provider-only buffer is merely bounded registry storage. */
+    char name[256];
     char host[XR_ADDRESS_HOST_MAX + 1];
     uint16_t port;
     XrNodeState state;
