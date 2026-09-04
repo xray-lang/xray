@@ -258,7 +258,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         binding = (ROOT / "stdlib/http2/http2_binding.c").read_text(encoding="utf-8")
         definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
         aot = (ROOT / "src/aot/xrt_http.h").read_text(encoding="utf-8")
-        cache = (ROOT / "stdlib/stdlib_cache.h").read_text(encoding="utf-8")
+        cache = (ROOT / "src/module/xstdlib_runtime_cache.h").read_text(encoding="utf-8")
 
         for owner in (
             'const H2_ALPN = "h2"',
