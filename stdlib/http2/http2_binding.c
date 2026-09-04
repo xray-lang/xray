@@ -22,7 +22,7 @@
  */
 
 #include "../../stdlib/common.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/mem/xheap.h"
