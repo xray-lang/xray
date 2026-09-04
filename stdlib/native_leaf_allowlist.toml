@@ -162,7 +162,7 @@ class = "runtime_leaf"
 abi = "none; constructs a bounded channel and registers a topic subscription"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through the single backend-neutral synchronized trie in src/coro/xtopic_registry.c on both VM and AOT. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen()"
+provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through the single backend-neutral synchronized trie in src/coro/xtopic_registry.c on both VM and AOT; the AOT ABI leaf in src/aot/xrt_cluster.c delegates its blocking service lookup to src/coro/xcluster_blocking_runtime.c. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen()"
 deletion_trigger = "when cluster.xr can construct a Channel and register a topic pattern directly, which needs the channel constructor and the topic table to be surfaces Xray source can name"
 
 [[leaf]]
@@ -212,7 +212,7 @@ class = "runtime_leaf"
 abi = "none; copies one validated buffer into matching local subscription channels"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray channel subsystem through src/coro/xtopic_registry.c's single synchronized trie projection shared by VM and AOT. cluster.xr owns validation, publication order, fanout limit and result precedence"
+provider = "the Xray channel subsystem through src/coro/xtopic_registry.c's single synchronized trie projection shared by VM and AOT. The AOT ABI leaf in src/aot/xrt_cluster.c delegates to src/coro/xcluster_blocking_runtime.c. cluster.xr owns validation, publication order, fanout limit and result precedence"
 deletion_trigger = "when cluster.xr can construct Channels and hold a synchronized topic index directly"
 
 [[leaf]]
@@ -222,7 +222,7 @@ class = "runtime_leaf"
 abi = "none on the publishing call itself: it enqueues one framed buffer per connected peer and signals the VM writer through its notify pipe or the AOT blocking peer through its condition variable"
 ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster transport queue in stdlib/cluster/cluster_topic.c and the AOT opaque blocking peer queue in src/io/xcluster_blocking.c. cluster.xr owns validation, local-versus-remote publication order, hop budget and result precedence"
+provider = "the VM cluster transport queue in stdlib/cluster/cluster_topic.c and the AOT blocking service in src/coro/xcluster_blocking_runtime.c over the opaque peer queue in src/io/xcluster_blocking.c. The AOT ABI leaf is only the tagged-value projection in src/aot/xrt_cluster.c. cluster.xr owns validation, local-versus-remote publication order, hop budget and result precedence"
 deletion_trigger = "when per-node transport queues are surfaces cluster.xr can name and enqueue into"
 
 [[leaf]]
@@ -232,7 +232,7 @@ class = "runtime_leaf"
 abi = "socket(2), setsockopt(2) SO_REUSEADDR and IPV6_V6ONLY, bind(2), listen(2) for the node listener; OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray scheduler, which the leaf asks to publish heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT discards all six TLS arguments, returns false outright when tlsEnabled is set, and runs its accept loop plus opaque reader/writer peers through src/io/xcluster_blocking.c on OS threads; VM and AOT use the same handshake and connected-frame projections. The node name, port range, heartbeat cadence and thresholds, topic fanout limit, and tombstone retention are cluster.xr's and are passed down as normalized scalars"
+provider = "the Xray scheduler, which the VM leaf asks to publish heartbeat and accept coroutines over a listener from src/io/xnet_transport.c and a TLS context from src/io/xtls_provider.c. The AOT ABI leaf in src/aot/xrt_cluster.c declines TLS and delegates its service lifecycle to src/coro/xcluster_blocking_runtime.c, whose listener and opaque reader/writer peers come from src/io/xcluster_blocking.c on OS threads. VM and AOT use the same handshake and connected-frame projections. The node name, port range, heartbeat cadence and thresholds, topic fanout limit, and tombstone retention are cluster.xr's and are passed down as normalized scalars"
 deletion_trigger = "when cluster.xr can publish its own coroutines and build its own listener over net's leaves, and the AOT half stops declining TLS so both backends start the same node"
 
 [[leaf]]
@@ -242,7 +242,7 @@ class = "runtime_leaf"
 abi = "close(2) on the listener and the notify pipe, setsockopt(2) IP_DROP_MEMBERSHIP, OpenSSL SSL_CTX_free(3), and a secure wipe of the shared secret (memset_s / explicit_bzero / a volatile loop)"
 ownership = "none"
 effect = "nothrow"
-provider = "the cluster runtime's own teardown: channel close and coroutine join on the VM (stdlib/cluster/cluster.c cluster_runtime_stop), service-slot removal on AOT, and blocking peer stop/join/close in src/io/xcluster_blocking.c"
+provider = "the cluster runtime's own teardown: channel close and coroutine join on the VM (stdlib/cluster/cluster.c cluster_runtime_stop), and the AOT ABI service-slot removal in src/aot/xrt_cluster.c followed by blocking service and peer stop/join/close in src/coro/xcluster_blocking_runtime.c and src/io/xcluster_blocking.c"
 deletion_trigger = "when cluster.xr owns the coroutines and the listener it started, so stopping them is ordinary Xray teardown; the secret wipe would still need a leaf, because Xray cannot promise the compiler will not elide a zeroing store"
 
 # ============================================================================

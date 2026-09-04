@@ -21,6 +21,8 @@
 
 typedef struct XrClusterBlockingPeer XrClusterBlockingPeer;
 
+#define XR_CLUSTER_ADDRESS_HOST_MAX 255
+
 typedef void (*XrClusterBlockingFrameHandler)(void *context,
                                               const XrClusterFrameProjection *projection);
 
@@ -41,6 +43,11 @@ XR_FUNC bool xr_cluster_blocking_server_handshake(xr_socket_t socket, const char
 XR_FUNC bool xr_cluster_blocking_client_handshake(xr_socket_t socket, const char *self_name,
                                                   const char *secret, uint32_t flags,
                                                   char peer_name[XR_NODE_NAME_MAX + 1]);
+XR_FUNC xr_socket_t xr_cluster_blocking_listener_open(uint16_t port, uint16_t *actual_port);
+XR_FUNC xr_socket_t xr_cluster_blocking_listener_accept(xr_socket_t listener);
+XR_FUNC xr_socket_t xr_cluster_blocking_connect(const char *host, size_t host_length,
+                                                uint16_t port);
+XR_FUNC void xr_cluster_blocking_socket_close(xr_socket_t socket);
 /* A successful construction transfers socket ownership to the peer. Frame
  * projections borrow their payload bytes and are valid only during the
  * synchronous callback. Destroy stops both threads, joins them and closes the

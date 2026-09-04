@@ -18,6 +18,7 @@
 #include "../shared/xr_crypto_core.h"
 
 #include <stdatomic.h>
+#include <stdio.h>
 #include <string.h>
 
 #define XR_CLUSTER_BLOCKING_QUEUE_HIGH_WATERMARK (4u * 1024u * 1024u)
@@ -60,6 +61,79 @@ int xr_cluster_blocking_wait(xr_socket_t socket, bool read_ready, int timeout_ms
     int result = select((int) socket + 1, read_ready ? &read_set : NULL,
                         read_ready ? NULL : &write_set, NULL, &timeout);
     return result > 0 ? 0 : -1;
+}
+
+xr_socket_t xr_cluster_blocking_listener_open(uint16_t port, uint16_t *actual_port) {
+    if (!actual_port)
+        return XR_INVALID_SOCKET;
+    xr_socket_t socket_fd = (xr_socket_t) socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (socket_fd == XR_INVALID_SOCKET)
+        return XR_INVALID_SOCKET;
+    (void) xr_socket_set_reuseaddr(socket_fd, true);
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons(port);
+    if (bind(socket_fd, (struct sockaddr *) &address, sizeof(address)) != 0 ||
+        listen(socket_fd, 128) != 0) {
+        xr_closesocket(socket_fd);
+        return XR_INVALID_SOCKET;
+    }
+    socklen_t length = (socklen_t) sizeof(address);
+    if (getsockname(socket_fd, (struct sockaddr *) &address, &length) != 0) {
+        xr_closesocket(socket_fd);
+        return XR_INVALID_SOCKET;
+    }
+    *actual_port = ntohs(address.sin_port);
+    return socket_fd;
+}
+
+xr_socket_t xr_cluster_blocking_listener_accept(xr_socket_t listener) {
+    if (listener == XR_INVALID_SOCKET)
+        return XR_INVALID_SOCKET;
+    return accept(listener, NULL, NULL);
+}
+
+xr_socket_t xr_cluster_blocking_connect(const char *host, size_t host_length, uint16_t port) {
+    if (!host || host_length == 0 || host_length > XR_CLUSTER_ADDRESS_HOST_MAX ||
+        memchr(host, '\0', host_length))
+        return XR_INVALID_SOCKET;
+    char host_text[XR_CLUSTER_ADDRESS_HOST_MAX + 1];
+    memcpy(host_text, host, host_length);
+    host_text[host_length] = '\0';
+    char service[8];
+    if (snprintf(service, sizeof(service), "%u", (unsigned) port) < 0)
+        return XR_INVALID_SOCKET;
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    struct addrinfo *resolved = NULL;
+    if (getaddrinfo(host_text, service, &hints, &resolved) != 0)
+        return XR_INVALID_SOCKET;
+    xr_socket_t connected = XR_INVALID_SOCKET;
+    for (struct addrinfo *candidate = resolved; candidate; candidate = candidate->ai_next) {
+        xr_socket_t socket_fd = (xr_socket_t) socket(candidate->ai_family, candidate->ai_socktype,
+                                                     candidate->ai_protocol);
+        if (socket_fd == XR_INVALID_SOCKET)
+            continue;
+        if (connect(socket_fd, candidate->ai_addr, (socklen_t) candidate->ai_addrlen) == 0) {
+            connected = socket_fd;
+            break;
+        }
+        xr_closesocket(socket_fd);
+    }
+    freeaddrinfo(resolved);
+    return connected;
+}
+
+void xr_cluster_blocking_socket_close(xr_socket_t socket_fd) {
+    if (socket_fd == XR_INVALID_SOCKET)
+        return;
+    shutdown(socket_fd, XR_SHUT_RDWR);
+    xr_closesocket(socket_fd);
 }
 
 static bool blocking_read_all(xr_socket_t socket, uint8_t *data, size_t length, int timeout_ms) {
