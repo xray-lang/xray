@@ -31,6 +31,7 @@
 #include "../../src/coro/xtombstone_registry.h"
 #include "../../src/coro/xtopic_registry.h"
 #include "../../src/io/xcluster_wire.h"
+#include "../../src/io/xcluster_peer_transport.h"
 #include "../../src/io/xcluster_auth.h"
 #include "../../src/io/xcluster_handshake.h"
 #include "../../src/module/xmodule.h"
@@ -102,12 +103,7 @@ typedef struct XrClusterNode {
     uint32_t missed_heartbeats;
     uint64_t generation_token;
 
-    struct XrVMRuntime *isolate;
-
     XrClusterOutputQueue *outq;
-    _Atomic(bool) writer_running;
-    _Atomic(bool) writer_exited;
-    _Atomic(bool) reader_running;
 
     XrNodeMetrics metrics;
     XrPhiDetector phi;
@@ -115,11 +111,6 @@ typedef struct XrClusterNode {
     struct XrClusterNode *next;
 } XrClusterNode;
 
-void cluster_node_retain(XrClusterNode *node);
-void cluster_node_shutdown(XrClusterNode *node);
-void cluster_node_release(XrClusterNode *node);
-bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrValue inbound_handler,
-                           XrValue outbound_handler);
 XrCFuncResult cluster_peer_read_fn(struct XrVMRuntime *isolate, XrValue *args, int argc,
                                    XrValue *result);
 XrCFuncResult cluster_peer_write_fn(struct XrVMRuntime *isolate, XrValue *args, int argc,
@@ -175,6 +166,66 @@ typedef struct XrCluster {
 
 /* ========== Opaque Provider Resource Primitives ========== */
 
+/* These operations carry no admission or disconnect policy. They only keep a
+ * peer allocation alive across native I/O and close its queue/socket exactly
+ * once after the registry owner has detached it. */
+static inline void cluster_node_retain(XrClusterNode *node) {
+    if (node)
+        atomic_fetch_add_explicit(&node->ref_count, 1, memory_order_relaxed);
+}
+
+static inline void cluster_node_shutdown(XrClusterNode *node) {
+    if (!node)
+        return;
+    bool expected = false;
+    if (!atomic_compare_exchange_strong_explicit(&node->shutdown_started, &expected, true,
+                                                 memory_order_acq_rel, memory_order_acquire))
+        return;
+    xr_cluster_output_queue_stop(node->outq);
+    node->state = XR_NODE_CLOSING;
+    if (node->conn && node->conn->fd >= 0)
+        (void) shutdown(node->conn->fd, XR_SHUT_RDWR);
+}
+
+static inline void cluster_node_release(XrClusterNode *node) {
+    if (!node)
+        return;
+    uint32_t previous = atomic_fetch_sub_explicit(&node->ref_count, 1, memory_order_acq_rel);
+    XR_DCHECK(previous > 0, "cluster node reference underflow");
+    if (previous != 1)
+        return;
+    cluster_node_shutdown(node);
+    XR_DCHECK(atomic_load_explicit(&node->shutdown_started, memory_order_acquire),
+              "cluster node destroyed before shutdown");
+    xr_io_close(node->conn);
+    node->conn = NULL;
+    xr_cluster_output_queue_destroy(node->outq);
+    xr_free(node);
+}
+
+static inline void cluster_node_release_lease(void *owner) {
+    cluster_node_release((XrClusterNode *) owner);
+}
+
+/* The caller must hold a cluster runtime reference. The returned peer lease
+ * survives registry detachment until cluster_node_release() balances it. */
+static inline XrClusterNode *cluster_node_acquire(XrCluster *cluster, uint64_t generation) {
+    if (!cluster)
+        return NULL;
+    XrClusterNode *node = NULL;
+    xr_amutex_lock(&cluster->nodes_lock);
+    for (XrClusterNode *candidate = cluster->nodes; candidate; candidate = candidate->next) {
+        if (candidate->generation_token == generation && candidate->state == XR_NODE_CONNECTED &&
+            candidate->conn) {
+            cluster_node_retain(candidate);
+            node = candidate;
+            break;
+        }
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    return node;
+}
+
 /* Transport coroutines retain the provider runtime independently of the
  * source-owned start/stop generation. The last transport reference reclaims
  * only opaque registries and TLS contexts; source policy never enters this
@@ -213,6 +264,10 @@ static inline void cluster_runtime_release(XrCluster *cluster) {
     if (cluster->tls_server_ctx)
         xr_tls_context_free(cluster->tls_server_ctx);
     xr_free(cluster);
+}
+
+static inline void cluster_runtime_release_lease(void *owner) {
+    cluster_runtime_release((XrCluster *) owner);
 }
 
 /* A provider callback may race source stop or another terminal callback. The

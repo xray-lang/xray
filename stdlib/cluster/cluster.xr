@@ -98,6 +98,29 @@ export const OUTPUT_QUEUE_HIGH_WATERMARK_BYTES = 4194304
 // resource limits into one i64 transport word; their values and policy remain
 // source-owned while the provider only projects the two machine fields.
 const _START_LIMITS_RADIX = 4294967296
+const _PEER_READ_STALE = 1
+const _PEER_READ_RUNTIME_STOPPED = 2
+const _PEER_READ_EOF = 3
+const _PEER_READ_IO_ERROR = 4
+const _PEER_READ_INVALID_LENGTH = 5
+const _PEER_READ_PAYLOAD_TOO_LARGE = 6
+const _PEER_READ_RESOURCE_UNAVAILABLE = 7
+const _PEER_READ_CANCELLED = 8
+const _PEER_READ_INVALID_LIMIT = 9
+const _PEER_WRITE_DRAINED = 0
+const _PEER_WRITE_STALE = 1
+const _PEER_WRITE_RUNTIME_STOPPED = 2
+const _PEER_WRITE_QUEUE_FULL = 3
+const _PEER_WRITE_QUEUE_STOPPED = 4
+const _PEER_WRITE_RESOURCE_UNAVAILABLE = 5
+const _PEER_WRITE_SOCKET_CLOSED = 6
+const _PEER_WRITE_IO_ERROR = 7
+const _PEER_WRITE_CANCELLED = 8
+const _PEER_QUEUE_ACCEPTED = 0
+const _PEER_QUEUE_FULL = 1
+const _PEER_QUEUE_STOPPED = 2
+const _PEER_QUEUE_RESOURCE_UNAVAILABLE = 3
+const _PEER_QUEUE_INVALID = 4
 export const NODE_MONITOR_CAPACITY = 8
 export const COROUTINE_MONITOR_CAPACITY = 1
 
@@ -503,19 +526,29 @@ fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
     }
     var exited: ClusterCoroExit = { name: name, reason: reason }
     var response = encodeCoroExit(exited)
-    if (response != null) { __peerEnqueue(peerGeneration, response!) }
+    if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
 }
 
-fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64, wire: Array<u8>) {
+fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
+    var admission = __peerEnqueue(peerGeneration, wire)
+    if (admission == _PEER_QUEUE_FULL ||
+        admission == _PEER_QUEUE_RESOURCE_UNAVAILABLE ||
+        admission == _PEER_QUEUE_INVALID) {
+        __disconnectPeer(peerGeneration)
+    }
+}
+
+fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
+                         wire: Array<u8>) -> bool {
     var frame = decodeFrame(wire)
-    if (frame == null) { return }
+    if (frame == null) { return false }
     if (frame!.kind == FRAME_HEARTBEAT_PING) {
         var timestamp = decodeHeartbeat(frame!.payload)
-        if (timestamp == null) { return }
+        if (timestamp == null) { return true }
         var response = encodeHeartbeat(FRAME_HEARTBEAT_PONG, timestamp!)
-        if (response != null) { __peerEnqueue(peerGeneration, response!) }
+        if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
         __observeHeartbeat(peerGeneration, receivedAtMs, -1)
-        return
+        return true
     }
     if (frame!.kind == FRAME_HEARTBEAT_PONG) {
         var timestamp = decodeHeartbeat(frame!.payload)
@@ -523,43 +556,55 @@ fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64, wire: Array<u8>
             var rtt = receivedAtMs - timestamp!
             __observeHeartbeat(peerGeneration, receivedAtMs, rtt < 0 ? 0 : rtt)
         }
-        return
+        return true
     }
     if (frame!.kind == FRAME_TRANSPORT_ENVELOPE) {
         var transport = decodeTransportFrame(wire)
-        if (transport == null) { return }
+        if (transport == null) { return true }
         __deliverInbound(transport!.topic, transport!.envelope)
         if (transport!.hopLimit > 0) {
             var forward = encodeTransportFrame(transport!.hopLimit - 1, transport!.topic,
                                                transport!.envelope)
             if (forward != null) { __broadcast(peerGeneration, forward!) }
         }
-        return
+        return true
     }
     if (frame!.kind == FRAME_CORO_MONITOR) {
         var name = decodeCoroMonitor(frame!.payload)
         if (name != null) { go _forwardRemoteMonitor(peerGeneration, name!) }
-        return
+        return true
     }
     if (frame!.kind == FRAME_CORO_EXIT) {
         var exited = decodeCoroExit(frame!.payload)
         if (exited != null) {
             __notifyRemoteMonitor(peerGeneration, exited!.name, exited!.reason)
         }
+        return true
     }
     // CORO_DEMONITOR is deliberately a no-op until remote monitor identity is
     // part of the wire contract; the protocol has no safe removal key today.
+    return true
 }
 
 fn _dispatchInboundOne(peerGeneration: i64) -> bool {
-    var inbound = __readPeer(peerGeneration)
-    if (inbound == null) { return false }
-    if (inbound!.status != 0 || inbound!.wire == null) {
-        __disconnectPeer(peerGeneration)
+    var event = __readPeer(peerGeneration, FRAME_MAX_PAYLOAD)
+    var wire = event as Array<u8>?
+    if (wire != null) {
+        var keep = _dispatchInboundFrame(peerGeneration, time.monotonic(), wire!)
+        if (!keep) { __disconnectPeer(peerGeneration) }
+        return keep
+    }
+    var reason = event as i64?
+    if (reason == null || reason! == _PEER_READ_STALE ||
+        reason! == _PEER_READ_RUNTIME_STOPPED || reason! == _PEER_READ_CANCELLED) {
         return false
     }
-    _dispatchInboundFrame(peerGeneration, inbound!.receivedAtMs, inbound!.wire!)
-    return true
+    if (reason! == _PEER_READ_EOF || reason! == _PEER_READ_IO_ERROR ||
+        reason! == _PEER_READ_INVALID_LENGTH || reason! == _PEER_READ_PAYLOAD_TOO_LARGE ||
+        reason! == _PEER_READ_RESOURCE_UNAVAILABLE || reason! == _PEER_READ_INVALID_LIMIT) {
+        __disconnectPeer(peerGeneration)
+    }
+    return false
 }
 
 fn _dispatchInbound(peerGeneration: i64) {
@@ -654,13 +699,19 @@ export final class PhiDetector {
 fn _dispatchOutbound(peerGeneration: i64) {
     while (true) {
         var status = __writePeer(peerGeneration)
-        if (status < 0) { return }
-        if (status != 0) {
+        if (status == _PEER_WRITE_STALE || status == _PEER_WRITE_RUNTIME_STOPPED ||
+            status == _PEER_WRITE_QUEUE_STOPPED || status == _PEER_WRITE_CANCELLED) {
+            return
+        }
+        if (status == _PEER_WRITE_QUEUE_FULL ||
+            status == _PEER_WRITE_RESOURCE_UNAVAILABLE ||
+            status == _PEER_WRITE_SOCKET_CLOSED || status == _PEER_WRITE_IO_ERROR) {
             __disconnectPeer(peerGeneration)
             return
         }
-        // Each leaf invocation owns one detached queue batch. Xray chooses the
-        // next scheduling point and whether another batch should be requested.
+        if (status != _PEER_WRITE_DRAINED) { return }
+        // Each leaf invocation drains at most one detached queue batch. Xray
+        // chooses the next scheduling point and whether another batch is due.
         Coro.yield()
     }
 }
@@ -1556,7 +1607,13 @@ export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
         notifications.close()
         return null
     }
-    if (!__peerEnqueue(peerGeneration, request!)) {
+    var admission = __peerEnqueue(peerGeneration, request!)
+    if (admission != _PEER_QUEUE_ACCEPTED) {
+        if (admission == _PEER_QUEUE_FULL ||
+            admission == _PEER_QUEUE_RESOURCE_UNAVAILABLE ||
+            admission == _PEER_QUEUE_INVALID) {
+            __disconnectPeer(peerGeneration)
+        }
         __unregisterCoroutineMonitor(name, coroName!, notifications)
         notifications.close()
         return null

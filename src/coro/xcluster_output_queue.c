@@ -60,15 +60,22 @@ static XrClusterOutputBatch *output_batch_new_owned(uint8_t *data, uint32_t leng
     return batch;
 }
 
-static int output_queue_push_batch(XrClusterOutputQueue *queue, XrClusterOutputBatch *batch) {
+static XrClusterOutputPushResult output_queue_push_batch(XrClusterOutputQueue *queue,
+                                                         XrClusterOutputBatch *batch) {
     if (!queue || !batch)
-        return -1;
+        return XR_CLUSTER_OUTPUT_INVALID;
     xr_amutex_lock(&queue->lock);
-    if (atomic_load_explicit(&queue->stopped, memory_order_relaxed) ||
-        atomic_load_explicit(&queue->full, memory_order_relaxed) ||
-        batch->length > SIZE_MAX - queue->bytes) {
+    if (atomic_load_explicit(&queue->stopped, memory_order_relaxed)) {
         xr_amutex_unlock(&queue->lock);
-        return -1;
+        return XR_CLUSTER_OUTPUT_STOPPED;
+    }
+    if (atomic_load_explicit(&queue->full, memory_order_relaxed)) {
+        xr_amutex_unlock(&queue->lock);
+        return XR_CLUSTER_OUTPUT_FULL;
+    }
+    if (batch->length > SIZE_MAX - queue->bytes) {
+        xr_amutex_unlock(&queue->lock);
+        return XR_CLUSTER_OUTPUT_RESOURCE_UNAVAILABLE;
     }
     if (queue->tail)
         queue->tail->next = batch;
@@ -83,7 +90,7 @@ static int output_queue_push_batch(XrClusterOutputQueue *queue, XrClusterOutputB
     if (queue->notify_pipe[1] >= 0)
         xr_poll_signal_wakeup(queue->notify_pipe[1]);
     xr_amutex_unlock(&queue->lock);
-    return 0;
+    return XR_CLUSTER_OUTPUT_ACCEPTED;
 }
 
 XrClusterOutputQueue *xr_cluster_output_queue_new(size_t high_watermark) {
@@ -125,37 +132,40 @@ void xr_cluster_output_queue_destroy(XrClusterOutputQueue *queue) {
     xr_free(queue);
 }
 
-int xr_cluster_output_queue_push_copy(XrClusterOutputQueue *queue, const uint8_t *data,
-                                      uint32_t length) {
+XrClusterOutputPushResult xr_cluster_output_queue_push_copy(XrClusterOutputQueue *queue,
+                                                            const uint8_t *data, uint32_t length) {
     if (!queue || !data || length == 0)
-        return -1;
+        return XR_CLUSTER_OUTPUT_INVALID;
     uint8_t *owned = (uint8_t *) xr_malloc(length);
     if (!owned)
-        return -1;
+        return XR_CLUSTER_OUTPUT_RESOURCE_UNAVAILABLE;
     memcpy(owned, data, length);
     XrClusterOutputBatch *batch = output_batch_new_owned(owned, length);
     if (!batch) {
         xr_free(owned);
-        return -1;
+        return XR_CLUSTER_OUTPUT_RESOURCE_UNAVAILABLE;
     }
-    if (output_queue_push_batch(queue, batch) != 0) {
+    XrClusterOutputPushResult pushed = output_queue_push_batch(queue, batch);
+    if (pushed != XR_CLUSTER_OUTPUT_ACCEPTED) {
         output_batch_free(batch);
-        return -1;
+        return pushed;
     }
-    return 0;
+    return XR_CLUSTER_OUTPUT_ACCEPTED;
 }
 
-int xr_cluster_output_queue_push_owned(XrClusterOutputQueue *queue, uint8_t *data,
-                                       uint32_t length) {
+XrClusterOutputPushResult xr_cluster_output_queue_push_owned(XrClusterOutputQueue *queue,
+                                                             uint8_t *data, uint32_t length) {
     XrClusterOutputBatch *batch = output_batch_new_owned(data, length);
     if (!batch)
-        return -1;
-    if (output_queue_push_batch(queue, batch) != 0) {
+        return !queue || !data || length == 0 ? XR_CLUSTER_OUTPUT_INVALID
+                                              : XR_CLUSTER_OUTPUT_RESOURCE_UNAVAILABLE;
+    XrClusterOutputPushResult pushed = output_queue_push_batch(queue, batch);
+    if (pushed != XR_CLUSTER_OUTPUT_ACCEPTED) {
         batch->data = NULL;
         output_batch_free(batch);
-        return -1;
+        return pushed;
     }
-    return 0;
+    return XR_CLUSTER_OUTPUT_ACCEPTED;
 }
 
 XrClusterOutputBatch *xr_cluster_output_queue_take_all(XrClusterOutputQueue *queue) {

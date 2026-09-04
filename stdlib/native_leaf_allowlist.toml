@@ -73,16 +73,6 @@ deletion_trigger = "when the locked peer table can be iterated as ordinary Xray-
 
 [[leaf]]
 module = "cluster"
-symbol = "__ClusterInboundFrame"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM projects the receive timestamp and owned wire bytes produced by one generation-keyed framed read; cluster.xr owns the reader loop, all decoding and dispatch"
-deletion_trigger = "when the peer socket is an ordinary Xray-owned NetConn"
-
-[[leaf]]
-module = "cluster"
 symbol = "__ClusterHealthPeerSnapshot"
 class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
@@ -168,17 +158,17 @@ class = "runtime_leaf"
 abi = "none; selects a live peer by generation and copies one complete frame into its synchronized output queue"
 ownership = "none"
 effect = "nothrow"
-provider = "the locked native peer registry and output queue. cluster.xr exclusively owns frame encoding and the decision to send"
+provider = "the locked native peer registry and output queue, returning distinct accepted, full, stopped, resource and invalid admission facts. cluster.xr exclusively owns frame encoding and the resulting disconnect or drop decision"
 deletion_trigger = "when peer output queues are ordinary Xray-owned values"
 
 [[leaf]]
 module = "cluster"
 symbol = "__readPeer"
 class = "host_abi_leaf"
-abi = "recv(2), TLS read and scheduler netpoll wait; retains the generation-selected opaque peer only across one framed read"
+abi = "recv(2), TLS read and scheduler netpoll wait; retains the runtime and generation-selected opaque peer across one source-bounded framed read"
 ownership = "fresh"
 effect = "suspends"
-provider = "the peer socket and bounded length-framing buffer. cluster.xr owns the reader loop, fairness, decoding, dispatch and generation-safe disconnect policy"
+provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the peer socket lease and source-sized framing buffer; it returns wire bytes or distinct stopped, EOF, I/O, unsafe-length, capacity, resource, cancellation and invalid-caller-limit facts. cluster.xr owns bounds, timestamps, decoding, dispatch, drop and disconnect policy"
 deletion_trigger = "when the peer socket is an ordinary Xray-owned NetConn"
 
 [[leaf]]
@@ -188,7 +178,7 @@ class = "host_abi_leaf"
 abi = "send(2), TLS write and scheduler netpoll wait; drains one batch from the generation-selected opaque peer queue"
 ownership = "none"
 effect = "suspends"
-provider = "the peer socket and synchronized output queue. cluster.xr owns writer resubmission, fairness, slow-consumer handling and generation-safe disconnect policy"
+provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the runtime and peer socket lease, synchronized output queue and distinct drained, full, stopped, resource, closed, I/O and cancellation facts; a full queue is observed before any batch is detached. cluster.xr owns writer resubmission, fairness, slow-consumer handling, drop and generation-safe disconnect policy"
 deletion_trigger = "when the peer socket and output queue are ordinary Xray-owned values"
 
 [[leaf]]

@@ -2034,12 +2034,6 @@ module cluster {
     doc: "Private snapshot of mutable native peer registries and counters"
   }
 
-  object __ClusterInboundFrame {
-    fields: "const receivedAtMs: i64, const status: i64, const wire: Array<u8>?"
-    exact: true
-    doc: "Private projection of one complete frame or terminal reader event"
-  }
-
   object __ClusterHealthPeerSnapshot {
     fields: "const peerGeneration: i64, const lastReceivedAtMs: i64, const missedHeartbeats: i64, const samples: i64, const mean: f64, const variance: f64, const detectorLastHeartbeatMs: i64"
     exact: true
@@ -2151,12 +2145,12 @@ module cluster {
   }
 
   fn __readPeer {
-    signature: "(peerGeneration: i64): __ClusterInboundFrame?"
-    doc: "Suspend until one complete bounded frame or terminal socket event is available for a live peer generation"
+    signature: "(peerGeneration: i64, maxFramePayload: i64): Array<u8> | i64"
+    doc: "Suspend for one frame and return owned wire bytes or an orthogonal raw stale, stopped, EOF, I/O, wire-length, capacity, resource, cancellation or caller-limit reason"
     vm: "cluster_peer_read_fn"
     vm_binding: "yieldable"
-    argc: 1
-    arg_spec: "v"
+    argc: 2
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2166,7 +2160,7 @@ module cluster {
 
   fn __writePeer {
     signature: "(peerGeneration: i64): i64"
-    doc: "Suspend while writing one queued batch and return its transport status for a live peer generation"
+    doc: "Suspend while writing at most one queued batch and return an orthogonal raw stale, stopped, full, resource, socket, I/O or cancellation reason"
     vm: "cluster_peer_write_fn"
     vm_binding: "yieldable"
     argc: 1
@@ -2178,8 +2172,8 @@ module cluster {
   }
 
   fn __peerEnqueue {
-    signature: "(peerGeneration: i64, wire: Array<u8>): bool"
-    doc: "Enqueue one source-encoded wire frame for the current peer generation"
+    signature: "(peerGeneration: i64, wire: Array<u8>): i64"
+    doc: "Return the raw accepted, full, stopped, resource or invalid result of one peer queue admission"
     vm: "cluster_peer_enqueue_fn"
     argc: 2
     arg_spec: "vv"
