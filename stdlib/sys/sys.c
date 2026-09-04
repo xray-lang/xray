@@ -12,6 +12,7 @@
 #include "../../src/runtime/object/xpanic_info.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/xisolate_api.h"
+#include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/runtime/mem/xcoro_heap.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/vm/xvm.h"
