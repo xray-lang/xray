@@ -245,6 +245,35 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertNotIn("xrt_os_kill(XrValue", aot)
         self.assertIn("if (count > 0) { return count }", source)
 
+    def test_io_directory_policy_is_source_owned(self) -> None:
+        source = (ROOT / "stdlib/io/io.xr").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/io/io.c").read_text(encoding="utf-8")
+        provider = (ROOT / "src/io/xfile_provider.c").read_text(encoding="utf-8")
+        provider_header = (ROOT / "src/io/xfile_provider.h").read_text(encoding="utf-8")
+        aot = (ROOT / "src/aot/xrt_io.h").read_text(encoding="utf-8")
+
+        self.assertIn("return Path(os.getcwd())", source)
+        self.assertIn("defer { __dirClose(handle) }", source)
+        self.assertIn("var name = __dirNext(handle)", source)
+        self.assertIn("names.sort()", source)
+        self.assertIn('name! != "." && name! != ".."', source)
+        for native in ("__dirOpen", "__dirNext", "__dirClose"):
+            self.assertEqual(1, definitions.count(f"  fn {native} {{"))
+        self.assertIn("  fn __fileWriteStr {", definitions)
+
+        removed = {
+            "source": (source, ("__cwd", "__readDir")),
+            "definitions": (definitions, ("  fn __cwd {", "  fn __readDir {")),
+            "binding": (binding, ("io_cwd", "io_readDir", "XrFileDirEntries")),
+            "provider": (provider, ("xr_file_dir_entries_read", "file_dir_entries_push")),
+            "provider_header": (provider_header, ("XrFileDirEntries", "xr_file_dir_entries_read")),
+            "aot": (aot, ("xrt_io_cwd", "xrt_io_read_dir", "xrt_io_dir_for_each_entry")),
+        }
+        for owner, (text, tokens) in removed.items():
+            for token in tokens:
+                self.assertNotIn(token, text, f"{owner} still contains retired {token}")
+
     def test_http2_transport_policy_is_source_owned(self) -> None:
         source = (ROOT / "stdlib/http2/http2.xr").read_text(encoding="utf-8")
         net_source = (ROOT / "stdlib/net/net.xr").read_text(encoding="utf-8")

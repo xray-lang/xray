@@ -7687,7 +7687,8 @@ TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites) {
 
 TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls) {
     setup_parser_session();
-    const char *source = "export fn cwdRaw() -> string { return __cwd() }\n";
+    const char *source = "export fn fileFlushRaw(handle: i64) -> bool { "
+                         "return __fileFlush(handle) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7716,13 +7717,13 @@ TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundar
     XgGlobalEvidence ev;
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
         &ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
-    const XgBodySummary *body = evidence_find_body_by_name(&ev, "cwdRaw");
+    const XgBodySummary *body = evidence_find_body_by_name(&ev, "fileFlushRaw");
     ASSERT_NOT_NULL(body);
     ASSERT_EQ_UINT(body->callsite_count, 1);
     const XgCallsiteSummary *call = xg_global_evidence_find_callsite(&ev, body->callsite_start);
     ASSERT_NOT_NULL(call);
     ASSERT_EQ_UINT(call->kind, XG_CALL_NATIVE);
-    ASSERT_EQ_UINT(call->method_name_id, xg_name_id("__cwd"));
+    ASSERT_EQ_UINT(call->method_name_id, xg_name_id("__fileFlush"));
     ASSERT_TRUE((body->effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
     ASSERT_TRUE((body->escape_bits & XG_BODY_ESCAPE_NATIVE) != 0);
     ASSERT_TRUE((body->capability_bits & XG_CAP_NATIVE) != 0);

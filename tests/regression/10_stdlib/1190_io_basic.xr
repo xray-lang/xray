@@ -97,6 +97,8 @@ fn test_read_dir() {
     io.writeFile(path.join(tmpDir, path.from("file2.txt")), "f2")
     var entries = io.readDir(tmpDir)!
     assert(len(entries) >= 2)
+    assertEqual(entries[0].toString(), "file1.txt")
+    assertEqual(entries[1].toString(), "file2.txt")
     io.removeAll(tmpDir)
 }
 

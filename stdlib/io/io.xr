@@ -362,7 +362,7 @@ export fn copyFile(src: Path, dst: Path) -> bool {
     return published
 }
 
-export fn cwd() -> Path { return Path(__cwd()) }
+export fn cwd() -> Path { return Path(os.getcwd()) }
 export fn exists(path: Path) -> bool { return __stat(path) != null }
 export fn fileSize(path: Path) -> i64 {
     var raw = __stat(path)
@@ -436,7 +436,10 @@ export fn remove(path: Path) -> bool { return __remove(path) }
 fn _removeTree(target: Path, depth: i64) -> bool {
     if (depth >= 64) { return false }
     var metadata = __stat(target)
-    if (metadata == null) { return false }
+    // stat follows links, so a dangling symlink has no metadata. Removing it
+    // directly preserves the no-follow rule even when its target was already
+    // removed earlier in the directory walk.
+    if (metadata == null) { return __remove(target) }
     if (!metadata!.isDir || metadata!.isSymlink) { return __remove(target) }
 
     var names = _readDirNames(target)
@@ -515,19 +518,25 @@ export fn realpath(path: Path) -> Path? {
 }
 
 fn _readDirNames(path: Path) -> Array<string>? {
-    var raw = __readDir(path)
-    if (raw == null) { return null }
+    var handle = __dirOpen(path)
+    if (handle == 0) { return null }
+    defer { __dirClose(handle) }
     var names: Array<string> = []
-    for (var i = 0; i < len(raw!); i++) {
-        var name = raw![i]
-        if (name != "." && name != "..") { names.push(name) }
+    while (true) {
+        var name = __dirNext(handle)
+        if (name == null) {
+            names.sort()
+            return names
+        }
+        if (name! != "." && name! != "..") { names.push(name!) }
     }
-    return names
+    return null
 }
 
 // A path that cannot be listed answers null rather than an empty array: an
 // empty directory and a path that is not a directory are different answers,
-// and returning the same value for both hides the second.
+// and returning the same value for both hides the second. Names are sorted so
+// callers do not inherit platform-specific directory iteration order.
 export fn readDir(path: Path) -> Array<Path>? {
     var raws = _readDirNames(path)
     if (raws == null) { return null }

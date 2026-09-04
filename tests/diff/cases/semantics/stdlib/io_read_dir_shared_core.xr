@@ -26,6 +26,14 @@ print(hasA)
 print(!hasDot)
 print(!hasDotDot)
 
+// _readDirNames returns from inside its iterator loop at EOF. Repeating that
+// path under a low descriptor limit catches a missing deferred close.
+var reopened = true
+for (var attempt = 0; attempt < 128; attempt++) {
+    if (io.readDir(root) == null) { reopened = false }
+}
+print(reopened)
+
 var recursive = io.readDirRecursive(root)!
 var hasRecursiveTop = false
 var hasRecursiveA = false

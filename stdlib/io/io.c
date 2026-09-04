@@ -233,40 +233,93 @@ static XrValue io_mkdir(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(xr_fs_mkdir(path, 0755) == 0);
 }
 
-// readDir(path) - Read directory contents
-static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
+typedef struct IoDirIter {
+#ifdef XR_OS_WINDOWS
+    HANDLE handle;
+    WIN32_FIND_DATAA entry;
+    bool primed;
+#else
+    DIR *directory;
+#endif
+} IoDirIter;
+
+static XrValue io_dirOpen(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
     if (argc < 1)
-        return xr_null();
+        return xr_int(0);
     const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_null();
+    if (!path || path[0] == '\0')
+        return xr_int(0);
 
-    XrArray *arr = xr_array_new(xr_current_coro(X));
-    if (!arr)
-        return xr_null();
+#ifdef XR_OS_WINDOWS
+    size_t length = strlen(path);
+    char *pattern = (char *) xr_malloc(length + 3);
+    if (!pattern)
+        return xr_int(0);
+    memcpy(pattern, path, length);
+    if (length > 0 && pattern[length - 1] != '\\' && pattern[length - 1] != '/')
+        pattern[length++] = '\\';
+    pattern[length++] = '*';
+    pattern[length] = '\0';
 
-    XrFileDirEntries entries;
-    if (!xr_file_dir_entries_read(path, &entries)) {
-        xr_rc_release_value(xr_current_coro_heap(), xr_value_from_array(arr));
-        return xr_null();
+    WIN32_FIND_DATAA first;
+    HANDLE handle = FindFirstFileA(pattern, &first);
+    xr_free(pattern);
+    if (handle == INVALID_HANDLE_VALUE)
+        return xr_int(0);
+    IoDirIter *iterator = (IoDirIter *) xr_malloc(sizeof(IoDirIter));
+    if (!iterator) {
+        FindClose(handle);
+        return xr_int(0);
     }
-    for (size_t i = 0; i < entries.count; i++)
-        xr_array_push(arr, xrs_string_value_c(X, entries.names[i]));
-    xr_file_dir_entries_release(&entries);
-
-    return xr_value_from_array(arr);
+    iterator->handle = handle;
+    iterator->entry = first;
+    iterator->primed = true;
+#else
+    DIR *directory = opendir(path);
+    if (!directory)
+        return xr_int(0);
+    IoDirIter *iterator = (IoDirIter *) xr_malloc(sizeof(IoDirIter));
+    if (!iterator) {
+        closedir(directory);
+        return xr_int(0);
+    }
+    iterator->directory = directory;
+#endif
+    return xr_int((int64_t) (intptr_t) iterator);
 }
 
-// cwd() - Get current working directory
-static XrValue io_cwd(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-
-    char buf[XR_PATH_MAX];
-    if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
+static XrValue io_dirNext(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_null();
-    }
-    return xrs_string_value_c(X, buf);
+    IoDirIter *iterator = (IoDirIter *) (intptr_t) XR_TO_INT(args[0]);
+    if (!iterator)
+        return xr_null();
+#ifdef XR_OS_WINDOWS
+    if (!iterator->primed && !FindNextFileA(iterator->handle, &iterator->entry))
+        return xr_null();
+    iterator->primed = false;
+    return xrs_string_value_c(X, iterator->entry.cFileName);
+#else
+    struct dirent *entry = readdir(iterator->directory);
+    return entry ? xrs_string_value_c(X, entry->d_name) : xr_null();
+#endif
+}
+
+static XrValue io_dirClose(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    IoDirIter *iterator = (IoDirIter *) (intptr_t) XR_TO_INT(args[0]);
+    if (!iterator)
+        return xr_bool(true);
+#ifdef XR_OS_WINDOWS
+    bool ok = FindClose(iterator->handle) != 0;
+#else
+    bool ok = closedir(iterator->directory) == 0;
+#endif
+    xr_free(iterator);
+    return xr_bool(ok);
 }
 
 /* ========== Extended Functions ========== */

@@ -998,20 +998,6 @@ module io {
     layer: "system"
   }
 
-  fn __cwd {
-    signature: "(): string"
-    doc: "Get current working directory (raw string; io.xr wraps as Path)"
-    vm: "io_cwd"
-    aot: "xrt_io_cwd"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-    return_ownership: "fresh"
-  }
-
   fn __fileClose {
     signature: "(handle: i64): bool"
     doc: "Close an owned file descriptor; 0, 1 and 2 are refused"
@@ -1118,18 +1104,44 @@ module io {
     layer: "system"
   }
 
-  fn __readDir {
-    signature: "(path: Path): Array<string>?"
-    doc: "List directory entries (raw strings; io.xr wraps as Path)"
-    vm: "io_readDir"
-    aot: "xrt_io_read_dir"
+  fn __dirOpen {
+    signature: "(path: Path): i64"
+    doc: "Open a directory iterator and return an opaque handle token, or 0 on failure"
+    vm: "io_dirOpen"
+    aot: "xrt_io_dir_open"
     argc: 1
     arg_spec: "p"
     aot_direct: true
     link_object: false
     layer: "system"
     visibility: "internal"
+  }
+
+  fn __dirNext {
+    signature: "(handle: i64): string?"
+    doc: "Read the next directory entry name, or null at end of iteration"
+    vm: "io_dirNext"
+    aot: "xrt_io_dir_next"
+    argc: 1
+    arg_spec: "i"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
     return_ownership: "fresh"
+  }
+
+  fn __dirClose {
+    signature: "(handle: i64): bool"
+    doc: "Close an owned directory iterator handle"
+    vm: "io_dirClose"
+    aot: "xrt_io_dir_close"
+    argc: 1
+    arg_spec: "i"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
   }
 
   fn __readlink {

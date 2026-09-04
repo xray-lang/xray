@@ -121,13 +121,33 @@ deletion_trigger = "when Xray source can issue the chmod(2) call itself; the lea
 
 [[leaf]]
 module = "io"
-symbol = "__cwd"
+symbol = "__dirClose"
 class = "host_abi_leaf"
-abi = "getcwd(3); Win32 CRT _getcwd"
+abi = "closedir(3); Win32 FindClose"
+ownership = "none"
+effect = "nothrow"
+provider = "libc or Win32. VM stdlib/io/io.c io_dirClose and AOT src/aot/xrt_io.h xrt_io_dir_close release the opaque iterator token created by io.__dirOpen. io.xr owns lexical cleanup with defer, including early returns from the entry loop"
+deletion_trigger = "when Xray has a native opaque resource type whose deterministic destroy hook can own a directory iterator directly; the close operation itself is already the minimal boundary"
+
+[[leaf]]
+module = "io"
+symbol = "__dirNext"
+class = "host_abi_leaf"
+abi = "readdir(3); Win32 FindNextFileA, with the first FindFirstFileA result consumed before advancing"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel via libc. VM stdlib/io/io.c io_cwd -> src/os/unix/fs_unix.c xr_fs_getcwd; AOT src/aot/xrt_io.h calls getcwd directly into a stack buffer"
-deletion_trigger = "when Xray source can issue the getcwd(3) call itself; the leaf is already the minimal form of this boundary"
+provider = "libc or Win32. VM stdlib/io/io.c io_dirNext and AOT src/aot/xrt_io.h xrt_io_dir_next return one freshly owned entry name, or null at end/error. Entry filtering, deterministic sorting, and array growth are source-owned in io.xr"
+deletion_trigger = "when Xray source can issue the platform directory-iteration ABI itself; one-entry-at-a-time advancement is already the minimal boundary"
+
+[[leaf]]
+module = "io"
+symbol = "__dirOpen"
+class = "host_abi_leaf"
+abi = "opendir(3); Win32 FindFirstFileA"
+ownership = "none"
+effect = "nothrow"
+provider = "libc or Win32. VM stdlib/io/io.c io_dirOpen and AOT src/aot/xrt_io.h xrt_io_dir_open allocate an opaque iterator token, returning 0 on failure. No directory aggregation policy remains native"
+deletion_trigger = "when Xray has a native opaque resource type whose deterministic destroy hook can own a directory iterator directly; the open operation itself is already the minimal boundary"
 
 [[leaf]]
 module = "io"
@@ -228,16 +248,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "kernel. VM stdlib/io/io.c io_mkdir -> src/os/unix/fs_unix.c xr_fs_mkdir; AOT src/aot/xrt_io.h inlines mkdir and its own EEXIST fallback. The EEXIST-is-success rule is errno classification, which is policy the module body should own"
 deletion_trigger = "when a leaf can report its errno to Xray source, so io.xr can express \"EEXIST over an existing directory counts as success\" instead of the C side deciding it"
-
-[[leaf]]
-module = "io"
-symbol = "__readDir"
-class = "host_abi_leaf"
-abi = "opendir(3), readdir(3), closedir(3); Win32 FindFirstFileA, FindNextFileA, FindClose"
-ownership = "fresh"
-effect = "nothrow"
-provider = "libc. VM stdlib/io/io.c and AOT src/aot/xrt_io.h directly use FindFirstFileA/FindNextFileA or opendir/readdir. The leaf returns raw entry names; io.xr alone filters \".\" and \"..\", walks recursively and constructs public Path values"
-deletion_trigger = "when a directory-iterator handle triple (open/next/close) exists with the same shape as the file triple, so the entry loop and the dot-filter can be written in io.xr"
 
 [[leaf]]
 module = "io"
@@ -954,7 +964,7 @@ abi = "getcwd(3); Win32 GetCurrentDirectoryA"
 ownership = "fresh"
 effect = "nothrow"
 provider = "libc. VM stdlib/os/os.c -> src/os/unix/fs_unix.c xr_fs_getcwd; AOT src/aot/xrt_os.h calls getcwd directly, because it does not link fs_unix.c"
-deletion_trigger = "when os.xr reads the working directory through io.__cwd instead of keeping a second leaf for the same call, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
+deletion_trigger = "when Xray source can issue the platform working-directory query directly. os is the sole native owner today; io.cwd composes os.getcwd instead of carrying a duplicate leaf"
 
 [[leaf]]
 module = "os"

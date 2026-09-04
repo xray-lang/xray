@@ -34,8 +34,6 @@
 #define XR_IO_CORE_USE_HANDLE(tag)
 #endif
 
-typedef bool (*XrIoCoreDirEntryFn)(void *ctx, const char *name);
-
 typedef enum XrIoCoreStatField {
     XR_IO_CORE_STAT_SIZE = 0,
     XR_IO_CORE_STAT_MODE,

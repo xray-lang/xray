@@ -15,6 +15,11 @@
 # xrt_io_write_handle_chunk/_str. Those four c_contains lines are removed below
 # and the four new entry points added in their place.
 #
+# Directory aggregation now follows the same rule: xrt_io_read_dir was replaced
+# by xrt_io_dir_open/next/close, and io.xr owns the loop plus lexical cleanup.
+# io.cwd also composes os.getcwd, so xrt_os_getcwd is the sole working-directory
+# leaf instead of a duplicate xrt_io_cwd.
+#
 # The read and path-metadata cutover removed xrt_io_read_file,
 # xrt_io_read_file_bytes, xrt_io_exists, xrt_io_file_size, xrt_io_is_file,
 # xrt_io_is_dir and xrt_io_is_symlink. Whole-input buffering now composes the
@@ -52,10 +57,12 @@ c_contains=xrt_io_rename(
 c_contains=xrt_io_stat(
 c_contains=xrt_io_touch(
 c_contains=xrt_io_chmod_value(
-c_contains=xrt_io_read_dir(
+c_contains=xrt_io_dir_open(
+c_contains=xrt_io_dir_next(
+c_contains=xrt_io_dir_close(
 c_contains=xrt_io_read_dir_recursive(
 c_contains=xrt_io_realpath(
-c_contains=xrt_io_cwd(
+c_contains=xrt_os_getcwd(
 c_contains=xrt_io_chdir(
 c_contains=xrt_io_symlink(
 c_contains=xrt_io_readlink(

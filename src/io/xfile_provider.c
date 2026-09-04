@@ -31,7 +31,6 @@
 #endif
 #include <windows.h>
 #else
-#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 #endif
@@ -197,88 +196,6 @@ XrCFuncResult xr_file_write_once(XrVMRuntime *isolate, int64_t handle, const cha
     } while (count < 0 && errno == EINTR);
     *result = xr_int(count < 0 ? -1 : (int64_t) count);
     return XR_CFUNC_DONE;
-}
-
-static char *file_name_copy(const char *name) {
-    size_t length = strlen(name);
-    char *copy = (char *) xr_malloc(length + 1);
-    if (copy)
-        memcpy(copy, name, length + 1);
-    return copy;
-}
-
-static bool file_dir_entries_push(XrFileDirEntries *entries, size_t *capacity, const char *name) {
-    if (entries->count == *capacity) {
-        size_t grown = *capacity == 0 ? 16 : *capacity * 2;
-        char **names = (char **) xr_realloc(entries->names, grown * sizeof(char *));
-        if (!names)
-            return false;
-        entries->names = names;
-        *capacity = grown;
-    }
-    char *copy = file_name_copy(name);
-    if (!copy)
-        return false;
-    entries->names[entries->count++] = copy;
-    return true;
-}
-
-void xr_file_dir_entries_release(XrFileDirEntries *entries) {
-    if (!entries)
-        return;
-    for (size_t i = 0; i < entries->count; i++)
-        xr_free(entries->names[i]);
-    xr_free(entries->names);
-    entries->names = NULL;
-    entries->count = 0;
-}
-
-bool xr_file_dir_entries_read(const char *path, XrFileDirEntries *entries) {
-    if (!path || !entries)
-        return false;
-    *entries = (XrFileDirEntries) {0};
-    size_t capacity = 0;
-    bool ok = true;
-#ifdef XR_OS_WINDOWS
-    size_t length = strlen(path);
-    char *pattern = (char *) xr_malloc(length + 4);
-    if (!pattern)
-        return false;
-    memcpy(pattern, path, length);
-    pattern[length++] = '\\';
-    pattern[length++] = '*';
-    pattern[length] = '\0';
-
-    WIN32_FIND_DATAA entry;
-    HANDLE directory = FindFirstFileA(pattern, &entry);
-    xr_free(pattern);
-    if (directory == INVALID_HANDLE_VALUE)
-        return false;
-    do {
-        if (!file_dir_entries_push(entries, &capacity, entry.cFileName)) {
-            ok = false;
-            break;
-        }
-    } while (FindNextFileA(directory, &entry));
-    FindClose(directory);
-#else
-    DIR *directory = opendir(path);
-    if (!directory)
-        return false;
-    for (;;) {
-        struct dirent *entry = readdir(directory);
-        if (!entry)
-            break;
-        if (!file_dir_entries_push(entries, &capacity, entry->d_name)) {
-            ok = false;
-            break;
-        }
-    }
-    closedir(directory);
-#endif
-    if (!ok)
-        xr_file_dir_entries_release(entries);
-    return ok;
 }
 
 bool xr_file_temp_template(const char *root, char *output, size_t capacity) {

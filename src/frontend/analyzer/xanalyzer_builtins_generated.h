@@ -110,7 +110,6 @@ static const XaBuiltinHandle g_gen_io_handles[] = {
 static const XaBuiltinMember g_gen_io_functions[] = {
     {"__chmod", "(path: Path, mode: i64): bool", "Change file permissions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__chdir", "(path: Path): bool", "Change working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__fileClose", "(handle: i64): bool", "Close an owned file descriptor; 0, 1 and 2 are refused", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileFlush", "(handle: i64): bool", "Flush any C-runtime buffering behind a standard stream handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileOpen", "(path: Path): i64", "Open a file for binary reading and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -119,7 +118,9 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__fileWrite", "(handle: i64, data: Array<u8>, offset: i64): i64", "Write bytes from offset once; returns how many the stream accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileWriteStr", "(handle: i64, data: string, offset: i64): i64", "Write string bytes from offset once; returns how many were accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__mkdir", "(path: Path): bool", "Create directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__readDir", "(path: Path): Array<string>?", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__dirOpen", "(path: Path): i64", "Open a directory iterator and return an opaque handle token, or 0 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__dirNext", "(handle: i64): string?", "Read the next directory entry name, or null at end of iteration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__dirClose", "(handle: i64): bool", "Close an owned directory iterator handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__realpath", "(path: Path): string?", "Resolve to absolute path (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__rmdir", "(path: Path): bool", "Remove an empty directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -131,7 +132,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_IO_FUNCTION_COUNT 22
+#define GEN_IO_FUNCTION_COUNT 23
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {

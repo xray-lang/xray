@@ -43,8 +43,6 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT(module, isolate, "__chdir", io_chdir);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__cwd", io_cwd);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__fileClose", io_fileClose);
     expected_count++;
     XRS_EXPORT(module, isolate, "__fileFlush", io_fileFlush);
@@ -61,7 +59,11 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT(module, isolate, "__mkdir", io_mkdir);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__readDir", io_readDir);
+    XRS_EXPORT(module, isolate, "__dirOpen", io_dirOpen);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__dirNext", io_dirNext);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__dirClose", io_dirClose);
     expected_count++;
     XRS_EXPORT(module, isolate, "__readlink", io_readlink);
     expected_count++;
