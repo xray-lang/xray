@@ -9,11 +9,11 @@
  *
  * KEY CONCEPT:
  *   Four leaves that move opaque bytes over one TLS connection negotiated
- *   with ALPN "h2", plus a build-capability probe. None of them knows what a
- *   frame is: HPACK, framing, the stream state machine and flow control all
- *   live in stdlib/http2/http2.xr. What is left here is the part Xray cannot
- *   state -- a socket, a TLS session, and the protocol the peer agreed to
- *   speak over it.
+ *   with a caller-selected ALPN protocol, plus a build-capability probe. None
+ *   of them knows what a frame is: HPACK, framing, the stream state machine
+ *   and flow control all live in stdlib/http2/http2.xr. What is left here is
+ *   the part Xray cannot state -- a socket, a TLS session, and the protocol
+ *   the peer agreed to speak over it.
  *
  *   Connections are addressed by an integer handle rather than a pointer, so
  *   no address ever crosses into Xray. A handle carries a generation counter,
@@ -22,8 +22,8 @@
  */
 
 #include "../../stdlib/common.h"
+#include "../../stdlib/stdlib_cache.h"
 #include "../../src/base/xmalloc.h"
-#include "../../src/module/xmodule.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/mem/xheap.h"
 #include "../../src/os/os_thread.h"
@@ -33,17 +33,6 @@
 #include "../../stdlib/net/io.h"
 #include "../../stdlib/net/tls.h"
 #include <string.h>
-
-/* The protocol list offered on the wire: "h2" first, then "http/1.1" so a
- * server that speaks only HTTP/1.1 answers rather than failing the
- * handshake. Only "h2" is accepted below -- this module has no HTTP/1.1
- * fallback, and http.xr routes those requests elsewhere. */
-static const unsigned char ALPN_PROTOS[] = "\x02h2\x08http/1.1";
-#define ALPN_PROTOS_LEN 12
-
-/* One read is capped here rather than at the caller: `maxBytes` arrives from
- * Xray and a peer must not be able to name an allocation size. */
-#define XR_H2_MAX_READ 65536
 
 /* A connection never outlives its slot, and slots are never freed, so the
  * table only grows. This bounds it. */
@@ -79,53 +68,20 @@ static void h2_conn_close(XrIOConn *io, XrTlsContext *tls_ctx) {
         xr_tls_context_free(tls_ctx);
 }
 
-/* HTTP/2 connections are always TLS connections negotiated by h2_connect.
- * Keep their byte transport here instead of reviving the retired generic
- * xr_io_read/xr_io_write_all facade: no other owner needs that surface. */
-static int h2_conn_read(XrIOConn *io, void *buffer, size_t length) {
-    if (!io || !io->is_tls || !io->tls || !buffer || length == 0)
-        return -1;
-    int read_count = xr_tls_conn_read(io->X, io->tls, buffer, length);
-    if (read_count < 0)
-        io->last_error = XR_NERR_READ;
-    else if (read_count == 0)
-        io->last_error = XR_NERR_CLOSED;
-    return read_count;
-}
-
-static int h2_conn_write_all(XrIOConn *io, const void *buffer, size_t length) {
-    if (!io || !io->is_tls || !io->tls || !buffer || length == 0)
-        return -1;
-    size_t written = 0;
-    const char *bytes = (const char *) buffer;
-    while (written < length) {
-        int count = xr_tls_conn_write(io->X, io->tls, bytes + written, length - written);
-        if (count <= 0) {
-            io->last_error = XR_NERR_WRITE;
-            return written > 0 ? (int) written : count;
-        }
-        written += (size_t) count;
-    }
-    return (int) written;
-}
-
 static XrHttp2Context *http2_get_context(XrVMRuntime *X) {
-    XrModuleRegistry *registry = X ? (XrModuleRegistry *) X->module_registry : NULL;
-    XrModule *module = registry && registry->loaded_modules
-                           ? (XrModule *) xr_hashmap_get(registry->loaded_modules, "http2")
-                           : NULL;
-    if (!module)
-        return NULL;
-
     xr_mutex_lock(&http2_context_init_lock);
-    XrHttp2Context *ctx = (XrHttp2Context *) module->native_handle;
+    XrStdlibCache *cache = X ? xr_stdlib_cache_get(X) : NULL;
+    XrHttp2Context *ctx = cache ? (XrHttp2Context *) cache->http2_state : NULL;
     if (!ctx) {
         ctx = (XrHttp2Context *) xr_calloc(1, sizeof(XrHttp2Context));
-        if (ctx) {
+        if (ctx && cache) {
             ctx->free_head = -1;
             xr_mutex_init(&ctx->lock);
-            module->native_handle = ctx;
-            module->native_handle_destroy = http2_context_destroy;
+            cache->http2_state = ctx;
+            cache->http2_state_cleanup = http2_context_destroy;
+        } else if (ctx) {
+            xr_free(ctx);
+            ctx = NULL;
         }
     }
     xr_mutex_unlock(&http2_context_init_lock);
@@ -143,13 +99,6 @@ static void http2_context_destroy(void *handle) {
     xr_free(ctx->slots);
     xr_mutex_destroy(&ctx->lock);
     xr_free(ctx);
-}
-
-/* Handles are (generation << 32) | (slot + 1). The generation is never zero,
- * so a handle is always >= 2^32: positive, and never the -1 that means
- * failure. */
-static int64_t h2_handle_make(int32_t slot, uint32_t generation) {
-    return ((int64_t) generation << 32) | (int64_t) (slot + 1);
 }
 
 /* Resolve a handle to its slot index, or -1 when it names nothing live. */
@@ -202,7 +151,9 @@ static int64_t h2_slot_register(XrHttp2Context *ctx, XrIOConn *io, XrTlsContext 
     ctx->slots[slot].in_use = true;
     ctx->slots[slot].next_free = -1;
     xr_mutex_unlock(&ctx->lock);
-    return h2_handle_make(slot, generation);
+    /* The generation is never zero, so the encoded handle is positive and
+     * cannot collide with a private negative provider outcome. */
+    return ((int64_t) generation << 32) | (int64_t) (slot + 1);
 }
 
 /* Detach a live handle's connection so the caller can close it outside the
@@ -242,19 +193,27 @@ static XrIOConn *h2_conn_for_handle(XrVMRuntime *X, int64_t handle) {
 
 /* ========== Leaves ========== */
 
-XrValue h2_supported(XrVMRuntime *X, XrValue *args, int argc) {
+static XrValue h2_supported(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
-    (void) argc;
+    if (argc != 0)
+        return xr_bool(false);
     return xr_bool(xr_tls_is_available());
 }
 
-/* http2.__connect(host, port, timeoutMs) -> i64; -1 when no h2 connection
- * could be made, for any reason. */
-XrCFuncResult h2_connect(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
+/* http2.__connect(host, port, timeoutMs, alpn) -> i64. Negative values are
+ * raw provider outcomes that http2.xr maps to typed public errors:
+ * -1 transport failure, -2 TLS unavailable, -3 ALPN mismatch. */
+static XrCFuncResult h2_connect(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
     *result = xr_int(-1);
-    if (nargs < 3 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
+    if (nargs != 4 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
+        !XR_IS_STRING(args[3]))
         return XR_CFUNC_DONE;
+
+    if (!xr_tls_is_available()) {
+        *result = xr_int(-2);
+        return XR_CFUNC_DONE;
+    }
 
     XrHttp2Context *ctx = http2_get_context(X);
     if (!ctx)
@@ -265,13 +224,21 @@ XrCFuncResult h2_connect(XrVMRuntime *X, XrValue *args, int nargs, XrValue *resu
     if (port < 1 || port > 65535 || timeout_value <= 0 || timeout_value > INT32_MAX)
         return XR_CFUNC_DONE;
     const char *host = XR_STRING_CHARS(XR_TO_STRING(args[0]));
-    if (!host)
+    XrString *requested_alpn = XR_TO_STRING(args[3]);
+    if (!host || requested_alpn->length == 0 || requested_alpn->length > UINT8_MAX)
         return XR_CFUNC_DONE;
+
+    unsigned char alpn_wire[UINT8_MAX + 1];
+    alpn_wire[0] = (unsigned char) requested_alpn->length;
+    memcpy(alpn_wire + 1, XR_STRING_CHARS(requested_alpn), requested_alpn->length);
 
     XrTlsContext *tls_ctx = xr_tls_context_new_client();
     if (!tls_ctx)
         return XR_CFUNC_DONE;
-    xr_tls_context_set_alpn(tls_ctx, ALPN_PROTOS, ALPN_PROTOS_LEN);
+    if (xr_tls_context_set_alpn(tls_ctx, alpn_wire, requested_alpn->length + 1) != 0) {
+        h2_conn_close(NULL, tls_ctx);
+        return XR_CFUNC_DONE;
+    }
 
     XrIOConn *io = xr_io_connect_tls_with_ctx(X, tls_ctx, host, (int) port, (int) timeout_value);
     if (!io) {
@@ -279,11 +246,11 @@ XrCFuncResult h2_connect(XrVMRuntime *X, XrValue *args, int nargs, XrValue *resu
         return XR_CFUNC_DONE;
     }
 
-    /* A peer that did not choose h2 cannot be spoken to here, and answering a
-     * handle would let the caller write frames at an HTTP/1.1 server. */
-    const char *alpn = io->tls ? xr_tls_conn_get_alpn(io->tls) : NULL;
-    if (!alpn || strcmp(alpn, "h2") != 0) {
+    const char *selected_alpn = io->tls ? xr_tls_conn_get_alpn(io->tls) : NULL;
+    if (!selected_alpn || strlen(selected_alpn) != requested_alpn->length ||
+        memcmp(selected_alpn, XR_STRING_CHARS(requested_alpn), requested_alpn->length) != 0) {
         h2_conn_close(io, tls_ctx);
+        *result = xr_int(-3);
         return XR_CFUNC_DONE;
     }
 
@@ -297,75 +264,80 @@ XrCFuncResult h2_connect(XrVMRuntime *X, XrValue *args, int nargs, XrValue *resu
     return XR_CFUNC_DONE;
 }
 
-/* http2.__send(handle, data) -> bool; writes the whole buffer or fails. */
-XrCFuncResult h2_send(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
-    *result = xr_bool(false);
-    if (nargs < 2 || !XR_IS_INT(args[0]) || !XR_IS_ARRAY(args[1]))
+/* http2.__send(handle, data, offset) -> i64; performs one TLS write and
+ * answers the accepted byte count, or a negative value on failure. */
+static XrCFuncResult h2_send(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
+    *result = xr_int(-1);
+    if (nargs != 3 || !XR_IS_INT(args[0]) || !XR_IS_ARRAY(args[1]) || !XR_IS_INT(args[2]))
         return XR_CFUNC_DONE;
     XrArray *data = XR_TO_ARRAY(args[1]);
-    if (data->elem_type != XR_ELEM_U8 || data->length < 0)
+    int64_t offset = XR_TO_INT(args[2]);
+    if (data->elem_type != XR_ELEM_U8 || data->length <= 0 || offset < 0 || offset >= data->length)
         return XR_CFUNC_DONE;
-    if (data->length == 0) {
-        *result = xr_bool(true);
-        return XR_CFUNC_DONE;
-    }
     XrIOConn *io = h2_conn_for_handle(X, XR_TO_INT(args[0]));
     if (!io)
         return XR_CFUNC_DONE;
-    int written = h2_conn_write_all(io, data->data, (size_t) data->length);
-    *result = xr_bool(written == data->length);
+    if (!io->is_tls || !io->tls || !data->data)
+        return XR_CFUNC_DONE;
+    int written = xr_tls_conn_write(io->X, io->tls, (const uint8_t *) data->data + offset,
+                                    (size_t) (data->length - offset));
+    if (written <= 0)
+        io->last_error = XR_NERR_WRITE;
+    *result = xr_int(written);
     return XR_CFUNC_DONE;
 }
 
 /* http2.__recv(handle, maxBytes, timeoutMs) -> Array<u8>?
  *
  * One read. A short read is normal and is answered as-is; reassembling frames
- * from short reads is http2.xr's job. Null means the peer closed or the read
- * failed -- the caller cannot act differently on those two, and conflating
- * them keeps errno out of Xray. */
-XrCFuncResult h2_recv(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
+ * from short reads is http2.xr's job. An empty array means EOF; null means a
+ * transport failure. The source layer maps those outcomes to public errors. */
+static XrCFuncResult h2_recv(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
     *result = xr_null();
-    if (nargs < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
+    if (nargs != 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return XR_CFUNC_DONE;
     int64_t requested = XR_TO_INT(args[1]);
-    if (requested <= 0)
+    int64_t timeout_value = XR_TO_INT(args[2]);
+    if (requested <= 0 || requested > INT32_MAX || timeout_value <= 0 || timeout_value > INT32_MAX)
         return XR_CFUNC_DONE;
-    if (requested > XR_H2_MAX_READ)
-        requested = XR_H2_MAX_READ;
 
     XrIOConn *io = h2_conn_for_handle(X, XR_TO_INT(args[0]));
     if (!io)
         return XR_CFUNC_DONE;
-    int64_t timeout_value = XR_TO_INT(args[2]);
-    if (timeout_value > 0 && timeout_value <= INT32_MAX)
-        xr_io_set_timeout(io, (int) timeout_value);
+    xr_io_set_timeout(io, (int) timeout_value);
 
     XrCoroutine *coro = xr_current_coro(X);
     XrArray *buffer = xr_byte_array_new(coro, (int32_t) requested);
     if (!buffer)
         return XR_CFUNC_DONE;
 
-    int n = h2_conn_read(io, buffer->data, (size_t) requested);
-    if (n <= 0)
+    if (!io->is_tls || !io->tls || !buffer->data)
         return XR_CFUNC_DONE;
+    int n = xr_tls_conn_read(io->X, io->tls, buffer->data, (size_t) requested);
+    if (n < 0) {
+        io->last_error = XR_NERR_READ;
+        return XR_CFUNC_DONE;
+    }
+    if (n == 0)
+        io->last_error = XR_NERR_CLOSED;
     buffer->length = (int32_t) n;
     *result = xr_value_from_array(buffer);
     return XR_CFUNC_DONE;
 }
 
-/* http2.__close(handle) -> bool; false when the handle named nothing live. */
-XrValue h2_close(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_INT(args[0]))
-        return xr_bool(false);
+/* http2.__close(handle) -> (); stale handles are already closed. */
+static XrValue h2_close(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc != 1 || !XR_IS_INT(args[0]))
+        return XR_NULL_VAL;
     XrHttp2Context *ctx = http2_get_context(X);
     if (!ctx)
-        return xr_bool(false);
+        return XR_NULL_VAL;
     XrIOConn *io = NULL;
     XrTlsContext *tls_ctx = NULL;
     if (!h2_slot_take(ctx, XR_TO_INT(args[0]), &io, &tls_ctx))
-        return xr_bool(false);
+        return XR_NULL_VAL;
     h2_conn_close(io, tls_ctx);
-    return xr_bool(true);
+    return XR_NULL_VAL;
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_HTTP2 1

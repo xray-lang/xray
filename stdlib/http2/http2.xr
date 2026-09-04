@@ -7,9 +7,10 @@
 // so none of it needs C.
 //
 // What stays native is the part that cannot be stated in Xray at all: opening
-// a TCP connection, negotiating TLS with ALPN "h2", and moving bytes on and
-// off the wire. Those are four leaves — __connect, __send, __recv, __close —
-// and they know nothing about HTTP/2. The old boundary was a single
+// a TCP connection, negotiating TLS with an ALPN protocol chosen here, and
+// moving one chunk of bytes on or off the wire. Those are four leaves —
+// __connect, __send, __recv, __close — and they know nothing about HTTP/2.
+// The old boundary was a single
 // __request leaf that owned the entire protocol; this module encodes the
 // bytes, hands them to a leaf, takes bytes back, and decodes them.
 //
@@ -71,6 +72,18 @@ const DEFAULT_INITIAL_WINDOW_SIZE = 65535
 const DEFAULT_MAX_FRAME_SIZE = 16384
 const MAX_ALLOWED_FRAME_SIZE = 16777215
 const MAX_WINDOW = 2147483647
+
+// Transport policy belongs to this source module. The connect leaf only
+// adapts this requested protocol to the TLS provider, while the timeout bound
+// is the exact width accepted by the host ABI.
+const H2_ALPN = "h2"
+const MAX_TRANSPORT_TIMEOUT_MS: i64 = 2147483647
+
+// Raw connect outcomes are a private transport ABI. Typed public errors are
+// selected below, in request(), rather than inside the native provider.
+const CONNECT_FAILED: i64 = -1
+const CONNECT_TLS_UNAVAILABLE: i64 = -2
+const CONNECT_PROTOCOL_MISMATCH: i64 = -3
 
 // The connection preface a client sends before anything else (RFC 7540
 // Section 3.5). Twenty-four bytes, fixed.
@@ -1574,8 +1587,15 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
     while (true) {
         ex.pushBody(body)
         if (len(ex.outbox) > 0) {
-            if (!__send(handle, ex.outbox)) {
-                throw Http2Error.ConnectionFailed { target: "write failed" }
+            // The native leaf performs one TLS write. Owning the drain loop
+            // here keeps partial-write and no-progress policy in Xray.
+            var written = 0
+            while (written < len(ex.outbox)) {
+                var count = __send(handle, ex.outbox, written)
+                if (count <= 0) {
+                    throw Http2Error.ConnectionFailed { target: "write failed" }
+                }
+                written = written + count
             }
             ex.outbox = Array<u8>()
         }
@@ -1622,24 +1642,25 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
 // encodes it, hands the bytes to a leaf, takes bytes back, and decodes them.
 // Every refusal leaves through Http2Error, so one bad input has one name.
 //
-// Ask `supported()` first. This function does not, and cannot today: a call
-// to the capability leaf anywhere in a function that also reaches a
-// suspending leaf makes the compiler refuse the *importing* module with
-// XR_SEM_0019, blaming an unrelated null check in that module's top level.
-// See blockers/r3-6-7-capability-probe-beside-suspending-leaf.md. Without a
-// TLS provider the connect below simply fails, so the answer is
-// ConnectionFailed rather than TlsUnavailable.
+// The transport leaf reports provider absence and protocol negotiation as
+// private raw outcomes. This function is their only typed error owner.
 export fn request(url: string, method: string, headerNames: Array<string>,
                   headerValues: Array<string>, body: Array<u8>,
                   timeoutMs: i64) -> (i64, Array<string>, Array<string>, Array<u8>) {
     _validateRequest(method, headerNames, headerValues)
-    if (timeoutMs <= 0) {
-        throw Http2Error.ProtocolError { reason: "timeout must be positive" }
+    if (timeoutMs <= 0 || timeoutMs > MAX_TRANSPORT_TIMEOUT_MS) {
+        throw Http2Error.ProtocolError { reason: "timeout is outside the transport range" }
     }
     var target = _parseTarget(url)
 
-    var handle = __connect(target.host, target.port, timeoutMs)
-    if (handle < 0) { throw Http2Error.ConnectionFailed { target: url } }
+    var handle = __connect(target.host, target.port, timeoutMs, H2_ALPN)
+    if (handle == CONNECT_TLS_UNAVAILABLE) { throw Http2Error.TlsUnavailable }
+    if (handle == CONNECT_PROTOCOL_MISMATCH) {
+        throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }
+    }
+    if (handle == CONNECT_FAILED || handle < 0) {
+        throw Http2Error.ConnectionFailed { target: url }
+    }
     try {
         var answer = _exchange(handle, target, method, headerNames, headerValues, body,
                                timeoutMs)

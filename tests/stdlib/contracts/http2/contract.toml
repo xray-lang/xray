@@ -1,6 +1,6 @@
 schema = 1
 module = "http2"
-contract_revision = 3
+contract_revision = 4
 legacy_commit = "1134404162e287db158ec1ce805700114b47cecb"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/http2/legacy_expected.jsonl"
@@ -11,6 +11,8 @@ intentional_semantic_changes = [
   "HPACK, framing, the stream state machine and flow control moved from C into http2.xr; the native boundary is now four protocol-agnostic socket leaves (__connect/__send/__recv/__close) instead of one __request leaf that owned the whole protocol",
   "request answers a tuple and raises Http2Error instead of answering null: every refusal now has one name, where the same input previously surfaced as ProtocolError or ConnectionFailed depending on which of two copies of the admission rules noticed it",
   "one connection per request: the C connection pool is gone because HPACK dynamic-table state is per-connection and would have to live in module-level mutable state, which is not thread-safe",
+  "the ALPN selection, partial-write drain loop, timeout bound and typed mapping of TLS absence, protocol mismatch, EOF and transport failure are owned by http2.xr; native leaves expose only raw TLS/socket outcomes",
+  "AOT no longer advertises unconditional connect/send/recv/close stubs as transport implementations; it retains only the truthful false build-capability probe until a real AOT TLS provider exists",
 ]
 known_legacy_bugs = []
 equivalence = ["value", "error", "effect", "complexity"]

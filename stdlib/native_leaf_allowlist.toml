@@ -217,10 +217,10 @@ deletion_trigger = "when Xray can express a comparison the optimiser is forbidde
 # HPACK with the RFC 7541 static table and Huffman codes, the frame layer,
 # flow control and the stream state machine are all in `stdlib/http2/http2.xr`.
 # What is left in C is the socket underneath them -- opening a TLS connection
-# that negotiated ALPN "h2", and moving opaque bytes across it. These four
-# leaves know nothing about HTTP/2; they would serve any protocol. The AOT
-# side has none of it: every helper in `src/aot/xrt_http.h` is an
-# unconditional stub, and has been since before this module was migrated.
+# for the ALPN protocol selected by http2.xr, and moving one opaque byte chunk
+# across it. These four leaves know nothing about HTTP/2; they would serve any
+# protocol. AOT has no TLS transport provider, so it deliberately has no fake
+# connect/send/recv/close bindings.
 
 [[leaf]]
 module = "http2"
@@ -229,17 +229,17 @@ class = "host_abi_leaf"
 abi = "getaddrinfo(3), socket(2), connect(2), setsockopt(2) and close(2) through stdlib/net, plus OpenSSL SSL_connect(3) and SSL_get0_alpn_selected(3)"
 ownership = "none"
 effect = "suspends"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_connect opens one XrIOConn through xr_io_connect_tls_with_ctx, offers \"h2\" then \"http/1.1\" over ALPN, and fails when the peer does not choose h2. It answers an integer handle into a per-module table rather than a pointer, so no address crosses into Xray. AOT src/aot/xrt_http.h xrt_http_h2_connect_unavailable answers -1 unconditionally"
-deletion_trigger = "when net exposes a TLS connect that can carry an ALPN protocol list and report the negotiated protocol back, which is the only thing this leaf does that net.__connectFd plus a TLS handshake leaf cannot already express. It also needs the AOT stub replaced, or the two backends keep answering differently"
+provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_connect opens one XrIOConn through xr_io_connect_tls_with_ctx and adapts the caller-selected ALPN string to OpenSSL's length-prefixed ABI. It returns -1 for transport failure, -2 when TLS is absent, and -3 when the peer selects another protocol; http2.xr alone maps those raw outcomes to typed errors. A positive integer names a generation-checked slot in per-isolate stdlib state, so no address crosses into Xray. No AOT provider exists"
+deletion_trigger = "when net exposes a TLS connect that accepts an ALPN protocol and returns the negotiated result through its ordinary source-owned connection surface"
 
 [[leaf]]
 module = "http2"
 symbol = "__send"
 class = "host_abi_leaf"
-abi = "write(2) / OpenSSL SSL_write(3) through stdlib/net's XrIOConn, suspending on the netpoll when the socket is not writable"
+abi = "one write(2) / OpenSSL SSL_write(3) through stdlib/net's XrIOConn, suspending on the netpoll when the socket is not writable"
 ownership = "none"
 effect = "suspends"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_send writes one already-encoded buffer in full. Every byte it writes was produced by http2.xr; this leaf does not know what a frame is. AOT src/aot/xrt_http.h xrt_http_h2_send_unavailable answers false unconditionally"
+provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_send performs one TLS write from a source-selected offset and returns the accepted byte count. The partial-write drain loop and no-progress failure policy live in http2.xr. No AOT provider exists"
 deletion_trigger = "when net's own write path can be handed a connection opened by a TLS-with-ALPN connect, at which point this leaf and net's writer are the same function"
 
 [[leaf]]
@@ -249,7 +249,7 @@ class = "host_abi_leaf"
 abi = "read(2) / OpenSSL SSL_read(3) through stdlib/net's XrIOConn, suspending on the netpoll when the socket is not readable"
 ownership = "fresh"
 effect = "suspends"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_recv performs one read and answers the bytes it got, which may be fewer than asked for; reassembling frames from short reads is http2.xr's job. Null means the peer closed or the read failed. AOT src/aot/xrt_http.h xrt_http_h2_recv_unavailable answers null unconditionally"
+provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_recv performs one read of the source-selected bound and answers the bytes it got, which may be fewer than asked for. Empty means EOF and null means transport failure, so http2.xr owns both error mappings and all frame reassembly. No AOT provider exists"
 deletion_trigger = "same as __send: when net's read path can serve a connection this module opened"
 
 [[leaf]]
@@ -259,7 +259,7 @@ class = "host_abi_leaf"
 abi = "close(2) plus OpenSSL SSL_shutdown(3) and SSL_CTX_free(3) through stdlib/net"
 ownership = "none"
 effect = "nothrow"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_close releases the connection and frees its handle slot. AOT src/aot/xrt_http.h xrt_http_h2_close_unavailable answers false unconditionally"
+provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_close releases the connection and returns its generation-checked slot to the per-isolate table. It returns Unit; resource policy is source-owned. No AOT provider exists"
 deletion_trigger = "same as __send and __recv: when the connection is net's to close"
 
 [[leaf]]

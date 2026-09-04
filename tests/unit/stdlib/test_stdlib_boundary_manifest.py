@@ -253,6 +253,45 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertNotIn("xrt_os_kill(XrValue", aot)
         self.assertIn("if (count > 0) { return count }", source)
 
+    def test_http2_transport_policy_is_source_owned(self) -> None:
+        source = (ROOT / "stdlib/http2/http2.xr").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/http2/http2_binding.c").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        aot = (ROOT / "src/aot/xrt_http.h").read_text(encoding="utf-8")
+        cache = (ROOT / "stdlib/stdlib_cache.h").read_text(encoding="utf-8")
+
+        for owner in (
+            'const H2_ALPN = "h2"',
+            "const MAX_TRANSPORT_TIMEOUT_MS: i64 = 2147483647",
+            "const CONNECT_TLS_UNAVAILABLE: i64 = -2",
+            "const CONNECT_PROTOCOL_MISMATCH: i64 = -3",
+            "while (written < len(ex.outbox))",
+            "var count = __send(handle, ex.outbox, written)",
+            "throw Http2Error.TlsUnavailable",
+            'throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }',
+        ):
+            self.assertIn(owner, source)
+
+        for removed_c_policy in (
+            "ALPN_PROTOS",
+            "XR_H2_MAX_READ",
+            "h2_conn_write_all",
+            'xr_hashmap_get(registry->loaded_modules, "http2")',
+        ):
+            self.assertNotIn(removed_c_policy, binding)
+        self.assertIn("void *http2_state;", cache)
+
+        for unavailable in (
+            "xrt_http_h2_connect_unavailable",
+            "xrt_http_h2_send_unavailable",
+            "xrt_http_h2_recv_unavailable",
+            "xrt_http_h2_close_unavailable",
+        ):
+            self.assertNotIn(unavailable, definitions)
+            self.assertNotIn(unavailable, aot)
+        self.assertIn('signature: "(handle: i64, data: Array<u8>, offset: i64): i64"', definitions)
+        self.assertIn('signature: "(handle: i64): ()"', definitions)
+
     def test_exact_aot_runtime_adapters_do_not_allow_module_helper_families(self) -> None:
         manifest = load_manifest(ROOT)
         allowed = {

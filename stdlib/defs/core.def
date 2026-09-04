@@ -2225,28 +2225,26 @@ module http2 {
   }
 
   fn __connect {
-    signature: "(host: string, port: i64, timeoutMs: i64): i64"
-    doc: "Open one TLS connection that negotiated ALPN h2 and answer its handle, or -1"
+    signature: "(host: string, port: i64, timeoutMs: i64, alpn: string): i64"
+    doc: "Open one TLS connection for the requested ALPN protocol; answer a handle or a private negative provider outcome"
     vm: "h2_connect"
     vm_binding: "yieldable"
-    argc: 3
-    arg_spec: "vvv"
-    aot: "xrt_http_h2_connect_unavailable"
-    aot_direct: true
+    argc: 4
+    arg_spec: "vvvv"
+    aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "coro,netpoll"
   }
 
   fn __send {
-    signature: "(handle: i64, data: Array<u8>): bool"
-    doc: "Write one buffer to an open HTTP/2 connection"
+    signature: "(handle: i64, data: Array<u8>, offset: i64): i64"
+    doc: "Perform one TLS write from offset and answer its accepted byte count"
     vm: "h2_send"
     vm_binding: "yieldable"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_http_h2_send_unavailable"
-    aot_direct: true
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "coro,netpoll"
@@ -2254,13 +2252,12 @@ module http2 {
 
   fn __recv {
     signature: "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?"
-    doc: "Read up to maxBytes from an open HTTP/2 connection; null on error or EOF"
+    doc: "Read up to maxBytes once; empty on EOF and null on transport failure"
     vm: "h2_recv"
     vm_binding: "yieldable"
     argc: 3
     arg_spec: "vvv"
-    aot: "xrt_http_h2_recv_unavailable"
-    aot_direct: true
+    aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "coro,netpoll"
@@ -2268,13 +2265,12 @@ module http2 {
   }
 
   fn __close {
-    signature: "(handle: i64): bool"
-    doc: "Close an HTTP/2 connection and release its handle"
+    signature: "(handle: i64): ()"
+    doc: "Close an HTTP/2 connection and release its handle; stale handles are already closed"
     vm: "h2_close"
     argc: 1
     arg_spec: "v"
-    aot: "xrt_http_h2_close_unavailable"
-    aot_direct: true
+    aot_direct: false
     link_object: false
     layer: "runtime"
   }
