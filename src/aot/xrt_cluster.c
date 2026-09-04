@@ -29,7 +29,7 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
                           XrValue insecure, XrValue heartbeat_interval_ms,
                           XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats,
                           XrValue phi_min_samples, XrValue phi_threshold,
-                          XrValue topic_delivery_fanout_max, XrValue tombstone_retention_ms) {
+                          XrValue queue_and_topic_limits, XrValue tombstone_retention_ms) {
     (void) ca_file;
     (void) ca_file_len;
     (void) cert_file;
@@ -42,13 +42,18 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
         !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled) || !XR_IS_INT(heartbeat_interval_ms) ||
         !XR_IS_INT(heartbeat_timeout_ms) || !XR_IS_INT(max_missed_heartbeats) ||
         !XR_IS_INT(phi_min_samples) || !XR_IS_FLOAT(phi_threshold) ||
-        !XR_IS_INT(topic_delivery_fanout_max) || !XR_IS_INT(tombstone_retention_ms))
+        !XR_IS_INT(queue_and_topic_limits) ||
+        !XR_IS_INT(tombstone_retention_ms))
         return XR_FALSE_VAL;
     int64_t port = XR_TO_INT(port_value);
-    int64_t fanout_max = XR_TO_INT(topic_delivery_fanout_max);
-    if (port < 0 || port > UINT16_MAX || fanout_max <= 0 || fanout_max > UINT32_MAX)
+    int64_t packed_limits_value = XR_TO_INT(queue_and_topic_limits);
+    uint64_t packed_limits = packed_limits_value > 0 ? (uint64_t) packed_limits_value : 0;
+    uint64_t queue_high_watermark = packed_limits >> 32;
+    uint32_t fanout_max = (uint32_t) packed_limits;
+    if (port < 0 || port > UINT16_MAX || queue_high_watermark == 0 ||
+        queue_high_watermark > SIZE_MAX || fanout_max == 0)
         return XR_FALSE_VAL;
-    XrTopicRegistry *topics = xr_topic_registry_new_aot(aot, (uint32_t) fanout_max);
+    XrTopicRegistry *topics = xr_topic_registry_new_aot(aot, fanout_max);
     if (!topics)
         return XR_FALSE_VAL;
     XrClusterBlockingRuntimeConfig config = {
@@ -57,6 +62,7 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
         .secret = secret,
         .secret_length = (size_t) secret_len,
         .port = (uint16_t) port,
+        .output_queue_high_watermark = (size_t) queue_high_watermark,
         .topics = topics,
     };
     uint16_t actual_port = 0;

@@ -23,6 +23,7 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../../src/coro/xchannel.h"
+#include "../../src/coro/xcluster_output_queue.h"
 #include "../../src/coro/xmonitor_registry.h"
 #include "../../src/coro/xphi_detector.h"
 #include "../../src/coro/xtombstone_registry.h"
@@ -41,52 +42,6 @@
 #include <stdatomic.h>
 #include <limits.h>
 #include "../../src/os/os_thread.h"
-
-#ifdef _WIN32
-#include <fcntl.h>
-#if defined(_MSC_VER)
-#include <corecrt_io.h>
-#else
-#include <io.h>
-#endif
-
-static inline int xr_cluster_pipe(int fds[2]) {
-    return _pipe(fds, 4096, _O_BINARY);
-}
-
-static inline int xr_cluster_read(int fd, void *buf, size_t len) {
-    size_t capped = len > (size_t) UINT_MAX ? (size_t) UINT_MAX : len;
-    return _read(fd, buf, (unsigned int) capped);
-}
-
-static inline int xr_cluster_write(int fd, const void *buf, size_t len) {
-    size_t capped = len > (size_t) UINT_MAX ? (size_t) UINT_MAX : len;
-    return _write(fd, buf, (unsigned int) capped);
-}
-
-static inline int xr_cluster_fcntl_noop(int fd, int cmd, int flags) {
-    (void) fd;
-    (void) cmd;
-    (void) flags;
-    return 0;
-}
-
-#ifndef F_SETFL
-#define F_SETFL 0
-#endif
-#ifndef O_NONBLOCK
-#define O_NONBLOCK 0
-#endif
-
-#define pipe(fds) xr_cluster_pipe((fds))
-#define read(fd, buf, len) xr_cluster_read((fd), (buf), (len))
-#define write(fd, buf, len) xr_cluster_write((fd), (buf), (len))
-#define close(fd) _close((fd))
-#define fcntl(fd, cmd, flags) xr_cluster_fcntl_noop((fd), (cmd), (flags))
-#else
-#include <unistd.h>
-#include <fcntl.h>
-#endif
 
 /* ========== Forward Declarations ========== */
 
@@ -140,26 +95,6 @@ typedef enum {
     XR_NODE_CLOSING
 } XrNodeState;
 
-typedef struct XrOutFrame {
-    uint8_t *data;
-    uint32_t len;
-    bool owned;
-    struct XrOutFrame *next;
-} XrOutFrame;
-
-typedef struct XrOutputQueue {
-    XrOutFrame *head;
-    XrOutFrame *tail;
-    int64_t total_bytes;
-    int frame_count;
-    int64_t high_watermark;
-    int64_t low_watermark;
-    _Atomic(bool) is_full;
-    _Atomic(uint64_t) pending_frames;
-    int notify_pipe[2];
-    XrAdaptiveMutex lock;
-} XrOutputQueue;
-
 typedef struct XrNodeMetrics {
     _Atomic(uint64_t) frames_sent;
     _Atomic(uint64_t) frames_recv;
@@ -185,7 +120,7 @@ typedef struct XrClusterNode {
 
     struct XrVMRuntime *isolate;
 
-    XrOutputQueue outq;
+    XrClusterOutputQueue *outq;
     _Atomic(bool) writer_running;
     _Atomic(bool) writer_exited;
     _Atomic(bool) reader_running;
@@ -197,7 +132,8 @@ typedef struct XrClusterNode {
 } XrClusterNode;
 
 XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port,
-                                double expected_heartbeat_interval_ms);
+                                double expected_heartbeat_interval_ms,
+                                size_t output_queue_high_watermark);
 void cluster_node_retain(XrClusterNode *node);
 void cluster_node_shutdown(XrClusterNode *node);
 void cluster_node_release(XrClusterNode *node);
@@ -207,12 +143,9 @@ int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8
 int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
                                       uint8_t topic_len, const uint8_t *envelope,
                                       uint32_t envelope_len);
-int cluster_conn_read_try(XrIOConn *conn, uint8_t *data, size_t len, int *wait_events);
-int cluster_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t len, int *wait_events);
 int cluster_node_send_ping(XrClusterNode *node);
 bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node);
 bool cluster_node_is_slow(XrClusterNode *node);
-int64_t cluster_now_ms(void);
 
 /* ========== Cluster State ========== */
 
@@ -239,6 +172,7 @@ typedef struct XrCluster {
     int64_t max_missed_heartbeats;
     int64_t phi_min_samples;
     double phi_threshold;
+    size_t output_queue_high_watermark;
 
     XrTombstoneRegistry *tombstones;
     XrMonitorRegistry *monitors;

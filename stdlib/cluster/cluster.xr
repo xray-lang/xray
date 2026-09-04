@@ -40,7 +40,7 @@
 import crypto
 import math
 import net
-import { DialOptions, NetError } from net
+import { DialOptions, NetError, UdpFrom } from net
 import time
 
 // ========== Protocol constants ==========
@@ -93,6 +93,11 @@ export const ENVELOPE_HEADER_SIZE = 64
 // upper bound is what the channel subsystem will allocate.
 export const SUBSCRIPTION_CAPACITY_MAX = 1048576
 export const TOPIC_DELIVERY_FANOUT_MAX = 256
+export const OUTPUT_QUEUE_HIGH_WATERMARK_BYTES = 4194304
+// The private start leaf is intentionally scalar-only. Pack its two u32
+// resource limits into one i64 transport word; their values and policy remain
+// source-owned while the provider only projects the two machine fields.
+const _START_LIMITS_RADIX = 4294967296
 export const NODE_MONITOR_CAPACITY = 8
 export const COROUTINE_MONITOR_CAPACITY = 1
 
@@ -173,6 +178,16 @@ export type ClusterDiscoveryAnnouncement = {
 type _DiscoveryTombstone = {
     name: string,
     markedAtMs: i64,
+}
+
+type _DiscoveryTombstoneSet = {
+    entries: Array<_DiscoveryTombstone>,
+    names: Array<string>,
+}
+
+type _DiscoveryDatagram = {
+    sender: UdpFrom,
+    bytes: Array<u8>,
 }
 
 fn _bytes(text: string) -> Array<u8> {
@@ -572,28 +587,31 @@ fn _releaseDiscovery(token: i64) {
 }
 
 fn _drainDiscoveryTombstones(notifications: Channel<string>,
-                             tombstones: ref Array<_DiscoveryTombstone>, nowMs: i64) {
+                             tombstones: Array<_DiscoveryTombstone>,
+                             nowMs: i64) -> Array<_DiscoveryTombstone> {
+    var current: Array<_DiscoveryTombstone> = []
+    for (var i = 0; i < len(tombstones); i++) { current.push(tombstones[i]) }
     while (true) {
         match (notifications.tryRecv()) {
             Recv.Value { value: departed } -> {
                 var retained: Array<_DiscoveryTombstone> = []
-                for (var i = 0; i < len(tombstones); i++) {
-                    var entry = tombstones[i]
+                for (var i = 0; i < len(current); i++) {
+                    var entry = current[i]
                     if (entry.name != departed && tombstoneIsLive(entry.markedAtMs, nowMs)) {
                         retained.push(entry)
                     }
                 }
-                tombstones.clear()
-                for (var i = 0; i < len(retained); i++) { tombstones.push(retained[i]) }
-                tombstones.push({ name: departed, markedAtMs: nowMs })
+                retained.push({ name: departed, markedAtMs: nowMs })
+                current = retained
             }
-            _ -> { return }
+            _ -> { break }
         }
     }
+    return current
 }
 
-fn _liveDiscoveryTombstoneNames(tombstones: ref Array<_DiscoveryTombstone>,
-                                nowMs: i64) -> Array<string> {
+fn _liveDiscoveryTombstones(tombstones: Array<_DiscoveryTombstone>,
+                            nowMs: i64) -> _DiscoveryTombstoneSet {
     var retained: Array<_DiscoveryTombstone> = []
     var names: Array<string> = []
     for (var i = 0; i < len(tombstones); i++) {
@@ -603,9 +621,8 @@ fn _liveDiscoveryTombstoneNames(tombstones: ref Array<_DiscoveryTombstone>,
             names.push(entry.name)
         }
     }
-    tombstones.clear()
-    for (var i = 0; i < len(retained); i++) { tombstones.push(retained[i]) }
-    return names
+    var result: _DiscoveryTombstoneSet = { entries: retained, names: names }
+    return result
 }
 
 fn _hexNibble(c: rune) -> i64 {
@@ -743,73 +760,72 @@ fn _joinPeer(host: string, port: i64) -> bool {
 }
 
 fn _serveAcceptedPeer(conn: move NetConn, token: i64) {
-    var live = conn
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
-    if (_runtimeActiveToken.load() != token || !net.setDeadline(live, deadline)) {
-        net.close(live)
+    if (_runtimeActiveToken.load() != token || !net.setDeadline(conn, deadline)) {
+        net.close(conn)
         return
     }
 
     var config = __handshakeConfig()
     if (config == null || (config!.tlsEnabled && !config!.tlsServerReady)) {
-        net.close(live)
+        net.close(conn)
         return
     }
-    if (config!.tlsEnabled && __acceptTls(live, deadline) != 0) {
+    if (config!.tlsEnabled && __acceptTls(conn, deadline) != 0) {
         // The TLS provider closes the failed handle.
         return
     }
     if (_runtimeActiveToken.load() != token) {
-        net.close(live)
+        net.close(conn)
         return
     }
 
-    var frame = _readHandshakeFrame(live)
+    var frame = _readHandshakeFrame(conn)
     if (frame == null || frame!.kind != FRAME_HANDSHAKE_REQ) {
-        net.close(live)
+        net.close(conn)
         return
     }
     var request = decodeHandshakeRequest(frame!.payload)
     if (request == null || !_mayPublishPeer(request!.name)) {
-        net.close(live)
+        net.close(conn)
         return
     }
 
     var nonce = _handshakeNonce()
     if (nonce == null) {
-        net.close(live)
+        net.close(conn)
         return
     }
     var proof = computeHandshakeProof(config!.secret, request!.nonce)
     if (proof == null) {
-        net.close(live)
+        net.close(conn)
         return
     }
     var ackValue: ClusterHandshakeAck = {
         name: self(), nonce: nonce!, proof: proof!, flags: _CLUSTER_PROTOCOL_FLAGS,
     }
     var ack = encodeHandshakeAck(ackValue)
-    if (ack == null || net.writeBytes(live, ack!) != len(ack!)) {
-        net.close(live)
+    if (ack == null || net.writeBytes(conn, ack!) != len(ack!)) {
+        net.close(conn)
         return
     }
 
-    var doneFrame = _readHandshakeFrame(live)
+    var doneFrame = _readHandshakeFrame(conn)
     if (doneFrame == null || doneFrame!.kind != FRAME_HANDSHAKE_DONE) {
-        net.close(live)
+        net.close(conn)
         return
     }
     var done = decodeHandshakeDone(doneFrame!.payload)
     var expected = computeHandshakeProof(config!.secret, nonce!)
     if (done == null || expected == null || !handshakeProofEqual(done!, expected!)) {
-        net.close(live)
+        net.close(conn)
         return
     }
     if (_runtimeActiveToken.load() != token || !_mayPublishPeer(request!.name)) {
-        net.close(live)
+        net.close(conn)
         return
     }
-    __adoptPeer(move live, request!.name, "", 0, request!.flags)
+    __adoptPeer(move conn, request!.name, "", 0, request!.flags)
 }
 
 // Keep the affine connection inside a single-iteration frame. A loop-carried
@@ -837,7 +853,7 @@ fn _acceptOne(listener: NetListener, token: i64) -> bool {
     return true
 }
 
-fn _acceptLoop(listener: move NetListener, token: i64) {
+fn _acceptLoop(listener: NetListener, token: i64) {
     var live = listener
     defer { net.close(live) }
     while (_runtimeActiveToken.load() == token && _acceptOne(live, token)) {}
@@ -854,38 +870,65 @@ fn _healthLoop(token: i64, tickMs: i64) {
     }
 }
 
+fn _scheduleHealthLoop(token: i64, tickMs: i64) {
+    go _healthLoop(token, tickMs)
+}
+
 fn _activateClusterSource(started: bool, secret: string, tickMs: i64,
-                          listener: move NetListener) -> bool {
-    var live = listener
+                          pending: move NetListener?) -> bool {
+    if (pending == null) { return false }
+    const listener: NetListener = pending!
+    pending = null
     if (!started) {
-        net.close(live)
+        net.close(listener)
         return false
     }
     _discoveryHashBits.store(discoveryClusterHash(secret) as i64)
     var token = _runtimeNextToken.fetchAdd(1) + 1
     var (_, acquired) = _runtimeActiveToken.compareExchange(0, token)
     if (!acquired) {
-        net.close(live)
+        net.close(listener)
         __stop()
         return false
     }
-    go _healthLoop(token, tickMs)
+    _scheduleHealthLoop(token, tickMs)
     var config = __handshakeConfig()
     if (config == null || (config!.tlsEnabled && !config!.tlsServerReady)) {
-        net.close(live)
+        net.close(listener)
         return true
     }
-    if (!__trackListener(live)) {
+    if (!__trackListener(listener)) {
         _runtimeActiveToken.store(0)
-        net.close(live)
+        net.close(listener)
         __stop()
         return false
     }
-    go _acceptLoop(move live, token)
+    // Tracking intentionally establishes a borrowed provider alias used only
+    // to wake stop.  Transfer a retained listener reference to the accept
+    // coroutine; that coroutine remains the sole closer.
+    go _acceptLoop(listener, token)
     return true
 }
 
 fn _joinDiscoveredNode(host: string, port: i64) { _joinPeer(host, port) }
+
+// Isolate coroutine creation from the loop-carried tombstone owner.  The
+// scheduling frame contains only copied scalar values, so the discovery loop
+// never carries a borrowed ref-place load across `go`.
+fn _scheduleDiscoveredNode(host: string, port: i64) {
+    go _joinDiscoveredNode(host, port)
+}
+
+// The mutable receive buffer belongs to one suspension frame. Returning the
+// filled array prevents a ref-place load from becoming loop-carried across the
+// next recvFrom suspension.
+fn _receiveDiscoveryDatagram(conn: NetConn, waitMs: i64) -> _DiscoveryDatagram? {
+    var bytes = Array<u8>(_DISCOVERY_ANNOUNCEMENT_MAX_SIZE)
+    var sender = net.recvFrom(conn, ref bytes, waitMs)
+    if (sender == null) { return null }
+    var datagram: _DiscoveryDatagram = { sender: sender!, bytes: bytes }
+    return datagram
+}
 
 fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName: string,
                   expectedHash: u64, announcement: move Array<u8>, token: i64) {
@@ -897,12 +940,11 @@ fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName
         _releaseDiscovery(token)
     }
 
-    var buffer = Array<u8>(_DISCOVERY_ANNOUNCEMENT_MAX_SIZE)
     var tombstones: Array<_DiscoveryTombstone> = []
     var nextAnnouncementMs = 0
     while (_discoveryActiveToken.load() == token) {
         var nowMs = time.monotonic()
-        _drainDiscoveryTombstones(notifications, ref tombstones, nowMs)
+        tombstones = _drainDiscoveryTombstones(notifications, tombstones, nowMs)
         if (nowMs >= nextAnnouncementMs) {
             try {
                 net.sendTo(live, wire, DISCOVERY_MULTICAST_GROUP,
@@ -913,8 +955,8 @@ fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName
 
         var waitMs = nextAnnouncementMs - time.monotonic()
         if (waitMs < 1) { waitMs = 1 }
-        var sender = net.recvFrom(live, ref buffer, waitMs)
-        if (sender == null) {
+        var datagram = _receiveDiscoveryDatagram(live, waitMs)
+        if (datagram == null) {
             var error = net.lastError(live)
             if (error != null && error != NetError.Timeout) { return }
             continue
@@ -922,13 +964,23 @@ fn _discoveryLoop(socket: move NetConn, notifications: Channel<string>, selfName
         if (_discoveryActiveToken.load() != token) { return }
 
         nowMs = time.monotonic()
-        _drainDiscoveryTombstones(notifications, ref tombstones, nowMs)
-        var candidate = decodeDiscoveryAnnouncement(buffer)
+        tombstones = _drainDiscoveryTombstones(notifications, tombstones, nowMs)
+        var candidate = decodeDiscoveryAnnouncement(datagram!.bytes)
         var connected = nodes()
         if (candidate == null || connected == null) { continue }
-        var departed = _liveDiscoveryTombstoneNames(ref tombstones, nowMs)
+        var tombstoneSet = _liveDiscoveryTombstones(tombstones, nowMs)
+        tombstones = tombstoneSet.entries
+        var departed = tombstoneSet.names
         if (shouldJoinDiscoveredNode(selfName, connected!, departed, candidate!, expectedHash)) {
-            go _joinDiscoveredNode(sender!.host, candidate!.port)
+            var peerHost = copy(datagram!.sender.host)
+            var peerPort = candidate!.port
+            // End every optional-record projection before `go`: these
+            // projections are borrowed places, whereas the coroutine receives
+            // only the independent host/port values above.
+            datagram = null
+            candidate = null
+            connected = null
+            _scheduleDiscoveredNode(peerHost, peerPort)
         }
     }
 }
@@ -1330,7 +1382,6 @@ export fn start(config: ClusterConfig) -> bool {
     var tick = heartbeatTickInterval(interval)
     var secret = config.secret ?? ""
     if (!_fitsCString(secret, SHARED_SECRET_MAX_BYTES, true)) { return false }
-
     var tlsEnabled = false
     var caFile = ""
     var certFile = ""
@@ -1350,13 +1401,11 @@ export fn start(config: ClusterConfig) -> bool {
         if ((len(certFile) == 0) != (len(keyFile) == 0)) { return false }
     }
 
-    var maybeListener = _clusterListener(config.port)
-    if (maybeListener == null) { return false }
-    var listener: NetListener = maybeListener!
-    maybeListener = null
-    var port = net.port(listener)
+    var listener = _clusterListener(config.port)
+    if (listener == null) { return false }
+    var port = net.port(listener!)
     if (port < 0 || port > 65535) {
-        net.close(listener)
+        net.close(listener!)
         return false
     }
     var started = __start(
@@ -1373,7 +1422,7 @@ export fn start(config: ClusterConfig) -> bool {
         missed,
         PHI_MIN_SAMPLES,
         PHI_THRESHOLD,
-        TOPIC_DELIVERY_FANOUT_MAX,
+        OUTPUT_QUEUE_HIGH_WATERMARK_BYTES * _START_LIMITS_RADIX + TOPIC_DELIVERY_FANOUT_MAX,
         TOMBSTONE_RETENTION_MS
     )
     return _activateClusterSource(started, secret, tick, move listener)

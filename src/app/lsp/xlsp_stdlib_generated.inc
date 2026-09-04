@@ -98,6 +98,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"ENVELOPE_HEADER_SIZE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"SUBSCRIPTION_CAPACITY_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"TOPIC_DELIVERY_FANOUT_MAX", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"OUTPUT_QUEUE_HIGH_WATERMARK_BYTES", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"NODE_MONITOR_CAPACITY", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"COROUTINE_MONITOR_CAPACITY", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"HEARTBEAT_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
@@ -123,7 +124,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterSnapshot", XLSP_SYM_CLASS, "type __ClusterSnapshot = { self: string, port: i64, running: bool, nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: __ClusterTlsSnapshot }", "Private scalar snapshot read from the cluster runtime", NULL, 0},
     {"__ClusterHandshakeConfig", XLSP_SYM_CLASS, "type __ClusterHandshakeConfig = { secret: string, tlsEnabled: bool, tlsServerReady: bool }", "Private immutable configuration needed by source-owned cluster handshakes", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 91
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 92
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

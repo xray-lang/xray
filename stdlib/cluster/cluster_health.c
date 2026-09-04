@@ -15,6 +15,7 @@
 
 #include "../../src/coro/xmonitor_registry.h"
 #include "../../src/coro/xtombstone_registry.h"
+#include "../../src/os/os_time.h"
 
 #include <string.h>
 
@@ -28,7 +29,7 @@ void cluster_health_tick(XrCluster *cluster) {
     XrClusterNode **candidates = inline_candidates;
     uint32_t candidate_count = 0;
     uint32_t candidate_capacity = INLINE_CANDIDATES;
-    int64_t now = cluster_now_ms();
+    int64_t now = (int64_t) xr_time_monotonic_ms();
 
     xr_amutex_lock(&cluster->nodes_lock);
     for (XrClusterNode *node = cluster->nodes; node; node = node->next) {

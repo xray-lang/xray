@@ -30,172 +30,11 @@
 
 static void cluster_node_close(XrClusterNode *node);
 
-/* ========== Time Utility ========== */
-
-int64_t cluster_now_ms(void) {
-    return (int64_t) xr_time_monotonic_ms();
-}
-
-/* ========== Output Queue ========== */
-
-static void cluster_outq_init(XrOutputQueue *q) {
-    q->head = NULL;
-    q->tail = NULL;
-    q->total_bytes = 0;
-    q->frame_count = 0;
-    q->high_watermark = 4 * 1024 * 1024;  // 4MB
-    q->low_watermark = 1 * 1024 * 1024;   // 1MB
-    atomic_store(&q->is_full, false);
-    atomic_store(&q->pending_frames, 0);
-    // Create pipe for writer wakeup notification
-    int rc = pipe(q->notify_pipe);
-    XR_DCHECK(rc == 0, "pipe() failed for writer notification");
-    if (rc != 0) {
-        q->notify_pipe[0] = q->notify_pipe[1] = -1;
-    }
-    /*
-     * Both ends non-blocking:
-     *   - Write end: enqueue (outq_notify) never blocks even if the
-     *     pipe already has pending bytes.
-     *   - Read end: the writer coroutine drains via xr_socket_read,
-     *     which requires a non-blocking fd so it can suspend via
-     *     netpoll instead of pinning the worker thread in a raw
-     *     read(2) syscall.
-     */
-    if (q->notify_pipe[1] >= 0)
-        fcntl(q->notify_pipe[1], F_SETFL, O_NONBLOCK);
-    if (q->notify_pipe[0] >= 0)
-        fcntl(q->notify_pipe[0], F_SETFL, O_NONBLOCK);
-    xr_amutex_init(&q->lock);
-}
-
-/*
- * Close the writer-facing side of the notify pipe early. Used by
- * cluster_node_shutdown to wake any coroutine yielded on
- * xr_socket_read(notify_pipe[0]) with a clean EOF before we tear
- * down the rest of the node state. Calling this multiple times is
- * safe — it guards on the fd being >= 0.
- *
- * This is split out from cluster_outq_destroy specifically because the
- * destroy path wants to close the *read* end only after the writer
- * coroutine has exited; closing the read end while netpoll still
- * has the fd registered is a use-after-close on the PollDesc.
- */
-static void cluster_outq_close_write_end(XrOutputQueue *q) {
-    if (q->notify_pipe[1] >= 0) {
-        close(q->notify_pipe[1]);
-        q->notify_pipe[1] = -1;
-    }
-}
-
-static void cluster_outq_destroy(XrOutputQueue *q) {
-    XrOutFrame *f = q->head;
-    while (f) {
-        XrOutFrame *next = f->next;
-        if (f->owned)
-            xr_free(f->data);
-        xr_free(f);
-        f = next;
-    }
-    q->head = q->tail = NULL;
-    q->total_bytes = 0;
-    q->frame_count = 0;
-    atomic_store(&q->pending_frames, 0);
-    // Close both ends. Write end may already be -1 from an earlier
-    // cluster_outq_close_write_end during writer teardown; close is
-    // idempotent against our own -1 guard.
-    if (q->notify_pipe[1] >= 0)
-        close(q->notify_pipe[1]);
-    if (q->notify_pipe[0] >= 0)
-        close(q->notify_pipe[0]);
-    q->notify_pipe[0] = q->notify_pipe[1] = -1;
-}
-
-// Signal writer coroutine that data is available
-static inline void outq_notify(XrOutputQueue *q) {
-    if (q->notify_pipe[1] >= 0) {
-        uint8_t byte = 1;
-        // Ignore EAGAIN (pipe already has data)
-        (void) write(q->notify_pipe[1], &byte, 1);
-    }
-}
-
-// Internal helper: enqueue a frame node into the queue
-static void outq_enqueue_locked(XrOutputQueue *q, XrOutFrame *f) {
-    if (q->tail) {
-        q->tail->next = f;
-    } else {
-        q->head = f;
-    }
-    q->tail = f;
-    q->total_bytes += f->len;
-    q->frame_count++;
-    atomic_fetch_add(&q->pending_frames, 1);
-    if (q->total_bytes >= q->high_watermark) {
-        atomic_store(&q->is_full, true);
-    }
-}
-
-static int cluster_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len) {
-    if (atomic_load(&q->is_full))
-        return -1;
-
-    XrOutFrame *f = (XrOutFrame *) xr_malloc(sizeof(XrOutFrame));
-    if (!f)
-        return -1;
-    f->data = (uint8_t *) xr_malloc(len);
-    if (!f->data) {
-        xr_free(f);
-        return -1;
-    }
-    memcpy(f->data, data, len);
-    f->len = len;
-    f->owned = true;
-    f->next = NULL;
-
-    xr_amutex_lock(&q->lock);
-    outq_enqueue_locked(q, f);
-    xr_amutex_unlock(&q->lock);
-    outq_notify(q);
-    return 0;
-}
-
-// Zero-copy push: takes ownership of the data pointer (caller must have malloc'd it)
-static int cluster_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len) {
-    if (atomic_load(&q->is_full))
-        return -1;
-
-    XrOutFrame *f = (XrOutFrame *) xr_malloc(sizeof(XrOutFrame));
-    if (!f)
-        return -1;
-    f->data = data;
-    f->len = len;
-    f->owned = true;  // we own it (caller transferred ownership)
-    f->next = NULL;
-
-    xr_amutex_lock(&q->lock);
-    outq_enqueue_locked(q, f);
-    xr_amutex_unlock(&q->lock);
-    outq_notify(q);
-    return 0;
-}
-
-static XrOutFrame *cluster_outq_pop_all(XrOutputQueue *q) {
-    xr_amutex_lock(&q->lock);
-    XrOutFrame *batch = q->head;
-    q->head = NULL;
-    q->tail = NULL;
-    q->total_bytes = 0;
-    q->frame_count = 0;
-    atomic_store(&q->is_full, false);
-    xr_amutex_unlock(&q->lock);
-    return batch;
-}
-
 /* ========== Node Lifecycle ========== */
 
 XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port,
-                                double expected_heartbeat_interval_ms) {
+                                double expected_heartbeat_interval_ms,
+                                size_t output_queue_high_watermark) {
     XrClusterNode *node = (XrClusterNode *) xr_calloc(1, sizeof(XrClusterNode));
     if (!node)
         return NULL;
@@ -215,7 +54,11 @@ XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t por
     node->last_heartbeat_sent = 0;
     node->last_heartbeat_recv = 0;
     node->missed_heartbeats = 0;
-    cluster_outq_init(&node->outq);
+    node->outq = xr_cluster_output_queue_new(output_queue_high_watermark);
+    if (!node->outq) {
+        xr_free(node);
+        return NULL;
+    }
     atomic_store(&node->writer_running, false);
     atomic_store(&node->writer_exited, false);
     atomic_store(&node->reader_running, false);
@@ -243,10 +86,9 @@ void cluster_node_shutdown(XrClusterNode *node) {
      *
      *   1. Clear writer_running so any writer iteration after the
      *      next wake observes the stop signal.
-     *   2. Close the write end of notify_pipe (via the dedicated
-     *      cluster_outq_close_write_end helper). xr_socket_read on the
-     *      read end then returns 0 (EOF), wakes the coroutine, the
-     *      loop breaks, and the writer sets writer_exited.
+     *   2. Stop the output queue. Its provider closes the write end of the
+     *      wakeup pair, so xr_socket_read on the read end returns 0 (EOF),
+     *      wakes the coroutine, and lets the writer exit.
      *   3. Close the peer socket. Any in-flight send fails cleanly;
      *      the writer loop's early checks on node->conn bail out.
      *   4. The writer and reader each own a reference. The last release
@@ -261,7 +103,7 @@ void cluster_node_shutdown(XrClusterNode *node) {
      * any stuck reader with EBADF.
      */
     atomic_store(&node->writer_running, false);
-    cluster_outq_close_write_end(&node->outq);
+    xr_cluster_output_queue_stop(node->outq);
     cluster_node_close(node);
 }
 
@@ -271,7 +113,7 @@ static void cluster_node_destroy(XrClusterNode *node) {
         xr_io_close(node->conn);
         node->conn = NULL;
     }
-    cluster_outq_destroy(&node->outq);
+    xr_cluster_output_queue_destroy(node->outq);
     xr_free(node);
 }
 
@@ -303,7 +145,7 @@ static void cluster_node_close(XrClusterNode *node) {
 int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len) {
     if (!node || atomic_load(&node->shutdown_started) || node->state == XR_NODE_CLOSING)
         return -1;
-    return cluster_outq_push(&node->outq, data, len);
+    return xr_cluster_output_queue_push_copy(node->outq, data, len);
 }
 
 // Async send — encode frame and enqueue for writer coroutine
@@ -333,7 +175,7 @@ int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8
             xr_free(frame);
             return -1;
         }
-        int rc = cluster_outq_push_nocopy(&node->outq, frame, (uint32_t) wrote);
+        int rc = xr_cluster_output_queue_push_owned(node->outq, frame, (uint32_t) wrote);
         if (rc != 0) {
             xr_free(frame);
             return -1;
@@ -361,7 +203,7 @@ int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, co
         xr_free(frame);
         return -1;
     }
-    int rc = cluster_outq_push_nocopy(&node->outq, frame, (uint32_t) wrote);
+    int rc = xr_cluster_output_queue_push_owned(node->outq, frame, (uint32_t) wrote);
     if (rc != 0) {
         xr_free(frame);
         return -1;
@@ -373,21 +215,16 @@ int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, co
 
 typedef struct XrWriterContext {
     XrClusterNode *node;
-    XrOutFrame *frames;
+    XrClusterOutputBatch *frames;
     size_t offset;
 } XrWriterContext;
 
 static void cluster_writer_drop_frames(XrWriterContext *ctx) {
-    while (ctx && ctx->frames) {
-        XrOutFrame *frame = ctx->frames;
-        ctx->frames = frame->next;
-        if (frame->owned)
-            xr_free(frame->data);
-        xr_free(frame);
-        atomic_fetch_sub(&ctx->node->outq.pending_frames, 1);
-    }
-    if (ctx)
+    if (ctx) {
+        xr_cluster_output_batch_drop(ctx->node->outq, ctx->frames);
+        ctx->frames = NULL;
         ctx->offset = 0;
+    }
 }
 
 static void cluster_writer_context_destroy(void *context) {
@@ -399,34 +236,6 @@ static void cluster_writer_context_destroy(void *context) {
     atomic_store(&ctx->node->writer_exited, true);
     cluster_node_release(ctx->node);
     xr_free(ctx);
-}
-
-/*
- * One non-blocking connection write. wait_events reports the readiness
- * direction required by TLS; plain TCP always waits for writability.
- */
-int cluster_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t len, int *wait_events) {
-    if (!conn || conn->fd < 0)
-        return -3;
-    if (conn->is_tls) {
-        int n = xr_tls_conn_write_try(conn->tls, data, len);
-        if (n == -1) {
-            *wait_events = XR_WAIT_WRITE;
-            return -1;
-        }
-        if (n == -2) {
-            *wait_events = XR_WAIT_READ;
-            return -1;
-        }
-        return n > 0 ? n : -3;
-    }
-
-    XrIOTryResult result = xr_socket_write_try(conn->X, conn->fd, (const char *) data, len);
-    if (!result.ready) {
-        *wait_events = XR_WAIT_WRITE;
-        return -1;
-    }
-    return result.error == 0 ? result.value : -3;
 }
 
 static XrCFuncResult cluster_writer_drive(XrVMRuntime *X, XrWriterContext *ctx, XrValue *result);
@@ -448,25 +257,27 @@ static XrCFuncResult cluster_writer_drive(XrVMRuntime *X, XrWriterContext *ctx, 
 
     for (int operations = 0; operations < 64; operations++) {
         if (!ctx->frames)
-            ctx->frames = cluster_outq_pop_all(&node->outq);
+            ctx->frames = xr_cluster_output_queue_take_all(node->outq);
 
         if (!ctx->frames) {
             uint8_t drain[64];
+            int notify_fd = xr_cluster_output_queue_notify_fd(node->outq);
             XrIOTryResult read_result =
-                xr_socket_read_try(X, node->outq.notify_pipe[0], (char *) drain, sizeof(drain));
+                xr_socket_read_try(X, notify_fd, (char *) drain, sizeof(drain));
             if (!read_result.ready) {
-                return xr_yield_for_io(X, node->outq.notify_pipe[0], XR_WAIT_READ, -1,
-                                       cluster_writer_continue, ctx, result);
+                return xr_yield_for_io(X, notify_fd, XR_WAIT_READ, -1, cluster_writer_continue, ctx,
+                                       result);
             }
             if (read_result.error != 0 || read_result.value == 0)
                 return XR_CFUNC_DONE;
             continue;
         }
 
-        XrOutFrame *frame = ctx->frames;
+        uint32_t frame_length = xr_cluster_output_batch_length(ctx->frames);
+        const uint8_t *frame_data = xr_cluster_output_batch_data(ctx->frames);
         int wait_events = XR_WAIT_WRITE;
-        int n = cluster_conn_write_try(node->conn, frame->data + ctx->offset,
-                                       (size_t) frame->len - ctx->offset, &wait_events);
+        int n = xr_io_conn_write_try(node->conn, frame_data + ctx->offset,
+                                     (size_t) frame_length - ctx->offset, &wait_events);
         if (n == -1) {
             return xr_yield_for_io(X, node->conn->fd, wait_events, -1, cluster_writer_continue, ctx,
                                    result);
@@ -480,13 +291,9 @@ static XrCFuncResult cluster_writer_drive(XrVMRuntime *X, XrWriterContext *ctx, 
 
         ctx->offset += (size_t) n;
         atomic_fetch_add(&node->metrics.bytes_sent, (uint64_t) n);
-        if (ctx->offset == frame->len) {
-            ctx->frames = frame->next;
+        if (ctx->offset == frame_length) {
             ctx->offset = 0;
-            if (frame->owned)
-                xr_free(frame->data);
-            xr_free(frame);
-            atomic_fetch_sub(&node->outq.pending_frames, 1);
+            xr_cluster_output_batch_consume(node->outq, &ctx->frames);
             atomic_fetch_add(&node->metrics.frames_sent, 1);
         }
     }
@@ -548,30 +355,6 @@ static void cluster_reader_context_destroy(void *context) {
     xr_free(ctx);
 }
 
-int cluster_conn_read_try(XrIOConn *conn, uint8_t *data, size_t len, int *wait_events) {
-    if (!conn || conn->fd < 0)
-        return -3;
-    if (conn->is_tls) {
-        int n = xr_tls_conn_read_try(conn->tls, data, len);
-        if (n == -1) {
-            *wait_events = XR_WAIT_READ;
-            return -1;
-        }
-        if (n == -2) {
-            *wait_events = XR_WAIT_WRITE;
-            return -1;
-        }
-        return n >= 0 ? n : -3;
-    }
-
-    XrIOTryResult result = xr_socket_read_try(conn->X, conn->fd, (char *) data, len);
-    if (!result.ready) {
-        *wait_events = XR_WAIT_READ;
-        return -1;
-    }
-    return result.error == 0 ? result.value : -3;
-}
-
 static XrCFuncResult cluster_reader_drive(XrVMRuntime *X, XrReaderContext *ctx, XrValue *result);
 
 static XrCFuncResult cluster_reader_continue(XrVMRuntime *X, int status, XrValue resume_value,
@@ -604,7 +387,7 @@ static XrCFuncResult cluster_reader_drive(XrVMRuntime *X, XrReaderContext *ctx, 
         }
 
         int wait_events = XR_WAIT_READ;
-        int n = cluster_conn_read_try(ctx->node->conn, target, remaining, &wait_events);
+        int n = xr_io_conn_read_try(ctx->node->conn, target, remaining, &wait_events);
         if (n == -1) {
             return xr_yield_for_io(X, ctx->node->conn->fd, wait_events, -1, cluster_reader_continue,
                                    ctx, result);
@@ -729,13 +512,13 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node) {
 bool cluster_node_is_slow(XrClusterNode *node) {
     if (!node)
         return false;
-    return atomic_load(&node->outq.is_full);
+    return xr_cluster_output_queue_is_full(node->outq);
 }
 
 /* ========== Heartbeat ========== */
 
 int cluster_node_send_ping(XrClusterNode *node) {
-    int64_t now = cluster_now_ms();
+    int64_t now = (int64_t) xr_time_monotonic_ms();
     uint8_t frame[32];
     int len = cluster_frame_encode_heartbeat(frame, sizeof(frame), XR_FRAME_HEARTBEAT_PING, now);
     if (len < 0)

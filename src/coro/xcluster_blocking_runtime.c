@@ -40,6 +40,7 @@ struct XrClusterBlockingRuntime {
     _Atomic(bool) running;
     xr_thread_t accept_thread;
     bool accept_started;
+    size_t output_queue_high_watermark;
     xr_mutex_t nodes_lock;
     XrClusterBlockingNode *nodes;
     XrTopicRegistry *topics;
@@ -117,6 +118,7 @@ static XrClusterBlockingNode *blocking_node_new(XrClusterBlockingRuntime *runtim
         .socket = socket,
         .context = node,
         .frame_handler = blocking_receive_frame,
+        .queue_high_watermark = runtime->output_queue_high_watermark,
     };
     node->peer = xr_cluster_blocking_peer_new(&config);
     if (!node->peer) {
@@ -176,12 +178,13 @@ static void *blocking_accept_main(void *argument) {
 XrClusterBlockingRuntime *
 xr_cluster_blocking_runtime_new(const XrClusterBlockingRuntimeConfig *config,
                                 uint16_t *actual_port) {
-    if (!config || !config->topics || !actual_port)
+    if (!config || !config->topics || !actual_port || config->output_queue_high_watermark == 0)
         return NULL;
     XrClusterBlockingRuntime *runtime = (XrClusterBlockingRuntime *) xr_calloc(1, sizeof(*runtime));
     if (!runtime)
         return NULL;
     runtime->listener = XR_INVALID_SOCKET;
+    runtime->output_queue_high_watermark = config->output_queue_high_watermark;
     if (!blocking_copy_text(runtime->self_name, sizeof(runtime->self_name), config->name,
                             config->name_length, false) ||
         !blocking_copy_text(runtime->secret, sizeof(runtime->secret), config->secret,

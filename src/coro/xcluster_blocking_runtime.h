@@ -40,6 +40,7 @@ typedef struct {
     const char *secret;
     size_t secret_length;
     uint16_t port;
+    size_t output_queue_high_watermark;
     struct XrTopicRegistry *topics;
 } XrClusterBlockingRuntimeConfig;
 

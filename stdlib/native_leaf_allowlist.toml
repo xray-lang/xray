@@ -242,7 +242,7 @@ class = "runtime_leaf"
 abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows; standalone AOT additionally installs its opaque blocking cluster service"
 ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries. cluster.xr owns the listener, heartbeat and accept coroutines, validation and cadence. The AOT ABI leaf still installs the separate blocking service and declines TLS"
+provider = "the VM cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns the listener, heartbeat and accept coroutines, validation, cadence, output-queue high watermark and topic fanout limit. The AOT ABI leaf still installs the separate blocking service and declines TLS"
 deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values and standalone AOT no longer installs a separate cluster service"
 
 [[leaf]]

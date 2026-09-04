@@ -21,8 +21,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_CLUSTER_BLOCKING_QUEUE_HIGH_WATERMARK (4u * 1024u * 1024u)
-
 typedef struct XrClusterBlockingFrame {
     uint8_t *data;
     uint32_t length;
@@ -39,6 +37,7 @@ struct XrClusterBlockingPeer {
     XrClusterBlockingFrame *queue_head;
     XrClusterBlockingFrame *queue_tail;
     size_t queue_bytes;
+    size_t queue_high_watermark;
     xr_thread_t reader_thread;
     xr_thread_t writer_thread;
     bool reader_started;
@@ -209,8 +208,8 @@ static int blocking_peer_enqueue_owned(XrClusterBlockingPeer *peer, XrClusterBlo
     }
     xr_mutex_lock(&peer->queue_lock);
     if (!atomic_load_explicit(&peer->running, memory_order_relaxed) ||
-        peer->queue_bytes > XR_CLUSTER_BLOCKING_QUEUE_HIGH_WATERMARK ||
-        frame->length > XR_CLUSTER_BLOCKING_QUEUE_HIGH_WATERMARK - peer->queue_bytes) {
+        peer->queue_bytes > peer->queue_high_watermark ||
+        frame->length > peer->queue_high_watermark - peer->queue_bytes) {
         xr_mutex_unlock(&peer->queue_lock);
         blocking_frame_free(frame);
         return -1;
@@ -326,7 +325,8 @@ static void *blocking_peer_reader_main(void *argument) {
 }
 
 XrClusterBlockingPeer *xr_cluster_blocking_peer_new(const XrClusterBlockingPeerConfig *config) {
-    if (!config || config->socket == XR_INVALID_SOCKET || !config->frame_handler)
+    if (!config || config->socket == XR_INVALID_SOCKET || !config->frame_handler ||
+        config->queue_high_watermark == 0)
         return NULL;
     XrClusterBlockingPeer *peer = (XrClusterBlockingPeer *) xr_calloc(1, sizeof(*peer));
     if (!peer)
@@ -334,6 +334,7 @@ XrClusterBlockingPeer *xr_cluster_blocking_peer_new(const XrClusterBlockingPeerC
     peer->socket = config->socket;
     peer->context = config->context;
     peer->frame_handler = config->frame_handler;
+    peer->queue_high_watermark = config->queue_high_watermark;
     atomic_store_explicit(&peer->running, true, memory_order_relaxed);
     xr_mutex_init(&peer->queue_lock);
     xr_cond_init(&peer->queue_ready);

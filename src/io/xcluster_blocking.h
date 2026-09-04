@@ -30,6 +30,7 @@ typedef struct {
     xr_socket_t socket;
     void *context;
     XrClusterBlockingFrameHandler frame_handler;
+    size_t queue_high_watermark;
 } XrClusterBlockingPeerConfig;
 
 XR_FUNC int xr_cluster_blocking_wait(xr_socket_t socket, bool read_ready, int timeout_ms);

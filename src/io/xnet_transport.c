@@ -27,6 +27,7 @@
 #include "xnet_handle.h"
 #include "xdns.h"
 #include "../coro/xworker.h"
+#include "../coro/xsocket.h"
 #include "../runtime/xisolate_internal.h"
 #include "../os/os_net.h"
 #include <stdlib.h>
@@ -332,6 +333,52 @@ XrIOConn *xr_io_conn_take_net_handle(XrNetConn *handle, int timeout_ms) {
     handle->last_error = XR_NETERR_CLOSED;
     handle->last_errno = 0;
     return conn;
+}
+
+int xr_io_conn_read_try(XrIOConn *conn, uint8_t *data, size_t length, int *wait_events) {
+    if (!conn || conn->fd < 0 || !data || !wait_events)
+        return -3;
+    if (conn->is_tls) {
+        int count = xr_tls_conn_read_try(conn->tls, data, length);
+        if (count == -1) {
+            *wait_events = XR_WAIT_READ;
+            return -1;
+        }
+        if (count == -2) {
+            *wait_events = XR_WAIT_WRITE;
+            return -1;
+        }
+        return count >= 0 ? count : -3;
+    }
+    XrIOTryResult result = xr_socket_read_try(conn->X, conn->fd, (char *) data, length);
+    if (!result.ready) {
+        *wait_events = XR_WAIT_READ;
+        return -1;
+    }
+    return result.error == 0 ? result.value : -3;
+}
+
+int xr_io_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t length, int *wait_events) {
+    if (!conn || conn->fd < 0 || !data || !wait_events)
+        return -3;
+    if (conn->is_tls) {
+        int count = xr_tls_conn_write_try(conn->tls, data, length);
+        if (count == -1) {
+            *wait_events = XR_WAIT_WRITE;
+            return -1;
+        }
+        if (count == -2) {
+            *wait_events = XR_WAIT_READ;
+            return -1;
+        }
+        return count > 0 ? count : -3;
+    }
+    XrIOTryResult result = xr_socket_write_try(conn->X, conn->fd, (const char *) data, length);
+    if (!result.ready) {
+        *wait_events = XR_WAIT_WRITE;
+        return -1;
+    }
+    return result.error == 0 ? result.value : -3;
 }
 
 /* ========== Utility Functions ========== */

@@ -94,6 +94,7 @@ static int cluster_runtime_open(XrVMRuntime *X, const char *name, uint16_t port,
                                 const XrClusterTlsOptions *tls, int64_t heartbeat_interval_ms,
                                 int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
                                 int64_t phi_min_samples, double phi_threshold,
+                                size_t output_queue_high_watermark,
                                 uint32_t topic_delivery_fanout_max,
                                 int64_t tombstone_retention_ms) {
     if (X->cluster)
@@ -157,6 +158,7 @@ static int cluster_runtime_open(XrVMRuntime *X, const char *name, uint16_t port,
     c->max_missed_heartbeats = max_missed_heartbeats;
     c->phi_min_samples = phi_min_samples;
     c->phi_threshold = phi_threshold;
+    c->output_queue_high_watermark = output_queue_high_watermark;
 
     atomic_store(&c->running, true);
     X->cluster = c;
@@ -318,8 +320,8 @@ static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int a
     XrString *name = XR_TO_STRING(args[0]);
     if (!cluster_binding_text_fits(name, XR_NODE_NAME_MAX, false))
         return xr_bool(true);
-    return xr_bool(
-        xr_tombstone_registry_contains(cluster->tombstones, name->data, cluster_now_ms()));
+    return xr_bool(xr_tombstone_registry_contains(cluster->tombstones, name->data,
+                                                  (int64_t) xr_time_monotonic_ms()));
 }
 
 static XrValue cluster_health_tick_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -400,7 +402,8 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
 
     XrClusterNode *node = cluster_node_new(name->data, host->data, (uint16_t) port,
-                                           (double) cluster->heartbeat_interval_ms);
+                                           (double) cluster->heartbeat_interval_ms,
+                                           cluster->output_queue_high_watermark);
     if (!node) {
         xr_net_conn_close(handle);
         return xr_bool(false);
@@ -413,7 +416,7 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
     node->state = XR_NODE_CONNECTED;
     node->flags = (uint32_t) flags;
-    node->last_heartbeat_recv = cluster_now_ms();
+    node->last_heartbeat_recv = (int64_t) xr_time_monotonic_ms();
 
     if (!cluster_node_add(cluster, node)) {
         cluster_node_shutdown(node);
@@ -473,15 +476,18 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         tls_ptr = &tls_opts;
     }
 
-    int64_t topic_fanout_max = XR_TO_INT(args[13]);
-    if (XR_TO_INT(args[11]) <= 0 || topic_fanout_max <= 0 || topic_fanout_max > UINT32_MAX ||
-        XR_TO_INT(args[14]) <= 0)
+    int64_t packed_limits_value = XR_TO_INT(args[13]);
+    uint64_t packed_limits = packed_limits_value > 0 ? (uint64_t) packed_limits_value : 0;
+    uint64_t output_queue_high_watermark = packed_limits >> 32;
+    uint32_t topic_fanout_max = (uint32_t) packed_limits;
+    if (XR_TO_INT(args[11]) <= 0 || output_queue_high_watermark == 0 ||
+        output_queue_high_watermark > SIZE_MAX || topic_fanout_max == 0 || XR_TO_INT(args[14]) <= 0)
         return xr_bool(false);
 
-    int rc = cluster_runtime_open(X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]),
-                                  XR_TO_INT(args[9]), XR_TO_INT(args[10]), XR_TO_INT(args[11]),
-                                  XR_TO_FLOAT(args[12]), (uint32_t) topic_fanout_max,
-                                  XR_TO_INT(args[14]));
+    int rc = cluster_runtime_open(
+        X, name->data, port, secret, tls_ptr, XR_TO_INT(args[8]), XR_TO_INT(args[9]),
+        XR_TO_INT(args[10]), XR_TO_INT(args[11]), XR_TO_FLOAT(args[12]),
+        (size_t) output_queue_high_watermark, topic_fanout_max, XR_TO_INT(args[14]));
     return xr_bool(rc == 0);
 }
 
@@ -543,7 +549,7 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
     switch (projection.kind) {
         case XR_CLUSTER_FRAME_HEARTBEAT_PING: {
             (void) cluster_node_enqueue(node, projection.response, projection.response_length);
-            int64_t now_hb = cluster_now_ms();
+            int64_t now_hb = (int64_t) xr_time_monotonic_ms();
             node->last_heartbeat_recv = now_hb;
             node->missed_heartbeats = 0;
             xr_phi_detector_record(&node->phi, now_hb);
@@ -551,7 +557,7 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
         }
 
         case XR_CLUSTER_FRAME_HEARTBEAT_PONG: {
-            int64_t now_pong = cluster_now_ms();
+            int64_t now_pong = (int64_t) xr_time_monotonic_ms();
             node->metrics.last_rtt_ms = now_pong - projection.heartbeat_timestamp;
             node->last_heartbeat_recv = now_pong;
             node->missed_heartbeats = 0;
@@ -720,7 +726,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 xr_object_instance_set_by_key(
                     X, nj, "sendErrors", xr_int((int64_t) atomic_load(&node->metrics.send_errors)));
                 // slow_consumer_events: total times this peer hit the
-                // high watermark (4 MiB by default) since start. Each
+                // source-configured high watermark since start. Each
                 // event corresponds to one outq_bytes >= high_watermark
                 // transition in cluster_node.
                 xr_object_instance_set_by_key(
@@ -728,15 +734,15 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                     xr_int((int64_t) atomic_load(&node->metrics.slow_consumer_events)));
                 xr_object_instance_set_by_key(X, nj, "rttMs", xr_int(node->metrics.last_rtt_ms));
                 xr_object_instance_set_by_key(X, nj, "outQueueBytes",
-                                              xr_int(node->outq.total_bytes));
+                                              xr_int(xr_cluster_output_queue_bytes(node->outq)));
                 xr_object_instance_set_by_key(X, nj, "outQueueFrames",
-                                              xr_int(node->outq.frame_count));
+                                              xr_int(xr_cluster_output_queue_frames(node->outq)));
                 xr_object_instance_set_by_key(X, nj, "slow", xr_bool(cluster_node_is_slow(node)));
 
                 // Phi accrual failure-detector score. Higher = more
                 // likely dead. Threshold for "kill" is set by
                 // cluster policy in cluster_health.c.
-                int64_t now = cluster_now_ms();
+                int64_t now = (int64_t) xr_time_monotonic_ms();
                 double phi = xr_phi_detector_value(&node->phi, now);
                 xr_object_instance_set_by_key(X, nj, "phi", xr_float(phi));
                 xr_object_instance_set_by_key(X, nj, "missedHeartbeats",
@@ -766,7 +772,8 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
      * brain scenarios.
      */
     xr_object_instance_set_by_key(
-        X, info, "deadNodes", xr_int(xr_tombstone_registry_count(c->tombstones, cluster_now_ms())));
+        X, info, "deadNodes",
+        xr_int(xr_tombstone_registry_count(c->tombstones, (int64_t) xr_time_monotonic_ms())));
 
     /*
      * Expose the operator-configurable heartbeat knobs so ops can

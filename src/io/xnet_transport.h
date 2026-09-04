@@ -108,6 +108,12 @@ XR_FUNC XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_
  * the returned XrIOConn becomes their sole owner. */
 XR_FUNC XrIOConn *xr_io_conn_take_net_handle(struct XrNetConn *handle, int timeout_ms);
 
+/* One non-blocking transport operation. A -1 result asks the caller to wait
+ * for wait_events; -3 means the connection has failed or closed. */
+XR_FUNC int xr_io_conn_read_try(XrIOConn *conn, uint8_t *data, size_t length, int *wait_events);
+XR_FUNC int xr_io_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t length,
+                                 int *wait_events);
+
 /* ========== Utility Functions ========== */
 
 XR_FUNC void xr_io_set_timeout(XrIOConn *conn, int timeout_ms);
