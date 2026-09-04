@@ -4056,8 +4056,8 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             xr_stable_id_equal(target->callee_function,
                                plan->functions[source_instance_function].id) &&
             target->callable_type == source_instance_type;
-        bool open_source_instance_shape =
-            !program_bound && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN &&
+        bool dependency_source_instance_shape =
+            !program_bound && target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY &&
             source_call->opcode == XI_CALL_METHOD && (source_call->semantic_immediate & 1) == 0 &&
             source_call->metadata_count == 1 && source_call->operand_count > 0 &&
             target->function == XR_SEMANTIC_INDEX_NONE &&
@@ -4101,7 +4101,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         }
         if ((!direct && !native && !normal_native && !source_shape && !indirect &&
              !native_namespace_shape && !builtin_instance_shape && !source_instance_shape &&
-             !open_source_instance_shape && !class_construction_shape &&
+             !dependency_source_instance_shape && !class_construction_shape &&
              !imported_class_construction_shape) ||
             target->reserved[0] != 0 || target->reserved[1] != 0 || target->reserved[2] != 0) {
             char detail[640];
@@ -4109,7 +4109,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                      "call-target authority disagrees with frozen invocation facts "
                      "operation=%u function=%u opcode=%u target-kind=%u direct=%u native=%u "
                      "source=%u indirect=%u native-namespace=%u builtin-instance=%u "
-                     "source-instance=%u open-source-instance=%u class-construction=%u "
+                     "source-instance=%u dependency-source-instance=%u class-construction=%u "
                      "imported-class-construction=%u source-namespace=%u native-namespace-fact=%u "
                      "native-yieldable=%u indirect-type=%u native-module=%.*s native-selector=%s "
                      "native-namespace-refusal=%s "
@@ -4117,7 +4117,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                      operation, source_call->function, source_call->opcode, target->kind,
                      direct ? 1u : 0u, native ? 1u : 0u, source_shape ? 1u : 0u, indirect ? 1u : 0u,
                      native_namespace_shape ? 1u : 0u, builtin_instance_shape ? 1u : 0u,
-                     source_instance_shape ? 1u : 0u, open_source_instance_shape ? 1u : 0u,
+                     source_instance_shape ? 1u : 0u, dependency_source_instance_shape ? 1u : 0u,
                      class_construction_shape ? 1u : 0u,
                      imported_class_construction_shape ? 1u : 0u, source_namespace ? 1u : 0u,
                      native_namespace ? 1u : 0u, native_yieldable ? 1u : 0u, indirect_type,
@@ -4870,7 +4870,7 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
                               "builtin instance call-target shape is invalid");
             }
             work.suspendable[operation->function] = 1;
-        } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN) {
+        } else if (target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY) {
             const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
             if (target->function != XR_SEMANTIC_INDEX_NONE ||
                 target->dependency >= plan->dependency_count ||
@@ -4954,7 +4954,7 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
                 (plan->operations[operation].opcode == XI_CALL_METHOD &&
                  (target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
                   target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE ||
-                  target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN)) ||
+                  target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY)) ||
                 (plan->operations[operation].opcode == XI_CALL &&
                  target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE);
         }
@@ -5325,7 +5325,7 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
             target->kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE ||
             target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
             target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE ||
-            target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN ||
+            target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY ||
             (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE &&
              !instance_method_bound);
         if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) {
@@ -5409,7 +5409,7 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
                     (operation->opcode == XI_CALL_METHOD &&
                      (target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
                       target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE ||
-                      target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN ||
+                      target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY ||
                       (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE &&
                        !instance_method_bound))) ||
                     (operation->opcode == XI_CALL &&
@@ -6053,7 +6053,7 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             used[target->dependency] = 1;
             continue;
         }
-        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN) {
+        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY) {
             if (target->dependency >= dependency_count ||
                 target->operation >= plan->operation_count ||
                 target->callable_type >= plan->type_count) {
@@ -6079,27 +6079,26 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                     : NULL;
             const char *selector =
                 operation->metadata_count == 1 ? plan->metadata[operation->metadata_begin] : NULL;
-            uint8_t method_required =
-                XR_SEM_SOURCE_METHOD_INSTANCE | XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
+            uint8_t method_required = XR_SEM_SOURCE_METHOD_INSTANCE;
+            if (source_class && (source_class->flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0)
+                method_required |= XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
             if (!method || !source_class || !selector || operation->opcode != XI_CALL_METHOD ||
                 operation->operand_count != method->parameter_count ||
                 method->function >= match->function_count ||
                 !suspendable[target->dependency][method->function] ||
-                strcmp(selector, method->name) != 0 ||
-                (method->flags & method_required) != method_required ||
+                strcmp(selector, method->name) != 0 || method->flags != method_required ||
                 (source_class->flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) == 0 ||
-                (source_class->flags &
-                 (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_GENERIC)) != 0 ||
+                (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0 ||
                 !xr_stable_id_equal(source_class->id, receiver_type->source_class_identity)) {
                 snprintf(authority_detail, sizeof(authority_detail),
-                         "open instance-method call disagrees with frozen dependency "
+                         "dependency instance-method call disagrees with frozen dependency "
                          "target=%u operation=%u dependency=%u selector=%s",
                          target_index, target->operation, target->dependency,
                          selector ? selector : "");
                 valid = false;
                 if (!survey)
                     break;
-                semantic_survey_row("source_open_method_call", authority_detail);
+                semantic_survey_row("source_dependency_method_call", authority_detail);
                 refused_rows++;
                 continue;
             }

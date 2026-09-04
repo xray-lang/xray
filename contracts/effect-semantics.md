@@ -299,18 +299,19 @@ stable source-class identity, module-local member ordinal, selector, function
 identity, parameter count, and final/open-domain flag. Imported source nominal
 types carry only that dependency class stable identity across XSM; analyzer
 class IDs and pointers may locate a dependency row during construction but are
-never serialized or hashed as authority. `SOURCE_INSTANCE_METHOD_OPEN` is
-published only for an exact non-super call on a dependency's open, runtime,
+never serialized or hashed as authority. `SOURCE_METHOD_DEPENDENCY` is
+published only for an exact non-super call on a dependency's runtime,
 non-generic source class when the declaration selector and arity are unique and
 the dependency's verified SemanticPlan independently proves that declaration
-suspendable. Module-set verification repeats the class, method, function,
-selector, arity, flags, and suspendability proof against the exact ordered
-dependency plans. It authorizes the conservative coroutine-state obligation
-for the open dispatch domain, not a closed target set or execution target;
-TargetPlan therefore remains fail closed. Inherited declarations, generic
-classes, ambiguous dependency identities, synchronous declarations, super
-calls, missing states, standalone dependency decoding, and forged class or
-method IDs remain unavailable.
+suspendable. The dependency class flags distinguish an exact final binding from
+an open dispatch domain; no selector or module spelling supplies that fact.
+Module-set verification repeats the class, method, function, selector, arity,
+flags, and suspendability proof against the exact ordered dependency plans. It
+authorizes the coroutine-state obligation, not an execution target; TargetPlan
+therefore remains fail closed. Inherited declarations, generic classes,
+ambiguous dependency identities, synchronous declarations, super calls,
+missing states, standalone dependency decoding, and forged class or method IDs
+remain unavailable.
 Schema 23 additionally freezes an exact source-enum declaration in each
 eligible enum type row. Its stable preimage binds the canonical nominal owner,
 enum name, ordered member names, payload counts, and each payload member's
@@ -578,13 +579,13 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 6ff80ebb347cdb1014
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 7ffec309f46f195f382998816c7e9cb89ee43aa73b71aafe90056748b761caa7
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 4efcba5c314e6f9971075f0ab8038d30d0e572d09ce7e84eff83253c04d1ddd3
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 82e14aa7ee4ae5ad18dcd9101016aee6869e8abe24110d979ae470fac715df45
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 16dd118c2a3c7fe472dd6dbd0f09723d4c00c2125c4d037ecb5a9eae650f33be
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h c08a139463180986271b41e50b499bf91adacdc5da5794f2779a46d7c14ec842
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h eff6c3f1b47353bf1642f872f8c5bbe52b4a389b230ee183f3f7f79a155d84de
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h e2e28c2cc4d84d8f6325682709556edb1ffaed813f4a29ecc4dc8aedc92b5c91
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
 anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h 5f318f550148e43df5229fdfe277e7046ee5692d7a05512a11eb306f39b77c1b
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af16c555c1a8145aea90fb7f1b50cd599420590f2cfbb96980f2
@@ -594,10 +595,10 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c a5eecd48078848d3929d6f25daf01a75085884c77c8eab5dd1fac40145383b7d
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 9d3e0364e97435b3b7ed879fdc682ca53d446d0e5d2296772fef3dd8aebc02e4
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 532959558cb72938709198f481ac42d53ec074ca0602b5d4c4512568db908f1a
 anchor-sha256: src/stdlib/xstdlib_metadata.h 75e60f0698de3dd3c432b6215b315f4c6fa6703bd98a6b152e0608867bdc8657
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 39487d3cc2cdd5984cd9ddf981191be2a64079f1d58e402d8cd78cb668568930
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 3a46c8b638a8554c9efaddcb50fc0357e03c8f3b46b60e3f3d5d1a72af2587d7
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def 630421965a4045646bc4350ecbced9a04342938cf37e59939cee2bf4ababd195
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
 anchor-sha256: src/shared/xr_string_parse_core.h e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1

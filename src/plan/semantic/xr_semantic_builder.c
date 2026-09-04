@@ -3487,9 +3487,9 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
     return true;
 }
 
-static bool append_source_instance_method_open_call_target(XrSemanticBuildContext *ctx,
-                                                           const XiValue *value,
-                                                           uint32_t operation) {
+static bool append_source_instance_method_dependency_call_target(XrSemanticBuildContext *ctx,
+                                                                 const XiValue *value,
+                                                                 uint32_t operation) {
     if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 || !value->aux ||
         (value->aux_int & 1) != 0 || operation >= ctx->plan->operation_count)
         return true;
@@ -3523,14 +3523,14 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
                     ? &plan->source_classes[candidate->source_class]
                     : NULL;
             uint8_t class_required = XR_SEM_SOURCE_CLASS_RUNTIME_TYPE;
-            uint8_t method_required =
-                XR_SEM_SOURCE_METHOD_INSTANCE | XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
+            uint8_t method_required = XR_SEM_SOURCE_METHOD_INSTANCE;
+            if (source_class && (source_class->flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0)
+                method_required |= XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
             if (!source_class ||
                 !xr_stable_id_equal(source_class->id, type->source_class_identity) ||
                 (source_class->flags & class_required) != class_required ||
-                (source_class->flags &
-                 (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_GENERIC)) != 0 ||
-                (candidate->flags & method_required) != method_required ||
+                (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0 ||
+                candidate->flags != method_required ||
                 candidate->parameter_count != call->operand_count ||
                 candidate->function >= plan->function_count || !suspendable[candidate->function] ||
                 strcmp(candidate->name, (const char *) value->aux) != 0)
@@ -3559,7 +3559,7 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
     record->source_export = XR_SEMANTIC_INDEX_NONE;
     record->export_identity = match_method->id;
     record->callable_type = receiver->type;
-    record->kind = XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN;
+    record->kind = XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY;
     XrTextBuilder key = {0};
     bool valid =
         text_append_format(&key,
@@ -3576,7 +3576,7 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
     XrFingerprint digest;
     if (!valid || !record->canonical_key ||
         !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
-        return fail(ctx, "XR_SEM_0019", "open source method call identity is incomplete");
+        return fail(ctx, "XR_SEM_0019", "dependency source method call identity is incomplete");
     return true;
 }
 
@@ -3764,7 +3764,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
             return false;
         return ctx->plan->call_target_count != before
                    ? true
-                   : append_source_instance_method_open_call_target(ctx, value, operation);
+                   : append_source_instance_method_dependency_call_target(ctx, value, operation);
     }
     if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
         return true;

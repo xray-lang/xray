@@ -1193,7 +1193,7 @@ static XrSemanticPlan *build_open_source_instance_method_semantic(XrSemanticPlan
                                                          sizeof(error)));
     XrSemanticPlan *semantic = xr_semantic_plan_retain(caller->semantic_plan);
     REQUIRE(semantic != NULL && semantic->call_target_count == 1 &&
-            semantic->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN);
+            semantic->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
 
     caller->module = NULL;
     xi_func_free(caller);
@@ -11686,6 +11686,11 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "imported-source-class-constructor-authority") == 0) {
         test_imported_source_class_constructor_authority();
         puts("Imported source-class constructor authority tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "source-dependency-method-fails-closed") == 0) {
+        test_open_source_instance_method_target_fails_closed();
+        puts("Source dependency method TargetPlan refusal tests passed");
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "source-class-array-push-authority") == 0) {

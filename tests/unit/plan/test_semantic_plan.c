@@ -1160,9 +1160,10 @@ static XrSemanticPlan *build_source_instance_method_local_plan(
     return plan;
 }
 
-static XrSemanticPlan *build_source_instance_method_open_plan(XrSemanticPlan **dependency_out,
-                                                              bool publish_state,
-                                                              bool expect_success) {
+static XrSemanticPlan *build_source_instance_method_dependency_plan(XrSemanticPlan **dependency_out,
+                                                                    bool explicit_final,
+                                                                    bool publish_state,
+                                                                    bool expect_success) {
     XiFunc *dependency_root = xi_func_new("open_worker_root", &stub_unit);
     XiFunc *wait = xi_func_new("wait", &stub_unit);
     REQUIRE(dependency_root != NULL && wait != NULL);
@@ -1211,7 +1212,7 @@ static XrSemanticPlan *build_source_instance_method_open_plan(XrSemanticPlan **d
         .nmethod = 1,
         .child_idx = &child,
         .ninst = 1,
-        .explicit_final = false,
+        .explicit_final = explicit_final,
         .needs_runtime_type = true,
         .xg_class_id = 42,
     };
@@ -4831,9 +4832,10 @@ static void test_source_template_method_local_authority(void) {
                                                    "XR_SEM_0019");
 }
 
-static void test_source_instance_method_open_authority(void) {
+static void test_source_instance_method_dependency_authority(void) {
     XrSemanticPlan *dependency = NULL;
-    XrSemanticPlan *plan = build_source_instance_method_open_plan(&dependency, true, true);
+    XrSemanticPlan *plan =
+        build_source_instance_method_dependency_plan(&dependency, false, true, true);
     REQUIRE(plan != NULL && dependency != NULL);
     REQUIRE(dependency->source_class_count == 1 && dependency->source_method_count == 1);
     const XrSemanticSourceMethodRecord *method = &dependency->source_methods[0];
@@ -4842,7 +4844,7 @@ static void test_source_instance_method_open_authority(void) {
     REQUIRE(strstr(method->canonical_key, "xg") == NULL);
     REQUIRE(plan->dependency_count == 1 && plan->call_target_count == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
-    REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN);
+    REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
     REQUIRE(target->function == XR_SEMANTIC_INDEX_NONE &&
             target->source_export == XR_SEMANTIC_INDEX_NONE && target->dependency == 0 &&
             target->callable_type < plan->type_count);
@@ -4875,7 +4877,7 @@ static void test_source_instance_method_open_authority(void) {
     REQUIRE(xr_xsm_decode_module_set(bytes, size, decoded_dependencies, 1, &decoded, error,
                                      sizeof(error)));
     REQUIRE(decoded->source_method_count == 0 && decoded->call_target_count == 1 &&
-            decoded->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN);
+            decoded->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
     xr_semantic_plan_free(decoded);
     xr_semantic_plan_free(decoded_dependency);
     uint8_t *old_schema = copy_bytes(bytes, size);
@@ -4932,7 +4934,36 @@ static void test_source_instance_method_open_authority(void) {
     target->id.bytes[0] = saved_key;
     xr_semantic_plan_free(plan);
     xr_semantic_plan_free(dependency);
-    (void) build_source_instance_method_open_plan(NULL, false, false);
+    (void) build_source_instance_method_dependency_plan(NULL, false, false, false);
+
+    XrSemanticPlan *final_dependency = NULL;
+    XrSemanticPlan *final_plan =
+        build_source_instance_method_dependency_plan(&final_dependency, true, true, true);
+    REQUIRE(final_plan != NULL && final_dependency != NULL &&
+            final_dependency->source_class_count == 1 &&
+            final_dependency->source_method_count == 1);
+    REQUIRE((final_dependency->source_classes[0].flags &
+             (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE)) ==
+            (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE));
+    REQUIRE(final_dependency->source_methods[0].flags == XR_SEM_SOURCE_METHOD_INSTANCE);
+    REQUIRE(final_plan->call_target_count == 1 &&
+            final_plan->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
+    const XrSemanticPlan *final_dependencies[1] = {final_dependency};
+    REQUIRE(xr_semantic_plan_verify_module_set(final_plan, final_dependencies, 1, error,
+                                               sizeof(error)));
+    uint8_t saved_final_method_flags = final_dependency->source_methods[0].flags;
+    final_dependency->source_methods[0].flags |= XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
+    REQUIRE(!xr_semantic_plan_verify_module_set(final_plan, final_dependencies, 1, error,
+                                                sizeof(error)));
+    final_dependency->source_methods[0].flags = saved_final_method_flags;
+    uint8_t saved_final_class_flags = final_dependency->source_classes[0].flags;
+    final_dependency->source_classes[0].flags &= (uint8_t) ~XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL;
+    REQUIRE(!xr_semantic_plan_verify_module_set(final_plan, final_dependencies, 1, error,
+                                                sizeof(error)));
+    final_dependency->source_classes[0].flags = saved_final_class_flags;
+    xr_semantic_plan_free(final_plan);
+    xr_semantic_plan_free(final_dependency);
+    (void) build_source_instance_method_dependency_plan(NULL, true, false, false);
 }
 
 static void test_shared_direct_call_target_authority(void) {
@@ -6623,6 +6654,11 @@ int main(int argc, char **argv) {
         puts("Builtin runtime method SemanticPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "source-dependency-method-authority") == 0) {
+        test_source_instance_method_dependency_authority();
+        puts("Source dependency method SemanticPlan authority tests passed");
+        return 0;
+    }
     test_semantic_build_requires_typed_module_identity();
     test_stable_ids();
     test_source_enum_identity_and_mutations();
@@ -6655,7 +6691,7 @@ int main(int argc, char **argv) {
     test_builtin_instance_yieldable_authority();
     test_source_instance_method_local_authority();
     test_source_template_method_local_authority();
-    test_source_instance_method_open_authority();
+    test_source_instance_method_dependency_authority();
     test_source_export_call_target_authority();
     test_shared_direct_call_target_authority();
     test_parameter_and_capture_contracts();

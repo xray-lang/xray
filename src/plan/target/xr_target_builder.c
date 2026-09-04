@@ -419,8 +419,8 @@ static const char *target_trace_call_target_kind_name(uint8_t kind) {
             return "SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE";
         case XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL:
             return "SOURCE_TEMPLATE_METHOD_LOCAL";
-        case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN:
-            return "SOURCE_INSTANCE_METHOD_OPEN";
+        case XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY:
+            return "SOURCE_METHOD_DEPENDENCY";
         case XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR:
             return "SOURCE_CLASS_CONSTRUCTOR";
         case XR_SEM_CALL_TARGET_NATIVE_DIRECT:

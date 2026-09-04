@@ -45,6 +45,7 @@
 #include "../toolchain/xcompiler_session.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -320,6 +321,268 @@ static bool xi_pipeline_coro_is_sealed_builtin_constructor(const XiValue *call) 
            callee->aux_int < XR_USER_GLOBALS_START;
 }
 
+/* Rebuild one verified plan's closed local suspendability relation. Dependency
+ * Xi function children are intentionally detached after VM emission, so this
+ * immutable graph is the surviving target-neutral authority. */
+static int xi_pipeline_coro_plan_function_suspendability(const XrSemanticPlan *plan,
+                                                         uint32_t selected) {
+    if (!plan || !xr_semantic_plan_is_verified(plan))
+        return -1;
+    const uint32_t function_count = (uint32_t) xr_semantic_plan_function_count(plan);
+    const uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(plan);
+    if (selected >= function_count)
+        return -1;
+    uint8_t *suspendable =
+        function_count ? (uint8_t *) xr_calloc(function_count, sizeof(*suspendable)) : NULL;
+    uint32_t *head =
+        function_count ? (uint32_t *) xr_malloc((size_t) function_count * sizeof(*head)) : NULL;
+    uint32_t *next =
+        target_count ? (uint32_t *) xr_malloc((size_t) target_count * sizeof(*next)) : NULL;
+    uint32_t *queue =
+        function_count ? (uint32_t *) xr_malloc((size_t) function_count * sizeof(*queue)) : NULL;
+    if ((function_count && (!suspendable || !head || !queue)) || (target_count && !next)) {
+        xr_free(suspendable);
+        xr_free(head);
+        xr_free(next);
+        xr_free(queue);
+        return -1;
+    }
+    for (uint32_t i = 0; i < function_count; i++)
+        head[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < target_count; i++)
+        next[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_entity_count(plan); i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
+        const XrSemanticOperationRecord *operation =
+            entity && entity->kind == XR_SEM_ENTITY_COROUTINE_STATE
+                ? xr_semantic_plan_operation(plan, entity->subject)
+                : NULL;
+        if (operation && operation->function < function_count)
+            suspendable[operation->function] = 1;
+    }
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
+        const XrSemanticOperationRecord *operation =
+            target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+        bool propagates = target && operation && target->function < function_count &&
+                          ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                            (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL)) ||
+                           (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL &&
+                            operation->opcode == XI_CALL_METHOD) ||
+                           (target->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL &&
+                            operation->opcode == XI_CALL_METHOD));
+        if (!propagates)
+            continue;
+        next[i] = head[target->function];
+        head[target->function] = i;
+    }
+    uint32_t begin = 0;
+    uint32_t end = 0;
+    for (uint32_t i = 0; i < function_count; i++)
+        if (suspendable[i])
+            queue[end++] = i;
+    while (begin < end) {
+        uint32_t callee = queue[begin++];
+        for (uint32_t edge = head[callee]; edge != XR_SEMANTIC_INDEX_NONE; edge = next[edge]) {
+            const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, edge);
+            const XrSemanticOperationRecord *operation =
+                target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+            if (!operation || operation->function >= function_count) {
+                xr_free(suspendable);
+                xr_free(head);
+                xr_free(next);
+                xr_free(queue);
+                return -1;
+            }
+            if (!suspendable[operation->function]) {
+                suspendable[operation->function] = 1;
+                queue[end++] = operation->function;
+            }
+        }
+    }
+    int result = suspendable[selected] ? 1 : 0;
+    xr_free(suspendable);
+    xr_free(head);
+    xr_free(next);
+    xr_free(queue);
+    return result;
+}
+
+/* VM emission detaches dependency function children after freezing their
+ * SemanticPlan. A later module can still import one of those classes, but it
+ * must not infer constructor suspendability from the now-empty child array or
+ * from the class/member spelling. Join the resolver's exact module, export and
+ * shared-slot binding to the dependency's independently verified class and
+ * function records instead. */
+static int xi_pipeline_coro_imported_constructor_suspendability(const XiFunc *current,
+                                                                const XiValue *call) {
+    if (!current || !call || call->op != XI_CALL || call->nargs < 1 ||
+        !xi_value_is_constructor_call(call))
+        return -1;
+    const XiImportRef *ref = xi_value_import_ref(current, call->args[0]);
+    const XiModule *module = ref ? ref->resolved_module : NULL;
+    if (!ref || !ref->resolution_attempted || !ref->member_name || !ref->member_name[0] ||
+        ref->resolved_func || !module || ref->resolved_shared_slot < 0 ||
+        ref->resolved_shared_slot >= module->nslots || ref->resolved_export_slot < 0 ||
+        ref->resolved_export_slot >= module->nexports || !module->slot_classes ||
+        !module->classes || !module->exports || !module->init)
+        return -1;
+    const XiClassData *class_data = module->slot_classes[ref->resolved_shared_slot];
+    const XiModuleExport *exported = &module->exports[ref->resolved_export_slot];
+    if (!class_data || exported->class_data != class_data || exported->function ||
+        exported->shared_slot != ref->resolved_shared_slot || !exported->name ||
+        strcmp(exported->name, ref->member_name) != 0)
+        return -1;
+
+    uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        if (module->classes[i] != class_data)
+            continue;
+        if (source_class != XR_SEMANTIC_INDEX_NONE)
+            return -1;
+        source_class = i;
+    }
+    const XrSemanticPlan *plan = module->init->semantic_plan;
+    if (source_class == XR_SEMANTIC_INDEX_NONE || !plan || !xr_semantic_plan_is_frozen(plan) ||
+        !xr_semantic_plan_is_verified(plan) ||
+        xr_semantic_plan_source_class_count(plan) != module->nclasses)
+        return -1;
+    const XrSemanticSourceClassRecord *semantic_class =
+        xr_semantic_plan_source_class(plan, source_class);
+    if (!semantic_class || semantic_class->ordinal != source_class || !semantic_class->name ||
+        !class_data->class_name || strcmp(semantic_class->name, class_data->class_name) != 0)
+        return -1;
+
+    const XrSemanticSourceExportRecord *semantic_export = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_source_export_count(plan); i++) {
+        const XrSemanticSourceExportRecord *candidate = xr_semantic_plan_source_export(plan, i);
+        if (!candidate || candidate->kind != XR_SEM_SOURCE_EXPORT_SOURCE_CLASS ||
+            candidate->source_class != source_class ||
+            candidate->shared_slot != exported->shared_slot)
+            continue;
+        if (semantic_export)
+            return -1;
+        semantic_export = candidate;
+    }
+    if (!semantic_export || !semantic_export->name ||
+        strcmp(semantic_export->name, exported->name) != 0 ||
+        !xr_stable_id_equal(semantic_export->exported_entity, semantic_class->id))
+        return -1;
+
+    uint16_t constructor_member = UINT16_MAX;
+    for (uint16_t i = 0; i < class_data->nmethod; i++) {
+        if (!class_data->methods || !class_data->methods[i].is_constructor ||
+            class_data->methods[i].is_static)
+            continue;
+        if (constructor_member != UINT16_MAX)
+            return -1;
+        constructor_member = i;
+    }
+    const XrSemanticFunctionRecord *constructor = NULL;
+    uint32_t constructor_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_function_count(plan); i++) {
+        const XrSemanticFunctionRecord *candidate = xr_semantic_plan_function(plan, i);
+        if (!candidate || candidate->source_class != source_class ||
+            candidate->source_kind != XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR)
+            continue;
+        if (constructor)
+            return -1;
+        constructor = candidate;
+        constructor_index = i;
+    }
+    if (constructor_member == UINT16_MAX)
+        return !constructor && call->nargs == 1 ? 0 : -1;
+    if (!constructor || constructor->source_member_ordinal != constructor_member ||
+        constructor->parameter_count != call->nargs)
+        return -1;
+    return xi_pipeline_coro_plan_function_suspendability(plan, constructor_index);
+}
+
+/* Resolve a method whose dependency Xi children were detached after bytecode
+ * emission through the same frozen class/member relation the SemanticPlan
+ * later verifies. The dependency plan's closed local call graph decides
+ * whether lowering must reserve a state; the caller plan independently checks
+ * that state against the dependency plan before publication. */
+static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCoroResolverCtx *ctx,
+                                                             const XiValue *call) {
+    if (!ctx || !ctx->cfg || !ctx->cfg->graph_modules || !call || call->op != XI_CALL_METHOD ||
+        call->nargs < 1 || !call->args[0] || !call->aux || (call->aux_int & 1) != 0)
+        return -1;
+    const XiValue *receiver = xi_pipeline_coro_unwrap_identity(call->args[0]);
+    const XrType *receiver_type = receiver ? receiver->type : NULL;
+    if (!receiver_type || receiver_type->kind != XR_KIND_INSTANCE ||
+        !receiver_type->instance.class_ref || receiver_type->instance.class_ref->xg_class_id == 0)
+        return -1;
+
+    const XiModule *module = NULL;
+    const XiClassData *class_data = NULL;
+    uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
+    const XgClassId class_id = (XgClassId) receiver_type->instance.class_ref->xg_class_id;
+    for (int mi = 0; mi < ctx->cfg->graph_module_count; mi++) {
+        const XiModule *candidate_module = ctx->cfg->graph_modules[mi];
+        for (uint16_t ci = 0; candidate_module && ci < candidate_module->nclasses; ci++) {
+            const XiClassData *candidate = candidate_module->classes[ci];
+            if (!candidate || candidate->xg_class_id != class_id)
+                continue;
+            if (class_data)
+                return -1;
+            module = candidate_module;
+            class_data = candidate;
+            source_class = ci;
+        }
+    }
+    const XrSemanticPlan *plan = module && module->init ? module->init->semantic_plan : NULL;
+    if (!module || !class_data || !plan || !xr_semantic_plan_is_frozen(plan) ||
+        !xr_semantic_plan_is_verified(plan) ||
+        xr_semantic_plan_source_class_count(plan) != module->nclasses)
+        return -1;
+    const XrSemanticSourceClassRecord *semantic_class =
+        xr_semantic_plan_source_class(plan, source_class);
+    if (!semantic_class || semantic_class->ordinal != source_class || !semantic_class->name ||
+        !class_data->class_name || strcmp(semantic_class->name, class_data->class_name) != 0 ||
+        (semantic_class->flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) == 0 ||
+        (semantic_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0)
+        return -1;
+
+    uint16_t member = UINT16_MAX;
+    for (uint16_t i = 0; i < class_data->nmethod; i++) {
+        const XiClassMethod *candidate = class_data->methods ? &class_data->methods[i] : NULL;
+        if (!candidate || candidate->is_constructor || candidate->is_static || !candidate->name ||
+            strcmp(candidate->name, (const char *) call->aux) != 0)
+            continue;
+        if (member != UINT16_MAX)
+            return -1;
+        member = i;
+    }
+    if (member == UINT16_MAX)
+        return -1;
+    const uint8_t expected_flags =
+        (uint8_t) (XR_SEM_SOURCE_METHOD_INSTANCE |
+                   ((semantic_class->flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) != 0
+                        ? 0
+                        : XR_SEM_SOURCE_METHOD_OPEN_DOMAIN));
+    const XrSemanticSourceMethodRecord *method = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_source_method_count(plan); i++) {
+        const XrSemanticSourceMethodRecord *candidate = xr_semantic_plan_source_method(plan, i);
+        if (!candidate || candidate->source_class != source_class ||
+            candidate->member_ordinal != member || candidate->parameter_count != call->nargs ||
+            candidate->flags != expected_flags || !candidate->name ||
+            strcmp(candidate->name, (const char *) call->aux) != 0)
+            continue;
+        if (method)
+            return -1;
+        method = candidate;
+    }
+    const XrSemanticFunctionRecord *function =
+        method ? xr_semantic_plan_function(plan, method->function) : NULL;
+    if (!method || !function || function->source_class != source_class ||
+        function->source_member_ordinal != member ||
+        function->source_kind != XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD ||
+        function->parameter_count != call->nargs)
+        return -1;
+    return xi_pipeline_coro_plan_function_suspendability(plan, method->function);
+}
+
 static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
                                                 const XiValue *call) {
     XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
@@ -365,6 +628,12 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
                 return 0;
         }
     }
+    int imported_constructor = xi_pipeline_coro_imported_constructor_suspendability(current, call);
+    if (imported_constructor >= 0)
+        return imported_constructor;
+    int dependency_method = xi_pipeline_coro_dependency_method_suspendability(ctx, call);
+    if (dependency_method >= 0)
+        return dependency_method;
     if (row && xg_callsite_effects_compose_closed_world_calls(evidence, row, &effects))
         return (effects & XG_BODY_MAY_SUSPEND) != 0 ? 1 : 0;
     /* A frozen function-value callsite without one static target is not an

@@ -144,7 +144,7 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
     XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
     XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL,
-    XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN,
+    XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY,
     /* Construction of a declared class through its own class object. The row
      * names the declaration it builds and no callee function at all: a class
      * that declares no instance constructor enters no body, and one that does
@@ -567,9 +567,10 @@ typedef struct XrSemanticOperandRecord {
  * target. SOURCE_INSTANCE_METHOD_LOCAL is an exact final-class declaration;
  * SOURCE_TEMPLATE_METHOD_LOCAL is an exact generic self-call declaration and
  * does not assert a frozen generic class-instance identity;
- * SOURCE_INSTANCE_METHOD_OPEN is a dependency-verified open dispatch domain,
- * not an execution target. All kinds independently authorize coroutine state
- * creation without retaining Xi data.
+ * SOURCE_METHOD_DEPENDENCY is a dependency-verified source member binding;
+ * its currently admitted instance-method form is either a final binding or an
+ * open dispatch domain, not an execution target. All kinds independently
+ * authorize coroutine state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;
