@@ -699,9 +699,10 @@ static inline bool xr_semantic_owner_transfer_storage_is_exact(
 
 /* A source wrapper is a one-field capability boundary: its only explicit
  * constructor argument is stored into the one field the provider registry
- * names.  The SemanticPlan already freezes the constructor's field store, so
- * the linkage is proved from ordinary operations rather than by adding a
- * provider-specific row to the schema. */
+ * names. The selector immediate is an interned symbol id, not a field ordinal;
+ * the nonzero Xg field id is the independent class-layout authority. Requiring
+ * both that evidence and the serialized selector keeps the linkage structural
+ * without baking either frontend numbering scheme into this judgement. */
 static inline bool xr_semantic_native_storage_constructor_field_link_is_exact(
     const XrSemanticPlan *plan, uint32_t source_class, uint32_t constructor,
     const XrSemanticParameterRecord *storage_parameter,
@@ -727,7 +728,11 @@ static inline bool xr_semantic_native_storage_constructor_field_link_is_exact(
             return false;
         field_store = candidate;
     }
-    if (!field_store || field_store->semantic_immediate != 0 ||
+    if (!field_store || field_store->semantic_immediate < 0 || field_store->evidence[0] != 0 ||
+        field_store->evidence[1] != 0 || field_store->evidence[2] != 0 ||
+        field_store->evidence[3] != 0 || field_store->evidence[4] != 0 ||
+        field_store->evidence[5] == 0 || field_store->evidence[6] != 0 ||
+        field_store->evidence[7] != XR_SEMANTIC_INDEX_NONE ||
         xr_semantic_class_field_store_source_class(plan, field_store) != source_class)
         return false;
 

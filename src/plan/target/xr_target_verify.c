@@ -7662,6 +7662,15 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                         ? semantic_type_expected_rep(xr_semantic_plan_type(semantic, operand->type),
                                                      &argument_kind)
                         : -1;
+                bool argument_native_storage =
+                    !imported_class_construction && parameter && parameter->type == operand->type &&
+                    xr_semantic_native_storage_constructor_parameter_is_exact(semantic,
+                                                                              parameter_index) &&
+                    operand->ownership_action == (parameter->ownership == XI_OWN_OWNED
+                                                      ? XR_SEM_OPERAND_CONSUME
+                                                      : XR_SEM_OPERAND_BORROW);
+                if (argument_native_storage)
+                    argument_kind = XR_MACHINE_REP_DYN_VALUE;
                 uint8_t ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
                                         ? XR_TARGET_CALL_CONSUME
                                         : XR_TARGET_CALL_READ;
@@ -7669,16 +7678,23 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     imported_class_construction && caller_value && operand_type && parameter_type &&
                     xr_semantic_parameter_type_admits_argument(dependency, parameter_type,
                                                                operand_type, parameter->mode);
+                bool local_storage =
+                    !imported_class_construction && caller_value && callee_value &&
+                    ((argument_scalar == 1 &&
+                      caller_value->register_rep == callee_value->register_rep &&
+                      caller_value->memory_rep == callee_value->memory_rep) ||
+                     (argument_native_storage &&
+                      verify_tagged_container_value_boundary(plan, caller_value, callee_value,
+                                                             parameter->ownership == XI_OWN_OWNED
+                                                                 ? XR_TARGET_OWNERSHIP_OWNED
+                                                                 : XR_TARGET_OWNERSHIP_BORROWED)));
                 valid =
-                    parameter && caller_value &&
-                    (imported_storage || (argument_scalar == 1 && callee_value)) &&
+                    parameter && caller_value && (imported_storage || local_storage) &&
                     slot_binds_value_in_function(
                         plan, caller_value, view->range.functions_begin + operation->function) &&
                     (imported_class_construction ||
-                     (slot_binds_value_in_function(
-                          plan, callee_value, view->range.functions_begin + constructor_function) &&
-                      caller_value->register_rep == callee_value->register_rep &&
-                      caller_value->memory_rep == callee_value->memory_rep)) &&
+                     slot_binds_value_in_function(
+                         plan, callee_value, view->range.functions_begin + constructor_function)) &&
                     reconstruct_call_identity("xray-target-call-argument-v1", target->id,
                                               parameter->id, ordinal, &argument_identity) &&
                     xr_stable_id_equal(argument->identity, argument_identity) &&

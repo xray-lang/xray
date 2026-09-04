@@ -32,12 +32,12 @@ exist. Native LP64 and explicit foreign ILP32 profiles, resource limits, and gen
 remain covered. Full-language operation families, public embedding ABI, adaptive quickening, and any
 persistent private-code cache remain inactive for later tasks.
 
-anchor-sha256: CMakeLists.txt a876fde56d76d05f2edf0e305ad21ef05f20c524dcc3b6950436b6cc038116d4
+anchor-sha256: CMakeLists.txt 5feea73e16fab13673ee9460bf89186b39c2bc4bd822213124baf5fca1802e33
 anchor-sha256: xisa/core/registry.json 8fb9c70b946a02d637c3c74ff2e1dcf93e34376b3eff9e9699df180f01e4819c
 anchor-sha256: src/vm/xr_program_vm.h e3b6ee502236bb50d167f8609dd7bc94333f261e45236705fe0e5544cceff3a9
 anchor-sha256: src/vm/xr_program_vm.c 3c676da6f630e61a2a0c6e992c1d3f5a4acd8d7c4f16afa6e54ecf6c0201d416
 anchor-sha256: src/program/xr_program_verify.h f5d0d3216940bc6001e91e1fad27e350750e0ba863c85618e12e74e626397b0f
-anchor-sha256: src/program/xr_program_verify.c b0325e178815ed22a31879b84756318d7203060ed79733774dd9437e594cec11
+anchor-sha256: src/program/xr_program_verify.c 9b085ff260592e2aee1c212819042a35e0cad11dfabf074e8e2f5b875c51eed3
 anchor-sha256: src/execution/xr_execution.h d9d777969c65f282ff70a7cc755f26d11b2ebf0a044e05d059fde0049c88d357
 anchor-sha256: src/execution/xr_execution.c abb49afef5a5a9233c0e471ad9d0bc71a22cc65726938a6ce613e337f43d06c9
 anchor-sha256: scripts/check_xr_program_vm_contracts.py 5fba416acc72582bb02243b56205767512d9b1fe2352f33a90774b19d08c770a
