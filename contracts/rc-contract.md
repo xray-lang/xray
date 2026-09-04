@@ -129,5 +129,5 @@ anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 465aad140562f09d026c02a0ef
 anchor-sha256: src/aot/xrt_coll.h d04cd4b87bbe28e76f75fb3d68077f53976f7a3d91dcb86b307ba63f31fb41a4
 anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3
 anchor-sha256: src/runtime/core/xr_runtime_core.c cce6b3b7d317c83c167fadd906b742c90b48d5e84f7816993335c825f9465169
-anchor-sha256: src/api/xisolate.c 7b56106daee7fa48f9b08cf9d689a7b410f6be36ee795a575c1ac5c901446893
+anchor-sha256: src/api/xisolate.c 44ecf8bfa89f44aae0e745da27ded546ba40dbf404cc9d438047e28fd6cac489
 anchor-sha256: tests/unit/mem/test_fixed_heap_teardown.c 5522ad5fbc6a273595a33a05dac4cc87da9d96395a4278d39b66530c8362389e

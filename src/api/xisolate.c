@@ -88,6 +88,12 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     xr_thread_obj_drain_isolate(isolate);
     sys_thread_drain_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    /* Provider shutdown runs while scheduler workers and their wake paths are
+     * still intact. The lifecycle boundary first forbids new publication;
+     * each shutdown leaf then detaches its state, closes blocking resources
+     * and releases the isolate-owned reference before worker drain begins. */
+    xr_isolate_shutdown_providers(isolate);
+
     /* Drain the per-isolate profiler before any structure that
      * powers the report (opcode info, isolate pointer) goes away.
      * vm_profiler_report tolerates NULL so this is a no-op when

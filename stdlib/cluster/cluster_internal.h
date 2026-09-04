@@ -113,7 +113,6 @@ XrCFuncResult cluster_peer_write_fn(struct XrVMRuntime *isolate, XrValue *args, 
 
 typedef struct XrCluster {
     _Atomic(uint32_t) ref_count;
-    _Atomic(bool) stop_started;
     _Atomic(uint64_t) next_peer_generation;
     struct XrVMRuntime *isolate;
     struct XrNetListener *listener; /* borrowed while the source accept loop owns it */
@@ -223,20 +222,18 @@ static inline XrClusterNode *cluster_node_acquire(XrCluster *cluster, uint64_t g
  * source-owned start/stop generation. The last transport reference reclaims
  * only opaque registries and TLS contexts; source policy never enters this
  * primitive. */
-static inline void cluster_runtime_retain(XrCluster *cluster) {
+static inline void cluster_runtime_retain(void *provider) {
+    XrCluster *cluster = (XrCluster *) provider;
     if (cluster)
         atomic_fetch_add(&cluster->ref_count, 1);
 }
 
-/* Keep slot lookup and the strong-reference increment in one critical
- * section. The macro expands only where XrVMRuntime is complete and avoids a
- * cluster-specific dependency in the core runtime layer. */
+/* The generic isolate boundary keeps slot lookup and the strong-reference
+ * increment in one critical section. */
 #define XR_CLUSTER_RUNTIME_ACQUIRE(isolate, out_cluster)                                         \
     do {                                                                                         \
-        xr_amutex_lock(&(isolate)->cluster_slot_lock);                                            \
-        (out_cluster) = (XrCluster *) (isolate)->cluster;                                         \
-        cluster_runtime_retain(out_cluster);                                                      \
-        xr_amutex_unlock(&(isolate)->cluster_slot_lock);                                          \
+        (out_cluster) = (XrCluster *) xr_isolate_provider_acquire(                                \
+            (isolate), &(isolate)->cluster, cluster_runtime_retain);                              \
     } while (0)
 
 static inline void cluster_runtime_release(XrCluster *cluster) {

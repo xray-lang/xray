@@ -38,6 +38,67 @@ static const XrModuleIdentityAuthority k_vm_api_memory_authority = {
     .namespace_id = "vm-api-fixture-v1",
 };
 
+typedef struct ProviderLifecycleFixture {
+    int retain_count;
+    int shutdown_count;
+    bool scheduler_was_live;
+} ProviderLifecycleFixture;
+
+static void provider_lifecycle_fixture_retain(void *provider) {
+    ProviderLifecycleFixture *fixture = (ProviderLifecycleFixture *) provider;
+    fixture->retain_count++;
+}
+
+static XrValue provider_lifecycle_fixture_shutdown(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    ProviderLifecycleFixture *fixture = (ProviderLifecycleFixture *) xr_isolate_provider_detach(
+        isolate, &isolate->cluster, provider_lifecycle_fixture_shutdown);
+    if (fixture) {
+        fixture->shutdown_count++;
+        fixture->scheduler_was_live = xr_isolate_get_scheduler_runtime(isolate) != NULL;
+    }
+    return xr_null();
+}
+
+TEST(provider_lifecycle_shutdown_precedes_scheduler_teardown) {
+    XrVMConfig params = {0};
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso);
+    xr_isolate_multicore_init(iso, 1);
+    ASSERT_NOT_NULL(xr_isolate_get_scheduler_runtime(iso));
+
+    ProviderLifecycleFixture fixture = {0};
+    ASSERT_TRUE(xr_isolate_provider_publish(iso, &iso->cluster, &fixture,
+                                            provider_lifecycle_fixture_shutdown));
+    ASSERT_EQ_PTR(xr_isolate_provider_acquire(iso, &iso->cluster,
+                                              provider_lifecycle_fixture_retain),
+                  &fixture);
+    ASSERT_EQ_INT(fixture.retain_count, 1);
+
+    xray_vm_delete(iso);
+    ASSERT_EQ_INT(fixture.shutdown_count, 1);
+    ASSERT_TRUE(fixture.scheduler_was_live);
+}
+
+TEST(provider_lifecycle_closing_rejects_republication) {
+    XrVMConfig params = {0};
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso);
+
+    ProviderLifecycleFixture fixture = {0};
+    ASSERT_TRUE(xr_isolate_provider_publish(iso, &iso->cluster, &fixture,
+                                            provider_lifecycle_fixture_shutdown));
+    xr_isolate_shutdown_providers(iso);
+    ASSERT_NULL(iso->cluster);
+    ASSERT_EQ_INT(fixture.shutdown_count, 1);
+    ASSERT_FALSE(xr_isolate_provider_publish(iso, &iso->cluster, &fixture,
+                                             provider_lifecycle_fixture_shutdown));
+
+    xray_vm_delete(iso);
+    ASSERT_EQ_INT(fixture.shutdown_count, 1);
+}
+
 /* ========== xr_vm_current_ctx contract ========== */
 
 TEST(vm_current_ctx_returns_elided_root_ctx) {
@@ -409,6 +470,10 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
+RUN_TEST_SUITE("Native provider lifecycle");
+RUN_TEST(provider_lifecycle_shutdown_precedes_scheduler_teardown);
+RUN_TEST(provider_lifecycle_closing_rejects_republication);
+
 RUN_TEST_SUITE("xr_vm_current_ctx contract");
 RUN_TEST(vm_current_ctx_returns_elided_root_ctx);
 RUN_TEST(vm_elided_root_allocates_without_task_identity);

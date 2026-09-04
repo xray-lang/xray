@@ -40,6 +40,8 @@
 
 /* ========== xray Function Bindings ========== */
 
+static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc);
+
 static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(true);
@@ -380,7 +382,6 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
     if (!cluster)
         return xr_bool(false);
     atomic_store(&cluster->ref_count, 1);
-    atomic_store(&cluster->stop_started, false);
     atomic_store(&cluster->next_peer_generation, 1);
     cluster->isolate = X;
     xr_amutex_init(&cluster->nodes_lock);
@@ -424,11 +425,8 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
     }
     cluster->output_queue_high_watermark = (size_t) output_queue_high_watermark;
     atomic_store(&cluster->running, true);
-    xr_amutex_lock(&X->cluster_slot_lock);
-    bool published = X->cluster == NULL;
-    if (published)
-        X->cluster = cluster;
-    xr_amutex_unlock(&X->cluster_slot_lock);
+    bool published =
+        xr_isolate_provider_publish(X, &X->cluster, cluster, cluster_stop_fn);
     if (!published) {
         atomic_store(&cluster->running, false);
         cluster_runtime_release(cluster);
@@ -441,20 +439,13 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
 static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    /* Detaching transfers the slot's owning reference to this caller. The
-     * running transition is in the same critical section, so a later acquire
-     * cannot observe this provider generation. */
-    xr_amutex_lock(&X->cluster_slot_lock);
-    XrCluster *cluster = (XrCluster *) X->cluster;
-    if (!cluster || atomic_exchange(&cluster->stop_started, true)) {
-        cluster = NULL;
-    } else {
-        atomic_store(&cluster->running, false);
-        X->cluster = NULL;
-    }
-    xr_amutex_unlock(&X->cluster_slot_lock);
+    /* Detach transfers the slot's owning reference to this caller and blocks
+     * later acquisitions of the retired provider generation. */
+    XrCluster *cluster =
+        (XrCluster *) xr_isolate_provider_detach(X, &X->cluster, cluster_stop_fn);
     if (!cluster)
         return xr_null();
+    atomic_store(&cluster->running, false);
 
     /* The source accept coroutine owns the listener. Closing the borrowed
      * provider alias only wakes its pending accept; the coroutine drops the

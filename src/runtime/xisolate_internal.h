@@ -55,6 +55,19 @@ typedef struct XrGlobalStringPool XrGlobalStringPool;
 XR_FUNC int xr_execution_engine_init(XrVMRuntime *isolate);
 XR_FUNC void xr_execution_engine_cleanup(XrVMRuntime *isolate);
 
+/* Native providers publish their isolate-owned state through this lifecycle
+ * boundary. Acquiring a state retains it while publication is locked;
+ * isolate teardown closes publication, invokes every registered shutdown leaf,
+ * and only then permits scheduler destruction. */
+typedef void (*XrProviderRetainFn)(void *provider);
+XR_FUNC void *xr_isolate_provider_acquire(XrVMRuntime *isolate, void **slot,
+                                          XrProviderRetainFn retain);
+XR_FUNC bool xr_isolate_provider_publish(XrVMRuntime *isolate, void **slot, void *provider,
+                                         XrCFunctionPtr shutdown);
+XR_FUNC void *xr_isolate_provider_detach(XrVMRuntime *isolate, void **slot,
+                                         XrCFunctionPtr shutdown);
+XR_FUNC void xr_isolate_shutdown_providers(XrVMRuntime *isolate);
+
 /* ========== Fast Macros ========== */
 
 // Simplified design: Use Isolate directly, no ThreadLocalTop
@@ -162,12 +175,18 @@ struct XrVMRuntime {
     void *debug_state;  // XrDebugState* for debugger integration
     void *debug_hooks;  // XrDebugHooks* for VM callback interface
 
-    /* ========== Cluster (optional, enabled with XR_HAS_CLUSTER) ========== */
-    /* The slot mutex makes taking a strong provider reference atomic with
-     * observing the slot. Without it, cluster.stop could clear and free the
-     * provider between a consumer's pointer load and refcount increment. */
-    XrAdaptiveMutex cluster_slot_lock;
-    void *cluster;  // XrCluster* (stdlib/cluster), protected by cluster_slot_lock
+    /* ========== Native provider lifecycle ========== */
+    /* Provider publication, strong-reference acquisition and detach share one
+     * lock. Teardown permanently closes publication before calling shutdown
+     * leaves, so no provider generation can appear behind the teardown pass. */
+    XrAdaptiveMutex provider_lifecycle_lock;
+    struct XrProviderLifecycleEntry *provider_lifecycle_entries;
+    bool provider_lifecycle_closing;
+
+    /* Cluster is the first native provider using the generic lifecycle API.
+     * Its opaque state remains here because transport fast paths need a
+     * constant-time isolate-local slot. */
+    void *cluster;  // XrCluster*, protected by provider_lifecycle_lock
 
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by module/xstdlib_runtime_cache.h. Holds memoised
