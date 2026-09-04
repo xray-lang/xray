@@ -358,6 +358,9 @@ class StdlibObjectShapeEntry:
     fields: tuple[StdlibHandleFieldEntry, ...]
     exact: bool
     visibility: str
+    semantic_source: str = ""
+    semantic_authority: str = "stdlib_def"
+    source_line: int = 0
 
     @property
     def symbol(self) -> str:
@@ -381,6 +384,9 @@ class StdlibEnumEntry:
     doc: str
     variants: tuple[StdlibEnumVariantEntry, ...]
     visibility: str
+    semantic_source: str = ""
+    semantic_authority: str = "stdlib_def"
+    source_line: int = 0
 
     @property
     def symbol(self) -> str:
@@ -438,6 +444,9 @@ class StdlibTypeMethodEntry:
     allocation: str
     receiver_mode: str
     visibility: str
+    semantic_source: str = ""
+    semantic_authority: str = "stdlib_def"
+    source_line: int = 0
 
     @property
     def symbol(self) -> str:
@@ -663,6 +672,221 @@ def parse_enum_variants(raw: str, context: str) -> tuple[StdlibEnumVariantEntry,
     if not variants:
         raise SystemExit(f"{context}: enum requires at least one variant")
     return tuple(variants)
+
+
+@dataclasses.dataclass(frozen=True)
+class CompilerModuleSchema:
+    """Xray-syntax declarations consumed by a compiler-owned namespace."""
+
+    module: str
+    semantic_source: str
+    object_shapes: tuple[StdlibObjectShapeEntry, ...]
+    enums: tuple[StdlibEnumEntry, ...]
+    intrinsic_methods: tuple[StdlibTypeMethodEntry, ...]
+
+
+COMPILER_MODULE_RE = re.compile(
+    r"^\s*//\s*@compiler-module\s+([A-Za-z_][A-Za-z0-9_]*)\s*$", re.MULTILINE
+)
+COMPILER_ENUM_RE = re.compile(
+    r"^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", re.MULTILINE
+)
+COMPILER_OBJECT_RE = re.compile(
+    r"^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{", re.MULTILINE
+)
+COMPILER_CLASS_RE = re.compile(
+    r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{", re.MULTILINE
+)
+COMPILER_INTRINSIC_RE = re.compile(
+    r"^\s*//\s*@compiler-intrinsic(?:\s+allocation=(no_heap|may_heap))?\s*$"
+)
+COMPILER_METHOD_RE = re.compile(
+    r"^\s*(?:(ref|move)\s+)?([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:<[^>{]+>)?\s*(\([^)]*\))\s*(?:->\s*(.+?))?\s*$"
+)
+
+
+def matching_source_brace(text: str, open_index: int, context: str) -> int:
+    """Find a schema declaration's closing brace."""
+    depth = 0
+    for index in range(open_index, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    raise SystemExit(f"{context}: declaration has no matching closing brace")
+
+
+def source_line(text: str, offset: int) -> int:
+    return text.count("\n", 0, offset) + 1
+
+
+def source_decl_doc(text: str, offset: int, name: str, fallback: str) -> str:
+    """Read the `// Name - ...` sentence immediately above a declaration."""
+    prefix = text[:offset].splitlines()
+    while prefix and not prefix[-1].strip():
+        prefix.pop()
+    if not prefix:
+        return fallback
+    match = re.fullmatch(
+        rf"\s*//\s*{re.escape(name)}\s*(?:-|—|:)\s*(.+?)\s*", prefix[-1]
+    )
+    if not match:
+        return fallback
+    return match.group(1).removesuffix(".")
+
+
+def parse_compiler_intrinsic_methods(
+    root: Path,
+    path: Path,
+    module: str,
+    text: str,
+    class_match: re.Match[str],
+) -> list[StdlibTypeMethodEntry]:
+    """Parse explicitly marked methods from one compiler-schema class."""
+    class_name = class_match.group(1)
+    open_index = text.find("{", class_match.start())
+    close_index = matching_source_brace(
+        text, open_index, f"{path}:{source_line(text, class_match.start())}: {class_name}"
+    )
+    body = text[open_index + 1 : close_index]
+    body_line = source_line(text, open_index + 1)
+    pending_doc: list[str] = []
+    pending_allocation: str | None = None
+    methods: list[StdlibTypeMethodEntry] = []
+    for index, raw in enumerate(body.splitlines(), body_line):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("//"):
+            intrinsic = COMPILER_INTRINSIC_RE.fullmatch(raw)
+            if intrinsic:
+                pending_allocation = intrinsic.group(1) or ""
+            else:
+                pending_doc.append(stripped[2:].strip().removesuffix("."))
+            continue
+        method = COMPILER_METHOD_RE.fullmatch(raw)
+        if not method:
+            raise SystemExit(f"{path}:{index}: unsupported compiler-schema class member")
+        if pending_allocation is None:
+            raise SystemExit(
+                f"{path}:{index}: {module}.{class_name}.{method.group(2)} must carry "
+                "an @compiler-intrinsic marker"
+            )
+        receiver_mode = method.group(1) or "read"
+        return_type = (method.group(4) or "()").strip()
+        methods.append(
+            StdlibTypeMethodEntry(
+                module=module,
+                type_name=class_name,
+                name=method.group(2),
+                signature=f"{method.group(3)}: {return_type}",
+                doc=" ".join(pending_doc) or "Compiler intrinsic",
+                allocation=pending_allocation,
+                receiver_mode=receiver_mode,
+                visibility="public",
+                semantic_source=path.resolve().relative_to(root.resolve()).as_posix(),
+                semantic_authority="compiler_intrinsic",
+                source_line=index,
+            )
+        )
+        pending_doc = []
+        pending_allocation = None
+    return methods
+
+
+def parse_compiler_module_schemas(root: Path) -> list[CompilerModuleSchema]:
+    """Parse Xray declarations that define compiler-owned module namespaces.
+
+    A schema is selected by its own `@compiler-module` marker, not by a module
+    name embedded in this parser. Ordinary enums and structural aliases remain
+    Xray-owned declarations. Only class methods carrying a per-method
+    `@compiler-intrinsic` marker cross into compiler-owned lowering.
+    """
+    schemas: list[CompilerModuleSchema] = []
+    types_dir = root / "stdlib" / "types"
+    for path in sorted(types_dir.glob("*.xr")):
+        text = path.read_text(encoding="utf-8")
+        markers = list(COMPILER_MODULE_RE.finditer(text))
+        if not markers:
+            continue
+        if len(markers) != 1:
+            raise SystemExit(f"{path}: compiler schema requires exactly one @compiler-module")
+        module = markers[0].group(1)
+        semantic_source = path.resolve().relative_to(root.resolve()).as_posix()
+        object_shapes: list[StdlibObjectShapeEntry] = []
+        enums: list[StdlibEnumEntry] = []
+        intrinsic_methods: list[StdlibTypeMethodEntry] = []
+
+        for match in COMPILER_OBJECT_RE.finditer(text):
+            name = match.group(1)
+            open_index = text.find("{", match.start())
+            line = source_line(text, match.start())
+            close_index = matching_source_brace(
+                text, open_index, f"{path}:{line}: {module}.{name}"
+            )
+            fields = parse_handle_fields(
+                " ".join(text[open_index + 1 : close_index].splitlines()),
+                f"{path}:{line}: {module}.{name}",
+            )
+            object_shapes.append(
+                StdlibObjectShapeEntry(
+                    module=module,
+                    name=name,
+                    doc=source_decl_doc(text, match.start(), name, "Exact object shape"),
+                    fields=fields,
+                    exact=True,
+                    visibility="public",
+                    semantic_source=semantic_source,
+                    semantic_authority="xray_schema",
+                    source_line=line,
+                )
+            )
+
+        for match in COMPILER_ENUM_RE.finditer(text):
+            name = match.group(1)
+            open_index = text.find("{", match.start())
+            line = source_line(text, match.start())
+            close_index = matching_source_brace(
+                text, open_index, f"{path}:{line}: {module}.{name}"
+            )
+            variants = parse_enum_variants(
+                " ".join(text[open_index + 1 : close_index].splitlines()),
+                f"{path}:{line}: {module}.{name}",
+            )
+            enums.append(
+                StdlibEnumEntry(
+                    module=module,
+                    name=name,
+                    doc=source_decl_doc(text, match.start(), name, "Enum type"),
+                    variants=variants,
+                    visibility="public",
+                    semantic_source=semantic_source,
+                    semantic_authority="xray_schema",
+                    source_line=line,
+                )
+            )
+
+        for match in COMPILER_CLASS_RE.finditer(text):
+            intrinsic_methods.extend(
+                parse_compiler_intrinsic_methods(root, path, module, text, match)
+            )
+
+        if not object_shapes and not enums and not intrinsic_methods:
+            raise SystemExit(f"{path}: @compiler-module {module} declares no schema rows")
+        schemas.append(
+            CompilerModuleSchema(
+                module=module,
+                semantic_source=semantic_source,
+                object_shapes=tuple(object_shapes),
+                enums=tuple(enums),
+                intrinsic_methods=tuple(intrinsic_methods),
+            )
+        )
+    return schemas
 
 
 def parse_def_metadata(
@@ -1287,6 +1511,38 @@ def parse_def_metadata(
     type_methods = [inherit(e, e.type_name) for e in type_methods]
     class_methods = [inherit(e, e.class_name) for e in class_methods]
     class_fields = [inherit(e, e.class_name) for e in class_fields]
+
+    object_keys = {(entry.module, entry.name) for entry in object_shapes}
+    enum_keys = {(entry.module, entry.name) for entry in enums}
+    intrinsic_keys = {(entry.module, entry.type_name, entry.name) for entry in type_methods}
+    for schema in parse_compiler_module_schemas(root):
+        for entry in schema.object_shapes:
+            key = (entry.module, entry.name)
+            if key in object_keys:
+                raise SystemExit(
+                    f"{entry.semantic_source}:{entry.source_line}: duplicate object schema "
+                    f"{entry.module}.{entry.name}"
+                )
+            object_keys.add(key)
+            object_shapes.append(entry)
+        for entry in schema.enums:
+            key = (entry.module, entry.name)
+            if key in enum_keys:
+                raise SystemExit(
+                    f"{entry.semantic_source}:{entry.source_line}: duplicate enum schema "
+                    f"{entry.module}.{entry.name}"
+                )
+            enum_keys.add(key)
+            enums.append(entry)
+        for entry in schema.intrinsic_methods:
+            key = (entry.module, entry.type_name, entry.name)
+            if key in intrinsic_keys:
+                raise SystemExit(
+                    f"{entry.semantic_source}:{entry.source_line}: duplicate intrinsic method "
+                    f"{entry.module}.{entry.type_name}.{entry.name}"
+                )
+            intrinsic_keys.add(key)
+            type_methods.append(entry)
 
     return (
         entries,

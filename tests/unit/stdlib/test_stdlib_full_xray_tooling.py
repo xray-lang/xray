@@ -248,6 +248,44 @@ class StrictProbeReaderTest(unittest.TestCase):
 
 
 class InventoryTraceTest(unittest.TestCase):
+    def test_coro_schema_separates_xray_types_from_compiler_intrinsics(self) -> None:
+        _modules, rows, defects = inventory.build_rows(ROOT)
+        self.assertFalse(any("Coro" in item for item in defects))
+        embedded_native_types = (
+            ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("xr_native_def_coro[]", embedded_native_types)
+        coro_rows = {row.symbol: row for row in rows if row.module == "Coro"}
+        self.assertEqual(
+            {
+                "CoroState",
+                "CoroGroupKey",
+                "CoroMetric",
+                "CoroStats",
+                "CoroInfo",
+                "CoroDeadlock",
+                "CoroLocal.set",
+                "CoroLocal.get",
+            },
+            set(coro_rows),
+        )
+        for name in (
+            "CoroState",
+            "CoroGroupKey",
+            "CoroMetric",
+            "CoroStats",
+            "CoroInfo",
+            "CoroDeadlock",
+        ):
+            self.assertTrue(coro_rows[name].xray_body)
+            self.assertEqual("xray_schema", coro_rows[name].plan_coverage)
+            self.assertFalse(inventory.is_semantic_c_owner(coro_rows[name]))
+        for name in ("CoroLocal.set", "CoroLocal.get"):
+            self.assertFalse(coro_rows[name].xray_body)
+            self.assertTrue(coro_rows[name].generated_c_only)
+            self.assertEqual("compiler_intrinsic", coro_rows[name].plan_coverage)
+            self.assertFalse(inventory.is_semantic_c_owner(coro_rows[name]))
+
     def test_sync_source_classes_need_no_manual_native_export_rows(self) -> None:
         manifest = inventory.load_manifest(ROOT)
         sync_module = next(

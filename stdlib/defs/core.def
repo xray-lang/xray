@@ -1638,55 +1638,6 @@ module mem {
 
 }
 
-module Coro {
-  type_method CoroLocal.set {
-    signature: "(value: T): ()"
-    receiver: "CoroLocal"
-    doc: "Set this typed coroutine-local slot for the current coroutine"
-    allocation: "may_heap"
-  }
-
-  type_method CoroLocal.get {
-    signature: "(): T?"
-    receiver: "CoroLocal"
-    doc: "Get this typed coroutine-local slot for the current coroutine"
-    allocation: "no_heap"
-  }
-
-  enum CoroState {
-    variants: "Unknown, Ready, Blocked, Running, Done"
-    doc: "Lifecycle state captured in a coroutine diagnostic snapshot"
-  }
-
-  enum CoroGroupKey {
-    variants: "Name, State"
-    doc: "Stable key used to group coroutine diagnostic snapshots"
-  }
-
-  enum CoroMetric {
-    variants: "Id, Reductions"
-    doc: "Metric used to rank coroutine diagnostic snapshots"
-  }
-
-  object CoroStats {
-    fields: "const active: i64, const blocked: i64, const ready: i64, const total: i64, const created: i64"
-    exact: true
-    doc: "Typed aggregate counters for the coroutine scheduler"
-  }
-
-  object CoroInfo {
-    fields: "const id: i64, const name: string?, const state: CoroState, const reductions: i64, const source: string?"
-    exact: true
-    doc: "Typed diagnostic snapshot for one coroutine"
-  }
-
-  object CoroDeadlock {
-    fields: "const members: Array<CoroInfo>, const reason: string"
-    exact: true
-    doc: "Typed description of a detected coroutine wait cycle"
-  }
-}
-
 module net {
   native_class NetConn {
     visibility: "internal"

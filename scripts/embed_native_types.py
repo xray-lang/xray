@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Embed stdlib/types/*.xr files into a C header as string literals.
+"""Embed legacy native-type declarations into a C header as string literals.
 
 Usage:
   python3 scripts/embed_native_types.py stdlib/types/
@@ -9,12 +9,22 @@ Usage:
 The generated file provides:
   - XR_NATIVE_TYPE_DEFS: X-macro list of (name, source_string)
   - Individual static const char *xr_native_def_XXX strings
+
+Files carrying ``@compiler-module`` are compiler schemas consumed by
+``stdlibgen``.  They are deliberately excluded from the legacy XrTypeId-backed
+native-type loader so the two ownership paths cannot parse the same class.
 """
 
 import argparse
 import glob
 import os
+import re
 import sys
+
+
+COMPILER_MODULE_RE = re.compile(
+    r"^\s*//\s*@compiler-module\s+[A-Za-z_][A-Za-z0-9_]*\s*$", re.MULTILINE
+)
 
 def escape_c_string(s):
     """Escape a string for embedding as a C string literal."""
@@ -45,6 +55,8 @@ def render(types_dir):
         name = os.path.splitext(os.path.basename(path))[0]
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
+        if COMPILER_MODULE_RE.search(content):
+            continue
         var_name = f"xr_native_def_{name}"
         escaped = escape_c_string(content)
         lines.extend([f'static const char {var_name}[] = "{escaped}";', ""])

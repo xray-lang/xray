@@ -317,27 +317,6 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
-    {"Coro", "CoroStats", "active", "i64", true},
-    {"Coro", "CoroStats", "blocked", "i64", true},
-    {"Coro", "CoroStats", "ready", "i64", true},
-    {"Coro", "CoroStats", "total", "i64", true},
-    {"Coro", "CoroStats", "created", "i64", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroInfo[] = {
-    {"Coro", "CoroInfo", "id", "i64", true},
-    {"Coro", "CoroInfo", "name", "string?", true},
-    {"Coro", "CoroInfo", "state", "CoroState", true},
-    {"Coro", "CoroInfo", "reductions", "i64", true},
-    {"Coro", "CoroInfo", "source", "string?", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlock[] = {
-    {"Coro", "CoroDeadlock", "members", "Array<CoroInfo>", true},
-    {"Coro", "CoroDeadlock", "reason", "string", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterTlsSnapshot[] = {
     {"cluster", "__ClusterTlsSnapshot", "enabled", "bool", true},
     {"cluster", "__ClusterTlsSnapshot", "clientReady", "bool", true},
@@ -376,13 +355,34 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
     {"cluster", "__ClusterSnapshot", "tls", "__ClusterTlsSnapshot", true},
 };
 
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
+    {"Coro", "CoroStats", "active", "i64", true},
+    {"Coro", "CoroStats", "blocked", "i64", true},
+    {"Coro", "CoroStats", "ready", "i64", true},
+    {"Coro", "CoroStats", "total", "i64", true},
+    {"Coro", "CoroStats", "created", "i64", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroInfo[] = {
+    {"Coro", "CoroInfo", "id", "i64", true},
+    {"Coro", "CoroInfo", "name", "string?", true},
+    {"Coro", "CoroInfo", "state", "CoroState", true},
+    {"Coro", "CoroInfo", "reductions", "i64", true},
+    {"Coro", "CoroInfo", "source", "string?", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlock[] = {
+    {"Coro", "CoroDeadlock", "members", "Array<CoroInfo>", true},
+    {"Coro", "CoroDeadlock", "reason", "string", true},
+};
+
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
-    {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
-    {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
     {"cluster", "__ClusterTlsSnapshot", "Private scalar TLS state read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterTlsSnapshot, 3, true},
     {"cluster", "__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
     {"cluster", "__ClusterSnapshot", "Private scalar snapshot read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterSnapshot, 10, true},
+    {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
+    {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
+    {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
 };
 #define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
 

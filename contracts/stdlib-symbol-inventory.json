@@ -1,16 +1,16 @@
 {
   "schema": 1,
-  "base": "3318ae5ecaa760cb0f26f8454041e62606bb2567",
+  "base": "7222c8d1f54c8ad60406b529a1dc5c84baa0992f",
   "counts": {
     "modules": 33,
     "production_modules": 31,
     "test_only_modules": 2,
-    "symbols": 1819,
-    "production_symbols": 1793,
-    "xray_body_symbols": 1356,
-    "handwritten_c_semantic_owner": 261,
-    "native_leaf_symbols": 169,
-    "production_native_leaf_symbols": 169,
+    "symbols": 1820,
+    "production_symbols": 1794,
+    "xray_body_symbols": 1365,
+    "handwritten_c_semantic_owner": 250,
+    "native_leaf_symbols": 175,
+    "production_native_leaf_symbols": 175,
     "unclassified_native_leaf": 0,
     "whole_module_native_policy": 0,
     "public_native_symbols": 0,
@@ -19,12 +19,12 @@
     "production_modules_without_xray_source": 0,
     "modules_entering_module_graph": 31,
     "c_functions_without_manifest_module": 0,
-    "def_symbols_without_manifest_module": 8,
+    "def_symbols_without_manifest_module": 0,
     "queue": {
-      "deepen-existing-xray": 3,
+      "deepen-existing-xray": 2,
       "establish-xray-source": 1,
       "needs-generic-loader": 0,
-      "native-leaf-only": 27,
+      "native-leaf-only": 28,
       "test-only": 2
     }
   },
@@ -205,12 +205,12 @@
       ],
       "c_function_count": 18,
       "enters_module_graph": true,
-      "symbol_count": 45,
+      "symbol_count": 41,
       "xray_body_symbols": 22,
       "handwritten_c_symbols": 18,
-      "native_leaf_symbols": 14,
-      "queue": "deepen-existing-xray",
-      "queue_reason": "4 handwritten C functions remain behind the .xr surface",
+      "native_leaf_symbols": 19,
+      "queue": "native-leaf-only",
+      "queue_reason": "no handwritten C owner and no per-module loader",
       "probe": {}
     },
     {
@@ -691,14 +691,14 @@
         "stdlib/cluster/cluster_proto.c",
         "stdlib/cluster/cluster_topic.c"
       ],
-      "c_function_count": 182,
+      "c_function_count": 184,
       "enters_module_graph": true,
-      "symbol_count": 270,
-      "xray_body_symbols": 90,
-      "handwritten_c_symbols": 177,
-      "native_leaf_symbols": 13,
+      "symbol_count": 275,
+      "xray_body_symbols": 93,
+      "handwritten_c_symbols": 179,
+      "native_leaf_symbols": 14,
       "queue": "deepen-existing-xray",
-      "queue_reason": "167 handwritten C functions remain behind the .xr surface",
+      "queue_reason": "168 handwritten C functions remain behind the .xr surface",
       "probe": {}
     },
     {
@@ -3638,7 +3638,7 @@
       "handwritten_c_body": "stdlib/mem/mem.c",
       "native_leaf": true,
       "leaf_class": "alloc_leaf",
-      "leaf_reason": "abi=malloc(3); ownership=fresh; effect=nothrow; provider=the system heap -- plain libc malloc, or mimalloc where the build selects it. The byte block always comes from the system heap; only the handle holding it is managed. VM stdlib/mem/mem.c enters runtime/object/xbuffer.c, whose native body destructor frees the block when the coroutine heap's refcount reaches zero; AOT src/aot/xrt_mem.h allocates an ARC cell marked XRT_ARC_KIND_BUFFER whose builtin destructor does the same; deletion_trigger=when Xray can express an owned byte block with a destructor in its own type system, so a Buffer is an Xray type over a raw allocation rather than a native handle the runtime has to know how to destroy",
+      "leaf_reason": "abi=malloc(3); ownership=fresh; effect=nothrow; provider=the system heap -- plain libc malloc, or mimalloc where the build selects it. The byte block always comes from the system heap; only the handle holding it is managed. VM stdlib/mem/mem.c enters runtime/object/xbuffer.c, whose native body destructor frees the block when the coroutine heap's refcount reaches zero; AOT src/aot/xrt_mem.h allocates an ARC cell marked XRT_ARC_KIND_BUFFER whose builtin destructor does the same; deletion_trigger=when the provider ABI can bind this allocation to a verified Xray drop target; the public Buffer type already remains source-owned and needs no user destructor syntax",
       "plan_coverage": "native_binding",
       "vm_binding": "mem_alloc",
       "aot_binding": "xrt_mem_alloc",
@@ -3653,7 +3653,7 @@
       "handwritten_c_body": "stdlib/mem/mem.c",
       "native_leaf": true,
       "leaf_class": "alloc_leaf",
-      "leaf_reason": "abi=calloc(3); ownership=fresh; effect=nothrow; provider=the system heap, with the same managed-handle arrangement as mem.__alloc. The zeroing is calloc's, which lets the allocator hand back pages the kernel already zeroed instead of writing them again; deletion_trigger=when Xray can express an owned byte block with a destructor in its own type system, and can request zeroed pages rather than zeroing them itself -- writing the zeroes in Xray would lose calloc's ability to skip that write",
+      "leaf_reason": "abi=calloc(3); ownership=fresh; effect=nothrow; provider=the system heap, with the same managed-handle arrangement as mem.__alloc. The zeroing is calloc's, which lets the allocator hand back pages the kernel already zeroed instead of writing them again; deletion_trigger=when provider drop can target verified Xray code and the allocator provider exposes zeroed allocation; writing zeroes in source would lose calloc's ability to skip that write",
       "plan_coverage": "native_binding",
       "vm_binding": "mem_alloc_zeroed",
       "aot_binding": "xrt_mem_alloc_zeroed",
@@ -3668,10 +3668,70 @@
       "handwritten_c_body": "stdlib/mem/mem.c",
       "native_leaf": true,
       "leaf_class": "alloc_leaf",
-      "leaf_reason": "abi=posix_memalign(3); Win32 _aligned_malloc, or mi_malloc_aligned under mimalloc; ownership=fresh; effect=nothrow; provider=the system heap through runtime/object/xbuffer.c xr_malloc_aligned on the VM and XRT_MALLOC's aligned form on AOT, with the same managed-handle arrangement as mem.__alloc; deletion_trigger=same as mem.__alloc: when Xray can express an owned byte block with a destructor in its own type system. The alignment argument is one parameter of the same allocation and does not need a separate step",
+      "leaf_reason": "abi=posix_memalign(3); Win32 _aligned_malloc, or mi_malloc_aligned under mimalloc; ownership=fresh; effect=nothrow; provider=the system heap through runtime/object/xbuffer.c xr_malloc_aligned on the VM and XRT_MALLOC's aligned form on AOT, with the same managed-handle arrangement as mem.__alloc; deletion_trigger=same as mem.__alloc: when provider drop can target verified Xray code. The alignment argument is one parameter of the same allocation and does not need a separate step",
       "plan_coverage": "native_binding",
       "vm_binding": "mem_alloc_aligned",
       "aot_binding": "xrt_mem_alloc_aligned",
+      "covered_c_deletion": "stdlib/mem/mem.c"
+    },
+    {
+      "module": "mem",
+      "symbol": "__bufferLength",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "stdlib/mem/mem.c",
+      "native_leaf": true,
+      "leaf_class": "runtime_leaf",
+      "leaf_reason": "abi=none; reads the length field of the private Buffer storage handle; ownership=none; effect=nothrow; provider=runtime/object/xbuffer.c on the VM and xrt_buffer_length on AOT; deletion_trigger=when Xray can declare the private provider-storage layout and its structural drop entry directly",
+      "plan_coverage": "native_binding",
+      "vm_binding": "mem_buffer_length",
+      "aot_binding": "xrt_mem_buffer_length",
+      "covered_c_deletion": "stdlib/mem/mem.c"
+    },
+    {
+      "module": "mem",
+      "symbol": "__bufferAsBytes",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "stdlib/mem/mem.c",
+      "native_leaf": true,
+      "leaf_class": "runtime_leaf",
+      "leaf_reason": "abi=none; projects a readonly borrowed Slice<u8> over the private Buffer storage handle; ownership=borrowed_param:0; effect=nothrow; provider=runtime/object/xbuffer.c on the VM and xrt_buffer_as_bytes on AOT; mem.Buffer.asBytes in source owns the public operation; deletion_trigger=when Xray can project a borrow from an opaque owned allocation without exposing the allocation handle publicly",
+      "plan_coverage": "native_binding",
+      "vm_binding": "mem_buffer_as_bytes",
+      "aot_binding": "xrt_mem_buffer_as_bytes",
+      "covered_c_deletion": "stdlib/mem/mem.c"
+    },
+    {
+      "module": "mem",
+      "symbol": "__bufferBorrowPtr",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "stdlib/mem/mem.c",
+      "native_leaf": true,
+      "leaf_class": "runtime_leaf",
+      "leaf_reason": "abi=none; projects a borrowed MutPtr<u8> from the private Buffer storage handle; ownership=none; effect=nothrow; provider=runtime/object/xbuffer.c on the VM and xrt_buffer_borrow_ptr on AOT; the analyzer retains the unsafe and owner-borrow rules; deletion_trigger=when Xray can project a raw pointer borrow from an opaque owned allocation without exposing the allocation handle publicly",
+      "plan_coverage": "native_binding",
+      "vm_binding": "mem_buffer_borrow_ptr",
+      "aot_binding": "xrt_mem_buffer_borrow_ptr",
+      "covered_c_deletion": "stdlib/mem/mem.c"
+    },
+    {
+      "module": "mem",
+      "symbol": "__bufferResize",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "stdlib/mem/mem.c",
+      "native_leaf": true,
+      "leaf_class": "alloc_leaf",
+      "leaf_reason": "abi=realloc(3), or allocate-copy-free for explicitly aligned storage; ownership=none; effect=nothrow; provider=runtime/object/xbuffer.c on the VM and xrt_buffer_resize on AOT; mem.Buffer.resize in source owns size normalization and the public result; deletion_trigger=when the provider ABI exposes fallible realloc and a verified Xray structural drop target",
+      "plan_coverage": "native_binding",
+      "vm_binding": "mem_buffer_resize",
+      "aot_binding": "xrt_mem_buffer_resize",
       "covered_c_deletion": "stdlib/mem/mem.c"
     },
     {
@@ -3766,87 +3826,14 @@
     },
     {
       "module": "mem",
-      "symbol": "Buffer.asBytes",
-      "kind": "type-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer.asMutBytes",
-      "kind": "type-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer.borrowPtr",
-      "kind": "type-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer.resize",
-      "kind": "type-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer",
+      "symbol": "__BufferStorage",
       "kind": "native-class",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
+      "native_leaf": true,
+      "leaf_class": "alloc_leaf",
+      "leaf_reason": "abi=none; private runtime object shape carrying an owned byte allocation and its reclamation hook; ownership=none; effect=nothrow; provider=runtime/object/xbuffer.c on the VM and the XRT_ARC_KIND_BUFFER builtin destructor on AOT; mem.Buffer in mem.xr is the only public owner of this handle; deletion_trigger=when opaque provider storage can bind its structural drop entry to verified Xray code; the public source class must remain independent of any user destructor hook",
       "plan_coverage": "native_binding"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer.asBytes",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/mem/mem.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "mem_buffer_as_bytes",
-      "covered_c_deletion": "stdlib/mem/mem.c"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer.asMutBytes",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/mem/mem.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "mem_buffer_as_mut_bytes",
-      "covered_c_deletion": "stdlib/mem/mem.c"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer.borrowPtr",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/mem/mem.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "mem_buffer_borrow_ptr",
-      "covered_c_deletion": "stdlib/mem/mem.c"
-    },
-    {
-      "module": "mem",
-      "symbol": "Buffer.resize",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/mem/mem.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "mem_buffer_resize",
-      "covered_c_deletion": "stdlib/mem/mem.c"
     },
     {
       "module": "mem",
@@ -13340,17 +13327,17 @@
     },
     {
       "module": "crypto",
-      "symbol": "__randomBytes",
+      "symbol": "__fillRandomBytes",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
       "handwritten_c_body": "stdlib/crypto/crypto.c",
       "native_leaf": true,
       "leaf_class": "security_provider_leaf",
-      "leaf_reason": "abi=Linux getrandom(2), retried on EINTR, falling back to reading /dev/urandom and aborting if that also fails; macOS and BSD arc4random_buf(3); Windows BCryptGenRandom with BCRYPT_USE_SYSTEM_PREFERRED_RNG; ownership=fresh; effect=nothrow; provider=the platform CSPRNG through src/os/os_random.h xr_random_bytes (src/os/unix/random_unix.c, src/os/win/random_win.c). Both backends call that same function -- src/aot/xrt_crypto.h includes os_random.h directly -- and differ only in which allocator carries the result array; deletion_trigger=never on security grounds: a CSPRNG reimplemented in Xray would replace an audited kernel entropy source with unaudited code. The leaf changes only when the platform's entropy interface changes",
+      "leaf_reason": "abi=Linux getrandom(2), retried on EINTR, falling back to reading /dev/urandom and aborting if that also fails; macOS and BSD arc4random_buf(3); Windows BCryptGenRandom with BCRYPT_USE_SYSTEM_PREFERRED_RNG; ownership=none; effect=nothrow; provider=the platform CSPRNG through src/os/os_random.h xr_random_bytes (src/os/unix/random_unix.c, src/os/win/random_win.c). Xray allocates and sizes the destination array before either backend enters the provider, so the leaf owns no memory policy; deletion_trigger=never on security grounds: a CSPRNG reimplemented in Xray would replace an audited kernel entropy source with unaudited code. The leaf changes only when the platform's entropy interface changes",
       "plan_coverage": "native_binding",
-      "vm_binding": "crypto_random_bytes_raw",
-      "aot_binding": "xrt_crypto_random_bytes_raw",
+      "vm_binding": "crypto_fill_random_bytes",
+      "aot_binding": "xrt_crypto_fill_random_bytes",
       "covered_c_deletion": "stdlib/crypto/crypto.c"
     },
     {
@@ -13362,7 +13349,7 @@
       "handwritten_c_body": "stdlib/crypto/crypto.c",
       "native_leaf": true,
       "leaf_class": "security_provider_leaf",
-      "leaf_reason": "abi=none; a hand-written constant-time comparison, not OpenSSL CRYPTO_memcmp(3); ownership=none; effect=nothrow; provider=src/shared/xr_crypto_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. The VM additionally checks the element type is u8; deletion_trigger=when Xray can express a comparison the optimiser is forbidden to short-circuit; until the language can state that constraint, an Xray body would be free to return early on the first differing byte and would silently stop being constant-time",
+      "leaf_reason": "abi=none; a hand-written constant-time comparison, not OpenSSL CRYPTO_memcmp(3); ownership=none; effect=nothrow; provider=src/shared/xr_crypto_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. Both backends reject non-u8 and malformed array representations before calling it; deletion_trigger=when Xray can express a comparison the optimiser is forbidden to short-circuit; until the language can state that constraint, an Xray body would be free to return early on the first differing byte and would silently stop being constant-time",
       "plan_coverage": "native_binding",
       "vm_binding": "crypto_timing_safe_equal_bytes",
       "aot_binding": "xrt_crypto_timing_safe_equal_bytes",
@@ -13608,14 +13595,28 @@
     },
     {
       "module": "cluster",
-      "symbol": "__monitor",
+      "symbol": "__monitorNode",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
       "handwritten_c_body": "stdlib/cluster/cluster.c",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; constructs a channel and registers with the coroutine registry, or enqueues a monitor frame toward a remote node; ownership=fresh; effect=nothrow; provider=the Xray channel subsystem plus the coroutine registry (src/coro/xcoro_registry.h xr_coro_monitor), driven by stdlib/cluster/cluster_monitor.c. The remote-coroutine branch enqueues a frame that a writer coroutine later sends. There is no AOT binding; deletion_trigger=when the coroutine registry is a surface Xray source can name, so a monitor registration is an ordinary call rather than a native leaf",
+      "leaf_reason": "abi=none; constructs a bounded channel and registers one normalized node-down target; ownership=fresh; effect=nothrow; provider=the Xray channel subsystem and the cluster runtime's node-monitor registry, driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates the node target and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding; deletion_trigger=when the cluster monitor registry and Channel constructor are surfaces Xray source can name",
+      "plan_coverage": "native_binding",
+      "vm_binding": "cluster_monitor_node_fn",
+      "covered_c_deletion": "stdlib/cluster/cluster.c"
+    },
+    {
+      "module": "cluster",
+      "symbol": "__monitorCoroutine",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "stdlib/cluster/cluster.c",
+      "native_leaf": true,
+      "leaf_class": "runtime_leaf",
+      "leaf_reason": "abi=none; constructs a bounded channel, registers one normalized remote-coroutine target and enqueues its monitor frame; ownership=fresh; effect=nothrow; provider=the Xray channel subsystem plus the coroutine registry (src/coro/xcoro_registry.h xr_coro_monitor), driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates both names and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding; deletion_trigger=when the coroutine registry, cluster writer queue and Channel constructor are surfaces Xray source can name",
       "plan_coverage": "native_binding",
       "vm_binding": "cluster_monitor_coro_fn",
       "covered_c_deletion": "stdlib/cluster/cluster.c"
@@ -13725,6 +13726,15 @@
       "leaf_class": "native_record_shape_leaf",
       "leaf_reason": "abi=none; a record layout, not a call; ownership=none; effect=nothrow; provider=declaration only (stdlib/defs/core.def). The VM fills it from runtime-owned cluster state before cluster.xr constructs the public ClusterInfo value; there is no AOT binding; deletion_trigger=when cluster runtime state is exposed through scalar accessor leaves, so cluster.xr can assemble the diagnostic snapshot without a native record class",
       "plan_coverage": "native_binding"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ADDRESS_HOST_MAX_BYTES",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
     },
     {
       "module": "cluster",
@@ -14367,6 +14377,15 @@
     },
     {
       "module": "cluster",
+      "symbol": "SHARED_SECRET_MAX_BYTES",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "SUBSCRIPTION_CAPACITY_MAX",
       "kind": "const",
       "audience": "production",
@@ -14503,6 +14522,15 @@
     {
       "module": "cluster",
       "symbol": "topicMatches",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "validCoroutineName",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14929,6 +14957,16 @@
     {
       "module": "cluster",
       "symbol": "cluster_runtime_join_spawn",
+      "kind": "c-function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.c",
+      "handwritten_c_body": "stdlib/cluster/cluster.c",
+      "plan_coverage": "c_internal",
+      "covered_c_deletion": "stdlib/cluster/cluster.c"
+    },
+    {
+      "module": "cluster",
+      "symbol": "cluster_binding_text_fits",
       "kind": "c-function",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.c",
@@ -18353,80 +18391,72 @@
       "symbol": "CoroStats",
       "kind": "object-shape",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_schema"
     },
     {
       "module": "Coro",
       "symbol": "CoroInfo",
       "kind": "object-shape",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_schema"
     },
     {
       "module": "Coro",
       "symbol": "CoroDeadlock",
       "kind": "object-shape",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_schema"
     },
     {
       "module": "Coro",
       "symbol": "CoroState",
       "kind": "enum",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_schema"
     },
     {
       "module": "Coro",
       "symbol": "CoroGroupKey",
       "kind": "enum",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_schema"
     },
     {
       "module": "Coro",
       "symbol": "CoroMetric",
       "kind": "enum",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_schema"
     },
     {
       "module": "Coro",
       "symbol": "CoroLocal.set",
       "kind": "type-method",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "generated_c_only": true,
+      "plan_coverage": "compiler_intrinsic"
     },
     {
       "module": "Coro",
       "symbol": "CoroLocal.get",
       "kind": "type-method",
       "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "blocker": "declared module is outside the stdlib boundary manifest"
+      "semantic_source": "stdlib/types/coro.xr",
+      "generated_c_only": true,
+      "plan_coverage": "compiler_intrinsic"
     }
   ]
 }

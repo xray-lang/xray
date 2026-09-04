@@ -478,6 +478,16 @@ def entry_kind(entry: Any) -> str:
     }.get(type(entry).__name__, type(entry).__name__)
 
 
+def entry_semantic_authority(entry: Any) -> str:
+    """Return the declaration's explicit owner, defaulting to legacy `.def`."""
+    return str(getattr(entry, "semantic_authority", "stdlib_def") or "stdlib_def")
+
+
+def entry_semantic_source(entry: Any, fallback: str) -> str:
+    """Return the source that owns a generated declaration row."""
+    return str(getattr(entry, "semantic_source", "") or fallback)
+
+
 def leaf_class_proposal(module: str, entry: Any) -> tuple[str, str]:
     """Propose an allowlist class for a private native leaf.
 
@@ -836,6 +846,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
             symbol = entry_symbol_name(entry)
             if not symbol:
                 continue
+            authority = entry_semantic_authority(entry)
             vm = str(getattr(entry, "vm", "") or "")
             aot = str(getattr(entry, "aot", "") or "")
             # A leaf is a `fn` row that reaches C with an ownership and an
@@ -869,21 +880,30 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                     leaf_reason = f"{leaf_reason}; proposed {proposal}: {why}"
             else:
                 leaf_class, leaf_reason = "", ""
+            source_owned = authority == "xray_schema"
+            compiler_intrinsic = authority == "compiler_intrinsic"
             rows.append(
                 SymbolRow(
                     module=name,
                     symbol=symbol,
                     kind=entry_kind(entry),
                     audience=audience,
-                    semantic_source=def_source,
-                    xray_body=False,
-                    handwritten_c_body=c_body or ("external" if vm else ""),
-                    generated_c_only=False,
+                    semantic_source=entry_semantic_source(entry, def_source),
+                    xray_body=source_owned,
+                    handwritten_c_body=(
+                        "" if source_owned or compiler_intrinsic
+                        else c_body or ("external" if vm else "")
+                    ),
+                    generated_c_only=compiler_intrinsic,
                     native_leaf=is_leaf,
                     leaf_class=leaf_class,
                     leaf_reason=leaf_reason,
                     factory_loader="",
-                    plan_coverage="native_binding",
+                    plan_coverage=(
+                        "xray_schema" if source_owned
+                        else "compiler_intrinsic" if compiler_intrinsic
+                        else "native_binding"
+                    ),
                     vm_binding=vm,
                     aot_binding=aot,
                     covered_c_deletion=c_body,
@@ -1073,6 +1093,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
             continue
         for entry in defs[module]:
             symbol = entry_symbol_name(entry)
+            authority = entry_semantic_authority(entry)
             vm = str(getattr(entry, "vm", "") or "")
             # A leaf outside the manifest is classified through the same
             # allowlist as any other. Skipping it here would let a leaf escape
@@ -1086,25 +1107,36 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                 defects.extend(leaf_row_defects)
             else:
                 leaf_class, leaf_reason = "", ""
+            source_owned = authority == "xray_schema"
+            compiler_intrinsic = authority == "compiler_intrinsic"
             rows.append(
                 SymbolRow(
                     module=module,
                     symbol=symbol,
                     kind=entry_kind(entry),
                     audience="production",
-                    semantic_source="stdlib/defs/core.def",
-                    xray_body=False,
-                    handwritten_c_body="external",
-                    generated_c_only=False,
+                    semantic_source=entry_semantic_source(entry, "stdlib/defs/core.def"),
+                    xray_body=source_owned,
+                    handwritten_c_body=(
+                        "" if source_owned or compiler_intrinsic else "external"
+                    ),
+                    generated_c_only=compiler_intrinsic,
                     native_leaf=is_leaf,
                     leaf_class=leaf_class,
                     leaf_reason=leaf_reason,
                     factory_loader="",
-                    plan_coverage="native_binding",
+                    plan_coverage=(
+                        "xray_schema" if source_owned
+                        else "compiler_intrinsic" if compiler_intrinsic
+                        else "native_binding"
+                    ),
                     vm_binding=vm,
                     aot_binding=str(getattr(entry, "aot", "") or ""),
                     covered_c_deletion="",
-                    blocker="declared module is outside the stdlib boundary manifest",
+                    blocker=(
+                        "" if source_owned or compiler_intrinsic
+                        else "declared module is outside the stdlib boundary manifest"
+                    ),
                 )
             )
 

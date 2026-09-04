@@ -1,0 +1,65 @@
+// Compiler schema for the scheduler-owned Coro namespace.
+//
+// The diagnostic carriers below are ordinary Xray types. The compiler and
+// runtime generate their module-scoped metadata from this source instead of
+// assigning their meaning to a handwritten C declaration table.
+//
+// @compiler-module Coro
+
+// CoroState - Lifecycle state captured in a coroutine diagnostic snapshot.
+enum CoroState {
+    Unknown,
+    Ready,
+    Blocked,
+    Running,
+    Done,
+}
+
+// CoroGroupKey - Stable key used to group coroutine diagnostic snapshots.
+enum CoroGroupKey {
+    Name,
+    State,
+}
+
+// CoroMetric - Metric used to rank coroutine diagnostic snapshots.
+enum CoroMetric {
+    Id,
+    Reductions,
+}
+
+// CoroStats - Typed aggregate counters for the coroutine scheduler.
+type CoroStats = {
+    const active: i64,
+    const blocked: i64,
+    const ready: i64,
+    const total: i64,
+    const created: i64,
+}
+
+// CoroInfo - Typed diagnostic snapshot for one coroutine.
+type CoroInfo = {
+    const id: i64,
+    const name: string?,
+    const state: CoroState,
+    const reductions: i64,
+    const source: string?,
+}
+
+// CoroDeadlock - Typed description of a detected coroutine wait cycle.
+type CoroDeadlock = {
+    const members: Array<CoroInfo>,
+    const reason: string,
+}
+
+// CoroLocal is an opaque compiler value whose operations lower directly to
+// the current coroutine's typed local-slot opcodes. It has no user-definable
+// representation and is deliberately not a standard-library class body.
+class CoroLocal<T> {
+    // Set this typed coroutine-local slot for the current coroutine.
+    // @compiler-intrinsic allocation=may_heap
+    set(value: T)
+
+    // Get this typed coroutine-local slot for the current coroutine.
+    // @compiler-intrinsic allocation=no_heap
+    get() -> T?
+}

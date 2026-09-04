@@ -492,7 +492,8 @@ static void xa_native_types_init_once(void) {
     XR_NATIVE_TYPE_DEFS(LOAD_NATIVE)
 #undef LOAD_NATIVE
 
-    /* Inject type members generated from C source (single source of truth). */
+    /* Inject the few type members whose Xray schema is projected by the
+     * stdlib metadata generator rather than indexed by XrTypeId. */
 #ifdef GEN_BUFFER_MEMBER_COUNT
     native_builtin_types[XR_TID_BUFFER].name = TYPE_NAME_BUFFER;
     native_builtin_types[XR_TID_BUFFER].members = g_gen_buffer_members;

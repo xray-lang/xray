@@ -696,7 +696,10 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
     ) = stdlibgen.parse_def_metadata(root)
     locations = build_def_location_index(root)
 
-    def source_for(kind: str, module: str, name: str) -> tuple[str, int]:
+    def source_for(kind: str, module: str, name: str, entry: Any = None) -> tuple[str, int]:
+        semantic_source = str(getattr(entry, "semantic_source", "") or "")
+        if semantic_source:
+            return semantic_source, int(getattr(entry, "source_line", 0) or 1)
         return locations.get((kind, module, name), ("stdlib/defs/core.def", 1))
 
     out: list[dict[str, Any]] = []
@@ -777,7 +780,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
     for object_shape in object_shapes:
         if object_shape.is_internal:
             continue
-        source, line = source_for("object", object_shape.module, object_shape.name)
+        source, line = source_for("object", object_shape.module, object_shape.name, object_shape)
         category, surface, doc_module = module_inventory_surface(object_shape.module)
         out.append(
             item(
@@ -813,7 +816,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
     for enum in enums:
         if enum.is_internal:
             continue
-        source, line = source_for("enum", enum.module, enum.name)
+        source, line = source_for("enum", enum.module, enum.name, enum)
         category, surface, doc_module = module_inventory_surface(enum.module)
         out.append(
             item(
