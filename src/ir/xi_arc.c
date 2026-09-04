@@ -632,18 +632,28 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
         user->args[0] == member && user->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
         single && single->source_operand == 0)
         return true;
+    /* A declared view-return contract can root a Slice in a non-Slice owner.
+     * `Buffer.asBytes() -> const Slice<u8> from this` is the minimal shape:
+     * the receiver owns provider storage, while the returned value is only a
+     * two-word view into that storage.  ViewEvidence is the lowering-sealed
+     * authority for this relationship.  Consume it before requiring `member`
+     * itself to be a Slice carrier, otherwise ARC releases a class/array owner
+     * immediately after the call and leaves the returned view dangling. */
+    if ((user->op == XI_CALL || user->op == XI_CALL_METHOD ||
+         user->op == XI_CALL_METHOD_DIRECT) &&
+        arc_type_is_span_view(user->type) && user->view_evidence.complete &&
+        user->view_evidence.sources) {
+        for (uint16_t i = 0; i < user->view_evidence.source_count; i++) {
+            int16_t operand = user->view_evidence.sources[i].source_operand;
+            if (operand >= 0 && (uint16_t) operand < user->nargs &&
+                user->args[operand] == member)
+                return true;
+        }
+    }
     if (!arc_value_is_span_view_carrier(member))
         return false;
     if (!arc_type_is_span_view(user->type))
         return false;
-    if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
-        user->view_evidence.complete && user->view_evidence.sources) {
-        for (uint16_t i = 0; i < user->view_evidence.source_count; i++) {
-            int16_t operand = user->view_evidence.sources[i].source_operand;
-            if (operand >= 0 && (uint16_t) operand < user->nargs && user->args[operand] == member)
-                return true;
-        }
-    }
     switch (user->op) {
         case XI_SLICE_AS_BYTES:
         case XI_SLICE_REINTERPRET:

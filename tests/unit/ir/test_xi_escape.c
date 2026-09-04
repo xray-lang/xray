@@ -1614,6 +1614,54 @@ static void test_arc_span_borrow_flows_through_phi(void) {
     xi_func_free(f);
 }
 
+/* A view-returning method may root its Slice in an ordinary RC receiver rather
+ * than in another Slice.  The call's ViewEvidence must therefore extend the
+ * receiver lifetime through the returned view's final use. */
+static void test_arc_span_call_view_keeps_non_span_owner_alive(void) {
+    XiFunc *f = make_func("arc_span_call_owner", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *owner = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    owner->escape = XI_ESC_ARG;
+    XiValue *view = xi_value_new(f, entry, XI_CALL_METHOD, &t_span, 1);
+    view->args[0] = owner;
+    view->aux = (void *) "view";
+    XiViewSourceEvidence source = {
+        .source_operand = 0,
+        .source_param = -1,
+        .origin = XI_VIEW_ORIGIN_RECEIVER,
+        .lifetime = 1,
+    };
+    ASSERT_EQ(xi_value_set_view_evidence(f, view, &source, 1, 0, 0, 1), true,
+              "method Slice result accepts receiver-rooted ViewEvidence");
+    XiValue *idx = xi_const_int(f, entry, 0, &t_int);
+    XiValue *get = xi_value_new(f, entry, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = view;
+    get->args[1] = idx;
+    xi_block_set_return(entry, get);
+
+    xi_arc_insert(f);
+
+    int release_pos = -1;
+    int use_pos = -1;
+    for (uint32_t i = 0; i < entry->nvalues; i++) {
+        XiValue *value = entry->values[i];
+        if (value == get)
+            use_pos = (int) i;
+        if (value && value->op == XI_RELEASE && value->nargs == 1 &&
+            value->args[0] == owner)
+            release_pos = (int) i;
+    }
+    ASSERT_EQ(count_target_ops(f, XI_RELEASE, owner), 1,
+              "view owner is released exactly once");
+    ASSERT_EQ(release_pos > use_pos, true,
+              "non-Slice owner outlives its receiver-rooted Slice result");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "receiver-rooted Slice call satisfies the borrow-closure contract");
+    xi_func_free(f);
+}
+
 /* A branch-local Slice can be one incoming owner of a join phi. The phi is an
  * ownership-transfer boundary: uses after the join cannot extend that one
  * branch owner's liveness into a block the owner definition does not
@@ -2095,6 +2143,7 @@ int main(void) {
     test_arc_err_check_skips_boxed_ref_load_borrow();
     test_arc_err_check_keeps_boxed_fresh_owner();
     test_arc_span_borrow_flows_through_phi();
+    test_arc_span_call_view_keeps_non_span_owner_alive();
     test_arc_branch_local_span_phi_stays_in_dominance_region();
     test_stack_alloc_local_array();
     test_stack_alloc_local_plain_map_set();
