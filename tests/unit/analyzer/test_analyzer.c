@@ -408,7 +408,13 @@ TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     ASSERT(const_slice->is_const);
     ASSERT(xr_type_is_exact_u8(const_slice->container.element_type));
 
-    XrType *private_native_class = xa_builtin_parse_type_string(g_isolate, "__BufferStorage");
+    XrType *unscoped_private_native_class =
+        xa_builtin_parse_type_string(g_isolate, "__BufferStorage");
+    ASSERT(unscoped_private_native_class != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(unscoped_private_native_class));
+
+    XrType *private_native_class =
+        xa_builtin_parse_type_string_for_module(g_isolate, "mem", "__BufferStorage");
     ASSERT(private_native_class != NULL);
     ASSERT(private_native_class->kind == XR_KIND_INSTANCE);
     ASSERT(private_native_class->instance.class_name != NULL);
