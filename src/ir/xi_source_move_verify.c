@@ -102,6 +102,50 @@ static bool value_uses(const XiValue *user, const XiValue *source) {
     return false;
 }
 
+/* ARC may preserve a coroutine-frame owner across a consuming move by
+ * pre-paying one extra reference, then dropping the frame slot immediately
+ * after the move:
+ *
+ *     RETAIN source
+ *     moved = SOURCE_MOVE source
+ *     RELEASE source
+ *
+ * RELEASE is physical ownership bookkeeping, not a semantic read of the
+ * source binding.  Accept only a same-block cleanup backed by an unmatched
+ * RETAIN before the move; an ordinary value use, an unbalanced release, or a
+ * cleanup on a later CFG path remains a C3 violation.  The independent ARC
+ * verifier still proves the complete path-wise reference-count balance. */
+static bool is_balanced_arc_cleanup(const XiValue *move, const XiValue *release,
+                                    const XiValue *source) {
+    if (!move || !release || !source || release->op != XI_RELEASE || release->nargs != 1 ||
+        !release->args || release->args[0] != source || !move->block ||
+        release->block != move->block)
+        return false;
+
+    int move_pos = value_position(move->block, move);
+    int release_pos = value_position(release->block, release);
+    if (move_pos < 0 || release_pos <= move_pos)
+        return false;
+
+    int credits = 0;
+    for (int i = 0; i < move_pos; i++) {
+        const XiValue *value = move->block->values[i];
+        if (!value || value->nargs != 1 || !value->args || value->args[0] != source)
+            continue;
+        if (value->op == XI_RETAIN)
+            credits++;
+        else if (value->op == XI_RELEASE && credits > 0)
+            credits--;
+    }
+    for (int i = move_pos + 1; i < release_pos && credits > 0; i++) {
+        const XiValue *value = move->block->values[i];
+        if (value && value->op == XI_RELEASE && value->nargs == 1 && value->args &&
+            value->args[0] == source)
+            credits--;
+    }
+    return credits > 0;
+}
+
 static XiSourceMoveVerifyStatus verify_one_move(XiFunc *func, XiValue *move,
                                                 XiSourceMoveVerifyReport *report) {
     const uint32_t required = XA_OWNERSHIP_EV_BINDING_LIVE | XA_OWNERSHIP_EV_ROOT_UNIQUE |
@@ -151,10 +195,13 @@ static XiSourceMoveVerifyStatus verify_one_move(XiFunc *func, XiValue *move,
             XiValue *user = block->values[vi];
             if (!user || user == move || !value_uses(user, source))
                 continue;
-            if (block != move->block || (int) vi > move_pos)
+            if (block != move->block || (int) vi > move_pos) {
+                if (is_balanced_arc_cleanup(move, user, source))
+                    continue;
                 return move_report(report, XI_SOURCE_MOVE_VIOLATION,
                                    XI_SOURCE_MOVE_C3_USE_AFTER_CONSUME, func, move, user,
                                    "source value is used on a path after XI_SOURCE_MOVE");
+            }
         }
         if (block->control == source && (block != move->block || move_pos < (int) block->nvalues))
             return move_report(report, XI_SOURCE_MOVE_VIOLATION,
