@@ -1853,6 +1853,19 @@ fn _bufferFromBytes(source: Array<u8>) -> Buffer {
     return out
 }
 
+// Keep each moved Buffer inside one non-looping ownership frame. Every fanout
+// target receives an independent allocation, while the caller retains only
+// the scalar provider outcome across its loop back edge.
+fn _offerTopic(target: Channel<Buffer>, envelope: Array<u8>) -> i64 {
+    var payload = _bufferFromBytes(envelope)
+    return match (target.trySend(move payload)) {
+        SendResult.Sent -> 0
+        SendResult.Closed -> 1
+        SendResult.Full -> 2
+        SendResult.Timeout -> 2
+    }
+}
+
 fn _deliverTopic(topic: string, envelope: Array<u8>) -> __ClusterDeliveryStats? {
     var token = _runtimeActiveToken.load()
     if (token == 0) { return null }
@@ -1863,13 +1876,10 @@ fn _deliverTopic(topic: string, envelope: Array<u8>) -> __ClusterDeliveryStats? 
 
     var accepted = 0
     for (var i = 0; i < len(targets); i++) {
-        var payload = _bufferFromBytes(envelope)
-        match (targets[i].trySend(move payload)) {
-            SendResult.Sent -> { accepted = accepted + 1 }
-            SendResult.Closed -> { stopped = stopped + 1 }
-            SendResult.Full -> { full = full + 1 }
-            SendResult.Timeout -> { full = full + 1 }
-        }
+        var outcome = _offerTopic(targets[i], envelope)
+        if (outcome == 0) { accepted = accepted + 1 }
+        else if (outcome == 1) { stopped = stopped + 1 }
+        else { full = full + 1 }
     }
     var stats: __ClusterDeliveryStats = {
         accepted: accepted,
