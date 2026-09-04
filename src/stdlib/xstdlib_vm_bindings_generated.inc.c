@@ -55,7 +55,9 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     expected_count++;
     XRS_EXPORT(module, isolate, "__notifyRemoteMonitor", cluster_notify_remote_monitor_fn);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__disconnectPeer", cluster_disconnect_peer_fn);
+    XRS_EXPORT(module, isolate, "__detachPeer", cluster_detach_peer_fn);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__notifyNodeDown", cluster_notify_node_down_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__registerNodeMonitor", cluster_register_node_monitor_fn);
     expected_count++;

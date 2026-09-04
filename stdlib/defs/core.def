@@ -2233,16 +2233,33 @@ module cluster {
     caps: "channel"
   }
 
-  fn __disconnectPeer {
-    signature: "(peerGeneration: i64): bool"
-    doc: "Detach and close the peer generation selected by Xray transport policy"
-    vm: "cluster_disconnect_peer_fn"
+  fn __detachPeer {
+    signature: "(peerGeneration: i64): string?"
+    doc: "Atomically detach one peer generation and return its owned name after closing opaque transport resources"
+    vm: "cluster_detach_peer_fn"
     argc: 1
     arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "channel"
+    effect: "nothrow"
+    allocation: "may_heap"
+    return_ownership: "fresh"
+  }
+
+  fn __notifyNodeDown {
+    signature: "(name: string): ()"
+    doc: "Publish a source-selected node-down notification through the synchronized monitor registry"
+    vm: "cluster_notify_node_down_fn"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    caps: "channel"
+    effect: "nothrow"
+    allocation: "may_heap"
   }
 
   fn __registerNodeMonitor {

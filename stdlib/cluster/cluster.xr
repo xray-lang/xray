@@ -529,12 +529,24 @@ fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
     if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
 }
 
+// Detachment is generation-keyed and returns the detached node name as a raw
+// provider fact. Only the source generation that stayed active throughout the
+// detach may select the node-down notification effect.
+fn _disconnectPeer(peerGeneration: i64) {
+    var token = _runtimeActiveToken.load()
+    if (token == 0) { return }
+    var name = __detachPeer(peerGeneration)
+    if (name != null && _runtimeActiveToken.load() == token) {
+        __notifyNodeDown(name!)
+    }
+}
+
 fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
     var admission = __peerEnqueue(peerGeneration, wire)
     if (admission == _PEER_QUEUE_FULL ||
         admission == _PEER_QUEUE_RESOURCE_UNAVAILABLE ||
         admission == _PEER_QUEUE_INVALID) {
-        __disconnectPeer(peerGeneration)
+        _disconnectPeer(peerGeneration)
     }
 }
 
@@ -591,7 +603,7 @@ fn _dispatchInboundOne(peerGeneration: i64) -> bool {
     var wire = event as Array<u8>?
     if (wire != null) {
         var keep = _dispatchInboundFrame(peerGeneration, time.monotonic(), wire!)
-        if (!keep) { __disconnectPeer(peerGeneration) }
+        if (!keep) { _disconnectPeer(peerGeneration) }
         return keep
     }
     var reason = event as i64?
@@ -602,7 +614,7 @@ fn _dispatchInboundOne(peerGeneration: i64) -> bool {
     if (reason! == _PEER_READ_EOF || reason! == _PEER_READ_IO_ERROR ||
         reason! == _PEER_READ_INVALID_LENGTH || reason! == _PEER_READ_PAYLOAD_TOO_LARGE ||
         reason! == _PEER_READ_RESOURCE_UNAVAILABLE || reason! == _PEER_READ_INVALID_LIMIT) {
-        __disconnectPeer(peerGeneration)
+        _disconnectPeer(peerGeneration)
     }
     return false
 }
@@ -706,7 +718,7 @@ fn _dispatchOutbound(peerGeneration: i64) {
         if (status == _PEER_WRITE_QUEUE_FULL ||
             status == _PEER_WRITE_RESOURCE_UNAVAILABLE ||
             status == _PEER_WRITE_SOCKET_CLOSED || status == _PEER_WRITE_IO_ERROR) {
-            __disconnectPeer(peerGeneration)
+            _disconnectPeer(peerGeneration)
             return
         }
         if (status != _PEER_WRITE_DRAINED) { return }
@@ -1617,7 +1629,7 @@ export fn monitor(name: string, coroName: string? = null) -> Channel<string>? {
         if (admission == _PEER_QUEUE_FULL ||
             admission == _PEER_QUEUE_RESOURCE_UNAVAILABLE ||
             admission == _PEER_QUEUE_INVALID) {
-            __disconnectPeer(peerGeneration)
+            _disconnectPeer(peerGeneration)
         }
         __unregisterCoroutineMonitor(name, coroName!, notifications)
         notifications.close()

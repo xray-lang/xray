@@ -223,13 +223,23 @@ deletion_trigger = "when the synchronized monitor index is ordinary Xray-owned s
 
 [[leaf]]
 module = "cluster"
-symbol = "__disconnectPeer"
+symbol = "__detachPeer"
 class = "runtime_leaf"
-abi = "none; detaches one generation from the locked registry and shuts down its socket and queue"
+abi = "none; atomically detaches one generation from the locked registry, returns its owned name and shuts down its socket and queue"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the native peer registry and opaque transport resources. The leaf reports only whether the generation was detached and its name; cluster.xr exclusively decides which terminal reader or writer event closes the peer and whether node-down notification follows"
+deletion_trigger = "when the peer registry and transport resources are ordinary Xray-owned values"
+
+[[leaf]]
+module = "cluster"
+symbol = "__notifyNodeDown"
+class = "runtime_leaf"
+abi = "none; publishes one source-selected node name through the synchronized monitor registry"
 ownership = "none"
 effect = "nothrow"
-provider = "the native peer registry and opaque transport resources. cluster.xr exclusively decides which terminal reader or writer event closes the peer"
-deletion_trigger = "when the peer registry and transport resources are ordinary Xray-owned values"
+provider = "the native monitor channel registry. cluster.xr checks its source generation token and exclusively selects the notification effect"
+deletion_trigger = "when the synchronized monitor index is ordinary Xray-owned state"
 
 [[leaf]]
 module = "cluster"
