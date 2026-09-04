@@ -12116,7 +12116,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             else
                 goto uncovered_call;
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
-        uncovered_call:
+        uncovered_call:;
             uint32_t metadata_count = 0;
             uint32_t operand_count = 0;
             const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
