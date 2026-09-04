@@ -26,7 +26,6 @@
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xcluster_output_queue.h"
 #include "../../src/coro/xyieldable.h"
-#include "../../src/coro/xphi_detector.h"
 #include "../../src/io/xcluster_peer_transport.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
@@ -84,7 +83,6 @@ typedef struct XrClusterNode {
     uint16_t port;
     XrNodeState state;
     XrIOConn *conn;
-    int64_t last_heartbeat_sent;
     int64_t last_heartbeat_recv;
     uint32_t flags;
     uint32_t missed_heartbeats;
@@ -93,7 +91,6 @@ typedef struct XrClusterNode {
     XrClusterOutputQueue *outq;
 
     XrNodeMetrics metrics;
-    XrPhiDetector phi;
 
     struct XrClusterNode *next;
 } XrClusterNode;
@@ -301,7 +298,6 @@ static inline XrClusterDeliveryStats cluster_transport_broadcast(XrCluster *clus
 
 /* ========== Cluster Info API ========== */
 
-// Returns Json with full cluster state, node metrics, phi values
-// Exposed as cluster.info() in xray
+// Native snapshot helpers return raw cluster resource and transport facts.
 
 #endif

@@ -79,6 +79,19 @@ fn test_xray_owned_health_and_tombstone_policy() {
     assertEqual(cluster.heartbeatTickInterval(100), 500)
     assertEqual(cluster.heartbeatTickInterval(5000), 2500)
 
+    var detector = cluster.PhiDetector(5000)
+    detector.record(1000)
+    detector.record(6000)
+    detector.record(11000)
+    assertEqual(detector.sampleCount, 2)
+    assert(detector.value(11000) < 0.001)
+    var oneIntervalLate = detector.value(16000)
+    assert(oneIntervalLate > 0.30 && oneIntervalLate < 0.31)
+    for (var i = 0; i < cluster.PHI_WINDOW_SIZE + 20; i++) {
+        detector.record(16000 + i * 5000)
+    }
+    assertEqual(detector.sampleCount, cluster.PHI_WINDOW_SIZE)
+
     assert(!cluster.heartbeatIsDead(99.0, 2, 14999, 2, 15000, 3))
     assert(cluster.heartbeatIsDead(99.0, 3, 0, 0, 15000, 3))
     assert(cluster.heartbeatIsDead(0.0, 2, 15001, 2, 15000, 3))

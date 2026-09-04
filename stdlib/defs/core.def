@@ -2023,9 +2023,9 @@ module http2 {
 
 module cluster {
   object __ClusterNodeSnapshot {
-    fields: "const name: string, const host: string, const port: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const missedHeartbeats: i64, const samples: i64, const mean: f64, const variance: f64, const detectorLastHeartbeatMs: i64"
+    fields: "const name: string, const host: string, const port: i64, const peerGeneration: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const missedHeartbeats: i64, const lastReceivedAtMs: i64"
     exact: true
-    doc: "Private metrics and raw failure-detector storage for one connected peer"
+    doc: "Private metrics and raw transport-health facts for one connected peer"
   }
 
   object __ClusterRuntimeSnapshot {
@@ -2035,9 +2035,9 @@ module cluster {
   }
 
   object __ClusterHealthPeerSnapshot {
-    fields: "const peerGeneration: i64, const lastReceivedAtMs: i64, const missedHeartbeats: i64, const samples: i64, const mean: f64, const variance: f64, const detectorLastHeartbeatMs: i64"
+    fields: "const peerGeneration: i64, const lastReceivedAtMs: i64, const missedHeartbeats: i64"
     exact: true
-    doc: "Private scalar snapshot of one connected peer's failure detector state"
+    doc: "Private scalar snapshot of one connected peer's raw transport-health facts"
   }
 
   object __ClusterDeliveryStats {
@@ -2059,11 +2059,11 @@ module cluster {
   }
 
   fn __healthSnapshot {
-    signature: "(heartbeatWire: Array<u8>, heartbeatSentAtMs: i64): Array<__ClusterHealthPeerSnapshot>?"
-    doc: "Enqueue one source-encoded heartbeat and snapshot locked peer detector storage"
+    signature: "(): Array<__ClusterHealthPeerSnapshot>?"
+    doc: "Snapshot locked raw peer health facts without applying heartbeat queue policy"
     vm: "cluster_health_snapshot_fn"
-    argc: 2
-    arg_spec: "vv"
+    argc: 0
+    arg_spec: ""
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2123,11 +2123,11 @@ module cluster {
   }
 
   fn __adoptPeer {
-    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool"
+    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool"
     doc: "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops"
     vm: "cluster_adopt_peer_fn"
-    argc: 8
-    arg_spec: "vssvvvvv"
+    argc: 7
+    arg_spec: "vssvvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2172,7 +2172,7 @@ module cluster {
 
   fn __observeHeartbeat {
     signature: "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool"
-    doc: "Project one source-decoded heartbeat observation onto locked peer health state"
+    doc: "Project one source-decoded heartbeat onto locked raw peer receive facts"
     vm: "cluster_observe_heartbeat_fn"
     argc: 3
     arg_spec: "vvv"
@@ -2263,7 +2263,7 @@ module cluster {
 
   fn __runtimeSnapshot {
     signature: "(): __ClusterRuntimeSnapshot?"
-    doc: "Read connected peer metrics, raw detector storage and the native topic count"
+    doc: "Read connected peer metrics and raw transport-health facts"
     vm: "cluster_runtime_snapshot_fn"
     argc: 0
     arg_spec: ""

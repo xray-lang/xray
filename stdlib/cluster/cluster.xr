@@ -197,6 +197,20 @@ type _NodeDownMonitors = {
     remote: Array<Channel<string>>,
 }
 
+type _PhiPeerState = {
+    runtimeToken: i64,
+    peerGeneration: i64,
+    detector: PhiDetector,
+}
+
+type _PhiPeerSnapshot = {
+    recorded: bool,
+    samples: i64,
+    mean: f64,
+    variance: f64,
+    lastHeartbeatMs: i64,
+}
+
 // Source-owned loops use generation tokens so a retiring coroutine cannot
 // affect a later start on the same isolate. Discovery has a separate token
 // because callers may enable or restart it independently of cluster startup.
@@ -212,6 +226,8 @@ const _monitorNextId: Atomic<i64> = Atomic<i64>(0)
 const _runtimeDecisionLock: Atomic<bool> = Atomic<bool>(false)
 const _topicStateLock: Atomic<bool> = Atomic<bool>(false)
 var _topicSubscriptions: Array<_TopicSubscription> = []
+const _phiStateLock: Atomic<bool> = Atomic<bool>(false)
+var _phiPeerStates: Array<_PhiPeerState> = []
 // The protected section only copies or swaps one small record and never
 // suspends, so a lock-free flag preserves the synchronous public query surface
 // without exposing ordinary mutable module state across worker coroutines.
@@ -251,6 +267,13 @@ fn _lockMonitorState() {
     }
 }
 
+fn _lockPhiState() {
+    while (true) {
+        var (_, acquired) = _phiStateLock.compareExchange(false, true)
+        if (acquired) { return }
+    }
+}
+
 // Retirement first makes new registrations fail their locked token recheck.
 // Detaching the complete registry under the lock makes the cutover atomic;
 // closing the detached channels afterwards keeps wakeups out of the spinlock.
@@ -262,6 +285,17 @@ fn _closeTopicSubscriptions() {
     for (var i = 0; i < len(retired); i++) {
         retired[i].notifications.close()
     }
+}
+
+fn _clearPhiPeerStates(runtimeToken: i64) {
+    var retained: Array<_PhiPeerState> = []
+    _lockPhiState()
+    for (var i = 0; i < len(_phiPeerStates); i++) {
+        var state = _phiPeerStates[i]
+        if (state.runtimeToken != runtimeToken) { retained.push(state) }
+    }
+    _phiPeerStates = retained
+    _phiStateLock.store(false)
 }
 
 fn _closeChannels(channels: Array<Channel<string>>) {
@@ -321,12 +355,13 @@ fn _retireRuntimeGeneration(token: i64) -> bool {
     return true
 }
 
-fn _retireCurrentRuntimeGeneration() {
+fn _retireCurrentRuntimeGeneration() -> i64 {
     _lockRuntimeDecision()
     var token = _runtimeActiveToken.load()
     _runtimeActiveToken.store(0)
     if (token != 0) { _clearMonitorStateLocked(token) }
     _runtimeDecisionLock.store(false)
+    return token
 }
 
 fn _pruneRecentDeparturesLocked(nowMs: i64) {
@@ -901,6 +936,7 @@ fn _disconnectPeer(peerGeneration: i64) {
     if (token == 0) { return }
     var name = __detachPeer(peerGeneration)
     if (name != null) {
+        _removePhiPeerState(token, peerGeneration)
         _notifyNodeDownIfCurrent(token, peerGeneration, name!, time.monotonic())
     }
 }
@@ -923,14 +959,14 @@ fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64,
         if (timestamp == null) { return true }
         var response = encodeHeartbeat(FRAME_HEARTBEAT_PONG, timestamp!)
         if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
-        __observeHeartbeat(peerGeneration, receivedAtMs, -1)
+        _observeHeartbeat(peerGeneration, receivedAtMs, -1)
         return true
     }
     if (frame!.kind == FRAME_HEARTBEAT_PONG) {
         var timestamp = decodeHeartbeat(frame!.payload)
         if (timestamp != null) {
             var rtt = receivedAtMs - timestamp!
-            __observeHeartbeat(peerGeneration, receivedAtMs, rtt < 0 ? 0 : rtt)
+            _observeHeartbeat(peerGeneration, receivedAtMs, rtt < 0 ? 0 : rtt)
         }
         return true
     }
@@ -993,9 +1029,8 @@ export fn handshakeProofEqual(left: Array<u8>, right: Array<u8>) -> bool {
 
 // ========== Failure detection ===========
 
-// Native peer tables retain detector samples because socket callbacks update
-// them under the peer lock. Both live health decisions and diagnostic snapshots
-// project those raw scalars through this one source-owned formula.
+// Both live health decisions and diagnostic snapshots use the same
+// source-owned formula over source-owned detector state.
 fn _phiValue(samples: i64, mean: f64, variance: f64,
              lastHeartbeatMs: i64, nowMs: i64) -> f64 {
     if (lastHeartbeatMs == 0 || samples < 2) { return 0.0 }
@@ -1056,6 +1091,91 @@ export final class PhiDetector {
         return _phiValue(this.sampleCount, this.mean, this.variance,
                          this.lastHeartbeatMs, nowMs)
     }
+}
+
+fn _removePhiPeerState(runtimeToken: i64, peerGeneration: i64) {
+    var retained: Array<_PhiPeerState> = []
+    _lockPhiState()
+    for (var i = 0; i < len(_phiPeerStates); i++) {
+        var state = _phiPeerStates[i]
+        if (state.runtimeToken != runtimeToken || state.peerGeneration != peerGeneration) {
+            retained.push(state)
+        }
+    }
+    _phiPeerStates = retained
+    _phiStateLock.store(false)
+}
+
+// Source records first, then the provider validates and projects the raw peer
+// receive facts. A failed provider update removes the speculative entry. The
+// health reader rejects the brief two-step mismatch, so no partial observation
+// can cause a disconnect decision.
+fn _recordPhiHeartbeat(runtimeToken: i64, peerGeneration: i64,
+                       receivedAtMs: i64, expectedIntervalMs: i64) -> bool {
+    _lockPhiState()
+    if (_runtimeActiveToken.load() != runtimeToken) {
+        _phiStateLock.store(false)
+        return false
+    }
+    for (var i = 0; i < len(_phiPeerStates); i++) {
+        var state = _phiPeerStates[i]
+        if (state.runtimeToken == runtimeToken && state.peerGeneration == peerGeneration) {
+            if (receivedAtMs >= state.detector.lastHeartbeatMs) {
+                state.detector.record(receivedAtMs)
+            }
+            _phiStateLock.store(false)
+            return true
+        }
+    }
+    var detector = PhiDetector(expectedIntervalMs)
+    detector.record(receivedAtMs)
+    var state: _PhiPeerState = {
+        runtimeToken: runtimeToken,
+        peerGeneration: peerGeneration,
+        detector: detector,
+    }
+    _phiPeerStates.push(state)
+    _phiStateLock.store(false)
+    return true
+}
+
+fn _observeHeartbeat(peerGeneration: i64, receivedAtMs: i64, rttMs: i64) {
+    var runtimeToken = _runtimeActiveToken.load()
+    if (runtimeToken == 0) { return }
+    var source = _sourceStateSnapshot()
+    if (source == null ||
+        !_recordPhiHeartbeat(runtimeToken, peerGeneration, receivedAtMs,
+                            source!.heartbeatIntervalMs)) {
+        return
+    }
+    if (!__observeHeartbeat(peerGeneration, receivedAtMs, rttMs)) {
+        _removePhiPeerState(runtimeToken, peerGeneration)
+    }
+}
+
+fn _phiPeerSnapshot(runtimeToken: i64, peerGeneration: i64) -> _PhiPeerSnapshot {
+    var snapshot: _PhiPeerSnapshot = {
+        recorded: false,
+        samples: 0,
+        mean: 0.0,
+        variance: 1.0,
+        lastHeartbeatMs: 0,
+    }
+    _lockPhiState()
+    if (_runtimeActiveToken.load() == runtimeToken) {
+        for (var i = 0; i < len(_phiPeerStates); i++) {
+            var state = _phiPeerStates[i]
+            if (state.runtimeToken == runtimeToken && state.peerGeneration == peerGeneration) {
+                snapshot.recorded = true
+                snapshot.samples = state.detector.sampleCount
+                snapshot.mean = state.detector.mean
+                snapshot.variance = state.detector.variance
+                snapshot.lastHeartbeatMs = state.detector.lastHeartbeatMs
+            }
+        }
+    }
+    _phiStateLock.store(false)
+    return snapshot
 }
 
 // The writer reports only transport facts: the queue crossed its configured
@@ -1291,11 +1411,11 @@ fn _joinPeer(host: string, port: i64) -> bool {
         return false
     }
     return __adoptPeer(move live, ack!.name, host, port, ack!.flags,
-                       config.heartbeatIntervalMs, _dispatchInbound, _dispatchOutbound)
+                       _dispatchInbound, _dispatchOutbound)
 }
 
 fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: string,
-                      tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
+                      tlsEnabled: bool, tlsServerReady: bool) {
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     if (_runtimeActiveToken.load() != token || !net.setDeadline(conn, deadline)) {
         net.close(conn)
@@ -1360,7 +1480,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    __adoptPeer(move conn, request!.name, "", 0, request!.flags, heartbeatIntervalMs,
+    __adoptPeer(move conn, request!.name, "", 0, request!.flags,
                 _dispatchInbound, _dispatchOutbound)
 }
 
@@ -1368,7 +1488,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
 // local would have one source identity on both sides of its back edge, which
 // cannot be consumed by one iteration and then reused by the next.
 fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: string,
-              tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) -> bool {
+              tlsEnabled: bool, tlsServerReady: bool) -> bool {
     if (!net.setAcceptDeadline(listener, time.monotonic() + _ACCEPT_POLL_MS)) {
         if (_runtimeActiveToken.load() != token) { return false }
         time.sleep(10)
@@ -1386,23 +1506,22 @@ fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: strin
         net.close(live)
         return false
     }
-    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady,
-                          heartbeatIntervalMs)
+    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady)
     return true
 }
 
 fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: string,
-               tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
+               tlsEnabled: bool, tlsServerReady: bool) {
     var live = listener
     defer { net.close(live) }
     while (_runtimeActiveToken.load() == token &&
-           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady,
-                      heartbeatIntervalMs)) {}
+           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady)) {}
 }
 
 fn _stopFailedHealthGeneration(token: i64) {
     if (!_retireRuntimeGeneration(token)) { return }
     _closeTopicSubscriptions()
+    _clearPhiPeerStates(token)
     __stop()
     _clearSourceState()
 }
@@ -1418,19 +1537,24 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
             _stopFailedHealthGeneration(token)
             return
         }
-        var peers = __healthSnapshot(heartbeat!, sentAtMs)
+        var peers = __healthSnapshot()
         if (peers == null) {
             _stopFailedHealthGeneration(token)
             return
         }
         for (var i = 0; i < len(peers!); i++) {
             var peer = peers![i]
+            _enqueueControlFrame(peer.peerGeneration, heartbeat!)
+            var detector = _phiPeerSnapshot(token, peer.peerGeneration)
+            if (detector.recorded && detector.lastHeartbeatMs != peer.lastReceivedAtMs) {
+                continue
+            }
             var elapsedMs = sentAtMs - peer.lastReceivedAtMs
-            var phi = _phiValue(peer.samples, peer.mean, peer.variance,
-                                peer.detectorLastHeartbeatMs, sentAtMs)
-            var expiredDuringWarmup = peer.samples < PHI_MIN_SAMPLES &&
+            var phi = _phiValue(detector.samples, detector.mean, detector.variance,
+                                detector.lastHeartbeatMs, sentAtMs)
+            var expiredDuringWarmup = detector.samples < PHI_MIN_SAMPLES &&
                                       elapsedMs > heartbeatTimeoutMs
-            var dead = heartbeatIsDead(phi, peer.samples, elapsedMs, peer.missedHeartbeats,
+            var dead = heartbeatIsDead(phi, detector.samples, elapsedMs, peer.missedHeartbeats,
                                        heartbeatTimeoutMs, maxMissedHeartbeats)
             if (dead || expiredDuringWarmup) {
                 var nextMissed = expiredDuringWarmup ? peer.missedHeartbeats + 1
@@ -1438,6 +1562,7 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
                 var name = __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs,
                                                  peer.missedHeartbeats, nextMissed, dead)
                 if (name != null) {
+                    _removePhiPeerState(token, peer.peerGeneration)
                     _notifyNodeDownIfCurrent(token, peer.peerGeneration, name!, sentAtMs)
                 }
             }
@@ -1475,6 +1600,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
     if (!__trackListener(listener)) {
         _retireRuntimeGeneration(token)
         _closeTopicSubscriptions()
+        _clearPhiPeerStates(token)
         net.close(listener)
         __stop()
         _clearSourceState()
@@ -1484,7 +1610,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
     // to wake stop.  Transfer a retained listener reference to the accept
     // coroutine; that coroutine remains the sole closer.
     go _acceptLoop(listener, token, state.selfName, state.secret, state.tlsEnabled,
-                   state.tlsServerReady, state.heartbeatIntervalMs)
+                   state.tlsServerReady)
     return true
 }
 
@@ -1971,16 +2097,23 @@ export fn discover() -> bool {
 }
 
 export fn info() -> ClusterInfo? {
+    var runtimeToken = _runtimeActiveToken.load()
+    if (runtimeToken == 0) { return null }
     var maybeState = _sourceStateSnapshot()
     if (maybeState == null) { return null }
     var raw = __runtimeSnapshot()
-    if (raw == null) { return null }
+    if (raw == null || _runtimeActiveToken.load() != runtimeToken) { return null }
     var state = maybeState!
     var snapshot = raw!
     var nodes: Array<ClusterNodeInfo> = []
     var observedAtMs = time.monotonic()
     for (var i = 0; i < len(snapshot.nodes); i++) {
         var node = snapshot.nodes[i]
+        var detector = _phiPeerSnapshot(runtimeToken, node.peerGeneration)
+        var phi = detector.recorded && detector.lastHeartbeatMs == node.lastReceivedAtMs
+                    ? _phiValue(detector.samples, detector.mean, detector.variance,
+                                detector.lastHeartbeatMs, observedAtMs)
+                    : 0.0
         var publicNode: ClusterNodeInfo = {
             name: node.name,
             host: node.host,
@@ -1998,8 +2131,7 @@ export fn info() -> ClusterInfo? {
             outQueueBytes: node.outQueueBytes,
             outQueueFrames: node.outQueueFrames,
             slow: node.slow,
-            phi: _phiValue(node.samples, node.mean, node.variance,
-                           node.detectorLastHeartbeatMs, observedAtMs),
+            phi: phi,
             missedHeartbeats: node.missedHeartbeats,
         }
         nodes.push(publicNode)
@@ -2159,8 +2291,9 @@ export fn join(addr: string) -> bool {
 
 export fn stop() {
     _discoveryActiveToken.store(0)
-    _retireCurrentRuntimeGeneration()
+    var retiredToken = _retireCurrentRuntimeGeneration()
     _closeTopicSubscriptions()
+    if (retiredToken != 0) { _clearPhiPeerStates(retiredToken) }
     _clearSourceState()
     __stop()
 }

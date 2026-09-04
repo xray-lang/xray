@@ -25,6 +25,8 @@ RETIRED_STANDALONE_FILES = (
     "src/aot/xrt_cluster.h",
     "src/coro/xcluster_blocking_runtime.c",
     "src/coro/xcluster_blocking_runtime.h",
+    "src/coro/xphi_detector.c",
+    "src/coro/xphi_detector.h",
     "src/coro/xtopic_registry.c",
     "src/coro/xtopic_registry.h",
     "src/io/xcluster_blocking.c",
@@ -56,6 +58,23 @@ class ClusterAotBoundaryTests(unittest.TestCase):
             "src/aot/xaot_stdlib_generated.inc.c",
         ):
             self.assertNotIn("xrt_cluster_", (ROOT / relative).read_text(), relative)
+
+    def test_phi_state_and_heartbeat_admission_are_source_owned(self) -> None:
+        cluster_c = (ROOT / "stdlib/cluster/cluster.c").read_text()
+        cluster_h = (ROOT / "stdlib/cluster/cluster_internal.h").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        health_snapshot = cluster_c.split(
+            "static XrValue cluster_health_snapshot_fn", 1
+        )[1].split("static XrValue cluster_health_apply_fn", 1)[0]
+
+        self.assertNotIn("XrPhiDetector", cluster_h)
+        self.assertNotIn("last_heartbeat_sent", cluster_h)
+        self.assertNotIn("xr_cluster_output_queue", health_snapshot)
+        self.assertIn("var _phiPeerStates: Array<_PhiPeerState>", cluster_xr)
+        self.assertIn("var peers = __healthSnapshot()", cluster_xr)
+        self.assertIn(
+            "_enqueueControlFrame(peer.peerGeneration, heartbeat!)", cluster_xr
+        )
 
 
 if __name__ == "__main__":

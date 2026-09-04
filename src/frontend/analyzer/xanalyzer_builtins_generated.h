@@ -85,6 +85,7 @@ static const XaBuiltinObjectField g_gen_cluster___clusternodesnapshot_object_fie
     {"name", "string"},
     {"host", "string"},
     {"port", "i64"},
+    {"peerGeneration", "i64"},
     {"framesSent", "i64"},
     {"framesReceived", "i64"},
     {"bytesSent", "i64"},
@@ -96,10 +97,7 @@ static const XaBuiltinObjectField g_gen_cluster___clusternodesnapshot_object_fie
     {"outQueueFrames", "i64"},
     {"slow", "bool"},
     {"missedHeartbeats", "i64"},
-    {"samples", "i64"},
-    {"mean", "f64"},
-    {"variance", "f64"},
-    {"detectorLastHeartbeatMs", "i64"},
+    {"lastReceivedAtMs", "i64"},
 };
 
 // cluster.__ClusterRuntimeSnapshot object fields
@@ -112,10 +110,6 @@ static const XaBuiltinObjectField g_gen_cluster___clusterhealthpeersnapshot_obje
     {"peerGeneration", "i64"},
     {"lastReceivedAtMs", "i64"},
     {"missedHeartbeats", "i64"},
-    {"samples", "i64"},
-    {"mean", "f64"},
-    {"variance", "f64"},
-    {"detectorLastHeartbeatMs", "i64"},
 };
 
 // cluster.__ClusterDeliveryStats object fields
@@ -127,9 +121,9 @@ static const XaBuiltinObjectField g_gen_cluster___clusterdeliverystats_object_fi
 };
 
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
-    {"__ClusterNodeSnapshot", "Private metrics and raw failure-detector storage for one connected peer", g_gen_cluster___clusternodesnapshot_object_fields, 18, true},
+    {"__ClusterNodeSnapshot", "Private metrics and raw transport-health facts for one connected peer", g_gen_cluster___clusternodesnapshot_object_fields, 16, true},
     {"__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer state", g_gen_cluster___clusterruntimesnapshot_object_fields, 1, true},
-    {"__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's failure detector state", g_gen_cluster___clusterhealthpeersnapshot_object_fields, 7, true},
+    {"__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's raw transport-health facts", g_gen_cluster___clusterhealthpeersnapshot_object_fields, 3, true},
     {"__ClusterDeliveryStats", "Private raw admission outcomes from cluster channel and queue providers", g_gen_cluster___clusterdeliverystats_object_fields, 4, true},
 };
 #define GEN_CLUSTER_OBJECT_SHAPE_COUNT 4
@@ -137,23 +131,23 @@ static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64): bool", "Open cluster TLS contexts and native peer provider state from source-normalized scalar configuration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__healthSnapshot", "(heartbeatWire: Array<u8>, heartbeatSentAtMs: i64): Array<__ClusterHealthPeerSnapshot>?", "Enqueue one source-encoded heartbeat and snapshot locked peer detector storage", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__healthSnapshot", "(): Array<__ClusterHealthPeerSnapshot>?", "Snapshot locked raw peer health facts without applying heartbeat queue policy", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool): string?", "Compare and apply one source-owned health decision, returning only the generation-safe detached peer name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__trackListener", "(listener: NetListener): bool", "Borrow the source-owned listener so native stop can wake its pending accept", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, heartbeatIntervalMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__readPeer", "(peerGeneration: i64, maxFramePayload: i64, callback: fn(peerGeneration: i64, wire: Array<u8>?, reason: i64): ()): i64", "Start one owned peer read and deliver wire bytes or an orthogonal raw reason to the source callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writePeer", "(peerGeneration: i64, callback: fn(peerGeneration: i64, reason: i64): ()): i64", "Start one owned peer write and deliver an orthogonal raw queue, socket, provider or cancellation reason to the source callback", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__peerEnqueue", "(peerGeneration: i64, wire: Array<u8>): i64", "Return the raw accepted, full, stopped, resource or invalid result of one peer queue admission", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__observeHeartbeat", "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool", "Project one source-decoded heartbeat observation onto locked peer health state", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__observeHeartbeat", "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool", "Project one source-decoded heartbeat onto locked raw peer receive facts", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__broadcast", "(excludedPeerGeneration: i64, wire: Array<u8>): __ClusterDeliveryStats?", "Return raw admission outcomes after one locked peer broadcast", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__peerName", "(peerGeneration: i64): string?", "Look up the connected peer name for one exact generation", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__peerGeneration", "(name: string): i64", "Look up the connected peer generation for one exact name", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__detachPeer", "(peerGeneration: i64): string?", "Atomically detach one peer generation and return its owned name after closing opaque transport resources", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__discoveryOpen", "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?", "Open one IPv4 multicast UDP handle for the source-owned discovery loop", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics, raw detector storage and the native topic count", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics and raw transport-health facts", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 18
 
