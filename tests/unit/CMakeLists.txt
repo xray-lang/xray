@@ -993,6 +993,11 @@ add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c
 set_tests_properties(test_xr_aot_refinement PROPERTIES
     LABELS "aot;refinement;backend;task-279"
 )
+add_test(NAME test_xr_aot_refinement_unreachable_native_callee
+    COMMAND $<TARGET_FILE:test_xr_aot_refinement> unreachable-native-callee)
+set_tests_properties(test_xr_aot_refinement_unreachable_native_callee PROPERTIES
+    LABELS "aot;refinement;target-plan;mutation;task-293"
+)
 
 # Keep the dumb-emitter contract self-contained even though the behavioral
 # test later includes compiler-only fixtures. This compile probe has only the

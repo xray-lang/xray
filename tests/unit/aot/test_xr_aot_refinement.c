@@ -59,6 +59,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/aot/refine/xr_aot_scalar_value.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/shared/xr_print_plan.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -3794,6 +3795,107 @@ static void test_native_direct_fresh_result_refinement_authority_is_exact(void) 
     xi_func_free(function);
 }
 
+static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_closed(void) {
+    static XrType callee_type = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 9203,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .function =
+            {
+                .params = NULL,
+                .param_count = 0,
+                .min_params = 0,
+                .return_type = &scalar_int,
+                .throw_effect = XR_FN_EFFECT_MAY_THROW,
+            },
+    };
+    XiFunc *root = xi_func_new("unreachable_native_scalar_root", &scalar_unit);
+    XiFunc *wrapper = xi_func_new("unreachable_native_scalar_wrapper", &scalar_int);
+    XiBlock *root_entry = root ? xi_block_new(root) : NULL;
+    XiBlock *wrapper_entry = wrapper ? xi_block_new(wrapper) : NULL;
+    REQUIRE(root && wrapper && root_entry && wrapper_entry);
+    root_entry->sealed = wrapper_entry->sealed = true;
+    root->children = (XiFunc **) xr_calloc(1u, sizeof(*root->children));
+    REQUIRE(root->children);
+    root->children[0] = wrapper;
+    root->nchildren = root->children_cap = 1u;
+    wrapper->parent_func = root;
+    xi_block_set_return(root_entry, NULL);
+
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(wrapper, (uint32_t) sizeof(*ref));
+    XiValue *callee = xi_value_new(wrapper, wrapper_entry, XI_IMPORT_REF, &callee_type, 0u);
+    XiValue *call = xi_value_new(wrapper, wrapper_entry, XI_CALL, &scalar_int, 1u);
+    REQUIRE(ref && callee && call);
+    *ref = (XiImportRef) {
+        .module_path = "time",
+        .member_name = "__realtimeNanos",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    callee->aux = ref;
+    call->args[0] = callee;
+    xi_block_set_return(wrapper_entry, call);
+    root->stage = wrapper->stage = XI_STAGE_OPTIMIZED;
+    XiModule *module =
+        xi_module_new("fixture/unreachable_native_scalar.xr", "unreachable_native_scalar", root);
+    REQUIRE(module && xi_module_set_identity(
+                          module, "memory-module-v1:id=36:unreachable-native-scalar-fixture-v1"));
+    root->module = module;
+
+    char error[512] = {0};
+    REQUIRE(build_fixture_semantic_plan_and_attach(root, error, sizeof(error)));
+    XrSemanticPlan *semantic = root->semantic_plan;
+    REQUIRE(semantic && wrapper->semantic_plan_function_index < semantic->function_count);
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0u; i < semantic->operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = &semantic->operations[i];
+        if (candidate->function == wrapper->semantic_plan_function_index &&
+            candidate->opcode == XI_CALL)
+            operation_index = operation_index == XR_SEMANTIC_INDEX_NONE ? i : UINT32_MAX;
+    }
+    REQUIRE(operation_index < semantic->operation_count);
+    XrSemanticOperationRecord *operation = &semantic->operations[operation_index];
+    REQUIRE(operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
+
+    XrTargetProfile *profile = build_target_profile();
+    XrTargetPlan *target = NULL;
+    const XrSemanticPlan *modules[] = {semantic};
+    bool built = xr_target_plan_build_program_module_set(modules, 1u, semantic, profile, &target,
+                                                         error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "unreachable native scalar TargetPlan failed: %s\n", error);
+    REQUIRE(built && target && target->module_partitions_count == 1u &&
+            target->module_partitions[0].calls_count == 0u);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, semantic, &policy,
+                                                                  &refinement, &diag));
+    REQUIRE(refinement != NULL);
+    xr_aot_refinement_plan_free(refinement);
+
+    /* The exact same absent call row must not become a general fallback. A
+     * mutation that makes the frozen function a program root invalidates the
+     * TargetPlan/SemanticPlan pair before that stale omission can be used. */
+    REQUIRE(operation->function < semantic->function_count);
+    XrSemanticFunctionRecord *owner = &semantic->functions[operation->function];
+    uint8_t saved_initializer = owner->is_module_initializer;
+    owner->is_module_initializer = 1u;
+    refinement = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, semantic, &policy,
+                                                                   &refinement, &diag));
+    REQUIRE(refinement == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+    owner->is_module_initializer = saved_initializer;
+
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(root);
+}
+
 static void test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed(void) {
     XiFunc *function = xi_func_new("borrowed_byte_slice_parameter", &scalar_byte);
     REQUIRE(function != NULL);
@@ -5480,6 +5582,11 @@ int main(int argc, char **argv) {
         puts("Native-direct fresh-result AOT refinement tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "unreachable-native-callee") == 0) {
+        test_unreachable_native_scalar_callee_authority_is_exact_and_fail_closed();
+        puts("Unreachable native callee AOT refinement tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "direct-local-go-storage") == 0) {
         test_direct_local_go_callee_storage_is_exact_and_fail_closed();
         puts("Direct-local go storage AOT refinement tests passed");
@@ -5511,6 +5618,7 @@ int main(int argc, char **argv) {
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
     test_native_direct_fresh_result_refinement_authority_is_exact();
+    test_unreachable_native_scalar_callee_authority_is_exact_and_fail_closed();
     test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed();
     test_fixed_array_backing_projection_is_exact_and_fail_closed();
     test_named_aggregate_emission_is_exact_and_fail_closed();
