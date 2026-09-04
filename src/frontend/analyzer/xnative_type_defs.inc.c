@@ -12,10 +12,6 @@ static const char xr_native_def_channel[] = "// Built-in Channel<T> type — imp
 
 static const char xr_native_def_coroutine[] = "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum TaskResult<T> {\n    Success { value: T },\n    Failed { error: Error },\n    Cancelled,\n    Timeout,\n    Pending,\n}\n\nenum TaskStatus {\n    Pending,\n    Running,\n    Success,\n    Failed,\n    Cancelled,\n}\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    ref cancel()\n    ref poll() -> TaskResult<T>\n    ref awaitResult() -> TaskResult<T>\n    ref awaitTimeout(timeout: i64) -> TaskResult<T>\n}\n";
 
-static const char xr_native_def_countdownlatch[] = "// Built-in CountdownLatch type; implemented by the runtime.\nclass CountdownLatch {\n    remaining: i64\n    isClosed: bool\n    reset(count: i64) -> bool\n    done(count?: i64) -> i64\n    tryWait() -> bool\n    wait() -> bool\n    close()\n}\n";
-
-static const char xr_native_def_eventcount[] = "// Built-in EventCount type; implemented by the runtime.\nclass EventCount {\n    epoch: i64\n    isClosed: bool\n    advance(step?: i64) -> i64\n    wait(lastEpoch: i64, workerHint?: i64) -> i64\n    close()\n}\n";
-
 static const char xr_native_def_f64[] = "// Built-in f64 type — implementation in src/runtime/value/xf64_methods.c\nclass f64 {\n    // @lowered\n    static parse(text: string) -> f64\n    // @lowered\n    static tryParse(text: string) -> f64?\n    abs() -> f64\n    toString() -> string\n    toFixed(decimals?: i64) -> string\n    toI64() -> i64\n    floor() -> i64\n    ceil() -> i64\n    round() -> i64\n    sqrt() -> f64\n    pow(exp: f64) -> f64\n    isNaN() -> bool\n}\n";
 
 static const char xr_native_def_i64[] = "// Built-in i64 type — implementation in src/runtime/value/xi64_methods.c\nenum NumberParseError {\n    InvalidSyntax,\n    OutOfRange\n}\nclass i64 {\n    // @lowered\n    static parse(text: string) -> i64\n    // @lowered\n    static tryParse(text: string) -> i64?\n    abs() -> i64\n    toString() -> string\n    toBigInt() -> BigInt\n    toF64() -> f64\n    toHex() -> string\n    max(other: i64) -> i64\n    min(other: i64) -> i64\n    sqrt() -> f64\n    pow(exp: f64) -> f64\n    checkedAdd(other: i64) -> i64?\n    checkedSub(other: i64) -> i64?\n    checkedMul(other: i64) -> i64?\n    saturatingAdd(other: i64) -> i64\n    saturatingSub(other: i64) -> i64\n    saturatingMul(other: i64) -> i64\n    wrappingAdd(other: i64) -> i64\n    wrappingSub(other: i64) -> i64\n    wrappingMul(other: i64) -> i64\n    addOverflows(other: i64) -> bool\n    subOverflows(other: i64) -> bool\n    mulOverflows(other: i64) -> bool\n}\n";
@@ -30,11 +26,7 @@ static const char xr_native_def_panic_info[] = "// Built-in PanicInfo class — 
 
 static const char xr_native_def_regex[] = "// Built-in Regex type. The automata live in stdlib/regex/regex.xr; the class\n// is only the handle, and it exists as a native class because the literal\n// syntax /pat/flags lowers to XI_REGEX_COMPILE with its result type pinned to\n// type_regex (src/ir/xi_lower_expr.c:11349).\n//\n// `prog` is the compiled program image, produced and memoised by regex.xr. It\n// is a plain GC-visible field rather than a native body because\n// XrNativeBodyDesc has no trace callback, so a native body cannot hold an\n// Xray value without the collector losing it. It starts empty and regex.xr\n// fills it by pushing: a class-typed parameter is a read capability, so the\n// field itself cannot be assigned from there, but its elements can.\nclass Regex {\n    pattern: string\n    flags: i64\n    prog: Array<i64>\n}\n";
 
-static const char xr_native_def_resultgroup[] = "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports integer associative reduction.\nclass ResultGroup {\n    readyCount: i64\n    pendingCount: i64\n    batchSize: i64\n    isClosed: bool\n    add(value: i64) -> bool\n    flush()\n    reset(count: i64) -> bool\n    recv(): i64?\n    tryRecv(): (i64?, bool)\n    close()\n}\n";
-
 static const char xr_native_def_rune[] = "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar value.\nclass rune {\n    toUInt32() -> u32\n    toString() -> string\n    isLetter() -> bool\n    isNumber() -> bool\n    isAlphanumeric() -> bool\n    isWhitespace() -> bool\n}\n";
-
-static const char xr_native_def_semaphore[] = "// Built-in Semaphore type; implemented by the runtime.\nclass Semaphore {\n    available: i64\n    isClosed: bool\n    release(count?: i64) -> i64\n    tryAcquire() -> bool\n    acquire() -> bool\n    close()\n}\n";
 
 static const char xr_native_def_set[] = "// Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c\nclass Set<T: Hashable> {\n    ref add(value: T)\n    contains(value: T) -> bool\n    ref delete(value: T) -> bool\n    ref clear()\n    values() -> Array<T>\n    forEach(fn: fn(value: T)) -> ()\n    union(other: Set<T>) -> Set<T>\n    intersection(other: Set<T>) -> Set<T>\n    difference(other: Set<T>) -> Set<T>\n    symmetricDifference(other: Set<T>) -> Set<T>\n    isSubset(other: Set<T>) -> bool\n    isSuperset(other: Set<T>) -> bool\n    toArray() -> Array<T>\n    // Iteration protocol — yields each element T (used by for-in).\n    iterator() -> Iterator<T>\n    toString() -> string\n}\n";
 
@@ -44,8 +36,6 @@ static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder typ
 
 static const char xr_native_def_thread[] = "// sys.Thread.spawn is compiler-defined, not a native constructor surface.\n//\n// Task 147 selected the language/IR construct form:\n//     sys.Thread.spawn(fn() -> T { ... }) -> Thread<T>\n//\n// The handle itself is a native runtime type so join/detach/property dispatch\n// use the normal native-type tables. Do not add a constructor or static call\n// here; doing so would reintroduce the old Thread<T>(body) surface and bypass\n// the go-like capture/move checks enforced by sys.Thread.spawn.\nclass Thread<T> {\n    done: bool\n    join() -> T\n    detach()\n}\n";
 
-static const char xr_native_def_workqueue[] = "// Built-in WorkQueue<T> type; implemented by the runtime.\nclass WorkQueue<T> {\n    shardCount: i64\n    isClosed: bool\n    push(value: T, shard?: i64) -> bool\n    // WorkQueue<int> only: enqueue count consecutive integer jobs and return the accepted count.\n    pushRange(start: i64, count: i64, shardStart?: i64) -> i64\n    pop(workerId?: i64): T?\n    tryPop(workerId?: i64): (T?, bool)\n    close()\n}\n";
-
 #define XR_NATIVE_TYPE_DEFS(X) \
     X("array", xr_native_def_array) \
     X("atomic", xr_native_def_atomic) \
@@ -53,8 +43,6 @@ static const char xr_native_def_workqueue[] = "// Built-in WorkQueue<T> type; im
     X("bool", xr_native_def_bool) \
     X("channel", xr_native_def_channel) \
     X("coroutine", xr_native_def_coroutine) \
-    X("countdownlatch", xr_native_def_countdownlatch) \
-    X("eventcount", xr_native_def_eventcount) \
     X("f64", xr_native_def_f64) \
     X("i64", xr_native_def_i64) \
     X("iterator", xr_native_def_iterator) \
@@ -62,11 +50,8 @@ static const char xr_native_def_workqueue[] = "// Built-in WorkQueue<T> type; im
     X("map", xr_native_def_map) \
     X("panic_info", xr_native_def_panic_info) \
     X("regex", xr_native_def_regex) \
-    X("resultgroup", xr_native_def_resultgroup) \
     X("rune", xr_native_def_rune) \
-    X("semaphore", xr_native_def_semaphore) \
     X("set", xr_native_def_set) \
     X("string", xr_native_def_string) \
     X("stringbuilder", xr_native_def_stringbuilder) \
-    X("thread", xr_native_def_thread) \
-    X("workqueue", xr_native_def_workqueue)
+    X("thread", xr_native_def_thread)

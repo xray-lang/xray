@@ -162,10 +162,10 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 // http2 module functions
 static const XaBuiltinMember g_gen_http2_functions[] = {
     {"__supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__connect", "(host: string, port: i64, timeoutMs: i64): i64", "Open one TLS connection that negotiated ALPN h2 and answer its handle, or -1", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__send", "(handle: i64, data: Array<u8>): bool", "Write one buffer to an open HTTP/2 connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes from an open HTTP/2 connection; null on error or EOF", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__close", "(handle: i64): bool", "Close an HTTP/2 connection and release its handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__connect", "(host: string, port: i64, timeoutMs: i64, alpn: string): i64", "Open one TLS connection for the requested ALPN protocol; answer a handle or a private negative provider outcome", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__send", "(handle: i64, data: Array<u8>, offset: i64): i64", "Perform one TLS write from offset and answer its accepted byte count", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes once; empty on EOF and null on transport failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_HTTP2_FUNCTION_COUNT 5
 
@@ -193,7 +193,6 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__chmod", "(path: Path, mode: i64): bool", "Change file permissions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__chdir", "(path: Path): bool", "Change working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__exists", "(path: Path): bool", "Check if path exists", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileClose", "(handle: i64): bool", "Close an owned file descriptor; 0, 1 and 2 are refused", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileFlush", "(handle: i64): bool", "Flush any C-runtime buffering behind a standard stream handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileOpen", "(path: Path): i64", "Open a file for binary reading and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -201,16 +200,8 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__fileRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read at most maxBytes from a descriptor; an empty result means EOF", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__fileWrite", "(handle: i64, data: Array<u8>, offset: i64): i64", "Write bytes from offset once; returns how many the stream accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileWriteStr", "(handle: i64, data: string, offset: i64): i64", "Write string bytes from offset once; returns how many were accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileSize", "(path: Path): i64", "Get file size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__isDir", "(path: Path): bool", "Check if path is a directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__isFile", "(path: Path): bool", "Check if path is a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__isSymlink", "(path: Path): bool", "Check if path is a symlink", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__mkdir", "(path: Path): bool", "Create directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__readDir", "(path: Path): Array<string>?", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__readFile", "(path: Path): string?", "Read entire file as string", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__readFileBytes", "(path: Path): Array<u8>?", "Read entire file as byte array", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__readStdin", "(): string?", "Read all data from standard input", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__readStdinBytes", "(): Array<u8>?", "Read all standard input as binary bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__realpath", "(path: Path): string?", "Resolve to absolute path (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__rmdir", "(path: Path): bool", "Remove an empty directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -222,7 +213,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_IO_FUNCTION_COUNT 31
+#define GEN_IO_FUNCTION_COUNT 22
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {
@@ -385,7 +376,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__setenv", "(name: string, value: string): bool", "Set environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__unsetenv", "(name: string): bool", "Unset environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__environBlock", "(): Array<string>", "Host environment block as raw NAME=VALUE entries", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__exit", "(code?: i64): ()", "Exit process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__exit", "(code: i64): ()", "Exit process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__getpid", "(): i64", "Get process ID", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__getcwd", "(): string", "Get current working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
@@ -395,7 +386,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__gid", "(): i64", "Get group ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cpuCount", "(): i64", "Get number of CPU cores", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__ppid", "(): i64", "Get parent process ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__kill", "(pid: i64, signal?: i64): bool", "Send signal to process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__kill", "(pid: i64, signal: i64): bool", "Send signal to process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__totalMemory", "(): i64", "Get total system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__freeMemory", "(): i64", "Get available system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__uptime", "(): f64", "Get system uptime in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -403,9 +394,8 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__clock", "(): f64", "Get process CPU time in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__exec", "(cmd: string): __ExecResult?", "Execute shell command", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__spawn", "(program: string, args: Array<string>): __ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_OS_FUNCTION_COUNT 25
+#define GEN_OS_FUNCTION_COUNT 24
 
 static const XaBuiltinClass g_gen_regex_classes[] = {
     {"Regex", true},

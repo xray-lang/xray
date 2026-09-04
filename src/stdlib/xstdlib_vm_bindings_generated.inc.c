@@ -95,8 +95,6 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT(module, isolate, "__cwd", io_cwd);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__exists", io_exists);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__fileClose", io_fileClose);
     expected_count++;
     XRS_EXPORT(module, isolate, "__fileFlush", io_fileFlush);
@@ -111,25 +109,9 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__fileWriteStr", io_fileWriteStr);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__fileSize", io_fileSize);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__isDir", io_isDir);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__isFile", io_isFile);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__isSymlink", io_isSymlink);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__mkdir", io_mkdir);
     expected_count++;
     XRS_EXPORT(module, isolate, "__readDir", io_readDir);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__readFile", io_readFile);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__readFileBytes", io_readFileBytes);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__readStdin", io_readStdin);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__readStdinBytes", io_readStdinBytes);
     expected_count++;
     XRS_EXPORT(module, isolate, "__readlink", io_readlink);
     expected_count++;
@@ -387,8 +369,6 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT_YIELDABLE(module, isolate, "__sleep", os_sleep);
     expected_count++;
     XRS_EXPORT(module, isolate, "__exec", os_exec);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__spawn", os_spawn);
     expected_count++;
     return module->export_count == expected_count;
 }
