@@ -69,6 +69,12 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
         re.compile(r"\bsys\.sleepMs\s*\("),
     ),
     RemovedForm(
+        "OS_SLEEP_CALL",
+        "os.sleep(...) removed; use coroutine-friendly time.sleep(...) delays",
+        "293",
+        re.compile(r"\bos\.sleep\s*\("),
+    ),
+    RemovedForm(
         "SYS_CPU_COUNT_CALL",
         "sys.cpuCount() removed; use the canonical os.cpuCount() host-topology query",
         "293",

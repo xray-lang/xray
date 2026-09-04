@@ -22,7 +22,6 @@
 #include "xvm_dispatch_helpers.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../os/os_time.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
@@ -100,22 +99,21 @@ static XrDispatchAction vm_sleep_impl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
     }
 
     XrCoroutine *coro = vm_get_coro(vm_ctx);
-    if (coro) {
-        vm_suspend_continue_from_next(frame, pc);
-        XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);
-        if (sleep_result.kind == XR_CORO_BLOCK_BLOCKED) {
-            return XR_DISP_BLOCKED;
-        }
-        if (sleep_result.kind == XR_CORO_BLOCK_ERROR) {
-            VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "sleep: out of memory");
-        }
-        if (sleep_result.kind != XR_CORO_BLOCK_NO_CORO) {
-            return XR_DISP_NEXT;
-        }
+    if (!coro) {
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "sleep: coroutine context required");
     }
-
-    xr_time_sleep_ms((uint64_t) milliseconds);
-    return XR_DISP_NEXT;
+    vm_suspend_continue_from_next(frame, pc);
+    XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);
+    if (sleep_result.kind == XR_CORO_BLOCK_BLOCKED) {
+        return XR_DISP_BLOCKED;
+    }
+    if (sleep_result.kind == XR_CORO_BLOCK_ERROR) {
+        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "sleep: out of memory");
+    }
+    if (sleep_result.kind == XR_CORO_BLOCK_READY) {
+        return XR_DISP_NEXT;
+    }
+    VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "sleep: coroutine timer unavailable");
 }
 
 XR_FUNC XrDispatchAction vm_time_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,

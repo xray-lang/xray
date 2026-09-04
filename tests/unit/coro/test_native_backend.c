@@ -70,6 +70,14 @@ static void native_increment(void *arg) {
         (*value)++;
 }
 
+TEST(time_sleep_duration_policy_is_backend_neutral) {
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(INT64_MIN), 0);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(0), 0);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(1), 1);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(XR_TIME_SLEEP_MAX_MS), XR_TIME_SLEEP_MAX_MS);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(INT64_MAX), XR_TIME_SLEEP_MAX_MS);
+}
+
 typedef struct NativeYieldableFixture {
     int entries;
     int destroys;
@@ -1833,6 +1841,7 @@ TEST(parallel_reduce_state_agg_runs_range_reducer) {
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Native Coroutine Backend");
+RUN_TEST(time_sleep_duration_policy_is_backend_neutral);
 RUN_TEST(native_coroutine_uses_native_backend_without_vm_state);
 RUN_TEST(native_yieldable_coroutine_uses_backend_neutral_continuation_contract);
 RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);

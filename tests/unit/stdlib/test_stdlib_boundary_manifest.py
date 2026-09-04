@@ -247,6 +247,24 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertNotIn("xrt_os_kill(XrValue", aot)
         self.assertIn("if (count > 0) { return count }", source)
 
+    def test_time_sleep_has_one_coroutine_timer_contract(self) -> None:
+        time_source = (ROOT / "stdlib/time/time.xr").read_text(encoding="utf-8")
+        time_provider = (ROOT / "stdlib/time/time.c").read_text(encoding="utf-8")
+        vm = (ROOT / "src/vm/xvm_chan_ops.c").read_text(encoding="utf-8")
+        aot = (ROOT / "src/coro/xaot_runtime.c").read_text(encoding="utf-8")
+        block = (ROOT / "src/coro/xblock_core.c").read_text(encoding="utf-8")
+        block_header = (ROOT / "src/coro/xblock.h").read_text(encoding="utf-8")
+
+        self.assertIn("export fn sleep(ms: i64)", time_source)
+        self.assertIn("if (ms <= 0) { return }", time_source)
+        self.assertIn("ms > 86400000 ? 86400000 : ms", time_source)
+        self.assertIn("#define XR_TIME_SLEEP_MAX_MS INT64_C(86400000)", block_header)
+        self.assertIn("milliseconds = xr_time_sleep_normalize_ms(milliseconds);", block)
+        self.assertIn("ms = xr_time_sleep_normalize_ms(ms);", time_provider)
+        self.assertIn("XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);", vm)
+        self.assertIn("XrCoroBlockResult block = xr_coro_sleep(ctx->coro, milliseconds);", aot)
+        self.assertNotIn("xr_time_sleep_ms", vm)
+
     def test_io_directory_policy_is_source_owned(self) -> None:
         source = (ROOT / "stdlib/io/io.xr").read_text(encoding="utf-8")
         definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
