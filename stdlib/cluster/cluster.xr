@@ -172,6 +172,10 @@ const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
 const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
 const _runtimeNextToken: Atomic<i64> = Atomic<i64>(0)
 const _runtimeActiveToken: Atomic<i64> = Atomic<i64>(0)
+// Serializes source generation retirement with the non-suspending node-down
+// notification leaf. This closes the check/call window without moving active
+// generation or notification policy into the provider.
+const _runtimeDecisionLock: Atomic<bool> = Atomic<bool>(false)
 // The protected section only copies or swaps one small record and never
 // suspends, so a lock-free flag preserves the synchronous public query surface
 // without exposing ordinary mutable module state across worker coroutines.
@@ -183,6 +187,36 @@ fn _lockSourceState() {
         var (_, acquired) = _sourceStateLock.compareExchange(false, true)
         if (acquired) { return }
     }
+}
+
+fn _lockRuntimeDecision() {
+    while (true) {
+        var (_, acquired) = _runtimeDecisionLock.compareExchange(false, true)
+        if (acquired) { return }
+    }
+}
+
+fn _retireRuntimeGeneration(token: i64) -> bool {
+    _lockRuntimeDecision()
+    if (_runtimeActiveToken.load() != token) {
+        _runtimeDecisionLock.store(false)
+        return false
+    }
+    _runtimeActiveToken.store(0)
+    _runtimeDecisionLock.store(false)
+    return true
+}
+
+fn _retireCurrentRuntimeGeneration() {
+    _lockRuntimeDecision()
+    _runtimeActiveToken.store(0)
+    _runtimeDecisionLock.store(false)
+}
+
+fn _notifyNodeDownIfCurrent(token: i64, name: string) {
+    _lockRuntimeDecision()
+    if (_runtimeActiveToken.load() == token) { __notifyNodeDown(name) }
+    _runtimeDecisionLock.store(false)
 }
 
 fn _sourceStateSnapshot() -> _ClusterSourceState? {
@@ -536,9 +570,7 @@ fn _disconnectPeer(peerGeneration: i64) {
     var token = _runtimeActiveToken.load()
     if (token == 0) { return }
     var name = __detachPeer(peerGeneration)
-    if (name != null && _runtimeActiveToken.load() == token) {
-        __notifyNodeDown(name!)
-    }
+    if (name != null) { _notifyNodeDownIfCurrent(token, name!) }
 }
 
 fn _enqueueControlFrame(peerGeneration: i64, wire: Array<u8>) {
@@ -1086,8 +1118,7 @@ fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: stri
 }
 
 fn _stopFailedHealthGeneration(token: i64) {
-    var (_, active) = _runtimeActiveToken.compareExchange(token, 0)
-    if (!active) { return }
+    if (!_retireRuntimeGeneration(token)) { return }
     __stop()
     _clearSourceState()
 }
@@ -1156,7 +1187,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
         return true
     }
     if (!__trackListener(listener)) {
-        _runtimeActiveToken.store(0)
+        _retireRuntimeGeneration(token)
         net.close(listener)
         __stop()
         _clearSourceState()
@@ -1731,7 +1762,7 @@ export fn join(addr: string) -> bool {
 
 export fn stop() {
     _discoveryActiveToken.store(0)
-    _runtimeActiveToken.store(0)
+    _retireCurrentRuntimeGeneration()
     _clearSourceState()
     __stop()
 }

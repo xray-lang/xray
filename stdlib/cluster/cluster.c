@@ -42,6 +42,11 @@
 
 static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc);
 
+/* Peer generations cross isolate-local cluster restarts. A retiring transport
+ * continuation therefore cannot address a replacement peer through a reused
+ * numeric token. Zero permanently marks process-lifetime exhaustion. */
+static _Atomic(uint64_t) cluster_next_peer_generation = 1;
+
 static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(true);
@@ -294,8 +299,16 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
     node->state = XR_NODE_CONNECTED;
     node->flags = (uint32_t) flags;
     node->last_heartbeat_recv = (int64_t) xr_time_monotonic_ms();
-    node->generation_token =
-        atomic_fetch_add_explicit(&cluster->next_peer_generation, 1, memory_order_relaxed);
+    uint64_t next_generation =
+        atomic_load_explicit(&cluster_next_peer_generation, memory_order_relaxed);
+    while (next_generation != 0) {
+        uint64_t next = next_generation == UINT64_MAX ? 0 : next_generation + 1;
+        if (atomic_compare_exchange_weak_explicit(&cluster_next_peer_generation, &next_generation,
+                                                  next, memory_order_relaxed,
+                                                  memory_order_relaxed))
+            break;
+    }
+    node->generation_token = next_generation;
     if (node->generation_token == 0) {
         cluster_node_shutdown(node);
         cluster_node_release(node);
@@ -382,7 +395,6 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
     if (!cluster)
         return xr_bool(false);
     atomic_store(&cluster->ref_count, 1);
-    atomic_store(&cluster->next_peer_generation, 1);
     cluster->isolate = X;
     xr_amutex_init(&cluster->nodes_lock);
 

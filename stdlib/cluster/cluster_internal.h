@@ -113,7 +113,6 @@ XrCFuncResult cluster_peer_write_fn(struct XrVMRuntime *isolate, XrValue *args, 
 
 typedef struct XrCluster {
     _Atomic(uint32_t) ref_count;
-    _Atomic(uint64_t) next_peer_generation;
     struct XrVMRuntime *isolate;
     struct XrNetListener *listener; /* borrowed while the source accept loop owns it */
 
