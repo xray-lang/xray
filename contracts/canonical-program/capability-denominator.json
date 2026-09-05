@@ -1,0 +1,1178 @@
+{
+  "schema": "xray-canonical-capability-denominator/1",
+  "architecture_task": 293,
+  "coordination_task": 304,
+  "rule": "A declared core capability closes only after one real source build reaches the canonical producer, bounded verifier, independent reference, VM-private executor, AOT-private executor, and retained product route with the required observations. Shared rejection of a valid declared capability is not parity.",
+  "required_layers": [
+    "source_owner",
+    "producer",
+    "verifier",
+    "reference",
+    "vm",
+    "aot",
+    "product"
+  ],
+  "layer_states": [
+    "OPEN",
+    "CURRENT_ROUTE_ONLY",
+    "PARTIAL_CANONICAL",
+    "PASS"
+  ],
+  "observation_axes": [
+    "value",
+    "stdout",
+    "typed-error",
+    "panic",
+    "cleanup",
+    "provider-effect",
+    "allowed-trace",
+    "diagnostic"
+  ],
+  "profiles": [
+    {
+      "id": "core-local-x86_64-windows-msvc",
+      "kind": "native-execution",
+      "required_for_293": true,
+      "status": "NOT_QUALIFIED",
+      "evidence_anchors": [
+        "src/aot/xaot_link.c",
+        "tests/aot/run_portable_c11_msvc_regressions.py"
+      ]
+    },
+    {
+      "id": "canonical-foreign-profile-fixtures",
+      "kind": "semantic-and-refusal-fixture",
+      "required_for_293": true,
+      "status": "PARTIAL",
+      "evidence_anchors": [
+        "tests/unit/plan/test_target_profile.c",
+        "tests/unit/execution/test_xr_execution.c"
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "id": "runtime-deterministic-test-provider",
+      "kind": "runtime-provider-contract",
+      "required_for_293": true,
+      "status": "PARTIAL",
+      "evidence_anchors": [
+        "tests/unit/execution/test_xr_execution.c",
+        "contracts/canonical-program/execution-binding-coverage.json"
+      ]
+    },
+    {
+      "id": "runtime-host-core-provider-set",
+      "kind": "runtime-provider-contract",
+      "required_for_293": true,
+      "status": "OPEN",
+      "evidence_anchors": [
+        "src/runtime/abi/xr_runtime_contract.c",
+        "contracts/canonical-program/w7-wave5-contract-freeze.json"
+      ]
+    },
+    {
+      "id": "aot-msvc",
+      "kind": "aot-toolchain-provider",
+      "required_for_293": true,
+      "status": "NOT_QUALIFIED",
+      "evidence_anchors": [
+        "tests/aot/run_portable_c11_msvc_regressions.py",
+        "tests/aot/run_freestanding_provider_abi_test.py"
+      ]
+    },
+    {
+      "id": "aot-zig",
+      "kind": "aot-toolchain-provider",
+      "required_for_293": true,
+      "status": "NOT_QUALIFIED",
+      "evidence_anchors": [
+        "tests/aot/run_aot_bundled_zig_smoke.py",
+        "tests/aot/run_freestanding_provider_abi_test.py"
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "scalar-integer-bool-control",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md",
+        "spec/source/sections/005-4-statements.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/basic/arith.xr",
+        "tests/diff/cases/basic/loops.xr"
+      ],
+      "required_observations": [
+        "value",
+        "stdout",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "xrproto-and-chunk",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "The canonical island covers i64/bool/control atoms but not the declared scalar-width and product surface."
+    },
+    {
+      "id": "floating-point-and-fixed-width-numeric",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr",
+        "tests/diff/cases/semantics/types/fixed_width_type_tests.xr"
+      ],
+      "required_observations": [
+        "value",
+        "stdout",
+        "panic",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "xrproto-and-chunk",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "General FP, exact-width integers, conversion, overflow, and formatting are outside the current canonical operation set."
+    },
+    {
+      "id": "string-rune-interpolation",
+      "spec_anchors": [
+        "spec/source/sections/004-3-expressions.md",
+        "spec/source/sections/015-14-built-in-type-methods.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/basic/strings.xr",
+        "tests/diff/cases/semantics/string/interpolation_display_shapes.xr"
+      ],
+      "required_observations": [
+        "value",
+        "stdout",
+        "panic",
+        "cleanup"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "xrproto-and-chunk",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Managed string/rune values, interpolation ordering, methods, and cleanup do not yet have canonical end-to-end coverage."
+    },
+    {
+      "id": "nullable-union-cast-and-narrowing",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md",
+        "spec/source/sections/004-3-expressions.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/nullable_scalar_target.xr",
+        "tests/diff/cases/semantics/narrowing/narrowed_types_reach_codegen.xr"
+      ],
+      "required_observations": [
+        "value",
+        "panic",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Flow facts and runtime nullable/union representation are still owned by legacy paths."
+    },
+    {
+      "id": "array-slice-fixed-array-range-iteration",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md",
+        "spec/source/sections/004-3-expressions.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/basic/arrays.xr",
+        "tests/diff/cases/semantics/collections/range_iterator_shared_core.xr",
+        "tests/diff/cases/semantics/slice/slice_single_source_return.xr"
+      ],
+      "required_observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Container values, views, indices, iteration, panic bounds, and loans are not represented by the current canonical subset."
+    },
+    {
+      "id": "map-set-object-json",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md",
+        "spec/source/sections/004-3-expressions.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/collections/map_set_derived_key_fields.xr",
+        "tests/diff/cases/semantics/json/object_json_codec_bridge.xr"
+      ],
+      "required_observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Hash/equality, structural objects, JSON value identity, and managed container cleanup lack a canonical full chain."
+    },
+    {
+      "id": "tuple-struct-value-aggregate",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md",
+        "spec/source/sections/006-5-declarations.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/match/struct_destructure.xr",
+        "tests/diff/cases/semantics/value_struct_param_copy.xr"
+      ],
+      "required_observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Canonical aggregate atoms exist, but tuple/struct declaration, nontrivial fields, destructuring, and product execution remain open."
+    },
+    {
+      "id": "enum-variant-pattern",
+      "spec_anchors": [
+        "spec/source/sections/006-5-declarations.md",
+        "spec/source/sections/007-6-patterns.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/match/adt_enum_payload_tostring.xr",
+        "tests/diff/cases/semantics/unit_enum_return_value.xr"
+      ],
+      "required_observations": [
+        "value",
+        "panic",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Variant atoms exist, but all declared patterns, guards, exhaustiveness, enum APIs, and product entry evidence are not closed."
+    },
+    {
+      "id": "class-construction-field-static-instance",
+      "spec_anchors": [
+        "spec/source/sections/006-5-declarations.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/final_class_instance_method_call.xr",
+        "tests/compile_errors/oop/019_class_literal_unknown_field.xr"
+      ],
+      "required_observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "typed-program-and-program-semantic-closure",
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Imported classes, constructors, fields, static/instance calls, inheritance, and object lifetime are not canonical product capabilities."
+    },
+    {
+      "id": "interface-existential-witness",
+      "spec_anchors": [
+        "spec/source/sections/006-5-declarations.md",
+        "spec/source/sections/010-9-generics.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/generic_iterable_constraint.xr",
+        "tests/diff/cases/semantics/collections/for_in_interface_iterator.xr"
+      ],
+      "required_observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Wave 4 covers a bounded existential/witness slice, not all declared constraints, values, ownership modes, or product routes."
+    },
+    {
+      "id": "module-graph-import-export-init",
+      "spec_anchors": [
+        "spec/source/sections/012-11-modules.md"
+      ],
+      "source_test_anchors": [
+        "tests/vm/source_multimodule_session.xr",
+        "tests/vm/bytecode_build_multimodule.xr",
+        "tests/compile_errors/module/circular_dependency.xr"
+      ],
+      "required_observations": [
+        "value",
+        "stdout",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "typed-program-and-program-semantic-closure",
+        "semantic-plan",
+        "target-plan",
+        "xrproto-and-chunk"
+      ],
+      "layers": {
+        "source_owner": "OPEN",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "There is no application-neutral owner that retains and links the complete analyzed module set into one validated program."
+    },
+    {
+      "id": "direct-imported-static-instance-call",
+      "spec_anchors": [
+        "spec/source/sections/004-3-expressions.md",
+        "spec/source/sections/006-5-declarations.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/functions/string_result_direct_call.xr",
+        "tests/diff/cases/semantics/stdlib/sys_thread_const_function_value.xr"
+      ],
+      "required_observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "typed-program-and-program-semantic-closure",
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Sealed direct call atoms exist, but the full module-export-class-static-instance chain and fallible calls are not closed."
+    },
+    {
+      "id": "callable-closure-capture",
+      "spec_anchors": [
+        "spec/source/sections/004-3-expressions.md",
+        "spec/source/sections/008-7-scoping-and-name-resolution.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/functions/higher_order_closures.xr",
+        "tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr"
+      ],
+      "required_observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "A bounded callable.pack slice exists; transitive/mutable/generic captures and ownership-safe product execution remain open."
+    },
+    {
+      "id": "generic-monomorphization",
+      "spec_anchors": [
+        "spec/source/sections/010-9-generics.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/generic_container_type_args.xr",
+        "tests/diff/cases/semantics/value_struct_generic_literal.xr",
+        "tests/compile_errors/generics/e0388_mono_breadth_budget.xr"
+      ],
+      "required_observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "typed-program-and-program-semantic-closure",
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "OPEN",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Generic instance reachability, exact identity, budgets, closure, and canonical product emission are not owned by one source build."
+    },
+    {
+      "id": "ownership-read-ref-move-copy-drop",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md",
+        "spec/source/sections/017-16-runtime-model.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/ownership/converged_capability_positive.xr",
+        "tests/diff/cases/semantics/ownership/copy_deep_independent.xr",
+        "tests/fixtures/task284_ownership_negative/ref_suspend.xr"
+      ],
+      "required_observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Core move/copy/drop/place atoms are bounded foundations; borrows, aliases, nontrivial values, edge cleanup, and execution boundaries remain open."
+    },
+    {
+      "id": "typed-error-throw-try-catch",
+      "spec_anchors": [
+        "spec/source/sections/009-8-error-handling.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/exception/try_catch.xr",
+        "tests/diff/cases/semantics/exception/uncaught_top_level_error.xr"
+      ],
+      "required_observations": [
+        "typed-error",
+        "stdout",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Canonical error publication/invoke atoms do not yet cover full catch/rethrow, module, coroutine, and product behavior."
+    },
+    {
+      "id": "panic-trap-catch",
+      "spec_anchors": [
+        "spec/source/sections/009-8-error-handling.md",
+        "spec/source/sections/017-16-runtime-model.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/exception/catch_panic.xr",
+        "tests/diff/cases/semantics/exception/panic_exception_shape.xr"
+      ],
+      "required_observations": [
+        "panic",
+        "stdout",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Panic publication is bounded; catch, fault shapes, unwind, top-level reporting, and product parity remain open."
+    },
+    {
+      "id": "defer-cleanup-resource-lifetime",
+      "spec_anchors": [
+        "spec/source/sections/009-8-error-handling.md",
+        "spec/source/sections/017-16-runtime-model.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/cleanup/resource_release_order.xr",
+        "tests/diff/cases/semantics/cleanup/defer_async_await.xr",
+        "tests/diff/cases/semantics/cleanup/defer_panic_unwind.xr"
+      ],
+      "required_observations": [
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Implicit cleanup, LIFO defer, normal/error/panic/cancel exits, finalizers, and provider resource release need one shared logical contract."
+    },
+    {
+      "id": "generator-value-yield",
+      "spec_anchors": [
+        "spec/source/sections/004-3-expressions.md"
+      ],
+      "source_test_anchors": [
+        "tests/diff/cases/semantics/generator/value_yield.xr",
+        "tests/diff/cases/semantics/generator/early_stop.xr"
+      ],
+      "required_observations": [
+        "value",
+        "typed-error",
+        "cleanup",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Generator yield is distinct from scheduler yield and has no complete canonical state/abandonment/error path."
+    },
+    {
+      "id": "coroutine-go-await-task",
+      "spec_anchors": [
+        "spec/source/sections/011-10-concurrency-and-coroutines.md"
+      ],
+      "source_test_anchors": [
+        "tests/concurrency_litmus/mp_task_await.xr",
+        "tests/diff/cases/semantics/cleanup/defer_coroutine.xr"
+      ],
+      "required_observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-deterministic-test-provider",
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Logical states, safepoints, cross-module suspendability, continuations, results, panic/error propagation, and cancellation remain open."
+    },
+    {
+      "id": "channel-select-scope-cancel",
+      "spec_anchors": [
+        "spec/source/sections/011-10-concurrency-and-coroutines.md"
+      ],
+      "source_test_anchors": [
+        "tests/concurrency_litmus/mp_channel.xr",
+        "tests/diff/cases/liveness/cancel_responsive_blocking.xr",
+        "tests/diff/cases/limits/select_cases_over_32.xr"
+      ],
+      "required_observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Channel/select/scope/cancel behavior and allowed-trace observation are not canonical program capabilities."
+    },
+    {
+      "id": "atomic-sync-memory-model",
+      "spec_anchors": [
+        "spec/source/sections/011-10-concurrency-and-coroutines.md",
+        "spec/source/sections/017-16-runtime-model.md"
+      ],
+      "source_test_anchors": [
+        "tests/concurrency_litmus/mp_atomic_flag.xr",
+        "tests/coroutine_safety/12_atomic_counter.xr"
+      ],
+      "required_observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Ordering, synchronization edges, shared promotion, race constraints, and executor refinement are not represented in the canonical chain."
+    },
+    {
+      "id": "builtin-method-native-provider-call",
+      "spec_anchors": [
+        "spec/source/sections/014-13-built-in-functions.md",
+        "spec/source/sections/015-14-built-in-type-methods.md"
+      ],
+      "source_test_anchors": [
+        "tests/builtin_probes/array.xr",
+        "tests/builtin_probes/task.xr",
+        "tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr"
+      ],
+      "required_observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-deterministic-test-provider",
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "runtime-target-profile-and-abi",
+        "semantic-plan",
+        "target-plan",
+        "vm-opcode-dispatch",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Provider requirements and instance admission exist, but canonical provider-call execution and the declared builtin/method surface are not closed."
+    },
+    {
+      "id": "ffi-c-boundary-and-callback",
+      "spec_anchors": [
+        "spec/source/sections/003-2-type-system.md",
+        "spec/source/sections/006-5-declarations.md"
+      ],
+      "source_test_anchors": [
+        "tests/ffi/run_c_export_smoke.py",
+        "tests/ffi/run_extern_layout_probe.py",
+        "tests/compile_errors/ffi/001_extern_call_requires_unsafe.xr"
+      ],
+      "required_observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set",
+        "aot-msvc",
+        "aot-zig"
+      ],
+      "legacy_owner_ids": [
+        "runtime-target-profile-and-abi",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Boundary types, extern/import/export calls, callbacks, ownership, unsafe checks, and provider effects need exact canonical metadata and parity evidence."
+    },
+    {
+      "id": "target-profile-query",
+      "spec_anchors": [
+        "spec/source/sections/018-17-compilation-pipeline.md"
+      ],
+      "source_test_anchors": [
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/plan/test_target_profile.c"
+      ],
+      "required_observations": [
+        "value",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc",
+        "canonical-foreign-profile-fixtures"
+      ],
+      "required_providers": [],
+      "legacy_owner_ids": [
+        "runtime-target-profile-and-abi",
+        "target-plan"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "The bounded target-query slice passes in canonical tests, but shared source owner, product route, and final local/foreign qualification remain open."
+    },
+    {
+      "id": "regex-literal-and-runtime-semantics",
+      "spec_anchors": [
+        "spec/source/sections/002-1-lexical-structure.md",
+        "spec/source/sections/015-14-built-in-type-methods.md"
+      ],
+      "source_test_anchors": [
+        "tests/builtin_probes/regex.xr",
+        "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr"
+      ],
+      "required_observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan",
+        "aot-semantic-fallbacks"
+      ],
+      "layers": {
+        "source_owner": "CURRENT_ROUTE_ONLY",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Declared literal validation, flags, error timing, immutable plan identity, and runtime behavior are not a canonical vertical slice; optional matcher optimizations are excluded."
+    },
+    {
+      "id": "test-entry-assertion-async",
+      "spec_anchors": [
+        "spec/source/sections/013-12-testing.md"
+      ],
+      "source_test_anchors": [
+        "tests/test_harness/single_pass.xr",
+        "tests/test_harness/mixed_pass_fail.xr"
+      ],
+      "required_observations": [
+        "value",
+        "stdout",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "required_profiles": [
+        "core-local-x86_64-windows-msvc"
+      ],
+      "required_providers": [
+        "runtime-host-core-provider-set"
+      ],
+      "legacy_owner_ids": [
+        "vm-loader-and-embed-api",
+        "xrproto-and-chunk",
+        "legacy-runtime-xrprogram"
+      ],
+      "layers": {
+        "source_owner": "OPEN",
+        "producer": "OPEN",
+        "verifier": "OPEN",
+        "reference": "OPEN",
+        "vm": "OPEN",
+        "aot": "OPEN",
+        "product": "CURRENT_ROUTE_ONLY"
+      },
+      "state": "OPEN",
+      "open_reason": "Test discovery may remain tooling metadata, but each sync/async case still executes through legacy compilation rather than the shared validated program owner."
+    }
+  ],
+  "excluded_from_293_core": [
+    {
+      "id": "stdlib-full-self-hosting-and-real-network-scenarios",
+      "owner_task": 292,
+      "reason": "General compiler/runtime gaps feed this denominator, while complete .xr ownership and TLS/multicast/multi-node scenarios have an independent exit gate."
+    },
+    {
+      "id": "persistent-incremental-cache-and-scale",
+      "owner_task": 305,
+      "reason": "Identity safety remains core; persistent fine-grained caching and 1k/10k scale qualification do not block the first canonical product cutover."
+    },
+    {
+      "id": "advanced-deployment-and-release",
+      "owner_task": 306,
+      "reason": "Hybrid, hot reload, remote/cross/install/package, multi-platform release, and future format compatibility are separately qualified."
+    },
+    {
+      "id": "new-language-surface-proposals",
+      "owner_task": 287,
+      "reason": "Unaccepted future syntax cannot expand or shrink this denominator implicitly."
+    },
+    {
+      "id": "optional-regex-optimizer-families",
+      "owner_task": 288,
+      "reason": "Prefix, OnePass, DFA, and hot matcher specialization are optimizations; declared regex semantics remain in the core denominator."
+    }
+  ]
+}

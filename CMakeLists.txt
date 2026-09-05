@@ -317,6 +317,8 @@ set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contra
 set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contracts.py)
 set(PROGRAMAOTCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_contracts.py)
 set(PROGRAMSOURCECONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_source_contracts.py)
+set(CANONICALCUTOVERMANIFESTCHECK
+    ${CMAKE_SOURCE_DIR}/scripts/check_canonical_cutover_manifests.py)
 set(PROGRAMWAVE3CLOSURECHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave3_closure.py)
 set(PROGRAMWAVE4CONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_contract.py)
 set(PROGRAMWAVE4EXITCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_exit.py)
@@ -706,6 +708,20 @@ add_custom_target(check-xr-program-source-contracts
             ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_pipeline.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
     COMMENT "Checking the source-to-XrProgram authority boundary"
+    VERBATIM
+)
+
+# Task 304 freezes the full declared-language denominator separately from the
+# atomic CoreSpec operation registry and records every retained product route
+# and legacy deletion node. This is governance-only and is not runtime input.
+add_custom_target(check-canonical-cutover-manifests
+    COMMAND ${XRAY_PYTHON} ${CANONICALCUTOVERMANIFESTCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${CANONICALCUTOVERMANIFESTCHECK}
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/capability-denominator.json
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/product-cutover-manifest.json
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/legacy-owner-migration.json
+    COMMENT "Checking the canonical capability denominator and product cutover inventory"
     VERBATIM
 )
 
@@ -4925,6 +4941,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(canonical_program_contracts_self_test PROPERTIES
         LABELS "meta;contracts;freeze;canonical-program;task-294"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME canonical_cutover_manifests
+        COMMAND ${XRAY_PYTHON} ${CANONICALCUTOVERMANIFESTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(canonical_cutover_manifests PROPERTIES
+        LABELS "meta;contracts;canonical-program;task-304"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME canonical_cutover_manifests_self_test
+        COMMAND ${XRAY_PYTHON} ${CANONICALCUTOVERMANIFESTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(canonical_cutover_manifests_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;mutation;task-304"
         PROCESSORS 1
         TIMEOUT 30
     )

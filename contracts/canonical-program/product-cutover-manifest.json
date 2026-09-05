@@ -1,0 +1,477 @@
+{
+  "schema": "xray-canonical-product-cutover/1",
+  "architecture_task": 293,
+  "cutover_task": 302,
+  "rule": "Every retained product route must consume the same shared source-build owner and one validated XrProgram. Final cutover is one fail-closed reachability change: no compatibility reader, hidden flag, shadow executor, or capability fallback remains.",
+  "required_route_ids": [
+    "cli-run-source",
+    "cli-test-source",
+    "cli-build-native",
+    "cli-emit-c",
+    "public-source-embed",
+    "runtime-only-program-embed"
+  ],
+  "routes": [
+    {
+      "id": "cli-run-source",
+      "public_surface": "xray run SOURCE",
+      "current_owner_anchors": [
+        "src/app/cli/xcmd_run.c",
+        "src/api/xisolate_scripting.c"
+      ],
+      "target_contract": "source request -> shared source owner -> validated XrProgram -> exact profile/providers -> VM-private code -> XrInstance",
+      "required_capability_scope": "all capability-denominator rows",
+      "legacy_owner_ids": [
+        "vm-loader-and-embed-api",
+        "xrproto-and-chunk",
+        "semantic-plan",
+        "target-plan"
+      ],
+      "completion_evidence": [],
+      "state": "LEGACY_REACHABLE"
+    },
+    {
+      "id": "cli-test-source",
+      "public_surface": "xray test SOURCE_OR_PROJECT",
+      "current_owner_anchors": [
+        "src/app/cli/xcmd_test.c",
+        "src/api/xisolate_scripting.c"
+      ],
+      "target_contract": "test discovery metadata selects explicit entries; every case uses the shared source owner and the same VM-private execution boundary as run",
+      "required_capability_scope": "all capability-denominator rows plus test-entry-assertion-async",
+      "legacy_owner_ids": [
+        "vm-loader-and-embed-api",
+        "xrproto-and-chunk",
+        "semantic-plan",
+        "target-plan"
+      ],
+      "completion_evidence": [],
+      "state": "LEGACY_REACHABLE"
+    },
+    {
+      "id": "cli-build-native",
+      "public_surface": "xray build SOURCE_OR_PROJECT",
+      "current_owner_anchors": [
+        "src/app/cli/xcmd_build.c",
+        "src/aot/xaot_driver.c"
+      ],
+      "target_contract": "shared source owner -> validated XrProgram + exact profile + backend options -> AOT-private BackendIR -> native artifact; no live instance/provider binding/generation lease",
+      "required_capability_scope": "all capability-denominator rows",
+      "legacy_owner_ids": [
+        "aot-semantic-fallbacks",
+        "aot-module-summary-cache",
+        "semantic-plan",
+        "target-plan",
+        "xsm-artifact",
+        "xtp-artifact"
+      ],
+      "completion_evidence": [],
+      "state": "LEGACY_REACHABLE"
+    },
+    {
+      "id": "cli-emit-c",
+      "public_surface": "xray build --emit-c SOURCE_OR_PROJECT",
+      "current_owner_anchors": [
+        "src/app/cli/xcmd_build.c",
+        "src/aot/xi_cgen.c"
+      ],
+      "target_contract": "the same validated program/profile/backend options as build lower through BackendIR and the terminal generated-C verifier with byte-repeatability evidence",
+      "required_capability_scope": "all capability-denominator rows",
+      "legacy_owner_ids": [
+        "aot-semantic-fallbacks",
+        "semantic-plan",
+        "target-plan"
+      ],
+      "completion_evidence": [],
+      "state": "LEGACY_REACHABLE"
+    },
+    {
+      "id": "public-source-embed",
+      "public_surface": "public dofile/dostring-style source embedding",
+      "current_owner_anchors": [
+        "include/xray.h",
+        "src/api/xisolate_scripting.c"
+      ],
+      "target_contract": "a public source request delegates to the shared source owner and invokes a typed export through XrInstance; no public Proto/chunk/TargetPlan object escapes",
+      "required_capability_scope": "all capability-denominator rows",
+      "legacy_owner_ids": [
+        "vm-loader-and-embed-api",
+        "xrproto-and-chunk",
+        "legacy-runtime-xrprogram"
+      ],
+      "completion_evidence": [],
+      "state": "LEGACY_REACHABLE"
+    },
+    {
+      "id": "runtime-only-program-embed",
+      "public_surface": "runtime-only validated-program load/create-instance/invoke/unload API",
+      "current_owner_anchors": [
+        "include/xray_runtime_api.h",
+        "src/runtime/xr_runtime_api.c"
+      ],
+      "target_contract": "program bytes + exact profile + exact provider bindings -> bounded validation -> XrInstance -> typed export invocation; runtime-only closure links no compiler, AOT, cache, legacy loader, Proto, or TargetPlan",
+      "required_capability_scope": "all executable capability-denominator rows",
+      "legacy_owner_ids": [
+        "legacy-runtime-xrprogram",
+        "vm-loader-and-embed-api",
+        "xtp-artifact",
+        "target-plan"
+      ],
+      "completion_evidence": [],
+      "state": "OPEN"
+    }
+  ],
+  "deletion_nodes": [
+    {
+      "id": "legacy-semantic-plan-product",
+      "legacy_owner_ids": [
+        "semantic-plan"
+      ],
+      "source_anchors": [
+        "src/plan/semantic"
+      ],
+      "symbol_patterns": [
+        "XrSemanticPlan",
+        "xr_semantic_plan_"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-target-plan-product",
+      "legacy_owner_ids": [
+        "target-plan"
+      ],
+      "source_anchors": [
+        "src/plan/target/xr_target_plan.h",
+        "src/plan/target/xr_target_plan.c"
+      ],
+      "symbol_patterns": [
+        "XrTargetPlan",
+        "xr_target_plan_"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-xsm-product",
+      "legacy_owner_ids": [
+        "xsm-artifact"
+      ],
+      "source_anchors": [
+        "src/plan/format/xr_xsm_schema.h",
+        "src/plan/format/xr_xsm_encode.c",
+        "src/plan/format/xr_xsm_decode.c"
+      ],
+      "symbol_patterns": [
+        "xr_xsm_",
+        "XR_XSM"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-xtp-product",
+      "legacy_owner_ids": [
+        "xtp-artifact"
+      ],
+      "source_anchors": [
+        "src/plan/format/xr_xtp_schema.h",
+        "src/plan/format/xr_xtp_encode.c",
+        "src/plan/format/xr_xtp_decode.c",
+        "include/xray_target_plan_load.h"
+      ],
+      "symbol_patterns": [
+        "xr_xtp_",
+        "XR_XTP",
+        "xr_runtime_target_plan_load"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-xrc-bytecode-artifact",
+      "legacy_owner_ids": [
+        "xrc-bytecode-container"
+      ],
+      "source_anchors": [
+        "src/module/xbytecode_compile.c",
+        "src/app/cli/xcmd_build.c"
+      ],
+      "symbol_patterns": [
+        ".xrc",
+        "xr_compile_to_file"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-proto-chunk-public-execution",
+      "legacy_owner_ids": [
+        "xrproto-and-chunk"
+      ],
+      "source_anchors": [
+        "src/module/xproto_codec.h",
+        "src/runtime/value/xchunk.h",
+        "src/api/xisolate_scripting.c"
+      ],
+      "symbol_patterns": [
+        "XrProto",
+        "XChunk",
+        "xr_execute"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-runtime-xrprogram-api",
+      "legacy_owner_ids": [
+        "legacy-runtime-xrprogram"
+      ],
+      "source_anchors": [
+        "include/xray_runtime_api.h",
+        "src/runtime/xr_runtime_api.c"
+      ],
+      "symbol_patterns": [
+        "xr_program_load_target_plan",
+        "xr_program_execute_direct_i64",
+        "xr_program_unload"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-vm-loader-and-source-executor",
+      "legacy_owner_ids": [
+        "vm-loader-and-embed-api"
+      ],
+      "source_anchors": [
+        "src/api/xisolate.c",
+        "src/api/xisolate_scripting.c",
+        "src/runtime/xisolate_api.c"
+      ],
+      "symbol_patterns": [
+        "xr_dofile",
+        "xr_dostring",
+        "xr_execute"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-vm-opcode-semantic-authority",
+      "legacy_owner_ids": [
+        "vm-opcode-dispatch"
+      ],
+      "source_anchors": [
+        "src/vm",
+        "src/runtime/value/xchunk.h"
+      ],
+      "symbol_patterns": [
+        "OP_",
+        "XChunk"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-aot-semantic-inspection",
+      "legacy_owner_ids": [
+        "aot-semantic-fallbacks"
+      ],
+      "source_anchors": [
+        "src/aot/xaot_verify.c",
+        "src/aot/xaot_driver.c",
+        "src/aot/refine/xr_aot_representation_refinement.c"
+      ],
+      "symbol_patterns": [
+        "XrSemanticPlan",
+        "XrTargetPlan",
+        "program_semantic_closure"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-aot-cgen-route",
+      "legacy_owner_ids": [
+        "aot-semantic-fallbacks"
+      ],
+      "source_anchors": [
+        "src/aot/xi_cgen.c",
+        "src/aot/emit_c/xr_c_emission_plan.c"
+      ],
+      "symbol_patterns": [
+        "xi_cgen",
+        "xr_c_emission_plan"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-aot-module-summary-cache",
+      "legacy_owner_ids": [
+        "aot-module-summary-cache"
+      ],
+      "source_anchors": [
+        "src/aot/xaot_module_summary.c",
+        "src/incremental"
+      ],
+      "symbol_patterns": [
+        "xaot_module_summary",
+        "XSM"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-parallel-semantic-closure",
+      "legacy_owner_ids": [
+        "typed-program-and-program-semantic-closure"
+      ],
+      "source_anchors": [
+        "src/frontend/analyzer/xa_typed_program.h",
+        "src/plan/semantic/xr_program_semantic_closure.h",
+        "src/ir/xi_program_semantic_plan.c"
+      ],
+      "symbol_patterns": [
+        "XaTypedProgram",
+        "XrProgramSemanticClosure"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-aot-live-instance-compile-input",
+      "legacy_owner_ids": [
+        "runtime-target-profile-and-abi"
+      ],
+      "source_anchors": [
+        "src/aot/program/xr_backend_ir.c",
+        "src/execution/xr_execution.c"
+      ],
+      "symbol_patterns": [
+        "xr_execution_instance_acquire",
+        "XrExecutionLease"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-scenario-family-admission",
+      "legacy_owner_ids": [
+        "semantic-plan",
+        "target-plan"
+      ],
+      "source_anchors": [
+        "src/plan/semantic/xr_semantic_plan.h",
+        "src/plan/target/xr_target_plan.h"
+      ],
+      "symbol_patterns": [
+        "XR_SEMANTIC_SCENARIO",
+        "XR_TARGET_SCENARIO"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-compatibility-flags-and-shadow-routes",
+      "legacy_owner_ids": [
+        "vm-loader-and-embed-api",
+        "xrc-bytecode-container",
+        "xtp-artifact"
+      ],
+      "source_anchors": [
+        "src/app/cli/xcmd_run.c",
+        "src/app/cli/xcmd_build.c",
+        "src/app/cli/xcmd_test.c"
+      ],
+      "symbol_patterns": [
+        "semantic-plan",
+        "target-plan",
+        ".xrc"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-runtime-generation-debug-identities",
+      "legacy_owner_ids": [
+        "runtime-generation-and-debug"
+      ],
+      "source_anchors": [
+        "src/app/dap",
+        "src/module/xproto_codec.c"
+      ],
+      "symbol_patterns": [
+        "XrProto",
+        "target_plan_fingerprint",
+        "bytecode"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-install-package-cli-selection",
+      "legacy_owner_ids": [
+        "installer-package-and-cli-routes"
+      ],
+      "source_anchors": [
+        "src/app/cli",
+        "src/app/toolchain",
+        "tests/aot"
+      ],
+      "symbol_patterns": [
+        ".xrc",
+        "target-plan",
+        "bytecode"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    },
+    {
+      "id": "legacy-old-shape-wip",
+      "legacy_owner_ids": [
+        "old-shape-wip"
+      ],
+      "source_anchors": [
+        "src/plan/semantic/xr_semantic_array_index_shape.h",
+        "tests/unit/plan/test_target_plan.c"
+      ],
+      "symbol_patterns": [
+        "XrSemanticArrayIndexShape",
+        "XrTargetPlan"
+      ],
+      "final_reachable_count": 0,
+      "evidence": [],
+      "state": "REACHABLE"
+    }
+  ],
+  "cutover_gate": {
+    "all_capabilities_closed": false,
+    "all_routes_canonical_only": false,
+    "all_deletion_nodes_zero": false,
+    "aot_compile_input_pure": false,
+    "runtime_only_embed_closed": false,
+    "matching_source_binary_qualified": false,
+    "state": "BLOCKED"
+  }
+}
