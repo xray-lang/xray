@@ -78,6 +78,9 @@ def read(root: Path, relative: str) -> str:
 def validate(root: Path) -> None:
     header = read(root, "src/program/xr_program_from_xi.h")
     producer = read(root, "src/program/xr_program_from_xi.c")
+    owner_header = read(root, "src/program/xr_program_source_build.h")
+    owner = read(root, "src/program/xr_program_source_build.c")
+    owner_test = read(root, "tests/unit/program/test_xr_program_source_build.c")
     pipeline_header = read(root, "src/ir/xi_pipeline.h")
     pipeline = read(root, "src/ir/xi_pipeline.c")
     test = read(root, "tests/unit/ir/test_xi_pipeline.c")
@@ -90,6 +93,43 @@ def validate(root: Path) -> None:
 
     for token in ("module_roots", "entry_function", "semantic_profile_fingerprint"):
         require(token in header, f"source producer input lacks {token}")
+    for token in (
+        "XrProgramSourceEntryIdentity",
+        "module_identity",
+        "function_name",
+        "source_content_fingerprint",
+        "XrProgramSourceProduct",
+        "XrValidatedProgram *program",
+        "XrProgramSourceDiagnostic",
+    ):
+        require(token in owner_header, f"source owner API lacks {token}")
+    for token in (
+        "xr_module_graph_build",
+        "xa_analyzer_analyze",
+        "xa_mono_pass",
+        "xr_canon_program",
+        "xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer",
+        "xi_pipeline_program_input_config",
+        "xi_resolve_imports",
+        "entry_function = entry",
+        "xr_program_write_from_xi",
+        "xr_program_validate",
+        "xr_program_source_product_free",
+    ):
+        require(token in owner, f"source owner implementation lacks {token}")
+    for forbidden in ("XrProto", "XrTargetPlan", "XrInstance"):
+        require(forbidden not in owner_header and forbidden not in owner,
+                f"source owner regained forbidden product dependency {forbidden}")
+    for token in (
+        "source_owner_single_module_is_deterministic_and_detached",
+        "source_owner_two_module_graph_is_deterministic",
+        "source_owner_rejects_non_authoritative_entry_identity",
+        "source_owner_rejects_module_budget_before_analysis",
+        "source_owner_reports_structured_analysis_failure",
+        "xr_validated_program_bytes",
+        "XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION",
+    ):
+        require(token in owner_test, f"source owner evidence lacks {token}")
     for token in (
         "source_semantic_module_present",
         "XI_STAGE_OPTIMIZED",
@@ -376,11 +416,14 @@ def self_test(root: Path) -> None:
         support = {
             "src/program/xr_program_from_xi.h",
             "src/program/xr_program_from_xi.c",
+            "src/program/xr_program_source_build.h",
+            "src/program/xr_program_source_build.c",
             "src/program/xr_program_verify.c",
             "src/program/xr_reference_evaluator.c",
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",
+            "tests/unit/program/test_xr_program_source_build.c",
             "tests/unit/program/test_xr_program_verify.c",
             "tests/unit/program/xr_program_invoke_fixture.h",
             "tests/unit/program/xr_program_panic_fixture.h",
@@ -460,6 +503,20 @@ def self_test(root: Path) -> None:
             else:
                 raise ContractError(f"{owner} mutation was accepted")
         producer.write_text(original_producer, encoding="utf-8")
+        owner = target / "src/program/xr_program_source_build.c"
+        original_owner = owner.read_text(encoding="utf-8")
+        owner.write_text(
+            original_owner.replace("xr_program_write_from_xi", "removed_program_writer", 1),
+            encoding="utf-8",
+        )
+        try:
+            validate(target)
+        except ContractError as exc:
+            require("xr_program_write_from_xi" in str(exc),
+                    f"source owner mutation reported the wrong invariant: {exc}")
+        else:
+            raise ContractError("source owner without canonical writer was accepted")
+        owner.write_text(original_owner, encoding="utf-8")
 
 
 def main() -> int:

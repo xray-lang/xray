@@ -32,7 +32,7 @@ exist. Native LP64 and explicit foreign ILP32 profiles, resource limits, and gen
 remain covered. Full-language operation families, public embedding ABI, adaptive quickening, and any
 persistent private-code cache remain inactive for later tasks.
 
-anchor-sha256: CMakeLists.txt ca4552209c5c428195208fdfb94d85348468734831896381f96ef11d7e495089
+anchor-sha256: CMakeLists.txt 5f1fa0ef1eefff52eaa31a5873a03cc59bd160805ee09c8f35091d6de501ce0d
 anchor-sha256: xisa/core/registry.json 86a6f14d8971d7217de112cef7147c78b9b2328f7e778530ab9317cd8525555c
 anchor-sha256: src/vm/xr_program_vm.h f378acaffbccb1fd354fe97ee5a5e56ba1e9cd31172f301dcedfece2254257eb
 anchor-sha256: src/vm/xr_program_vm.c 40d4714032983ede92dde1c24f218ffa06cde433d60f8f032437f41e73ab688a

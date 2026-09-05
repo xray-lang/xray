@@ -705,10 +705,13 @@ add_custom_target(check-xr-program-source-contracts
             ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.c
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_source_build.h
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_source_build.c
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
             ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.h
             ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_source_build.c
             ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_pipeline.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
     COMMENT "Checking the source-to-XrProgram authority boundary"
