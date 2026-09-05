@@ -680,7 +680,13 @@ def module_inventory_surface(module: str) -> tuple[str, str, str]:
     return "stdlib-module", "stdlib", module
 
 
-def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
+def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
+    """Collect source-provenanced API rows consumed by stdlib metadata generation.
+
+    Most rows originate in ``stdlib/defs``, but compiler-module schemas are
+    parsed from their Xray semantic source and projected into the same metadata
+    tables.  The entry's ``semantic_source`` therefore remains authoritative.
+    """
     stdlibgen = load_stdlibgen(root)
     (
         entries,
@@ -696,7 +702,10 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
     ) = stdlibgen.parse_def_metadata(root)
     locations = build_def_location_index(root)
 
-    def source_for(kind: str, module: str, name: str) -> tuple[str, int]:
+    def source_for(kind: str, module: str, name: str, entry: Any = None) -> tuple[str, int]:
+        semantic_source = str(getattr(entry, "semantic_source", "") or "")
+        if semantic_source:
+            return semantic_source, int(getattr(entry, "source_line", 0) or 1)
         return locations.get((kind, module, name), ("stdlib/defs/core.def", 1))
 
     out: list[dict[str, Any]] = []
@@ -777,7 +786,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
     for object_shape in object_shapes:
         if object_shape.is_internal:
             continue
-        source, line = source_for("object", object_shape.module, object_shape.name)
+        source, line = source_for("object", object_shape.module, object_shape.name, object_shape)
         category, surface, doc_module = module_inventory_surface(object_shape.module)
         out.append(
             item(
@@ -813,7 +822,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
     for enum in enums:
         if enum.is_internal:
             continue
-        source, line = source_for("enum", enum.module, enum.name)
+        source, line = source_for("enum", enum.module, enum.name, enum)
         category, surface, doc_module = module_inventory_surface(enum.module)
         out.append(
             item(
@@ -1492,14 +1501,14 @@ def compare_api_inventories(
 def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) -> dict[str, Any]:
     builtin_data = load_builtin_dump(root, xray, builtin_dump)
     items: list[dict[str, Any]] = []
-    def_items = collect_def_stdlib(root)
+    metadata_items = collect_stdlib_metadata(root)
     runtime_intrinsic_items = collect_runtime_intrinsic_modules(root)
     source_module_symbols = {
         (entry.get("namespace", ""), entry.get("name", ""))
-        for entry in [*def_items, *runtime_intrinsic_items]
+        for entry in [*metadata_items, *runtime_intrinsic_items]
         if entry.get("category") == "stdlib-module"
     }
-    items.extend(def_items)
+    items.extend(metadata_items)
     items.extend(runtime_intrinsic_items)
     items.extend(
         entry
@@ -1555,7 +1564,7 @@ def check_docs(root: Path, inventory: dict[str, Any]) -> list[str]:
             errors.append(f"missing stdlib knowledge card for source API module `{module}`")
         if docs_dir.exists() and not (docs_dir / f"{module}.md").exists():
             errors.append(f"missing generated stdlib knowledge markdown for `{module}`")
-    errors.extend(check_def_stdlib_source(root, inventory))
+    errors.extend(check_stdlib_metadata_source(root, inventory))
     errors.extend(check_stdlib_builtin_dump_residue(inventory))
     errors.extend(check_language_spec_stdlib_residue(root))
     errors.extend(check_boundary_module_inventory(root, inventory))
@@ -1582,8 +1591,8 @@ def check_boundary_module_inventory(root: Path, inventory: dict[str, Any]) -> li
     ]
 
 
-def check_def_stdlib_source(root: Path, inventory: dict[str, Any]) -> list[str]:
-    """Ensure .def-owned module APIs do not silently fall back to builtin-dump."""
+def check_stdlib_metadata_source(root: Path, inventory: dict[str, Any]) -> list[str]:
+    """Require each generated metadata row to retain its semantic source."""
     actual_by_key = {
         (
             entry.get("category", ""),
@@ -1595,7 +1604,7 @@ def check_def_stdlib_source(root: Path, inventory: dict[str, Any]) -> list[str]:
         for entry in inventory.get("items", [])
     }
     errors: list[str] = []
-    for expected in collect_def_stdlib(root):
+    for expected in collect_stdlib_metadata(root):
         key = (
             expected.get("category", ""),
             expected.get("namespace", ""),
@@ -1606,12 +1615,14 @@ def check_def_stdlib_source(root: Path, inventory: dict[str, Any]) -> list[str]:
         actual = actual_by_key.get(key)
         label = f"{expected.get('namespace')}.{expected.get('name')}"
         if actual is None:
-            errors.append(f".def API symbol missing from source inventory: {label}")
+            errors.append(f"source-backed stdlib API symbol missing from inventory: {label}")
             continue
         source = actual.get("source", "")
-        if not source.startswith("stdlib/defs/"):
+        expected_source = expected.get("source", "")
+        if source != expected_source:
             errors.append(
-                f".def API symbol must use .def source, not {source or '<missing>'}: {label}"
+                "stdlib API symbol must use declared semantic source "
+                f"{expected_source or '<missing>'}, not {source or '<missing>'}: {label}"
             )
     return errors
 

@@ -137,9 +137,8 @@ xr_semantic_type_is_nullable_widening(const XrSemanticTypeRecord *value_type,
 /* Null has no payload to convert. It may cross a call boundary only when the
  * frozen parameter describes a nullable reference representation. Unknown and
  * value types stay unclaimed even if a malformed row carries those flags. */
-static inline bool
-xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecord *operand_type,
-                                    const XrSemanticTypeRecord *parameter_type) {
+static inline bool xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecord *operand_type,
+                                                       const XrSemanticTypeRecord *parameter_type) {
     return operand_type && parameter_type && operand_type->kind == (uint32_t) XR_KIND_NULL &&
            parameter_type->kind != (uint32_t) XR_KIND_UNKNOWN &&
            (parameter_type->flags &
@@ -147,21 +146,125 @@ xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecord *operand_type,
                (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE);
 }
 
+/* Nullable i64/f64/bool values use the tagged carrier for their whole
+ * lifetime: the tag is the optional discriminant and the payload is the scalar.
+ * Consequently the null spelling crosses this boundary without an adapter,
+ * just like null crossing into a nullable reference. Keep this judgement
+ * structural and deliberately narrow. A malformed null row, a non-native
+ * scalar width, rune, pointer, reference-capable or aggregate type is not call
+ * authority. */
+static inline bool
+xr_semantic_null_inhabits_nullable_scalar_parameter(const XrSemanticTypeRecord *operand_type,
+                                                    const XrSemanticTypeRecord *parameter_type) {
+    const uint8_t allowed_parameter_flags = (uint8_t) (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST);
+    XrStableId zero = {{0}};
+    if (!operand_type || !parameter_type || operand_type->kind != (uint32_t) XR_KIND_NULL ||
+        operand_type->builtin_type != XR_TID_NULL ||
+        operand_type->scalar_rep != XR_SCALAR_REP_NONE || operand_type->flags != 0 ||
+        operand_type->child_count != 0 || operand_type->aggregate_extent != 0 ||
+        operand_type->aggregate_align != 0 ||
+        operand_type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(operand_type->source_class_identity, zero) ||
+        operand_type->source_enum_key || operand_type->enum_layout_id != 0 ||
+        operand_type->enum_member_count != 0 || operand_type->enum_flags != 0 ||
+        operand_type->reserved_enum != 0 ||
+        (parameter_type->flags & (uint8_t) ~allowed_parameter_flags) != 0 ||
+        (parameter_type->flags & XR_SEM_TYPE_NULLABLE) == 0 ||
+        parameter_type->builtin_type != XR_TID_NULL || parameter_type->child_count != 0 ||
+        parameter_type->aggregate_extent != 0 || parameter_type->aggregate_align != 0 ||
+        parameter_type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(parameter_type->source_class_identity, zero) ||
+        parameter_type->source_enum_key || parameter_type->enum_layout_id != 0 ||
+        parameter_type->enum_member_count != 0 || parameter_type->enum_flags != 0 ||
+        parameter_type->reserved_enum != 0)
+        return false;
+    switch ((XrTypeKind) parameter_type->kind) {
+        case XR_KIND_INT:
+            return parameter_type->scalar_rep == XR_NATIVE_I64;
+        case XR_KIND_FLOAT:
+            return parameter_type->scalar_rep == XR_NATIVE_F64;
+        case XR_KIND_BOOL:
+            return parameter_type->scalar_rep == XR_SCALAR_REP_NONE;
+        default:
+            return false;
+    }
+}
+
+/* Widening one exact i64/f64/bool payload into its nullable spelling boxes the
+ * scalar into the same tagged carrier used by every nullable scalar value. The
+ * backend already freezes that ordinary call-boundary conversion; semantic
+ * authority only has to prove that nullable is the sole type difference and
+ * that both rows are in the supported scalar family. */
+static inline bool
+xr_semantic_type_is_nullable_scalar_widening(const XrSemanticTypeRecord *operand_type,
+                                             const XrSemanticTypeRecord *parameter_type) {
+    XrStableId zero = {{0}};
+    if (!operand_type || !parameter_type || !operand_type->canonical_key ||
+        !parameter_type->canonical_key || operand_type->kind != parameter_type->kind ||
+        operand_type->scalar_rep != parameter_type->scalar_rep ||
+        operand_type->builtin_type != XR_TID_NULL || parameter_type->builtin_type != XR_TID_NULL ||
+        operand_type->flags != (parameter_type->flags & (uint8_t) ~XR_SEM_TYPE_NULLABLE) ||
+        (operand_type->flags & (uint8_t) ~(XR_SEM_TYPE_CONST)) != 0 ||
+        (parameter_type->flags & XR_SEM_TYPE_NULLABLE) == 0 || operand_type->child_count != 0 ||
+        parameter_type->child_count != 0 || operand_type->aggregate_extent != 0 ||
+        operand_type->aggregate_align != 0 || parameter_type->aggregate_extent != 0 ||
+        parameter_type->aggregate_align != 0 ||
+        operand_type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        parameter_type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(operand_type->source_class_identity, zero) ||
+        !xr_stable_id_equal(parameter_type->source_class_identity, zero) ||
+        operand_type->source_enum_key || parameter_type->source_enum_key ||
+        operand_type->enum_layout_id != 0 || parameter_type->enum_layout_id != 0 ||
+        operand_type->enum_member_count != 0 || parameter_type->enum_member_count != 0 ||
+        operand_type->enum_flags != 0 || parameter_type->enum_flags != 0 ||
+        operand_type->reserved_enum != 0 || parameter_type->reserved_enum != 0)
+        return false;
+    switch ((XrTypeKind) parameter_type->kind) {
+        case XR_KIND_INT:
+            if (parameter_type->scalar_rep != XR_NATIVE_I64)
+                return false;
+            break;
+        case XR_KIND_FLOAT:
+            if (parameter_type->scalar_rep != XR_NATIVE_F64)
+                return false;
+            break;
+        case XR_KIND_BOOL:
+            if (parameter_type->scalar_rep != XR_SCALAR_REP_NONE)
+                return false;
+            break;
+        default:
+            return false;
+    }
+    size_t operand_head = 0;
+    size_t parameter_head = 0;
+    unsigned operand_nullable = 0;
+    unsigned parameter_nullable = 0;
+    const char *operand_tail = xr_semantic_type_key_split_nullable(
+        operand_type->canonical_key, &operand_head, &operand_nullable);
+    const char *parameter_tail = xr_semantic_type_key_split_nullable(
+        parameter_type->canonical_key, &parameter_head, &parameter_nullable);
+    return operand_tail && parameter_tail && operand_nullable == 0u && parameter_nullable == 1u &&
+           operand_head == parameter_head &&
+           strncmp(operand_type->canonical_key, parameter_type->canonical_key, operand_head) == 0 &&
+           strcmp(operand_tail, parameter_tail) == 0;
+}
+
 /* What a declared parameter admits at a callsite that crosses a module edge.
  *
  * The three layers that check this -- the semantic module-set verifier, the
  * target builder, and the target verifier -- must ask one question, because a
  * call the semantic layer admits and the target layer refuses is reported as a
- * missing target authority, which points at the wrong thing entirely.  The two
- * admissions below are the language's own rules, not this pass's inventions:
- * a read-only boundary admits the top-level const spelling, null inhabits a
- * nullable reference, a value widens into a nullable reference, and a union
- * parameter admits each of its members. */
+ * missing target authority, which points at the wrong thing entirely. These
+ * admissions are the language's own rules, not this pass's inventions: a
+ * read-only boundary admits the top-level const spelling, null inhabits a
+ * nullable reference or the exact tagged nullable-scalar family, and a value
+ * widens into the nullable form when the carrier or the explicit scalar
+ * boundary supplies that representation. A union parameter admits anything
+ * admitted by one of its members. */
 static inline bool
-xr_semantic_parameter_type_admits_argument(const XrSemanticPlan *callee,
-                                           const XrSemanticTypeRecord *parameter_type,
-                                           const XrSemanticTypeRecord *operand_type,
-                                           uint8_t parameter_mode) {
+xr_semantic_parameter_leaf_type_admits_argument(const XrSemanticTypeRecord *parameter_type,
+                                                const XrSemanticTypeRecord *operand_type,
+                                                uint8_t parameter_mode) {
     if (!parameter_type || !operand_type)
         return false;
     if (xr_stable_id_equal(operand_type->id, parameter_type->id))
@@ -170,7 +273,20 @@ xr_semantic_parameter_type_admits_argument(const XrSemanticPlan *callee,
         return true;
     if (xr_semantic_null_inhabits_parameter(operand_type, parameter_type))
         return true;
+    if (xr_semantic_null_inhabits_nullable_scalar_parameter(operand_type, parameter_type))
+        return true;
+    if (xr_semantic_type_is_nullable_scalar_widening(operand_type, parameter_type))
+        return true;
     if (xr_semantic_type_is_nullable_widening(operand_type, parameter_type))
+        return true;
+    return false;
+}
+
+static inline bool xr_semantic_parameter_type_admits_argument(
+    const XrSemanticPlan *callee, const XrSemanticTypeRecord *parameter_type,
+    const XrSemanticTypeRecord *operand_type, uint8_t parameter_mode) {
+    if (xr_semantic_parameter_leaf_type_admits_argument(parameter_type, operand_type,
+                                                        parameter_mode))
         return true;
     if (parameter_type->kind != (uint32_t) XR_KIND_UNION || !callee)
         return false;
@@ -185,7 +301,11 @@ xr_semantic_parameter_type_admits_argument(const XrSemanticPlan *callee,
         if (member_type >= type_count)
             return false;
         const XrSemanticTypeRecord *record = xr_semantic_plan_type(callee, member_type);
-        if (record && xr_stable_id_equal(operand_type->id, record->id))
+        /* Union membership does not erase the ordinary call conversion. A
+         * value is admitted when any member would admit it as a parameter in
+         * its own right: for example, a read-only const handle may inhabit the
+         * corresponding unqualified handle member. */
+        if (xr_semantic_parameter_leaf_type_admits_argument(record, operand_type, parameter_mode))
             return true;
     }
     return false;

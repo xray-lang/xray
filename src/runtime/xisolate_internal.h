@@ -55,6 +55,19 @@ typedef struct XrGlobalStringPool XrGlobalStringPool;
 XR_FUNC int xr_execution_engine_init(XrVMRuntime *isolate);
 XR_FUNC void xr_execution_engine_cleanup(XrVMRuntime *isolate);
 
+/* Native providers publish their isolate-owned state through this lifecycle
+ * boundary. Acquiring a state retains it while publication is locked;
+ * isolate teardown closes publication, invokes every registered shutdown leaf,
+ * and only then permits scheduler destruction. */
+typedef void (*XrProviderRetainFn)(void *provider);
+XR_FUNC void *xr_isolate_provider_acquire(XrVMRuntime *isolate, void **slot,
+                                          XrProviderRetainFn retain);
+XR_FUNC bool xr_isolate_provider_publish(XrVMRuntime *isolate, void **slot, void *provider,
+                                         XrCFunctionPtr shutdown);
+XR_FUNC void *xr_isolate_provider_detach(XrVMRuntime *isolate, void **slot,
+                                         XrCFunctionPtr shutdown);
+XR_FUNC void xr_isolate_shutdown_providers(XrVMRuntime *isolate);
+
 /* ========== Fast Macros ========== */
 
 // Simplified design: Use Isolate directly, no ThreadLocalTop
@@ -162,28 +175,33 @@ struct XrVMRuntime {
     void *debug_state;  // XrDebugState* for debugger integration
     void *debug_hooks;  // XrDebugHooks* for VM callback interface
 
-    /* ========== Cluster (optional, enabled with XR_HAS_CLUSTER) ========== */
-    void *cluster;  // XrCluster* (stdlib/cluster), NULL if not started
+    /* ========== Native provider lifecycle ========== */
+    /* Provider publication, strong-reference acquisition and detach share one
+     * lock. Teardown permanently closes publication before calling shutdown
+     * leaves, so no provider generation can appear behind the teardown pass. */
+    XrAdaptiveMutex provider_lifecycle_lock;
+    struct XrProviderLifecycleEntry *provider_lifecycle_entries;
+    bool provider_lifecycle_closing;
 
     /* ========== stdlib per-isolate cache ========== */
-    // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
+    // Opaque pointer owned by module/xstdlib_runtime_cache.h. Holds memoised
     // values that reference per-isolate symbol IDs (e.g. the dynamic-
     // layout XrClass built once by io.stat() and the interned error-map
     // keys shared by json/yaml/toml/xml/csv parsers). Kept as `void *`
     // here so stdlib types don't leak into the core header; cast via
-    // the accessor functions in `stdlib/stdlib_cache.h`.
-    void *stdlib_cache;  // XrStdlibCache* (stdlib/stdlib_cache.h), lazily allocated
+    // the accessor functions in `module/xstdlib_runtime_cache.h`.
+    void *stdlib_cache;  // XrStdlibCache*, lazily allocated
 
     /* ========== Prelude type marker registry ==========
      * Pointer to the process-wide constant XrPreludeSymbols table built
-     * by stdlib/prelude/prelude.c. Populated during isolate init by
+     * by module/xprelude_runtime.c. Populated during isolate init by
      * xr_prelude_install(). Read by the parser when resolving a
      * type-context identifier that is neither a primitive keyword nor a
      * user-defined class name. Kept as `void *` so the core header has
      * no dependency on stdlib types; consumers cast via
      * xr_prelude_get_symbols(). NULL means the prelude has not been
      * loaded (minimal-runtime isolates that skipped setup_full). */
-    void *prelude_symbols;  // const XrPreludeSymbols* (stdlib/prelude/prelude.h)
+    void *prelude_symbols;  // const XrPreludeSymbols* (module/xprelude_runtime.h)
 
     /* ========== VM profiler (opt-in, isolate-local) ==========
      * Bytecode execution counters collected during this isolate's

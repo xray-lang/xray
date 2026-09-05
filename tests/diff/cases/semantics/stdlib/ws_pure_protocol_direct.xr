@@ -17,7 +17,7 @@ var upgradeRequest = "GET /chat?room=1 HTTP/1.1\r\n" +
     "Sec-WebSocket-Protocol: superchat, chat\r\n" +
     "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover\r\n\r\n"
 var parsedRequest = ws.parseUpgradeRequest(upgradeRequest, ["chat"], true, ["https://app.example"])!
-print(parsedRequest.target)
+print(parsedRequest.requestTarget)
 print(parsedRequest.secKey == key)
 print(parsedRequest.protocol!)
 print(parsedRequest.deflate)

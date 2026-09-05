@@ -31,18 +31,12 @@ XR_FUNC bool xi_type_is_channel(const XrType *type) {
     return false;
 }
 
-static bool xi_type_name_is_sync_handle(const char *name) {
-    return name && (strcmp(name, "Atomic") == 0 || strcmp(name, "WorkQueue") == 0 ||
-                    strcmp(name, "ResultGroup") == 0 || strcmp(name, "CountdownLatch") == 0 ||
-                    strcmp(name, "Semaphore") == 0 || strcmp(name, "EventCount") == 0);
-}
-
 XR_FUNC bool xi_type_is_named_instance(const XrType *type, const char *name) {
     if (!type || !name)
         return false;
     if (type->kind == XR_KIND_INSTANCE)
         return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
-    if (type->kind == XR_KIND_CLASS && xi_type_name_is_sync_handle(name))
+    if (type->kind == XR_KIND_CLASS && strcmp(name, "Atomic") == 0)
         return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
     if (type->kind == XR_KIND_UNION) {
         for (uint8_t i = 0; i < type->union_type.member_count; i++) {
@@ -232,8 +226,8 @@ XR_FUNC bool xi_import_ref_is_native_stdlib(const XiImportRef *ref) {
 }
 
 XR_FUNC bool xi_import_ref_is_unresolved(const XiImportRef *ref) {
-    return ref && ref->module_path && ref->module_path[0] &&
-           !xi_import_ref_is_source_module(ref) && !xi_import_ref_is_native_stdlib(ref);
+    return ref && ref->module_path && ref->module_path[0] && !xi_import_ref_is_source_module(ref) &&
+           !xi_import_ref_is_native_stdlib(ref);
 }
 
 XR_FUNC bool xi_value_type_is_channel(const XiValue *v) {
@@ -254,31 +248,6 @@ XR_FUNC bool xi_value_type_is_thread(const XiValue *v) {
 XR_FUNC bool xi_value_type_is_atomic(const XiValue *v) {
     v = xi_value_unwrap_identity(v);
     return v && xi_type_is_named_instance(v->type, "Atomic");
-}
-
-XR_FUNC bool xi_value_type_is_work_queue(const XiValue *v) {
-    v = xi_value_unwrap_identity(v);
-    return v && xi_type_is_named_instance(v->type, "WorkQueue");
-}
-
-XR_FUNC bool xi_value_type_is_result_group(const XiValue *v) {
-    v = xi_value_unwrap_identity(v);
-    return v && xi_type_is_named_instance(v->type, "ResultGroup");
-}
-
-XR_FUNC bool xi_value_type_is_countdown_latch(const XiValue *v) {
-    v = xi_value_unwrap_identity(v);
-    return v && xi_type_is_named_instance(v->type, "CountdownLatch");
-}
-
-XR_FUNC bool xi_value_type_is_semaphore(const XiValue *v) {
-    v = xi_value_unwrap_identity(v);
-    return v && xi_type_is_named_instance(v->type, "Semaphore");
-}
-
-XR_FUNC bool xi_value_type_is_event_count(const XiValue *v) {
-    v = xi_value_unwrap_identity(v);
-    return v && xi_type_is_named_instance(v->type, "EventCount");
 }
 
 XR_FUNC bool xi_value_type_is_unknown(const XiValue *v) {

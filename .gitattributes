@@ -29,3 +29,18 @@ tests/benchmarks/target-machine/source_run/helper.edited.txt text eol=lf
 # is the .def/.isa file; CI freshness check enforces consistency.
 *_gen.h  linguist-generated=true
 *_gen.c  linguist-generated=true
+
+# Xi lowering projections participate in a raw-byte, identity-bound freshness
+# proof.  Keep those governed outputs LF-only so the proof is host-independent.
+src/ir/xi_lowering_coverage_gen.h text eol=lf
+src/ir/xi_emit_vm_gen.h text eol=lf
+src/vm/xvm_template_width_gen.inc.c text eol=lf
+src/vm/xvm_template_bitwise_binary_gen.inc.c text eol=lf
+src/vm/xvm_template_bitwise_unary_gen.inc.c text eol=lf
+src/vm/xvm_template_unary_gen.inc.c text eol=lf
+src/vm/xvm_template_arith_binary_gen.inc.c text eol=lf
+src/vm/xvm_template_shift_gen.inc.c text eol=lf
+src/vm/xvm_template_compare_gen.inc.c text eol=lf
+src/aot/xi_to_c_dispatch_gen.h text eol=lf
+src/aot/xi_to_c_stmt_dispatch_gen.h text eol=lf
+tests/unit/ir/test_xi_lowering_gen.c text eol=lf

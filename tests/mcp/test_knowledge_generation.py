@@ -262,7 +262,7 @@ def check_generated_stdlib_api_tables(root: Path) -> list[str]:
         '`http.router`',
         '`io.readFile`',
         '`net.dialEndpoint`',
-        '`os.spawn`',
+        '`Process.spawn`',
     ]
     return [f"generated stdlib API table missing {needle}" for needle in required if needle not in text]
 

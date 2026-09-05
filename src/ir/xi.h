@@ -51,6 +51,7 @@
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_view_origin.h"
 #include "../runtime/value/xtransfer_mode.h"
+#include "xi_method_symbol.h"
 
 /* Forward declarations for types defined in other modules */
 struct XrType;
@@ -124,16 +125,6 @@ typedef enum XiInterfaceUseKind {
     XI_INTERFACE_USE_MOVE = 3,
     XI_INTERFACE_USE_OWNED_STORAGE = 4,
 } XiInterfaceUseKind;
-
-/* Stable method identities generated from the dispatch-symbol registry.
- * Selector text remains diagnostic metadata; compiler authorities compare
- * these typed IDs so a fabricated spelling cannot acquire builtin semantics. */
-typedef enum XiMethodSymbolId {
-    XI_METHOD_SYMBOL_INVALID = 0,
-#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) XI_METHOD_SYMBOL_##aot_name = id,
-#include "xi_method_sym.def"
-#undef XI_METHOD_SYM
-} XiMethodSymbolId;
 
 /* ========== IR Stage ========== */
 
@@ -728,7 +719,6 @@ typedef enum {
      * aux_int = resolved shared index (set by driver post-lowering, -1 if unresolved). */
     XI_IMPORT_REF,
 
-    XI_REGEX_COMPILE, /* args[0]=pattern(str), args[1]=flags(str); compiles regex literal */
 
     /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
     XI_RETAIN,        /* args[0]=value; increment refcount (no-op for scalars) */
@@ -976,6 +966,10 @@ typedef struct XiClassData {
     uint32_t *instance_field_source_node_ids; /* evidence-stable IDs parallel to field names */
     XiFieldDefault *instance_field_defaults;  /* declaration defaults parallel to field names */
     uint16_t instance_field_count;
+    /* Exact flattened field index for a generated stdlib source/provider
+     * bridge, or -1.  Both VM descriptors and AOT offsetof metadata consume
+     * this compile-time proof; neither backend performs name lookup. */
+    int16_t source_provider_field_index;
     XiClassMethod *methods;   /* arena array [nmethod] of method descriptors */
     uint16_t nmethod;         /* total method count (instance + static) */
     uint16_t *child_idx;      /* maps method order → XiFunc::children index */

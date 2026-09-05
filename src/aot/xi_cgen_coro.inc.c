@@ -95,11 +95,18 @@ static bool cg_coro_value_has_storage(XiCgenCtx *ctx, const XiFunc *f, const XiV
  * its final AOT storage is a pointer even though the boundary value is tagged.
  * Give that boundary its own XrValue temporary, then bridge and convert it once
  * the await completes.  This keeps the runtime slot ABI and the typed local ABI
- * explicit instead of assigning two physical representations to one C local. */
+ * explicit instead of assigning two physical representations to one C local.
+ * The exact SemanticPlan operation owns the boundary-carrier fact; the frozen
+ * target emission plan independently owns the final local's storage fact. */
 static bool cg_coro_await_needs_tagged_boundary_temp(XiCgenCtx *ctx, const XiFunc *f,
                                                      const XiValue *v) {
-    return v && v->op == XI_AWAIT && cg_coro_value_has_storage(ctx, f, v) &&
-           cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED &&
+    if (!f || !f->semantic_plan || !v || v->op != XI_AWAIT ||
+        !cg_coro_value_has_storage(ctx, f, v))
+        return false;
+
+    const XrSemanticOperationRecord *operation = cg_semantic_operation_for_value(ctx, f, v);
+    return operation && operation->opcode == XI_AWAIT &&
+           xr_semantic_dynamic_value_is_exact(f->semantic_plan, operation) &&
            cg_value_plan_storage_rep(ctx, v) != XR_REP_TAGGED;
 }
 
@@ -495,18 +502,6 @@ static void emit_assign_from_owned_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, c
     fprintf(out, ";\n");
 }
 
-static void emit_assign_from_bool_temp(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
-                                       const char *temp_name) {
-    fprintf(out, "    ");
-    emit_vref(out, dst);
-    fprintf(out, " = ");
-    if (cg_value_plan_storage_rep(ctx, dst) == XR_REP_TAGGED)
-        fprintf(out, "XR_FROM_BOOL(%s)", temp_name);
-    else
-        fprintf(out, "%s", temp_name);
-    fprintf(out, ";\n");
-}
-
 static void emit_assign_from_i64_temp(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
                                       const char *temp_name) {
     fprintf(out, "    ");
@@ -677,11 +672,6 @@ static void emit_coro_optional_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc 
     fprintf(out, "xr_slot_none()");
 }
 
-static bool cg_coro_can_use_xvalue_result_ptr(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    return cg_coro_value_has_storage(ctx, f, v) &&
-           cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-}
-
 static const XiCoroPlan *cg_coro_plan(XiCgenCtx *ctx, const XiFunc *f);
 
 static bool cg_coro_i64_optional_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiValue *root) {
@@ -834,7 +824,9 @@ typedef enum {
     CG_CORO_NET_ACCEPT,
     CG_CORO_NET_READ_INTO,
     CG_CORO_NET_WRITE_BYTES,
-    CG_CORO_NET_COPY_BIDIRECTIONAL,
+    CG_CORO_NET_TLS_HANDSHAKE,
+    CG_CORO_NET_TLS_CLIENT_CONTEXT,
+    CG_CORO_NET_TLS_SERVER_CONTEXT,
 } CgCoroNetCallKind;
 static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
@@ -1097,6 +1089,41 @@ static uint32_t cg_coro_static_cleanup_capacity(const XiFunc *f) {
     return count;
 }
 
+static bool cg_coro_func_has_net_wait(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (cg_coro_net_call_kind(ctx, f, blk->values[vi]) != CG_CORO_NET_NONE)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_coro_func_has_child_frame(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (cg_coro_call_needs_child_frame(ctx, f, blk->values[vi]))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_coro_func_needs_cancel_cleanup(XiCgenCtx *ctx, const XiFunc *f) {
+    return cg_coro_static_cleanup_capacity(f) > 0 || cg_coro_func_has_net_wait(ctx, f) ||
+           cg_coro_func_has_child_frame(ctx, f);
+}
+
 static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
     size_t size = 0;
     size_t max_align = 1;
@@ -1109,6 +1136,10 @@ static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
         cg_coro_layout_add(&size, &max_align, sizeof(bool), _Alignof(bool));
         cg_coro_layout_add(&size, &max_align, sizeof(uint32_t) * cleanup_capacity,
                            _Alignof(uint32_t));
+    }
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        cg_coro_layout_add(&size, &max_align, sizeof(XrValue), _Alignof(XrValue));
+        cg_coro_layout_add(&size, &max_align, sizeof(bool), _Alignof(bool));
     }
     if (cg_func_frame_needs_cl(f))
         cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
@@ -1129,8 +1160,6 @@ static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
             CgCoroNetCallKind net_layout_kind = cg_coro_net_call_kind(ctx, f, v);
             if (net_layout_kind == CG_CORO_NET_WRITE_BYTES)
                 cg_coro_layout_add(&size, &max_align, sizeof(int64_t), _Alignof(int64_t));
-            if (net_layout_kind == CG_CORO_NET_COPY_BIDIRECTIONAL)
-                cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
                 if (cg_coro_callable_target_switch_plan(ctx, v))
@@ -2051,6 +2080,10 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    bool cleanup_cancel;\n");
         fprintf(out, "    uint32_t cleanup_entries[%u];\n", cleanup_capacity);
     }
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        fprintf(out, "    XrValue net_pending_handle;\n");
+        fprintf(out, "    bool net_pending_tls_handshake;\n");
+    }
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_closure_t *_cl;\n");
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++)
@@ -2077,8 +2110,6 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             CgCoroNetCallKind net_kind = cg_coro_net_call_kind(ctx, f, v);
             if (net_kind == CG_CORO_NET_WRITE_BYTES)
                 fprintf(out, "    int64_t net_progress_%u;\n", v->id);
-            if (net_kind == CG_CORO_NET_COPY_BIDIRECTIONAL)
-                fprintf(out, "    XrtNetBidiAsyncState *net_bidi_state_%u;\n", v->id);
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 fprintf(out, "    void *call_frame_%u;\n", v->id);
                 if (cg_coro_callable_target_switch_plan(ctx, v))
@@ -2135,6 +2166,10 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    f->cleanup_dispatch = 0;\n");
         fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
         fprintf(out, "    f->cleanup_cancel = false;\n");
+    }
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        fprintf(out, "    f->net_pending_handle = XR_NULL_VAL;\n");
+        fprintf(out, "    f->net_pending_tls_handshake = false;\n");
     }
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    f->_cl = _cl;\n");
@@ -2607,9 +2642,63 @@ static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, 
     CG_NET_MEMBER("__accept", CG_CORO_NET_ACCEPT);
     CG_NET_MEMBER("__readInto", CG_CORO_NET_READ_INTO);
     CG_NET_MEMBER("__writeBytes", CG_CORO_NET_WRITE_BYTES);
-    CG_NET_MEMBER("__copyBidirectional", CG_CORO_NET_COPY_BIDIRECTIONAL);
+    CG_NET_MEMBER("__tlsHandshake", CG_CORO_NET_TLS_HANDSHAKE);
+    CG_NET_MEMBER("__tlsClientHandshakeWithContext", CG_CORO_NET_TLS_CLIENT_CONTEXT);
+    CG_NET_MEMBER("__tlsServerHandshakeWithContext", CG_CORO_NET_TLS_SERVER_CONTEXT);
 #undef CG_NET_MEMBER
     return CG_CORO_NET_NONE;
+}
+
+static bool cg_coro_net_is_tls_handshake(CgCoroNetCallKind kind) {
+    return kind == CG_CORO_NET_TLS_HANDSHAKE || kind == CG_CORO_NET_TLS_CLIENT_CONTEXT ||
+           kind == CG_CORO_NET_TLS_SERVER_CONTEXT;
+}
+
+static uint16_t cg_coro_net_conn_arg_index(CgCoroNetCallKind kind) {
+    return kind == CG_CORO_NET_TLS_CLIENT_CONTEXT || kind == CG_CORO_NET_TLS_SERVER_CONTEXT ? 2u
+                                                                                            : 1u;
+}
+
+static void emit_coro_net_storage_arg(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                      uint16_t arg_index) {
+    fprintf(out, "xrt_source_provider_storage(");
+    emit_value_as_rep_ctx(ctx, out, v->args[arg_index], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+static void emit_coro_net_pending_begin(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                        CgCoroNetCallKind kind) {
+    fprintf(out, "        if (XR_IS_NULL(f->net_pending_handle)) {\n");
+    fprintf(out, "            f->net_pending_handle = ");
+    emit_coro_net_storage_arg(ctx, out, v, cg_coro_net_conn_arg_index(kind));
+    fprintf(out, ";\n");
+    fprintf(out, "            xrt_retain(f->net_pending_handle);\n");
+    fprintf(out, "            f->net_pending_tls_handshake = %s;\n",
+            cg_coro_net_is_tls_handshake(kind) ? "true" : "false");
+    fprintf(out, "        }\n");
+}
+
+static void emit_coro_net_pending_end(FILE *out, const char *indent) {
+    fprintf(out, "%sxrt_release(f->net_pending_handle);\n", indent);
+    fprintf(out, "%sf->net_pending_handle = XR_NULL_VAL;\n", indent);
+    fprintf(out, "%sf->net_pending_tls_handshake = false;\n", indent);
+}
+
+static void emit_coro_net_pending_failure(FILE *out, const char *indent, const char *result_name) {
+    fprintf(out, "%sif (f->net_pending_tls_handshake) {\n", indent);
+    fprintf(out, "%s    (void)xrt_net_tls_handshake_abort(f->net_pending_handle,\n", indent);
+    fprintf(out,
+            "%s        %s.kind == XR_AOT_RUN_CANCELLED ? XRT_NETERR_CANCELLED : "
+            "XRT_NETERR_IO);\n",
+            indent, result_name);
+    fprintf(out, "%s} else {\n", indent);
+    fprintf(out,
+            "%s    xrt_net_mark_error(f->net_pending_handle,\n"
+            "%s        %s.kind == XR_AOT_RUN_CANCELLED ? XRT_NETERR_CANCELLED : "
+            "XRT_NETERR_IO);\n",
+            indent, indent, result_name);
+    fprintf(out, "%s}\n", indent);
+    emit_coro_net_pending_end(out, indent);
 }
 
 static void emit_coro_net_timeout_result(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -2617,17 +2706,23 @@ static void emit_coro_net_timeout_result(XiCgenCtx *ctx, FILE *out, const XiFunc
                                          const char *wait_name, const char *done_label) {
     (void) f;
     fprintf(out, "    if (XR_TO_INT(%s.value) == XR_AOT_IO_WAIT_TIMEOUT) {\n", wait_name);
-    fprintf(out, "        xrt_net_mark_timeout(");
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ");\n");
+    if (cg_coro_net_is_tls_handshake(kind)) {
+        fprintf(out,
+                "        XrValue _net_timeout_value_%u = "
+                "xrt_net_tls_handshake_abort(f->net_pending_handle, XRT_NETERR_TIMEOUT);\n",
+                v->id);
+    } else {
+        fprintf(out, "        xrt_net_mark_error(f->net_pending_handle, XRT_NETERR_TIMEOUT);\n");
+    }
     if (kind == CG_CORO_NET_WRITE_BYTES) {
         fprintf(out,
                 "        XrValue _net_timeout_value_%u = "
                 "XR_FROM_INT(f->net_progress_%u > 0 ? f->net_progress_%u : -1);\n",
                 v->id, v->id, v->id);
-    } else {
+    } else if (!cg_coro_net_is_tls_handshake(kind)) {
         fprintf(out, "        XrValue _net_timeout_value_%u = XR_NULL_VAL;\n", v->id);
     }
+    emit_coro_net_pending_end(out, "        ");
     char timeout_value[64];
     snprintf(timeout_value, sizeof(timeout_value), "_net_timeout_value_%u", v->id);
     emit_assign_from_xrvalue_temp_ctx(ctx, out, v, timeout_value);
@@ -2636,168 +2731,18 @@ static void emit_coro_net_timeout_result(XiCgenCtx *ctx, FILE *out, const XiFunc
     fprintf(out, "        f->state = 0;\n        goto %s;\n    }\n", done_label);
 }
 
-static void emit_coro_net_bidi_materialize(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                           const XiValue *v,
-                                           const XrStdlibEnumDefEntry *error_enum) {
-    (void) f;
-    const XrType *object_type = v ? v->type : NULL;
-    bool object_ok = object_type && XR_TYPE_IS_STRUCT_OBJECT(object_type) &&
-                     object_type->object.field_count == 2 && object_type->object.field_names &&
-                     object_type->object.field_types && object_type->object.field_types[0] &&
-                     object_type->object.field_types[1] &&
-                     XR_TYPE_IS_INT(object_type->object.field_types[0]) &&
-                     XR_TYPE_IS_INT(object_type->object.field_types[1]);
-    if (!ctx || !out || !v || !error_enum || !object_ok || !error_enum->name ||
-        !error_enum->variants || error_enum->variant_count == 0) {
-        ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: invalid yieldable net.copyBidirectional result contract\n");
-        emit_codegen_abort_aot_result(out);
-        return;
-    }
-
-    const char *const *names = (const char *const *) object_type->object.field_names;
-    uint64_t key_first = xg_object_stable_name_key(names[0]);
-    uint64_t key_second = xg_object_stable_name_key(names[1]);
-    bool first_leads = key_first < key_second ||
-                       (key_first == key_second && xg_name_id(names[0]) <= xg_name_id(names[1]));
-    int slot_first = first_leads ? 0 : 1;
-    int slot_second = first_leads ? 1 : 0;
-    int shape_id = cg_intern_object_shape_type_domain(ctx, object_type, XR_OBJECT_DOMAIN_STRUCT);
-    if (shape_id < 0) {
-        ctx->error = true;
-        emit_codegen_abort_aot_result(out);
-        return;
-    }
-
-    fprintf(out, "    if (_net_bidi_result_%u.error_index >= 0) {\n", v->id);
-    fprintf(out,
-            "        uint32_t _net_bidi_error_%u = "
-            "(uint32_t)_net_bidi_result_%u.error_index;\n",
-            v->id, v->id);
-    fprintf(out,
-            "        if (_net_bidi_error_%u >= UINT32_C(%u)) { "
-            "fputs(\"invalid yieldable stdlib error ordinal\\n\", stderr); abort(); }\n",
-            v->id, (unsigned) error_enum->variant_count);
-    fprintf(out, "        xrt_pending_error = xrt_enum_box_new(UINT32_C(%u), ",
-            (unsigned) error_enum->layout_id);
-    emit_c_string_literal(out, error_enum->name);
-    fprintf(out, ", ((const char *const[]){");
-    for (uint16_t i = 0; i < error_enum->variant_count; i++) {
-        if (i > 0)
-            fprintf(out, ", ");
-        emit_c_string_literal(out, error_enum->variants[i].name);
-    }
-    fprintf(out, "})[_net_bidi_error_%u], _net_bidi_error_%u);\n", v->id, v->id);
-    fprintf(out, "    }\n");
-    fprintf(out, "    XrValue _net_bidi_value_%u = xrt_object_new_shape(&_xobj_shape_%d);\n", v->id,
-            shape_id);
-    fprintf(out,
-            "    xrt_object_set_field(_net_bidi_value_%u, %d, "
-            "XR_FROM_INT(_net_bidi_result_%u.first));\n",
-            v->id, slot_first, v->id);
-    fprintf(out,
-            "    xrt_object_set_field(_net_bidi_value_%u, %d, "
-            "XR_FROM_INT(_net_bidi_result_%u.second));\n",
-            v->id, slot_second, v->id);
-    char value_name[64];
-    snprintf(value_name, sizeof(value_name), "_net_bidi_value_%u", v->id);
-    emit_assign_from_xrvalue_temp_ctx(ctx, out, v, value_name);
-}
-
-static bool emit_coro_net_bidi_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                         const XiValue *v, int *state_id) {
-    if (cg_coro_net_call_kind(ctx, f, v) != CG_CORO_NET_COPY_BIDIRECTIONAL)
-        return false;
-    uint16_t argc = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
-    const XrStdlibDefEntry *method = NULL;
-    const XrStdlibEnumDefEntry *error_enum = NULL;
-    for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
-        const XrStdlibDefEntry *candidate = &xr_stdlib_def_entries[i];
-        if (candidate->module && candidate->name && strcmp(candidate->module, "net") == 0 &&
-            strcmp(candidate->name, "__copyBidirectional") == 0 && candidate->argc == argc) {
-            method = candidate;
-            break;
-        }
-    }
-    for (uint32_t i = 0; i < XR_STDLIB_ENUM_DEF_ENTRY_COUNT; i++) {
-        const XrStdlibEnumDefEntry *candidate = &xr_stdlib_enum_def_entries[i];
-        if (candidate->module && candidate->name && strcmp(candidate->module, "net") == 0 &&
-            strcmp(candidate->name, "NetError") == 0) {
-            error_enum = candidate;
-            break;
-        }
-    }
-    if (argc != 2 || !method || !method->ret || strcmp(method->ret, "i64_pair_result") != 0 ||
-        !method->aot_enum || strcmp(method->aot_enum, "NetError") != 0 || !error_enum) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT net.copyBidirectional contract\n");
-        emit_codegen_abort_aot_result(out);
-        return true;
-    }
-
-    int sid = cg_coro_claim_state(ctx, f, v, state_id);
-    fprintf(out,
-            "    XrtI64PairResult _net_bidi_result_%u = "
-            "xrt_net_bidi_result(0, 0, 9);\n",
-            v->id);
-    fprintf(out, "    {\n");
-    fprintf(out, "        XrValue _net_bidi_a_%u = xrt_value_set_storage_graph(", v->id);
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ", XR_OBJ_STORAGE_SHARED);\n");
-    fprintf(out, "        XrValue _net_bidi_b_%u = xrt_value_set_storage_graph(", v->id);
-    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
-    fprintf(out, ", XR_OBJ_STORAGE_SHARED);\n");
-    fprintf(out,
-            "        f->net_bidi_state_%u = "
-            "xrt_net_bidi_async_state_new(_net_bidi_a_%u, _net_bidi_b_%u);\n",
-            v->id, v->id, v->id);
-    fprintf(out, "    }\n");
-    fprintf(out, "    if (!f->net_bidi_state_%u) goto N%u_DONE;\n", v->id, v->id);
-    fprintf(out, "    xrt_net_bidi_async_state_retain(f->net_bidi_state_%u);\n", v->id);
-    fprintf(out, "    f->state = %d;\n", sid);
-    fprintf(out,
-            "    XrAotResult _net_bidi_submit_%u = xr_aot_async_submit("
-            "ctx, xrt_net_bidi_async_invoke, f->net_bidi_state_%u, "
-            "xrt_net_bidi_async_state_release);\n",
-            v->id, v->id);
-    fprintf(out, "    if (_net_bidi_submit_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
-    fprintf(out, "        return _net_bidi_submit_%u;\n", v->id);
-    fprintf(out, "    f->state = 0;\n");
-    fprintf(out, "    xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n", v->id);
-    fprintf(out, "    f->net_bidi_state_%u = NULL;\n", v->id);
-    fprintf(out, "    if (_net_bidi_submit_%u.kind == XR_AOT_RUN_CANCELLED)\n", v->id);
-    fprintf(out, "        return _net_bidi_submit_%u;\n", v->id);
-    fprintf(out, "    goto N%u_DONE;\n", v->id);
-
-    fprintf(out, "S%d:;\n", sid);
-    fprintf(out, "    f->state = 0;\n");
-    fprintf(out, "    XrAotResult _net_bidi_resume_%u = xr_aot_async_resume(ctx);\n", v->id);
-    fprintf(out, "    if (_net_bidi_resume_%u.kind != XR_AOT_RUN_DONE) {\n", v->id);
-    fprintf(out, "        xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n", v->id);
-    fprintf(out, "        f->net_bidi_state_%u = NULL;\n", v->id);
-    fprintf(out, "        return _net_bidi_resume_%u;\n", v->id);
-    fprintf(out, "    }\n");
-    fprintf(out, "    _net_bidi_result_%u = f->net_bidi_state_%u->result;\n", v->id, v->id);
-    fprintf(out, "    xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n", v->id);
-    fprintf(out, "    f->net_bidi_state_%u = NULL;\n", v->id);
-    fprintf(out, "N%u_DONE:;\n", v->id);
-    emit_coro_net_bidi_materialize(ctx, out, f, v, error_enum);
-    emit_coro_debug_result_source_var_sync(ctx, out, f, v);
-    return true;
-}
-
 static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        int *state_id) {
     CgCoroNetCallKind kind = cg_coro_net_call_kind(ctx, f, v);
     if (kind == CG_CORO_NET_NONE)
         return false;
-    if (kind == CG_CORO_NET_COPY_BIDIRECTIONAL)
-        return emit_coro_net_bidi_call_stmt(ctx, out, f, v, state_id);
     uint16_t argc = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
     bool arity_ok = (kind == CG_CORO_NET_ACCEPT && argc == 1) ||
                     (kind == CG_CORO_NET_READ_INTO && argc == 3) ||
-                    (kind == CG_CORO_NET_WRITE_BYTES && argc == 2);
+                    (kind == CG_CORO_NET_WRITE_BYTES && argc == 2) ||
+                    (kind == CG_CORO_NET_TLS_HANDSHAKE && argc == 4) ||
+                    (kind == CG_CORO_NET_TLS_CLIENT_CONTEXT && argc == 4) ||
+                    (kind == CG_CORO_NET_TLS_SERVER_CONTEXT && argc == 3);
     if (!arity_ok) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT net I/O call arity %u\n",
@@ -2817,25 +2762,60 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
     snprintf(resume_name, sizeof(resume_name), "_net_resume_%u", v->id);
 
     fprintf(out, "%s:;\n    {\n", retry_label);
+    emit_coro_net_pending_begin(ctx, out, v, kind);
     if (kind == CG_CORO_NET_ACCEPT) {
         fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_accept_try(", v->id);
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
         fprintf(out, ");\n");
     } else if (kind == CG_CORO_NET_READ_INTO) {
         fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_read_into_try(", v->id);
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
         fprintf(out, ");\n");
-    } else {
+    } else if (kind == CG_CORO_NET_WRITE_BYTES) {
         fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_write_bytes_try(", v->id);
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ", f->net_progress_%u);\n", v->id);
         fprintf(out, "        f->net_progress_%u = _net_%u.progress;\n", v->id, v->id);
+    } else if (kind == CG_CORO_NET_TLS_HANDSHAKE) {
+        fprintf(out, "        xrt_net_try_result_t _net_%u = xrt_net_tls_handshake_try(", v->id);
+        emit_coro_net_storage_arg(ctx, out, v, 1);
+        for (uint16_t arg = 2; arg <= 4; arg++) {
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[arg], XR_REP_TAGGED);
+        }
+        fprintf(out, ");\n");
+    } else if (kind == CG_CORO_NET_TLS_CLIENT_CONTEXT) {
+        fprintf(out,
+                "        xrt_net_try_result_t _net_%u = "
+                "xrt_net_tls_client_handshake_context_try(",
+                v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_coro_net_storage_arg(ctx, out, v, 2);
+        fprintf(out, ", xr_str_data(");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+        fprintf(out, "), xr_str_len(");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+        fprintf(out, "), ");
+        emit_value_as_rep_ctx(ctx, out, v->args[4], XR_REP_TAGGED);
+        fprintf(out, ");\n");
+    } else {
+        fprintf(out,
+                "        xrt_net_try_result_t _net_%u = "
+                "xrt_net_tls_server_handshake_context_try(",
+                v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_coro_net_storage_arg(ctx, out, v, 2);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
+        fprintf(out, ");\n");
     }
     fprintf(out, "        if (_net_%u.state != XRT_NET_TRY_DONE) {\n", v->id);
     fprintf(out, "            f->state = %d;\n", sid);
@@ -2844,10 +2824,17 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
             "_net_%u.state == XRT_NET_TRY_WAIT_READ ? XR_AOT_IO_EVENT_READ : "
             "XR_AOT_IO_EVENT_WRITE, _net_%u.timeout_ms);\n",
             wait_name, v->id, v->id, v->id);
+    fprintf(out,
+            "            if (%s.kind == XR_AOT_RUN_ERROR || "
+            "%s.kind == XR_AOT_RUN_CANCELLED) {\n",
+            wait_name, wait_name);
+    emit_coro_net_pending_failure(out, "                ", wait_name);
+    fprintf(out, "                return %s;\n            }\n", wait_name);
     fprintf(out, "            if (%s.kind != XR_AOT_RUN_DONE) return %s;\n", wait_name, wait_name);
     fprintf(out, "            f->state = 0;\n");
     emit_coro_net_timeout_result(ctx, out, f, v, kind, wait_name, done_label);
     fprintf(out, "            goto %s;\n        }\n", retry_label);
+    emit_coro_net_pending_end(out, "        ");
     char result_name[48];
     snprintf(result_name, sizeof(result_name), "_net_%u.value", v->id);
     emit_assign_from_xrvalue_temp_ctx(ctx, out, v, result_name);
@@ -2857,6 +2844,10 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
 
     fprintf(out, "S%d:;\n    f->state = 0;\n    {\n", sid);
     fprintf(out, "        XrAotResult %s = xr_aot_io_wait_resume(ctx);\n", resume_name);
+    fprintf(out, "        if (%s.kind == XR_AOT_RUN_ERROR || %s.kind == XR_AOT_RUN_CANCELLED) {\n",
+            resume_name, resume_name);
+    emit_coro_net_pending_failure(out, "            ", resume_name);
+    fprintf(out, "            return %s;\n        }\n", resume_name);
     fprintf(out, "        if (%s.kind != XR_AOT_RUN_DONE) return %s;\n", resume_name, resume_name);
     emit_coro_net_timeout_result(ctx, out, f, v, kind, resume_name, done_label);
     fprintf(out, "    }\n    goto %s;\n%s:;\n", retry_label, done_label);
@@ -4037,111 +4028,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && xi_value_type_is_work_queue(v->args[0])) {
-        const char *field = (const char *) v->aux;
-        const char *helper = cg_work_queue_field_helper(field);
-        if (!helper) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT WorkQueue field '%s'\n",
-                    field ? field : "?");
-            emit_codegen_abort_aot_result(out);
-            return;
-        }
-        fprintf(out, "    XrValue _wq_field_%u = %s(ctx, ", v->id, helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_wq_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && xi_value_type_is_result_group(v->args[0])) {
-        const char *field = (const char *) v->aux;
-        const char *helper = cg_result_group_field_helper(field);
-        if (!helper) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT ResultGroup field '%s'\n",
-                    field ? field : "?");
-            emit_codegen_abort_aot_result(out);
-            return;
-        }
-        fprintf(out, "    XrValue _rg_field_%u = %s(ctx, ", v->id, helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_rg_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && xi_value_type_is_countdown_latch(v->args[0])) {
-        const char *field = (const char *) v->aux;
-        const char *helper = cg_countdown_latch_field_helper(field);
-        if (!helper) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT CountdownLatch field '%s'\n",
-                    field ? field : "?");
-            emit_codegen_abort_aot_result(out);
-            return;
-        }
-        fprintf(out, "    XrValue _latch_field_%u = %s(ctx, ", v->id, helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[40];
-            snprintf(tmp, sizeof(tmp), "_latch_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && xi_value_type_is_semaphore(v->args[0])) {
-        const char *field = (const char *) v->aux;
-        const char *helper = cg_semaphore_field_helper(field);
-        if (!helper) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Semaphore field '%s'\n",
-                    field ? field : "?");
-            emit_codegen_abort_aot_result(out);
-            return;
-        }
-        fprintf(out, "    XrValue _sem_field_%u = %s(ctx, ", v->id, helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[40];
-            snprintf(tmp, sizeof(tmp), "_sem_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && xi_value_type_is_event_count(v->args[0])) {
-        const char *field = (const char *) v->aux;
-        const char *helper = cg_event_count_field_helper(field);
-        if (!helper) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT EventCount field '%s'\n",
-                    field ? field : "?");
-            emit_codegen_abort_aot_result(out);
-            return;
-        }
-        fprintf(out, "    XrValue _event_count_field_%u = %s(ctx, ", v->id, helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[56];
-            snprintf(tmp, sizeof(tmp), "_event_count_field_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
     if (xi_value_is_task_method_call(v, "cancel", 0)) {
         fprintf(out, "    XrValue _task_method_%u = xr_aot_task_cancel(ctx, ", v->id);
         emit_vref(out, v->args[0]);
@@ -4219,664 +4105,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_task(v->args[0])) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task method '%s'\n",
-                v->aux ? (const char *) v->aux : "?");
-        emit_codegen_abort_aot_result(out);
-        return;
-    }
-
-    if (xi_value_is_work_queue_method_call(v, "push", 1) ||
-        xi_value_is_work_queue_method_call(v, "push", 2)) {
-        fprintf(out, "    bool _wq_push_%u = xr_aot_work_queue_push_bool(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        if (v->nargs >= 3)
-            emit_int64_arg(ctx, out, v->args[2]);
-        else
-            fprintf(out, "-1");
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_wq_push_%u", v->id);
-            emit_assign_from_bool_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_work_queue_method_call(v, "pushRange", 2) ||
-        xi_value_is_work_queue_method_call(v, "pushRange", 3)) {
-        fprintf(out, "    int64_t _wq_push_range_%u = xr_aot_work_queue_push_range_i64(ctx, ",
-                v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_int64_arg(ctx, out, v->args[1]);
-        fprintf(out, ", ");
-        emit_int64_arg(ctx, out, v->args[2]);
-        fprintf(out, ", ");
-        if (v->nargs >= 4)
-            emit_int64_arg(ctx, out, v->args[3]);
-        else
-            fprintf(out, "-1");
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[40];
-            snprintf(tmp, sizeof(tmp), "_wq_push_range_%u", v->id);
-            emit_assign_from_i64_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_work_queue_method_call(v, "close", 0)) {
-        fprintf(out, "    xr_aot_work_queue_close_void(ctx, ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            XrRep rep = cg_value_plan_storage_rep(ctx, v);
-            if (rep != XR_REP_VOID) {
-                fprintf(out, "    ");
-                emit_vref(out, v);
-                fprintf(out, " = ");
-                fprintf(out, rep == XR_REP_TAGGED ? "XR_NULL_VAL" : "0");
-                fprintf(out, ";\n");
-            }
-        }
-        return;
-    }
-
-    if (xi_value_is_work_queue_method_call(v, "tryPop", 0) ||
-        xi_value_is_work_queue_method_call(v, "tryPop", 1)) {
-        /* The runtime returns the popped value via out-param + an ok flag; the
-         * (value, ok) pair is packed here into an AOT-native tuple so downstream
-         * XI_TUPLE_GET reads it through xrt_tuple_get like every other AOT tuple.
-         * The popped value is bridged in case its element type is a heap object. */
-        fprintf(out, "    XrValue _wq_try_pop_val_%u = XR_NULL_VAL;\n", v->id);
-        fprintf(out, "    bool _wq_try_pop_ok_%u = xr_aot_work_queue_try_pop(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        if (v->nargs >= 2)
-            emit_int64_arg(ctx, out, v->args[1]);
-        else
-            fprintf(out, "-1");
-        fprintf(out, ", &_wq_try_pop_val_%u);\n", v->id);
-        fprintf(
-            out,
-            "    XrValue _wq_try_pop_%u = xrt_tuple_make_consuming(2, (XrValue[]){"
-            "xr_aot_bridge_value_to_xrt(_wq_try_pop_val_%u), XR_FROM_BOOL(_wq_try_pop_ok_%u)});\n",
-            v->id, v->id, v->id);
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_wq_try_pop_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_blocking_work_queue_method_call(v)) {
-        emit_value_generated_line_reset(ctx, out, v);
-        int sid = cg_coro_claim_state(ctx, f, v, state_id);
-        bool direct_i64_optional = cg_value_is_i64_optional_blocking_result_root(v) &&
-                                   cg_value_is_elided_i64_optional_blocking_result(ctx, f, v);
-        bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(ctx, f, v);
-        if (!direct_i64_optional && !direct_xvalue) {
-            fprintf(out, "    XrSlotRef _wq_pop_slot_%u = ", v->id);
-            emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-            fprintf(out, ";\n");
-        }
-        fprintf(out, "    f->state = %d;\n", sid);
-        emit_value_source_line(ctx, out, v);
-        const char *helper = "xr_aot_work_queue_pop";
-        if (direct_i64_optional)
-            helper = "xr_aot_work_queue_pop_i64_optional";
-        else if (direct_xvalue)
-            helper = "xr_aot_work_queue_pop_value";
-        fprintf(out, "    XrAotResult _wq_pop_%u = %s(ctx, ", v->id, helper);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        if (v->nargs >= 2)
-            emit_int64_arg(ctx, out, v->args[1]);
-        else
-            fprintf(out, "-1");
-        if (direct_i64_optional) {
-            fprintf(out, ", &");
-            emit_coro_i64_optional_value_ref(ctx, out, f, v);
-            fprintf(out, ", &");
-            emit_coro_i64_optional_has_ref(ctx, out, f, v);
-            fprintf(out, ");\n");
-        } else if (direct_xvalue) {
-            fprintf(out, ", &");
-            emit_vref(out, v);
-            fprintf(out, ");\n");
-        } else {
-            fprintf(out, ", _wq_pop_slot_%u);\n", v->id);
-        }
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_wq_pop_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        return _wq_pop_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    if (_wq_pop_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _wq_pop_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    goto S%d_DONE;\n", sid);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = %d;\n", sid);
-        if (!direct_i64_optional && !direct_xvalue) {
-            fprintf(out, "    _wq_pop_slot_%u = ", v->id);
-            emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-            fprintf(out, ";\n");
-        }
-        emit_value_source_line(ctx, out, v);
-        if (direct_i64_optional) {
-            fprintf(out, "    _wq_pop_%u = xr_aot_work_queue_pop_i64_optional_resume(ctx, &",
-                    v->id);
-            emit_coro_i64_optional_value_ref(ctx, out, f, v);
-            fprintf(out, ", &");
-            emit_coro_i64_optional_has_ref(ctx, out, f, v);
-            fprintf(out, ");\n");
-        } else if (direct_xvalue) {
-            fprintf(out, "    _wq_pop_%u = xr_aot_work_queue_pop_value_resume(ctx, &", v->id);
-            emit_vref(out, v);
-            fprintf(out, ");\n");
-        } else {
-            fprintf(out, "    _wq_pop_%u = xr_aot_work_queue_pop_resume(ctx, _wq_pop_slot_%u);\n",
-                    v->id, v->id);
-        }
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_wq_pop_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
-        fprintf(out, "        return _wq_pop_%u;\n", v->id);
-        fprintf(out, "    if (_wq_pop_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _wq_pop_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "S%d_DONE:;\n", sid);
-        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
-        return;
-    }
-
-    if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_work_queue(v->args[0])) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT WorkQueue method '%s'\n",
-                v->aux ? (const char *) v->aux : "?");
-        emit_codegen_abort_aot_result(out);
-        return;
-    }
-
-    if (xi_value_is_result_group_method_call(v, "add", 1)) {
-        fprintf(out, "    bool _rg_add_%u = xr_aot_result_group_add_bool(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_int64_arg(ctx, out, v->args[1]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_rg_add_%u", v->id);
-            emit_assign_from_bool_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_result_group_method_call(v, "flush", 0)) {
-        fprintf(out, "    xr_aot_result_group_flush_void(ctx, ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            XrRep rep = cg_value_plan_storage_rep(ctx, v);
-            if (rep != XR_REP_VOID) {
-                fprintf(out, "    ");
-                emit_vref(out, v);
-                fprintf(out, " = ");
-                fprintf(out, rep == XR_REP_TAGGED ? "XR_NULL_VAL" : "0");
-                fprintf(out, ";\n");
-            }
-        }
-        return;
-    }
-
-    if (xi_value_is_result_group_method_call(v, "reset", 1)) {
-        fprintf(out, "    bool _rg_reset_%u = xr_aot_result_group_reset_bool(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_int64_arg(ctx, out, v->args[1]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[40];
-            snprintf(tmp, sizeof(tmp), "_rg_reset_%u", v->id);
-            emit_assign_from_bool_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_result_group_method_call(v, "tryRecv", 0)) {
-        fprintf(out, "    XrValue _rg_try_recv_val_%u = XR_NULL_VAL;\n", v->id);
-        fprintf(out, "    bool _rg_try_recv_ok_%u = xr_aot_result_group_try_recv(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", &_rg_try_recv_val_%u);\n", v->id);
-        fprintf(out,
-                "    XrValue _rg_try_recv_%u = xrt_tuple_make_consuming(2, "
-                "(XrValue[]){_rg_try_recv_val_%u, "
-                "XR_FROM_BOOL(_rg_try_recv_ok_%u)});\n",
-                v->id, v->id, v->id);
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_rg_try_recv_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_result_group_method_call(v, "close", 0)) {
-        fprintf(out, "    xr_aot_result_group_close_void(ctx, ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            XrRep rep = cg_value_plan_storage_rep(ctx, v);
-            if (rep != XR_REP_VOID) {
-                fprintf(out, "    ");
-                emit_vref(out, v);
-                fprintf(out, " = ");
-                fprintf(out, rep == XR_REP_TAGGED ? "XR_NULL_VAL" : "0");
-                fprintf(out, ";\n");
-            }
-        }
-        return;
-    }
-
-    if (xi_value_is_blocking_result_group_method_call(v)) {
-        emit_value_generated_line_reset(ctx, out, v);
-        int sid = cg_coro_claim_state(ctx, f, v, state_id);
-        bool direct_i64_optional = cg_value_is_i64_optional_blocking_result_root(v) &&
-                                   cg_value_is_elided_i64_optional_blocking_result(ctx, f, v);
-        bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(ctx, f, v);
-        if (!direct_i64_optional && !direct_xvalue) {
-            fprintf(out, "    XrSlotRef _rg_recv_slot_%u = ", v->id);
-            emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-            fprintf(out, ";\n");
-        }
-        fprintf(out, "    xr_aot_submit_deferred_spawns(ctx);\n");
-        fprintf(out, "    f->state = %d;\n", sid);
-        emit_value_source_line(ctx, out, v);
-        const char *helper = "xr_aot_result_group_recv";
-        if (direct_i64_optional)
-            helper = "xr_aot_result_group_recv_i64_optional";
-        else if (direct_xvalue)
-            helper = "xr_aot_result_group_recv_value";
-        fprintf(out, "    XrAotResult _rg_recv_%u = %s(ctx, ", v->id, helper);
-        emit_vref(out, v->args[0]);
-        if (direct_i64_optional) {
-            fprintf(out, ", &");
-            emit_coro_i64_optional_value_ref(ctx, out, f, v);
-            fprintf(out, ", &");
-            emit_coro_i64_optional_has_ref(ctx, out, f, v);
-            fprintf(out, ");\n");
-        } else if (direct_xvalue) {
-            fprintf(out, ", &");
-            emit_vref(out, v);
-            fprintf(out, ");\n");
-        } else {
-            fprintf(out, ", _rg_recv_slot_%u);\n", v->id);
-        }
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        return _rg_recv_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _rg_recv_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    goto S%d_DONE;\n", sid);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = %d;\n", sid);
-        if (!direct_i64_optional && !direct_xvalue) {
-            fprintf(out, "    _rg_recv_slot_%u = ", v->id);
-            emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-            fprintf(out, ";\n");
-        }
-        emit_value_source_line(ctx, out, v);
-        if (direct_i64_optional) {
-            fprintf(out, "    _rg_recv_%u = xr_aot_result_group_recv_i64_optional_resume(ctx, &",
-                    v->id);
-            emit_coro_i64_optional_value_ref(ctx, out, f, v);
-            fprintf(out, ", &");
-            emit_coro_i64_optional_has_ref(ctx, out, f, v);
-            fprintf(out, ");\n");
-        } else if (direct_xvalue) {
-            fprintf(out, "    _rg_recv_%u = xr_aot_result_group_recv_value_resume(ctx, &", v->id);
-            emit_vref(out, v);
-            fprintf(out, ");\n");
-        } else {
-            fprintf(out,
-                    "    _rg_recv_%u = xr_aot_result_group_recv_resume(ctx, _rg_recv_slot_%u);\n",
-                    v->id, v->id);
-        }
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
-        fprintf(out, "        return _rg_recv_%u;\n", v->id);
-        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _rg_recv_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "S%d_DONE:;\n", sid);
-        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
-        return;
-    }
-
-    if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_result_group(v->args[0])) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT ResultGroup method '%s'\n",
-                v->aux ? (const char *) v->aux : "?");
-        emit_codegen_abort_aot_result(out);
-        return;
-    }
-
-    if (xi_value_is_countdown_latch_method_call(v, "reset", 1)) {
-        fprintf(out, "    bool _latch_reset_%u = xr_aot_countdown_latch_reset_bool(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_int64_arg(ctx, out, v->args[1]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[40];
-            snprintf(tmp, sizeof(tmp), "_latch_reset_%u", v->id);
-            emit_assign_from_bool_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_countdown_latch_method_call(v, "done", 0) ||
-        xi_value_is_countdown_latch_method_call(v, "done", 1)) {
-        fprintf(out, "    int64_t _latch_done_%u = xr_aot_countdown_latch_done_i64(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        if (v->nargs >= 2)
-            emit_int64_arg(ctx, out, v->args[1]);
-        else
-            fprintf(out, "1");
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[40];
-            snprintf(tmp, sizeof(tmp), "_latch_done_%u", v->id);
-            emit_assign_from_i64_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_countdown_latch_method_call(v, "tryWait", 0)) {
-        fprintf(out, "    bool _latch_try_wait_%u = xr_aot_countdown_latch_try_wait_bool(ctx, ",
-                v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[48];
-            snprintf(tmp, sizeof(tmp), "_latch_try_wait_%u", v->id);
-            emit_assign_from_bool_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_countdown_latch_method_call(v, "close", 0)) {
-        fprintf(out, "    xr_aot_countdown_latch_close_void(ctx, ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            XrRep rep = cg_value_plan_storage_rep(ctx, v);
-            if (rep != XR_REP_VOID) {
-                fprintf(out, "    ");
-                emit_vref(out, v);
-                fprintf(out, " = ");
-                fprintf(out, rep == XR_REP_TAGGED ? "XR_NULL_VAL" : "0");
-                fprintf(out, ";\n");
-            }
-        }
-        return;
-    }
-
-    if (xi_value_is_blocking_countdown_latch_method_call(v)) {
-        emit_value_generated_line_reset(ctx, out, v);
-        int sid = cg_coro_claim_state(ctx, f, v, state_id);
-        fprintf(out, "    XrSlotRef _latch_wait_slot_%u = ", v->id);
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ";\n");
-        fprintf(out, "    f->state = %d;\n", sid);
-        emit_value_source_line(ctx, out, v);
-        fprintf(out, "    XrAotResult _latch_wait_%u = xr_aot_countdown_latch_wait(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", _latch_wait_slot_%u);\n", v->id);
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_latch_wait_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        return _latch_wait_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    if (_latch_wait_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _latch_wait_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    goto S%d_DONE;\n", sid);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = %d;\n", sid);
-        fprintf(out, "    _latch_wait_slot_%u = ", v->id);
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ";\n");
-        emit_value_source_line(ctx, out, v);
-        fprintf(out,
-                "    _latch_wait_%u = xr_aot_countdown_latch_wait_resume(ctx, "
-                "_latch_wait_slot_%u);\n",
-                v->id, v->id);
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_latch_wait_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
-        fprintf(out, "        return _latch_wait_%u;\n", v->id);
-        fprintf(out, "    if (_latch_wait_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _latch_wait_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "S%d_DONE:;\n", sid);
-        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
-        return;
-    }
-
-    if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_countdown_latch(v->args[0])) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT CountdownLatch method '%s'\n",
-                v->aux ? (const char *) v->aux : "?");
-        emit_codegen_abort_aot_result(out);
-        return;
-    }
-
-    if (xi_value_is_semaphore_method_call(v, "release", 0) ||
-        xi_value_is_semaphore_method_call(v, "release", 1)) {
-        fprintf(out, "    int64_t _sem_release_%u = xr_aot_semaphore_release_i64(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        if (v->nargs >= 2)
-            emit_int64_arg(ctx, out, v->args[1]);
-        else
-            fprintf(out, "1");
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[40];
-            snprintf(tmp, sizeof(tmp), "_sem_release_%u", v->id);
-            emit_assign_from_i64_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_semaphore_method_call(v, "tryAcquire", 0)) {
-        fprintf(out, "    bool _sem_try_acquire_%u = xr_aot_semaphore_try_acquire_bool(ctx, ",
-                v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[48];
-            snprintf(tmp, sizeof(tmp), "_sem_try_acquire_%u", v->id);
-            emit_assign_from_bool_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_semaphore_method_call(v, "close", 0)) {
-        fprintf(out, "    xr_aot_semaphore_close_void(ctx, ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            XrRep rep = cg_value_plan_storage_rep(ctx, v);
-            if (rep != XR_REP_VOID) {
-                fprintf(out, "    ");
-                emit_vref(out, v);
-                fprintf(out, " = ");
-                fprintf(out, rep == XR_REP_TAGGED ? "XR_NULL_VAL" : "0");
-                fprintf(out, ";\n");
-            }
-        }
-        return;
-    }
-
-    if (xi_value_is_blocking_semaphore_method_call(v)) {
-        emit_value_generated_line_reset(ctx, out, v);
-        int sid = cg_coro_claim_state(ctx, f, v, state_id);
-        fprintf(out, "    XrSlotRef _sem_acquire_slot_%u = ", v->id);
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ";\n");
-        fprintf(out, "    f->state = %d;\n", sid);
-        emit_value_source_line(ctx, out, v);
-        fprintf(out, "    XrAotResult _sem_acquire_%u = xr_aot_semaphore_acquire(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", _sem_acquire_slot_%u);\n", v->id);
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_sem_acquire_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        return _sem_acquire_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    if (_sem_acquire_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _sem_acquire_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    goto S%d_DONE;\n", sid);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = %d;\n", sid);
-        fprintf(out, "    _sem_acquire_slot_%u = ", v->id);
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ";\n");
-        emit_value_source_line(ctx, out, v);
-        fprintf(out,
-                "    _sem_acquire_%u = xr_aot_semaphore_acquire_resume(ctx, "
-                "_sem_acquire_slot_%u);\n",
-                v->id, v->id);
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_sem_acquire_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
-        fprintf(out, "        return _sem_acquire_%u;\n", v->id);
-        fprintf(out, "    if (_sem_acquire_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _sem_acquire_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "S%d_DONE:;\n", sid);
-        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
-        return;
-    }
-
-    if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_semaphore(v->args[0])) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Semaphore method '%s'\n",
-                v->aux ? (const char *) v->aux : "?");
-        emit_codegen_abort_aot_result(out);
-        return;
-    }
-
-    if (xi_value_is_event_count_method_call(v, "advance", 0) ||
-        xi_value_is_event_count_method_call(v, "advance", 1)) {
-        fprintf(out, "    int64_t _event_count_advance_%u = xr_aot_event_count_advance_i64(ctx, ",
-                v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        if (v->nargs >= 2)
-            emit_int64_arg(ctx, out, v->args[1]);
-        else
-            fprintf(out, "1");
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[56];
-            snprintf(tmp, sizeof(tmp), "_event_count_advance_%u", v->id);
-            emit_assign_from_i64_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
-    if (xi_value_is_event_count_method_call(v, "close", 0)) {
-        fprintf(out, "    xr_aot_event_count_close_void(ctx, ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            XrRep rep = cg_value_plan_storage_rep(ctx, v);
-            if (rep != XR_REP_VOID) {
-                fprintf(out, "    ");
-                emit_vref(out, v);
-                fprintf(out, " = ");
-                fprintf(out, rep == XR_REP_TAGGED ? "XR_NULL_VAL" : "0");
-                fprintf(out, ";\n");
-            }
-        }
-        return;
-    }
-
-    if (xi_value_is_blocking_event_count_method_call(v)) {
-        emit_value_generated_line_reset(ctx, out, v);
-        int sid = cg_coro_claim_state(ctx, f, v, state_id);
-        fprintf(out, "    XrSlotRef _event_count_wait_slot_%u = ", v->id);
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ";\n");
-        fprintf(out, "    f->state = %d;\n", sid);
-        emit_value_source_line(ctx, out, v);
-        fprintf(out, "    XrAotResult _event_count_wait_%u = xr_aot_event_count_wait(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_int64_arg(ctx, out, v->args[1]);
-        fprintf(out, ", ");
-        if (v->nargs >= 3)
-            emit_int64_arg(ctx, out, v->args[2]);
-        else
-            fprintf(out, "-1");
-        fprintf(out, ", _event_count_wait_slot_%u);\n", v->id);
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_event_count_wait_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        return _event_count_wait_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    if (_event_count_wait_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _event_count_wait_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    goto S%d_DONE;\n", sid);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = %d;\n", sid);
-        fprintf(out, "    _event_count_wait_slot_%u = ", v->id);
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ";\n");
-        emit_value_source_line(ctx, out, v);
-        fprintf(out,
-                "    _event_count_wait_%u = xr_aot_event_count_wait_resume(ctx, "
-                "_event_count_wait_slot_%u);\n",
-                v->id, v->id);
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_event_count_wait_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
-        fprintf(out, "        return _event_count_wait_%u;\n", v->id);
-        fprintf(out, "    if (_event_count_wait_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _event_count_wait_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "S%d_DONE:;\n", sid);
-        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
-        return;
-    }
-
-    if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_event_count(v->args[0])) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT EventCount method '%s'\n",
                 v->aux ? (const char *) v->aux : "?");
         emit_codegen_abort_aot_result(out);
         return;
@@ -5727,21 +4955,45 @@ static void emit_coro_direct_call_frame_release(XiCgenCtx *ctx, FILE *out, const
     }
 }
 
-static void emit_coro_net_async_state_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+static void emit_coro_direct_call_frame_cleanup(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const char *prefix) {
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (cg_coro_net_call_kind(ctx, f, v) != CG_CORO_NET_COPY_BIDIRECTIONAL)
+            const XaotCallableInvokePlan *switch_plan = cg_coro_callable_target_switch_plan(ctx, v);
+            if (switch_plan) {
+                const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+                fprintf(out, "    if (f->call_frame_%u) {\n", v->id);
+                fprintf(out, "        switch (f->call_target_id_%u) {\n", v->id);
+                for (uint16_t ti = 0; ti < switch_plan->target_count; ti++) {
+                    const XaotCallableTargetCase *target =
+                        xaot_bundle_callable_target_case(bundle, switch_plan, ti);
+                    if (!target || !target->target_func ||
+                        (target->effect_bits & XG_BODY_MAY_SUSPEND) == 0)
+                        continue;
+                    const char *target_prefix = cg_module_prefix_for_func(ctx, target->target_func);
+                    fprintf(out, "            case %uu: if (", target->target_id);
+                    emit_fname_suffix(ctx, out, target_prefix, target->target_func, "_aot_desc");
+                    fprintf(out, ".run_pending_cleanup) ");
+                    emit_fname_suffix(ctx, out, target_prefix, target->target_func, "_aot_desc");
+                    fprintf(out, ".run_pending_cleanup(f->call_frame_%u, ctx); break;\n", v->id);
+                }
+                fprintf(out, "            default: break;\n");
+                fprintf(out, "        }\n    }\n");
                 continue;
-            fprintf(out, "    if (f->net_bidi_state_%u) {\n", v->id);
-            fprintf(out, "        xrt_net_bidi_async_state_cancel(f->net_bidi_state_%u);\n", v->id);
-            fprintf(out, "        xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n",
-                    v->id);
-            fprintf(out, "        f->net_bidi_state_%u = NULL;\n", v->id);
-            fprintf(out, "    }\n");
+            }
+            CgStaticFunctionCall call = cg_coro_direct_suspend_call_target_info(ctx, f, v);
+            if (!call.func)
+                continue;
+            const char *target_prefix = call.prefix ? call.prefix : prefix;
+            fprintf(out, "    if (f->call_frame_%u && ", v->id);
+            emit_fname_suffix(ctx, out, target_prefix, call.func, "_aot_desc");
+            fprintf(out, ".run_pending_cleanup)\n        ");
+            emit_fname_suffix(ctx, out, target_prefix, call.func, "_aot_desc");
+            fprintf(out, ".run_pending_cleanup(f->call_frame_%u, ctx);\n", v->id);
         }
     }
 }
@@ -5756,20 +5008,6 @@ static uint32_t cg_coro_direct_call_frame_count(XiCgenCtx *ctx, const XiFunc *f)
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             if (cg_coro_call_needs_child_frame(ctx, f, blk->values[vi]))
-                count++;
-        }
-    }
-    return count;
-}
-
-static uint32_t cg_coro_net_async_state_count(XiCgenCtx *ctx, const XiFunc *f) {
-    uint32_t count = 0;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            if (cg_coro_net_call_kind(ctx, f, blk->values[vi]) == CG_CORO_NET_COPY_BIDIRECTIONAL)
                 count++;
         }
     }
@@ -5807,7 +5045,8 @@ static uint16_t cg_coro_plan_slot_physical_release_width(XiCgenCtx *ctx, const X
  * frame_root survives the storage filter, plus the direct suspend-call pointers.
  * Matches what emit_coro_frame_value_visit traces by construction. */
 static uint32_t cg_coro_plan_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const XiCoroPlan *plan) {
-    uint32_t count = cg_coro_direct_call_frame_count(ctx, f);
+    uint32_t count =
+        cg_coro_direct_call_frame_count(ctx, f) + (cg_coro_func_has_net_wait(ctx, f) ? 1u : 0u);
     if (!plan)
         return count;
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
@@ -5859,7 +5098,7 @@ static uint32_t cg_coro_plan_frame_releases(XiCgenCtx *ctx, const XiFunc *f,
                                             const XiCoroPlan *plan) {
     uint32_t count = (cg_func_frame_needs_cl(f) ? 1u : 0u) +
                      cg_coro_direct_call_frame_count(ctx, f) +
-                     cg_coro_net_async_state_count(ctx, f);
+                     (cg_coro_func_has_net_wait(ctx, f) ? 1u : 0u);
     if (!plan)
         return count;
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
@@ -6029,7 +5268,10 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         fprintf(out, "        return _result;\n");
         fprintf(out, "    }\n");
         fprintf(out, "}\n\n");
+    }
 
+    bool needs_cancel_cleanup = cg_coro_func_needs_cancel_cleanup(ctx, f);
+    if (needs_cancel_cleanup) {
         fprintf(out, "%svoid ", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_run_cleanup");
         fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
@@ -6038,13 +5280,28 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         fprintf(out, " *f = (");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
         fprintf(out, " *)raw_frame;\n");
-        fprintf(out, "    if (!f || f->cleanup_depth == 0)\n        return;\n");
-        fprintf(out, "    f->cleanup_cancel = true;\n");
-        fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
-        fprintf(out, "    f->cleanup_dispatch = f->cleanup_entries[--f->cleanup_depth];\n");
-        fprintf(out, "    (void)");
-        emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
-        fprintf(out, "(raw_frame, ctx);\n");
+        fprintf(out, "    if (!f)\n        return;\n");
+        emit_coro_direct_call_frame_cleanup(ctx, out, f, prefix);
+        if (cg_coro_func_has_net_wait(ctx, f)) {
+            fprintf(out, "    if (!XR_IS_NULL(f->net_pending_handle)) {\n"
+                         "        if (f->net_pending_tls_handshake)\n"
+                         "            (void)xrt_net_tls_handshake_abort(f->net_pending_handle, "
+                         "XRT_NETERR_CANCELLED);\n"
+                         "        else\n"
+                         "            xrt_net_mark_error(f->net_pending_handle, "
+                         "XRT_NETERR_CANCELLED);\n");
+            emit_coro_net_pending_end(out, "        ");
+            fprintf(out, "    }\n");
+        }
+        if (cleanup_capacity > 0) {
+            fprintf(out, "    if (f->cleanup_depth == 0)\n        return;\n");
+            fprintf(out, "    f->cleanup_cancel = true;\n");
+            fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
+            fprintf(out, "    f->cleanup_dispatch = f->cleanup_entries[--f->cleanup_depth];\n");
+            fprintf(out, "    (void)");
+            emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
+            fprintf(out, "(raw_frame, ctx);\n");
+        }
         fprintf(out, "}\n\n");
     }
 
@@ -6057,6 +5314,9 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " *)frame;\n");
     fprintf(out, "    if (!f)\n        return;\n");
+    if (cg_coro_func_has_net_wait(ctx, f))
+        fprintf(out, "    if (!XR_IS_NULL(f->net_pending_handle))\n"
+                     "        xr_aot_trace_frame_value(visitor, f->net_pending_handle);\n");
     emit_coro_frame_value_visit(ctx, out, f, "xr_aot_trace_frame_value", true);
     emit_coro_direct_call_frame_trace(ctx, out, f, prefix);
     fprintf(out, "}\n\n");
@@ -6071,8 +5331,18 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, " *)frame;\n");
     fprintf(out, "    (void)heap;\n");
     fprintf(out, "    if (!f)\n        return;\n");
+    if (cg_coro_func_has_net_wait(ctx, f)) {
+        fprintf(out,
+                "    if (!XR_IS_NULL(f->net_pending_handle)) {\n"
+                "        if (f->net_pending_tls_handshake)\n"
+                "            (void)xrt_net_tls_handshake_abort(f->net_pending_handle, "
+                "XRT_NETERR_CANCELLED);\n"
+                "        else\n"
+                "            xrt_net_mark_error(f->net_pending_handle, XRT_NETERR_CANCELLED);\n");
+        emit_coro_net_pending_end(out, "        ");
+        fprintf(out, "    }\n");
+    }
     emit_coro_direct_call_frame_release(ctx, out, f, prefix);
-    emit_coro_net_async_state_release(ctx, out, f);
     emit_coro_frame_arc_release(ctx, out, f);
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_release(xr_mkptr(f->_cl, XR_TAG_CLOSURE));\n");
@@ -6098,7 +5368,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, ",\n");
     fprintf(out, "    .run_pending_cleanup = ");
-    if (cleanup_capacity > 0)
+    if (needs_cancel_cleanup)
         emit_fname_suffix(ctx, out, prefix, f, "_aot_run_cleanup");
     else
         fprintf(out, "NULL");

@@ -38,8 +38,13 @@ static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
 static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 14, .frozen = true};
 static XrType stub_task = {
     .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
-static XrType stub_result_group = {
-    .kind = XR_KIND_INSTANCE, .id = 13, .frozen = true, .instance = {.class_name = "ResultGroup"}};
+static XrType stub_range = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 13,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "Range"},
+};
 static XrType stub_task_array = {
     .kind = XR_KIND_ARRAY,
     .id = 12,
@@ -1074,56 +1079,6 @@ TEST(mark_one_shot_sequential_await_skips_persistent_task_array) {
     xi_func_free(f);
 }
 
-TEST(mark_fire_and_forget_result_group_go_deferred) {
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *callee = xi_param(f, blk, 0, &stub_func);
-    XiValue *group = xi_param(f, blk, 1, &stub_result_group);
-    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_void, 2);
-    go->args[0] = callee;
-    go->args[1] = group;
-    go->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_FIRE_AND_FORGET;
-
-    XiValue *recv = xi_value_new(f, blk, XI_CALL_METHOD, &stub_int, 1);
-    recv->args[0] = group;
-    recv->aux = (void *) "recv";
-    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
-
-    XiPassChange chg = xi_opt_mark_one_shot_await(f);
-
-    (void) recv;
-    assert(chg.values_changed && "ResultGroup producer go should be deferred until recv");
-    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
-    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
-    xi_func_free(f);
-}
-
-TEST(mark_fire_and_forget_result_group_go_keeps_linked_go_immediate) {
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *callee = xi_param(f, blk, 0, &stub_func);
-    XiValue *group = xi_param(f, blk, 1, &stub_result_group);
-    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_void, 2);
-    go->args[0] = callee;
-    go->args[1] = group;
-    go->aux_int = 1;
-    go->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_FIRE_AND_FORGET;
-
-    XiValue *recv = xi_value_new(f, blk, XI_CALL_METHOD, &stub_int, 1);
-    recv->args[0] = group;
-    recv->aux = (void *) "recv";
-    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
-
-    XiPassChange chg = xi_opt_mark_one_shot_await(f);
-
-    (void) recv;
-    assert(!chg.values_changed && "linked fire-and-forget go has observable propagation state");
-    assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
-    xi_func_free(f);
-}
-
 /* ========== DCE Tests ========== */
 
 TEST(dce_removes_unused) {
@@ -1740,6 +1695,38 @@ TEST(select_rep_box_const_for_return) {
     assert(blk->control != c42 && "return should wrap const in BOX");
     assert(blk->control->op == XI_BOX && "wrapper should be XI_BOX");
     assert(blk->control->args[0] == c42 && "BOX arg should be the constant");
+    xi_func_free(f);
+}
+
+TEST(select_rep_range_bounds_use_native_i64) {
+    XiFunc *f = make_func("select_rep_range_bounds", &stub_void);
+    XiBlock *blk = f->entry;
+    XiValue *start = xi_const_int(f, blk, 2, &stub_int);
+    XiValue *end = xi_const_int(f, blk, 5, &stub_int);
+    XiValue *range = xi_value_new(f, blk, XI_RANGE, &stub_range, 2);
+    REQUIRE(start && end && range);
+    range->args[0] = start;
+    range->args[1] = end;
+
+    XiRepPolicy policy = xi_rep_policy_aot_transition();
+    XiRepAdapterKind kind = XI_REP_ADAPTER_COUNT;
+    uint16_t input = XR_REP_VOID;
+    uint16_t output = XR_REP_VOID;
+    REQUIRE(!xi_opt_rep_adapter_for_use(start, range, 0, &policy, &kind, &input, &output));
+    REQUIRE(kind == XI_REP_ADAPTER_NONE);
+    REQUIRE(!xi_opt_rep_adapter_for_use(end, range, 1, &policy, &kind, &input, &output));
+    REQUIRE(kind == XI_REP_ADAPTER_NONE);
+
+    XiOp saved_op = range->op;
+    range->op = XI_TUPLE_NEW;
+    REQUIRE(xi_opt_rep_adapter_for_use(start, range, 0, &policy, &kind, &input, &output));
+    REQUIRE(kind == XI_REP_ADAPTER_BOX && input == XR_REP_I64 && output == XR_REP_TAGGED);
+    range->op = saved_op;
+
+    xi_opt_select_rep_with_policy(f, &policy);
+    REQUIRE(range->args[0] == start && range->args[1] == end);
+    REQUIRE(count_rep_adapter(f, XI_BOX, start) == 0);
+    REQUIRE(count_rep_adapter(f, XI_BOX, end) == 0);
     xi_func_free(f);
 }
 
@@ -2849,8 +2836,6 @@ int main(void) {
     run_mark_one_shot_sequential_await_counted_task_array_loop();
     run_mark_one_shot_sequential_await_rejects_repeated_constant_index_loop();
     run_mark_one_shot_sequential_await_skips_persistent_task_array();
-    run_mark_fire_and_forget_result_group_go_deferred();
-    run_mark_fire_and_forget_result_group_go_keeps_linked_go_immediate();
 
     /* Dead code elimination */
     run_dce_removes_unused();
@@ -2880,6 +2865,7 @@ int main(void) {
 
     /* SelectRepresentations */
     run_select_rep_box_const_for_return();
+    run_select_rep_range_bounds_use_native_i64();
     run_select_rep_enum_ordinal_requires_exact_native_witness();
     run_select_rep_unbox_param_for_arith();
     run_select_rep_identity_copy_preserves_source_carrier();

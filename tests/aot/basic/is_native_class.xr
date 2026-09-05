@@ -1,10 +1,9 @@
-// `is` / `as` against prelude native classes must answer identically under
-// VM and AOT: the VM reads the instance type id, the AOT backend compares
-// the value tag. Sockets stay out except `net.listen`, whose behavior is
-// backend-identical; `net.dial` is not, so the NetConn positive lives in the
-// VM regression suite and the AOT tag path is pinned by the cgen filetest.
+// `is` / `as` must answer identically under VM and AOT for source-defined net
+// classes and prelude native classes. Source classes use runtime type identity;
+// BigInt/StringBuilder use their dedicated native value tags.
 
 import net
+import { NetConn, NetListener } from net
 
 fn isConn(x: NetConn | i64) -> bool { return x is NetConn }
 fn isListener(x: NetListener | i64) -> bool { return x is NetListener }

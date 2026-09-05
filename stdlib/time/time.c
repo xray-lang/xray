@@ -10,6 +10,7 @@
 
 #include "../common.h"
 #include "../../src/coro/xworker.h"
+#include "../../src/coro/xblock.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/vm/xvm.h"  // xr_yieldable_cfunction_new
 #include "../../src/base/xchecks.h"
@@ -57,19 +58,6 @@ static XrValue time_utcOffsetAt(XrVMRuntime *isolate, XrValue *args, int nargs) 
 }
 
 /*
- * Continuation for time.sleep — the timer has fired, just return null.
- */
-static XrCFuncResult time_sleep_done(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
-                                     XrValue *result) {
-    (void) X;
-    (void) status;
-    (void) resume_value;
-    (void) ctx;
-    *result = xr_null();
-    return XR_CFUNC_DONE;
-}
-
-/*
  * time.sleep(milliseconds: int) -> null
  *
  * Coroutine-friendly: yields via xr_yield_for_timeout so the worker
@@ -86,18 +74,13 @@ static XrCFuncResult xr_time_sleep(XrVMRuntime *X, XrValue *args, int nargs, XrV
     }
 
     int64_t ms = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : (int64_t) XR_TO_FLOAT(args[0]);
-    if (ms <= 0) {
+    ms = xr_time_sleep_normalize_ms(ms);
+    if (ms == 0) {
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
 
-    /* Cap at 24 hours to prevent timer-wheel overflow or scheduler
-     * starvation from accidentally huge values. */
-    static const int64_t MAX_SLEEP_MS = 24LL * 60 * 60 * 1000;
-    if (ms > MAX_SLEEP_MS)
-        ms = MAX_SLEEP_MS;
-
-    return xr_yield_for_timeout(X, ms, time_sleep_done, NULL, result);
+    return xr_yield_for_timeout(X, ms, xr_yield_finish_null, NULL, result);
 }
 
 // ========== Module loader ==========

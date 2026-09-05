@@ -1,20 +1,14 @@
 // regex - pattern matching, written in Xray.
 //
-// This file is the sole compile and match owner: it owns the parser, compiler,
-// NFA simulation and top-level API. The native binding retains only VM handle
-// construction and three non-matching leaves that Xray cannot express.
+// This file is the sole regex owner: it declares the Regex object, flag
+// policy, compiled-program cache, parser, compiler, NFA simulation and public
+// API. A regex literal is canonicalized to this class constructor, so literal
+// and dynamic construction cannot acquire separate representations or flag
+// parsers.
 //
-// What stays native, and why it is not a second owner of anything here:
-//   __regexNew         allocates the Regex handle. `Regex` has to remain a
-//                      native class because the literal syntax /pat/flags
-//                      lowers to XI_REGEX_COMPILE with its result type pinned
-//                      to type_regex (src/ir/xi_lower_expr.c:11349).
-//   __regexParseFlags  the one flag-string mask used by both regex.compile()
-//                      and the VM regex-literal path.
-//   __unicodePropId    the unicode property tables belong to unicode, not to
-//   __unicodeHasProp   regex; their owner is src/base/xunicode.c and copying
-//                      several hundred code-point ranges in here would mint a
-//                      second answer to the same question.
+// Only two native leaves remain. __unicodePropId and __unicodeHasProp query
+// the runtime's canonical Unicode property tables; they contain no regex
+// object, cache, parser or matching policy.
 //
 // Layout of the compiled program image, the AST and every constant below is
 // fixed by analysis/r3-6-5-regex-xray-design.md.
@@ -29,11 +23,51 @@
 //   * Array<i64>(n) does not zero-fill: 255 of 256 elements came back non-zero
 //     from reused memory. Every sized allocation states its fill value.
 
+export final class Regex {
+    pattern: string
+    flags: i64
+    prog: Array<i64>
+
+    constructor(pattern: string, flags: string = "") {
+        this.pattern = pattern
+        this.flags = rxParseFlags(flags)
+        this.prog = Array<i64>()
+    }
+}
+
+export final class RegexMatch {
+    start: i64
+    end: i64
+    text: string
+    groups: Array<string>
+
+    constructor(start: i64, end: i64, text: string, groups: Array<string>) {
+        this.start = start
+        this.end = end
+        this.text = text
+        this.groups = groups
+    }
+}
+
 const RX_F_NONE: i64 = 0
 const RX_F_IGNORECASE: i64 = 1
 const RX_F_MULTILINE: i64 = 2
 const RX_F_DOTALL: i64 = 4
 const RX_F_UNGREEDY: i64 = 8
+
+fn rxParseFlags(flags: string) -> i64 {
+    var text = flags.copyBytes()
+    var parsed = RX_F_NONE
+    var i = 0
+    while (i < len(text)) {
+        var flag = text[i] as i64
+        if (flag == 105) { parsed = parsed | RX_F_IGNORECASE }
+        else if (flag == 109) { parsed = parsed | RX_F_MULTILINE }
+        else if (flag == 115) { parsed = parsed | RX_F_DOTALL }
+        i = i + 1
+    }
+    return parsed
+}
 
 const EW_BEGIN_LINE: i64 = 1
 const EW_END_LINE: i64 = 2
@@ -1205,6 +1239,21 @@ fn rxDecodeUtf8(text: Array<u8>, i: i64) -> i64 {
     return -1
 }
 
+// Return the first byte boundary after the scalar starting at `pos`. Empty
+// matches are observable positions in the public API, so repeated searches
+// must advance by one Unicode scalar rather than one storage byte. A position
+// inside an invalid scalar still advances by one byte: callers always start
+// from a string boundary, but the fallback guarantees progress if that
+// invariant is ever weakened.
+fn rxNextScalarBoundary(text: Array<u8>, pos: i64) -> i64 {
+    var n = len(text)
+    if (pos < 0) { return 0 }
+    if (pos >= n) { return n + 1 }
+    var decoded = rxDecodeUtf8(text, pos)
+    if (decoded < 0) { return pos + 1 }
+    return pos + (decoded & 255)
+}
+
 // Execution scratch: thread lists, capture snapshots and the dedup marks.
 // Two preallocated lists are swapped rather than reallocated per byte.
 class RxX {
@@ -1499,7 +1548,11 @@ fn rxCount(prog: Array<i64>, s: string) -> i64 {
     while (pos <= n) {
         if (!rxSearch(prog, text, pos, false, ref caps)) { break }
         total = total + 1
-        if (caps[1] == caps[0]) { pos = caps[0] + 1 } else { pos = caps[1] }
+        if (caps[1] == caps[0]) {
+            pos = rxNextScalarBoundary(text, caps[0])
+        } else {
+            pos = caps[1]
+        }
     }
     return total
 }
@@ -1545,7 +1598,11 @@ fn rxFindAllRanges(prog: Array<i64>, s: string, limit: i64) -> Array<i64> {
             k = k + 1
         }
         found = found + 1
-        if (caps[1] == caps[0]) { pos = caps[0] + 1 } else { pos = caps[1] }
+        if (caps[1] == caps[0]) {
+            pos = rxNextScalarBoundary(text, caps[0])
+        } else {
+            pos = caps[1]
+        }
     }
     return out
 }
@@ -1643,13 +1700,21 @@ fn rxReplace(prog: Array<i64>, s: string, repl: string, all: bool) -> string {
         rxAppendRepl(buf, rb, text, caps, ncaps)
         last = caps[1]
         if (caps[1] == caps[0]) {
-            // one empty match per position, then step over one byte; the C fast
-            // path re-emitted the byte at p here, which is mine 6
+            // One empty match per scalar boundary. Copy the complete scalar
+            // before searching from the next boundary so the assembled bytes
+            // remain valid UTF-8.
             if (caps[0] < n) {
-                buf.b.push(text[caps[0]])
-                last = caps[0] + 1
+                var next = rxNextScalarBoundary(text, caps[0])
+                var scalarPos = caps[0]
+                while (scalarPos < next) {
+                    buf.b.push(text[scalarPos])
+                    scalarPos = scalarPos + 1
+                }
+                last = next
+                pos = next
+            } else {
+                pos = n + 1
             }
-            pos = caps[0] + 1
         } else {
             pos = caps[1]
         }
@@ -1684,9 +1749,9 @@ fn rxSplit(prog: Array<i64>, s: string, limit: i64) -> Array<string> {
         if (limit > 0 && len(parts) >= limit - 1) { break }
         if (!rxSearch(prog, text, pos, false, ref caps)) { break }
         if (caps[0] == caps[1]) {
-            // an empty separator never splits; step one byte
+            // An empty separator never splits; resume at the next scalar.
             if (caps[0] >= n) { break }
-            pos = caps[0] + 1
+            pos = rxNextScalarBoundary(text, caps[0])
             continue
         }
         parts.push(rxBytesToStr(text, last, caps[0]))
@@ -1743,9 +1808,9 @@ export enum RegexError {
     InvalidPattern { message: string, position: i64 }
 }
 
-// The program image is compiled on first use and memoised in the handle.
-// Laziness is forced by the literal path: /pat/flags reaches __regexNew
-// through the VM's OP_REGEX_COMPILE, and C can no longer compile a pattern.
+// The program image is compiled on first use and memoised in the source object.
+// Literals call the same constructor as explicit source construction, so this
+// is the only cache and the only lazy-compilation policy.
 // The write is idempotent -- the same pattern and flags compile to an equal
 // image -- so two coroutines racing here can at worst compile twice. That is
 // the whole of the mutable state in this engine, and it is why the DFA is
@@ -1780,7 +1845,7 @@ fn rxProgValid(prog: Array<i64>) -> bool {
 }
 
 export fn compile(pattern: string, flags: string = "") -> Regex {
-    var re = __regexNew(pattern, __regexParseFlags(flags))
+    var re = Regex(pattern, flags)
     // Compile eagerly so a bad pattern is reported by compile(), where C
     // reported it. C answered null after xr_runtime_error
     // (xregex_binding.c:238-242); `-> Regex` cannot answer null, and handing
@@ -1832,7 +1897,7 @@ fn rxMakeMatch(text: Array<u8>, caps: Array<i64>, ncaps: i64) -> RegexMatch {
         }
         i = i + 1
     }
-    return __regexMatchNew(caps[0], caps[1], rxBytesToStr(text, caps[0], caps[1]), g)
+    return RegexMatch(caps[0], caps[1], rxBytesToStr(text, caps[0], caps[1]), g)
 }
 
 // Mine 3 (KEPT): offset shifts the text base, so ^ \A and \b can hold again at

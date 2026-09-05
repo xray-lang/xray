@@ -1,5 +1,5 @@
 // Typed sys.Process lifecycle handle. This keeps process management separate
-// from os.exec/os.spawn convenience capture helpers and does not introduce
+// from os.exec convenience capture and does not introduce
 // parallel process APIs.
 import sys
 import { ProcessOptions, Signal } from sys

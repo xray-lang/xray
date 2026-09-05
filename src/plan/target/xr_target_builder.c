@@ -25,6 +25,7 @@
 #include "../semantic/xr_semantic_enum_shape.h"
 #include "../semantic/xr_semantic_range_slice_shape.h"
 #include "xr_target_profile_internal.h"
+#include "xr_target_program_reachability.h"
 #include "../../base/xmalloc.h"
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../ir/xi.h"
@@ -33,14 +34,18 @@
 #include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../semantic/xr_semantic_allocation_shape.h"
+#include "../semantic/xr_semantic_array_index_shape.h"
 #include "../semantic/xr_semantic_array_type_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
+#include "../semantic/xr_semantic_source_class_field_shape.h"
+#include "../semantic/xr_semantic_source_structural_field_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_string_utf8_shape.h"
 #include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
+#include "../semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../semantic/xr_semantic_map_entry_iterator_shape.h"
@@ -54,7 +59,7 @@
 #include "../semantic/xr_semantic_native_leaf_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
-#include "../semantic/xr_semantic_owner_forward_shape.h"
+#include "../semantic/xr_semantic_owner_transfer_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_const_variant_shape.h"
 #include "../semantic/xr_semantic_direct_callee_shape.h"
@@ -135,6 +140,7 @@ typedef struct XrTargetCallIntent {
     uint32_t callee_function;
     uint32_t source_dependency;
     uint32_t source_export;
+    uint32_t runtime_capabilities;
     XrStableId source_export_identity;
     XrStableId source_callee_identity;
     XrStableId native_callee_identity;
@@ -274,6 +280,8 @@ struct XrTargetPlanBuilder {
     XrSemanticPlan *semantic_plan;
     XrSemanticPlan **semantic_dependencies;
     uint32_t semantic_dependency_count;
+    const XrTargetProgramReachability *program_reachability;
+    uint32_t program_module;
     XrTargetProfile *profile;
     XrTargetRepIntent *rep_intents;
     uint32_t rep_intent_count;
@@ -409,10 +417,14 @@ static const char *target_trace_call_target_kind_name(uint8_t kind) {
             return "SOURCE_INSTANCE_METHOD_LOCAL";
         case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE:
             return "SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE";
-        case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN:
-            return "SOURCE_INSTANCE_METHOD_OPEN";
+        case XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL:
+            return "SOURCE_TEMPLATE_METHOD_LOCAL";
+        case XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY:
+            return "SOURCE_METHOD_DEPENDENCY";
         case XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR:
             return "SOURCE_CLASS_CONSTRUCTOR";
+        case XR_SEM_CALL_TARGET_NATIVE_DIRECT:
+            return "NATIVE_DIRECT";
         default:
             return "unnamed";
     }
@@ -887,6 +899,13 @@ static bool private_leaf_program_excludes_function(const XrTargetPlanBuilder *bu
                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
            function && !function->is_module_initializer &&
            !xr_semantic_plan_program_function_for_semantic_function(semantic, semantic_function);
+}
+
+static bool program_module_set_excludes_function(const XrTargetPlanBuilder *builder,
+                                                 uint32_t semantic_function) {
+    return builder && builder->program_reachability &&
+           !xr_target_program_function_is_reachable(builder->program_reachability,
+                                                    builder->program_module, semantic_function);
 }
 
 static bool private_leaf_program_compile_time_callee_value(const XrSemanticPlan *semantic,
@@ -5269,6 +5288,110 @@ static bool builder_ref_caller_storage_is_exact(const XrTargetPlanBuilder *build
     return true;
 }
 
+/* Close the exact value-preserving chain before a direct-local ref argument
+ * asks for its caller storage.  The ordinary identity/owner-transfer families
+ * run later, after the boundary families have established all producer
+ * representations; a single family reorder therefore cannot solve mixed
+ * COPY -> MOVE -> COPY chains.  This local fixed point consumes only the
+ * shared exact semantic shapes and only exact tagged Array representations.
+ * It never guesses from an opcode or admits an arbitrary cross-type COPY. */
+static bool builder_close_exact_tagged_array_forwarding_storage(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis, char *error,
+    size_t error_size) {
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    bool changed;
+    do {
+        changed = false;
+        for (uint32_t i = 0; i < operation_count; i++) {
+            const XrSemanticOperationRecord *operation =
+                xr_semantic_plan_operation(builder->semantic_plan, i);
+            uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+            bool exact_identity = xr_semantic_storage_identity_copy_is_exact(
+                builder->semantic_plan, operation, &source_value);
+            bool exact_transfer =
+                !exact_identity && xr_semantic_owner_transfer_is_exact(
+                                       builder->semantic_plan, operation, &source_value);
+            uint8_t result_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+            if ((!exact_identity && !exact_transfer) || !operation ||
+                operation->result_value >= analysis->total_values ||
+                operation->result_type >= analysis->type_count ||
+                analysis->defined_values[operation->result_value] ||
+                !semantic_direct_local_array_type_is_exact(builder->semantic_plan,
+                                                           operation->result_type, false,
+                                                           &result_storage) ||
+                source_value >= analysis->total_values ||
+                !analysis->defined_values[source_value])
+                continue;
+
+            const XrTargetValueIntent *source_match = NULL;
+            for (uint32_t v = 0; v < builder->value_intent_count; v++) {
+                const XrTargetValueIntent *candidate = &builder->value_intents[v];
+                if (candidate->semantic_value != source_value)
+                    continue;
+                if (source_match) {
+                    source_match = NULL;
+                    break;
+                }
+                source_match = candidate;
+            }
+            if (!source_match || source_match->semantic_function != operation->function ||
+                source_match->register_rep.kind != XR_MACHINE_REP_DYN_VALUE ||
+                source_match->memory_rep.kind != XR_MACHINE_REP_DYN_VALUE ||
+                !builder_ref_caller_storage_is_exact(builder, source_value,
+                                                     source_match->semantic_type,
+                                                     operation->function))
+                continue;
+
+            /* Appending may grow the intent array, so copy the inherited rows
+             * before handing any pointer back to the builder. */
+            XrTargetMachineRepRecord register_rep = source_match->register_rep;
+            XrTargetMachineRepRecord memory_rep = source_match->memory_rep;
+            XrStableId slot_identity;
+            if (!make_slot_identity(builder->semantic_plan, operation->function,
+                                    XR_TARGET_SLOT_TEMPORARY, operation->id,
+                                    XR_SEMANTIC_INDEX_NONE, &slot_identity))
+                return fail(error, error_size, "XR_TARGET_1001",
+                            "tagged Array forwarding slot identity is incomplete");
+            XrTargetSlotIntent slot = {
+                .identity = slot_identity,
+                .function = operation->function,
+                .semantic_value = operation->result_value,
+                .semantic_operation = i,
+                .logical_slot = XR_SEMANTIC_INDEX_NONE,
+                .register_rep = register_rep,
+                .memory_rep = memory_rep,
+                .role = XR_TARGET_SLOT_TEMPORARY,
+                .root_kind = memory_rep.root_kind,
+                .ownership = memory_rep.ownership,
+                .debug_variable = XR_SEMANTIC_INDEX_NONE,
+            };
+            XrTargetValueIntent value = {
+                .semantic_value = operation->result_value,
+                .semantic_function = operation->function,
+                .semantic_type = operation->result_type,
+                .register_rep = register_rep,
+                .memory_rep = memory_rep,
+                .slot_identity = slot_identity,
+                .has_slot = true,
+                .resolve_type_rep = false,
+            };
+            if (!append_slot_intent(builder, &slot, error, error_size) ||
+                !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC,
+                                      0, &memory_rep, error, error_size) ||
+                !append_value_intent(builder, &value, error, error_size))
+                return false;
+            analysis->defined_values[operation->result_value] = 1;
+            analysis->used_types[operation->result_type] = 1;
+            analysis->value_types[operation->result_value] = operation->result_type;
+            analysis->value_functions[operation->result_value] = operation->function;
+            analysis->value_operations[operation->result_value] = i;
+            analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+            changed = true;
+        }
+    } while (changed);
+    return true;
+}
+
 static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetPlanBuilder *builder,
                                                                  char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE,
@@ -5389,6 +5512,9 @@ static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetPlanBui
                     XR_TARGET_TAGGED_CARRIER_REF_PLACE_LOAD, load->id, error, error_size);
         }
     }
+    if (valid)
+        valid = builder_close_exact_tagged_array_forwarding_storage(builder, &analysis, error,
+                                                                    error_size);
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
@@ -5720,6 +5846,110 @@ static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder
     return true;
 }
 
+/* INDEX_GET borrows one element from its Array owner. Scalar elements were
+ * already claimed by the scalar family; this family owns the other exact
+ * machine case, a managed element stored in the tagged lane. The result gets
+ * its own SSA slot because it is a distinct value, but that slot is borrowed
+ * and therefore neither owns nor releases the Array's allocation. */
+static bool builder_add_array_index_result_storage(XrTargetPlanBuilder *builder, char *error,
+                                                   size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.used_types[value->semantic_type] = 1;
+        }
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        uint32_t operand_count = 0;
+        const XrSemanticOperandRecord *operands =
+            xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
+        uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        if (!xr_semantic_array_index_tagged_read_is_exact(builder->semantic_plan, operation, NULL,
+                                                          NULL))
+            continue;
+        if (!operation || !operands || operation->operand_begin >= operand_count ||
+            operation->result_value >= analysis.total_values ||
+            operation->result_type >= analysis.type_count ||
+            operation->function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
+            analysis.defined_values[operation->result_value] ||
+            !semantic_direct_local_array_type_is_exact(builder->semantic_plan,
+                                                       operands[operation->operand_begin].type,
+                                                       false, &array_storage) ||
+            array_storage != XR_TARGET_ARRAY_STORAGE_TAGGED) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "Array index result storage authority is incomplete");
+            break;
+        }
+        if (analysis.type_rep_kinds[operation->result_type] != XR_MACHINE_REP_COUNT &&
+            analysis.type_rep_kinds[operation->result_type] != XR_MACHINE_REP_DYN_VALUE) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "Array index result type has conflicting storage representations");
+            break;
+        }
+        XrTargetMachineRepRecord rep;
+        XrStableId slot_identity;
+        if (!make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile),
+                                             &rep) ||
+            !append_rep_intent(builder, &rep, error, error_size) ||
+            !make_slot_identity(builder->semantic_plan, operation->function,
+                                XR_TARGET_SLOT_TEMPORARY, operation->id, XR_SEMANTIC_INDEX_NONE,
+                                &slot_identity)) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "target cannot materialize borrowed Array index storage");
+            break;
+        }
+        XrTargetSlotIntent slot = {
+            .identity = slot_identity,
+            .function = operation->function,
+            .semantic_value = operation->result_value,
+            .semantic_operation = i,
+            .logical_slot = XR_SEMANTIC_INDEX_NONE,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .role = XR_TARGET_SLOT_TEMPORARY,
+            .root_kind = XR_TARGET_ROOT_DYNAMIC,
+            .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+            .debug_variable = XR_SEMANTIC_INDEX_NONE,
+        };
+        XrTargetValueIntent value = {
+            .semantic_value = operation->result_value,
+            .semantic_function = operation->function,
+            .semantic_type = operation->result_type,
+            .register_rep = rep,
+            .memory_rep = rep,
+            .slot_identity = slot_identity,
+            .has_slot = true,
+        };
+        valid = append_slot_intent(builder, &slot, error, error_size) &&
+                append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0,
+                                     &rep, error, error_size) &&
+                append_value_intent(builder, &value, error, error_size);
+        if (valid) {
+            analysis.defined_values[operation->result_value] = 1;
+            analysis.used_types[operation->result_type] = 1;
+            analysis.value_types[operation->result_value] = operation->result_type;
+            analysis.value_functions[operation->result_value] = operation->function;
+            analysis.type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+        }
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE;
+    return true;
+}
+
 /* Binds the class object to its own owned dynamic slot. The allocation is a
  * module-level ownership root: Semantic ownership and the existing AOT class
  * lifetime path still own the allocation, the roots and the cleanup, so this
@@ -5979,6 +6209,48 @@ imported_source_class_instance_storage_is_exact(const XrTargetPlanBuilder *build
             (!callee && stable_id_is_zero(target->callee_function)));
 }
 
+/* A function export that returns a source class has no caller-local class row.
+ * Resolve the unique frozen export target and require the caller's external
+ * class identity to match the dependency's exact declaration before assigning
+ * tagged owned storage to the result. */
+static bool
+source_export_owned_class_instance_storage_is_exact(const XrTargetPlanBuilder *builder,
+                                                    uint32_t semantic_operation,
+                                                    const XrSemanticOperationRecord *operation) {
+    const XrSemanticPlan *caller = builder ? builder->semantic_plan : NULL;
+    const XrSemanticCallTargetRecord *target = NULL;
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(caller);
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *candidate = xr_semantic_plan_call_target(caller, i);
+        if (!candidate || candidate->operation != semantic_operation ||
+            candidate->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            continue;
+        if (target)
+            return false;
+        target = candidate;
+    }
+    const XrSemanticPlan *dependency =
+        target && target->dependency < builder->semantic_dependency_count
+            ? builder->semantic_dependencies[target->dependency]
+            : NULL;
+    const XrSemanticSourceExportRecord *source_export =
+        dependency && target->source_export < xr_semantic_plan_source_export_count(dependency)
+            ? xr_semantic_plan_source_export(dependency, target->source_export)
+            : NULL;
+    const XrSemanticFunctionRecord *callee =
+        source_export && source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION
+            ? xr_semantic_plan_function(dependency, source_export->function)
+            : NULL;
+    uint32_t source_class = xr_semantic_source_export_owned_class_result_source_class(
+        caller, dependency, operation, callee);
+    return target && source_export && callee && source_class != XR_SEMANTIC_INDEX_NONE &&
+           target->function == XR_SEMANTIC_INDEX_NONE &&
+           target->callable_type == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(source_export->exported_entity, callee->id) &&
+           xr_stable_id_equal(target->export_identity, source_export->id) &&
+           xr_stable_id_equal(target->callee_function, callee->id);
+}
+
 static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *builder, char *error,
                                                       size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE, error,
@@ -6004,7 +6276,11 @@ static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *build
             xr_semantic_class_instance_value_is_exact(builder->semantic_plan, operation, NULL);
         bool imported = !local && operation->opcode == XI_CALL &&
                         imported_source_class_instance_storage_is_exact(builder, i, operation);
-        if (!local && !imported)
+        bool source_export =
+            !local && !imported &&
+            (operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+            source_export_owned_class_instance_storage_is_exact(builder, i, operation);
+        if (!local && !imported && !source_export)
             continue;
         valid = note_source_class_instance_storage_value(builder, &analysis, i, error, error_size);
     }
@@ -6029,23 +6305,21 @@ static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *build
  * the value is bound on entry rather than computed. The allocation, its roots
  * and its cleanup stay with semantic ownership and the existing AOT class
  * lifetime path, so this family adds no root or cleanup row. */
-static bool note_source_class_parameter_storage_value(XrTargetPlanBuilder *builder,
-                                                      XrTargetValueStorageAnalysis *analysis,
-                                                      uint32_t parameter_index, char *error,
-                                                      size_t error_size) {
+static bool note_tagged_parameter_storage_value(XrTargetPlanBuilder *builder,
+                                                XrTargetValueStorageAnalysis *analysis,
+                                                uint32_t parameter_index, bool exact_parameter,
+                                                char *error, size_t error_size) {
     const XrSemanticPlan *plan = builder->semantic_plan;
     const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
-    uint32_t source_class =
-        xr_semantic_class_instance_parameter_source_class(plan, parameter_index);
-    if (source_class == XR_SEMANTIC_INDEX_NONE || !parameter ||
-        parameter->value >= analysis->total_values || parameter->type >= analysis->type_count ||
+    if (!exact_parameter || !parameter || parameter->value >= analysis->total_values ||
+        parameter->type >= analysis->type_count ||
         parameter->function >= xr_semantic_plan_function_count(plan) ||
         analysis->defined_values[parameter->value]) {
         if (target_trace_enabled())
             fprintf(stderr,
                     "[target] refused in source-class parameter storage: parameter=%u "
                     "source_class=%u value=%u/%u type=%u/%u function=%u/%zu already_bound=%u\n",
-                    parameter_index, source_class,
+                    parameter_index, exact_parameter ? 0u : XR_SEMANTIC_INDEX_NONE,
                     parameter ? parameter->value : XR_SEMANTIC_INDEX_NONE, analysis->total_values,
                     parameter ? parameter->type : XR_SEMANTIC_INDEX_NONE, analysis->type_count,
                     parameter ? parameter->function : XR_SEMANTIC_INDEX_NONE,
@@ -6112,6 +6386,17 @@ static bool note_source_class_parameter_storage_value(XrTargetPlanBuilder *build
     return true;
 }
 
+static bool note_source_class_parameter_storage_value(XrTargetPlanBuilder *builder,
+                                                      XrTargetValueStorageAnalysis *analysis,
+                                                      uint32_t parameter_index, char *error,
+                                                      size_t error_size) {
+    return note_tagged_parameter_storage_value(builder, analysis, parameter_index,
+                                               xr_semantic_class_instance_parameter_source_class(
+                                                   builder->semantic_plan, parameter_index) !=
+                                                   XR_SEMANTIC_INDEX_NONE,
+                                               error, error_size);
+}
+
 /* The three parameter shapes are collected by three families rather than one so
  * that a plan states which of them it actually contains; they share one
  * collector because the storage row they bind is the same. */
@@ -6172,6 +6457,33 @@ static bool builder_add_source_class_argument_storage(XrTargetPlanBuilder *build
     return builder_add_source_class_parameter_family(
         builder, XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE,
         xr_semantic_class_argument_source_class, error, error_size);
+}
+
+static bool builder_add_native_class_argument_storage(XrTargetPlanBuilder *builder, char *error,
+                                                      size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_NATIVE_CLASS_ARGUMENT_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values)
+            analysis.defined_values[value->semantic_value] = 1;
+    }
+    uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < parameter_count; i++) {
+        if (!xr_semantic_native_storage_constructor_parameter_is_exact(builder->semantic_plan, i))
+            continue;
+        valid = note_tagged_parameter_storage_value(builder, &analysis, i, true, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_NATIVE_CLASS_ARGUMENT_STORAGE;
+    return true;
 }
 
 /* Binds the String a concatenation allocates to its own owned dynamic slot.
@@ -6831,10 +7143,15 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
     bool exact_dynamic = xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation);
+    bool exact_native_fresh =
+        xr_semantic_native_direct_fresh_result_is_exact(builder->semantic_plan, operation, NULL);
+    bool exact_builtin_runtime = xr_semantic_builtin_runtime_method_has_result_class(
+        builder->semantic_plan, operation, XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC);
     bool exact_map_iterator_result =
         xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL, NULL) ||
         xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation, NULL);
-    if ((!exact_dynamic && !exact_map_iterator_result) ||
+    if ((!exact_dynamic && !exact_native_fresh && !exact_builtin_runtime &&
+         !exact_map_iterator_result) ||
         operation->result_value >= analysis->total_values)
         return fail(error, error_size, "XR_TARGET_1001", "dynamic value authority is incomplete");
     /* A value an earlier family already bound is not this family's to claim:
@@ -6896,84 +7213,96 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
  * about. */
 /* An owner transfer takes the representation its source already proved, the
  * same way an identity copy does: the two differ in who owns the result, not
- * in what is held. Propagates rather than decides, so it runs after the
- * families that determine storage and declines a transfer whose source nothing
- * claimed. */
-static bool builder_add_owner_forward_storage(XrTargetPlanBuilder *builder, char *error,
-                                              size_t error_size) {
-    if (!builder_begin_family(builder, XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE, error, error_size))
+ * in what is held.  Once both propagation families are active, close their
+ * combined graph to a fixed point.  Neither ordering the families nor making
+ * each one a single operation-order sweep can cover both COPY -> MOVE and
+ * MOVE -> COPY chains. */
+static bool builder_add_owner_transfer_storage(XrTargetPlanBuilder *builder, char *error,
+                                               size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE, error, error_size))
         return false;
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
     bool valid = true;
-    for (uint32_t i = 0; valid && i < operation_count; i++) {
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(builder->semantic_plan, i);
-        uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
-        if (!operation ||
-            !xr_semantic_owner_forward_is_exact(builder->semantic_plan, operation, &source_value))
-            continue;
-        const XrTargetValueIntent *source_intent = NULL;
-        bool result_claimed = false;
-        for (uint32_t v = 0; v < builder->value_intent_count; v++) {
-            uint32_t claimed = builder->value_intents[v].semantic_value;
-            if (claimed == operation->result_value)
-                result_claimed = true;
-            if (claimed == source_value)
-                source_intent = &builder->value_intents[v];
+    bool changed;
+    do {
+        changed = false;
+        for (uint32_t i = 0; valid && i < operation_count; i++) {
+            const XrSemanticOperationRecord *operation =
+                xr_semantic_plan_operation(builder->semantic_plan, i);
+            uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+            bool exact_transfer = xr_semantic_owner_transfer_storage_is_exact(
+                builder->semantic_plan, operation, &source_value);
+            bool exact_identity =
+                !exact_transfer && xr_semantic_storage_identity_copy_is_exact(
+                                       builder->semantic_plan, operation, &source_value);
+            if (!operation || (!exact_transfer && !exact_identity))
+                continue;
+            const XrTargetValueIntent *source_intent = NULL;
+            bool result_claimed = false;
+            for (uint32_t v = 0; v < builder->value_intent_count; v++) {
+                uint32_t claimed = builder->value_intents[v].semantic_value;
+                if (claimed == operation->result_value)
+                    result_claimed = true;
+                if (claimed == source_value)
+                    source_intent = &builder->value_intents[v];
+            }
+            if (result_claimed || !source_intent)
+                continue;
+            /* Transfers always state their result layout because the exact
+             * native-storage form may change semantic types.  An identity
+             * rename needs a new layout only for the checked Array narrowing;
+             * ordinary same-type copies consume the source type's row. */
+            if ((exact_transfer || source_intent->semantic_type != operation->result_type) &&
+                !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC,
+                                      0, &source_intent->memory_rep, error, error_size)) {
+                valid = false;
+                break;
+            }
+            XrStableId slot_identity;
+            if (!make_slot_identity(builder->semantic_plan, operation->function,
+                                    XR_TARGET_SLOT_TEMPORARY, operation->id,
+                                    XR_SEMANTIC_INDEX_NONE, &slot_identity)) {
+                valid = fail(error, error_size, "XR_TARGET_1001",
+                             "value forwarding slot identity is incomplete");
+                break;
+            }
+            XrTargetSlotIntent slot = {
+                .identity = slot_identity,
+                .function = operation->function,
+                .semantic_value = operation->result_value,
+                .semantic_operation = i,
+                .logical_slot = XR_SEMANTIC_INDEX_NONE,
+                .register_rep = source_intent->register_rep,
+                .memory_rep = source_intent->memory_rep,
+                .role = XR_TARGET_SLOT_TEMPORARY,
+                .root_kind = source_intent->memory_rep.root_kind,
+                .ownership = source_intent->memory_rep.ownership,
+                .debug_variable = XR_SEMANTIC_INDEX_NONE,
+            };
+            if (!append_slot_intent(builder, &slot, error, error_size)) {
+                valid = false;
+                break;
+            }
+            XrTargetValueIntent intent = {
+                .semantic_value = operation->result_value,
+                .semantic_function = operation->function,
+                .semantic_type = operation->result_type,
+                .register_rep = source_intent->register_rep,
+                .memory_rep = source_intent->memory_rep,
+                .slot_identity = slot_identity,
+                .has_slot = true,
+                .resolve_type_rep = false,
+            };
+            uint32_t value_count_before = builder->value_intent_count;
+            valid = append_value_intent(builder, &intent, error, error_size);
+            changed = changed || (valid && builder->value_intent_count > value_count_before);
         }
-        if (result_claimed || !source_intent)
-            continue;
-        /* The result names its own semantic type, which need not be the one the
-         * source named even though both hold the same thing. A binding without
-         * a layout for its type is refused downstream, so the transfer states
-         * one, carrying the source's memory representation. */
-        if (!append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0,
-                                  &source_intent->memory_rep, error, error_size)) {
-            valid = false;
-            break;
-        }
-        XrStableId slot_identity;
-        if (!make_slot_identity(builder->semantic_plan, operation->function,
-                                XR_TARGET_SLOT_TEMPORARY, operation->id, XR_SEMANTIC_INDEX_NONE,
-                                &slot_identity)) {
-            valid = fail(error, error_size, "XR_TARGET_1001",
-                         "owner forward slot identity is incomplete");
-            break;
-        }
-        XrTargetSlotIntent slot = {
-            .identity = slot_identity,
-            .function = operation->function,
-            .semantic_value = operation->result_value,
-            .semantic_operation = i,
-            .logical_slot = XR_SEMANTIC_INDEX_NONE,
-            .register_rep = source_intent->register_rep,
-            .memory_rep = source_intent->memory_rep,
-            .role = XR_TARGET_SLOT_TEMPORARY,
-            .root_kind = source_intent->memory_rep.root_kind,
-            .ownership = source_intent->memory_rep.ownership,
-            .debug_variable = XR_SEMANTIC_INDEX_NONE,
-        };
-        if (!append_slot_intent(builder, &slot, error, error_size)) {
-            valid = false;
-            break;
-        }
-        XrTargetValueIntent intent = {
-            .semantic_value = operation->result_value,
-            .semantic_function = operation->function,
-            .semantic_type = operation->result_type,
-            .register_rep = source_intent->register_rep,
-            .memory_rep = source_intent->memory_rep,
-            .slot_identity = slot_identity,
-            .has_slot = true,
-            .resolve_type_rep = false,
-        };
-        valid = append_value_intent(builder, &intent, error, error_size);
-    }
+    } while (valid && changed);
     if (!valid) {
         builder->poisoned = true;
         return false;
     }
-    builder->completed_family_mask |= XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE;
+    builder->completed_family_mask |= XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE;
     return true;
 }
 
@@ -6987,8 +7316,8 @@ static bool builder_add_identity_copy_storage(XrTargetPlanBuilder *builder, char
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
         uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
-        if (!operation ||
-            !xr_semantic_identity_copy_is_exact(builder->semantic_plan, operation, &source_value))
+        if (!operation || !xr_semantic_storage_identity_copy_is_exact(
+                              builder->semantic_plan, operation, &source_value))
             continue;
         const XrTargetValueIntent *source_intent = NULL;
         bool result_claimed = false;
@@ -7003,6 +7332,12 @@ static bool builder_add_identity_copy_storage(XrTargetPlanBuilder *builder, char
         }
         if (result_claimed || !source_intent)
             continue;
+        if (source_intent->semantic_type != operation->result_type &&
+            !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0,
+                                  &source_intent->memory_rep, error, error_size)) {
+            valid = false;
+            break;
+        }
         /* A slot belongs to exactly one value and its identity is rebuilt from
          * that value, so the result cannot name the source's slot even though
          * it holds the same thing. It gets its own, carrying the source's
@@ -7200,6 +7535,11 @@ static bool builder_add_dynamic_value_storage(XrTargetPlanBuilder *builder, char
             valid = note_stringbuilder_constructor_storage_value(builder, &analysis, i, error,
                                                                  error_size);
         else if (xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation) ||
+                 xr_semantic_native_direct_fresh_result_is_exact(builder->semantic_plan, operation,
+                                                                 NULL) ||
+                 xr_semantic_builtin_runtime_method_has_result_class(
+                     builder->semantic_plan, operation,
+                     XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC) ||
                  xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL,
                                                            NULL) ||
                  xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation,
@@ -7498,6 +7838,161 @@ static bool builder_add_direct_local_string_boundary_storage(XrTargetPlanBuilder
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE;
+    return true;
+}
+
+/* Bind the result of an exact source-class field read independently of any
+ * particular consumer.  LOAD_FIELD borrows the allocation owned by the
+ * containing instance, so every admitted managed result uses a borrowed
+ * dynamic carrier.  The semantic judgement owns which result types belong to
+ * this closed carrier roster; this target half owns only the profile geometry,
+ * slot identity, and root/ownership facts. */
+static bool note_managed_field_result_storage(XrTargetPlanBuilder *builder,
+                                              XrTargetValueStorageAnalysis *analysis,
+                                              const XrSemanticOperationRecord *operation,
+                                              uint32_t operation_index, char *error,
+                                              size_t error_size) {
+    if (!builder || !analysis || !operation || operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
+        operation_index >= xr_semantic_plan_operation_count(builder->semantic_plan) ||
+        analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "managed field result storage authority is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize managed field result storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
+                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "managed field result slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = operation_index,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                               error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->used_types[operation->result_type] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+static bool builder_add_source_class_field_result_storage(XrTargetPlanBuilder *builder, char *error,
+                                                          size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_FIELD_RESULT_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value >= analysis.total_values ||
+            value->semantic_type >= analysis.type_count)
+            continue;
+        analysis.defined_values[value->semantic_value] = 1;
+        analysis.used_types[value->semantic_type] = 1;
+        analysis.value_types[value->semantic_value] = value->semantic_type;
+        analysis.value_functions[value->semantic_value] = value->semantic_function;
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        uint8_t carrier = XR_SEM_SOURCE_CLASS_FIELD_RESULT_NONE;
+        if (!operation || operation->result_value >= analysis.total_values ||
+            analysis.defined_values[operation->result_value] ||
+            !xr_semantic_source_class_field_result_carrier_is_exact(builder->semantic_plan,
+                                                                    operation, &carrier))
+            continue;
+        if (carrier != XR_SEM_SOURCE_CLASS_FIELD_RESULT_BORROWED_TAGGED) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "source-class field result carrier is unsupported");
+            break;
+        }
+        valid =
+            note_managed_field_result_storage(builder, &analysis, operation, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_CLASS_FIELD_RESULT_STORAGE;
+    return true;
+}
+
+/* Bind managed values read out of exact source structural shapes.  The field
+ * ordinal and result type are frozen in SemanticPlan; the containing aggregate
+ * owns the field, so OBJECT_GET_F hands out a borrowed tagged carrier. */
+static bool builder_add_source_structural_field_result_storage(XrTargetPlanBuilder *builder,
+                                                               char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value >= analysis.total_values ||
+            value->semantic_type >= analysis.type_count)
+            continue;
+        analysis.defined_values[value->semantic_value] = 1;
+        analysis.used_types[value->semantic_type] = 1;
+        analysis.value_types[value->semantic_value] = value->semantic_type;
+        analysis.value_functions[value->semantic_value] = value->semantic_function;
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        uint8_t carrier = XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_NONE;
+        if (!operation || operation->result_value >= analysis.total_values ||
+            analysis.defined_values[operation->result_value] ||
+            !xr_semantic_source_structural_field_result_carrier_is_exact(builder->semantic_plan,
+                                                                         operation, &carrier))
+            continue;
+        if (carrier != XR_SEM_SOURCE_STRUCTURAL_FIELD_RESULT_BORROWED_TAGGED) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "source structural field result carrier is unsupported");
+            break;
+        }
+        valid =
+            note_managed_field_result_storage(builder, &analysis, operation, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE;
     return true;
 }
 
@@ -9705,6 +10200,47 @@ static bool collect_string_runes_call_intent(XrTargetPlanBuilder *builder, uint3
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_builtin_runtime_method_call_intent(XrTargetPlanBuilder *builder,
+                                                       uint32_t operation_index,
+                                                       const XrSemanticOperationRecord *operation,
+                                                       char *error, size_t error_size) {
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    XrStableId method_identity;
+    XrSemanticBuiltinRuntimeMethodResultClass result_class =
+        XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID;
+    if (!xr_semantic_builtin_runtime_method_is_exact(builder->semantic_plan, operation, &spec,
+                                                     &receiver) ||
+        !xr_builtin_runtime_method_identity(spec, &method_identity) ||
+        (result_class = xr_semantic_builtin_runtime_method_result_class(spec)) ==
+            XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "builtin runtime method dispatch authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .native_callee_identity = method_identity,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = result_class == XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC
+                                ? XR_TARGET_CALL_RETURN_OWNED
+                                : XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD,
+        .target_kind = XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD,
+    };
+    if (!stable_identity_from_pair("xray-target-builtin-runtime-method-v1", operation->id,
+                                   method_identity, receiver, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "builtin runtime method call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_iterator_rune_has_next_call_intent(XrTargetPlanBuilder *builder,
                                                        uint32_t operation_index,
                                                        const XrSemanticOperationRecord *operation,
@@ -10715,11 +11251,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          * the constructor receiver. Asking only about the declared-parameter
          * form would refuse every `this`, whose type row is the anonymous
          * instance that names no declaration. */
-        bool exact_class_instance =
-            parameter && parameter->type == operand->type &&
-            xr_semantic_class_instance_parameter_source_class(plan, parameter_index) !=
-                XR_SEMANTIC_INDEX_NONE &&
-            xr_semantic_class_parameter_call_transfer_is_exact(plan, parameter_index, operand);
+        bool exact_class_instance = parameter && parameter->type == operand->type &&
+                                    xr_semantic_class_call_parameter_source_class(
+                                        plan, parameter_index, operand) != XR_SEMANTIC_INDEX_NONE;
         /* An Array handed over by value. It travels the plain argument path a
          * scalar takes -- the tagged value is copied, the allocation is shared
          * -- so it states no place and no element storage of its own. Whatever
@@ -10966,6 +11500,8 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
         callee ? xr_semantic_plan_type(dependency, callee->return_type) : NULL;
     bool exact_string_result =
         semantic_source_export_string_result_is_exact(plan, dependency, operation, callee);
+    bool exact_class_result = xr_semantic_source_export_owned_class_result_source_class(
+                                  plan, dependency, operation, callee) != XR_SEMANTIC_INDEX_NONE;
     if (!target || !dependency || !source_export ||
         source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION || !callee ||
         !xr_stable_id_equal(source_export->exported_entity, callee->id) || !operation ||
@@ -10976,7 +11512,8 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
         !xr_stable_id_equal(target->export_identity, source_export->id) ||
         !xr_stable_id_equal(target->callee_function, callee->id) || !result_type ||
         !callee_result_type || !xr_stable_id_equal(result_type->id, callee_result_type->id) ||
-        (!call_type_is_exact_scalar(plan, operation->result_type) && !exact_string_result)) {
+        (!call_type_is_exact_scalar(plan, operation->result_type) && !exact_string_result &&
+         !exact_class_result)) {
         char detail[512];
         snprintf(
             detail, sizeof(detail),
@@ -11029,7 +11566,9 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = callee->parameter_count,
         .result_mode = XR_TARGET_CALL_VALUE,
-        .result_ownership = exact_string_result ? XR_TARGET_CALL_RETURN_OWNED : XR_TARGET_CALL_NONE,
+        .result_ownership = (exact_string_result || exact_class_result)
+                                ? XR_TARGET_CALL_RETURN_OWNED
+                                : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
         .target_kind = XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
         .suspends = suspends,
@@ -11184,6 +11723,83 @@ static bool collect_native_yieldable_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_native_direct_call_intent(XrTargetPlanBuilder *builder, uint32_t target_index,
+                                              const XrSemanticCallTargetRecord *target,
+                                              bool suspends, char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder ? builder->semantic_plan : NULL;
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId native_identity = {{0}};
+    if (!target || !operation || target->kind != XR_SEM_CALL_TARGET_NATIVE_DIRECT ||
+        target->function != XR_SEMANTIC_INDEX_NONE ||
+        target->dependency != XR_SEMANTIC_INDEX_NONE ||
+        target->source_export != XR_SEMANTIC_INDEX_NONE ||
+        target->callable_type != XR_SEMANTIC_INDEX_NONE || suspends ||
+        !xr_semantic_native_direct_call_shape_is_exact(plan, operation, &entry, &native_identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native direct call authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = target_index,
+        .semantic_operation = target->operation,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .runtime_capabilities = entry ? entry->runtime_capabilities : 0,
+        .native_callee_identity = native_identity,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = entry ? entry->argc : 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = xr_semantic_native_direct_result_kind(plan, operation, entry) ==
+                                    XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NULLABLE_NATIVE
+                                ? XR_TARGET_CALL_RETURN_OWNED
+                                : XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT,
+        .target_kind = XR_TARGET_CALL_TARGET_NATIVE_DIRECT,
+    };
+    if (!entry || operation->operand_count != (uint16_t) (entry->argc + 1u) ||
+        !stable_identity_from_pair("xray-target-native-direct-v2", target->id, native_identity,
+                                   entry->runtime_capabilities, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native direct call identity is incomplete");
+    XrTargetMachineRepRecord tagged_rep = {0};
+    if (!make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile),
+                                         &tagged_rep) ||
+        !append_rep_intent(builder, &tagged_rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native direct tagged argument representation is incomplete");
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t call_intent = builder->call_intent_count;
+    for (uint16_t ordinal = 0; ordinal < call.argument_count; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;
+        if (!operands || semantic_operand >= operand_count)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "native direct call argument authority is incomplete");
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = operand->value,
+            .caller_storage_value = operand->value,
+            .callee_parameter = XR_SEMANTIC_INDEX_NONE,
+            .ordinal = ordinal,
+            .mode = XR_TARGET_CALL_VALUE,
+            .ownership = XR_TARGET_CALL_READ,
+            .transfer_mode = XR_TRANSFER_SHARE,
+            .flags = 0,
+            .array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE,
+        };
+        if (!stable_identity_from_pair("xray-target-native-direct-argument-v1", target->id,
+                                       native_identity, ordinal, &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 /* The suspending method of a frozen builtin instance. The SemanticPlan target
  * names the receiver type and the roster entry its builtin id and arity select;
  * it names no callee function, so the intent carries none either. The call
@@ -11328,11 +11944,14 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         if (private_leaf_program && operation &&
             !xr_semantic_plan_program_function_for_semantic_function(plan, operation->function))
             continue;
+        if (operation && program_module_set_excludes_function(builder, operation->function))
+            continue;
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool native_yieldable = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
+        bool native_direct = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
         bool builtin_instance =
@@ -11347,12 +11966,13 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         bool names_local_function =
             xr_semantic_call_target_names_local_function(target, operation, function_count);
         if (!target || !operation ||
-            (!direct && !source && !native_namespace && !native_yieldable && !class_construction &&
-             !builtin_instance && !instance_method_local) ||
+            (!direct && !source && !native_namespace && !native_yieldable && !native_direct &&
+             !class_construction && !builtin_instance && !instance_method_local) ||
             ((direct || instance_method_local) && !names_local_function) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (native_yieldable && operation->opcode != XI_CALL) ||
+            (native_direct && operation->opcode != XI_CALL) ||
             (class_construction && operation->opcode != XI_CALL) ||
             (builtin_instance && operation->opcode != XI_CALL_METHOD) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
@@ -11371,9 +11991,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 fprintf(stderr,
                         "[target] refused in call target coverage: SemanticPlan proved a call "
                         "target of kind %s, and this family consumes only DIRECT_LOCAL, "
-                        "SOURCE_EXPORT, NATIVE_YIELDABLE, NATIVE_NAMESPACE_YIELDABLE, "
-                        "BUILTIN_INSTANCE_YIELDABLE, SOURCE_INSTANCE_METHOD_LOCAL and "
-                        "SOURCE_CLASS_CONSTRUCTOR\n",
+                        "SOURCE_EXPORT, NATIVE_DIRECT, NATIVE_YIELDABLE, "
+                        "NATIVE_NAMESPACE_YIELDABLE, "
+                        "BUILTIN_INSTANCE_YIELDABLE, SOURCE_INSTANCE_METHOD_LOCAL, "
+                        "SOURCE_TEMPLATE_METHOD_LOCAL and SOURCE_CLASS_CONSTRUCTOR\n",
                         target_trace_call_target_kind_name(target ? target->kind : 0u));
                 fprintf(stderr,
                         "[target]   call target=%u    kind=%s (%u), names function %u, dependency "
@@ -11387,7 +12008,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 target_trace_judgement("the operation record exists", operation != NULL);
                 target_trace_judgement("this family consumes the kind",
                                        direct || source || native_namespace || native_yieldable ||
-                                           class_construction || builtin_instance);
+                                           native_direct || class_construction ||
+                                           builtin_instance || instance_method_local);
                 if (direct)
                     target_trace_judgement("DIRECT_LOCAL names a function in range",
                                            target->function < function_count);
@@ -11404,6 +12026,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                            operation && operation->opcode == XI_CALL_METHOD);
                 if (native_yieldable)
                     target_trace_judgement("NATIVE_YIELDABLE sits on CALL",
+                                           operation && operation->opcode == XI_CALL);
+                if (native_direct)
+                    target_trace_judgement("NATIVE_DIRECT sits on CALL",
                                            operation && operation->opcode == XI_CALL);
                 if (class_construction)
                     target_trace_judgement("SOURCE_CLASS_CONSTRUCTOR sits on CALL",
@@ -11480,6 +12105,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         if (private_leaf_program && operation &&
             !xr_semantic_plan_program_function_for_semantic_function(plan, operation->function))
             continue;
+        if (operation && program_module_set_excludes_function(builder, operation->function))
+            continue;
         uint32_t target_index = target_by_operation[i];
         if (target_index != XR_SEMANTIC_INDEX_NONE) {
             const XrSemanticCallTargetRecord *target =
@@ -11501,6 +12128,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                     builder, target_index, target, state_by_operation[i] != 0, error, error_size);
             } else if (target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE) {
                 valid = collect_native_yieldable_call_intent(
+                    builder, target_index, target, state_by_operation[i] != 0, error, error_size);
+            } else if (target && target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT) {
+                valid = collect_native_direct_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0, error, error_size);
             } else if (target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE) {
                 valid = collect_builtin_instance_yieldable_call_intent(
@@ -11544,6 +12174,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_stringbuilder_append_rune_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_stringbuilder_append_rune_call_intent(builder, i, operation, error,
                                                                   error_size);
+        } else if (xr_semantic_builtin_runtime_method_is_exact(plan, operation, NULL, NULL)) {
+            valid = collect_builtin_runtime_method_call_intent(builder, i, operation, error,
+                                                               error_size);
         } else if (xr_semantic_string_runes_is_exact(plan, operation, NULL)) {
             valid = collect_string_runes_call_intent(builder, i, operation, error, error_size);
         } else if (xr_semantic_iterator_rune_has_next_is_exact(plan, operation, NULL)) {
@@ -11615,7 +12248,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             else
                 goto uncovered_call;
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
-        uncovered_call:
+        uncovered_call:;
             uint32_t metadata_count = 0;
             uint32_t operand_count = 0;
             const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
@@ -15178,6 +15811,15 @@ static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t 
     return -1;
 }
 
+static int find_rep_kind_ownership(const XrTargetMaterializedPlan *materialized, uint16_t kind,
+                                   uint8_t ownership) {
+    for (uint32_t i = 0; i < materialized->machine_rep_count; i++)
+        if (materialized->machine_reps[i].kind == kind &&
+            materialized->machine_reps[i].ownership == ownership)
+            return (int) i;
+    return -1;
+}
+
 /* The shared judgement in xr_target_call_abi_shape.h decides this; only the
  * container holding the machine-rep table differs between the two layers, and
  * it must be proven non-null before it is read. */
@@ -15204,6 +15846,8 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
         (materialized->call_argument_count && !materialized->call_arguments))
         return fail(error, error_size, "XR_EXEC_5003", "call materialization failed");
     int void_rep = find_rep_kind(materialized, XR_MACHINE_REP_VOID);
+    int tagged_rep = find_rep_kind_ownership(materialized, XR_MACHINE_REP_DYN_VALUE,
+                                             XR_TARGET_OWNERSHIP_BORROWED);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(builder->profile);
     if (void_rep < 0 || !machine)
         return fail(error, error_size, "XR_TARGET_1003",
@@ -15247,6 +15891,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             .callee_function = intent->callee_function,
             .source_dependency = intent->source_dependency,
             .source_export = intent->source_export,
+            .runtime_capabilities = intent->runtime_capabilities,
             .source_export_identity = intent->source_export_identity,
             .source_callee_identity = intent->source_callee_identity,
             .native_callee_identity = intent->native_callee_identity,
@@ -15282,10 +15927,16 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             bool array_intrinsic =
                 intent->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_INTRINSIC &&
                 intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_INTRINSIC;
+            bool native_direct =
+                intent->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT &&
+                intent->target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT;
             bool external_source_callee =
                 intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
                 (intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
                  intent->source_dependency != XR_SEMANTIC_INDEX_NONE);
+            bool imported_constructor_callee =
+                intent->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+                intent->source_dependency != XR_SEMANTIC_INDEX_NONE;
             const XrSemanticPlan *callee_semantic =
                 external_source_callee &&
                         intent->source_dependency < builder->semantic_dependency_count
@@ -15305,7 +15956,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 intent->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
                 (intent->argument_count == 2 || intent->argument_count == 4);
             const XrSemanticParameterRecord *parameter =
-                array_intrinsic || array_fill || array_hof || iterator_rune_nth ||
+                array_intrinsic || native_direct || array_fill || array_hof || iterator_rune_nth ||
                         array_member_tagged_store
                     ? NULL
                     : xr_semantic_plan_parameter(callee_semantic,
@@ -15329,6 +15980,10 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 semantic_operand
                     ? xr_semantic_plan_type(builder->semantic_plan, semantic_operand->type)
                     : NULL;
+            bool imported_constructor_storage =
+                imported_constructor_callee && parameter && operand_type && parameter_type &&
+                xr_semantic_parameter_type_admits_argument(callee_semantic, parameter_type,
+                                                           operand_type, parameter->mode);
             bool adt_enum_borrow_boundary =
                 xr_semantic_adt_enum_type_is_exact(parameter_type) && caller && callee &&
                 caller->register_rep < materialized->machine_rep_count &&
@@ -15411,22 +16066,53 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                                                 parameter->ownership == XI_OWN_OWNED
                                                     ? XR_TARGET_OWNERSHIP_OWNED
                                                     : XR_TARGET_OWNERSHIP_BORROWED);
+            bool native_storage_boundary =
+                parameter &&
+                xr_semantic_native_storage_constructor_parameter_is_exact(
+                    callee_semantic, argument_intent->callee_parameter) &&
+                tagged_container_value_boundary(materialized, caller, callee,
+                                                parameter->ownership == XI_OWN_OWNED
+                                                    ? XR_TARGET_OWNERSHIP_OWNED
+                                                    : XR_TARGET_OWNERSHIP_BORROWED);
             bool const_read_boundary =
                 !external_source_callee && parameter &&
                 xr_target_const_read_call_boundary(
                     materialized->machine_reps, materialized->machine_rep_count, caller, callee,
                     xr_semantic_type_is_const_read_admission(operand_type, parameter_type,
                                                              parameter->mode));
-            if (array_intrinsic || array_fill || array_hof || iterator_rune_nth ||
+            if (array_intrinsic || native_direct || array_fill || array_hof || iterator_rune_nth ||
                 array_member_tagged_store) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
-                    !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
+                    !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+                    (native_direct && tagged_rep < 0)) {
+                    if (native_direct && target_trace_enabled()) {
+                        fprintf(stderr,
+                                "[target] refused in native-direct argument materialization: "
+                                "call=%u argument=%u semantic-value=%u caller-bound=%u\n",
+                                i, ordinal, argument_intent->caller_storage_value,
+                                caller ? 1u : 0u);
+                        for (uint32_t candidate = 0;
+                             candidate < xr_semantic_plan_operation_count(builder->semantic_plan);
+                             candidate++) {
+                            const XrSemanticOperationRecord *definition =
+                                xr_semantic_plan_operation(builder->semantic_plan, candidate);
+                            if (definition &&
+                                definition->result_value == argument_intent->caller_storage_value)
+                                target_trace_operation(builder->semantic_plan, candidate,
+                                                       definition);
+                        }
+                        target_trace_type(builder->semantic_plan, "native-direct argument type",
+                                          semantic_operand ? semantic_operand->type
+                                                           : XR_SEMANTIC_INDEX_NONE);
+                    }
                     return fail(error, error_size, "XR_TARGET_1003",
-                                iterator_rune_nth
+                                native_direct ? "native direct argument lacks exact caller storage"
+                                : iterator_rune_nth
                                     ? "Iterator<rune>.nth index lacks exact caller storage"
                                 : array_member_tagged_store
                                     ? "Array member tagged store lacks exact caller storage"
                                     : "Array intrinsic argument lacks exact caller storage");
+                }
                 materialized->call_arguments[next_argument] = (XrTargetCallArgumentRecord) {
                     .identity = argument_intent->identity,
                     .call = i,
@@ -15437,8 +16123,9 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                     .callee_slot = XR_SEMANTIC_INDEX_NONE,
                     .register_rep = caller->register_rep,
                     .memory_rep = caller->memory_rep,
-                    .callee_register_rep = caller->register_rep,
-                    .callee_memory_rep = caller->memory_rep,
+                    .callee_register_rep =
+                        native_direct ? (uint16_t) tagged_rep : caller->register_rep,
+                    .callee_memory_rep = native_direct ? (uint16_t) tagged_rep : caller->memory_rep,
                     .ordinal = argument_intent->ordinal,
                     .mode = argument_intent->mode,
                     .ownership = argument_intent->ownership,
@@ -15451,18 +16138,34 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             }
             if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                 !parameter || !caller || caller->slot == XR_SEMANTIC_INDEX_NONE ||
+                (imported_constructor_callee && !imported_constructor_storage) ||
                 (!external_source_callee &&
                  (!callee || callee->slot == XR_SEMANTIC_INDEX_NONE ||
                   ((caller->register_rep != callee->register_rep ||
                     caller->memory_rep != callee->memory_rep) &&
                    !adt_enum_borrow_boundary && !tagged_ref_borrow_boundary &&
                    !container_value_borrow_boundary && !class_instance_boundary &&
-                   !const_read_boundary)))) {
+                   !native_storage_boundary && !const_read_boundary)))) {
                 if (target_trace_enabled()) {
                     fprintf(stderr,
                             "[target] refused in call argument materialization: argument %u of "
                             "call intent %u has no storage both sides agree on\n",
                             ordinal, i);
+                    target_trace_operation(builder->semantic_plan, intent->semantic_operation,
+                                           xr_semantic_plan_operation(builder->semantic_plan,
+                                                                      intent->semantic_operation));
+                    target_trace_type(builder->semantic_plan, "caller operand type",
+                                      semantic_operand ? semantic_operand->type
+                                                       : XR_SEMANTIC_INDEX_NONE);
+                    for (uint32_t candidate = 0;
+                         candidate < xr_semantic_plan_operation_count(builder->semantic_plan);
+                         candidate++) {
+                        const XrSemanticOperationRecord *definition =
+                            xr_semantic_plan_operation(builder->semantic_plan, candidate);
+                        if (definition && semantic_operand &&
+                            definition->result_value == semantic_operand->value)
+                            target_trace_operation(builder->semantic_plan, candidate, definition);
+                    }
                     target_trace_judgement("the callee parameter record exists", parameter != NULL);
                     target_trace_judgement("the caller value has a bound slot",
                                            caller && caller->slot != XR_SEMANTIC_INDEX_NONE);
@@ -16246,11 +16949,13 @@ static const XrTargetFamily k_target_families[] = {
     {"array_hof_result_storage", builder_add_array_hof_result_storage},
     {"nullable_scalar_storage", builder_add_nullable_scalar_storage},
     {"array_member_result_storage", builder_add_array_member_result_storage},
+    {"array_index_result_storage", builder_add_array_index_result_storage},
     {"source_class_object_storage", builder_add_source_class_object_storage},
     {"source_class_instance_storage", builder_add_source_class_instance_storage},
     {"source_class_receiver_storage", builder_add_source_class_receiver_storage},
     {"source_class_method_receiver_storage", builder_add_source_class_method_receiver_storage},
     {"source_class_argument_storage", builder_add_source_class_argument_storage},
+    {"native_class_argument_storage", builder_add_native_class_argument_storage},
     {"string_concat_result_storage", builder_add_string_concat_result_storage},
     {"string_convert_result_storage", builder_add_string_convert_result_storage},
     {"panic_catch_storage", builder_add_panic_catch_storage},
@@ -16269,6 +16974,8 @@ static const XrTargetFamily k_target_families[] = {
     {"container_copy_result_storage", builder_add_container_copy_result_storage},
     {"direct_local_string_boundary_storage", builder_add_direct_local_string_boundary_storage},
     {"adt_enum_storage", builder_add_adt_enum_storage},
+    {"source_class_field_result_storage", builder_add_source_class_field_result_storage},
+    {"source_structural_field_result_storage", builder_add_source_structural_field_result_storage},
     {"direct_local_callee_storage", builder_add_direct_local_callee_storage},
     {"direct_local_go_callee_storage", builder_add_direct_local_go_callee_storage},
     {"direct_local_go_task_result_storage", builder_add_direct_local_go_task_result_storage},
@@ -16291,7 +16998,7 @@ static const XrTargetFamily k_target_families[] = {
     /* Propagates, so it runs after every family that decides storage and
      * before the call family that reads the result. */
     {"identity_copy_storage", builder_add_identity_copy_storage},
-    {"owner_forward_storage", builder_add_owner_forward_storage},
+    {"owner_transfer_storage", builder_add_owner_transfer_storage},
     {"calls_and_adapters", builder_add_calls_and_adapters},
     {"coroutine_state_calls", builder_add_coroutine_state_calls},
     {"dynamic_entry_expectations", builder_add_dynamic_entry_expectations},
@@ -16330,13 +17037,16 @@ typedef struct XrProgramGraphModuleDraft {
 static bool build_program_graph_module(const XrSemanticPlan *semantic,
                                        const XrSemanticPlan *const *dependencies,
                                        uint32_t dependency_count, XrTargetProfile *profile,
-                                       XrTargetMaterializedPlan *out, char *error,
-                                       size_t error_size) {
+                                       const XrTargetProgramReachability *program_reachability,
+                                       uint32_t program_module, XrTargetMaterializedPlan *out,
+                                       char *error, size_t error_size) {
     XrTargetPlanBuilder *builder = NULL;
     memset(out, 0, sizeof(*out));
     if (!builder_new(semantic, profile, dependencies, dependency_count, true, &builder, error,
                      error_size))
         return false;
+    builder->program_reachability = program_reachability;
+    builder->program_module = program_module;
     bool built = builder_collect_families(builder, error, error_size) &&
                  builder_materialize(builder, out, error, error_size);
     builder_free(builder);
@@ -16988,13 +17698,12 @@ bool xr_target_plan_build_program_graph(const XrSemanticPlan *const *semantic_mo
         return fail(error, error_size, "XR_TARGET_1000",
                     "program graph local dependency vectors are not exact");
     }
-    bool built =
-        build_program_graph_module(entry, entry_dependencies, entry_dependency_count, profile,
-                                   &modules[entry_program->program_module_row].target, error,
-                                   error_size) &&
-        build_program_graph_module(producer, producer_dependencies, producer_dependency_count,
-                                   profile, &modules[producer_program->program_module_row].target,
-                                   error, error_size);
+    bool built = build_program_graph_module(
+                     entry, entry_dependencies, entry_dependency_count, profile, NULL, 0u,
+                     &modules[entry_program->program_module_row].target, error, error_size) &&
+                 build_program_graph_module(
+                     producer, producer_dependencies, producer_dependency_count, profile, NULL, 0u,
+                     &modules[producer_program->program_module_row].target, error, error_size);
     if (!built)
         goto done;
     /* The per-module entry expectation is the unresolved form of this exact
@@ -17418,6 +18127,10 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
         return fail(error, error_size, "XR_TARGET_1000",
                     "target module set entry module is missing or ambiguous");
 
+    XrTargetProgramReachability reachability = {0};
+    if (!xr_target_program_reachability_build(modules, module_count, &reachability, error,
+                                              error_size))
+        return false;
     XrTargetMaterializedPlan *materialized =
         (XrTargetMaterializedPlan *) xr_calloc(module_count, sizeof(*materialized));
     XrTargetModulePartitionRecord *partitions =
@@ -17429,6 +18142,7 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
         xr_free(materialized);
         xr_free(partitions);
         xr_free(rep_maps);
+        xr_target_program_reachability_dispose(&reachability);
         return fail(error, error_size, "XR_EXEC_5003",
                     "target module set builder allocation failed");
     }
@@ -17442,7 +18156,8 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
         built = xr_target_semantic_program_module_direct_dependencies(
             modules, module_count, row, &dependencies, &dependency_count, error, error_size);
         built = built && build_program_graph_module(modules[row], dependencies, dependency_count,
-                                                    profile, &materialized[row], error, error_size);
+                                                    profile, &reachability, row, &materialized[row],
+                                                    error, error_size);
         if (built && row == entry_row) {
             entry_dependencies = dependencies;
             entry_dependency_count = dependency_count;
@@ -17541,6 +18256,7 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
     xr_free(partitions);
     xr_free(rep_maps);
     xr_free(entry_dependencies);
+    xr_target_program_reachability_dispose(&reachability);
     return built;
 }
 

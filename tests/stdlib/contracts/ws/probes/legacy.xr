@@ -8,7 +8,7 @@ var key = "dGhlIHNhbXBsZSBub25jZQ=="
 emit("rfc6455-accept-key", ws.acceptKey(key) == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
 var request = "GET /chat HTTP/1.1\r\nHost: example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n"
 var parsed = ws.parseUpgradeRequest(request, null, false, null)
-emit("upgrade-handshake", parsed != null && parsed!.target == "/chat" && ws.upgradeResponse(key).contains("101 Switching Protocols"))
+emit("upgrade-handshake", parsed != null && parsed!.requestTarget == "/chat" && ws.upgradeResponse(key).contains("101 Switching Protocols"))
 var close = ws.parseClosePayload(Array<u8>([3, 232, 79, 75]))
 emit("close-payload-utf8", close != null && close!.code == 1000 && close!.reason == "OK" && ws.parseClosePayload(Array<u8>([3, 232, 192, 175])) == null)
 emit("close-reason-array-render", close != null && close!.reason == "[79, 75]")

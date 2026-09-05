@@ -7,6 +7,8 @@ import runtime
 
 print(runtime.liveBytes() >= 0)
 print(runtime.liveObjects() >= 0)
+print(runtime.finalizerCount() >= 0)
 var info = runtime.info()
 print(info.liveBytes >= 0)
 print(info.liveObjects >= 0)
+print(info.finalizerCount >= 0)

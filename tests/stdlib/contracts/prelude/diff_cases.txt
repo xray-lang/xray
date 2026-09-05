@@ -1,1 +1,0 @@
-tests/diff/cases/semantics/stdlib/prelude_contract_direct.xr

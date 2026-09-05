@@ -264,7 +264,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/builtin_symbols.def` 自动引入的类型符号：
-> `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
+> `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
 > `Array<u8>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 > 这些名字**不可被重新声明**：`class Array {}`、`enum TaskResult {}`、`interface Stringable {}` 一律是编译错误。
 > 完整的保留集是该注册表的全部条目（类型、枚举、约束接口），不止上面列出的 prelude 类型；
@@ -617,8 +617,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
-| Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
-| 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
+| Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`Os*` 同步类型 |
+| 模块导出类型 | `DateTime`、`Logger`、`NetConn`、`NetListener`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -660,8 +660,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `JSON.WithRest<T>` | 解析器内建 |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
-| `NetConn` | prelude |
-| `NetListener` | prelude |
 | `OsBarrier` | prelude |
 | `OsCondvar` | prelude |
 | `OsMutex` | prelude |
@@ -671,8 +669,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Path` | prelude |
 | `Ptr<T>` | 解析器内建 |
 | `Range` | prelude |
-| `Regex` | prelude |
-| `RegexMatch` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
 | `StringBuilder` | prelude |
@@ -6331,7 +6327,7 @@ print(len(empty))           // 0
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<u8>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
+> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<u8>` 是 `Array` 的具体化；`DateTime`、`Logger`、`NetConn`、`NetListener` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -6348,7 +6344,7 @@ print(len(empty))           // 0
 
 | 模块 | 主题 | 关键 API |
 |--|--|--|
-| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
+| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `readInto` `readBytes` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `TlsClientContext` `TlsServerContext` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL 解析与构造 | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
@@ -6369,7 +6365,7 @@ TCP 等待操作使用协程友好的 netpoll 路径。`setReadDeadline(conn, de
 
 `shutdownRead(conn)`、`shutdownWrite(conn)` 和 `shutdown(conn)` 暴露 TCP 半关闭语义。通用 proxy/relay 应优先使用 `copyBidirectional(a, b)`，它会在单向 EOF 后半关闭对端写侧，并返回两个方向的字节统计。
 
-TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, hostname, timeout?)` 提供；TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
+TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, alpnProtocols))`；需要自定义 CA、客户端证书或 STARTTLS 时使用 `TlsClientContext`。`TlsServerContext` 接受按服务端优先级排列的 ALPN 列表，`negotiatedProtocol(conn)` 返回双方协商的协议或 `null`。ALPN 只配置协商能力，是否接受选中结果仍由 HTTP/2、WebSocket 等协议模块决定。TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
 
 ### 15.3 数据格式
 
@@ -6427,7 +6423,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
 | `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
-| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`cpuCount()`、`sleepMs()`、`threadYield()`、`pinToCpu()`、`onSignal()` |
+| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`threadYield()`、`pinToCpu()`、`onSignal()`；主机 CPU 拓扑统一使用 `os.cpuCount()`，协程友好延时统一使用 `time.sleep(ms)` |
 
 ### 15.10 并行
 
@@ -6603,7 +6599,6 @@ os.platform()             // "darwin" / "linux" / "windows"
 os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
 os.sep()                  // 路径分隔符
 os.eol()                  // 行尾
-os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 ```
 
 > **命名约定**：`os.*` 以 POSIX 函数名为主（`getenv` / `getcwd` / `getpid`）；不随 Node.js。Node 风格的 `process.env` 映射不提供，请用 `os.getenv(name)` / `os.environ()`。

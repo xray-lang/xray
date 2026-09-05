@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_stdlib_boundary import (  # noqa: E402
+    check_builtin_distribution,
     check_dynamic,
     check_error_model_policy,
     check_fastpaths,
@@ -52,64 +53,40 @@ benchmark_runner = importlib.util.module_from_spec(_BENCHMARK_RUNNER_SPEC)
 _BENCHMARK_RUNNER_SPEC.loader.exec_module(benchmark_runner)
 
 
-def regex_native_field_ownership_errors(source: str) -> list[str]:
-    """Validate the transfer boundary used by the native Regex handles."""
-    errors: list[str] = []
-    required_before_store = (
-        (
-            "borrowed pattern retain",
-            "    xr_rc_retain_value(pattern);\n",
-            "    xr_instance_set_field_fast(inst, XR_REGEX_FIELD_PATTERN, pattern);\n",
-        ),
-        (
-            "borrowed match text retain",
-            "    xr_rc_retain_value(args[2]);\n",
-            "    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_TEXT, args[2]);\n",
-        ),
-        (
-            "borrowed match groups retain",
-            "    xr_rc_retain_value(args[3]);\n",
-            "    xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_GROUPS, args[3]);\n",
-        ),
-    )
-    for label, retain, store in required_before_store:
-        if source.count(retain) != 1:
-            errors.append(f"{label} must exist exactly once")
-            continue
-        if source.count(store) != 1 or source.index(retain) > source.index(store):
-            errors.append(f"{label} must precede its field store")
-    prog_creation = "    XrArray *prog = xr_array_new(xr_current_coro(isolate));\n"
-    prog_store = (
-        "    xr_instance_set_field_fast(inst, XR_REGEX_FIELD_PROG, "
-        "xr_value_from_array(prog));\n"
-    )
-    if source.count(prog_creation) != 1 or source.count(prog_store) != 1:
-        errors.append("fresh regex program must transfer directly into its field")
-    else:
-        creation_offset = source.index(prog_creation)
-        store_offset = source.index(prog_store)
-        if creation_offset > store_offset:
-            errors.append("fresh regex program creation must precede its field store")
-        elif "xr_rc_retain" in source[
-            creation_offset : store_offset + len(prog_store)
-        ]:
-            errors.append("fresh regex program must not gain a second owner")
-    return errors
-
-
 class StdlibBoundaryManifestTest(unittest.TestCase):
     def test_loadable_modules_have_one_boundary_entry(self) -> None:
         manifest = load_manifest(ROOT)
         self.assertEqual(loadable_modules(ROOT), set(manifest.by_name))
         self.assertEqual([], check_manifest(ROOT))
 
+    def test_prelude_is_implicit_language_core_not_an_import_target(self) -> None:
+        manifest = load_manifest(ROOT)
+        self.assertNotIn("prelude", manifest.by_name)
+        self.assertNotIn("prelude", loadable_modules(ROOT))
+
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        runner = (ROOT / "src/app/mcp/xmcp_tools_run.c").read_text(encoding="utf-8")
+        self.assertNotIn("XRAY_STDLIB_SOURCELESS_MODULES prelude", cmake)
+        run_allowlist = runner.split("RUN_ALLOWED_MODULES[] = {", 1)[1].split("};", 1)[0]
+        self.assertNotIn('"prelude"', run_allowlist)
+
+        registry = (ROOT / "stdlib/prelude/builtin_symbols.def").read_text(
+            encoding="utf-8"
+        )
+        runtime = (ROOT / "src/module/xprelude_runtime.c").read_text(encoding="utf-8")
+        self.assertIn('XR_BUILTIN_PRELUDE_TYPE("Array"', registry)
+        self.assertIn('XR_BUILTIN_PRELUDE_TYPE("Map"', registry)
+        self.assertIn('XR_BUILTIN_ENUM("Ordering"', registry)
+        self.assertIn("void xr_prelude_install", runtime)
+
     def test_source_only_module_declares_no_native_entries(self) -> None:
         manifest = load_manifest(ROOT)
-        for name in ("base64", "compress", "csv"):
+        for name in ("base64", "cluster", "compress", "csv", "http2"):
             module = manifest.by_name[name]
             self.assertIn(name, source_modules(ROOT))
             self.assertNotIn(name, native_entry_binder_modules(ROOT))
             self.assertEqual([], module.get("public_native", []))
+        self.assertEqual([], check_builtin_distribution(ROOT))
 
     def test_module_native_entries_are_bound_by_a_generated_binder(self) -> None:
         manifest = load_manifest(ROOT)
@@ -120,9 +97,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         # bypass the generic loader's boundary inventory.
         self.assertEqual(
             {
-                "cluster",
                 "crypto",
-                "http2",
                 "io",
                 "math",
                 "mem",
@@ -130,7 +105,6 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
                 "os",
                 "regex",
                 "runtime",
-                "sync",
                 "sys",
                 "test_yield",
                 "time",
@@ -218,29 +192,167 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertEqual([], check_semantic_owners(ROOT))
         self.assertEqual([], check_fastpaths(ROOT))
 
-    def test_regex_native_fields_have_one_exact_owner(self) -> None:
-        path = ROOT / "stdlib/regex/xregex_binding.c"
-        source = path.read_text(encoding="utf-8")
-        self.assertEqual([], regex_native_field_ownership_errors(source))
-        mutations = {
-            "pattern": "    xr_rc_retain_value(pattern);\n",
-            "text": "    xr_rc_retain_value(args[2]);\n",
-            "groups": "    xr_rc_retain_value(args[3]);\n",
+    def test_regex_object_and_literal_policy_are_source_owned(self) -> None:
+        source = (ROOT / "stdlib/regex/regex.xr").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/regex/xregex_binding.c").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        canonicalizer = (ROOT / "src/frontend/canonical/xcanon.c").read_text(encoding="utf-8")
+        self.assertIn("export final class Regex {", source)
+        self.assertIn("constructor(pattern: string, flags: string", source)
+        self.assertIn("fn rxParseFlags(", source)
+        self.assertIn("this.prog = Array<i64>()", source)
+        self.assertIn('xr_ast_new_expr(ctx->session, "regex", "Regex"', canonicalizer)
+        for retired in (
+            "make_regex",
+            "xr_regex_compile_literal",
+            "xr_regex_register_class",
+            "regex_parse_flags",
+            "regex_compile",
+        ):
+            self.assertNotIn(retired, binding)
+        self.assertNotIn("class Regex {", definitions)
+        self.assertNotIn("fn __regexNew {", definitions)
+        self.assertNotIn("fn __regexParseFlags {", definitions)
+        self.assertFalse((ROOT / "stdlib/types/regex.xr").exists())
+
+    def test_regex_match_shape_is_source_owned(self) -> None:
+        source = (ROOT / "stdlib/regex/regex.xr").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/regex/xregex_binding.c").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        self.assertIn("export final class RegexMatch {", source)
+        for field in ("start: i64", "end: i64", "text: string", "groups: Array<string>"):
+            self.assertIn(field, source)
+        for legacy_owner in ("XR_REGEX_MATCH_FIELD_", "regex_match_new", "__regexMatchNew"):
+            self.assertNotIn(legacy_owner, binding)
+            self.assertNotIn(legacy_owner, definitions)
+
+    def test_os_process_surface_has_one_source_model(self) -> None:
+        source = (ROOT / "stdlib/os/os.xr").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/os/os.c").read_text(encoding="utf-8")
+        aot = (ROOT / "src/aot/xrt_os.h").read_text(encoding="utf-8")
+        sys_source = (ROOT / "stdlib/sys/sys.xr").read_text(encoding="utf-8")
+        sys_provider = (ROOT / "src/coro/xsys_provider.c").read_text(encoding="utf-8")
+        sys_aot = (ROOT / "src/aot/xrt_sys.h").read_text(encoding="utf-8")
+        self.assertNotIn("export fn spawn(", source)
+        self.assertNotIn("fn __spawn {", definitions)
+        self.assertNotIn("os_spawn", binding)
+        self.assertIn("static spawn(program: string", sys_source)
+        self.assertIn("var code = this.tryWait()", sys_source)
+        self.assertIn("time.sleep(1)", sys_source)
+        self.assertNotIn("fn __processWait {", definitions)
+        self.assertNotIn("xr_sys_provider_process_wait", sys_provider)
+        self.assertNotIn("xrt_sys_process_wait", sys_aot)
+        self.assertEqual(1, definitions.count("  fn __kill {"))
+        self.assertNotIn("xrt_os_kill(XrValue", aot)
+        self.assertIn("if (count > 0) { return count }", source)
+
+    def test_time_sleep_has_one_coroutine_timer_contract(self) -> None:
+        time_source = (ROOT / "stdlib/time/time.xr").read_text(encoding="utf-8")
+        time_provider = (ROOT / "stdlib/time/time.c").read_text(encoding="utf-8")
+        vm = (ROOT / "src/vm/xvm_chan_ops.c").read_text(encoding="utf-8")
+        aot = (ROOT / "src/coro/xaot_runtime.c").read_text(encoding="utf-8")
+        block = (ROOT / "src/coro/xblock_core.c").read_text(encoding="utf-8")
+        block_header = (ROOT / "src/coro/xblock.h").read_text(encoding="utf-8")
+
+        self.assertIn("export fn sleep(ms: i64)", time_source)
+        self.assertIn("if (ms <= 0) { return }", time_source)
+        self.assertIn("ms > 86400000 ? 86400000 : ms", time_source)
+        self.assertIn("#define XR_TIME_SLEEP_MAX_MS INT64_C(86400000)", block_header)
+        self.assertIn("milliseconds = xr_time_sleep_normalize_ms(milliseconds);", block)
+        self.assertIn("ms = xr_time_sleep_normalize_ms(ms);", time_provider)
+        self.assertIn("XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);", vm)
+        self.assertIn("XrCoroBlockResult block = xr_coro_sleep(ctx->coro, milliseconds);", aot)
+        self.assertNotIn("xr_time_sleep_ms", vm)
+
+    def test_io_directory_policy_is_source_owned(self) -> None:
+        source = (ROOT / "stdlib/io/io.xr").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        binding = (ROOT / "stdlib/io/io.c").read_text(encoding="utf-8")
+        provider = (ROOT / "src/io/xfile_provider.c").read_text(encoding="utf-8")
+        provider_header = (ROOT / "src/io/xfile_provider.h").read_text(encoding="utf-8")
+        aot = (ROOT / "src/aot/xrt_io.h").read_text(encoding="utf-8")
+
+        self.assertIn("return Path(os.getcwd())", source)
+        self.assertIn("defer { __dirClose(handle) }", source)
+        self.assertIn("var name = __dirNext(handle)", source)
+        self.assertIn("names.sort()", source)
+        self.assertIn('name! != "." && name! != ".."', source)
+        for native in ("__dirOpen", "__dirNext", "__dirClose"):
+            self.assertEqual(1, definitions.count(f"  fn {native} {{"))
+        self.assertIn("  fn __fileWriteStr {", definitions)
+        self.assertIn("#include <sys/stat.h>", provider)
+        self.assertIn("#define XR_FILE_CREATE_MODE (_S_IREAD | _S_IWRITE)", provider)
+
+        removed = {
+            "source": (source, ("__cwd", "__readDir")),
+            "definitions": (definitions, ("  fn __cwd {", "  fn __readDir {")),
+            "binding": (binding, ("io_cwd", "io_readDir", "XrFileDirEntries")),
+            "provider": (provider, ("xr_file_dir_entries_read", "file_dir_entries_push")),
+            "provider_header": (provider_header, ("XrFileDirEntries", "xr_file_dir_entries_read")),
+            "aot": (aot, ("xrt_io_cwd", "xrt_io_read_dir", "xrt_io_dir_for_each_entry")),
         }
-        for label, retain in mutations.items():
-            with self.subTest(label=label):
-                self.assertIn(retain, source)
-                self.assertNotEqual(
-                    [], regex_native_field_ownership_errors(source.replace(retain, "", 1))
-                )
-        prog_creation = "    XrArray *prog = xr_array_new(xr_current_coro(isolate));\n"
-        self.assertIn(prog_creation, source)
-        extra_owner = source.replace(
-            prog_creation,
-            prog_creation + "    xr_rc_retain_value(xr_value_from_array(prog));\n",
-            1,
-        )
-        self.assertNotEqual([], regex_native_field_ownership_errors(extra_owner))
+        for owner, (text, tokens) in removed.items():
+            for token in tokens:
+                self.assertNotIn(token, text, f"{owner} still contains retired {token}")
+
+    def test_http2_transport_policy_is_source_owned(self) -> None:
+        source = (ROOT / "stdlib/http2/http2.xr").read_text(encoding="utf-8")
+        net_source = (ROOT / "stdlib/net/net.xr").read_text(encoding="utf-8")
+        net_provider = (ROOT / "src/io/xnet_provider.c").read_text(encoding="utf-8")
+        tls_provider = (ROOT / "src/io/xtls_provider.c").read_text(encoding="utf-8")
+        aot_net = (ROOT / "src/aot/xrt_net.h").read_text(encoding="utf-8")
+        definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
+        cache = (ROOT / "src/module/xstdlib_runtime_cache.h").read_text(encoding="utf-8")
+
+        for owner in (
+            'const H2_ALPN = "h2"',
+            "const MAX_TRANSPORT_TIMEOUT_MS: i64 = 2147483647",
+            "net.dial(host, port, net.DialOptions(remaining, true, protocols))",
+            "net.negotiatedProtocol(live) != H2_ALPN",
+            "net.setDeadline(live, deadline)",
+            "net.writeBytes(conn, ex.outbox)",
+            "net.readInto(conn, ref chunk, DEFAULT_MAX_FRAME_SIZE)",
+            "net.close(conn)",
+            "throw Http2Error.TlsUnavailable",
+            'throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }',
+        ):
+            self.assertIn(owner, source)
+
+        for generic_net_owner in (
+            "fn _encodeAlpnProtocols",
+            "alpnProtocols: Array<string>? = null",
+            "export fn negotiatedProtocol(conn: NetConn) -> string?",
+        ):
+            self.assertIn(generic_net_owner, net_source)
+        self.assertNotIn("export fn dialTLS", net_source)
+        self.assertIn("SSL_CTX_set_alpn_select_cb", tls_provider)
+        self.assertIn("SSL_select_next_proto", tls_provider)
+        self.assertIn("net_tls_negotiated_protocol", net_provider)
+        self.assertIn("wire->length > UINT16_MAX", net_provider)
+        self.assertIn("buf->length = (int32_t) n;", net_provider)
+        self.assertIn("ex.buf.appendFrom(chunk[:received])", source)
+        self.assertIn("xrt_net_alpn_wire_valid", aot_net)
+        self.assertIn("xrt_net_tls_negotiated_protocol", aot_net)
+        self.assertIn("return XR_NULL_VAL;", aot_net)
+        self.assertNotIn("http2_state", cache)
+
+        for removed_leaf in (
+            "module http2 {",
+            "h2_supported",
+            "h2_connect",
+            "h2_send",
+            "h2_recv",
+            "h2_close",
+        ):
+            self.assertNotIn(removed_leaf, definitions)
+        for removed_path in (
+            "stdlib/http2/http2_binding.c",
+            "src/io/xhttp2_transport.c",
+            "src/io/xhttp2_transport.h",
+            "src/aot/xrt_http.h",
+        ):
+            self.assertFalse((ROOT / removed_path).exists())
 
     def test_exact_aot_runtime_adapters_do_not_allow_module_helper_families(self) -> None:
         manifest = load_manifest(ROOT)

@@ -1,6 +1,6 @@
 schema = 1
 module = "runtime"
-contract_revision = 3
+contract_revision = 4
 legacy_commit = "5ba146f59ba3f2518e457ea9ac2dd0f7b246d5ee"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/runtime/legacy_expected.jsonl"
@@ -17,7 +17,9 @@ legacy_public_surface = [
 intentional_semantic_changes = [
   "cycle-collector control and heap introspection moved from mem to the dedicated runtime module",
   "the cycle-collector control plane (collectCycles, enable/disable/isCycleCollectionEnabled, info.cycleCollections) is gone with the collector itself (task 247); the four entry points were deleted rather than stubbed, so calling one is a compile error and not a silent no-op",
-  "standalone AOT reads the provider-owned current execution arena and materializes the same typed RuntimeInfo fields",
+  "standalone AOT reads the provider-owned current execution arena through scalar counter leaves",
+  "RuntimeInfo is constructed entirely in runtime.xr; the native __RuntimeStats shape and __stats object-return fast path were deleted",
+  "allocator-internal blocks/freeBlocks/fullBlocks were removed because the execution-arena backend cannot provide them; RuntimeInfo now contains only backend-independent counters",
 ]
 known_legacy_bugs = []
 equivalence = ["value", "error", "effect", "complexity"]
@@ -33,7 +35,7 @@ new_behavior = "no successor: task 247 deleted the cycle collector, so there is 
 [[legacy_behavior]]
 id = "heap-counters"
 classification = "required"
-new_behavior = "liveBytes, liveObjects, and info expose non-negative counters from the current execution-local reclamation domain"
+new_behavior = "liveBytes, liveObjects, finalizerCount, and info expose non-negative counters from the current execution-local reclamation domain"
 
 [[legacy_behavior]]
 id = "standalone-aot-introspection"

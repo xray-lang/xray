@@ -4070,11 +4070,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
         .summary = "",
     },
     {
-        .name = "sleep",
-        .signature = "(ms: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "spawn",
         .signature = "(program: string, args: Array<string>): ExecResult?",
         .summary = "",
@@ -5476,11 +5471,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "cpuCount",
-        .signature = "(): i64",
-        .summary = "Return the number of CPUs available to OS-thread work",
-    },
-    {
         .name = "onSignal",
         .signature = "(signal: Signal, handler: fn()): bool",
         .summary = "",
@@ -5489,11 +5479,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .name = "pinToCpu",
         .signature = "(cpu: i64): bool",
         .summary = "Best-effort pin of the current OS thread to a CPU index",
-    },
-    {
-        .name = "sleepMs",
-        .signature = "(ms: i64): ()",
-        .summary = "Block the current OS thread for at least ms milliseconds",
     },
     {
         .name = "threadYield",
@@ -9914,7 +9899,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.ppid` | `(): i64` |  |\n"
             "| `os.sep` | `(): string` |  |\n"
             "| `os.setenv` | `(name: string, value: string): bool` |  |\n"
-            "| `os.sleep` | `(ms: i64): ()` |  |\n"
             "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` |  |\n"
             "| `os.tmpdir` | `(): string` |  |\n"
             "| `os.totalMemory` | `(): i64` |  |\n"
@@ -10323,7 +10307,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# sys module\n"
             "\n"
-            "Low-level OS-thread primitives: `sys.Thread.spawn(...)`, `ThreadOptions`, `ThreadLocal<T>`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, CPU/thread helpers, signal hooks, and blocking sleep/yield operations. `sys.Thread.spawn` is compiler-defined; it returns the prelude `Thread<T>` handle with `join`, `detach`, and `done`.\n"
+            "Low-level OS-thread primitives: `sys.Thread.spawn(...)`, `ThreadOptions`, `ThreadLocal<T>`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, thread yield/affinity helpers, and signal hooks. `sys.Thread.spawn` is compiler-defined; it returns the prelude `Thread<T>` handle with `join`, `detach`, and `done`. Host CPU topology belongs to `os.cpuCount()` and coroutine-friendly delays belong to `time.sleep(ms)`.\n"
             "\n"
             "Usage: `import sys` then call `sys.function()`.\n"
             "\n"
@@ -10371,10 +10355,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ThreadLocal.constructor` | `(init: fn() -> T): ()` |  |\n"
             "| `ThreadLocal.get` | `(): T` |  |\n"
             "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
-            "| `sys.cpuCount` | `(): i64` | Return the number of CPUs available to OS-thread work |\n"
             "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n"
             "| `sys.pinToCpu` | `(cpu: i64): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
-            "| `sys.sleepMs` | `(ms: i64): ()` | Block the current OS thread for at least ms milliseconds |\n"
             "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"
             "",
         .symbols = _symbols_sys,

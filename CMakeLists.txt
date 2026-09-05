@@ -935,13 +935,11 @@ set(XRAY_BUNDLED_ZIG "" CACHE FILEPATH "Zig executable to install when XRAY_BUND
 # Stdlib modular options (for security control / binary size)
 option(XR_STDLIB_FULL       "Full stdlib (ignores group options below)" ON)
 option(XR_STDLIB_FILESYSTEM "Filesystem modules (io, os)" ON)
-option(XR_STDLIB_NET        "Network modules (net, http)" ON)
+option(XR_STDLIB_NET        "Network modules (net, http, http2, cluster)" ON)
 option(XR_STDLIB_DATA       "Data format modules (csv, toml, yaml, xml)" ON)
 option(XR_STDLIB_CRYPTO    "Crypto standard-library module" ON)
 option(XR_STDLIB_COMPRESS  "Compression standard-library module" ON)
-option(XR_STDLIB_CLUSTER   "Cluster standard-library module" ON)
 option(XR_STDLIB_WS        "WebSocket standard-library module" ON)
-option(XR_STDLIB_HTTP2     "HTTP/2 standard-library module" ON)
 option(XR_BUILD_TEST_MODULES "Build internal stdlib test modules" OFF)
 
 if(XR_BUILD_TEST_MODULES)
@@ -1304,6 +1302,7 @@ endfunction()
 
 file(GLOB BASE_SRC CONFIGURE_DEPENDS "src/base/*.c")
 list(APPEND BASE_SRC
+    "src/shared/xr_crypto_core.c"
     "src/shared/xr_unicode_grapheme_data.c"
     "src/shared/xr_unicode_grapheme.c"
     "src/shared/xr_http_url.c"
@@ -1396,11 +1395,10 @@ file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
 
 # Standard Library (Native modules) - modular conditional compilation
-# Core modules (required): prelude (built-in type registry), time, math, log,
-# gc, regex, path, datetime, encoding, base64, url
+# Core standard-library modules: time, math, log, regex, path, datetime,
+# encoding, base64, and url. The implicit language-core registry is compiled
+# from stdlib/prelude/builtin_symbols.def, but it is not a loadable module.
 file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
-    "stdlib/prelude/*.c"
-    "stdlib/stdlib_cache.c"
     "stdlib/_probe/*.c"
     "stdlib/time/*.c"
     "stdlib/math/*.c"
@@ -1424,9 +1422,9 @@ set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
 if(XR_STDLIB_FULL)
     # Full stdlib includes every built-in module. Group switches apply only to
-    # modular builds, so "full" has one exact, fail-closed meaning.
+    # modular builds, so "full" has one exact, fail-closed meaning. Source-only
+    # modules do not contribute C translation units.
     file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
-    list(APPEND STDLIB_ALL_SRC "stdlib/stdlib_cache.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
     if(NOT XR_BUILD_TEST_MODULES)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
@@ -1438,9 +1436,7 @@ if(XR_STDLIB_FULL)
     add_compile_definitions(XR_HAS_NETWORK=1)
     add_compile_definitions(XR_HAS_DATA_FORMATS=1)
     add_compile_definitions(XR_HAS_CRYPTO=1)
-    add_compile_definitions(XR_HAS_CLUSTER=1)
     add_compile_definitions(XR_HAS_WS=1)
-    add_compile_definitions(XR_HAS_HTTP2=1)
     message(STATUS "Stdlib: full")
 else()
     # Modular compilation - define XR_STDLIB_MODULAR to indicate modular build
@@ -1457,7 +1453,7 @@ else()
         file(GLOB STDLIB_NET_SRC CONFIGURE_DEPENDS "stdlib/net/*.c" "stdlib/http/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_NET_SRC})
         add_compile_definitions(XR_HAS_NETWORK=1)
-        message(STATUS "Stdlib: +network (net, http)")
+        message(STATUS "Stdlib: +network (net, http, http2, cluster)")
     endif()
 
     if(XR_STDLIB_DATA)
@@ -1474,25 +1470,11 @@ else()
         message(STATUS "Stdlib: +crypto")
     endif()
 
-    if(XR_STDLIB_CLUSTER)
-        file(GLOB STDLIB_CLUSTER_SRC CONFIGURE_DEPENDS "stdlib/cluster/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_CLUSTER_SRC})
-        add_compile_definitions(XR_HAS_CLUSTER=1)
-        message(STATUS "Stdlib: +cluster")
-    endif()
-
     if(XR_STDLIB_WS)
         file(GLOB STDLIB_WS_SRC CONFIGURE_DEPENDS "stdlib/ws/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_WS_SRC})
         add_compile_definitions(XR_HAS_WS=1)
         message(STATUS "Stdlib: +ws")
-    endif()
-
-    if(XR_STDLIB_HTTP2)
-        file(GLOB STDLIB_HTTP2_SRC CONFIGURE_DEPENDS "stdlib/http2/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_HTTP2_SRC})
-        add_compile_definitions(XR_HAS_HTTP2=1)
-        message(STATUS "Stdlib: +http2")
     endif()
 
     if(XR_BUILD_TEST_MODULES)
@@ -1516,29 +1498,21 @@ if(NOT XR_STDLIB_FULL)
     endif()
     if(NOT XR_STDLIB_NET)
         list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
-            "stdlib/(net|http)/[^/]+\\.xr$")
+            "stdlib/(net|http|http2|cluster)/[^/]+\\.xr$")
     endif()
     if(NOT XR_STDLIB_DATA)
         list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
             "stdlib/(csv|toml|yaml|xml)/[^/]+\\.xr$")
-    endif()
-    if(NOT XR_STDLIB_CLUSTER)
-        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
-            "stdlib/cluster/[^/]+\\.xr$")
     endif()
     if(NOT XR_STDLIB_WS)
         list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
             "stdlib/ws/[^/]+\\.xr$")
     endif()
 endif()
-# Loadable modules with no .xr source of their own. They belong in the
-# descriptor table for the same reason the sourced ones do, but they cannot be
-# discovered from the source list, and naming a binder that this build did not
-# compile would not link -- so the build states them where it states the rest of
-# its module selection.
-#   prelude - installed into the isolate itself; the module is an import no-op
-#   test_yield - scheduler test stubs, present only in test-module builds
-set(XRAY_STDLIB_SOURCELESS_MODULES prelude)
+# Loadable test modules with no .xr source of their own cannot be discovered
+# from the source list. Production has no sourceless modules: implicit
+# language-core installation is isolate setup, not an import target.
+set(XRAY_STDLIB_SOURCELESS_MODULES "")
 if(XR_BUILD_TEST_MODULES)
     list(APPEND XRAY_STDLIB_SOURCELESS_MODULES test_yield)
 endif()
@@ -1740,6 +1714,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/target/xr_target_plan.c
     src/plan/target/xr_target_profile.c
     src/plan/target/xr_target_profile_verify.c
+    src/plan/target/xr_target_program_reachability.c
     src/plan/target/xr_target_verify.c
     src/aot/emit_c/xr_c_emission_plan.c
     src/aot/emit_c/xr_c_scalar_ref_projection.c
@@ -1770,9 +1745,9 @@ add_library(xray_aot_core STATIC
     src/base/xsha256.c
     src/base/xunicode.c
     src/shared/xr_compress_engine.c
-    stdlib/crypto/crypto.c
+    src/shared/xr_crypto_core.c
 )
-target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1 XR_CRYPTO_CORE_ONLY=1)
+target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1)
 target_include_directories(xray_aot_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set(XRAY_RT_CORO_SOURCES
@@ -1789,9 +1764,6 @@ set(XRAY_RT_CORO_SOURCES
     ${CORO_SRC}
     ${IO_SRC}
     src/aot/xrt_gen_iter.c
-    stdlib/cluster/cluster_aot.c
-    stdlib/cluster/cluster_auth.c
-    stdlib/cluster/cluster_proto.c
 )
 list(REMOVE_DUPLICATES XRAY_RT_CORO_SOURCES)
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
@@ -1907,6 +1879,7 @@ set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     src/plan/target/xr_target_instruction_verify.c
     src/plan/target/xr_target_profile.c
     src/plan/target/xr_target_profile_verify.c
+    src/plan/target/xr_target_program_reachability.c
     src/plan/target/xr_target_verify.c
     src/plan/target/xr_xtp_materialize.c
 )
@@ -2075,6 +2048,11 @@ endif()
 # OpenSSL support
 # - WebSocket stdlib needs libcrypto (SHA1 for handshake) even without TLS
 # - Full TLS needs both libssl and libcrypto
+set(XRAY_RUNTIME_TLS_ENABLED OFF)
+# The installed AOT SDK carries verified TLS archives beside xray_rt_coro;
+# selecting shared provider libraries here would make native output depend on
+# the build machine's prefix or loader configuration.
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 if(APPLE)
     # Respect a release/toolchain-provided root first, then cover both native
     # Homebrew layouts for developer builds. Do not force the arm64 prefix on
@@ -2087,10 +2065,6 @@ if(APPLE)
             endif()
         endforeach()
     endif()
-    # Native packages cannot depend on a user's Homebrew prefix.  Link OpenSSL
-    # into the Xray executable; provider-specific AOT dependencies remain
-    # explicit in the generated link manifest.
-    set(OPENSSL_USE_STATIC_LIBS TRUE)
 endif()
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)
@@ -2103,12 +2077,29 @@ if(OpenSSL_FOUND)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
     if(ENABLE_TLS)
+        set(XRAY_RUNTIME_TLS_ENABLED ON)
+        set(XRAY_RUNTIME_TLS_SSL_FILE
+            "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_ssl${CMAKE_STATIC_LIBRARY_SUFFIX}")
+        set(XRAY_RUNTIME_TLS_CRYPTO_FILE
+            "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_crypto${CMAKE_STATIC_LIBRARY_SUFFIX}")
+        file(TO_CMAKE_PATH "${OPENSSL_SSL_LIBRARY}" XRAY_RUNTIME_TLS_SSL_SOURCE)
+        file(TO_CMAKE_PATH "${OPENSSL_CRYPTO_LIBRARY}" XRAY_RUNTIME_TLS_CRYPTO_SOURCE)
+        add_compile_definitions(
+            XRT_TLS_SSL_LIBRARY="${XRAY_RUNTIME_TLS_SSL_SOURCE}"
+            XRT_TLS_CRYPTO_LIBRARY="${XRAY_RUNTIME_TLS_CRYPTO_SOURCE}"
+        )
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            string(APPEND XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON ",\"dl\"")
+        endif()
         target_link_libraries(xray_core_objs PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
+        target_include_directories(xray_rt_coro PRIVATE ${OPENSSL_INCLUDE_DIR})
+        target_link_libraries(xray_rt_coro PUBLIC OpenSSL::SSL OpenSSL::Crypto)
         target_compile_definitions(xray_core_objs PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_core PUBLIC XR_ENABLE_TLS=1)
+        target_compile_definitions(xray_rt_coro PRIVATE XR_ENABLE_TLS=1)
     endif()
 else()
     message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
@@ -2901,6 +2892,17 @@ if(BUILD_TESTS)
     )
     set_tests_properties(test_stdlib_arg_spec_gate PROPERTIES
         LABELS "stdlib;metadata;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME test_cluster_aot_boundary
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_cluster_aot_boundary.py
+    )
+    set_tests_properties(test_cluster_aot_boundary PROPERTIES
+        LABELS "stdlib;aot;boundary;unit"
         PROCESSORS 1
         TIMEOUT 30
     )
@@ -6113,6 +6115,18 @@ install(TARGETS xray_aot_core xray_rt_coro
     ARCHIVE DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
     COMPONENT XraySDK
 )
+if(XRAY_RUNTIME_TLS_ENABLED)
+    install(FILES "${OPENSSL_SSL_LIBRARY}"
+        DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
+        RENAME "${XRAY_RUNTIME_TLS_SSL_FILE}"
+        COMPONENT XraySDK
+    )
+    install(FILES "${OPENSSL_CRYPTO_LIBRARY}"
+        DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
+        RENAME "${XRAY_RUNTIME_TLS_CRYPTO_FILE}"
+        COMPONENT XraySDK
+    )
+endif()
 
 # Apple's post-install ranlib stamps each archive table of contents with the
 # current time, so an installed archive is not a function of its members and a

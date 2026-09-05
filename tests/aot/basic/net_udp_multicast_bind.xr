@@ -1,0 +1,12 @@
+// Generic IPv4 multicast socket construction must have the same observable
+// handle lifecycle through the VM and hosted AOT providers.
+import net
+
+fn main() {
+    var conn = net.udpMulticastBind("239.255.43.32", 47232, 7, true)
+    print(net.fd(conn) >= 0)
+    net.close(conn)
+    print(net.fd(conn))
+}
+
+main()

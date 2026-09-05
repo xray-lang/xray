@@ -1505,6 +1505,53 @@ static XgInterfaceId producer_interface_id(uint64_t nominal_key) {
     return (XgInterfaceId) hash_folded32(hash);
 }
 
+/* Analyzer nominal metadata outlives an individual evidence build. Numeric
+ * class/declaration ids are positions in one evidence snapshot and may shift
+ * when the final post-monomorphization graph adds declarations. The stable
+ * nominal key is the cross-build authority: matching keys permit an atomic
+ * rebind to this snapshot, while a different key remains a hard rejection. */
+static bool producer_nominal_info_key_can_rebind(const XrClassInfo *info, uint64_t nominal_key) {
+    if (!info || nominal_key == 0)
+        return false;
+    if (info->xg_nominal_key != 0)
+        return info->xg_nominal_key == nominal_key;
+    return info->xg_decl_id == XG_NO_ID && info->xg_class_id == XG_NO_ID &&
+           info->xg_interface_id == XG_NO_ID;
+}
+
+static bool producer_rebind_class_info(XrClassInfo *info, uint64_t nominal_key,
+                                       XgDeclId decl_id, XgClassId class_id) {
+    if (!producer_nominal_info_key_can_rebind(info, nominal_key) ||
+        info->xg_interface_id != XG_NO_ID)
+        return false;
+    info->xg_decl_id = decl_id;
+    info->xg_class_id = class_id;
+    info->xg_nominal_key = nominal_key;
+    return true;
+}
+
+static bool producer_rebind_interface_info(XrClassInfo *info, uint64_t nominal_key,
+                                           XgDeclId decl_id, XgInterfaceId interface_id) {
+    if (!producer_nominal_info_key_can_rebind(info, nominal_key) ||
+        info->xg_class_id != XG_NO_ID ||
+        (info->xg_interface_id != XG_NO_ID && info->xg_interface_id != interface_id))
+        return false;
+    info->xg_decl_id = decl_id;
+    info->xg_interface_id = interface_id;
+    info->xg_nominal_key = nominal_key;
+    return true;
+}
+
+static bool producer_rebind_enum_info(XrClassInfo *info, uint64_t nominal_key,
+                                      XgDeclId decl_id) {
+    if (!producer_nominal_info_key_can_rebind(info, nominal_key) ||
+        info->xg_class_id != XG_NO_ID || info->xg_interface_id != XG_NO_ID)
+        return false;
+    info->xg_decl_id = decl_id;
+    info->xg_nominal_key = nominal_key;
+    return true;
+}
+
 static bool producer_register_interface(XgProducer *p, XgModuleId module_id, const AstNode *node,
                                         XrClassInfo *analyzer_info) {
     const InterfaceDeclNode *decl;
@@ -1537,8 +1584,8 @@ static bool producer_register_interface(XgProducer *p, XgModuleId module_id, con
             if (analyzer_info) {
                 if ((analyzer_info->xg_interface_id != XG_NO_ID &&
                      analyzer_info->xg_interface_id != existing->interface_id) ||
-                    (analyzer_info->xg_nominal_key != 0 &&
-                     analyzer_info->xg_nominal_key != nominal_key))
+                    !producer_nominal_info_key_can_rebind(analyzer_info, nominal_key) ||
+                    analyzer_info->xg_class_id != XG_NO_ID)
                     return false;
                 existing->analyzer_info = analyzer_info;
                 analyzer_info->xg_interface_id = existing->interface_id;
@@ -1559,7 +1606,8 @@ static bool producer_register_interface(XgProducer *p, XgModuleId module_id, con
     if (analyzer_info) {
         if ((analyzer_info->xg_interface_id != XG_NO_ID &&
              analyzer_info->xg_interface_id != interface_id) ||
-            (analyzer_info->xg_nominal_key != 0 && analyzer_info->xg_nominal_key != nominal_key))
+            !producer_nominal_info_key_can_rebind(analyzer_info, nominal_key) ||
+            analyzer_info->xg_class_id != XG_NO_ID)
             return false;
         analyzer_info->xg_interface_id = interface_id;
         analyzer_info->xg_nominal_key = nominal_key;
@@ -1936,12 +1984,15 @@ static bool producer_publish_nominal_conformance(XgProducer *producer, XgClassId
     const XgDeclSummary *decl = producer_decl_by_id(producer, decl_id);
     uint64_t nominal_key = decl ? decl->nominal_key : 0;
     if (!producer || !producer->evidence || !producer->analyzer || !nominal_info || !decl ||
-        nominal_key == 0 || producer_nominal_key(producer, decl) != nominal_key ||
-        (nominal_info->xg_decl_id != XG_NO_ID && nominal_info->xg_decl_id != decl_id) ||
-        (nominal_info->xg_nominal_key != 0 && nominal_info->xg_nominal_key != nominal_key))
+        nominal_key == 0 || producer_nominal_key(producer, decl) != nominal_key)
         return false;
-    nominal_info->xg_decl_id = decl_id;
-    nominal_info->xg_nominal_key = nominal_key;
+    if (decl_kind == XG_DECL_ENUM) {
+        if (class_id != XG_NO_ID ||
+            !producer_rebind_enum_info(nominal_info, nominal_key, decl_id))
+            return false;
+    } else if (!producer_rebind_class_info(nominal_info, nominal_key, decl_id, class_id)) {
+        return false;
+    }
     XgDerivedNominalContract type_contract = producer_derive_implementor_contract(nominal_info);
     uint32_t published_count = 0;
     uint32_t published_start = producer->evidence->ninterface_impls + 1;
@@ -2040,14 +2091,9 @@ static bool producer_publish_nominal_conformances(XgProducer *producer) {
                 const XgDeclSummary *decl = producer_decl_by_id(producer, summary->decl_id);
                 if (!decl || decl->nominal_key == 0 ||
                     producer_nominal_key(producer, decl) != decl->nominal_key ||
-                    (links->class_info->xg_decl_id != XG_NO_ID &&
-                     links->class_info->xg_decl_id != summary->decl_id) ||
-                    (links->class_info->xg_nominal_key != 0 &&
-                     links->class_info->xg_nominal_key != decl->nominal_key))
+                    !producer_rebind_class_info(links->class_info, decl->nominal_key,
+                                                summary->decl_id, row->class_id))
                     return false;
-                links->class_info->xg_class_id = row->class_id;
-                links->class_info->xg_decl_id = summary->decl_id;
-                links->class_info->xg_nominal_key = decl->nominal_key;
             }
             continue;
         }
@@ -2067,13 +2113,8 @@ static bool producer_publish_nominal_conformances(XgProducer *producer) {
             const XgDeclSummary *decl = producer_decl_by_id(producer, row->decl_id);
             if (!decl || decl->nominal_key == 0 ||
                 producer_nominal_key(producer, decl) != decl->nominal_key ||
-                (row->analyzer_info->xg_decl_id != XG_NO_ID &&
-                 row->analyzer_info->xg_decl_id != row->decl_id) ||
-                (row->analyzer_info->xg_nominal_key != 0 &&
-                 row->analyzer_info->xg_nominal_key != decl->nominal_key))
+                !producer_rebind_enum_info(row->analyzer_info, decl->nominal_key, row->decl_id))
                 return false;
-            row->analyzer_info->xg_decl_id = row->decl_id;
-            row->analyzer_info->xg_nominal_key = decl->nominal_key;
         }
         if (row->decl->interface_count == 0)
             continue;
@@ -3481,16 +3522,6 @@ static uint32_t body_capabilities_for_builtin_constructor(const char *name) {
         return XG_CAP_CHANNEL | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
     if (strcmp(name, "Atomic") == 0)
         return XG_CAP_ATOMIC | XG_CAP_OBJECTS;
-    if (strcmp(name, "WorkQueue") == 0)
-        return XG_CAP_WORK_QUEUE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "ResultGroup") == 0)
-        return XG_CAP_RESULT_GROUP | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "CountdownLatch") == 0)
-        return XG_CAP_COUNTDOWN_LATCH | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "Semaphore") == 0)
-        return XG_CAP_SEMAPHORE | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
-    if (strcmp(name, "EventCount") == 0)
-        return XG_CAP_EVENT_COUNT | XG_CAP_COROUTINE | XG_CAP_OBJECTS;
     return 0;
 }
 
@@ -4222,8 +4253,13 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_synthetic_tref32(XR_TREF_NULL, NULL, NULL, 0);
         case AST_LITERAL_BIGINT:
             return hash_named_type_key32("BigInt", NULL, 0);
-        case AST_LITERAL_REGEX:
-            return hash_named_type_key32("Regex", NULL, 0);
+        case AST_LITERAL_REGEX: {
+            XrType *type = bc->producer && bc->producer->analyzer
+                               ? xa_analyzer_get_node_type(bc->producer->analyzer, expr)
+                               : NULL;
+            const char *class_name = xr_type_get_class_name(type);
+            return class_name ? hash_named_type_key32(class_name, NULL, 0) : 0;
+        }
         case AST_ENUM_ACCESS:
         case AST_MEMBER_ACCESS: {
             const char *enum_name = NULL;
@@ -6513,17 +6549,12 @@ body_unique_pending_object_return_literal(const XgPendingBody *body) {
 }
 
 /* A native primitive can hand back an exact structural object even though it
- * has no .xr body to scan: net.__copyBidirectional yields the two-field
- * __CopyBidirectionalResult through the i64_pair_result adapter. Such a shape
- * never reaches the evidence table through the object-literal or type-alias
- * routes, so a field read on the call result would have no proven receiver
- * shape and the AOT backend would reject the whole module. Register the shape
- * here from the analyzed return type, in the canonical field order the
- * structural field-table verifier and the backend shape interner require. The
- * i64_pair_result materializer stores each pair half into the matching
- * canonical slot, so a field read resolves to the slot its value was written
- * to, and this row's stable shape key matches the one the backend interns for
- * the materialized object. The row is keyed by the type's stable identity so
+ * has no .xr body to scan. Such a shape never reaches the evidence table
+ * through the object-literal or type-alias routes, so a field read on the call
+ * result would have no proven receiver shape and the AOT backend would reject
+ * the whole module. Register the shape from the analyzed return type in the
+ * canonical field order required by the structural field-table verifier and
+ * backend shape interner. The row is keyed by the type's stable identity so
  * repeated calls share one shape. */
 static XgObjectShapeId body_add_native_return_object_shape(XgBodyCollect *bc, const XrType *type,
                                                            uint32_t source_span_id) {
@@ -6545,9 +6576,7 @@ static XgObjectShapeId body_add_native_return_object_shape(XgBodyCollect *bc, co
     {
         /* Canonical field order (stable name key, then name id) is what the AOT
          * structural field-table verifier and the backend shape interner both
-         * demand, and it is the order the i64_pair_result materializer writes
-         * each value into, so a later field read resolves to the slot its value
-         * was stored in. */
+         * demand. */
         typedef struct {
             const XrType *field_type;
             uint64_t stable_name_key;
@@ -8830,6 +8859,9 @@ static bool body_sequence_registry_receiver_matches(const XgLocalType *local,
     if (!local || local->sequence_kind == 0)
         return false;
     switch (receiver) {
+        case XA_BUILTIN_RECEIVER_STRING:
+        case XA_BUILTIN_RECEIVER_RANGE:
+            return false;
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
             return false;
@@ -9760,16 +9792,6 @@ static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNod
     if (class_name == hash_name32("Task"))
         return (method_name == hash_name32("awaitResult") && argc == 0) ||
                (method_name == hash_name32("awaitTimeout") && argc == 1);
-    if (class_name == hash_name32("WorkQueue"))
-        return method_name == hash_name32("pop") && (argc == 0 || argc == 1);
-    if (class_name == hash_name32("ResultGroup"))
-        return method_name == hash_name32("recv") && argc == 0;
-    if (class_name == hash_name32("CountdownLatch"))
-        return method_name == hash_name32("wait") && argc == 0;
-    if (class_name == hash_name32("Semaphore"))
-        return method_name == hash_name32("acquire") && argc == 0;
-    if (class_name == hash_name32("EventCount"))
-        return method_name == hash_name32("wait") && (argc == 1 || argc == 2);
     return false;
 }
 
@@ -11408,14 +11430,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     // Backfill the evidence class id onto the analyzer's class info so IR
     // lowering can resolve field accesses through the exact declaring class,
     // disambiguating same-named classes exported by different modules.
-    if (class_info) {
-        if ((class_info->xg_decl_id != XG_NO_ID && class_info->xg_decl_id != decl_id) ||
-            (class_info->xg_nominal_key != 0 && class_info->xg_nominal_key != decl.nominal_key))
-            return false;
-        class_info->xg_class_id = class_id;
-        class_info->xg_decl_id = decl_id;
-        class_info->xg_nominal_key = decl.nominal_key;
-    }
+    if (class_info && !producer_rebind_class_info(class_info, decl.nominal_key, decl_id, class_id))
+        return false;
     if (!producer_add_decl_derives(p, module_id, decl_id, (uint32_t) node->line, cls->name,
                                    derive_flags, cls, class_id))
         return false;
@@ -11460,14 +11476,11 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
         producer_interface_id(decl.nominal_key) != interface_id ||
         !xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
-    if (interface_info) {
-        if ((interface_info->xg_decl_id != XG_NO_ID &&
-             interface_info->xg_decl_id != decl.decl_id) ||
-            interface_info->xg_interface_id != interface_id ||
-            interface_info->xg_nominal_key != decl.nominal_key)
-            return false;
-        interface_info->xg_decl_id = decl.decl_id;
-    }
+    if (interface_info &&
+        (interface_info->xg_interface_id != interface_id ||
+         !producer_rebind_interface_info(interface_info, decl.nominal_key, decl.decl_id,
+                                         interface_id)))
+        return false;
     for (int i = 0; i < iface->extends_count; i++) {
         const XrTypeRef *parent = iface->extends ? iface->extends[i] : NULL;
         const char *parent_name = xr_tref_head_name(parent);
@@ -11717,13 +11730,8 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
     decl.derive_flags = derive_flags;
     if (decl.nominal_key == 0 || !xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
-    if (enum_info) {
-        if ((enum_info->xg_decl_id != XG_NO_ID && enum_info->xg_decl_id != decl.decl_id) ||
-            (enum_info->xg_nominal_key != 0 && enum_info->xg_nominal_key != decl.nominal_key))
-            return false;
-        enum_info->xg_decl_id = decl.decl_id;
-        enum_info->xg_nominal_key = decl.nominal_key;
-    }
+    if (enum_info && !producer_rebind_enum_info(enum_info, decl.nominal_key, decl.decl_id))
+        return false;
     for (int i = 0; i < e->method_count; i++) {
         const AstNode *method_node = e->methods ? e->methods[i] : NULL;
         if (!method_node || method_node->type != AST_METHOD_DECL)

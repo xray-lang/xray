@@ -13,7 +13,7 @@
  * wrapper in src/aot/xrt_mem.h).
  *
  * Ordering codes mirror the prelude `Ordering` enum ordinals
- * (see stdlib/prelude/prelude.c): 0 Relaxed, 1 Acquire, 2 Release,
+ * (see module/xprelude_runtime.c): 0 Relaxed, 1 Acquire, 2 Release,
  * 3 AcquireRelease, 4 SeqCst.
  */
 

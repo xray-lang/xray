@@ -355,6 +355,29 @@ static void test_xrt_type_metadata_uses_hot_name_and_derive_tables(void) {
                     "internal-name lookup reads name row");
 }
 
+static void test_xrt_source_provider_projection_uses_registered_offset(void) {
+    typedef struct {
+        XrObjHeader hdr;
+        XrValue decoy;
+        XrValue storage;
+    } TestProviderWrapper;
+
+    uint16_t tid =
+        xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestProviderWrapper));
+    TestProviderWrapper *wrapper =
+        (TestProviderWrapper *) xrt_obj_alloc(tid, sizeof(TestProviderWrapper));
+    wrapper->decoy = XR_FROM_INT(11);
+    wrapper->storage = XR_FROM_INT(29);
+    XrValue boxed = xrt_box_obj(wrapper);
+
+    ASSERT_NULL(xrt_source_provider_storage(boxed),
+                "ordinary AOT class has no provider projection");
+    xrt_type_set_source_provider(tid, (uint32_t) offsetof(TestProviderWrapper, storage));
+    ASSERT_INT(xrt_source_provider_storage(boxed), 29,
+               "provider projection uses the generated exact offset");
+    xrt_release(boxed);
+}
+
 static void test_xrt_thread_handle_methods(void) {
     xrt_thread_object_t thread = {0};
     atomic_store_explicit(&thread.state, XRT_THREAD_JOINED, memory_order_release);
@@ -415,6 +438,7 @@ int main(void) {
     test_xrt_type_identity_uses_stable_owner_adapter();
     test_map_entries_dispatch_returns_tuple_array();
     test_xrt_type_metadata_uses_hot_name_and_derive_tables();
+    test_xrt_source_provider_projection_uses_registered_offset();
     test_xrt_thread_handle_methods();
     test_xrt_threadlocal_live_registry();
 

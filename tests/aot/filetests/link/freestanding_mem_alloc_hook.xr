@@ -2,11 +2,16 @@ import mem
 
 fn xray_alloc_hook_score(n: i64) -> i64 {
     var a = mem.alloc(16)
-    var s: Slice<u8> = a.asMutBytes()
-    s[0] = 7
+    var written = unsafe {
+        mem.withSliceMut<u8>(a.borrowPtr(), len(a), ref a,
+            fn(s: ref Slice<u8>) -> i64 {
+                s[0] = 7
+                return s[0] as i64
+            })
+    }
 
     var z = mem.allocZeroed(8)
-    var zs: Slice<u8> = z.asBytes()
+    var zs: const Slice<u8> = z.asBytes()
 
     var aligned = mem.allocAligned(32, 16)
     if (!aligned.resize(64)) {
@@ -15,5 +20,5 @@ fn xray_alloc_hook_score(n: i64) -> i64 {
     var p = unsafe { aligned.borrowPtr() }
     mem.set(p, 3, 64)
 
-    return n + len(a) + len(z) + len(aligned) + (s[0] as i64) + (zs[0] as i64)
+    return n + len(a) + len(z) + len(aligned) + written + (zs[0] as i64)
 }

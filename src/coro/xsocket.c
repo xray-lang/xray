@@ -39,46 +39,67 @@ int xr_socket_set_nonblock(int fd) {
 
 // ========== Connection Management ==========
 
-// Create listen socket
-int xr_socket_listen(const char *host, int port, int backlog) {
-    XR_DCHECK(host != NULL, "socket_listen: NULL host");
-    XR_DCHECK(port > 0, "socket_listen: invalid port");
-    int fd = (int) socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
-        fprintf(stderr, "socket() failed: %d\n", xr_get_socket_error());
-        return -1;
-    }
-
-    // Set socket options
-    xr_socket_set_reuseaddr(fd, true);
-    xr_socket_set_nonblock(fd);
-
-    // Bind address
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-
-    if (host && host[0] != '\0') {
-        addr.sin_addr.s_addr = inet_addr(host);
-    } else {
-        addr.sin_addr.s_addr = INADDR_ANY;
-    }
-
-    if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "bind() failed (port %d): %d\n", port, xr_get_socket_error());
+static int socket_bind_listener(int fd, const struct sockaddr *address, socklen_t address_length,
+                                int backlog) {
+    if (bind(fd, address, address_length) != 0 || listen(fd, backlog) != 0 ||
+        xr_socket_set_nonblocking((xr_socket_t) fd) != 0) {
         xr_closesocket((xr_socket_t) fd);
         return -1;
     }
-
-    // Start listening
-    if (listen(fd, backlog > 0 ? backlog : 128) < 0) {
-        fprintf(stderr, "listen() failed (port %d): %d\n", port, xr_get_socket_error());
-        xr_closesocket((xr_socket_t) fd);
-        return -1;
-    }
-
     return fd;
+}
+
+int xr_socket_listen(const char *host, int port, int backlog) {
+    if (port < 0 || port > 65535 || backlog <= 0)
+        return -1;
+
+    bool has_host = host && host[0] != '\0';
+    struct in_addr ipv4_address;
+    bool force_ipv4 = has_host && inet_pton(AF_INET, host, &ipv4_address) == 1;
+
+    if (!force_ipv4) {
+        struct in6_addr ipv6_address = in6addr_any;
+        if (has_host && inet_pton(AF_INET6, host, &ipv6_address) != 1)
+            return -1;
+
+        int fd = (int) socket(AF_INET6, SOCK_STREAM, 0);
+        if (fd >= 0) {
+            int v6_only = 0;
+            if (xr_socket_set_reuseaddr((xr_socket_t) fd, true) == 0 &&
+                setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (const char *) &v6_only,
+                           sizeof(v6_only)) == 0) {
+                struct sockaddr_in6 address;
+                memset(&address, 0, sizeof(address));
+                address.sin6_family = AF_INET6;
+                address.sin6_port = htons((uint16_t) port);
+                address.sin6_addr = ipv6_address;
+                int listener = socket_bind_listener(fd, (struct sockaddr *) &address,
+                                                    sizeof(address), backlog);
+                if (listener >= 0)
+                    return listener;
+            } else {
+                xr_closesocket((xr_socket_t) fd);
+            }
+        }
+    }
+
+    int fd = (int) socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    if (xr_socket_set_reuseaddr((xr_socket_t) fd, true) != 0) {
+        xr_closesocket((xr_socket_t) fd);
+        return -1;
+    }
+
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons((uint16_t) port);
+    if (force_ipv4)
+        address.sin_addr = ipv4_address;
+    else
+        address.sin_addr.s_addr = INADDR_ANY;
+    return socket_bind_listener(fd, (struct sockaddr *) &address, sizeof(address), backlog);
 }
 
 // Blocking accept (coroutine-safe, uses yieldable protocol internally)

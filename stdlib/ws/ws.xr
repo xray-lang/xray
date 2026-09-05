@@ -10,7 +10,7 @@ import text
 import crypto
 import base64
 import net
-import { NetError, DialOptions } from net
+import { DialOptions, NetConn, NetError, NetListener } from net
 import time
 
 const _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -84,20 +84,20 @@ export class ParsedUpgradeResponse {
 }
 
 export class ParsedUpgradeRequest {
-    target: string
+    requestTarget: string
     secKey: string
     protocol: string?
     deflate: bool
     origin: string?
 
     constructor(
-        target: string,
+        requestTarget: string,
         secKey: string,
         protocol: string? = null,
         deflate: bool = false,
         origin: string? = null
     ) {
-        this.target = target
+        this.requestTarget = requestTarget
         this.secKey = secKey
         this.protocol = protocol
         this.deflate = deflate
@@ -291,14 +291,14 @@ fn _randomBytes(n: i64) -> Array<u8> {
 }
 
 fn _header(headers: string, name: string) -> string? {
-    var target = text.lower(name)
+    var headerName = text.lower(name)
     var start = 0
     while (start < len(headers)) {
         var end = _indexOfFrom(headers, "\r\n", start)
         if (end < 0) { end = len(headers) }
         var line = headers.slice(start, end)
         var colon = line.indexOf(":")
-        if (colon > 0 && text.lower(line.slice(0, colon)) == target) {
+        if (colon > 0 && text.lower(line.slice(0, colon)) == headerName) {
             return _trim(line.slice(colon + 1))
         }
         start = end + 2
@@ -424,8 +424,8 @@ export fn parseUpgradeRequest(
     if (!_startsWithAt(line, 0, "GET ")) { return null }
     var versionStart = _indexOfFrom(line, " ", 4)
     if (versionStart <= 4) { return null }
-    var target = line.slice(4, versionStart)
-    if (len(target) == 0 || target.runes().nth(0) != '/') { return null }
+    var requestTarget = line.slice(4, versionStart)
+    if (len(requestTarget) == 0 || requestTarget.runes().nth(0) != '/') { return null }
     if (line.slice(versionStart + 1, len(line)) != "HTTP/1.1") { return null }
 
     var upgrade = _header(request, "Upgrade")
@@ -451,7 +451,7 @@ export fn parseUpgradeRequest(
         deflate = _headerHasElementToken(extensions!, "permessage-deflate")
     }
 
-    return ParsedUpgradeRequest(target, secKey!, protocol, deflate, origin)
+    return ParsedUpgradeRequest(requestTarget, secKey!, protocol, deflate, origin)
 }
 
 export fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = false) -> string {
@@ -1170,7 +1170,7 @@ fn _wsServeConn(conn: move NetConn, ctx: _WsServeCtx) {
         net.close(live)
         return
     }
-    var wsconn = WsConn(live, true, request!.target, null, ctx.maxMessage)
+    var wsconn = WsConn(live, true, request!.requestTarget, null, ctx.maxMessage)
     ctx.handler(ref wsconn)
     wsconn.close()
 }

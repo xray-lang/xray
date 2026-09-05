@@ -5,7 +5,9 @@ import runtime
 
 assert(runtime.liveBytes() >= 0)
 assert(runtime.liveObjects() >= 0)
+assert(runtime.finalizerCount() >= 0)
 var info = runtime.info()
 assert(info.liveBytes >= 0)
 assert(info.liveObjects >= 0)
+assert(info.finalizerCount >= 0)
 print("{\"case\":\"heap-counters\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

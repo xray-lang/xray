@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused fail-closed coverage for task-256's built-in stdlib cutover."""
+"""Fail-closed coverage for binary-stdlib and L2 native-provider readiness."""
 
 from __future__ import annotations
 
@@ -19,24 +19,48 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         failures = [item for item in readiness.build_results(ROOT) if not item.ok]
         self.assertEqual([], failures, "\n".join(f"{item.category}: {item.detail}" for item in failures))
 
-    def test_retained_stdlib_set_is_exact(self) -> None:
+    def test_native_provider_set_is_exact(self) -> None:
         modules = readiness.load_boundary_modules(ROOT)
-        self.assertTrue(readiness.RETAINED_STDLIB_MODULES <= set(modules))
-        self.assertEqual(readiness.TERMINAL_STDLIB_MODULE_COUNT, len(modules))
+        self.assertEqual({"crypto"}, readiness.NATIVE_PROVIDER_MODULES)
+        self.assertTrue(readiness.NATIVE_PROVIDER_MODULES <= set(modules))
 
-        partial = dict(modules)
-        partial.pop("http2")
-        result = readiness.check_boundary(ROOT, stdlib_modules=partial)[0]
-        self.assertFalse(result.ok)
-        self.assertIn("http2", result.detail)
+    def test_source_only_modules_are_not_native_readiness_subjects(self) -> None:
+        source_only = {"cluster", "http2", "compress"}
+        checks = (
+            readiness.check_module_payloads(ROOT),
+            readiness.check_contracts(ROOT),
+            readiness.check_perf_manifest(ROOT),
+            readiness.check_api_classification(ROOT),
+        )
+        for results in checks:
+            self.assertEqual({"crypto"}, {item.subject for item in results})
+        self.assertTrue(source_only.isdisjoint(readiness.NATIVE_PROVIDER_MODULES))
+        without_source_only = {
+            name: entry
+            for name, entry in readiness.load_boundary_modules(ROOT).items()
+            if name not in source_only
+        }
+        self.assertTrue(
+            all(
+                item.ok
+                for item in readiness.check_boundary(
+                    ROOT, stdlib_modules=without_source_only
+                )
+            )
+        )
+        self.assertFalse(
+            any("compress" in path for path in readiness.ABI_EVIDENCE),
+            "source-only compress evidence must not be classified as native-provider ABI",
+        )
 
     def test_module_cannot_leave_stdlib(self) -> None:
         modules = readiness.load_boundary_modules(ROOT)
         mutated = dict(modules)
         mutated.pop("crypto")
-        result = readiness.check_boundary(ROOT, stdlib_modules=mutated)[0]
-        self.assertFalse(result.ok)
-        self.assertIn("crypto", result.detail)
+        results = readiness.check_boundary(ROOT, stdlib_modules=mutated)
+        provider_set = next(item for item in results if item.category == "NATIVE_PROVIDER_SET")
+        self.assertFalse(provider_set.ok)
+        self.assertIn("crypto", provider_set.detail)
 
     def test_l2_public_native_surface_is_exact(self) -> None:
         modules = readiness.load_boundary_modules(ROOT)
@@ -57,10 +81,8 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         self.assertTrue(all(item.ok for item in readiness.check_contracts(ROOT)))
         self.assertTrue(all(item.ok for item in readiness.check_perf_manifest(ROOT)))
 
-    def test_api_import_and_physical_classification_is_canonical(self) -> None:
+    def test_api_classification_is_canonical(self) -> None:
         self.assertTrue(all(item.ok for item in readiness.check_api_classification(ROOT)))
-        self.assertTrue(all(item.ok for item in readiness.check_import_cutover(ROOT)))
-        self.assertTrue(all(item.ok for item in readiness.check_physical_cutover(ROOT)))
 
 
 if __name__ == "__main__":

@@ -96,6 +96,7 @@ typedef enum XrSemanticIntrinsicKind {
     XR_SEM_INTRINSIC_ASSERTION = 24,
     XR_SEM_INTRINSIC_NATIVE_TARGET_LEAF_SCALAR_CALL = 25,
     XR_SEM_INTRINSIC_OUTPUT = 26,
+    XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD = 27,
     XR_SEM_INTRINSIC_COUNT,
 } XrSemanticIntrinsicKind;
 
@@ -143,7 +144,7 @@ typedef enum XrSemanticCallTargetKind {
     XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
     XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE,
     XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL,
-    XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN,
+    XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY,
     /* Construction of a declared class through its own class object. The row
      * names the declaration it builds and no callee function at all: a class
      * that declares no instance constructor enters no body, and one that does
@@ -158,6 +159,16 @@ typedef enum XrSemanticCallTargetKind {
      * whole graph decides, and consumes this the way it consumes the local kind
      * once it has. Unconsumed, the row binds nothing. */
     XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE,
+    /* A call from a generic method body whose receiver is that body's exact
+     * self parameter. Generic receiver types are intentionally erased and do
+     * not freeze a class-instance identity; the enclosing source-method row,
+     * exact self value, selector and arity instead name the template-local
+     * body. An arbitrary value of the same generic spelling does not. */
+    XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL,
+    /* A grounded, non-suspending stdlib member reached as a plain call. The
+     * generated registry, rather than a backend symbol lookup, owns its exact
+     * module/member/arity and tagged-value ABI. */
+    XR_SEM_CALL_TARGET_NATIVE_DIRECT,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -540,8 +551,10 @@ typedef struct XrSemanticOperandRecord {
 
 /*
  * Exact call-site authority. DIRECT_LOCAL is rebuilt from frozen SSA or from a
- * unique lexical SET_SHARED/GET_SHARED slot chain. NATIVE_YIELDABLE is rebuilt
- * from a bare IMPORT_REF and the canonical stdlib binding registry.
+ * unique lexical SET_SHARED/GET_SHARED slot chain. NATIVE_YIELDABLE and
+ * NATIVE_DIRECT are rebuilt from a bare IMPORT_REF and the canonical stdlib
+ * binding registry; the latter proves a non-suspending tagged-value shim and
+ * includes its runtime capability mask in the stable target identity.
  * SOURCE_EXPORT is completed only by the ordered module-set verifier against
  * the dependency's public export table. INDIRECT_CALLABLE freezes only an
  * open function-value dispatch domain and its conservative state obligation;
@@ -552,9 +565,12 @@ typedef struct XrSemanticOperandRecord {
  * BUILTIN_INSTANCE_YIELDABLE binds a reserved
  * builtin instance type, selector, and arity without asserting a machine call
  * target. SOURCE_INSTANCE_METHOD_LOCAL is an exact final-class declaration;
- * SOURCE_INSTANCE_METHOD_OPEN is a dependency-verified open dispatch domain,
- * not an execution target. All eight kinds independently authorize coroutine
- * state creation without retaining Xi data.
+ * SOURCE_TEMPLATE_METHOD_LOCAL is an exact generic self-call declaration and
+ * does not assert a frozen generic class-instance identity;
+ * SOURCE_METHOD_DEPENDENCY is a dependency-verified source member binding;
+ * its currently admitted instance-method form is either a final binding or an
+ * open dispatch domain, not an execution target. All kinds independently
+ * authorize coroutine state creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;

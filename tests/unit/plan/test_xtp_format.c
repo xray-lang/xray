@@ -751,8 +751,12 @@ static XtpFixture make_source_export_fixture(void) {
     fixture.profile = build_profile();
     const XrSemanticPlan *dependencies[] = {fixture.dependency};
     char error[512] = {0};
-    REQUIRE(xr_target_plan_build_module_set(fixture.semantic, dependencies, 1, fixture.profile,
-                                            &fixture.plan, error, sizeof(error)));
+    bool built = xr_target_plan_build_module_set(fixture.semantic, dependencies, 1,
+                                                 fixture.profile, &fixture.plan, error,
+                                                 sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-export XTP fixture TargetPlan failed: %s\n", error);
+    REQUIRE(built);
     REQUIRE(xr_target_plan_is_verified(fixture.plan));
     REQUIRE(xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error, sizeof(error)));
     REQUIRE(fixture.bytes && fixture.size >= XR_XTP_HEADER_SIZE);
@@ -1034,10 +1038,10 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
     size_t call_offset = (size_t) xr_xtp_take_u64(call_entry + 8);
     REQUIRE(xr_xtp_take_u32(fixture.bytes + call_offset + 20) == XR_SEMANTIC_INDEX_NONE &&
             xr_xtp_take_u32(fixture.bytes + call_offset + 32) == XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u32(fixture.bytes + call_offset + 100) == XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u16(fixture.bytes + call_offset + 124) == 0 &&
-            fixture.bytes[call_offset + 134] == XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
-            fixture.bytes[call_offset + 135] == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
+            xr_xtp_take_u32(fixture.bytes + call_offset + 104) == XR_SEMANTIC_INDEX_NONE &&
+            xr_xtp_take_u16(fixture.bytes + call_offset + 128) == 0 &&
+            fixture.bytes[call_offset + 138] == XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
+            fixture.bytes[call_offset + 139] == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
 
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
@@ -1642,7 +1646,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0,  448, 58, 12, 24, 108, 28, 40, 24, 12,  48,  58,  112,
-        32, 178, 58, 20, 4,  20,  44, 12, 48, 144, 132, 216, 340,
+        32, 182, 58, 20, 4,  20,  44, 12, 48, 144, 132, 216, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -2101,10 +2105,10 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-57-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-60-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
         test_previous_schema_is_rejected();
-        puts("XTP schema 57 cutover tests passed");
+        puts("XTP schema 60 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

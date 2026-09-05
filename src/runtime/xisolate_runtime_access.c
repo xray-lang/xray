@@ -10,7 +10,108 @@
 
 #include "xisolate_api.h"
 #include "xisolate_internal.h"
+#include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include "core/xr_runtime_core.h"
+
+typedef struct XrProviderLifecycleEntry {
+    void **slot;
+    XrCFunctionPtr shutdown;
+    struct XrProviderLifecycleEntry *next;
+} XrProviderLifecycleEntry;
+
+static XrProviderLifecycleEntry **provider_entry_link(XrVMRuntime *isolate, void **slot,
+                                                      XrCFunctionPtr shutdown) {
+    XrProviderLifecycleEntry **link = &isolate->provider_lifecycle_entries;
+    while (*link) {
+        if ((*link)->slot == slot && (!shutdown || (*link)->shutdown == shutdown))
+            return link;
+        link = &(*link)->next;
+    }
+    return NULL;
+}
+
+void *xr_isolate_provider_acquire(XrVMRuntime *isolate, void **slot,
+                                  XrProviderRetainFn retain) {
+    if (!isolate || !slot || !retain)
+        return NULL;
+
+    void *provider = NULL;
+    xr_amutex_lock(&isolate->provider_lifecycle_lock);
+    if (!isolate->provider_lifecycle_closing && provider_entry_link(isolate, slot, NULL)) {
+        provider = *slot;
+        if (provider)
+            retain(provider);
+    }
+    xr_amutex_unlock(&isolate->provider_lifecycle_lock);
+    return provider;
+}
+
+bool xr_isolate_provider_publish(XrVMRuntime *isolate, void **slot, void *provider,
+                                 XrCFunctionPtr shutdown) {
+    if (!isolate || !slot || !provider || !shutdown)
+        return false;
+
+    XrProviderLifecycleEntry *entry = (XrProviderLifecycleEntry *) xr_malloc(sizeof(*entry));
+    if (!entry)
+        return false;
+    entry->slot = slot;
+    entry->shutdown = shutdown;
+
+    xr_amutex_lock(&isolate->provider_lifecycle_lock);
+    bool published = !isolate->provider_lifecycle_closing && *slot == NULL &&
+                     !provider_entry_link(isolate, slot, NULL);
+    if (published) {
+        entry->next = isolate->provider_lifecycle_entries;
+        isolate->provider_lifecycle_entries = entry;
+        *slot = provider;
+    }
+    xr_amutex_unlock(&isolate->provider_lifecycle_lock);
+    if (!published)
+        xr_free(entry);
+    return published;
+}
+
+void *xr_isolate_provider_detach(XrVMRuntime *isolate, void **slot, XrCFunctionPtr shutdown) {
+    if (!isolate || !slot || !shutdown)
+        return NULL;
+
+    XrProviderLifecycleEntry *entry = NULL;
+    void *provider = NULL;
+    xr_amutex_lock(&isolate->provider_lifecycle_lock);
+    XrProviderLifecycleEntry **link = provider_entry_link(isolate, slot, shutdown);
+    if (link) {
+        entry = *link;
+        *link = entry->next;
+        provider = *slot;
+        *slot = NULL;
+    }
+    xr_amutex_unlock(&isolate->provider_lifecycle_lock);
+    xr_free(entry);
+    return provider;
+}
+
+void xr_isolate_shutdown_providers(XrVMRuntime *isolate) {
+    if (!isolate)
+        return;
+
+    xr_amutex_lock(&isolate->provider_lifecycle_lock);
+    isolate->provider_lifecycle_closing = true;
+    XrProviderLifecycleEntry *entry = isolate->provider_lifecycle_entries;
+    xr_amutex_unlock(&isolate->provider_lifecycle_lock);
+
+    while (entry) {
+        void **slot = entry->slot;
+        XrCFunctionPtr shutdown = entry->shutdown;
+        (void) shutdown(isolate, NULL, 0);
+
+        xr_amutex_lock(&isolate->provider_lifecycle_lock);
+        entry = isolate->provider_lifecycle_entries;
+        XR_CHECK(!provider_entry_link(isolate, slot, shutdown),
+                 "provider shutdown leaf must detach its lifecycle registration");
+        xr_amutex_unlock(&isolate->provider_lifecycle_lock);
+    }
+}
 
 XrRuntimeCore *xr_isolate_get_runtime_core(XrVMRuntime *X) {
     return X ? X->core_rt : NULL;

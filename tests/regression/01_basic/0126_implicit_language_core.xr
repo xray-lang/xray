@@ -1,0 +1,16 @@
+// Builtin types and enums are installed implicitly. This source deliberately
+// has no imports: removing the compatibility module must not remove language
+// core registration.
+
+@test
+fn test_implicit_language_core() {
+    var values: Array<i64> = [3, 1, 2]
+    values.sort()
+
+    var mapping: Map<string, i64> = #{"x": values[0]}
+    var ordering = Ordering.SeqCst
+
+    assertEqual(len(values), 3)
+    assertEqual(mapping["x"], 1)
+    assertEqual(ordering.ordinal, 4)
+}

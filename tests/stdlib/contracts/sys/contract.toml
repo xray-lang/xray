@@ -1,6 +1,6 @@
 schema = 1
 module = "sys"
-contract_revision = 1
+contract_revision = 2
 legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/sys/legacy_expected.jsonl"
@@ -16,6 +16,7 @@ legacy_public_surface = [
 intentional_semantic_changes = [
   "sys is a permanent L2 OS thread/lock shell; the .def signatures are the typed contract",
   "this contract is a behavior baseline lock, not a migration",
+  "sys.cpuCount is removed because host CPU topology has one canonical query at os.cpuCount",
 ]
 known_legacy_bugs = [
   "none recorded for the native baseline",

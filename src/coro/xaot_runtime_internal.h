@@ -12,20 +12,9 @@
 #define XAOT_RUNTIME_INTERNAL_H
 
 #include "xaot_coro.h"
-#include "../os/os_thread.h"
-
 #include <stdatomic.h>
 
 #include "../base/xglobal_indices.h"
-
-typedef struct XrAotServiceSlot {
-    xr_mutex_t lock;
-    xr_cond_t drained;
-    void *service;
-    XrAotServiceDestroyFn destroy;
-    uint32_t active;
-    bool closing;
-} XrAotServiceSlot;
 
 struct XrAotRuntime {
     uint32_t caps;
@@ -43,7 +32,6 @@ struct XrAotRuntime {
      * runtime. */
     void *coro_locals_arena;
     atomic_flag coro_locals_lock;
-    XrAotServiceSlot service_slots[XR_AOT_SERVICE_SLOT_COUNT];
     XrValue builtins[XR_USER_GLOBALS_START];
 };
 

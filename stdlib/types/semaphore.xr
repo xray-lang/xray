@@ -1,9 +1,0 @@
-// Built-in Semaphore type; implemented by the runtime.
-class Semaphore {
-    available: i64
-    isClosed: bool
-    release(count?: i64) -> i64
-    tryAcquire() -> bool
-    acquire() -> bool
-    close()
-}

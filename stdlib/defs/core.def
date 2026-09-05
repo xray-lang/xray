@@ -55,7 +55,7 @@ module time {
     visibility: "internal"
   }
 
-  fn sleep {
+  fn __sleep {
     signature: "(ms: i64): ()"
     doc: "Sleep for milliseconds"
     vm: "xr_time_sleep"
@@ -66,6 +66,7 @@ module time {
     link_object: false
     layer: "runtime"
     caps: "coro,timer"
+    visibility: "internal"
   }
 }
 
@@ -437,18 +438,17 @@ module math {
 }
 
 module crypto {
-  fn __randomBytes {
-    signature: "(n: i64): Array<u8>"
-    doc: "Read n bytes from the platform CSPRNG"
-    vm: "crypto_random_bytes_raw"
-    aot: "xrt_crypto_random_bytes_raw"
+  fn __fillRandomBytes {
+    signature: "(bytes: ref Array<u8>): ()"
+    doc: "Overwrite an existing byte array from the platform CSPRNG"
+    vm: "crypto_fill_random_bytes"
+    aot: "xrt_crypto_fill_random_bytes"
     argc: 1
     arg_spec: "v"
     aot_direct: true
     link_object: true
     layer: "system"
     visibility: "internal"
-    return_ownership: "fresh"
   }
 
   fn __timingSafeEqualBytes {
@@ -467,203 +467,7 @@ module crypto {
 }
 
 module sys {
-  native_class OsMutex {
-    super_slot: "objectClass"
-    core_slot: "sysMutexClass"
-    native_body: "g_sys_mutex_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSMUTEX"
-  }
-
-  native_class OsRwLock {
-    super_slot: "objectClass"
-    core_slot: "sysRwLockClass"
-    native_body: "g_sys_rwlock_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSRWLOCK"
-  }
-
-  native_class OsCondvar {
-    super_slot: "objectClass"
-    core_slot: "sysCondvarClass"
-    native_body: "g_sys_condvar_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSCONDVAR"
-  }
-
-  native_class OsBarrier {
-    super_slot: "objectClass"
-    core_slot: "sysBarrierClass"
-    native_body: "g_sys_barrier_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSBARRIER"
-  }
-
-  native_class OsOnce {
-    super_slot: "objectClass"
-    core_slot: "sysOnceClass"
-    native_body: "g_sys_once_body_desc"
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_SYSONCE"
-  }
-
-  class_method OsMutex.lock {
-    vm: "sys_mutex_lock"
-    argc: 0
-  }
-
-  class_method OsMutex.unlock {
-    vm: "sys_mutex_unlock"
-    argc: 0
-  }
-
-  class_method OsMutex.tryLock {
-    vm: "sys_mutex_try_lock"
-    argc: 0
-  }
-
-  class_method OsRwLock.rdlock {
-    vm: "sys_rwlock_rdlock"
-    argc: 0
-  }
-
-  class_method OsRwLock.rdunlock {
-    vm: "sys_rwlock_rdunlock"
-    argc: 0
-  }
-
-  class_method OsRwLock.wrlock {
-    vm: "sys_rwlock_wrlock"
-    argc: 0
-  }
-
-  class_method OsRwLock.wrunlock {
-    vm: "sys_rwlock_wrunlock"
-    argc: 0
-  }
-
-  class_method OsCondvar.wait {
-    vm: "sys_condvar_wait"
-    argc: 1
-  }
-
-  class_method OsCondvar.waitFor {
-    vm: "sys_condvar_wait_for"
-    argc: 2
-  }
-
-  class_method OsCondvar.signal {
-    vm: "sys_condvar_signal"
-    argc: 0
-  }
-
-  class_method OsCondvar.broadcast {
-    vm: "sys_condvar_broadcast"
-    argc: 0
-  }
-
-  class_method OsBarrier.wait {
-    vm: "sys_barrier_wait"
-    argc: 0
-  }
-
-  class_method OsOnce.call {
-    vm: "sys_once_call"
-    argc: 1
-  }
-
-  fn OsMutex {
-    signature: "(): OsMutex"
-    doc: "Create an OS-domain mutex"
-    vm: "sys_mutex_new"
-    aot: "xrt_sys_mutex_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __osMutexNew {
-    signature: "(): OsMutex"
-    doc: "Create an OS-domain mutex for sys module internals"
-    vm: "sys_mutex_new"
-    aot: "xrt_sys_mutex_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-    return_ownership: "fresh"
-  }
-
-  fn OsRwLock {
-    signature: "(): OsRwLock"
-    doc: "Create an OS-domain read-write lock"
-    vm: "sys_rwlock_new"
-    aot: "xrt_sys_rwlock_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn OsCondvar {
-    signature: "(): OsCondvar"
-    doc: "Create an OS-domain condition variable"
-    vm: "sys_condvar_new"
-    aot: "xrt_sys_condvar_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn OsBarrier {
-    signature: "(parties: i64): OsBarrier"
-    doc: "Create a reusable OS-domain barrier"
-    vm: "sys_barrier_new"
-    aot: "xrt_sys_barrier_new"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn OsOnce {
-    signature: "(): OsOnce"
-    doc: "Create an OS-domain once gate"
-    vm: "sys_once_new"
-    aot: "xrt_sys_once_new"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn cpuCount {
-    signature: "(): i64"
-    doc: "Return the number of CPUs available to OS-thread work"
-    vm: "sys_cpu_count"
-    aot: "xrt_sys_cpu_count"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn threadYield {
+  fn __threadYield {
     signature: "(): ()"
     doc: "Yield the current OS thread to another runnable OS thread"
     vm: "sys_thread_yield"
@@ -673,21 +477,10 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
-  fn sleepMs {
-    signature: "(ms: i64): ()"
-    doc: "Block the current OS thread for at least ms milliseconds"
-    vm: "sys_sleep_ms"
-    aot: "xrt_sys_sleep_ms"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn pinToCpu {
+  fn __pinToCpu {
     signature: "(cpu: i64): bool"
     doc: "Best-effort pin of the current OS thread to a CPU index"
     vm: "sys_pin_to_cpu"
@@ -697,6 +490,7 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
   fn __threadLocalId {
@@ -804,20 +598,6 @@ module sys {
     visibility: "internal"
   }
 
-  fn __processWait {
-    signature: "(id: i64): i64"
-    doc: "Wait for a process handle token and return its exit code, or -1 on failure"
-    vm: "sys_process_wait_yieldable"
-    vm_binding: "yieldable"
-    aot: "xrt_sys_process_wait"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-  }
-
   fn __processTryWait {
     signature: "(id: i64): i64?"
     doc: "Poll a process handle token; return null while running, exit code when finished, or -1 on failure"
@@ -899,158 +679,9 @@ module sys {
     layer: "system"
     visibility: "internal"
   }
-
-  type_method OsMutex.lock {
-    signature: "(): ()"
-    receiver: "OsMutex"
-    doc: "Lock the mutex"
-  }
-
-  type_method OsMutex.unlock {
-    signature: "(): ()"
-    receiver: "OsMutex"
-    doc: "Unlock the mutex"
-  }
-
-  type_method OsMutex.tryLock {
-    signature: "(): bool"
-    receiver: "OsMutex"
-    doc: "Try to lock the mutex"
-  }
-
-  type_method OsRwLock.rdlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Acquire the read side of the read-write lock"
-  }
-
-  type_method OsRwLock.rdunlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Release the read side of the read-write lock"
-  }
-
-  type_method OsRwLock.wrlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Acquire the write side of the read-write lock"
-  }
-
-  type_method OsRwLock.wrunlock {
-    signature: "(): ()"
-    receiver: "OsRwLock"
-    doc: "Release the write side of the read-write lock"
-  }
-
-  type_method OsCondvar.wait {
-    signature: "(m: OsMutex): ()"
-    receiver: "OsCondvar"
-    doc: "Wait on the condition variable with an already-locked mutex"
-  }
-
-  type_method OsCondvar.waitFor {
-    signature: "(m: OsMutex, timeoutNs: i64): bool"
-    receiver: "OsCondvar"
-    doc: "Wait on the condition variable until signalled or timeout elapses"
-  }
-
-  type_method OsCondvar.signal {
-    signature: "(): ()"
-    receiver: "OsCondvar"
-    doc: "Wake one waiter"
-  }
-
-  type_method OsCondvar.broadcast {
-    signature: "(): ()"
-    receiver: "OsCondvar"
-    doc: "Wake all waiters"
-  }
-
-  type_method OsBarrier.wait {
-    signature: "(): bool"
-    receiver: "OsBarrier"
-    doc: "Wait until all parties have arrived"
-  }
-
-  type_method OsOnce.call {
-    signature: "(body: fn(): ()): ()"
-    receiver: "OsOnce"
-    doc: "Run the closure exactly once"
-  }
 }
 
 module regex {
-  class Regex {
-    visibility: "internal"
-    super_slot: objectClass
-    core_slot: regexClass
-    flags: "XR_CLASS_BUILTIN"
-    builtin_kind: XR_BK_REGEX
-  }
-
-  class RegexMatch {
-    super_slot: objectClass
-    core_slot: regexMatchClass
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_FINAL"
-    builtin_kind: XR_BK_REGEX_MATCH
-  }
-
-  class_field Regex.pattern {
-    visibility: "internal"
-  }
-
-  class_field Regex.flags {
-    visibility: "internal"
-  }
-
-  class_field Regex.prog {
-    visibility: "internal"
-  }
-
-  class_field RegexMatch.start {
-  }
-
-  class_field RegexMatch.end {
-  }
-
-  class_field RegexMatch.text {
-  }
-
-  class_field RegexMatch.groups {
-  }
-
-  fn __regexNew {
-    signature: "(pattern: string, flags: i64): Regex"
-    doc: "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation"
-    vm: "regex_compile"
-    argc: 2
-    arg_spec: "sv"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __regexMatchNew {
-    signature: "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch"
-    doc: "Allocate a RegexMatch with its four fields set"
-    vm: "regex_match_new"
-    argc: 4
-    arg_spec: "vvsv"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __regexParseFlags {
-    signature: "(flags: string): i64"
-    doc: "Parse flag spelling for the VM representation adapter"
-    vm: "regex_parse_flags"
-    argc: 1
-    arg_spec: "s"
-    layer: "pure"
-    allocation: "no_heap"
-  }
-
   fn __unicodePropId {
     signature: "(name: string): i64"
     doc: "Unicode property name to id, -1 when unknown"
@@ -1073,10 +704,6 @@ module regex {
 }
 
 module os {
-  handle __ExecResult {
-    fields: "const stdout: string, const stderr: string, const exitCode: i64"
-  }
-
   fn __platform {
     signature: "(): string"
     doc: "Host operating system name"
@@ -1154,7 +781,7 @@ module os {
   }
 
   fn __exit {
-    signature: "(code?: i64): ()"
+    signature: "(code: i64): ()"
     doc: "Exit process"
     vm: "os_exit"
     aot: "xrt_os_exit"
@@ -1280,19 +907,7 @@ module os {
   }
 
   fn __kill {
-    signature: "(pid: i64, signal?: i64): bool"
-    doc: "Send signal to process"
-    vm: "os_kill"
-    aot: "xrt_os_kill"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __kill {
-    signature: "(pid: i64, signal?: i64): bool"
+    signature: "(pid: i64, signal: i64): bool"
     doc: "Send signal to process"
     vm: "os_kill"
     aot: "xrt_os_kill_signal"
@@ -1352,55 +967,6 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __clock {
-    signature: "(): f64"
-    doc: "Get process CPU time in seconds"
-    vm: "os_clock"
-    aot: "xrt_os_clock"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __sleep {
-    signature: "(ms: i64): ()"
-    doc: "Sleep for milliseconds"
-    vm: "os_sleep"
-    vm_binding: "yieldable"
-    aot: "xrt_os_sleep"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __exec {
-    signature: "(cmd: string): __ExecResult?"
-    doc: "Execute shell command"
-    vm: "os_exec"
-    aot: "xrt_os_exec"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __spawn {
-    signature: "(program: string, args: Array<string>): __ExecResult?"
-    doc: "Execute a program without a shell (injection-safe argv)"
-    vm: "os_spawn"
-    argc: 2
-    arg_spec: "sv"
-    aot_direct: false
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
 }
 
 module io {
@@ -1425,32 +991,6 @@ module io {
     doc: "Change working directory"
     vm: "io_chdir"
     aot: "xrt_io_chdir"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __cwd {
-    signature: "(): string"
-    doc: "Get current working directory (raw string; io.xr wraps as Path)"
-    vm: "io_cwd"
-    aot: "xrt_io_cwd"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-    return_ownership: "fresh"
-  }
-
-  fn __exists {
-    signature: "(path: Path): bool"
-    doc: "Check if path exists"
-    vm: "io_exists"
-    aot: "xrt_io_exists"
     argc: 1
     arg_spec: "p"
     aot_direct: true
@@ -1552,54 +1092,6 @@ module io {
     visibility: "internal"
   }
 
-  fn __fileSize {
-    signature: "(path: Path): i64"
-    doc: "Get file size in bytes"
-    vm: "io_fileSize"
-    aot: "xrt_io_file_size"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __isDir {
-    signature: "(path: Path): bool"
-    doc: "Check if path is a directory"
-    vm: "io_isDir"
-    aot: "xrt_io_is_dir"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __isFile {
-    signature: "(path: Path): bool"
-    doc: "Check if path is a file"
-    vm: "io_isFile"
-    aot: "xrt_io_is_file"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __isSymlink {
-    signature: "(path: Path): bool"
-    doc: "Check if path is a symlink"
-    vm: "io_isSymlink"
-    aot: "xrt_io_is_symlink"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   fn __mkdir {
     signature: "(path: Path): bool"
     doc: "Create directory"
@@ -1612,13 +1104,26 @@ module io {
     layer: "system"
   }
 
-  fn __readDir {
-    signature: "(path: Path): Array<string>?"
-    doc: "List directory entries (raw strings; io.xr wraps as Path)"
-    vm: "io_readDir"
-    aot: "xrt_io_read_dir"
+  fn __dirOpen {
+    signature: "(path: Path): i64"
+    doc: "Open a directory iterator and return an opaque handle token, or 0 on failure"
+    vm: "io_dirOpen"
+    aot: "xrt_io_dir_open"
     argc: 1
     arg_spec: "p"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __dirNext {
+    signature: "(handle: i64): string?"
+    doc: "Read the next directory entry name, or null at end of iteration"
+    vm: "io_dirNext"
+    aot: "xrt_io_dir_next"
+    argc: 1
+    arg_spec: "i"
     aot_direct: true
     link_object: false
     layer: "system"
@@ -1626,58 +1131,17 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn __readFile {
-    signature: "(path: Path): string?"
-    doc: "Read entire file as string"
-    vm: "io_readFile"
-    vm_binding: "yieldable"
-    aot: "xrt_io_read_file"
+  fn __dirClose {
+    signature: "(handle: i64): bool"
+    doc: "Close an owned directory iterator handle"
+    vm: "io_dirClose"
+    aot: "xrt_io_dir_close"
     argc: 1
-    arg_spec: "p"
+    arg_spec: "i"
     aot_direct: true
     link_object: false
     layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __readFileBytes {
-    signature: "(path: Path): Array<u8>?"
-    doc: "Read entire file as byte array"
-    vm: "io_readFileBytes"
-    vm_binding: "yieldable"
-    aot: "xrt_io_read_file_bytes"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __readStdin {
-    signature: "(): string?"
-    doc: "Read all data from standard input"
-    vm: "io_readStdin"
-    aot: "xrt_io_read_stdin"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __readStdinBytes {
-    signature: "(): Array<u8>?"
-    doc: "Read all standard input as binary bytes"
-    vm: "io_readStdinBytes"
-    aot: "xrt_io_read_stdin_bytes"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
+    visibility: "internal"
   }
 
   fn __readlink {
@@ -1758,7 +1222,7 @@ module io {
   }
 
   fn __symlink {
-    signature: "(target: Path, link: Path): bool"
+    signature: "(source: Path, link: Path): bool"
     doc: "Create symbolic link"
     vm: "io_symlink"
     aot: "xrt_io_symlink"
@@ -1810,26 +1274,6 @@ module io {
 }
 
 module runtime {
-  object __RuntimeStats {
-    fields: "const liveBytes: i64, const liveObjects: i64, const finalizerCount: i64, const blocks: i64, const freeBlocks: i64, const fullBlocks: i64"
-    exact: true
-    doc: "Raw counters read in one pass from the current execution-local reclamation domain"
-  }
-
-  fn __stats {
-    signature: "(): __RuntimeStats"
-    doc: "Read the current execution-local reclamation domain counters"
-    vm: "runtime_stats"
-    aot: "xr_aot_runtime_info"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-    visibility: "internal"
-  }
-
   fn __liveBytes {
     signature: "(): i64"
     doc: "Live memory bytes in the current execution-local reclamation domain"
@@ -1848,6 +1292,19 @@ module runtime {
     doc: "Live object count in the current execution-local reclamation domain"
     vm: "runtime_live_objects"
     aot: "xr_aot_runtime_live_objects"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    visibility: "internal"
+  }
+
+  fn __finalizerCount {
+    signature: "(): i64"
+    doc: "Registered finalizers in the current execution-local reclamation domain"
+    vm: "runtime_finalizer_count"
+    aot: "xr_aot_runtime_finalizer_count"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -1884,33 +1341,13 @@ module runtime {
 }
 
 module mem {
-  native_class Buffer {
+  native_class __BufferStorage {
     visibility: "internal"
     super_slot: "objectClass"
     core_slot: "memBufferClass"
-    native_body: "g_mem_buffer_body_desc"
+    native_body_expr: "xr_buffer_native_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
     builtin_kind: "XR_BK_BUFFER"
-  }
-
-  class_method Buffer.asBytes {
-    vm: "mem_buffer_as_bytes"
-    argc: 0
-  }
-
-  class_method Buffer.asMutBytes {
-    vm: "mem_buffer_as_mut_bytes"
-    argc: 0
-  }
-
-  class_method Buffer.borrowPtr {
-    vm: "mem_buffer_borrow_ptr"
-    argc: 0
-  }
-
-  class_method Buffer.resize {
-    vm: "mem_buffer_resize"
-    argc: 1
   }
 
   fn __fence {
@@ -1950,18 +1387,6 @@ module mem {
     layer: "core"
   }
 
-  fn __cacheInvalidate {
-    signature: "(ptr: Ptr<u8>, n: i64): ()"
-    doc: "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available"
-    vm: "mem_cache_invalidate"
-    aot: "xrt_mem_cache_invalidate"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
   fn __nontemporalStore {
     signature: "(ptr: MutPtr<u8>, v: i64, size: i64): ()"
     doc: "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available"
@@ -1987,8 +1412,8 @@ module mem {
   }
 
   fn __alloc {
-    signature: "(n: i64): Buffer"
-    doc: "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped"
+    signature: "(n: i64): __BufferStorage"
+    doc: "Allocate n uninitialized bytes in a private managed storage handle"
     vm: "mem_alloc"
     aot: "xrt_mem_alloc"
     argc: 1
@@ -2001,8 +1426,8 @@ module mem {
   }
 
   fn __allocZeroed {
-    signature: "(n: i64): Buffer"
-    doc: "Allocate n zero-initialized bytes as a managed Buffer"
+    signature: "(n: i64): __BufferStorage"
+    doc: "Allocate n zero-initialized bytes in a private managed storage handle"
     vm: "mem_alloc_zeroed"
     aot: "xrt_mem_alloc_zeroed"
     argc: 1
@@ -2015,8 +1440,8 @@ module mem {
   }
 
   fn __allocAligned {
-    signature: "(n: i64, align: i64): Buffer"
-    doc: "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))"
+    signature: "(n: i64, align: i64): __BufferStorage"
+    doc: "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))"
     vm: "mem_alloc_aligned"
     aot: "xrt_mem_alloc_aligned"
     argc: 2
@@ -2028,22 +1453,62 @@ module mem {
     return_ownership: "fresh"
   }
 
-  fn pageAlloc {
-    signature: "(bytes: i64, prot?: i64): MutPtr<u8>"
-    doc: "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
-    allocation: "may_heap"
-    vm: "mem_page_alloc"
-    aot: "xrt_mem_page_alloc_default"
+  fn __bufferLength {
+    signature: "(storage: __BufferStorage): i64"
+    doc: "Read the byte length from a private Buffer storage handle"
+    vm: "mem_buffer_length"
+    aot: "xrt_mem_buffer_length"
     argc: 1
     arg_spec: "v"
     aot_direct: true
     link_object: false
-    layer: "core"
+    layer: "runtime"
+    allocation: "no_heap"
   }
 
-  fn pageAlloc {
-    signature: "(bytes: i64, prot?: i64): MutPtr<u8>"
-    doc: "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
+  fn __bufferAsBytes {
+    signature: "(storage: __BufferStorage): const Slice<u8>"
+    doc: "Borrow a readonly byte view from a private Buffer storage handle"
+    vm: "mem_buffer_as_bytes"
+    aot: "xrt_mem_buffer_as_bytes"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "no_heap"
+    return_ownership: "borrowed_param:0"
+  }
+
+  fn __bufferBorrowPtr {
+    signature: "(storage: __BufferStorage): MutPtr<u8>"
+    doc: "Borrow the raw pointer from a private Buffer storage handle"
+    vm: "mem_buffer_borrow_ptr"
+    aot: "xrt_mem_buffer_borrow_ptr"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "no_heap"
+  }
+
+  fn __bufferResize {
+    signature: "(storage: __BufferStorage, n: i64): bool"
+    doc: "Resize a private Buffer storage handle"
+    vm: "mem_buffer_resize"
+    aot: "xrt_mem_buffer_resize"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "may_heap"
+  }
+
+  fn __pageAlloc {
+    signature: "(bytes: i64, prot: i64): MutPtr<u8>"
+    doc: "Map zero-filled anonymous pages with explicit protection bits"
     allocation: "may_heap"
     vm: "mem_page_alloc"
     aot: "xrt_mem_page_alloc"
@@ -2078,19 +1543,6 @@ module mem {
     layer: "core"
   }
 
-  fn __copy {
-    signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
-    doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
-    allocation: "no_heap"
-    vm: "mem_copy"
-    aot: "xrt_mem_copy"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
   fn __move {
     signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (may overlap; memmove)"
@@ -2102,31 +1554,6 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "no_heap"
-  }
-
-  fn __set {
-    signature: "(dst: MutPtr<u8>, u8: i64, n: i64): ()"
-    doc: "Fill n bytes at dst with byte (memset)"
-    vm: "mem_set"
-    aot: "xrt_mem_set"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-    allocation: "no_heap"
-  }
-
-  fn __compare {
-    signature: "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64"
-    doc: "Compare n bytes at a and b (memcmp: <0, 0, >0)"
-    vm: "mem_compare"
-    aot: "xrt_mem_compare"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: true
-    link_object: false
-    layer: "core"
   }
 
   fn __volatileLoad {
@@ -2153,152 +1580,34 @@ module mem {
     layer: "core"
   }
 
-  type_method Buffer.asBytes {
-    signature: "(): Slice<u8>"
-    receiver: "Buffer"
-    doc: "Borrow this buffer as a readonly Slice<u8> view"
-    allocation: "no_heap"
-  }
-
-  type_method Buffer.asMutBytes {
-    signature: "(): Slice<u8>"
-    receiver: "Buffer"
-    doc: "Borrow this buffer as a mutable Slice<u8> view"
-    allocation: "no_heap"
-  }
-
-  type_method Buffer.borrowPtr {
-    signature: "(): MutPtr<u8>"
-    receiver: "Buffer"
-    doc: "Borrow the underlying mutable pointer; requires unsafe at the call site"
-    allocation: "no_heap"
-  }
-
-  type_method Buffer.resize {
-    signature: "(n: i64): bool"
-    receiver: "Buffer"
-    doc: "Resize this buffer; returns false on allocation failure"
-    allocation: "may_heap"
-    receiver_mode: "ref"
-  }
-
-}
-
-module Coro {
-  type_method CoroLocal.set {
-    signature: "(value: T): ()"
-    receiver: "CoroLocal"
-    doc: "Set this typed coroutine-local slot for the current coroutine"
-    allocation: "may_heap"
-  }
-
-  type_method CoroLocal.get {
-    signature: "(): T?"
-    receiver: "CoroLocal"
-    doc: "Get this typed coroutine-local slot for the current coroutine"
-    allocation: "no_heap"
-  }
-
-  enum CoroState {
-    variants: "Unknown, Ready, Blocked, Running, Done"
-    doc: "Lifecycle state captured in a coroutine diagnostic snapshot"
-  }
-
-  enum CoroGroupKey {
-    variants: "Name, State"
-    doc: "Stable key used to group coroutine diagnostic snapshots"
-  }
-
-  enum CoroMetric {
-    variants: "Id, Reductions"
-    doc: "Metric used to rank coroutine diagnostic snapshots"
-  }
-
-  object CoroStats {
-    fields: "const active: i64, const blocked: i64, const ready: i64, const total: i64, const created: i64"
-    exact: true
-    doc: "Typed aggregate counters for the coroutine scheduler"
-  }
-
-  object CoroInfo {
-    fields: "const id: i64, const name: string?, const state: CoroState, const reductions: i64, const source: string?"
-    exact: true
-    doc: "Typed diagnostic snapshot for one coroutine"
-  }
-
-  object CoroDeadlock {
-    fields: "const members: Array<CoroInfo>, const reason: string"
-    exact: true
-    doc: "Typed description of a detected coroutine wait cycle"
-  }
 }
 
 module net {
-  enum NetError {
-    variants: "Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory"
-    doc: "Typed failure from network operations; classification from native codes lives in net.xr"
-  }
-
-  object __CopyBidirectionalResult {
-    fields: "const aToB: i64, const bToA: i64"
-    exact: true
-    doc: "Byte counts copied in each direction by copyBidirectional"
-  }
-
-  native_class NetConn {
+  native_class __NetConnStorage {
     visibility: "internal"
     core_slot: "netConnClass"
     native_body_expr: "xr_netconn_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_NETCONN"
+    builtin_kind: "XR_BK_NET_CONN_STORAGE"
+    source_wrapper: "NetConn"
+    source_storage_field: "_storage"
   }
 
-  native_class NetListener {
+  native_class __NetListenerStorage {
     visibility: "internal"
     core_slot: "netListenerClass"
     native_body_expr: "xr_netlistener_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_NETLISTENER"
+    builtin_kind: "XR_BK_NET_LISTENER_STORAGE"
+    source_wrapper: "NetListener"
+    source_storage_field: "_storage"
   }
 
-  class_method NetConn.fd {
-    vm: "conn_method_fd"
-    argc: 0
-  }
-
-  class_method NetConn.close {
-    vm: "conn_method_close"
-    argc: 0
-  }
-
-  class_method NetConn.isClosed {
-    vm: "conn_method_is_closed"
-    argc: 0
-  }
-
-  class_method NetConn.isTLS {
-    vm: "conn_method_is_tls"
-    argc: 0
-  }
-
-  class_method NetListener.fd {
-    vm: "listener_method_fd"
-    argc: 0
-  }
-
-  class_method NetListener.port {
-    vm: "listener_method_port"
-    argc: 0
-  }
-
-  class_method NetListener.close {
-    vm: "listener_method_close"
-    argc: 0
-  }
-
-  class_method NetListener.isClosed {
-    vm: "listener_method_is_closed"
-    argc: 0
+  native_class __TlsContextStorage {
+    visibility: "internal"
+    core_slot: "tlsContextStorageClass"
+    native_body_expr: "xr_tls_context_storage_body_desc()"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
   }
 
   fn __resolveAll {
@@ -2317,8 +1626,8 @@ module net {
   }
 
   fn __connectFd {
-    signature: "(addr: string, port: i64, timeoutMs: i64): NetConn?"
-    doc: "Connect one literal address; null on failure with the code on __lastConnectCode"
+    signature: "(addr: string, port: i64, deadlineMs: i64): __NetConnStorage?"
+    doc: "Connect one literal address under an absolute deadline; null on failure with the code on __lastConnectCode"
     vm: "net_connect_fd_yieldable"
     vm_binding: "yieldable"
     argc: 3
@@ -2329,18 +1638,6 @@ module net {
     layer: "runtime"
     caps: "coro,netpoll"
     return_ownership: "fresh"
-  }
-
-  fn __nowMs {
-    signature: "(): i64"
-    doc: "Monotonic clock in milliseconds for net's own deadline arithmetic"
-    vm: "net_now_ms_fn"
-    argc: 0
-    arg_spec: ""
-    aot: "xrt_net_now_ms_fn"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
   }
 
   fn __lastConnectCode {
@@ -2356,7 +1653,7 @@ module net {
   }
 
   fn __listenFd {
-    signature: "(port: i64, backlog: i64, forceV4: bool): NetListener?"
+    signature: "(port: i64, backlog: i64, forceV4: bool): __NetListenerStorage?"
     doc: "Bind and listen; dual-stack preferred unless forceV4"
     vm: "net_listen_fd"
     argc: 3
@@ -2369,7 +1666,7 @@ module net {
   }
 
   fn __accept {
-    signature: "(listener: NetListener): NetConn?"
+    signature: "(listener: NetListener): __NetConnStorage?"
     doc: "Accept a new connection"
     vm: "net_accept_handle_yieldable"
     vm_binding: "yieldable"
@@ -2411,63 +1708,21 @@ module net {
     caps: "coro,netpoll"
   }
 
-  fn __copyBidirectional {
-    signature: "(a: NetConn, b: NetConn): __CopyBidirectionalResult"
-    doc: "Copy two TCP/TLS streams in both directions"
-    vm: "net_copy_bidirectional_yieldable"
-    vm_binding: "yieldable"
-    aot: "xrt_net_copy_bidirectional"
+  fn __shutdownDirection {
+    signature: "(conn: NetConn, direction: i64): bool"
+    doc: "Shut down the selected socket direction (0 read, 1 write, 2 both)"
+    vm: "net_shutdown_direction"
     argc: 2
     arg_spec: "vv"
-    ret: "i64_pair_result"
-    aot_enum: "NetError"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-    effect: "NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
-    return_ownership: "fresh"
-  }
-
-  fn __shutdownRead {
-    signature: "(conn: NetConn): bool"
-    doc: "Shut down the read side"
-    vm: "net_shutdown_read"
-    argc: 1
-    arg_spec: "v"
-    aot: "xrt_net_shutdown_read"
+    aot: "xrt_net_shutdown_direction"
     aot_direct: true
     link_object: false
     layer: "runtime"
   }
 
-  fn __shutdownWrite {
-    signature: "(conn: NetConn): bool"
-    doc: "Shut down the write side"
-    vm: "net_shutdown_write"
-    argc: 1
-    arg_spec: "v"
-    aot: "xrt_net_shutdown_write"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __shutdown {
-    signature: "(conn: NetConn): bool"
-    doc: "Shut down both directions"
-    vm: "net_shutdown_conn"
-    argc: 1
-    arg_spec: "v"
-    aot: "xrt_net_shutdown"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __close {
-    signature: "(handle: NetConn | NetListener): ()"
-    doc: "Close a connection or listener; idempotent"
+  fn __closeConn {
+    signature: "(conn: NetConn): ()"
+    doc: "Close a connection; idempotent"
     vm: "net_close_handle"
     argc: 1
     arg_spec: "v"
@@ -2478,9 +1733,22 @@ module net {
     caps: "netpoll"
   }
 
-  fn __fd {
-    signature: "(handle: NetConn | NetListener): i64"
-    doc: "Raw fd of a handle, -1 when closed"
+  fn __closeListener {
+    signature: "(listener: NetListener): ()"
+    doc: "Close a listener; idempotent"
+    vm: "net_close_handle"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_close"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    caps: "netpoll"
+  }
+
+  fn __connFd {
+    signature: "(conn: NetConn): i64"
+    doc: "Raw fd of a connection, -1 when closed"
     vm: "net_fd_handle"
     argc: 1
     arg_spec: "v"
@@ -2490,37 +1758,62 @@ module net {
     layer: "runtime"
   }
 
-  fn __setReadDeadline {
-    signature: "(conn: NetConn, deadline: i64): bool"
-    doc: "Absolute monotonic read deadline in ms; 0 clears"
-    vm: "net_set_read_deadline"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_net_set_read_deadline"
+  fn __listenerFd {
+    signature: "(listener: NetListener): i64"
+    doc: "Raw fd of a listener, -1 when closed"
+    vm: "net_fd_handle"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_fd"
     aot_direct: true
     link_object: false
     layer: "runtime"
   }
 
-  fn __setWriteDeadline {
-    signature: "(conn: NetConn, deadline: i64): bool"
-    doc: "Absolute monotonic write deadline in ms; 0 clears"
-    vm: "net_set_write_deadline"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_net_set_write_deadline"
+  fn __connIsTLS {
+    signature: "(conn: NetConn): bool"
+    doc: "Read whether a connection handle currently owns a TLS transport"
+    vm: "net_conn_is_tls"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_is_tls"
     aot_direct: true
     link_object: false
     layer: "runtime"
   }
 
-  fn __setDeadline {
-    signature: "(conn: NetConn, deadline: i64): bool"
-    doc: "Set both read and write deadlines"
-    vm: "net_set_deadline"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_net_set_deadline"
+  fn __tlsNegotiatedProtocol {
+    signature: "(conn: NetConn): string?"
+    doc: "Read the ALPN protocol selected by the TLS provider, or null when none was negotiated"
+    vm: "net_tls_negotiated_protocol"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_tls_negotiated_protocol"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
+  fn __listenerPort {
+    signature: "(listener: NetListener): i64"
+    doc: "Read the bound port cached on a listener handle"
+    vm: "net_listener_port"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_listener_port"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __setDeadlineDirection {
+    signature: "(conn: NetConn, deadline: i64, direction: i64): bool"
+    doc: "Set the selected absolute monotonic deadline (0 read, 1 write, 2 both)"
+    vm: "net_set_deadline_direction"
+    argc: 3
+    arg_spec: "vvv"
+    aot: "xrt_net_set_deadline_direction"
     aot_direct: true
     link_object: false
     layer: "runtime"
@@ -2538,9 +1831,9 @@ module net {
     layer: "runtime"
   }
 
-  fn __lastCode {
-    signature: "(handle: NetConn | NetListener): i64"
-    doc: "Portable error code of the last failed operation; 0 when none"
+  fn __connLastCode {
+    signature: "(conn: NetConn): i64"
+    doc: "Portable error code of the last failed connection operation; 0 when none"
     vm: "net_last_code"
     argc: 1
     arg_spec: "v"
@@ -2550,9 +1843,33 @@ module net {
     layer: "runtime"
   }
 
-  fn __lastErrno {
-    signature: "(handle: NetConn | NetListener): i64"
-    doc: "Raw errno captured for the last failed operation"
+  fn __listenerLastCode {
+    signature: "(listener: NetListener): i64"
+    doc: "Portable error code of the last failed listener operation; 0 when none"
+    vm: "net_last_code"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_last_code"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __connLastErrno {
+    signature: "(conn: NetConn): i64"
+    doc: "Raw errno captured for the last failed connection operation"
+    vm: "net_last_errno"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_last_errno"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __listenerLastErrno {
+    signature: "(listener: NetListener): i64"
+    doc: "Raw errno captured for the last failed listener operation"
     vm: "net_last_errno"
     argc: 1
     arg_spec: "v"
@@ -2571,25 +1888,86 @@ module net {
     aot: "xrt_net_has_tls"
     aot_direct: true
     link_object: false
+    define: "XRT_ENABLE_TLS"
     layer: "runtime"
+  }
+
+  fn __newTlsClientContext {
+    signature: "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool, alpnWire: Array<u8>): __TlsContextStorage?"
+    doc: "Create one immutable client TLS policy resource from source-validated paths, verification policy and ALPN wire bytes"
+    vm: "net_tls_client_context_new"
+    argc: 5
+    arg_spec: "sssvv"
+    aot: "xrt_net_tls_client_context_new"
+    aot_direct: true
+    link_object: false
+    define: "XRT_ENABLE_TLS"
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
+  fn __newTlsServerContext {
+    signature: "(certFile: string, keyFile: string, caFile: string, requireClientCertificate: bool, alpnWire: Array<u8>): __TlsContextStorage?"
+    doc: "Create one immutable server TLS policy resource with source-encoded ALPN preference and optional CA-verified client certificates"
+    vm: "net_tls_server_context_new"
+    argc: 5
+    arg_spec: "sssvv"
+    aot: "xrt_net_tls_server_context_new"
+    aot_direct: true
+    link_object: false
+    define: "XRT_ENABLE_TLS"
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
+  fn __tlsClientHandshakeWithContext {
+    signature: "(context: __TlsContextStorage, conn: NetConn, hostname: string, deadlineMs: i64): i64"
+    doc: "Promote a TCP connection with an immutable client TLS context under one absolute deadline"
+    vm: "net_tls_client_handshake_context_yieldable"
+    vm_binding: "yieldable"
+    argc: 4
+    arg_spec: "vvsv"
+    aot: "xrt_net_tls_client_handshake_context"
+    aot_direct: true
+    link_object: false
+    define: "XRT_ENABLE_TLS"
+    layer: "runtime"
+    caps: "coro,netpoll"
+  }
+
+  fn __tlsServerHandshakeWithContext {
+    signature: "(context: __TlsContextStorage, conn: NetConn, deadlineMs: i64): i64"
+    doc: "Promote an accepted TCP connection with an immutable server TLS context under one absolute deadline"
+    vm: "net_tls_server_handshake_context_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: "vvv"
+    aot: "xrt_net_tls_server_handshake_context"
+    aot_direct: true
+    link_object: false
+    define: "XRT_ENABLE_TLS"
+    layer: "runtime"
+    caps: "coro,netpoll"
   }
 
   fn __tlsHandshake {
-    signature: "(conn: NetConn, hostname: string, deadlineMs: i64): i64"
-    doc: "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code"
+    signature: "(conn: NetConn, hostname: string, deadlineMs: i64, alpnWire: Array<u8>): i64"
+    doc: "Client TLS handshake with a source-encoded ALPN offer under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code"
     vm: "net_tls_handshake_yieldable"
     vm_binding: "yieldable"
     vm_ifdef: "XR_ENABLE_TLS"
-    argc: 3
-    arg_spec: "vvv"
+    argc: 4
+    arg_spec: "vvvv"
     aot: "xrt_net_tls_handshake"
     aot_direct: true
     link_object: false
+    define: "XRT_ENABLE_TLS"
     layer: "runtime"
+    caps: "coro,netpoll"
   }
 
   fn __udpBind {
-    signature: "(port: i64, addr: string): NetConn?"
+    signature: "(port: i64, addr: string): __NetConnStorage?"
     doc: "Bind a UDP socket; empty addr binds the wildcard address"
     vm: "net_udp_bind_handle"
     argc: 2
@@ -2601,9 +1979,22 @@ module net {
     return_ownership: "fresh"
   }
 
+  fn __udpMulticastBind {
+    signature: "(group: string, port: i64, ttl: i64, loopback: bool): __NetConnStorage?"
+    doc: "Open an IPv4 multicast UDP socket after source-side address and option validation"
+    vm: "net_udp_multicast_bind_handle"
+    argc: 4
+    arg_spec: "vvvv"
+    aot: "xrt_net_udp_multicast_bind"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
   fn __udpSendTo {
-    signature: "(conn: NetConn, data: Array<u8>, addr: string, port: i64, timeoutMs: i64): i64"
-    doc: "Send one datagram to a literal address; bytes sent or -1 with a stored code"
+    signature: "(conn: NetConn, data: Array<u8>, addr: string, port: i64, deadlineMs: i64): i64"
+    doc: "Send one datagram to a literal address under an absolute deadline; bytes sent or -1 with a stored code"
     vm: "net_udp_send_to_yieldable"
     vm_binding: "yieldable"
     argc: 5
@@ -2616,8 +2007,8 @@ module net {
   }
 
   fn __udpRecvInto {
-    signature: "(conn: NetConn, buffer: Array<u8>, timeoutMs: i64): i64"
-    doc: "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code"
+    signature: "(conn: NetConn, buffer: Array<u8>, deadlineMs: i64): i64"
+    doc: "Receive one datagram into a caller buffer under an absolute deadline; bytes received, or -1 with a stored code"
     vm: "net_udp_recv_into_yieldable"
     vm_binding: "yieldable"
     argc: 3
@@ -2652,236 +2043,5 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
-  }
-}
-
-module http2 {
-  fn __supported {
-    signature: "(): bool"
-    doc: "Whether the built-in HTTP/2 standard module is available on this target"
-    vm: "h2_supported"
-    argc: 0
-    arg_spec: ""
-    aot: "xrt_http_h2_supported"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __connect {
-    signature: "(host: string, port: i64, timeoutMs: i64): i64"
-    doc: "Open one TLS connection that negotiated ALPN h2 and answer its handle, or -1"
-    vm: "h2_connect"
-    vm_binding: "yieldable"
-    argc: 3
-    arg_spec: "vvv"
-    aot: "xrt_http_h2_connect_unavailable"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-  }
-
-  fn __send {
-    signature: "(handle: i64, data: Array<u8>): bool"
-    doc: "Write one buffer to an open HTTP/2 connection"
-    vm: "h2_send"
-    vm_binding: "yieldable"
-    argc: 2
-    arg_spec: "vv"
-    aot: "xrt_http_h2_send_unavailable"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-  }
-
-  fn __recv {
-    signature: "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?"
-    doc: "Read up to maxBytes from an open HTTP/2 connection; null on error or EOF"
-    vm: "h2_recv"
-    vm_binding: "yieldable"
-    argc: 3
-    arg_spec: "vvv"
-    aot: "xrt_http_h2_recv_unavailable"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-    return_ownership: "fresh"
-  }
-
-  fn __close {
-    signature: "(handle: i64): bool"
-    doc: "Close an HTTP/2 connection and release its handle"
-    vm: "h2_close"
-    argc: 1
-    arg_spec: "v"
-    aot: "xrt_http_h2_close_unavailable"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-  }
-
-}
-
-module cluster {
-  enum ClusterDelivery {
-    variants: "Accepted, InvalidTopic, InvalidEnvelope, Unavailable, Overloaded, Disconnected"
-    doc: "Outcome of handing one opaque service envelope to the cluster transport"
-  }
-
-  enum ClusterNodeState {
-    variants: "Idle, Connecting, Handshaking, Connected, Closing"
-    doc: "Lifecycle state of a remote cluster node"
-  }
-
-  object ClusterTlsStatus {
-    fields: "const enabled: bool, const clientReady: bool, const serverReady: bool"
-    exact: true
-    doc: "Effective TLS posture of a running cluster node"
-  }
-
-  object ClusterNodeInfo {
-    fields: "const name: string, const host: string, const port: i64, const state: ClusterNodeState, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const phi: f64, const missedHeartbeats: i64"
-    exact: true
-    doc: "Typed diagnostic snapshot for one remote cluster node"
-  }
-
-  object ClusterInfo {
-    fields: "const self: string, const port: i64, const running: bool, const nodes: Array<ClusterNodeInfo>, const listeners: i64, const deadNodes: i64, const heartbeatIntervalMs: i64, const heartbeatTimeoutMs: i64, const maxMissedHeartbeats: i64, const tls: ClusterTlsStatus"
-    exact: true
-    doc: "Typed diagnostic snapshot for the local cluster runtime"
-  }
-
-  fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64): bool"
-    doc: "Start the backend-neutral cluster runtime from normalized scalar configuration and the heartbeat schedule cluster.xr decides"
-    vm: "cluster_start_primitive"
-    argc: 11
-    arg_spec: "svsvsssvvvv"
-    aot: "xrt_cluster_start"
-    aot_direct: true
-    link_object: true
-    layer: "runtime"
-    caps: "channel"
-  }
-
-  fn __join {
-    signature: "(host: string, port: i64): bool"
-    doc: "Join cluster at a host and port cluster.xr already parsed, without blocking the scheduler worker"
-    vm: "cluster_join"
-    vm_binding: "yieldable"
-    argc: 2
-    arg_spec: "sv"
-    aot: "xrt_cluster_join"
-    aot_direct: true
-    link_object: true
-    layer: "runtime"
-    caps: "channel"
-  }
-
-  fn __self {
-    signature: "(): string"
-    doc: "Get own node name"
-    vm: "cluster_self"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-  }
-
-  fn __nodes {
-    signature: "(): Array<string>?"
-    doc: "List cluster node names"
-    vm: "cluster_nodes"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-  }
-
-  fn __monitor {
-    signature: "(name: string, coro_name?: string): Channel<string>"
-    doc: "Monitor node or remote coroutine"
-    vm: "cluster_monitor_coro_fn"
-    argc: 2
-    arg_spec: "vv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-  }
-
-  fn __discover {
-    signature: "(): ()"
-    doc: "Start LAN auto-discovery"
-    vm: "cluster_discover_fn"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __stop {
-    signature: "(): ()"
-    doc: "Stop cluster node"
-    vm: "cluster_stop_fn"
-    argc: 0
-    arg_spec: ""
-    aot: "xrt_cluster_stop"
-    aot_direct: true
-    link_object: true
-    layer: "runtime"
-    caps: "channel"
-  }
-
-  fn __info {
-    signature: "(): ClusterInfo?"
-    doc: "Get cluster status info"
-    vm: "cluster_info_fn"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "fresh"
-  }
-
-  fn __send {
-    signature: "(topic: string, envelope: move Buffer, hopLimit: i64): ClusterDelivery"
-    doc: "Hand one canonical opaque service envelope, and the hop budget cluster.xr decides, to local and connected transports"
-    vm: "cluster_send_primitive"
-    argc: 3
-    arg_spec: "svv"
-    aot: "xrt_cluster_send"
-    ret: "enum_i64"
-    aot_enum: "ClusterDelivery"
-    aot_direct: true
-    link_object: true
-    layer: "runtime"
-    caps: "channel"
-    effect: "nothrow"
-    allocation: "may_heap"
-    return_ownership: "borrowed_static"
-  }
-
-  fn __listen {
-    signature: "(pattern: string, capacity: i64): Channel<Buffer>?"
-    doc: "Create a bounded receiver for opaque canonical service envelopes"
-    vm: "cluster_listen_fn"
-    argc: 2
-    arg_spec: "sv"
-    aot: "xrt_cluster_listen"
-    aot_direct: true
-    link_object: true
-    layer: "runtime"
-    return_ownership: "fresh"
-    caps: "channel"
   }
 }

@@ -31,7 +31,6 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <process.h>
 #define XRT_SYS_PROCESS_KILLED_EXIT_CODE ((unsigned int) 0xE0000001u)
 #else
 #include <dlfcn.h>
@@ -1028,16 +1027,16 @@ static inline XrValue xrt_sys_once_new(void) {
     return xrt_sys_once_box(once);
 }
 
-static inline XrValue xrt_sys_cpu_count(void) {
+static inline int64_t xrt_sys_available_cpu_count(void) {
 #if defined(XR_OS_WINDOWS)
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    return XR_FROM_INT(si.dwNumberOfProcessors > 0 ? (int64_t) si.dwNumberOfProcessors : 1);
+    return si.dwNumberOfProcessors > 0 ? (int64_t) si.dwNumberOfProcessors : 1;
 #elif defined(_SC_NPROCESSORS_ONLN)
     long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return XR_FROM_INT(n > 0 ? (int64_t) n : 1);
+    return n > 0 ? (int64_t) n : 1;
 #else
-    return XR_FROM_INT(1);
+    return 1;
 #endif
 }
 
@@ -1053,37 +1052,16 @@ static inline XrValue xrt_sys_thread_yield(void) {
     return XR_NULL_VAL;
 }
 
-static inline XrValue xrt_sys_sleep_ms(XrValue ms_value) {
-    int64_t ms = xrt_sys_int_arg(ms_value);
-    if (ms <= 0) {
-        xrt_sys_signal_poll();
-        return XR_NULL_VAL;
-    }
-#if defined(XR_OS_WINDOWS)
-    Sleep((DWORD) ms);
-#else
-    struct timespec req;
-    req.tv_sec = (time_t) (ms / 1000);
-    req.tv_nsec = (long) (ms % 1000) * 1000000L;
-    while (nanosleep(&req, &req) == -1 && errno == EINTR) {
-    }
-#endif
-    xrt_sys_signal_poll();
-    return XR_NULL_VAL;
-}
-
 static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
     int64_t cpu = xrt_sys_int_arg(cpu_value);
     if (cpu < 0)
         return XR_FROM_BOOL(false);
 #if defined(XR_OS_WINDOWS)
-    XrValue count_value = xrt_sys_cpu_count();
-    int64_t count = count_value.tag == XR_TAG_I64 && count_value.i > 0 ? count_value.i : 1;
+    int64_t count = xrt_sys_available_cpu_count();
     DWORD_PTR mask = ((DWORD_PTR) 1) << ((unsigned int) cpu % (unsigned int) count);
     return XR_FROM_BOOL(SetThreadAffinityMask(GetCurrentThread(), mask) != 0);
 #elif defined(XR_OS_LINUX) && defined(CPU_ZERO) && defined(CPU_SET)
-    XrValue count_value = xrt_sys_cpu_count();
-    int64_t count = count_value.tag == XR_TAG_I64 && count_value.i > 0 ? count_value.i : 1;
+    int64_t count = xrt_sys_available_cpu_count();
     cpu_set_t set;
     CPU_ZERO(&set);
     CPU_SET((int) ((unsigned int) cpu % (unsigned int) count), &set);
@@ -1545,32 +1523,6 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
         return XR_FROM_INT(detached_pid);
     }
     return XR_FROM_INT((int64_t) pid);
-#endif
-}
-
-static inline XrValue xrt_sys_process_wait(XrValue id_value) {
-    int64_t id = xrt_sys_int_arg(id_value);
-    if (id <= 0)
-        return XR_FROM_INT(-1);
-
-#if defined(XR_OS_WINDOWS)
-    int status = -1;
-    if (_cwait(&status, (intptr_t) id, _WAIT_CHILD) == -1)
-        return XR_FROM_INT(-1);
-    if ((unsigned int) status == XRT_SYS_PROCESS_KILLED_EXIT_CODE)
-        return XR_FROM_INT(-1);
-    return XR_FROM_INT((int64_t) status);
-#else
-    int status = 0;
-    pid_t r;
-    do {
-        r = waitpid((pid_t) id, &status, 0);
-    } while (r < 0 && errno == EINTR);
-    if (r < 0)
-        return XR_FROM_INT(-1);
-    if (WIFEXITED(status))
-        return XR_FROM_INT((int64_t) WEXITSTATUS(status));
-    return XR_FROM_INT(-1);
 #endif
 }
 

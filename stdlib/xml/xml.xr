@@ -931,11 +931,12 @@ fn _serializeCData(value: string, config: XmlWriteOptions, level: i64) -> string
     return out.toString()
 }
 
-fn _serializePI(target: string, data: string, config: XmlWriteOptions, level: i64) -> string {
+fn _serializePI(instructionTarget: string, data: string, config: XmlWriteOptions,
+                level: i64) -> string {
     var out = StringBuilder()
     out.append(_indentText(level, config.indent))
     out.append("<?")
-    out.append(target)
+    out.append(instructionTarget)
     if (len(data) > 0) {
         out.append(" ")
         out.append(data)
@@ -953,7 +954,8 @@ fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: i64, depth: i64
         XmlNode.Text { content: value }                             -> _serializeText(value, config, level),
         XmlNode.Comment { content: value }                          -> _serializeComment(value, config, level),
         XmlNode.CData { content: value }                            -> _serializeCData(value, config, level),
-        XmlNode.ProcessingInstruction { target, data: piData }   -> _serializePI(target, piData, config, level)
+        XmlNode.ProcessingInstruction { target: instructionTarget, data: piData } ->
+            _serializePI(instructionTarget, piData, config, level)
     }
 }
 

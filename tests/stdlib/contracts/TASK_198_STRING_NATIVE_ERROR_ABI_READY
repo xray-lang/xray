@@ -11,6 +11,7 @@ already validated for the built-in string boundary:
 - analyzer builtin/XRD effect metadata consumes the @errors contracts, and
   legacy Bytes/ByteSpan/ByteView aliases remain rejected.
 
-This is not the full TASK_198_TYPED_NATIVE_ERRORS_READY marker.  The task-200
-public-native switch remains blocked until compress/crypto/io/net native
-typed-error ABI and task-197 Slice provenance readiness are closed.
+This is not the full TASK_198_TYPED_NATIVE_ERRORS_READY marker.  The binary
+error-surface switch remains blocked until compress source-level error parity,
+crypto/io/net provider typed-error ABI, and task-197 Slice provenance readiness
+are closed.

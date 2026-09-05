@@ -187,7 +187,7 @@ static bool operation_is_static_suspend(const XrSemanticOperationRecord *operati
 
 加上 `dynamic_suspend`（`:4940-4953`），后者**只看 call target 的 kind**
 （`NATIVE_YIELDABLE` / `NATIVE_NAMESPACE_YIELDABLE` / `BUILTIN_INSTANCE_YIELDABLE` /
-`SOURCE_INSTANCE_METHOD_OPEN`，或 `DIRECT_LOCAL` 且被判 suspendable）。
+`SOURCE_METHOD_DEPENDENCY`，或 `DIRECT_LOCAL` 且被判 suspendable）。
 
 `actual` 则是 `work.state_counts[operation]`——Xi 层实际建了几个 `COROUTINE_STATE` 实体。
 Xi 层建它的依据是：
@@ -660,4 +660,3 @@ src/analysis/xglobal_summary.c:2727   xg_callsite_effects_compose
 判断一处重复该不该合，看的不是两份代码是否相同，而是**「两处各算一遍」本身是否在提供价值**。
 `mark_coroutine_functions` 那一对该合（差异纯粹是诊断措辞），`operation_is_call_shaped`
 那一对不该合（差异是独立取证路径）——两者在源码上都是「逐字重复」。
-

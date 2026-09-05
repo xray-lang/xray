@@ -538,6 +538,10 @@ add_xray_unit_test(test_xi_own ir/test_xi_own.c)
 add_xray_unit_test(test_xi_arc_verify ir/test_xi_arc_verify.c)
 add_xray_unit_test(test_xi_source_move_verify ir/test_xi_source_move_verify.c)
 add_xray_unit_test(test_semantic_plan plan/test_semantic_plan.c)
+add_test(NAME test_semantic_builtin_runtime_method_authority
+    COMMAND $<TARGET_FILE:test_semantic_plan> builtin-runtime-method-authority)
+set_tests_properties(test_semantic_builtin_runtime_method_authority PROPERTIES
+    LABELS "semantic;typed-plan;runtime-method")
 add_xray_unit_test(test_program_semantic_closure plan/test_program_semantic_closure.c)
 add_test(NAME test_program_semantic_call_locator
     COMMAND $<TARGET_FILE:test_program_semantic_closure>)
@@ -798,10 +802,18 @@ set_tests_properties(test_xr_program_aot_providers PROPERTIES
     TIMEOUT 120)
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_test(NAME test_target_program_reachability
+    COMMAND $<TARGET_FILE:test_target_plan> program-reachability)
+set_tests_properties(test_target_program_reachability PROPERTIES
+    LABELS "target-machine;aot;typed-plan;reachability")
 add_test(NAME test_target_native_target_leaf_authority
     COMMAND $<TARGET_FILE:test_target_plan> native-target-leaf-authority)
 set_tests_properties(test_target_native_target_leaf_authority PROPERTIES
     LABELS "target-machine;vm;typed-plan;stdlib")
+add_test(NAME test_target_native_direct_ref_authority
+    COMMAND $<TARGET_FILE:test_target_plan> native-direct-ref-authority)
+set_tests_properties(test_target_native_direct_ref_authority PROPERTIES
+    LABELS "target-machine;aot;typed-plan;stdlib")
 add_test(NAME test_target_plan_fingerprint_snapshot_determinism
     COMMAND $<TARGET_FILE:test_target_plan> fingerprint-snapshot-determinism)
 add_test(NAME test_target_plan_fingerprint_channel_close
@@ -820,6 +832,10 @@ add_test(NAME test_target_iterator_rune_nth_argument_authority
     COMMAND $<TARGET_FILE:test_target_plan> iterator-rune-nth-argument-authority)
 add_test(NAME test_target_source_class_array_fill_authority
     COMMAND $<TARGET_FILE:test_target_plan> source-class-array-fill-authority)
+add_test(NAME test_target_builtin_runtime_method_authority
+    COMMAND $<TARGET_FILE:test_target_plan> builtin-runtime-method-authority)
+set_tests_properties(test_target_builtin_runtime_method_authority PROPERTIES
+    LABELS "target-machine;aot;typed-plan;runtime-method")
 add_xray_unit_test(test_xtp_format plan/test_xtp_format.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xtp_resource_stress
@@ -1086,6 +1102,11 @@ add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 set_tests_properties(test_xr_aot_refinement PROPERTIES
     LABELS "aot;refinement;backend;task-279"
+)
+add_test(NAME test_xr_aot_refinement_unreachable_native_callee
+    COMMAND $<TARGET_FILE:test_xr_aot_refinement> unreachable-native-callee)
+set_tests_properties(test_xr_aot_refinement_unreachable_native_callee PROPERTIES
+    LABELS "aot;refinement;target-plan;mutation;task-293"
 )
 
 # Keep the dumb-emitter contract self-contained even though the behavioral
@@ -1506,8 +1527,6 @@ if(XR_STDLIB_COMPRESS)
     add_xray_unit_test(test_compress stdlib/test_compress.c)
 endif()
 add_xray_unit_test(test_xml_node stdlib/test_xml_node.c)
-add_xray_unit_test(test_cluster_proto stdlib/test_cluster_proto.c)
-set_tests_properties(test_cluster_proto PROPERTIES LABELS "cluster;protocol;stdlib")
 add_xray_unit_test(test_prelude_init stdlib/test_prelude_init.c)
 add_xray_unit_test(test_native_type_surface stdlib/test_native_type_surface.c)
 set_tests_properties(test_native_type_surface PROPERTIES LABELS "stdlib;metadata;native-types")
@@ -1528,10 +1547,6 @@ if(XRAY_STDLIB_VM_FASTPATHS)
         LABELS "stdlib;metadata;tooling;task-256"
     )
 endif()
-if(NOT WIN32)
-    add_xray_unit_test(test_io stdlib/test_io.c)
-endif()
-
 # ============================================================================
 # regex/ — Regex engine
 # ============================================================================

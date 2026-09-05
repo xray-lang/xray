@@ -15,14 +15,14 @@ for a migrated shared owner consume its generated stable owner ID. CGen adapter
 spelling is obtained by stable-ID lookup rather than reconstructed from an Xi
 or source-language name.
 
-`xi.regex.compile` binds its observable contract directly to
-`stdlib/regex/regex.xr`, whose `stdlib.regex.compile-match` identity is the sole
-compile/match owner. The VM and runtime prove exact membership in that owner;
-the AOT target is inapplicable and has no adapter. `xr_regex_core.h` is a
-separate `regex-flag-contract` utility for flag spelling and scalar boundaries,
-not a regex engine or an alternate compile/match owner. A missing VM/runtime
-binding, an AOT compile/match adapter, or owner logic in the flag utility fails
-closed.
+Regex construction is an ordinary source-class operation. Post-analysis
+canonicalization rewrites a regex literal to the module-qualified
+`regex.Regex(pattern, flags)` constructor, and `stdlib/regex/regex.xr` owns the
+object shape, flag spelling, program cache, and compile/match policy. There is
+no regex-specific Xi operation, VM opcode, native class, or shared semantic
+core. The C binding exposes only the two Unicode property-table ABI leaves;
+reviving a C constructor, cache, flag parser, literal helper, or class
+registration fails the owner ratchet.
 
 Bounds semantics have one real operation family: canonical `xi.index.get` and
 `xi.index.set`, whose generated VM and AOT consumers perform the access. The
@@ -115,9 +115,9 @@ Generated C may not ask the host compiler to rediscover target layout through
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml 05ddaa0d1870aac072fa918a9f444b521c55a305eff4509fd1c9172769980447
-anchor-sha256: contracts/semantic-owner-registry.json bda4c40d1de84f9295412942b3f4488cc1f50d9a6b0dbe2cd2906d5aa76ae93f
+anchor-sha256: contracts/semantic-owners.toml e8757676082856e5f3fcc538189f1dd5a9298832efc9d87a878640bc15dfcee2
+anchor-sha256: contracts/semantic-owner-registry.json 50e488398a29244c0f46c6785056213c5de4c22309045df0ea57ed460b9937d5
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 241fc6d624c38499814b0ca7e15d866b7c6d2d82f2d7634b303bf50d8b340366
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h cc514fd0784e29a162824d855e7caa28d36230e370f589d99981683cd51b5281
-anchor-sha256: scripts/check_semantic_owners.py b68ad3ae27d9010c07b7809e2319beb6aa057c88cb2273177dce68e80cc8116b
+anchor-sha256: contracts/shared-core-inventory.json f3f3567b73b0fc34c213e2b8d6d2a8ac1f99748af99cdfe36066fd94b84d23af
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h ed73a626b67d19606ee640290836529258d3a9a2c697eb87219d06cb88746b8c
+anchor-sha256: scripts/check_semantic_owners.py 060d15b62abb9fb20fe446d6b2e5b855868b8421e4954dae691ab39bc8a33748

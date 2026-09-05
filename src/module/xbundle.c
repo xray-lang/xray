@@ -173,7 +173,14 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
             }
             if (!bundle_add_entry(bundle, import_name, NULL, 0, spec->kind))
                 goto cleanup;
-            continue;
+            /* An embedded Xray layer is external only at run time.  Compile
+             * it far enough to publish its Xi module while walking the graph
+             * so dependants resolve source-owned call targets and consume the
+             * exact borrow/effect/storage contracts.  The bytecode body still
+             * comes from the runtime's embedded stdlib and is not duplicated
+             * in this bundle. */
+            if (!spec->ast || !spec->source_path)
+                continue;
         }
         if (!spec->ast || !spec->source_path) {
             xr_log_warning("bundle", "source-backed module is incomplete: %s",
@@ -190,6 +197,8 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
             goto cleanup;
         }
         compiled[ti] = proto;
+        if (external)
+            continue;
         size_t bc_size = 0;
         uint8_t *bc = xr_bootstrap_container_write(X, proto, 0, &bc_size, NULL);
         if (!bc) {

@@ -28,7 +28,7 @@
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
 #include "../coro/xthread_obj.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../module/xstdlib_runtime_cache.h"
 #include "../os/os_time.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,6 +87,12 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     stage_start_ns = xr_time_monotonic_ns();
     xr_thread_obj_drain_isolate(isolate);
     sys_thread_drain_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    /* Provider shutdown runs while scheduler workers and their wake paths are
+     * still intact. The lifecycle boundary first forbids new publication;
+     * each shutdown leaf then detaches its state, closes blocking resources
+     * and releases the isolate-owned reference before worker drain begins. */
+    xr_isolate_shutdown_providers(isolate);
 
     /* Drain the per-isolate profiler before any structure that
      * powers the report (opcode info, isolate pointer) goes away.

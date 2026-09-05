@@ -50,7 +50,7 @@
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../shared/xr_array_core.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../module/xstdlib_runtime_cache.h"
 #include "../shared/xr_elem_type.h"
 #include "../base/xnumber_parse_error.h"
 #include "../base/xconstants.h"
@@ -117,11 +117,6 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         {"StringSliceError", XR_GLOBAL_VAR_STRING_SLICE_ERROR},
         {"CompressionError", XR_GLOBAL_VAR_COMPRESSION_ERROR},
         {"CryptoError", XR_GLOBAL_VAR_CRYPTO_ERROR},
-        {"WorkQueue", XR_GLOBAL_VAR_WORKQUEUE},
-        {"ResultGroup", XR_GLOBAL_VAR_RESULTGROUP},
-        {"CountdownLatch", XR_GLOBAL_VAR_COUNTDOWNLATCH},
-        {"Semaphore", XR_GLOBAL_VAR_SEMAPHORE},
-        {"EventCount", XR_GLOBAL_VAR_EVENTCOUNT},
     };
     for (int i = 0; i < (int) (sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
         if (strcmp(name, builtin_classes[i].name) == 0)
@@ -142,10 +137,6 @@ static int xi_lower_type_constant_id(const char *name) {
 static int xi_lower_prelude_native_class_typeid(const char *name) {
     if (!name)
         return -1;
-    if (strcmp(name, "NetConn") == 0)
-        return XR_TID_NETCONN;
-    if (strcmp(name, "NetListener") == 0)
-        return XR_TID_NETLISTENER;
     if (strcmp(name, "BigInt") == 0)
         return XR_TID_BIGINT;
     if (strcmp(name, "StringBuilder") == 0)
@@ -165,29 +156,6 @@ static XiValue *xi_lower_emit_builtin_class(XiLower *l, const char *name, int li
         v->line = (uint32_t) line;
     }
     return v;
-}
-
-static bool xi_lower_sync_runtime_class_name(const char *name) {
-    return name && (strcmp(name, "Semaphore") == 0 || strcmp(name, "CountdownLatch") == 0 ||
-                    strcmp(name, "EventCount") == 0 || strcmp(name, "WorkQueue") == 0 ||
-                    strcmp(name, "ResultGroup") == 0);
-}
-
-static bool xi_lower_symbol_is_sync_runtime_class(XiLower *l, uint32_t sid, const char *name) {
-    if (!l || !l->analyzer || !sid)
-        return false;
-    XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, sid);
-    if (!sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-    if (!links)
-        return false;
-    const char *class_name = links->import_member_name ? links->import_member_name : name;
-    if (!xi_lower_sync_runtime_class_name(class_name))
-        return false;
-    if (links->module_name && strcmp(links->module_name, "sync") == 0)
-        return true;
-    return links->file_path && strstr(links->file_path, "stdlib/sync/sync.xr") != NULL;
 }
 
 static XaSymbol *xi_lower_lookup_class_symbol(XiLower *l, const char *name) {
@@ -488,31 +456,6 @@ XR_FUNC XrAggregateLayout *xi_lower_type_struct_layout(XiLower *l, struct XrType
         return NULL;
     const char *class_name = xr_type_get_class_name(type);
     return class_name ? xi_lower_lookup_struct_layout(l, class_name) : NULL;
-}
-
-static bool xi_lower_type_is_named_instance(const XrType *type, const char *name) {
-    if (!type || !name)
-        return false;
-    if (type->kind == XR_KIND_INSTANCE)
-        return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
-    if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
-            if (xi_lower_type_is_named_instance(type->union_type.members[i], name))
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool xi_lower_method_may_suspend(const XrType *receiver_type, const char *method,
-                                        int nargs) {
-    if (!receiver_type || !method)
-        return false;
-    if (xi_lower_type_is_named_instance(receiver_type, "WorkQueue"))
-        return strcmp(method, "pop") == 0 && (nargs == 0 || nargs == 1);
-    if (xi_lower_type_is_named_instance(receiver_type, "ResultGroup"))
-        return strcmp(method, "recv") == 0 && nargs == 0;
-    return false;
 }
 
 static XrAggregateLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
@@ -1398,9 +1341,6 @@ static XiValue *lower_unary(XiLower *l, AstNode *node) {
 static XiValue *lower_variable(XiLower *l, AstNode *node) {
     const char *name = node->as.variable.name;
     uint32_t sid = node->as.variable.symbol_id;
-    if (xi_lower_symbol_is_sync_runtime_class(l, sid, name))
-        return xi_lower_emit_builtin_class(l, name, node->line);
-
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
         /* Program-level top-level variables must be read from the
@@ -6564,8 +6504,6 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
     v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
     xi_chan_send_set_transfer_mode(v, transfer_mode);
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-    if (xi_lower_method_may_suspend(recv->type, method, want_args))
-        v->flags |= XI_FLAG_MAY_SUSPEND;
     v->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
     xi_lower_insert_err_check(l, node, v);
@@ -8263,8 +8201,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->flags |= XI_FLAG_MAY_SUSPEND;
             v->lowering_flags |= XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS;
         }
-        if (xi_lower_method_may_suspend(recv->type, ma->name, n))
-            v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;
         xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
         xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
@@ -10130,13 +10066,11 @@ generic_constructor:;
             (int) (sizeof(stack_constructor_modes) / sizeof(stack_constructor_modes[0])),
             &constructor_pcount);
     }
-    bool has_user_class_info = class_links && class_links->class_info != NULL;
-    bool force_builtin_class =
-        ((module_name && strcmp(module_name, "sync") == 0 &&
-          xi_lower_sync_runtime_class_name(cname)) ||
-         (class_sym && xi_lower_symbol_is_sync_runtime_class(l, class_sym->id, cname)) ||
-         (xi_lower_sync_runtime_class_name(cname) && !has_user_class_info));
-    if (!force_builtin_class) {
+    bool has_user_class_info =
+        (class_links && class_links->class_info != NULL) ||
+        (result_type && result_type->kind == XR_KIND_INSTANCE &&
+         result_type->instance.class_ref != NULL);
+    {
         int var_id = xi_lower_var_find(l, 0, cname);
         if (var_id >= 0) {
             if (l->is_program && l->shared_map[var_id] >= 0) {
@@ -10150,12 +10084,12 @@ generic_constructor:;
             }
         }
     }
-    if (!cls && !force_builtin_class) {
+    if (!cls) {
         XiTopBinding tb = xi_lower_find_top_binding(l, 0, cname);
         if (xi_top_binding_valid(tb))
             cls = xi_lower_emit_top_load(l, tb, l->type_any);
     }
-    if (!cls && !force_builtin_class) {
+    if (!cls) {
         struct XrType *upval_type = NULL;
         int upval_idx = xi_lower_resolve_upvalue(l, 0, cname, &upval_type);
         if (upval_idx >= 0) {
@@ -10164,6 +10098,14 @@ generic_constructor:;
                 cls->aux_int = upval_idx;
         }
     }
+    /* A module-qualified source class is an ordinary graph import. This path
+     * is shared by explicit qualified construction and syntax canonicalized
+     * to such a construction; the source class declaration remains the only
+     * layout and constructor authority. */
+    if (!cls && module_name && has_user_class_info)
+        cls = xi_lower_emit_import_ref(l, module_name, cname,
+                                       class_links ? class_links->type : l->type_any,
+                                       node ? (int) node->line : 0);
     /* Named-imported generic class construction is rewritten by
      * monomorphization to the concrete export name (`Foo$i64(args)`), while
      * the source import binding remains under the generic origin name
@@ -10172,15 +10114,14 @@ generic_constructor:;
      * monomorphic export itself instead of falling through to a null receiver.
      * AOT then resolves the constructor through the normal import/export table
      * using the same metadata path as namespace imports. */
-    if (!cls && !force_builtin_class && module_name == NULL && class_sym && cname &&
-        strchr(cname, '$')) {
+    if (!cls && module_name == NULL && class_sym && cname && strchr(cname, '$')) {
         const char *module_path = xi_lower_export_module_for_symbol(l, class_sym, cname);
         if (module_path)
             cls = xi_lower_emit_import_ref(l, module_path, cname,
                                            class_links ? class_links->type : l->type_any,
                                            node ? (int) node->line : 0);
     }
-    /* Built-in unified-class names (Exception, Range, sync classes, etc.)
+    /* Built-in unified-class names (Exception, Range, etc.)
      * are populated into the VM builtins array by the prelude module
      * loader at fixed XR_GLOBAL_VAR_* indices. Resolve them via
      * XI_GET_BUILTIN before falling back to null. */
@@ -10307,8 +10248,6 @@ static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode
         return NULL;
     const char *name = call->callee->as.variable.name;
     if (!name)
-        return NULL;
-    if (xi_lower_symbol_is_sync_runtime_class(l, call->callee->as.variable.symbol_id, name))
         return NULL;
     bool generic_class_call = lower_class_is_generic(l, name);
     if (!generic_class_call && call->type_arg_count > 0 && xi_lower_lookup_class_symbol(l, name))
@@ -11227,7 +11166,11 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     }
 
     bool is_safe = as->is_safe;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, l->type_any, 1);
+    /* The conversion witness and runtime target prove the narrowed static
+     * result type. Preserve that type in Xi: erasing it to `any` here makes
+     * every later callsite forget the analyzer's checked narrowing and forces
+     * backends to guess it again from the target spelling. */
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, cast_type, 1);
     if (!v)
         return NULL;
     v->args[0] = val;
@@ -12045,21 +11988,6 @@ static XiValue *xi_lower_expr_impl(XiLower *l, AstNode *node) {
                 l->func, l->cur_block,
                 node->as.literal.raw_value.bigint_val ? node->as.literal.raw_value.bigint_val : "0",
                 l->type_bigint);
-        case AST_LITERAL_REGEX: {
-            const char *pattern = node->as.literal.raw_value.regex.pattern;
-            const char *flags = node->as.literal.raw_value.regex.flags;
-            XiValue *pat_v =
-                xi_const_str(l->func, l->cur_block, pattern ? pattern : "", l->type_string);
-            XiValue *flg_v =
-                xi_const_str(l->func, l->cur_block, flags ? flags : "", l->type_string);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_REGEX_COMPILE, l->type_regex, 2);
-            if (v) {
-                v->args[0] = pat_v;
-                v->args[1] = flg_v;
-            }
-            return v;
-        }
-
         /* Expression statement wrapper: unwrap */
         case AST_EXPR_STMT:
             return xi_lower_expr(l, node->as.expr_stmt);

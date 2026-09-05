@@ -282,8 +282,9 @@ baseline:
 #define XR_TAG_THREAD 33       /* AOT Thread<T> OS-thread handle */
 #define XR_TAG_BUFFER 34       /* AOT mem.Buffer managed byte allocation */
 #define XR_TAG_BIGINT 35       /* AOT static BigInt literal view */
-#define XR_TAG_NET_CONN 36     /* AOT net.NetConn TCP handle */
-#define XR_TAG_NET_LISTENER 37 /* AOT net.NetListener TCP handle */
+#define XR_TAG_NET_CONN_STORAGE 36     /* AOT net.__NetConnStorage resource */
+#define XR_TAG_NET_LISTENER_STORAGE 37 /* AOT net.__NetListenerStorage resource */
+#define XR_TAG_TLS_CONTEXT_STORAGE 38  /* AOT net.__TlsContextStorage resource */
 
 typedef struct XrAotEnumBox {
     XrObjHeader hdr;
@@ -357,15 +358,6 @@ typedef struct XrAotEnumAggregate {
     uint32_t layout_id;
     XrValue payloads[XR_AOT_ENUM_AGG_PAYLOAD_CAP];
 } XrAotEnumAggregate;
-
-/* Small, typed multi-value ABI used by direct stdlib data-plane helpers.
- * error_index is -1 on success; otherwise it is an ordinal in the generated
- * error enum attached to the declarative stdlib entry. */
-typedef struct XrtI64PairResult {
-    int64_t first;
-    int64_t second;
-    int32_t error_index;
-} XrtI64PairResult;
 
 static inline int xrt_enum_key_parts(XrValue v, const char **enum_name, const char **member_name,
                                      uint32_t *member_index, uint32_t *layout_id) {

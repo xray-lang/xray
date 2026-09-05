@@ -61,8 +61,11 @@
 #include "../ir/xi_lowering_coverage_gen.h"
 #include "../ir/xi_opt.h"
 #include "../plan/semantic/xr_semantic_plan.h"
+#include "../plan/semantic/xr_semantic_dynamic_value_shape.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
+#include "../plan/semantic/xr_semantic_native_leaf_shape.h"
+#include "../plan/semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../plan/target/xr_target_capability.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_escape.h"
@@ -95,6 +98,7 @@
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../stdlib/xstdlib_defs_generated.h"
+#include "../stdlib/xstdlib_metadata.h"
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
@@ -238,8 +242,7 @@ static bool cg_type_is_i64_optional(const XrType *type) {
 static bool cg_value_is_i64_optional_blocking_result_root(const XiValue *v) {
     if (!v || !cg_type_is_i64_optional(v->type))
         return false;
-    return xi_value_is_blocking_work_queue_method_call(v) ||
-           xi_value_is_blocking_result_group_method_call(v);
+    return false;
 }
 
 static const XiValue *cg_i64_optional_blocking_result_root(XiCgenCtx *ctx, const XiValue *v) {
@@ -3062,8 +3065,39 @@ static CgValueEmissionStatus cg_cleanup_emission_view(XiCgenCtx *ctx, const XiFu
         entry ? xr_target_plan_cleanups(entry->target_plan, &cleanup_count) : NULL;
     const XrTargetFunctionRecord *functions =
         entry ? xr_target_plan_functions(entry->target_plan, &function_count) : NULL;
-    uint32_t function_index = function->semantic_plan_function_index;
-    if (entry && functions && function_index < function_count &&
+    uint32_t partition = UINT32_MAX;
+    uint32_t partition_count = 0u;
+    const XrTargetModulePartitionRecord *partitions =
+        entry ? xr_target_plan_module_partitions(entry->target_plan, &partition_count) : NULL;
+    uint32_t function_begin = 0u;
+    uint32_t partition_function_count = function_count;
+    uint32_t cleanup_begin = 0u;
+    uint32_t partition_cleanup_count = cleanup_count;
+    if (!entry || !entry->target_plan || !xr_target_plan_is_verified(entry->target_plan) ||
+        !xr_target_plan_partition_for_semantic(entry->target_plan, function->semantic_plan,
+                                               &partition))
+        return cg_value_emission_fail(ctx, "C cleanup SemanticPlan authority is missing");
+    if (partition_count) {
+        if (!partitions || partition >= partition_count ||
+            partitions[partition].functions_begin > function_count ||
+            partitions[partition].functions_count >
+                function_count - partitions[partition].functions_begin ||
+            partitions[partition].cleanups_begin > cleanup_count ||
+            partitions[partition].cleanups_count >
+                cleanup_count - partitions[partition].cleanups_begin)
+            return cg_value_emission_fail(ctx, "C cleanup module partition is invalid");
+        function_begin = partitions[partition].functions_begin;
+        partition_function_count = partitions[partition].functions_count;
+        cleanup_begin = partitions[partition].cleanups_begin;
+        partition_cleanup_count = partitions[partition].cleanups_count;
+    } else if (partition != 0u || partitions) {
+        return cg_value_emission_fail(ctx, "C cleanup singleton partition is invalid");
+    }
+    uint32_t semantic_function = function->semantic_plan_function_index;
+    uint32_t function_index = semantic_function < partition_function_count
+                                  ? function_begin + semantic_function
+                                  : XR_SEMANTIC_INDEX_NONE;
+    if (functions && function_index < function_count &&
         functions[function_index].cleanup_count == 0)
         return CG_VALUE_EMISSION_NOT_COVERED;
     if (!entry || !functions || function_index >= function_count || !cleanups || cleanup_count == 0)
@@ -3090,9 +3124,12 @@ static CgValueEmissionStatus cg_cleanup_emission_view(XiCgenCtx *ctx, const XiFu
     if (!operation || operation->opcode != XI_RELEASE)
         return CG_VALUE_EMISSION_NOT_COVERED;
     const XrTargetCleanupRecord *target = NULL;
-    for (uint32_t i = 0; cleanups && i < cleanup_count; i++) {
+    uint32_t cleanup_end = cleanup_begin + partition_cleanup_count;
+    for (uint32_t i = cleanup_begin; cleanups && i < cleanup_end; i++) {
         if (cleanups[i].semantic_operation != operation_index)
             continue;
+        if (cleanups[i].function != function_index)
+            return cg_value_emission_fail(ctx, "C cleanup function authority is inconsistent");
         if (target)
             return cg_value_emission_fail(ctx, "C cleanup TargetPlan identity is duplicated");
         target = &cleanups[i];
@@ -3181,6 +3218,104 @@ static bool cg_array_reserve_target_authority(XiCgenCtx *ctx, const XiFunc *func
            match->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
            match->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
            match->result_ownership == XR_TARGET_CALL_NONE;
+}
+
+/* Runtime receiver helpers are executable only when the unique typed registry
+ * row has survived both immutable plans. The live Xi node is compared after
+ * those plans are found; it may confirm the row but can never select it. */
+static CgValueEmissionStatus
+cg_builtin_runtime_method_target_authority(XiCgenCtx *ctx, const XiFunc *function,
+                                           const XiValue *value, XiMethodSymbolId *out_symbol) {
+    if (out_symbol)
+        *out_symbol = XI_METHOD_SYMBOL_INVALID;
+    if (!ctx || !function || !value || !out_symbol || !function->semantic_plan)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    const XrSemanticOperationRecord *operation =
+        cg_semantic_operation_for_value(ctx, function, value);
+    const XaBuiltinReceiverMethodSpec *live_spec =
+        xr_semantic_builtin_runtime_method_live_spec(value);
+    if ((!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD) &&
+        !live_spec)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method SemanticPlan authority is missing");
+
+    const CgValueEmissionRegistryEntry *entry = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        if (ctx->value_emission_registry[i].semantic_plan != function->semantic_plan)
+            continue;
+        if (entry)
+            return cg_value_emission_fail(
+                ctx, "builtin runtime method SemanticPlan authority is duplicated");
+        entry = &ctx->value_emission_registry[i];
+    }
+    if (!entry || !entry->target_plan || !xr_target_plan_is_verified(entry->target_plan))
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method TargetPlan authority is missing");
+
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(function->semantic_plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        if (xr_semantic_plan_operation(function->semantic_plan, i) != operation)
+            continue;
+        if (operation_index != XR_SEMANTIC_INDEX_NONE)
+            return cg_value_emission_fail(
+                ctx, "builtin runtime method operation identity is duplicated");
+        operation_index = i;
+    }
+    const XaBuiltinReceiverMethodSpec *semantic_spec = NULL;
+    uint32_t semantic_receiver = XR_SEMANTIC_INDEX_NONE;
+    XrStableId method_identity;
+    if (operation_index == XR_SEMANTIC_INDEX_NONE || !live_spec ||
+        !xr_semantic_builtin_runtime_method_is_exact(function->semantic_plan, operation,
+                                                     &semantic_spec, &semantic_receiver) ||
+        live_spec->method_id != semantic_spec->method_id ||
+        !xr_builtin_runtime_method_identity(semantic_spec, &method_identity) ||
+        value->nargs != (uint16_t) (semantic_spec->param_count + 1) || !value->args)
+        return cg_value_emission_fail(ctx, "builtin runtime method typed authority is not exact");
+
+    uint32_t frozen_operand_count = 0;
+    const XrSemanticOperandRecord *frozen_operands =
+        xr_semantic_plan_operands(function->semantic_plan, &frozen_operand_count);
+    if (!frozen_operands || operation->operand_begin > frozen_operand_count ||
+        operation->operand_count > frozen_operand_count - operation->operand_begin)
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method operand authority is incomplete");
+    for (uint16_t i = 0; i < value->nargs; i++) {
+        uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+        if (!value->args[i] ||
+            !cg_value_semantic_id(ctx, function, value->args[i], &semantic_value) ||
+            semantic_value != frozen_operands[operation->operand_begin + i].value)
+            return cg_value_emission_fail(
+                ctx, "builtin runtime method live operands disagree with SemanticPlan");
+    }
+    if (semantic_receiver != frozen_operands[operation->operand_begin].value)
+        return cg_value_emission_fail(ctx,
+                                      "builtin runtime method receiver authority is incomplete");
+
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(entry->target_plan, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (call)
+            return cg_value_emission_fail(ctx,
+                                          "builtin runtime method TargetPlan row is duplicated");
+        call = &calls[i];
+    }
+    if (!call || call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->result_value != operation->result_value || call->argument_count != 0 ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD ||
+        call->target_kind != XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+        !xr_stable_id_equal(call->native_callee_identity, method_identity))
+        return cg_value_emission_fail(ctx, "builtin runtime method TargetPlan row is not exact");
+    *out_symbol = semantic_spec->method_symbol;
+    return CG_VALUE_EMISSION_FOUND;
 }
 
 /* Resolve a C-emission recipe operand back to the unique frozen Xi member.
@@ -12020,10 +12155,7 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_panic",
         "xrt_abort",
         "xrt_type_no_index",
-        "xrt_mem_copy",
         "xrt_mem_move",
-        "xrt_mem_set",
-        "xrt_mem_compare",
         /* Static cleanup depth is header-inline thread-local state, not a
          * runtime dispatch or dynamic registration stack. */
         "xrt_cleanup_enter",
@@ -15823,6 +15955,11 @@ static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
                                  : NULL;
     if (!ref || !ref->module_path || !ref->member_name)
         return false;
+    CgNativeDirectEmissionView native_direct = {0};
+    CgNativeDirectEmissionStatus native_direct_status =
+        cg_native_direct_emission_view(ctx, f, call, &native_direct);
+    if (native_direct_status != CG_NATIVE_DIRECT_EMISSION_UNCOVERED)
+        return native_direct_status == CG_NATIVE_DIRECT_EMISSION_EXACT;
     return cg_find_aot_stdlib_method(ref->module_path, ref->member_name,
                                      (uint16_t) (call->nargs - 1)) != NULL;
 }

@@ -1136,7 +1136,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=53 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=54 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1510,15 +1510,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=53 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=54 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -7805,6 +7805,139 @@ TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key) {
+    setup_parser_session();
+    const char *source = "interface Marker {\n"
+                         "    mark() -> i64\n"
+                         "}\n"
+                         "class Box {\n"
+                         "    ping() -> i64 { return 1 }\n"
+                         "}\n"
+                         "enum Tone { Light, Dark }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "nominal-evidence-rebind.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
+    XaSymbol *box_symbol = xa_analyzer_lookup(analyzer, "Box");
+    XaSymbol *marker_symbol = xa_analyzer_lookup(analyzer, "Marker");
+    XaSymbol *tone_symbol = xa_analyzer_lookup(analyzer, "Tone");
+    ASSERT_NOT_NULL(box_symbol);
+    ASSERT_NOT_NULL(marker_symbol);
+    ASSERT_NOT_NULL(tone_symbol);
+    ASSERT_NOT_NULL(box_symbol->links.class_info);
+    ASSERT_NOT_NULL(marker_symbol->links.class_info);
+    ASSERT_NOT_NULL(tone_symbol->links.class_info);
+    XrClassInfo *box_info = box_symbol->links.class_info;
+    XrClassInfo *marker_info = marker_symbol->links.class_info;
+    XrClassInfo *tone_info = tone_symbol->links.class_info;
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    ASSERT_EQ_UINT(evidence.nclasses, 1);
+    uint64_t box_nominal_key = box_info->xg_nominal_key;
+    uint64_t marker_nominal_key = marker_info->xg_nominal_key;
+    uint64_t tone_nominal_key = tone_info->xg_nominal_key;
+    XgInterfaceId marker_interface_id = marker_info->xg_interface_id;
+    ASSERT_TRUE(box_nominal_key != 0);
+    ASSERT_TRUE(marker_nominal_key != 0);
+    ASSERT_TRUE(tone_nominal_key != 0);
+    ASSERT_TRUE(marker_interface_id != XG_NO_ID);
+    xg_global_evidence_free(&evidence);
+
+    box_info->xg_decl_id = UINT32_MAX - 1;
+    box_info->xg_class_id = UINT32_MAX - 2;
+    box_info->xg_interface_id = XG_NO_ID;
+    marker_info->xg_decl_id = UINT32_MAX - 3;
+    tone_info->xg_decl_id = UINT32_MAX - 4;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    ASSERT_EQ_UINT(evidence.nclasses, 1);
+    XgDeclId class_decl_id = XG_NO_ID;
+    XgDeclId interface_decl_id = XG_NO_ID;
+    XgDeclId enum_decl_id = XG_NO_ID;
+    for (uint32_t i = 0; i < evidence.ndecls; i++) {
+        if (evidence.decls[i].kind == XG_DECL_CLASS)
+            class_decl_id = evidence.decls[i].decl_id;
+        else if (evidence.decls[i].kind == XG_DECL_INTERFACE)
+            interface_decl_id = evidence.decls[i].decl_id;
+        else if (evidence.decls[i].kind == XG_DECL_ENUM)
+            enum_decl_id = evidence.decls[i].decl_id;
+    }
+    ASSERT_TRUE(class_decl_id != XG_NO_ID);
+    ASSERT_TRUE(interface_decl_id != XG_NO_ID);
+    ASSERT_TRUE(enum_decl_id != XG_NO_ID);
+    ASSERT_EQ_UINT(box_info->xg_decl_id, evidence.classes[0].decl_id);
+    ASSERT_EQ_UINT(box_info->xg_decl_id, class_decl_id);
+    ASSERT_EQ_UINT(box_info->xg_class_id, evidence.classes[0].class_id);
+    ASSERT_EQ_UINT(box_info->xg_interface_id, XG_NO_ID);
+    ASSERT_EQ_UINT(box_info->xg_nominal_key, box_nominal_key);
+    ASSERT_EQ_UINT(marker_info->xg_decl_id, interface_decl_id);
+    ASSERT_EQ_UINT(marker_info->xg_interface_id, marker_interface_id);
+    ASSERT_EQ_UINT(marker_info->xg_nominal_key, marker_nominal_key);
+    ASSERT_EQ_UINT(tone_info->xg_decl_id, enum_decl_id);
+    ASSERT_EQ_UINT(tone_info->xg_class_id, XG_NO_ID);
+    ASSERT_EQ_UINT(tone_info->xg_interface_id, XG_NO_ID);
+    ASSERT_EQ_UINT(tone_info->xg_nominal_key, tone_nominal_key);
+    xg_global_evidence_free(&evidence);
+
+    box_info->xg_nominal_key =
+        box_nominal_key == UINT64_MAX ? box_nominal_key - 1 : box_nominal_key + 1;
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&evidence);
+
+    box_info->xg_nominal_key = box_nominal_key;
+    box_info->xg_interface_id = UINT32_MAX;
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&evidence);
+
+    box_info->xg_interface_id = XG_NO_ID;
+    marker_info->xg_interface_id = marker_interface_id == UINT32_MAX ? marker_interface_id - 1
+                                                                     : marker_interface_id + 1;
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&evidence);
+
+    marker_info->xg_interface_id = marker_interface_id;
+    tone_info->xg_class_id = UINT32_MAX;
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&evidence);
+
+    tone_info->xg_class_id = XG_NO_ID;
+    box_info->xg_nominal_key = 0;
+    box_info->xg_decl_id = UINT32_MAX;
+    box_info->xg_class_id = XG_NO_ID;
+    box_info->xg_interface_id = XG_NO_ID;
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&evidence);
+
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_requires_stable_identity_for_core_print) {
     setup_parser_session();
     const char *source = "fn emit() { print(1) }\n";
@@ -7956,7 +8089,8 @@ TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites) {
 
 TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls) {
     setup_parser_session();
-    const char *source = "export fn cwdRaw() -> string { return __cwd() }\n";
+    const char *source = "export fn fileFlushRaw(handle: i64) -> bool { "
+                         "return __fileFlush(handle) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7985,13 +8119,13 @@ TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundar
     XgGlobalEvidence ev;
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
         &ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
-    const XgBodySummary *body = evidence_find_body_by_name(&ev, "cwdRaw");
+    const XgBodySummary *body = evidence_find_body_by_name(&ev, "fileFlushRaw");
     ASSERT_NOT_NULL(body);
     ASSERT_EQ_UINT(body->callsite_count, 1);
     const XgCallsiteSummary *call = xg_global_evidence_find_callsite(&ev, body->callsite_start);
     ASSERT_NOT_NULL(call);
     ASSERT_EQ_UINT(call->kind, XG_CALL_NATIVE);
-    ASSERT_EQ_UINT(call->method_name_id, xg_name_id("__cwd"));
+    ASSERT_EQ_UINT(call->method_name_id, xg_name_id("__fileFlush"));
     ASSERT_TRUE((body->effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
     ASSERT_TRUE((body->escape_bits & XG_BODY_ESCAPE_NATIVE) != 0);
     ASSERT_TRUE((body->capability_bits & XG_CAP_NATIVE) != 0);
@@ -13416,11 +13550,11 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_TASK), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_NETPOLL), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_ATOMIC), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_WORK_QUEUE), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_RESULT_GROUP), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COUNTDOWN_LATCH), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SEMAPHORE), 1);
-    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_EVENT_COUNT), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_WORK_QUEUE), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_RESULT_GROUP), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COUNTDOWN_LATCH), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_SEMAPHORE), 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_EVENT_COUNT), 0);
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_GENERATOR), 1);
 
     XaotBundle bundle;
@@ -13428,7 +13562,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_SCOPE));
     ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_TASK));
-    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_WORK_QUEUE));
+    ASSERT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_WORK_QUEUE));
     ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_GENERATOR));
     xaot_bundle_free(&bundle);
 
@@ -13781,9 +13915,14 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
     teardown_parser_session();
 }
 
-TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
+TEST(global_evidence_composes_source_class_receiver_effects) {
     setup_parser_session();
-    const char *source = "class Barrier {\n"
+    const char *source = "class CountdownLatch {\n"
+                         "    constructor(parties: i64) {}\n"
+                         "    done() {}\n"
+                         "    wait() -> bool { Coro.yield(); return true }\n"
+                         "}\n"
+                         "class Barrier {\n"
                          "    _latch: CountdownLatch\n"
                          "    constructor(parties: i64) {\n"
                          "        this._latch = CountdownLatch(parties)\n"
@@ -13817,7 +13956,7 @@ TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
     const XgBodySummary *wait_body = evidence_find_body_by_name(&ev, "wait");
     ASSERT_NOT_NULL(wait_body);
     ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_SUSPEND) != 0);
-    ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
+    ASSERT_TRUE((wait_body->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
 
     uint32_t wait_effects = 0;
     ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, wait_body, &wait_effects));
@@ -14616,6 +14755,7 @@ RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity);
+RUN_TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key);
 RUN_TEST(global_evidence_producer_requires_stable_identity_for_core_print);
 RUN_TEST(global_evidence_producer_keeps_shadowing_print_and_dump_as_closures);
 RUN_TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites);
@@ -14694,7 +14834,7 @@ RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
-RUN_TEST(global_evidence_composes_field_receiver_runtime_wait_effects);
+RUN_TEST(global_evidence_composes_source_class_receiver_effects);
 RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);
 RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);

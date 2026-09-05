@@ -14,18 +14,10 @@
 
 #include "../common.h"
 #include "../../src/base/xplatform.h"
-#include "../../src/base/xmalloc.h"
-#include "../../src/base/xchecks.h"
-#include "../../src/runtime/object/xjson.h"
-#include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
-#include "../../src/vm/xvm.h"           // xr_yieldable_cfunction_new
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 #include "../../src/os/os_fs.h"
 #include "../../src/shared/xr_os_core.h"
-#include "../stdlib_cache.h"
 
 #include <signal.h>
 #include <time.h>
@@ -36,12 +28,8 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #else
-#include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
 #include <unistd.h>
 #include <pwd.h>
-#include <sys/wait.h>
 #endif
 
 #ifdef XR_OS_MACOS
@@ -58,11 +46,6 @@
 extern char **environ;
 #endif
 
-static XrObjectInstance *os_exec_result_new(XrVMRuntime *X) {
-    XrClass *cls = xr_stdlib_record_class_get(X, "os", "__ExecResult");
-    return cls ? xr_object_instance_new_with_class(xr_current_coro(X), cls) : NULL;
-}
-
 /* ========== External Declarations ========== */
 
 struct XrCoroutine;
@@ -70,47 +53,6 @@ extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
-
-/* ========== Windows Compatibility ========== */
-
-#ifdef XR_OS_WINDOWS
-static int os_setenv_impl(const char *name, const char *value) {
-    if (!SetEnvironmentVariableA(name, value))
-        return -1;
-    /* Keep the CRT view synchronized when it can represent the value. The
-     * Windows process environment is authoritative because the CRT treats an
-     * empty value as deletion while Win32 distinguishes empty from missing. */
-    (void) _putenv_s(name, value);
-    return 0;
-}
-
-static int os_unsetenv_impl(const char *name) {
-    if (!SetEnvironmentVariableA(name, NULL))
-        return -1;
-    (void) _putenv_s(name, "");
-    return 0;
-}
-#else
-#define os_setenv_impl(name, value) setenv(name, value, 1)
-#define os_unsetenv_impl(name) unsetenv(name)
-#endif
-
-static const char *os_core_getenv(void *ctx, const char *name) {
-    (void) ctx;
-#ifdef XR_OS_WINDOWS
-    static XR_THREAD_LOCAL char value[32768];
-    SetLastError(ERROR_SUCCESS);
-    DWORD length = GetEnvironmentVariableA(name, value, (DWORD) sizeof(value));
-    if (length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
-        return NULL;
-    if (length >= sizeof(value))
-        return NULL;
-    value[length] = '\0';
-    return value;
-#else
-    return getenv(name);
-#endif
-}
 
 /* ========== Environment Variables ========== */
 
@@ -122,7 +64,19 @@ static XrValue os_getenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (!name)
         return xr_null();
 
-    const char *value = os_core_getenv(NULL, name);
+    const char *value = NULL;
+#ifdef XR_OS_WINDOWS
+    static XR_THREAD_LOCAL char windows_value[32768];
+    SetLastError(ERROR_SUCCESS);
+    DWORD length = GetEnvironmentVariableA(name, windows_value, (DWORD) sizeof(windows_value));
+    if (!(length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) &&
+        length < sizeof(windows_value)) {
+        windows_value[length] = '\0';
+        value = windows_value;
+    }
+#else
+    value = getenv(name);
+#endif
     if (!value)
         return xr_null();
 
@@ -140,7 +94,16 @@ static XrValue os_setenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (!name || !value)
         return xr_bool(false);
 
-    int result = os_setenv_impl(name, value);
+    int result = -1;
+#ifdef XR_OS_WINDOWS
+    if (SetEnvironmentVariableA(name, value)) {
+        /* Keep the CRT view synchronized when it can represent the value. */
+        (void) _putenv_s(name, value);
+        result = 0;
+    }
+#else
+    result = setenv(name, value, 1);
+#endif
     return xr_bool(result == 0);
 }
 
@@ -154,7 +117,15 @@ static XrValue os_unsetenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (!name)
         return xr_bool(false);
 
-    int result = os_unsetenv_impl(name);
+    int result = -1;
+#ifdef XR_OS_WINDOWS
+    if (SetEnvironmentVariableA(name, NULL)) {
+        (void) _putenv_s(name, "");
+        result = 0;
+    }
+#else
+    result = unsetenv(name);
+#endif
     return xr_bool(result == 0);
 }
 
@@ -188,12 +159,9 @@ static XrValue os_environ_block(XrVMRuntime *X, XrValue *args, int argc) {
 // exit(code) - Exit program
 static XrValue os_exit(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
-
-    int code = 0;
-    if (argc >= 1 && XR_IS_INT(args[0])) {
-        code = (int) XR_TO_INT(args[0]);
-    }
-
+    if (argc != 1 || !XR_IS_INT(args[0]))
+        return xr_null();
+    int code = (int) XR_TO_INT(args[0]);
     exit(code);
     return xr_null();  // Never reached
 }
@@ -312,7 +280,7 @@ static XrValue os_cpuCount(XrVMRuntime *X, XrValue *args, int argc) {
     GetSystemInfo(&si);
     return xr_int(si.dwNumberOfProcessors);
 #else
-    return xr_int(xr_os_core_cpu_count(sysconf(_SC_NPROCESSORS_ONLN)));
+    return xr_int((int64_t) sysconf(_SC_NPROCESSORS_ONLN));
 #endif
 }
 
@@ -462,16 +430,11 @@ static XrValue os_ppid(XrVMRuntime *X, XrValue *args, int argc) {
 // kill(pid, signal) - Send signal to process
 static XrValue os_kill(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    if (!XR_IS_INT(args[0]))
+    if (argc != 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
         return xr_bool(false);
 
     int pid = (int) XR_TO_INT(args[0]);
-    int sig = SIGTERM;  // default signal
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        sig = (int) XR_TO_INT(args[1]);
-    }
+    int sig = (int) XR_TO_INT(args[1]);
 
 #ifdef XR_OS_WINDOWS
     return xr_bool(false);
@@ -480,604 +443,21 @@ static XrValue os_kill(XrVMRuntime *X, XrValue *args, int argc) {
 #endif
 }
 
-// Continuation for os.sleep — timer fired, return null.
-static XrCFuncResult os_sleep_done(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
-                                   XrValue *result) {
-    (void) X;
-    (void) status;
-    (void) ctx;
-    *result = xr_null();
-    return XR_CFUNC_DONE;
-}
-
-// sleep(ms) - Coroutine-friendly sleep for milliseconds.
-// Yields the coroutine via the timer wheel so the worker thread can
-// service other coroutines during the wait.
-static XrCFuncResult os_sleep(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !XR_IS_INT(args[0])) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    int64_t ms = XR_TO_INT(args[0]);
-    if (ms <= 0) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-
-    return xr_yield_for_timeout(X, ms, os_sleep_done, NULL, result);
-}
-
-// clock() - Get process CPU time in seconds
-static XrValue os_clock(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    (void) args;
-    (void) argc;
-    return xr_float((double) clock() / CLOCKS_PER_SEC);
-}
-
-/* ========== Process Execution (P0) ========== */
-
-#ifndef XR_OS_WINDOWS
-typedef struct {
-    int fd;
-    char *buf;
-    size_t len;
-    size_t cap;
-    bool open;
-} XrExecPipe;
-
-static bool exec_pipe_init(XrExecPipe *pipe, int fd) {
-    pipe->fd = fd;
-    pipe->len = 0;
-    pipe->cap = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
-    pipe->open = true;
-    pipe->buf = (char *) xr_malloc(pipe->cap);
-    if (!pipe->buf)
-        return false;
-    pipe->buf[0] = '\0';
-
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0) {
-        (void) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    }
-    return true;
-}
-
-static void exec_pipe_close(XrExecPipe *pipe) {
-    if (pipe->open) {
-        close(pipe->fd);
-        pipe->open = false;
-    }
-}
-
-static void exec_pipe_free(XrExecPipe *pipe) {
-    exec_pipe_close(pipe);
-    xr_free(pipe->buf);
-    pipe->buf = NULL;
-    pipe->len = 0;
-    pipe->cap = 0;
-}
-
-static bool exec_pipe_append(XrExecPipe *pipe, const char *data, size_t n) {
-    size_t new_cap = 0;
-    if (!xr_os_core_exec_buffer_next_cap(pipe->len, pipe->cap, n, &new_cap))
-        return false;
-    if (new_cap > pipe->cap) {
-        if (!XR_REALLOC(pipe->buf, new_cap))
-            return false;
-        pipe->cap = new_cap;
-    }
-    return xr_os_core_exec_buffer_append_raw(pipe->buf, &pipe->len, pipe->cap, data, n);
-}
-
-static bool exec_pipe_drain(XrExecPipe *pipe) {
-    char tmp[4096];
-    for (;;) {
-        ssize_t n = read(pipe->fd, tmp, sizeof(tmp));
-        if (n > 0) {
-            if (!exec_pipe_append(pipe, tmp, (size_t) n))
-                return false;
-            continue;
-        }
-        if (n == 0) {
-            exec_pipe_close(pipe);
-            return true;
-        }
-        if (errno == EINTR)
-            continue;
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            return true;
-        exec_pipe_close(pipe);
-        return false;
-    }
-}
-
-static bool read_exec_pipes(int stdout_fd, int stderr_fd, char **stdout_buf, char **stderr_buf) {
-    XrExecPipe pipes[2];
-    if (!exec_pipe_init(&pipes[0], stdout_fd))
-        return false;
-    if (!exec_pipe_init(&pipes[1], stderr_fd)) {
-        exec_pipe_free(&pipes[0]);
-        return false;
-    }
-
-    while (pipes[0].open || pipes[1].open) {
-        struct pollfd pfds[2];
-        nfds_t nfds = 0;
-        for (int i = 0; i < 2; i++) {
-            if (!pipes[i].open)
-                continue;
-            pfds[nfds].fd = pipes[i].fd;
-            pfds[nfds].events = POLLIN | POLLHUP | POLLERR;
-            pfds[nfds].revents = 0;
-            nfds++;
-        }
-
-        int rc;
-        do {
-            rc = poll(pfds, nfds, -1);
-        } while (rc < 0 && errno == EINTR);
-        if (rc < 0)
-            goto fail;
-
-        nfds_t pos = 0;
-        for (int i = 0; i < 2; i++) {
-            if (!pipes[i].open)
-                continue;
-            short revents = pfds[pos++].revents;
-            if (revents & (POLLIN | POLLHUP | POLLERR)) {
-                if (!exec_pipe_drain(&pipes[i]))
-                    goto fail;
-            }
-        }
-    }
-
-    *stdout_buf = pipes[0].buf;
-    *stderr_buf = pipes[1].buf;
-    return true;
-
-fail:
-    exec_pipe_free(&pipes[0]);
-    exec_pipe_free(&pipes[1]);
-    return false;
-}
-#endif
-
-// exec(cmd) - Execute shell command, return ExecResult handle
-// (Json with fixed shape: stdout, stderr, exitCode).
-static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *cmd = xrs_string_arg(args[0], NULL);
-    if (!cmd)
-        return xr_null();
-    XR_DCHECK(cmd[0] != '\0', "os_exec: command string must be non-empty");
-
-#ifdef XR_OS_WINDOWS
-    // Windows: simplified via _popen (stdout only)
-    FILE *fp = _popen(cmd, "r");
-    if (!fp)
-        return xr_null();
-
-    char buf[4096];
-    size_t len = 0, cap = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
-    char *output = (char *) xr_malloc(cap);
-    if (!output) {
-        _pclose(fp);
-        return xr_null();
-    }
-    output[0] = '\0';
-
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
-        size_t new_cap = 0;
-        if (!xr_os_core_exec_buffer_next_cap(len, cap, n, &new_cap)) {
-            xr_free(output);
-            _pclose(fp);
-            return xr_null();
-        }
-        if (new_cap > cap) {
-            if (!XR_REALLOC(output, new_cap)) {
-                xr_free(output);
-                _pclose(fp);
-                return xr_null();
-            }
-            cap = new_cap;
-        }
-        if (!xr_os_core_exec_buffer_append_raw(output, &len, cap, buf, n)) {
-            xr_free(output);
-            _pclose(fp);
-            return xr_null();
-        }
-    }
-    // _pclose returns the same wait-style encoding as _cwait/_spawn; the
-    // decode (low-order byte, negative means close itself failed) is shared
-    // with the AOT runtime in xr_os_core.h.
-    int raw_status = _pclose(fp);
-    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
-
-    XrObjectInstance *json = os_exec_result_new(X);
-    XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, output));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int(exit_code));
-    xr_free(output);
-    return xr_object_instance_value(json);
-#else
-    // Unix: fork + exec + pipe for both stdout and stderr
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0)
-        return xr_null();
-    if (pipe(stderr_pipe) != 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        return xr_null();
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[0]);
-        close(stderr_pipe[1]);
-        return xr_null();
-    }
-
-    if (pid == 0) {
-        // Child process
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stderr_pipe[1], STDERR_FILENO);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
-        execl("/bin/sh", "sh", "-c", cmd, (char *) NULL);
-        _exit(127);
-    }
-
-    // Parent process
-    close(stdout_pipe[1]);
-    close(stderr_pipe[1]);
-
-    char *stdout_buf = NULL;
-    char *stderr_buf = NULL;
-    bool read_ok = read_exec_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
-
-    int status = 0;
-    pid_t waited;
-    do {
-        waited = waitpid(pid, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    if (waited < 0) {
-        status = -1;
-    }
-    if (!read_ok) {
-        xr_free(stdout_buf);
-        xr_free(stderr_buf);
-        return xr_null();
-    }
-    int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
-
-    XrObjectInstance *json = os_exec_result_new(X);
-    XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int(exit_code));
-
-    xr_free(stdout_buf);
-    xr_free(stderr_buf);
-    return xr_object_instance_value(json);
-#endif
-}
-
-#ifdef XR_OS_WINDOWS
-// Escape one argument per the CommandLineToArgvW contract: a run of
-// backslashes is only doubled before a literal quote or the closing quote.
-static void win_append_escaped_arg(char *buf, size_t *pos, const char *arg) {
-    size_t backslashes = 0;
-    for (const char *p = arg; *p; p++) {
-        if (*p == '\\') {
-            backslashes++;
-            buf[(*pos)++] = '\\';
-        } else if (*p == '"') {
-            for (size_t k = 0; k < backslashes; k++)
-                buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '"';
-            backslashes = 0;
-        } else {
-            backslashes = 0;
-            buf[(*pos)++] = *p;
-        }
-    }
-    for (size_t k = 0; k < backslashes; k++)
-        buf[(*pos)++] = '\\';
-}
-
-static char *win_build_command_line(const char *const *argv, int count) {
-    size_t cap = 1;
-    for (int i = 0; i < count; i++)
-        cap += strlen(argv[i]) * 2 + 3;
-    char *buf = (char *) xr_malloc(cap);
-    if (!buf)
-        return NULL;
-    size_t pos = 0;
-    for (int i = 0; i < count; i++) {
-        if (i > 0)
-            buf[pos++] = ' ';
-        buf[pos++] = '"';
-        win_append_escaped_arg(buf, &pos, argv[i]);
-        buf[pos++] = '"';
-    }
-    buf[pos] = '\0';
-    return buf;
-}
-#endif
-
-// spawn(program, args) - Execute a program WITHOUT a shell (argv array, no
-// interpolation), returning the same {stdout, stderr, exitCode} shape as
-// exec(). This is the injection-safe way to run subprocesses: unlike exec(),
-// arguments are passed verbatim to the program and are never parsed by a shell.
-static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *program = xrs_string_arg(args[0], NULL);
-    if (!program || program[0] == '\0')
-        return xr_null();
-
-    // args[1] (optional) is Array<string> holding the arguments after the
-    // program name. Omitted / null means no extra arguments.
-    XrArray *arg_arr = NULL;
-    int extra = 0;
-    if (argc >= 2 && XR_IS_ARRAY(args[1])) {
-        arg_arr = XR_TO_ARRAY(args[1]);
-        extra = arg_arr->length;
-    } else if (argc >= 2 && !XR_IS_NULL(args[1])) {
-        return xr_null();  // args must be an Array<string> (or omitted)
-    }
-    if (extra < 0 || (size_t) extra > (SIZE_MAX / sizeof(char *)) - 2)
-        return xr_null();
-
-    // argv = [program, extra..., NULL]
-    const char **spawn_argv = (const char **) xr_malloc(sizeof(char *) * ((size_t) extra + 2));
-    if (!spawn_argv)
-        return xr_null();
-    spawn_argv[0] = program;
-    for (int i = 0; i < extra; i++) {
-        const char *s = xrs_string_arg(xr_array_get(arg_arr, i), NULL);
-        if (!s) {
-            xr_free(spawn_argv);
-            return xr_null();  // every argument must be a string
-        }
-        spawn_argv[i + 1] = s;
-    }
-    spawn_argv[extra + 1] = NULL;
-
-#ifdef XR_OS_WINDOWS
-    char *cmdline = win_build_command_line(spawn_argv, extra + 1);
-    xr_free(spawn_argv);
-    if (!cmdline)
-        return xr_null();
-
-    SECURITY_ATTRIBUTES sa;
-    ZeroMemory(&sa, sizeof(sa));
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-
-    HANDLE out_rd = NULL, out_wr = NULL, err_rd = NULL, err_wr = NULL;
-    if (!CreatePipe(&out_rd, &out_wr, &sa, 0) || !CreatePipe(&err_rd, &err_wr, &sa, 0)) {
-        if (out_rd)
-            CloseHandle(out_rd);
-        if (out_wr)
-            CloseHandle(out_wr);
-        if (err_rd)
-            CloseHandle(err_rd);
-        if (err_wr)
-            CloseHandle(err_wr);
-        xr_free(cmdline);
-        return xr_null();
-    }
-    // The parent's read ends must NOT be inherited by the child.
-    SetHandleInformation(out_rd, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(err_rd, HANDLE_FLAG_INHERIT, 0);
-
-    STARTUPINFOA si;
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = out_wr;
-    si.hStdError = err_wr;
-    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-
-    PROCESS_INFORMATION pi;
-    ZeroMemory(&pi, sizeof(pi));
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
-    xr_free(cmdline);
-    // Close the child's write ends in the parent so reads see EOF at exit.
-    CloseHandle(out_wr);
-    CloseHandle(err_wr);
-    if (!ok) {
-        CloseHandle(out_rd);
-        CloseHandle(err_rd);
-        return xr_null();
-    }
-    CloseHandle(pi.hThread);
-
-    // Poll both pipes with PeekNamedPipe to drain without deadlocking on a
-    // full pipe buffer (a single blocking ReadFile on one pipe could stall
-    // while the child blocks writing the other).
-    char *out_buf = (char *) xr_malloc(1);
-    char *err_buf = (char *) xr_malloc(1);
-    size_t out_len = 0, err_len = 0, out_cap = 1, err_cap = 1;
-    if (out_buf)
-        out_buf[0] = '\0';
-    if (err_buf)
-        err_buf[0] = '\0';
-    bool out_open = true, err_open = true;
-    char tmp[4096];
-    while (out_open || err_open) {
-        bool progressed = false;
-        HANDLE handles[2] = {out_rd, err_rd};
-        char **bufs[2] = {&out_buf, &err_buf};
-        size_t *lens[2] = {&out_len, &err_len};
-        size_t *caps[2] = {&out_cap, &err_cap};
-        bool *opens[2] = {&out_open, &err_open};
-        for (int i = 0; i < 2; i++) {
-            if (!*opens[i])
-                continue;
-            DWORD avail = 0;
-            if (!PeekNamedPipe(handles[i], NULL, 0, NULL, &avail, NULL)) {
-                *opens[i] = false;  // pipe closed (child exited)
-                continue;
-            }
-            if (avail == 0)
-                continue;
-            DWORD got = 0;
-            if (!ReadFile(handles[i], tmp, sizeof(tmp), &got, NULL) || got == 0) {
-                *opens[i] = false;
-                continue;
-            }
-            progressed = true;
-            if (*lens[i] + got + 1 > *caps[i]) {
-                size_t nc = *caps[i];
-                while (*lens[i] + got + 1 > nc)
-                    nc *= 2;
-                char *g = (char *) xr_realloc(*bufs[i], nc);
-                if (!g) {
-                    *opens[i] = false;
-                    continue;
-                }
-                *bufs[i] = g;
-                *caps[i] = nc;
-            }
-            memcpy(*bufs[i] + *lens[i], tmp, got);
-            *lens[i] += got;
-            (*bufs[i])[*lens[i]] = '\0';
-        }
-        if (!progressed)
-            Sleep(1);
-    }
-
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD code = 0;
-    GetExitCodeProcess(pi.hProcess, &code);
-    CloseHandle(pi.hProcess);
-    CloseHandle(out_rd);
-    CloseHandle(err_rd);
-
-    XrObjectInstance *json = os_exec_result_new(X);
-    XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, out_buf ? out_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, err_buf ? err_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int((int) code));
-    xr_free(out_buf);
-    xr_free(err_buf);
-    return xr_object_instance_value(json);
-#else
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0) {
-        xr_free(spawn_argv);
-        return xr_null();
-    }
-    if (pipe(stderr_pipe) != 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        xr_free(spawn_argv);
-        return xr_null();
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[0]);
-        close(stderr_pipe[1]);
-        xr_free(spawn_argv);
-        return xr_null();
-    }
-
-    if (pid == 0) {
-        // Child: wire up pipes and exec the program directly (no shell).
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stderr_pipe[1], STDERR_FILENO);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
-        execvp(program, (char *const *) spawn_argv);
-        _exit(127);  // exec failed (e.g. program not found)
-    }
-
-    // Parent
-    close(stdout_pipe[1]);
-    close(stderr_pipe[1]);
-    xr_free(spawn_argv);
-
-    char *stdout_buf = NULL;
-    char *stderr_buf = NULL;
-    bool read_ok = read_exec_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
-
-    int status = 0;
-    pid_t waited;
-    do {
-        waited = waitpid(pid, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    if (waited < 0)
-        status = -1;
-    if (!read_ok) {
-        xr_free(stdout_buf);
-        xr_free(stderr_buf);
-        return xr_null();
-    }
-    int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
-
-    XrObjectInstance *json = os_exec_result_new(X);
-    XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
-                                  xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
-                                  xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
-                                  xr_int(exit_code));
-    xr_free(stdout_buf);
-    xr_free(stderr_buf);
-    return xr_object_instance_value(json);
-#endif
-}
-
 /* ========== Platform Information ========== */
 
 // Report host facts used by the public Xray wrappers. The ladders themselves
 // are shared with the AOT runtime in xr_os_core.h so the two agree by
 // construction.
-static const char *get_platform(void) {
-    return xr_os_core_platform();
-}
-
-static const char *get_arch(void) {
-    return xr_os_core_arch();
-}
-
 static XrValue os_platform(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    return xrs_string_value_c(X, get_platform());
+    return xrs_string_value_c(X, xr_os_core_platform());
 }
 
 static XrValue os_arch(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    return xrs_string_value_c(X, get_arch());
+    return xrs_string_value_c(X, xr_os_core_arch());
 }
 
 /* ========== Module Loading ========== */

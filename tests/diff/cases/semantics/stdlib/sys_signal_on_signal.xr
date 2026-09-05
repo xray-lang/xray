@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import { Signal } from sys
 
 const hits = Atomic<i64>(0)
@@ -10,7 +11,9 @@ print(os.kill(os.getpid(), 2))
 
 var spins = 0
 while (hits.load() == 0 && spins < 100) {
-    sys.sleepMs(10)
+    time.sleep(10)
+    // AOT signal closures are dispatched at explicit OS-thread poll points.
+    sys.threadYield()
     spins = spins + 1
 }
 

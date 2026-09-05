@@ -1,5 +1,5 @@
-// mem.pageAlloc's optional protection argument is represented by two exact
-// native registry rows. Both arities must retain independent call authority.
+// mem.pageAlloc's optional protection argument belongs to its Xray declaration;
+// both call shapes reach one exact private native mapping leaf.
 import mem
 
 fn run() {
@@ -7,8 +7,8 @@ fn run() {
     print(first.isNull())
     print(mem.pageFree(first, 4096))
 
-    // PROT_READ | PROT_WRITE. Keep this overload fixture focused on call
-    // identity; native module constant projection is a separate authority.
+    // PROT_READ | PROT_WRITE. Keep this fixture focused on source default
+    // materialization and explicit native-leaf arguments.
     var second = mem.pageAlloc(4096, 3)
     print(second.isNull())
     print(mem.pageFree(second, 4096))

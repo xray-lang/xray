@@ -1,4 +1,5 @@
 import mem
+import { Buffer } from mem
 
 export final class ByteEnvelope {
     contractId: i64
@@ -51,9 +52,13 @@ export fn payloadView(envelope: ByteEnvelope) -> PayloadView {
 export fn encodePayload(envelope: ByteEnvelope) -> Buffer {
     var out = mem.allocZeroed(len(envelope.payload))
     if (len(envelope.payload) > 0) {
-        var target: Slice<u8> = out.asMutBytes()
-        var source: Slice<u8> = envelope.payload[:]
-        target.copyFrom(source)
+        unsafe {
+            mem.withSliceMut<u8>(out.borrowPtr(), len(out), ref out,
+                fn(target: ref Slice<u8>) {
+                    var source: Slice<u8> = envelope.payload[:]
+                    target.copyFrom(source)
+                })
+        }
     }
     return out
 }

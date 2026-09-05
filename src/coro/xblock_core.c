@@ -215,7 +215,8 @@ XrCoroIoWaitKind xr_coro_io_wait(XrCoroutine *coro, int fd, int poll_mode, int64
 }
 
 XrCoroBlockResult xr_coro_sleep(XrCoroutine *coro, int64_t milliseconds) {
-    if (milliseconds <= 0) {
+    milliseconds = xr_time_sleep_normalize_ms(milliseconds);
+    if (milliseconds == 0) {
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
     }
     if (!coro) {

@@ -57,6 +57,30 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
         re.compile(r"\bmem\.free\s*\("),
     ),
     RemovedForm(
+        "BUFFER_AS_MUT_BYTES_CALL",
+        "Buffer.asMutBytes() removed; use scoped mem.withSliceMut(...) access",
+        "293",
+        re.compile(r"\.asMutBytes\s*\("),
+    ),
+    RemovedForm(
+        "SYS_SLEEP_MS_CALL",
+        "sys.sleepMs(...) removed; use coroutine-friendly time.sleep(...) delays",
+        "293",
+        re.compile(r"\bsys\.sleepMs\s*\("),
+    ),
+    RemovedForm(
+        "OS_SLEEP_CALL",
+        "os.sleep(...) removed; use coroutine-friendly time.sleep(...) delays",
+        "293",
+        re.compile(r"\bos\.sleep\s*\("),
+    ),
+    RemovedForm(
+        "SYS_CPU_COUNT_CALL",
+        "sys.cpuCount() removed; use the canonical os.cpuCount() host-topology query",
+        "293",
+        re.compile(r"\bsys\.cpuCount\s*\("),
+    ),
+    RemovedForm(
         "LOAD_LE_UNCHECKED",
         ".loadLEUnchecked removed unchecked little-endian load",
         "173",
@@ -70,7 +94,7 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
     ),
     RemovedForm(
         "BUFFER_DIRECT_INDEX",
-        "direct [] index on a mem.alloc* Buffer; use .asBytes()/.asMutBytes()",
+        "direct [] index on a mem.alloc* Buffer; use .asBytes() or scoped mem.withSliceMut(...) access",
         "157",
         re.compile(r"\bmem\.alloc\w*\s*\([^()]*\)\s*\["),
     ),

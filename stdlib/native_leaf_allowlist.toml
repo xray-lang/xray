@@ -45,128 +45,17 @@
 schema = 1
 
 # ============================================================================
-# cluster -- the distributed-node runtime
-# ============================================================================
-#
-# Five of these ten leaves have no `aot:` binding at all. That is not a
-# fallback: the code generator fails the compilation with "unsupported AOT
-# stdlib call" when a reachable call site needs one, so a program that touches
-# cluster.self(), nodes(), discover(), info() or monitor() cannot be compiled
-# ahead of time. Their deletion triggers say so, because "add the missing
-# binding" is a decidable condition and a real prerequisite for this module.
-
-[[leaf]]
-module = "cluster"
-symbol = "__discover"
-class = "host_abi_leaf"
-abi = "socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP (IP_DROP_MEMBERSHIP on stop), sendto(2) and recvfrom(2)"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel multicast sockets, driven by a native yieldable coroutine on the Xray netpoll. VM stdlib/cluster/cluster_discovery.c create_mcast_socket/cluster_discovery_start. There is no AOT binding: the code generator refuses a reachable call"
-deletion_trigger = "when cluster.xr can open a multicast socket over net's own leaves and run the announce/listen loop itself, which needs net to expose setsockopt(2) for the multicast options it currently does not"
-
-[[leaf]]
-module = "cluster"
-symbol = "__info"
-class = "runtime_leaf"
-abi = "none; reads cluster runtime state under its own mutexes and atomics"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_info_fn): the node tables under nodes_lock/dead_nodes_lock, relaxed atomic counters, and whether the TLS contexts are non-NULL. It does not call OpenSSL. There is no AOT binding"
-deletion_trigger = "when the cluster runtime's node tables and counters are reachable from cluster.xr through smaller accessor leaves, so assembling the snapshot record stops being a C-side operation"
-
-[[leaf]]
-module = "cluster"
-symbol = "__join"
-class = "host_abi_leaf"
-abi = "getaddrinfo(3), socket(2), non-blocking connect(2), getsockopt(2) SO_ERROR, send/recv; OpenSSL SSL_do_handshake(3) when TLS is on; the platform CSPRNG for the handshake nonce"
-ownership = "none"
-effect = "suspends"
-provider = "kernel connect(2) plus, on the VM, the Xray netpoll for the wait and OpenSSL for the handshake (stdlib/cluster/cluster.c cluster_join). AOT (stdlib/cluster/cluster_aot.c xrt_cluster_join) uses a blocking connect(2) with a select(2) timeout, two OS threads per node, no netpoll and no TLS. The leaf takes a host and a port, not an address: the grammar is parseAddress in cluster.xr, which both backends compile, and neither half parses one any more"
-deletion_trigger = "when cluster.xr can reach a peer over net.__connectFd and net.__tlsHandshake instead of the module's own socket path, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
-
-[[leaf]]
-module = "cluster"
-symbol = "__listen"
-class = "runtime_leaf"
-abi = "none; constructs a bounded channel and registers a topic subscription"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through cluster_transport_listen on the VM and xrt_cluster_listen on AOT. The channel itself is shared; the subscription table is a trie on the VM and a linked list on AOT. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen(): the three copies of those two rules -- the VM binding, the VM transport and the AOT entry point -- are gone"
-deletion_trigger = "when cluster.xr can construct a Channel and register a topic pattern directly, which needs the channel constructor and the topic table to be surfaces Xray source can name"
-
-[[leaf]]
-module = "cluster"
-symbol = "__monitor"
-class = "runtime_leaf"
-abi = "none; constructs a channel and registers with the coroutine registry, or enqueues a monitor frame toward a remote node"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the Xray channel subsystem plus the coroutine registry (src/coro/xcoro_registry.h xr_coro_monitor), driven by stdlib/cluster/cluster_monitor.c. The remote-coroutine branch enqueues a frame that a writer coroutine later sends. There is no AOT binding"
-deletion_trigger = "when the coroutine registry is a surface Xray source can name, so a monitor registration is an ordinary call rather than a native leaf"
-
-[[leaf]]
-module = "cluster"
-symbol = "__nodes"
-class = "runtime_leaf"
-abi = "none; reads the node table under nodes_lock and interns the names"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_nodes), allocating the result array on the coroutine heap. There is no AOT binding"
-deletion_trigger = "when the cluster runtime's node table is reachable from cluster.xr through a smaller accessor leaf, so building the name array stops being a C-side operation"
-
-[[leaf]]
-module = "cluster"
-symbol = "__self"
-class = "runtime_leaf"
-abi = "none; reads the node's own configured name"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_self), returning an interned string. There is no AOT binding"
-deletion_trigger = "when cluster.xr holds the node name it passed to cluster.__start rather than reading it back out of the C runtime -- which needs module-level state that survives across calls, the same capability blockers/a-stdlib-module-const-from-native-leaf.md is about"
-
-[[leaf]]
-module = "cluster"
-symbol = "__send"
-class = "runtime_leaf"
-abi = "none on the sending call itself: it moves buffer ownership, matches the topic trie and enqueues. The only host call is a write(2) on the node's notify pipe; the network bytes leave later on a writer coroutine"
-ownership = "borrowed_static"
-effect = "nothrow"
-provider = "the cluster transport's own queues and the Xray channel subsystem. VM stdlib/cluster/cluster_topic.c cluster_transport_send; AOT stdlib/cluster/cluster_aot.c xrt_cluster_send, an independent lock-and-list implementation over OS threads. The two share the topic matching in cluster_topic_core.h and the frame encoding in cluster_proto.c, and now take the topic rule and the hop budget from cluster.xr's send() instead of deciding either. One divergence is left and is not this leaf's to close: the VM re-forwards a received envelope to every other peer with the hop count decremented (cluster_topic.c cluster_transport_handle_frame) while the AOT reader delivers locally and never reads the hop byte at all (cluster_aot.c aot_cluster_process_transport), so a three-node chain reaches its far end on one backend and not the other"
-deletion_trigger = "when the topic table and the per-node outbound queue are surfaces Xray source can name, so cluster.xr can do the match and the enqueue itself"
-
-[[leaf]]
-module = "cluster"
-symbol = "__start"
-class = "runtime_leaf"
-abi = "socket(2), setsockopt(2) SO_REUSEADDR and IPV6_V6ONLY, bind(2), listen(2) for the node listener; OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
-ownership = "none"
-effect = "nothrow"
-provider = "the Xray scheduler, which the leaf asks to publish the heartbeat and accept coroutines, over a listener from stdlib/net/io.c xr_io_listen and a TLS context from stdlib/net/tls.c. AOT (stdlib/cluster/cluster_aot.c xrt_cluster_start) discards all six TLS arguments and returns false outright when tlsEnabled is set, and runs its accept loop on an OS thread instead. The node name, the port range and the heartbeat schedule are cluster.xr's: start() refuses an illegal name or port before the leaf is reached, and passes HEARTBEAT_INTERVAL_MS, HEARTBEAT_TIMEOUT_MS and MAX_MISSED_HEARTBEATS down rather than letting each backend default them"
-deletion_trigger = "when cluster.xr can publish its own coroutines and build its own listener over net's leaves, and the AOT half stops declining TLS so both backends start the same node"
-
-[[leaf]]
-module = "cluster"
-symbol = "__stop"
-class = "runtime_leaf"
-abi = "close(2) on the listener and the notify pipe, setsockopt(2) IP_DROP_MEMBERSHIP, OpenSSL SSL_CTX_free(3), and a secure wipe of the shared secret (memset_s / explicit_bzero / a volatile loop)"
-ownership = "none"
-effect = "nothrow"
-provider = "the cluster runtime's own teardown: channel close and coroutine join on the VM (stdlib/cluster/cluster.c cluster_runtime_stop), service-slot removal and thread join on AOT (stdlib/cluster/cluster_aot.c)"
-deletion_trigger = "when cluster.xr owns the coroutines and the listener it started, so stopping them is ordinary Xray teardown; the secret wipe would still need a leaf, because Xray cannot promise the compiler will not elide a zeroing store"
-
-# ============================================================================
 # crypto
 # ============================================================================
 
 [[leaf]]
 module = "crypto"
-symbol = "__randomBytes"
+symbol = "__fillRandomBytes"
 class = "security_provider_leaf"
 abi = "Linux getrandom(2), retried on EINTR, falling back to reading /dev/urandom and aborting if that also fails; macOS and BSD arc4random_buf(3); Windows BCryptGenRandom with BCRYPT_USE_SYSTEM_PREFERRED_RNG"
-ownership = "fresh"
+ownership = "none"
 effect = "nothrow"
-provider = "the platform CSPRNG through src/os/os_random.h xr_random_bytes (src/os/unix/random_unix.c, src/os/win/random_win.c). Both backends call that same function -- src/aot/xrt_crypto.h includes os_random.h directly -- and differ only in which allocator carries the result array"
+provider = "the platform CSPRNG through src/os/os_random.h xr_random_bytes (src/os/unix/random_unix.c, src/os/win/random_win.c). Xray allocates and sizes the destination array before either backend enters the provider, so the leaf owns no memory policy"
 deletion_trigger = "never on security grounds: a CSPRNG reimplemented in Xray would replace an audited kernel entropy source with unaudited code. The leaf changes only when the platform's entropy interface changes"
 
 [[leaf]]
@@ -176,71 +65,8 @@ class = "security_provider_leaf"
 abi = "none; a hand-written constant-time comparison, not OpenSSL CRYPTO_memcmp(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "src/shared/xr_crypto_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. The VM additionally checks the element type is u8"
+provider = "src/shared/xr_crypto_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. Both backends reject non-u8 and malformed array representations before calling it"
 deletion_trigger = "when Xray can express a comparison the optimiser is forbidden to short-circuit; until the language can state that constraint, an Xray body would be free to return early on the first differing byte and would silently stop being constant-time"
-
-# ============================================================================
-# http2
-# ============================================================================
-#
-# The HTTP/2 protocol stack is entirely Xray's own and now lives in Xray:
-# HPACK with the RFC 7541 static table and Huffman codes, the frame layer,
-# flow control and the stream state machine are all in `stdlib/http2/http2.xr`.
-# What is left in C is the socket underneath them -- opening a TLS connection
-# that negotiated ALPN "h2", and moving opaque bytes across it. These four
-# leaves know nothing about HTTP/2; they would serve any protocol. The AOT
-# side has none of it: every helper in `src/aot/xrt_http.h` is an
-# unconditional stub, and has been since before this module was migrated.
-
-[[leaf]]
-module = "http2"
-symbol = "__connect"
-class = "host_abi_leaf"
-abi = "getaddrinfo(3), socket(2), connect(2), setsockopt(2) and close(2) through stdlib/net, plus OpenSSL SSL_connect(3) and SSL_get0_alpn_selected(3)"
-ownership = "none"
-effect = "suspends"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_connect opens one XrIOConn through xr_io_connect_tls_with_ctx, offers \"h2\" then \"http/1.1\" over ALPN, and fails when the peer does not choose h2. It answers an integer handle into a per-module table rather than a pointer, so no address crosses into Xray. AOT src/aot/xrt_http.h xrt_http_h2_connect_unavailable answers -1 unconditionally"
-deletion_trigger = "when net exposes a TLS connect that can carry an ALPN protocol list and report the negotiated protocol back, which is the only thing this leaf does that net.__connectFd plus a TLS handshake leaf cannot already express. It also needs the AOT stub replaced, or the two backends keep answering differently"
-
-[[leaf]]
-module = "http2"
-symbol = "__send"
-class = "host_abi_leaf"
-abi = "write(2) / OpenSSL SSL_write(3) through stdlib/net's XrIOConn, suspending on the netpoll when the socket is not writable"
-ownership = "none"
-effect = "suspends"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_send writes one already-encoded buffer in full. Every byte it writes was produced by http2.xr; this leaf does not know what a frame is. AOT src/aot/xrt_http.h xrt_http_h2_send_unavailable answers false unconditionally"
-deletion_trigger = "when net's own write path can be handed a connection opened by a TLS-with-ALPN connect, at which point this leaf and net's writer are the same function"
-
-[[leaf]]
-module = "http2"
-symbol = "__recv"
-class = "host_abi_leaf"
-abi = "read(2) / OpenSSL SSL_read(3) through stdlib/net's XrIOConn, suspending on the netpoll when the socket is not readable"
-ownership = "fresh"
-effect = "suspends"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_recv performs one read and answers the bytes it got, which may be fewer than asked for; reassembling frames from short reads is http2.xr's job. Null means the peer closed or the read failed. AOT src/aot/xrt_http.h xrt_http_h2_recv_unavailable answers null unconditionally"
-deletion_trigger = "same as __send: when net's read path can serve a connection this module opened"
-
-[[leaf]]
-module = "http2"
-symbol = "__close"
-class = "host_abi_leaf"
-abi = "close(2) plus OpenSSL SSL_shutdown(3) and SSL_CTX_free(3) through stdlib/net"
-ownership = "none"
-effect = "nothrow"
-provider = "the kernel and OpenSSL. VM stdlib/http2/http2_binding.c h2_close releases the connection and frees its handle slot. AOT src/aot/xrt_http.h xrt_http_h2_close_unavailable answers false unconditionally"
-deletion_trigger = "same as __send and __recv: when the connection is net's to close"
-
-[[leaf]]
-module = "http2"
-symbol = "__supported"
-class = "build_identity_leaf"
-abi = "none; reports whether a TLS provider was linked into this build"
-ownership = "none"
-effect = "nothrow"
-provider = "build configuration. The VM answers xr_tls_is_available() from stdlib/net/tls.c, which is a constant true or false chosen by XR_ENABLE_TLS -- it probes nothing at runtime, so a true answer means OpenSSL is linked, not that any peer will negotiate h2. AOT src/aot/xrt_http.h xrt_http_h2_supported returns false unconditionally, which is why an AOT build has no HTTP/2 at all"
-deletion_trigger = "when http2.xr reads the TLS provider's presence through net.__hasTLS instead of a second leaf asking the same question, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md; the leaf disappears entirely once every supported build links a TLS provider"
 
 # ============================================================================
 # io -- filesystem and standard streams
@@ -271,7 +97,7 @@ abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
 provider = "declaration only (stdlib/defs/core.def). VM materialises it via xr_stdlib_record_class_get(X, \"io\", \"__FileStat\") in stdlib/io/io.c; AOT ignores the class and builds an anonymous struct object in src/aot/xrt_io.h"
-deletion_trigger = "when io.__stat is deleted, or when a .def entry can declare its return as a type io.xr owns, so the ten stat fields stop needing a native record class to travel through"
+deletion_trigger = "when a .def entry can return a structural record declared by io.xr, so the ten stat fields can cross the host boundary without a native record class"
 
 [[leaf]]
 module = "io"
@@ -295,23 +121,33 @@ deletion_trigger = "when Xray source can issue the chmod(2) call itself; the lea
 
 [[leaf]]
 module = "io"
-symbol = "__cwd"
+symbol = "__dirClose"
 class = "host_abi_leaf"
-abi = "getcwd(3); Win32 CRT _getcwd"
-ownership = "fresh"
+abi = "closedir(3); Win32 FindClose"
+ownership = "none"
 effect = "nothrow"
-provider = "kernel via libc. VM stdlib/io/io.c io_cwd -> src/os/unix/fs_unix.c xr_fs_getcwd; AOT src/aot/xrt_io.h calls getcwd directly into a stack buffer"
-deletion_trigger = "when Xray source can issue the getcwd(3) call itself; the leaf is already the minimal form of this boundary"
+provider = "libc or Win32. VM stdlib/io/io.c io_dirClose and AOT src/aot/xrt_io.h xrt_io_dir_close release the opaque iterator token created by io.__dirOpen. io.xr owns lexical cleanup with defer, including early returns from the entry loop"
+deletion_trigger = "when Xray has a native opaque resource type whose deterministic destroy hook can own a directory iterator directly; the close operation itself is already the minimal boundary"
 
 [[leaf]]
 module = "io"
-symbol = "__exists"
+symbol = "__dirNext"
 class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2). Win32 GetFileAttributesA"
+abi = "readdir(3); Win32 FindNextFileA, with the first FindFirstFileA result consumed before advancing"
+ownership = "fresh"
+effect = "nothrow"
+provider = "libc or Win32. VM stdlib/io/io.c io_dirNext and AOT src/aot/xrt_io.h xrt_io_dir_next return one freshly owned entry name, or null at end/error. Entry filtering, deterministic sorting, and array growth are source-owned in io.xr"
+deletion_trigger = "when Xray source can issue the platform directory-iteration ABI itself; one-entry-at-a-time advancement is already the minimal boundary"
+
+[[leaf]]
+module = "io"
+symbol = "__dirOpen"
+class = "host_abi_leaf"
+abi = "opendir(3); Win32 FindFirstFileA"
 ownership = "none"
 effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_exists -> src/os/unix/fs_unix.c xr_fs_exists -> xr_fs_stat, which uses lstat; AOT src/aot/xrt_io.h xrt_io_exists uses stat. The two backends answer differently for a dangling symlink -- recorded as divergence 1 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md"
-deletion_trigger = "when the compiler owner picks lstat or stat as canonical for this leaf (divergence 1 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md) and Xray source can issue the chosen call itself"
+provider = "libc or Win32. VM stdlib/io/io.c io_dirOpen and AOT src/aot/xrt_io.h xrt_io_dir_open allocate an opaque iterator token, returning 0 on failure. No directory aggregation policy remains native"
+deletion_trigger = "when Xray has a native opaque resource type whose deterministic destroy hook can own a directory iterator directly; the open operation itself is already the minimal boundary"
 
 [[leaf]]
 module = "io"
@@ -360,7 +196,7 @@ class = "host_abi_leaf"
 abi = "read(2), retried on EINTR; fread(3) for handle 0. Win32 CRT _read"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel via libc. VM stdlib/io/io.c io_fileRead; AOT src/aot/xrt_io.h xrt_io_read_handle_chunk. One read into a freshly allocated byte array, no drain loop; a zero-length result is EOF. Handle 0 is read through the C runtime's stdin stream on both sides, so it stays ordered against anything else the process reads from it"
+provider = "kernel via libc. VM stdlib/io/io.c io_fileRead; AOT src/aot/xrt_io.h xrt_io_read_handle_chunk. One read into a freshly allocated byte array, no drain loop; a zero-length result is EOF. Handle 0 is read through the C runtime's stdin stream on both sides. io.xr owns whole-file and whole-stdin aggregation, the 2 GiB ceiling and UTF-8 validation"
 deletion_trigger = "same as io.__fileOpen: when a .def entry can declare an opaque handle type io.xr owns. The chunked-read shape itself is already what io.xr's BufReader is built on and does not need to change"
 
 [[leaf]]
@@ -382,46 +218,6 @@ ownership = "none"
 effect = "suspends"
 provider = "kernel plus the Xray runtime's io_uring completion path on the VM; plain write(2) on the AOT side. It exists next to io.__fileWrite because arg_spec \"s\" lowers a string to a borrowed (data, len) pair, so a string write copies nothing; routing strings through the Array<u8> leaf would cost a full copy of every file written"
 deletion_trigger = "when a .def entry can name one parameter type that both a string and an Array<u8> satisfy without copying either, collapsing this leaf into io.__fileWrite; failing that, when Xray source can issue the write(2) call itself"
-
-[[leaf]]
-module = "io"
-symbol = "__fileSize"
-class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2)"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_fileSize -> src/os/unix/fs_unix.c xr_fs_stat (lstat) and reads .size; AOT src/aot/xrt_io.h xrt_io_file_size uses stat and reads st_size. Same lstat/stat split as __exists"
-deletion_trigger = "when io.__stat's divergence is resolved (divergence 1 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md), because a size reading is then one field selection over __stat and needs no leaf of its own"
-
-[[leaf]]
-module = "io"
-symbol = "__isDir"
-class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2). Win32 GetFileAttributesA"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_isDir -> src/os/unix/fs_unix.c xr_fs_is_dir -> xr_fs_stat (lstat); AOT src/aot/xrt_io.h xrt_io_is_dir uses stat. A symlink to a directory answers differently on the two backends"
-deletion_trigger = "when io.__stat's divergence is resolved, because a directory test is then one field selection over __stat and needs no leaf of its own"
-
-[[leaf]]
-module = "io"
-symbol = "__isFile"
-class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2). Win32 GetFileAttributesA"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_isFile -> src/os/unix/fs_unix.c xr_fs_is_file -> xr_fs_stat (lstat); AOT src/aot/xrt_io.h xrt_io_is_file uses stat. A symlink to a file answers differently on the two backends"
-deletion_trigger = "when io.__stat's divergence is resolved, because a regular-file test is then one field selection over __stat and needs no leaf of its own"
-
-[[leaf]]
-module = "io"
-symbol = "__isSymlink"
-class = "host_abi_leaf"
-abi = "lstat(2) plus S_ISLNK; Win32 GetFileAttributesA plus FILE_ATTRIBUTE_REPARSE_POINT"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_isSymlink and AOT src/aot/xrt_io.h xrt_io_is_symlink each inline the same one-call test; neither goes through src/os"
-deletion_trigger = "when io.__stat is the single path-metadata leaf, because the symlink flag it already packs makes this test one field selection"
 
 [[leaf]]
 module = "io"
@@ -452,56 +248,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "kernel. VM stdlib/io/io.c io_mkdir -> src/os/unix/fs_unix.c xr_fs_mkdir; AOT src/aot/xrt_io.h inlines mkdir and its own EEXIST fallback. The EEXIST-is-success rule is errno classification, which is policy the module body should own"
 deletion_trigger = "when a leaf can report its errno to Xray source, so io.xr can express \"EEXIST over an existing directory counts as success\" instead of the C side deciding it"
-
-[[leaf]]
-module = "io"
-symbol = "__readDir"
-class = "host_abi_leaf"
-abi = "opendir(3), readdir(3), closedir(3); Win32 FindFirstFileA, FindNextFileA, FindClose"
-ownership = "fresh"
-effect = "nothrow"
-provider = "libc. VM stdlib/io/io.c io_readDir -> src/os/os_dir.h -> src/os/unix/dir_unix.c; AOT src/aot/xrt_io.h inlines an equivalent loop. Both filter \".\" and \"..\" through xr_io_core_read_dir_visit() in src/shared/xr_io_core.h; the VM additionally drops entries whose name is 260 bytes or longer"
-deletion_trigger = "when a directory-iterator handle triple (open/next/close) exists with the same shape as the file triple, so the entry loop and the dot-filter can be written in io.xr"
-
-[[leaf]]
-module = "io"
-symbol = "__readFile"
-class = "host_abi_leaf"
-abi = "VM: open(2), fstat(2) and an io_uring READ submission on Linux, falling back to pread(2); otherwise fopen(3)/fseek(3)/ftell(3)/fread(3)/fclose(3). AOT: fopen(3)/fread(3) only"
-ownership = "fresh"
-effect = "suspends"
-provider = "kernel plus the Xray runtime's io_uring completion path on the VM (src/os/netpoll/netpoll_iouring.c); plain libc stdio on the AOT side. The two backends differ in whether the call can park the coroutine at all"
-deletion_trigger = "when io.xr can run the read-until-EOF loop over the existing __fileOpen/__fileRead/__fileClose triple without the cost recorded in blockers/a-stdlib-no-write-side-file-descriptor-leaf.md -- that is, once Xray gains an amortised byte-buffer append so the loop is linear rather than quadratic"
-
-[[leaf]]
-module = "io"
-symbol = "__readFileBytes"
-class = "host_abi_leaf"
-abi = "same as io.__readFile: VM open(2)/fstat(2)/io_uring READ with a pread(2) fallback, otherwise stdio; AOT fopen(3)/fread(3)"
-ownership = "fresh"
-effect = "suspends"
-provider = "kernel plus the Xray runtime's io_uring completion path on the VM; plain libc stdio on the AOT side"
-deletion_trigger = "same as io.__readFile: when io.xr can run the read-until-EOF loop over the existing read-side triple with an amortised byte-buffer append"
-
-[[leaf]]
-module = "io"
-symbol = "__readStdin"
-class = "host_abi_leaf"
-abi = "the stdio `stdin` stream: clearerr(3) plus a fread(3) loop, reaching read(2)"
-ownership = "fresh"
-effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c via xr_io_read_stdin_all; AOT src/aot/xrt_io.h inlines the same loop. Both drive xr_io_core_read_all_stream_alloc() in src/shared/xr_io_core.h. Neither uses the raw descriptor 0"
-deletion_trigger = "when a standard-stream handle exists in the same form as __fileOpen's, so the read-to-EOF loop can be written in io.xr over the existing __fileRead"
-
-[[leaf]]
-module = "io"
-symbol = "__readStdinBytes"
-class = "host_abi_leaf"
-abi = "the stdio `stdin` stream via fread(3); Win32 additionally _setmode(_fileno(stdin), _O_BINARY)"
-ownership = "fresh"
-effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c; AOT src/aot/xrt_io.h. Same shared drain helper as io.__readStdin"
-deletion_trigger = "same as io.__readStdin: when a standard-stream handle exists in the same form as __fileOpen's"
 
 [[leaf]]
 module = "io"
@@ -560,8 +306,8 @@ class = "host_abi_leaf"
 abi = "stat(2) plus lstat(2) -- the second call only to derive the symlink flag, since stat follows links; Win32 CRT stat plus GetFileAttributesA"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_stat packs ten scalars through xr_io_core_stat_fields() into an io.__FileStat instance; AOT src/aot/xrt_io.h xrt_io_stat packs the same ten into an anonymous struct object. The syscalls agree; the returned object shape does not"
-deletion_trigger = "when both backends materialise one record shape for the ten stat fields, and Xray source can issue the stat(2)/lstat(2) pair itself"
+provider = "kernel. VM stdlib/io/io.c io_stat and AOT src/aot/xrt_io.h xrt_io_stat execute the same stat(2)/lstat(2) pair and pack ten scalar fields into the private __FileStat boundary shape. io.xr alone projects that shape into public FileStat and derives exists, fileSize, isFile, isDir and isSymlink"
+deletion_trigger = "when Xray source can issue the stat(2)/lstat(2) pair itself; every path-metadata policy above that pair already lives in io.xr"
 
 [[leaf]]
 module = "io"
@@ -590,8 +336,8 @@ class = "alloc_leaf"
 abi = "malloc(3)"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the system heap -- plain libc malloc, or mimalloc where the build selects it. The byte block always comes from the system heap; only the handle holding it is managed. VM stdlib/mem/mem.c allocates an XrObjectInstance whose native body destructor frees the block when the coroutine heap's refcount reaches zero; AOT src/aot/xrt_mem.h allocates an ARC cell marked XRT_ARC_KIND_BUFFER whose builtin destructor does the same"
-deletion_trigger = "when Xray can express an owned byte block with a destructor in its own type system, so a Buffer is an Xray type over a raw allocation rather than a native handle the runtime has to know how to destroy"
+provider = "the system heap -- plain libc malloc, or mimalloc where the build selects it. The byte block always comes from the system heap; only the handle holding it is managed. VM stdlib/mem/mem.c enters runtime/object/xbuffer.c, whose native body destructor frees the block when the coroutine heap's refcount reaches zero; AOT src/aot/xrt_mem.h allocates an ARC cell marked XRT_ARC_KIND_BUFFER whose builtin destructor does the same"
+deletion_trigger = "when the provider ABI can bind this allocation to a verified Xray drop target; the public Buffer type already remains source-owned and needs no user destructor syntax"
 
 [[leaf]]
 module = "mem"
@@ -600,8 +346,8 @@ class = "alloc_leaf"
 abi = "posix_memalign(3); Win32 _aligned_malloc, or mi_malloc_aligned under mimalloc"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the system heap through xr_malloc_aligned on the VM and XRT_MALLOC's aligned form on AOT, with the same managed-handle arrangement as mem.__alloc"
-deletion_trigger = "same as mem.__alloc: when Xray can express an owned byte block with a destructor in its own type system. The alignment argument is one parameter of the same allocation and does not need a separate step"
+provider = "the system heap through runtime/object/xbuffer.c xr_malloc_aligned on the VM and XRT_MALLOC's aligned form on AOT, with the same managed-handle arrangement as mem.__alloc"
+deletion_trigger = "same as mem.__alloc: when provider drop can target verified Xray code. The alignment argument is one parameter of the same allocation and does not need a separate step"
 
 [[leaf]]
 module = "mem"
@@ -611,7 +357,57 @@ abi = "calloc(3)"
 ownership = "fresh"
 effect = "nothrow"
 provider = "the system heap, with the same managed-handle arrangement as mem.__alloc. The zeroing is calloc's, which lets the allocator hand back pages the kernel already zeroed instead of writing them again"
-deletion_trigger = "when Xray can express an owned byte block with a destructor in its own type system, and can request zeroed pages rather than zeroing them itself -- writing the zeroes in Xray would lose calloc's ability to skip that write"
+deletion_trigger = "when provider drop can target verified Xray code and the allocator provider exposes zeroed allocation; writing zeroes in source would lose calloc's ability to skip that write"
+
+[[leaf]]
+module = "mem"
+symbol = "__BufferStorage"
+class = "alloc_leaf"
+abi = "none; private runtime object shape carrying an owned byte allocation and its reclamation hook"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and the XRT_ARC_KIND_BUFFER builtin destructor on AOT; mem.Buffer in mem.xr is the only public owner of this handle"
+deletion_trigger = "when opaque provider storage can bind its structural drop entry to verified Xray code; the public source class must remain independent of any user destructor hook"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferLength"
+class = "runtime_leaf"
+abi = "none; reads the length field of the private Buffer storage handle"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_length on AOT"
+deletion_trigger = "when Xray can declare the private provider-storage layout and its structural drop entry directly"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferAsBytes"
+class = "runtime_leaf"
+abi = "none; projects a readonly borrowed Slice<u8> over the private Buffer storage handle"
+ownership = "borrowed_param:0"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_as_bytes on AOT; mem.Buffer.asBytes in source owns the public operation"
+deletion_trigger = "when Xray can project a borrow from an opaque owned allocation without exposing the allocation handle publicly"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferBorrowPtr"
+class = "runtime_leaf"
+abi = "none; projects a borrowed MutPtr<u8> from the private Buffer storage handle"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_borrow_ptr on AOT; the analyzer retains the unsafe and owner-borrow rules"
+deletion_trigger = "when Xray can project a raw pointer borrow from an opaque owned allocation without exposing the allocation handle publicly"
+
+[[leaf]]
+module = "mem"
+symbol = "__bufferResize"
+class = "alloc_leaf"
+abi = "realloc(3), or allocate-copy-free for explicitly aligned storage"
+ownership = "none"
+effect = "nothrow"
+provider = "runtime/object/xbuffer.c on the VM and xrt_buffer_resize on AOT; mem.Buffer.resize in source owns size normalization and the public result"
+deletion_trigger = "when the provider ABI exposes fallible realloc and a verified Xray structural drop target"
 
 [[leaf]]
 module = "mem"
@@ -625,16 +421,6 @@ deletion_trigger = "when Xray can express a cache-maintenance instruction with i
 
 [[leaf]]
 module = "mem"
-symbol = "__cacheInvalidate"
-class = "machine_intrinsic_leaf"
-abi = "the same x86 clflush plus seq_cst fence as mem.__cacheFlush; on other architectures only the fence"
-ownership = "none"
-effect = "nothrow"
-provider = "the compiler and the hardware on AOT, nothing on the VM. AOT routes both this leaf and mem.__cacheFlush through the identical xrt_mem_cache_maintain_range with identical arguments, so the two are indistinguishable in the generated code"
-deletion_trigger = "when the two directions are actually distinct operations -- today they generate the same instructions, so this leaf can be deleted as soon as a caller is shown not to need a separate name for it, ahead of any language capability"
-
-[[leaf]]
-module = "mem"
 symbol = "__cacheLineSize"
 class = "build_identity_leaf"
 abi = "none; a compile-time constant, not sysconf(3) _SC_LEVEL1_DCACHE_LINESIZE and not sysctlbyname(3) hw.cachelinesize"
@@ -642,26 +428,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "the preprocessor. The VM returns XR_CACHE_LINE from src/base/xplatform.h, which is literally 64; AOT returns the literal 64. The two agree and both are wrong on Apple Silicon, whose line is 128 bytes"
 deletion_trigger = "when the compiler exposes the target's cache line size to Xray source as a constant -- at which point the wrong value becomes a build-configuration question rather than a leaf. If it is ever made a runtime query instead, it becomes a host_abi_leaf and this record has to be rewritten"
-
-[[leaf]]
-module = "mem"
-symbol = "__compare"
-class = "host_abi_leaf"
-abi = "memcmp(3)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/mem/mem.c mem_compare; AOT src/aot/xrt_mem.h xrt_mem_compare. Two call sites, one entry point"
-deletion_trigger = "when Xray can express a byte-range comparison the compiler lowers to the same optimised routine; an Xray loop would be correct but would give up libc's vectorised implementation"
-
-[[leaf]]
-module = "mem"
-symbol = "__copy"
-class = "host_abi_leaf"
-abi = "memcpy(3)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/mem/mem.c mem_copy; AOT src/aot/xrt_mem.h xrt_mem_copy. Two call sites, one entry point"
-deletion_trigger = "when Xray can express a non-overlapping byte-range copy the compiler lowers to memcpy -- the non-overlap precondition also has to be statable, since it is what separates this leaf from mem.__move"
 
 [[leaf]]
 module = "mem"
@@ -695,13 +461,23 @@ deletion_trigger = "when Xray can express a store that bypasses the cache togeth
 
 [[leaf]]
 module = "mem"
+symbol = "__pageAlloc"
+class = "host_abi_leaf"
+abi = "mmap(2); Win32 VirtualAlloc with MEM_RESERVE | MEM_COMMIT"
+ownership = "fresh"
+effect = "nothrow"
+provider = "the kernel. VM stdlib/mem/mem.c -> src/os/unix/mem_unix.c xr_mem_map; AOT src/aot/xrt_mem.h calls mmap directly. Protection uses Xray's stable bits and one exact two-argument entry. Under the freestanding profile it reaches xr_hook_page_alloc"
+deletion_trigger = "when Xray source can issue the host page-mapping call itself; allocation is the smallest host boundary, while the protection default and lifetime policy already live in mem.xr"
+
+[[leaf]]
+module = "mem"
 symbol = "__pageFree"
 class = "host_abi_leaf"
 abi = "munmap(2); Win32 VirtualFree with MEM_RELEASE"
 ownership = "none"
 effect = "nothrow"
 provider = "the kernel. VM stdlib/mem/mem.c -> src/os/unix/mem_unix.c xr_mem_unmap; AOT src/aot/xrt_mem.h calls munmap directly, bypassing src/os. Under the freestanding profile neither is reached: src/aot/xrt_core_freestanding.h calls xr_hook_page_free, which the embedder must supply"
-deletion_trigger = "when Xray source can issue the munmap(2) call itself; releasing a mapping is the boundary and has no smaller form. Its counterpart mem.pageAlloc is still a public native pair, so this leaf cannot move before that one does"
+deletion_trigger = "when Xray source can issue the munmap(2) call itself; releasing a mapping is the boundary and has no smaller form"
 
 [[leaf]]
 module = "mem"
@@ -711,7 +487,7 @@ abi = "mprotect(2); Win32 VirtualProtect"
 ownership = "none"
 effect = "nothrow"
 provider = "the kernel. VM stdlib/mem/mem.c -> src/os/unix/mem_unix.c xr_mem_protect; AOT src/aot/xrt_mem.h calls mprotect directly. The protection bits are Xray's own abstraction (0 none, 1 read, 2 write, 4 exec) translated by two independent but equivalent tables. Under the freestanding profile it reaches xr_hook_page_protect instead"
-deletion_trigger = "when Xray source can issue the mprotect(2) call itself; as with mem.__pageFree, mem.pageAlloc has to stop being a public native pair first, since these three describe one mapping's lifetime"
+deletion_trigger = "when Xray source can issue the mprotect(2) call itself; changing host page-table permissions is the smallest host boundary"
 
 [[leaf]]
 module = "mem"
@@ -722,16 +498,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "the compiler on AOT (src/aot/xrt_mem.h), and nothing on the VM, where stdlib/mem/mem.c discards both arguments. Outside GCC and Clang the AOT path is also a no-op"
 deletion_trigger = "when Xray can express a prefetch hint. This is the one leaf here whose VM/AOT difference is genuinely unobservable -- a prefetch has no semantics beyond timing -- so it needs no reconciliation first"
-
-[[leaf]]
-module = "mem"
-symbol = "__set"
-class = "host_abi_leaf"
-abi = "memset(3)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/mem/mem.c mem_set; AOT src/aot/xrt_mem.h xrt_mem_set. Two call sites, one entry point"
-deletion_trigger = "when Xray can express a byte-range fill the compiler lowers to memset; an Xray loop would be correct but would give up libc's vectorised implementation"
 
 [[leaf]]
 module = "mem"
@@ -757,7 +523,7 @@ deletion_trigger = "when Xray can mark a store as one the optimiser may not elid
 # net -- sockets, DNS and TLS
 # ============================================================================
 #
-# The VM half (stdlib/net/net.c) and the AOT half (src/aot/xrt_net.h) are two
+# The VM half (src/io/xnet_provider.c) and the AOT half (src/aot/xrt_net.h) are two
 # independent implementations. They share only the header-only socket shims in
 # `src/os/os_net.h` and, under a coroutine, one netpoll instance. Where a leaf
 # reaches different syscalls or offers a capability on one backend only, the
@@ -771,13 +537,23 @@ deletion_trigger = "when Xray can mark a store as one the optimiser may not elid
 
 [[leaf]]
 module = "net"
-symbol = "__CopyBidirectionalResult"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
+symbol = "__NetConnStorage"
+class = "host_abi_leaf"
+abi = "close(2) (Win32 closesocket), Xray netpoll deregistration, and OpenSSL SSL_shutdown(3)/SSL_free(3) when the private storage owns a TLS transport"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def, exact shape {aToB: i64, bToA: i64}). VM builds it via xr_stdlib_record_class_get(X, \"net\", \"__CopyBidirectionalResult\"); AOT materialises it from the native XrtI64PairResult struct in the coroutine code generator"
-deletion_trigger = "when net.__copyBidirectional is deleted, or when a .def entry can declare its return as a type net.xr owns, so the byte-count pair stops needing a native record shape to travel through"
+provider = "the netconn_body_destroy hook in src/io/xnet_handle.c on the VM and the XRT_ARC_KIND_NET_CONN builtin destructor on AOT; net.NetConn in net.xr is the only public owner of this private handle"
+deletion_trigger = "when a generic opaque-provider resource can bind socket, netpoll and TLS teardown to verified structural drop code; the public source class must remain independent of any user destructor syntax"
+
+[[leaf]]
+module = "net"
+symbol = "__NetListenerStorage"
+class = "host_abi_leaf"
+abi = "close(2) (Win32 closesocket) plus Xray netpoll deregistration when the private storage is reclaimed"
+ownership = "none"
+effect = "nothrow"
+provider = "the netlistener_body_destroy hook in src/io/xnet_handle.c on the VM and the XRT_ARC_KIND_NET_LISTENER builtin destructor on AOT; net.NetListener in net.xr is the only public owner of this private handle"
+deletion_trigger = "when a generic opaque-provider resource can bind listener and netpoll teardown to verified structural drop code; the public source class must remain independent of any user destructor syntax"
 
 [[leaf]]
 module = "net"
@@ -786,18 +562,28 @@ class = "host_abi_leaf"
 abi = "accept(2) -- on the Linux io_uring path with SOCK_NONBLOCK, i.e. accept4(2) semantics -- plus fcntl(2) F_SETFL and setsockopt(2) TCP_NODELAY on the accepted descriptor"
 ownership = "fresh"
 effect = "suspends"
-provider = "kernel accept(2); the wait is the Xray netpoll (kqueue/epoll/io_uring/IOCP-AFD) on the VM and, under a coroutine, on AOT too. VM stdlib/net/net.c -> src/coro/xsocket.c xr_socket_accept_try; AOT src/aot/xrt_net.h xrt_net_accept_try under a coroutine and a select(2) wait otherwise"
+provider = "kernel accept(2); the wait is the Xray netpoll (kqueue/epoll/io_uring/IOCP-AFD) on the VM and, under a coroutine, on AOT too. VM src/io/xnet_provider.c -> src/coro/xsocket.c xr_socket_accept_try; AOT src/aot/xrt_net.h xrt_net_accept_try under a coroutine and a select(2) wait otherwise"
 deletion_trigger = "when Xray source can issue the accept(2) call itself and register the resulting descriptor with the netpoll; the descriptor's non-blocking and TCP_NODELAY setup would move to net.xr at the same time"
 
 [[leaf]]
 module = "net"
-symbol = "__close"
+symbol = "__closeConn"
 class = "host_abi_leaf"
 abi = "close(2) (Win32 closesocket), preceded on the AOT side by shutdown(2) SHUT_RDWR; netpoll deregistration is epoll_ctl(2) EPOLL_CTL_DEL or kevent(2) EV_DELETE; on the VM a TLS connection first runs OpenSSL SSL_shutdown(3) and SSL_free(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "libc close plus Xray netpoll deregistration, plus OpenSSL on the VM only. VM stdlib/net/net.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
+provider = "libc close plus Xray netpoll deregistration, plus OpenSSL for a TLS connection on the VM. VM src/io/xnet_provider.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
 deletion_trigger = "when the runtime offers a typed socket handle whose release Xray source can express, so the descriptor close, the netpoll deregistration and the TLS teardown stop having to happen together inside one C call"
+
+[[leaf]]
+module = "net"
+symbol = "__closeListener"
+class = "host_abi_leaf"
+abi = "close(2) (Win32 closesocket), preceded on the AOT side by shutdown(2) SHUT_RDWR; netpoll deregistration is epoll_ctl(2) EPOLL_CTL_DEL or kevent(2) EV_DELETE"
+ownership = "none"
+effect = "nothrow"
+provider = "libc close plus Xray netpoll deregistration. VM src/io/xnet_provider.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
+deletion_trigger = "when the runtime offers a typed listener handle whose release Xray source can express, so descriptor close and netpoll deregistration stop having to happen together inside one C call"
 
 [[leaf]]
 module = "net"
@@ -811,23 +597,33 @@ deletion_trigger = "when Xray source can issue the connect(2) call itself and aw
 
 [[leaf]]
 module = "net"
-symbol = "__copyBidirectional"
-class = "host_abi_leaf"
-abi = "read(2)/write(2) through the xr_socket_recv/xr_socket_send shims, shutdown(2) SHUT_WR on each half-close and shutdown(2) SHUT_RDWR at the end; the AOT pump additionally uses select(2)"
-ownership = "fresh"
-effect = "suspends, NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
-provider = "kernel read/write/shutdown. The pump differs completely: the VM spawns two native coroutines driven by the netpoll (stdlib/net/net.c), while AOT runs a single blocking select(2) loop on the runtime async thread pool and refuses any TLS connection outright (divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md)"
-deletion_trigger = "when net.xr can spawn two coroutines over __readInto/__writeBytes and express the half-close rule itself, which needs the AOT side to stop declining TLS connections so both backends run the same program"
+symbol = "__connIsTLS"
+class = "runtime_leaf"
+abi = "none; reads the transport-kind field of a runtime-owned connection handle"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_conn_is_tls; AOT src/aot/xrt_net.h xrt_net_is_tls"
+deletion_trigger = "when the connection handle representation is declared in Xray, so the TLS transport tag is an ordinary field read"
 
 [[leaf]]
 module = "net"
-symbol = "__fd"
+symbol = "__connFd"
 class = "runtime_leaf"
 abi = "none; reads the descriptor field of a runtime-owned socket handle, answering -1 once the handle is closed"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_fd_handle -> handle_get_fd; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
+provider = "the Xray runtime's own connection-storage memory. VM src/io/xnet_provider.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
 deletion_trigger = "when the socket handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call"
+
+[[leaf]]
+module = "net"
+symbol = "__listenerFd"
+class = "runtime_leaf"
+abi = "none; reads the descriptor field of a runtime-owned listener handle, answering -1 once the handle is closed"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own listener-storage memory. VM src/io/xnet_provider.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
+deletion_trigger = "when the listener handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call"
 
 [[leaf]]
 module = "net"
@@ -836,18 +632,68 @@ class = "build_identity_leaf"
 abi = "none; reports whether a TLS provider was linked into this build"
 ownership = "none"
 effect = "nothrow"
-provider = "build configuration. The VM answers from XR_ENABLE_TLS in stdlib/net/net.c; the standalone AOT runtime links no TLS engine and src/aot/xrt_net.h returns false unconditionally"
+provider = "build configuration. The VM answers from XR_ENABLE_TLS in src/io/xnet_provider.c; the standalone AOT runtime links no TLS engine and src/aot/xrt_net.h returns false unconditionally"
 deletion_trigger = "when the TLS provider is present in every supported build, so the question has one answer and net.xr can stop asking it -- or when build configuration becomes readable from Xray source"
 
 [[leaf]]
 module = "net"
-symbol = "__lastCode"
+symbol = "__tlsNegotiatedProtocol"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_get0_alpn_selected(3); the VM copies the provider-owned byte view into an Xray string"
+ownership = "fresh"
+effect = "nothrow"
+provider = "OpenSSL's negotiated TLS session state. VM src/io/xnet_provider.c returns the exact length-bearing ALPN protocol selected for a NetConn; standalone AOT has no TLS provider and src/aot/xrt_net.h returns null"
+deletion_trigger = "never while the TLS engine owns session negotiation state; this is the generic provider query used by any ALPN-based protocol"
+
+[[leaf]]
+module = "net"
+symbol = "__TlsContextStorage"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_CTX_free(3) through the native-body destroy hook"
+ownership = "none"
+effect = "nothrow"
+provider = "an immutable private handle whose native body owns one OpenSSL SSL_CTX; server ALPN preference storage is attached to the SSL_CTX lifetime, and source TlsClientContext and TlsServerContext values retain the handle without exposing provider state"
+deletion_trigger = "when the language has a generic opaque-provider resource declaration that can bind a native destroy hook without a module-specific native class"
+
+[[leaf]]
+module = "net"
+symbol = "__newTlsClientContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_CTX_new(3), trust-store loading, optional certificate/private-key loading and SSL_CTX_set_alpn_protos(3)"
+ownership = "fresh"
+effect = "nothrow"
+provider = "OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths, chooses verification policy and encodes the protocol list into ALPN wire format"
+deletion_trigger = "never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider"
+
+[[leaf]]
+module = "net"
+symbol = "__newTlsServerContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_CTX_new(3), server certificate/private-key loading, optional peer trust-store loading and SSL_CTX_set_alpn_select_cb(3)"
+ownership = "fresh"
+effect = "nothrow"
+provider = "OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths, chooses verification policy and encodes the server-preference ALPN list, while the provider owns the wire bytes for the complete SSL_CTX lifetime"
+deletion_trigger = "never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider"
+
+[[leaf]]
+module = "net"
+symbol = "__connLastCode"
 class = "runtime_leaf"
 abi = "none; reads the portable XR_NETERR_* code cached on the handle by whichever call last failed"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory; the code is written by net_error_from_errno (VM) or xrt_net_error_from_errno (AOT), which normalise errno into one portable vocabulary"
+provider = "the Xray runtime's own connection-storage memory; the code is written by net_error_from_errno (VM) or xrt_net_error_from_errno (AOT), which normalise errno into one portable vocabulary"
 deletion_trigger = "when a failing net leaf returns its error code in its own result instead of leaving it on the handle for a second call to collect"
+
+[[leaf]]
+module = "net"
+symbol = "__listenerLastCode"
+class = "runtime_leaf"
+abi = "none; reads the portable XR_NETERR_* code cached on the listener by whichever call last failed"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own listener-storage memory; the code is written by net_error_from_errno (VM) or xrt_net_error_from_errno (AOT), which normalise errno into one portable vocabulary"
+deletion_trigger = "when a failing listener leaf returns its error code in its own result instead of leaving it on the handle for a second call to collect"
 
 [[leaf]]
 module = "net"
@@ -856,38 +702,48 @@ class = "runtime_leaf"
 abi = "none; reads a per-worker thread-local integer, used because a failed connect has no handle to attach the code to"
 ownership = "none"
 effect = "nothrow"
-provider = "an XR_THREAD_LOCAL slot in the Xray runtime. VM stdlib/net/net.c g_last_connect_code; AOT src/aot/xrt_net.h g_xrt_last_connect_code. Two separate slots with the same contract"
+provider = "an XR_THREAD_LOCAL slot in the Xray runtime. VM src/io/xnet_provider.c g_last_connect_code; AOT src/aot/xrt_net.h g_xrt_last_connect_code. Two separate slots with the same contract"
 deletion_trigger = "when net.__connectFd returns its error code in its own result, so no thread-local has to carry it between two calls"
 
 [[leaf]]
 module = "net"
-symbol = "__lastErrno"
+symbol = "__connLastErrno"
 class = "runtime_leaf"
 abi = "none; reads the errno snapshot cached on the handle at the point of failure, not the live errno"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
+provider = "the Xray runtime's own connection-storage memory. VM src/io/xnet_provider.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
 deletion_trigger = "when a failing net leaf returns the platform errno in its own result, so it does not have to be snapshotted onto the handle for a later call"
+
+[[leaf]]
+module = "net"
+symbol = "__listenerLastErrno"
+class = "runtime_leaf"
+abi = "none; reads the errno snapshot cached on the listener at the point of failure, not the live errno"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own listener-storage memory. VM src/io/xnet_provider.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
+deletion_trigger = "when a failing listener leaf returns the platform errno in its own result, so it does not have to be snapshotted onto the handle for a later call"
 
 [[leaf]]
 module = "net"
 symbol = "__listenFd"
 class = "host_abi_leaf"
-abi = "socket(2), setsockopt(2) SO_REUSEADDR, setsockopt(2) IPV6_V6ONLY=0 for dual stack, bind(2), listen(2), fcntl(2) F_SETFL, and getsockname(2) to read back a kernel-assigned port; the VM path also sets TCP_NOTSENT_LOWAT"
+abi = "socket(2), setsockopt(2) SO_REUSEADDR, setsockopt(2) IPV6_V6ONLY=0 for dual stack, bind(2), listen(2), fcntl(2) F_SETFL, and getsockname(2) to read back a kernel-assigned port"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel socket/bind/listen. VM stdlib/net/net.c -> stdlib/net/io.c xr_io_listen; AOT src/aot/xrt_net.h xrt_net_listen_fd. Equivalent behaviour, two implementations"
+provider = "kernel socket/bind/listen. VM src/io/xnet_provider.c delegates platform setup to the generic xr_socket_listen helper in src/coro/xsocket.c; AOT uses xrt_net_listen_fd in src/aot/xrt_net.h. Equivalent behaviour, two implementations"
 deletion_trigger = "when Xray source can issue the socket(2)/bind(2)/listen(2) sequence itself; the sequence is one atomic setup from the caller's point of view and cannot be usefully split first"
 
 [[leaf]]
 module = "net"
-symbol = "__nowMs"
-class = "host_abi_leaf"
-abi = "clock_gettime(2) CLOCK_MONOTONIC; on Windows QueryPerformanceCounter on the VM and GetTickCount64 on AOT"
+symbol = "__listenerPort"
+class = "runtime_leaf"
+abi = "none; reads the bound-port field of a runtime-owned listener handle"
 ownership = "none"
 effect = "nothrow"
-provider = "kernel clock via libc. VM stdlib/net/net.c -> src/os/os_time.h xr_time_monotonic_ns; AOT src/aot/xrt_net.h inlines clock_gettime. Equivalent on POSIX; different clock sources and resolutions on Windows"
-deletion_trigger = "when net.xr reads the monotonic clock through time.__monotonicNanos instead of its own copy, which needs the multi-module program authority that blockers/a-stdlib-multi-module-program-authority.md tracks"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_listener_port; AOT src/aot/xrt_net.h xrt_net_listener_port"
+deletion_trigger = "when the listener handle representation is declared in Xray, so the port cached after bind is an ordinary field read"
 
 [[leaf]]
 module = "net"
@@ -921,73 +777,53 @@ deletion_trigger = "when the socket handle's representation is declared in Xray,
 
 [[leaf]]
 module = "net"
-symbol = "__setDeadline"
+symbol = "__setDeadlineDirection"
 class = "runtime_leaf"
-abi = "none; writes both the read and the write deadline fields on the connection handle"
+abi = "none; writes the selected read, write, or both deadline fields on the connection handle"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_deadline; AOT src/aot/xrt_net.h xrt_net_set_deadline"
-deletion_trigger = "when the socket handle's representation is declared in Xray; this leaf is already only the pair of the two single-sided setters and would go with them"
-
-[[leaf]]
-module = "net"
-symbol = "__setReadDeadline"
-class = "runtime_leaf"
-abi = "none; writes the read-deadline field on the connection handle"
-ownership = "none"
-effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_read_deadline; AOT src/aot/xrt_net.h xrt_net_set_read_deadline"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_set_deadline_direction; AOT src/aot/xrt_net.h xrt_net_set_deadline_direction"
 deletion_trigger = "when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call"
 
 [[leaf]]
 module = "net"
-symbol = "__setWriteDeadline"
-class = "runtime_leaf"
-abi = "none; writes the write-deadline field on the connection handle"
-ownership = "none"
-effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_set_write_deadline; AOT src/aot/xrt_net.h xrt_net_set_write_deadline"
-deletion_trigger = "when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call"
-
-[[leaf]]
-module = "net"
-symbol = "__shutdown"
+symbol = "__shutdownDirection"
 class = "host_abi_leaf"
-abi = "shutdown(2) with SHUT_RDWR"
+abi = "shutdown(2) with SHUT_RD, SHUT_WR, or SHUT_RDWR selected by the primitive direction argument"
 ownership = "none"
 effect = "nothrow"
-provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_conn, which also records the errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown, which returns only a bool"
-deletion_trigger = "when Xray source can issue the shutdown(2) call itself; the leaf is already the minimal form of this boundary"
-
-[[leaf]]
-module = "net"
-symbol = "__shutdownRead"
-class = "host_abi_leaf"
-abi = "shutdown(2) with SHUT_RD"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_read; AOT src/aot/xrt_net.h xrt_net_shutdown_read"
-deletion_trigger = "when Xray source can issue the shutdown(2) call itself, at which point the three direction-specific leaves collapse into one call with a direction argument"
-
-[[leaf]]
-module = "net"
-symbol = "__shutdownWrite"
-class = "host_abi_leaf"
-abi = "shutdown(2) with SHUT_WR"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel shutdown(2). VM stdlib/net/net.c net_shutdown_write; AOT src/aot/xrt_net.h xrt_net_shutdown_write"
-deletion_trigger = "when Xray source can issue the shutdown(2) call itself, at which point the three direction-specific leaves collapse into one call with a direction argument"
+provider = "kernel shutdown(2). VM src/io/xnet_provider.c net_shutdown_direction records errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown_direction returns only a bool"
+deletion_trigger = "when Xray source can issue shutdown(2) itself; the public direction-specific API is already source-owned and this is the single remaining syscall boundary"
 
 [[leaf]]
 module = "net"
 symbol = "__tlsHandshake"
 class = "security_provider_leaf"
-abi = "OpenSSL SSL_new(3), SSL_set_fd(3), SSL_set_tlsext_host_name(3) for SNI, SSL_connect(3) (the client-side SSL_do_handshake), SSL_get_error(3), and SSL_shutdown(3)/SSL_free(3) plus close(2) on failure"
+abi = "OpenSSL SSL_CTX_set_alpn_protos(3), SSL_new(3), SSL_set_fd(3), SSL_set_tlsext_host_name(3) for SNI, SSL_connect(3) (the client-side SSL_do_handshake), SSL_get_error(3), and SSL_shutdown(3)/SSL_free(3) plus close(2) on failure"
 ownership = "none"
 effect = "suspends"
-provider = "OpenSSL, on the VM only (stdlib/net/tls.c xr_tls_conn_handshake_try; WANT_READ/WANT_WRITE park the coroutine on the netpoll). The standalone AOT runtime links no TLS engine and src/aot/xrt_net.h closes the connection and returns NETERR_TLS -- divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md"
+provider = "OpenSSL, on the VM only (src/io/xnet_provider.c configures the Xray-encoded ALPN offer before src/io/xtls_provider.c xr_tls_conn_handshake_try; WANT_READ/WANT_WRITE park the coroutine on the netpoll). The standalone AOT runtime links no TLS engine and src/aot/xrt_net.h closes the connection and returns NETERR_TLS -- divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md"
 deletion_trigger = "never on the security grounds alone: a TLS handshake reimplemented in Xray would move certificate validation and the record layer out of an audited provider. The leaf changes only when the provider changes, and it can narrow once both backends link the same one"
+
+[[leaf]]
+module = "net"
+symbol = "__tlsClientHandshakeWithContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_new(3), SNI and hostname verification setup, SSL_connect(3), SSL_get_error(3), plus the scheduler netpoll wait ABI"
+ownership = "none"
+effect = "suspends"
+provider = "the generic non-blocking NetConn TLS provider parameterized by an immutable TlsClientContext managed by Xray source"
+deletion_trigger = "never while OpenSSL owns client TLS handshakes; it may merge with the default-context leaf when both backends share one provider ABI"
+
+[[leaf]]
+module = "net"
+symbol = "__tlsServerHandshakeWithContext"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_new(3), SSL_accept(3), SSL_select_next_proto(3), SSL_get_error(3), plus the scheduler netpoll wait ABI"
+ownership = "none"
+effect = "suspends"
+provider = "the generic non-blocking NetConn TLS provider parameterized by an immutable TlsServerContext managed by Xray source; server ALPN selection follows the context's preference order"
+deletion_trigger = "never while OpenSSL owns server TLS handshakes; it remains the audited security-provider boundary"
 
 [[leaf]]
 module = "net"
@@ -996,8 +832,18 @@ class = "host_abi_leaf"
 abi = "socket(2) SOCK_DGRAM, inet_pton(3), bind(2) and fcntl(2) F_SETFL"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel socket/bind. VM stdlib/net/net.c net_udp_bind_handle; AOT src/aot/xrt_net.h xrt_net_udp_bind. Equivalent behaviour, two implementations"
+provider = "kernel socket/bind. VM src/io/xnet_provider.c net_udp_bind_handle; AOT src/aot/xrt_net.h xrt_net_udp_bind. Equivalent behaviour, two implementations"
 deletion_trigger = "when Xray source can issue the socket(2)/bind(2) pair itself; the setup is atomic from the caller's point of view and has no smaller form"
+
+[[leaf]]
+module = "net"
+symbol = "__udpMulticastBind"
+class = "host_abi_leaf"
+abi = "socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP"
+ownership = "fresh"
+effect = "nothrow"
+provider = "kernel multicast socket setup. VM src/io/xnet_provider.c net_udp_multicast_bind_handle and AOT src/aot/xrt_net.h xrt_net_udp_multicast_bind perform the same generic socket construction; net.xr owns IPv4 multicast address validation and option ranges"
+deletion_trigger = "when Xray source can issue the multicast socket setup calls itself; the leaf is generic net host ABI and contains no cluster protocol policy"
 
 [[leaf]]
 module = "net"
@@ -1016,7 +862,7 @@ class = "runtime_leaf"
 abi = "none; reads the sender-port field on the handle. The ntohs(3) that produced it ran inside net.__udpRecvInto, not here"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM stdlib/net/net.c net_udp_from_port; AOT src/aot/xrt_net.h xrt_net_udp_from_port"
+provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_udp_from_port; AOT src/aot/xrt_net.h xrt_net_udp_from_port"
 deletion_trigger = "when net.__udpRecvInto returns the sender port in its own result, so it does not have to be parked on the handle for a second call to collect"
 
 [[leaf]]
@@ -1026,7 +872,7 @@ class = "host_abi_leaf"
 abi = "recvfrom(2), then inet_ntop(3) and ntohs(3) to record the sender"
 ownership = "none"
 effect = "suspends"
-provider = "kernel recvfrom; the readability wait is the Xray netpoll on the VM and select(2) on AOT. VM stdlib/net/net.c net_udp_recv_step; AOT src/aot/xrt_net.h xrt_net_udp_recv_into"
+provider = "kernel recvfrom; the readability wait is the Xray netpoll on the VM and select(2) on AOT. VM src/io/xnet_provider.c net_udp_recv_step; AOT src/aot/xrt_net.h xrt_net_udp_recv_into"
 deletion_trigger = "when Xray source can issue the recvfrom(2) call itself and await readability through the netpoll; the sender formatting would move to net.xr with it"
 
 [[leaf]]
@@ -1062,33 +908,13 @@ deletion_trigger = "when Xray source can issue the write(2) call itself and awai
 
 [[leaf]]
 module = "os"
-symbol = "__ExecResult"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def, fields stdout/stderr/exitCode). It is the return type of os.__exec and os.__spawn. VM instantiates it through xr_stdlib_record_class_get(X, \"os\", \"__ExecResult\"); AOT builds an anonymous struct object instead"
-deletion_trigger = "when os.__exec and os.__spawn are both deleted, or when a .def entry can declare its return as a type os.xr owns, so the three process-result fields stop needing a native record class"
-
-[[leaf]]
-module = "os"
 symbol = "__arch"
 class = "build_identity_leaf"
 abi = "none; a compile-time constant string chosen by an #if ladder over XR_ARCH_*"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the preprocessor. VM stdlib/os/os.c get_arch; AOT src/aot/xrt_os.h xrt_os_arch_cstr. Two copies of the same ladder; neither calls uname(2) or sysctl(3)"
+provider = "the preprocessor. VM stdlib/os/os.c os_arch; AOT src/aot/xrt_os.h xrt_os_arch_cstr. Two copies of the same ladder; neither calls uname(2) or sysctl(3)"
 deletion_trigger = "when the compiler exposes the target architecture to Xray source as a constant, at which point os.xr can name it without a call"
-
-[[leaf]]
-module = "os"
-symbol = "__clock"
-class = "host_abi_leaf"
-abi = "clock(3), divided by CLOCKS_PER_SEC"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/os/os.c os_clock; AOT src/aot/xrt_os.h xrt_os_clock. One line each, same entry point"
-deletion_trigger = "when os.xr reads process CPU time through time.__cpuNanos instead of keeping its own coarser reading, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
 
 [[leaf]]
 module = "os"
@@ -1097,8 +923,8 @@ class = "host_abi_leaf"
 abi = "sysconf(3) _SC_NPROCESSORS_ONLN; Win32 GetSystemInfo"
 ownership = "none"
 effect = "nothrow"
-provider = "libc and the Win32 API. VM stdlib/os/os.c os_cpuCount; AOT src/aot/xrt_os.h xrt_os_cpu_count. Two implementations, same entry point"
-deletion_trigger = "when Xray source can issue the sysconf(3) call itself; the leaf is already the minimal form of this boundary"
+provider = "libc and the Win32 API. VM stdlib/os/os.c os_cpuCount; AOT src/aot/xrt_os.h xrt_os_cpu_count. Both return the raw host count; os.xr alone normalizes non-positive answers to one"
+deletion_trigger = "when Xray source can issue the sysconf(3) call itself; normalization already lives in os.xr and the leaf is otherwise minimal"
 
 [[leaf]]
 module = "os"
@@ -1109,16 +935,6 @@ ownership = "fresh"
 effect = "nothrow"
 provider = "the C library's process-global environment block. VM stdlib/os/os.c; AOT src/aot/xrt_os.h. The two agree on POSIX and reach different Win32 entry points"
 deletion_trigger = "when os.xr can iterate the environment over a smaller pair of leaves (a count and an index read) instead of receiving the whole block flattened by C, and the two Windows spellings are reconciled"
-
-[[leaf]]
-module = "os"
-symbol = "__exec"
-class = "host_abi_leaf"
-abi = "pipe(2) twice, fork(2), dup2(2), fcntl(2) O_NONBLOCK, execl(3) of \"/bin/sh -c\", poll(2), read(2), waitpid(2) and close(2); Win32 _popen(3)/_pclose(3)"
-ownership = "fresh"
-effect = "nothrow"
-provider = "kernel process and pipe syscalls. VM stdlib/os/os.c read_exec_pipes; AOT src/aot/xrt_os.h xrt_os_read_exec_pipes. Line-for-line equivalent, two separate copies"
-deletion_trigger = "when os.xr can build this out of sys.Process -- which already has the spawn, the pipes and the wait as separate leaves with AOT bindings -- so the drain loop and the shell invocation become Xray code; that needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
 
 [[leaf]]
 module = "os"
@@ -1148,7 +964,7 @@ abi = "getcwd(3); Win32 GetCurrentDirectoryA"
 ownership = "fresh"
 effect = "nothrow"
 provider = "libc. VM stdlib/os/os.c -> src/os/unix/fs_unix.c xr_fs_getcwd; AOT src/aot/xrt_os.h calls getcwd directly, because it does not link fs_unix.c"
-deletion_trigger = "when os.xr reads the working directory through io.__cwd instead of keeping a second leaf for the same call, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
+deletion_trigger = "when Xray source can issue the platform working-directory query directly. os is the sole native owner today; io.cwd composes os.getcwd instead of carrying a duplicate leaf"
 
 [[leaf]]
 module = "os"
@@ -1194,11 +1010,11 @@ deletion_trigger = "when Xray source can issue the gethostname(2) call itself, a
 module = "os"
 symbol = "__kill"
 class = "host_abi_leaf"
-abi = "kill(2); the one-argument arity defaults the signal to SIGTERM. Windows does not support it and both backends answer false"
+abi = "kill(2); Windows does not support it and both backends answer false"
 ownership = "none"
 effect = "nothrow"
-provider = "the kernel. Two .def entries (argc 1 and argc 2) share one VM symbol os_kill, which picks the default from argc; AOT splits them into xrt_os_kill and xrt_os_kill_signal"
-deletion_trigger = "when Xray source can issue the kill(2) call itself, at which point the SIGTERM default becomes an ordinary default argument in os.xr and the two arities collapse into one"
+provider = "the kernel. One exact two-argument .def entry reaches VM os_kill and AOT xrt_os_kill_signal; the SIGTERM default exists only on the public os.xr function"
+deletion_trigger = "when Xray source can issue the kill(2) call itself; the leaf is already the minimal exact-arity boundary"
 
 [[leaf]]
 module = "os"
@@ -1217,7 +1033,7 @@ class = "build_identity_leaf"
 abi = "none; a compile-time constant string chosen by an #if ladder over XR_OS_*"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the preprocessor. VM stdlib/os/os.c get_platform; AOT src/aot/xrt_os.h xrt_os_platform_cstr. Two copies of the same ladder; neither queries the host. os.xr derives sep() and eol() from this value rather than asking again"
+provider = "the preprocessor. VM stdlib/os/os.c os_platform; AOT src/aot/xrt_os.h xrt_os_platform_cstr. Two copies of the same ladder; neither queries the host. os.xr derives sep() and eol() from this value rather than asking again"
 deletion_trigger = "when the compiler exposes the target platform to Xray source as a constant, at which point os.xr can name it without a call"
 
 [[leaf]]
@@ -1239,26 +1055,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "the C library's process-global environment. VM stdlib/os/os.c os_setenv; AOT src/aot/xrt_os.h xrt_os_setenv. The single-write AOT path leaves the Win32 block stale"
 deletion_trigger = "when Xray source can write the process environment itself, and the Windows CRT-versus-Win32 split is resolved so one store is authoritative"
-
-[[leaf]]
-module = "os"
-symbol = "__sleep"
-class = "runtime_leaf"
-abi = "none on the VM: the coroutine is parked on the scheduler's timer wheel and no host call is made. On AOT, nanosleep(2) retried on EINTR; Win32 Sleep"
-ownership = "none"
-effect = "suspends"
-provider = "the Xray scheduler on the VM (stdlib/os/os.c os_sleep is a yieldable C function over xr_yield_for_timeout, so the worker stays free); the kernel on AOT (src/aot/xrt_os.h xrt_os_sleep blocks the OS thread). This is the widest VM/AOT split in the module"
-deletion_trigger = "when the scheduler's timer wheel is a surface Xray source can await, so a sleep is an ordinary suspension point; the AOT half additionally has to stop blocking its worker thread, or the same program has two concurrency behaviours"
-
-[[leaf]]
-module = "os"
-symbol = "__spawn"
-class = "host_abi_leaf"
-abi = "pipe(2) twice, fork(2), dup2(2), execvp(3), poll(2) and waitpid(2); Win32 CreatePipe, CreateProcessA, PeekNamedPipe and WaitForSingleObject"
-ownership = "fresh"
-effect = "nothrow"
-provider = "kernel process and pipe syscalls, on the VM only (stdlib/os/os.c os_spawn). The .def entry carries no `aot:` binding and sets aot_direct false, so the AOT method table has no row for it and the code generator fails a reachable call with \"unsupported AOT stdlib call 'os.__spawn'\" -- it does not fall back to the VM"
-deletion_trigger = "when os.xr routes its callers to sys.Process.spawn, which already offers a strict superset (cwd, env, stdio redirection, detached) and does have an AOT binding. No .xr file in the repository calls os.spawn today, so this leaf can be deleted as soon as the public os.spawn wrapper is redirected or removed"
 
 [[leaf]]
 module = "os"
@@ -1321,7 +1117,7 @@ provider = "the kernel. VM stdlib/os/os.c os_uptime; AOT src/aot/xrt_os.h xrt_os
 deletion_trigger = "when Xray source can issue the boot-time query itself; the boot-time-to-uptime subtraction could move to os.xr first, but only once the leaf reports the boot instant rather than the difference"
 
 # ============================================================================
-# regex -- handle allocation plus three lookups owned elsewhere
+# regex -- Unicode table ABI leaves
 # ============================================================================
 #
 # The engine is no longer here. Parsing, compilation, NFA simulation and the
@@ -1330,38 +1126,8 @@ deletion_trigger = "when Xray source can issue the boot-time query itself; the b
 # are deleted, and so is the DFA, whose unsynchronised shared cache was a data
 # race on any Regex shared between coroutines.
 #
-# What is left is two handle constructors and three forwards to definitions
-# other files own. None of them decides anything about matching.
-
-[[leaf]]
-module = "regex"
-symbol = "__regexNew"
-class = "runtime_leaf"
-abi = "none; allocates one XrObjectInstance, retains the borrowed pattern into field 0, stores scalar flags in field 1, and transfers the fresh empty program array into field 2"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex_binding.c make_regex. Regex is the VM native handle required by XI_REGEX_COMPILE. The returned instance owns one retained pattern reference and the creator reference of the empty program array; ordinary instance destruction releases both fields. regex.xr alone compiles and fills the program array"
-deletion_trigger = "Regex has to stay a native class for as long as the regex literal syntax exists: /pat/flags lowers to XI_REGEX_COMPILE with its result type pinned to type_regex in src/ir/xi_lower_expr.c:11349. The leaf goes when a literal can lower to a call of an Xray constructor instead, at which point Regex can be an ordinary Xray class"
-
-[[leaf]]
-module = "regex"
-symbol = "__regexMatchNew"
-class = "runtime_leaf"
-abi = "none; allocates one XrObjectInstance, stores scalar start and end fields, and retains the borrowed text and groups into fields 2 and 3"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex_binding.c regex_match_new. Every value is computed by regex.xr. The returned instance owns the retained text and groups references, and ordinary instance destruction releases both fields"
-deletion_trigger = "goes when an .xr body can construct the native RegexMatch class, or when RegexMatch becomes an ordinary Xray class; no backend implementation owns this construction outside the VM binding"
-
-[[leaf]]
-module = "regex"
-symbol = "__regexParseFlags"
-class = "native_engine_leaf"
-abi = "none; a three-character scan over the flag string"
-ownership = "none"
-effect = "nothrow"
-provider = "src/shared/xr_regex_core.h xr_regex_core_parse_flags. Unknown flag characters are ignored, which is long-standing behaviour"
-deletion_trigger = "rewriting it would fork a shared definition: the regex literal path parses its flags in C (xr_regex_compile_literal, reached from the OP_REGEX_COMPILE bytecode) while regex.compile() parses them through this leaf, and an Xray copy would be free to drift from the C one. It goes when the literal path can reach Xray, which is the same condition that frees __regexNew"
+# Regex construction, flag parsing and the compiled-program cache are source
+# declarations in regex.xr. Only Unicode table queries cross the native ABI.
 
 [[leaf]]
 module = "regex"
@@ -1394,22 +1160,12 @@ deletion_trigger = "rewriting it would fork a shared definition: several hundred
 
 [[leaf]]
 module = "runtime"
-symbol = "__RuntimeStats"
-class = "native_record_shape_leaf"
-abi = "none; a record layout, not a call"
-ownership = "none"
-effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def, exact shape with liveBytes, liveObjects, finalizerCount, blocks, freeBlocks and fullBlocks). VM instantiates the generated record class; AOT interns an object shape in the code generator and sets the six fields positionally. The field order agrees; the shape carriers do not"
-deletion_trigger = "when runtime.__stats is deleted, or when a .def entry can declare its return as a type runtime.xr owns, so the six counters stop needing a native record shape"
-
-[[leaf]]
-module = "runtime"
 symbol = "__liveBytes"
 class = "runtime_leaf"
 abi = "none; reads a live-byte counter"
 ownership = "none"
 effect = "nothrow"
-provider = "the reclamation domain. The VM reads xr_coro_ensure_heap(coro)->totalbytes; AOT (src/coro/xaot_runtime.c xr_aot_runtime_live_bytes) prefers the execution arena's live_bytes and falls back to that same coroutine-heap counter only when the arena is absent, so the two are not always the same counter"
+provider = "the reclamation domain. The VM reads the TLS-active execution allocation context's local_heap->totalbytes; AOT (src/coro/xaot_runtime.c xr_aot_runtime_live_bytes) prefers the execution arena's live_bytes and falls back to its coroutine-heap counter when the arena is absent"
 deletion_trigger = "when the reclamation domain's counters are readable from Xray source, which needs the runtime to expose the domain as a value rather than as ambient per-coroutine state"
 
 [[leaf]]
@@ -1420,6 +1176,16 @@ abi = "none; reads a live-object counter"
 ownership = "none"
 effect = "nothrow"
 provider = "the reclamation domain. The VM reads heap->object_count; AOT (src/coro/xaot_runtime.c xr_aot_runtime_live_objects) prefers the execution arena's live_objects with the same fallback as __liveBytes"
+deletion_trigger = "when the reclamation domain's counters are readable from Xray source, which needs the runtime to expose the domain as a value rather than as ambient per-coroutine state"
+
+[[leaf]]
+module = "runtime"
+symbol = "__finalizerCount"
+class = "runtime_leaf"
+abi = "none; reads a registered-finalizer counter"
+ownership = "none"
+effect = "nothrow"
+provider = "the reclamation domain. The VM reads heap->finalizer_count; AOT (src/coro/xaot_runtime.c xr_aot_runtime_finalizer_count) prefers the execution arena's finalizer_count with the same fallback as __liveBytes"
 deletion_trigger = "when the reclamation domain's counters are readable from Xray source, which needs the runtime to expose the domain as a value rather than as ambient per-coroutine state"
 
 [[leaf]]
@@ -1442,25 +1208,35 @@ effect = "nothrow"
 provider = "src/runtime/mem/xsystem_heap.c xr_sysheap_static_alloc_bytes_total. Both backends call it; the AOT wrapper forwards directly"
 deletion_trigger = "when the module-static arena's counter is readable from Xray source; it is process-wide state with no coroutine-local form, so it needs a runtime surface of its own"
 
-[[leaf]]
-module = "runtime"
-symbol = "__stats"
-class = "runtime_leaf"
-abi = "none; one pass over the reclamation domain's counters"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the reclamation domain. The VM reads totalbytes, object_count and finalizer_count and then xr_region_get_stats for the block counts; AOT (src/coro/xaot_runtime.c xr_aot_runtime_info) fills only the first three from the execution arena and leaves blocks, freeBlocks and fullBlocks at zero unless it takes the coroutine-heap fallback"
-deletion_trigger = "when the individual counters are readable from Xray source, so runtime.xr can assemble the snapshot itself and choose which fields it wants -- which also removes the AOT path's three permanently-zero fields"
-
 # ============================================================================
 # sys -- processes, pipes, signals and dynamic libraries
 # ============================================================================
 #
 # As with os, the AOT halves are freestanding `static inline` helpers in
-# `src/aot/xrt_sys.h` that do not link `src/os/`. Four leaves here park the
+# `src/aot/xrt_sys.h` that do not link `src/os/`. Two leaves here park the
 # coroutine on the VM and block the OS thread on AOT; that is recorded per
 # leaf, because a leaf with two concurrency behaviours cannot be reduced to one
 # Xray body until they agree.
+
+[[leaf]]
+module = "sys"
+symbol = "__threadYield"
+class = "host_abi_leaf"
+abi = "sched_yield(2); Win32 SwitchToThread"
+ownership = "none"
+effect = "nothrow"
+provider = "the host OS scheduler through src/os/os_thread.h"
+deletion_trigger = "none while yielding an OS thread remains a host operation"
+
+[[leaf]]
+module = "sys"
+symbol = "__pinToCpu"
+class = "host_abi_leaf"
+abi = "pthread_setaffinity_np(3); Win32 SetThreadAffinityMask"
+ownership = "none"
+effect = "nothrow"
+provider = "the host OS affinity API through src/os/os_thread.h"
+deletion_trigger = "none while thread affinity remains an operating-system capability"
 
 [[leaf]]
 module = "sys"
@@ -1509,18 +1285,8 @@ class = "host_abi_leaf"
 abi = "sigaction(2) with sigemptyset(3), restricted to SIGTERM and SIGINT; Win32 signal(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "the kernel installs the handler, but delivery is the Xray runtime's. The VM spawns a dedicated C-function coroutine that polls the pending bits on the timer wheel every 10 ms and calls the closure; AOT stores the closure in a global slot whose pending bits are only consumed inside threadYield, sleepMs and pinToCpu, so an AOT program that calls none of those may never run the handler"
+provider = "the kernel installs the handler, but delivery is the Xray runtime's. The VM spawns a dedicated C-function coroutine that polls the pending bits on the timer wheel every 10 ms and calls the closure; AOT stores the closure in a global slot whose pending bits are consumed only inside threadYield, so an AOT program that never yields the OS thread may never run the handler"
 deletion_trigger = "when signal delivery is a scheduler surface both backends share -- a channel or an awaitable the runtime posts to -- so sys.xr can receive signals instead of registering a C-side callback"
-
-[[leaf]]
-module = "sys"
-symbol = "__osMutexNew"
-class = "host_abi_leaf"
-abi = "pthread_mutex_init(3); Win32 InitializeSRWLock"
-ownership = "fresh"
-effect = "nothrow"
-provider = "the pthreads implementation in libc. VM stdlib/sys/sys.c builds an instance whose native body calls src/os/unix/thread_unix.c xr_mutex_init; AOT src/aot/xrt_sys.h allocates a refcounted cell and calls pthread_mutex_init directly. Same entry point, different host objects"
-deletion_trigger = "when the runtime offers an OS mutex as a typed handle Xray source can hold, so the initialisation and the object it lives in are not decided inside one native call"
 
 [[leaf]]
 module = "sys"
@@ -1594,16 +1360,6 @@ deletion_trigger = "when Xray source can issue the waitpid(2) call itself; the n
 
 [[leaf]]
 module = "sys"
-symbol = "__processWait"
-class = "host_abi_leaf"
-abi = "waitpid(2); the VM normally passes WNOHANG and polls, while AOT blocks in a plain waitpid. Win32 _cwait"
-ownership = "none"
-effect = "suspends"
-provider = "the kernel wait, plus the Xray scheduler on the VM: stdlib/sys/sys.c loops over xr_proc_try_wait and yields for 1 ms, falling back to a blocking wait only where it cannot yield. AOT src/aot/xrt_sys.h blocks the worker for the child's lifetime -- divergence 4 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md"
-deletion_trigger = "when child exit is an awaitable the scheduler posts to on both backends, so sys.xr can write the wait as a suspension over __processTryWait instead of the C side choosing between polling and blocking"
-
-[[leaf]]
-module = "sys"
 symbol = "__threadLocalAlive"
 class = "runtime_leaf"
 abi = "none; a lookup in the runtime's live-id table under a spinlock, whose backoff uses sched_yield(3) or Sleep(0)"
@@ -1628,6 +1384,16 @@ deletion_trigger = "when the thread-local registry is one surface both backends 
 #
 # All four leaves read a clock. `time.__utcOffsetAt` is the only leaf in the
 # whole allowlist whose VM and AOT halves call the same function.
+
+[[leaf]]
+module = "time"
+symbol = "__sleep"
+class = "runtime_leaf"
+abi = "Xray scheduler timer-wheel suspension and coroutine resumption"
+ownership = "none"
+effect = "suspends"
+provider = "the runtime timer wheel; time.xr owns validation and maximum-duration policy"
+deletion_trigger = "none while source-level sleep requires scheduler integration"
 
 [[leaf]]
 module = "time"

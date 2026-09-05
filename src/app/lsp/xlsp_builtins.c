@@ -122,8 +122,6 @@ static XrType *create_type_for_builtin(XlspBuiltinType type) {
             return xr_type_new_json(NULL);
         case XLSP_TYPE_CHANNEL:
             return xr_type_new_channel(NULL, placeholder);
-        case XLSP_TYPE_REGEX:
-            return xr_type_new_regex(NULL);
         case XLSP_TYPE_BIGINT:
             return xr_type_new_bigint(NULL);
         case XLSP_TYPE_STRINGBUILDER:
@@ -167,8 +165,10 @@ static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec
         return;
     }
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_STRING:
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+        case XA_BUILTIN_RECEIVER_RANGE:
             xlsp_type_label(type, buf, buf_size);
             return;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
@@ -213,6 +213,9 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             break;
         case XA_BUILTIN_TYPE_STRING:
             snprintf(buf, buf_size, "string");
+            break;
+        case XA_BUILTIN_TYPE_ARRAY_OF_STRING:
+            snprintf(buf, buf_size, "Array<string>");
             break;
         case XA_BUILTIN_TYPE_U8:
             snprintf(buf, buf_size, "u8");
@@ -277,6 +280,16 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
             snprintf(buf, buf_size, "Iterator<(i64, %s)>", elem);
             break;
+        case XA_BUILTIN_TYPE_ITERATOR_OF_MAP_ENTRY_TUPLE: {
+            const char *key = receiver && receiver->kind == XR_KIND_MAP
+                                  ? xr_type_to_string(receiver->map.key_type)
+                                  : NULL;
+            const char *value = receiver && receiver->kind == XR_KIND_MAP
+                                    ? xr_type_to_string(receiver->map.value_type)
+                                    : NULL;
+            snprintf(buf, buf_size, "Iterator<(%s, %s)>", key ? key : "?", value ? value : "?");
+            break;
+        }
         case XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
             snprintf(buf, buf_size, "Array<(i64, %s)>", elem);
@@ -465,8 +478,6 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
         return XLSP_TYPE_BIGINT;
     if (strcmp(name, TYPE_NAME_STRINGBUILDER) == 0)
         return XLSP_TYPE_STRINGBUILDER;
-    if (strcmp(name, TYPE_NAME_REGEX) == 0)
-        return XLSP_TYPE_REGEX;
     if (strcmp(name, TYPE_NAME_PANIC_INFO) == 0)
         return XLSP_TYPE_PANIC_INFO;
     if (strcmp(name, TYPE_NAME_COROUTINE) == 0)
@@ -627,8 +638,6 @@ XlspBuiltinType xlsp_infer_literal_type(const char *text) {
         return XLSP_TYPE_BIGINT;
     if (strncmp(text, TYPE_NAME_STRINGBUILDER, 13) == 0)
         return XLSP_TYPE_STRINGBUILDER;
-    if (strncmp(text, TYPE_NAME_REGEX, 5) == 0)
-        return XLSP_TYPE_REGEX;
 
     return XLSP_TYPE_UNRESOLVED;
 }

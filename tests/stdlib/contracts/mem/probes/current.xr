@@ -18,15 +18,17 @@ fn run() {
     print("{\"case\":\"alloc-bulk-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"bytes\":\"copied-and-moved\"}}")
 
     var owner = mem.allocZeroed(4)
-    {
-        var view: Slice<u8> = owner.asMutBytes()
-        view[0] = 42
-        view[3] = 99
+    unsafe {
+        mem.withSliceMut<u8>(owner.borrowPtr(), len(owner), ref owner,
+            fn(view: ref Slice<u8>) {
+                view[0] = 42
+                view[3] = 99
+            })
     }
     assert(owner.resize(12))
     assert(len(owner) == 12)
     {
-        var view: Slice<u8> = owner.asBytes()
+        var view: const Slice<u8> = owner.asBytes()
         assert(view[0] == 42)
         assert(view[3] == 99)
     }

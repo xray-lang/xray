@@ -129,6 +129,11 @@ struct XiModule;
 struct XrModuleGraph;
 struct XaAnalyzer;
 struct XrModuleIdentityAuthority;
+typedef struct XrCompiledModuleGraph {
+    struct XiModule **modules;
+    struct XrProto **units;
+    int count;
+} XrCompiledModuleGraph;
 XR_FUNC XrProto *xr_compile_ast_with_source(struct XrCompilerSession *session, struct AstNode *ast,
                                             const char *source_file,
                                             const struct XrModuleIdentityAuthority *authority);
@@ -138,6 +143,15 @@ XR_FUNC XrProto *xr_compile_ast_in_graph(struct XrCompilerSession *session,
                                          struct XiModule **graph_modules, int graph_module_count,
                                          struct XiModule **out_module,
                                          const struct XrModuleIdentityAuthority *authority);
+XR_FUNC XrProto *xr_compile_source_in_graph(
+    struct XrCompilerSession *session, struct XaAnalyzer *shared_analyzer, const char *source,
+    const char *source_file, const struct XrModuleGraph *graph, struct XiModule **graph_modules,
+    int graph_module_count, struct XiModule **out_module,
+    const struct XrModuleIdentityAuthority *authority);
+XR_FUNC bool xr_compile_module_graph_dependencies(
+    struct XrCompilerSession *session, struct XaAnalyzer *shared_analyzer,
+    const struct XrModuleGraph *graph, XrCompiledModuleGraph *out);
+XR_FUNC void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation);
 XR_FUNC XrProto *xr_compile_source_with_path(struct XrCompilerSession *session, const char *source,
                                              const char *source_file,
                                              const struct XrModuleIdentityAuthority *authority);
@@ -145,6 +159,10 @@ XR_FUNC int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
                                 const struct XrModuleIdentityAuthority *authority);
 XR_FUNC int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename,
                               const struct XrModuleIdentityAuthority *authority);
+XR_FUNC int xr_isolate_dofile_in_graph(
+    XrVMRuntime *isolate, const char *filename,
+    const struct XrModuleIdentityAuthority *authority, struct XaAnalyzer *shared_analyzer,
+    const struct XrModuleGraph *graph, struct XiModule **graph_modules, int graph_module_count);
 XR_FUNC int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename,
                                     const struct XrModuleIdentityAuthority *authority,
                                     void **out_proto);

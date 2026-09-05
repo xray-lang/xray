@@ -6,7 +6,7 @@ var fixed = parseRequestText(
     "POST /submit HTTP/1.1\r\nContent-Length: 5\r\nX-Trace: one\r\n\r\nhelloextra"
 )!
 print(fixed.head.method)
-print(fixed.head.target)
+print(fixed.head.requestTarget)
 print(fixed.body)
 print(fixed.consumedBytes)
 print(fixed.getHeader("x-trace")!)

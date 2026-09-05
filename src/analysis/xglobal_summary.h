@@ -69,9 +69,12 @@ enum {
      * 43: constructions of a class without a declared constructor carry their
      * own callsite kind instead of the open closure kind.
      * 44: nested bodies publish their frozen lexical-parent body identity.
+     * 48: fresh native storage results participate in backend authority.
+     * 49: builtin runtime methods publish frozen method authority.
      * 53: compiler-owned target queries publish stable source occurrence and
-     * exact result contracts. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 53,
+     * exact result contracts.
+     * 54: combines the independent schema 49 and schema 53 lineages. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 54,
 };
 
 /* Return ownership as published to the whole-program evidence.

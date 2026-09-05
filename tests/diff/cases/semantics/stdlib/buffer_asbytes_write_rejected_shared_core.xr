@@ -1,12 +1,15 @@
 import mem
 
 fn main() {
-    var buffer = mem.allocZeroed(1)
-    {
-        var bytes: Slice<u8> = buffer.asMutBytes()
-        bytes[0] = 7
+    var writable = mem.allocZeroed(1)
+    unsafe {
+        mem.withSliceMut<u8>(writable.borrowPtr(), len(writable), ref writable,
+            fn(bytes: ref Slice<u8>) {
+                bytes[0] = 7
+            })
     }
-    var readonly: Slice<u8> = buffer.asBytes()
+    var readonlyBuffer = mem.allocZeroed(1)
+    var readonly: const Slice<u8> = readonlyBuffer.asBytes()
     readonly[0] = 9
     print("unreachable")
 }

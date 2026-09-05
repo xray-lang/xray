@@ -102,6 +102,15 @@ int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx) {
     return heap ? (int64_t) heap->object_count : 0;
 }
 
+int64_t xr_aot_runtime_finalizer_count(const XrAotContext *ctx) {
+    const XrAotCoroState *state = aot_context_state(ctx);
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    if (ops && ops->execution_arena_finalizer_count && state->execution_arena)
+        return ops->execution_arena_finalizer_count(state->execution_arena);
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    return heap ? (int64_t) heap->finalizer_count : 0;
+}
+
 /* Process-global by design (see xsystem_heap.h): the counters are the same
  * ones the VM natives read, so the two backends report identical semantics. */
 int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx) {
@@ -112,32 +121,6 @@ int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx) {
 int64_t xr_aot_runtime_static_bytes(const XrAotContext *ctx) {
     (void) ctx;
     return (int64_t) xr_sysheap_static_alloc_bytes_total();
-}
-
-XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
-    XrAotRuntimeInfo info = {0};
-    const XrAotCoroState *state = aot_context_state(ctx);
-    const XrAotValueOps *ops = aot_state_value_ops(state);
-    if (ops && ops->execution_arena_live_bytes && ops->execution_arena_live_objects &&
-        state->execution_arena) {
-        info.live_bytes = ops->execution_arena_live_bytes(state->execution_arena);
-        info.live_objects = ops->execution_arena_live_objects(state->execution_arena);
-        if (ops->execution_arena_finalizer_count)
-            info.finalizer_count = ops->execution_arena_finalizer_count(state->execution_arena);
-        return info;
-    }
-    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
-    if (!heap)
-        return info;
-    XrRegionStats stats = {0};
-    xr_region_get_stats(&heap->region, &stats);
-    info.live_bytes = heap->totalbytes;
-    info.live_objects = (int64_t) heap->object_count;
-    info.finalizer_count = (int64_t) heap->finalizer_count;
-    info.blocks = (int64_t) stats.total_blocks;
-    info.free_blocks = (int64_t) stats.free_blocks;
-    info.full_blocks = (int64_t) stats.full_blocks;
-    return info;
 }
 
 static void aot_drop_coro_locals(XrCoroutine *coro, XrAotRuntime *runtime) {
@@ -711,10 +694,6 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     runtime->value_ops = local_cfg.value_ops;
     runtime->coro_locals = XR_NULL_VAL;
     atomic_flag_clear_explicit(&runtime->coro_locals_lock, memory_order_relaxed);
-    for (uint32_t i = 0; i < XR_AOT_SERVICE_SLOT_COUNT; i++) {
-        xr_mutex_init(&runtime->service_slots[i].lock);
-        xr_cond_init(&runtime->service_slots[i].drained);
-    }
     for (int i = 0; i < XR_USER_GLOBALS_START; i++)
         runtime->builtins[i] = XR_NULL_VAL;
 
@@ -753,8 +732,6 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         return;
     XrAotRuntime *expected = runtime;
     atomic_compare_exchange_strong(&g_aot_runtime_current, &expected, NULL);
-    for (uint32_t i = 0; i < XR_AOT_SERVICE_SLOT_COUNT; i++)
-        (void) xr_aot_runtime_service_remove(runtime, i);
     if (runtime->root_coro) {
         xr_coro_destroy(runtime->root_coro);
         runtime->root_coro = NULL;
@@ -788,10 +765,6 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         xr_runtime_core_delete(runtime->core);
         runtime->core = NULL;
     }
-    for (uint32_t i = 0; i < XR_AOT_SERVICE_SLOT_COUNT; i++) {
-        xr_cond_destroy(&runtime->service_slots[i].drained);
-        xr_mutex_destroy(&runtime->service_slots[i].lock);
-    }
     xr_free(runtime);
 }
 
@@ -809,67 +782,6 @@ XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime) {
 
 const XrAotValueOps *xr_aot_runtime_value_ops(XrAotRuntime *runtime) {
     return runtime ? runtime->value_ops : NULL;
-}
-
-bool xr_aot_runtime_service_install(XrAotRuntime *runtime, uint32_t slot, void *service,
-                                    XrAotServiceDestroyFn destroy) {
-    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT || !service || !destroy)
-        return false;
-    XrAotServiceSlot *entry = &runtime->service_slots[slot];
-    xr_mutex_lock(&entry->lock);
-    bool installed = !entry->service && !entry->closing;
-    if (installed) {
-        entry->service = service;
-        entry->destroy = destroy;
-    }
-    xr_mutex_unlock(&entry->lock);
-    return installed;
-}
-
-void *xr_aot_runtime_service_acquire(XrAotRuntime *runtime, uint32_t slot) {
-    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT)
-        return NULL;
-    XrAotServiceSlot *entry = &runtime->service_slots[slot];
-    xr_mutex_lock(&entry->lock);
-    void *service = !entry->closing ? entry->service : NULL;
-    if (service)
-        entry->active++;
-    xr_mutex_unlock(&entry->lock);
-    return service;
-}
-
-void xr_aot_runtime_service_release(XrAotRuntime *runtime, uint32_t slot) {
-    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT)
-        return;
-    XrAotServiceSlot *entry = &runtime->service_slots[slot];
-    xr_mutex_lock(&entry->lock);
-    XR_CHECK(entry->active > 0, "AOT service release without an active lease");
-    entry->active--;
-    if (entry->closing && entry->active == 0)
-        xr_cond_broadcast(&entry->drained);
-    xr_mutex_unlock(&entry->lock);
-}
-
-bool xr_aot_runtime_service_remove(XrAotRuntime *runtime, uint32_t slot) {
-    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT)
-        return false;
-    XrAotServiceSlot *entry = &runtime->service_slots[slot];
-    xr_mutex_lock(&entry->lock);
-    if (!entry->service || entry->closing) {
-        xr_mutex_unlock(&entry->lock);
-        return false;
-    }
-    entry->closing = true;
-    while (entry->active > 0)
-        xr_cond_wait(&entry->drained, &entry->lock);
-    void *service = entry->service;
-    XrAotServiceDestroyFn destroy = entry->destroy;
-    entry->service = NULL;
-    entry->destroy = NULL;
-    entry->closing = false;
-    xr_mutex_unlock(&entry->lock);
-    destroy(service);
-    return true;
 }
 
 XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index) {

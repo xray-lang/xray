@@ -20,7 +20,7 @@
 | 12 | **Slow Upload** | client 写入，server 慢读 | MB/s, complete |
 | 13 | **Slow Download** | server 写入，client 慢读 | MB/s, complete |
 | 14 | **Idle Connections** | 大量空闲连接后 ping | opened, ping p99, errors |
-| 15 | **TLS** | 本地 TLS echo server + Xray `dialTLS` client | handshake/s, latency, throughput |
+| 15 | **TLS** | 本地 TLS echo server + Xray `dial(..., DialOptions(..., true))` client | handshake/s, latency, throughput |
 
 ## 对比对象
 
@@ -76,7 +76,7 @@ python3 compare.py results/
 | `echo_server.py` | Python TCP echo server (asyncio) |
 | `tcp_bench.py` | 统一 Python 压测客户端 |
 | `tls_bench.py` | 本地 TLS server + Xray TLS client harness |
-| `tls_client.xr` | Xray `net.dialTLS` benchmark client |
+| `tls_client.xr` | Xray `net.dial` + TLS `DialOptions` benchmark client |
 | `compare.py` | 结果对比脚本 |
 | `run_bench.sh` | 一键运行脚本 |
 

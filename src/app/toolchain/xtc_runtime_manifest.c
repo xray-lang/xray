@@ -95,6 +95,32 @@ static bool xtc_sha256_file(const char *path, char out[65]) {
     return true;
 }
 
+static void xtc_sha256_update_cstring(XrSHA256Context *ctx, const char *value) {
+    xr_sha256_update(ctx, (const uint8_t *) value, strlen(value) + 1);
+}
+
+static void xtc_runtime_build_tree_digest(const XrToolchainTarget *target,
+                                          XrRuntimeArtifactSet *runtime) {
+    static const char domain[] = "xray-build-tree-runtime-sdk-v1";
+    XrSHA256Context ctx;
+    uint8_t digest[32];
+    uint8_t artifact_count = (uint8_t) runtime->artifact_count;
+
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, (const uint8_t *) domain, sizeof(domain));
+    xtc_sha256_update_cstring(&ctx, target->name);
+    xr_sha256_update(&ctx, &artifact_count, sizeof(artifact_count));
+    for (size_t i = 0; i < runtime->artifact_count; i++) {
+        xtc_sha256_update_cstring(&ctx, runtime->artifacts[i].id);
+        xtc_sha256_update_cstring(&ctx, runtime->artifacts[i].sha256);
+    }
+    xr_sha256_final(&ctx, digest);
+
+    char digest_hex[65];
+    xtc_sha256_hex(digest, digest_hex);
+    snprintf(runtime->sdk_digest, sizeof(runtime->sdk_digest), "sha256:%s", digest_hex);
+}
+
 static bool xtc_runtime_provider_allowed(XrJsonValue *providers, XrToolchainProviderId provider) {
     const char *name = xtc_provider_name(provider);
     int count = xjson_array_len(providers);
@@ -291,6 +317,27 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
         }
         out->artifact_count++;
     }
+#if defined(XRT_TLS_SSL_LIBRARY) && defined(XRT_TLS_CRYPTO_LIBRARY)
+    static const struct {
+        const char *id;
+        const char *path;
+    } tls_artifacts[] = {
+        {"xray-tls-ssl", XRT_TLS_SSL_LIBRARY},
+        {"xray-tls-crypto", XRT_TLS_CRYPTO_LIBRARY},
+    };
+    for (size_t i = 0; i < sizeof(tls_artifacts) / sizeof(tls_artifacts[0]); i++) {
+        XrRuntimeArtifact *artifact = &out->artifacts[out->artifact_count];
+        snprintf(artifact->id, sizeof(artifact->id), "%s-%s-v1", tls_artifacts[i].id, target->name);
+        snprintf(artifact->kind, sizeof(artifact->kind), "%s", "static-library");
+        snprintf(artifact->path, sizeof(artifact->path), "%s", tls_artifacts[i].path);
+        if (!xtc_sha256_file(artifact->path, artifact->sha256)) {
+            xtc_runtime_error(err, err_size, "build-tree TLS runtime artifact is missing: %s",
+                              artifact->path);
+            return false;
+        }
+        out->artifact_count++;
+    }
+#endif
 #if defined(XR_OS_WINDOWS)
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "ws2_32");
@@ -303,17 +350,12 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
              "%s", "m");
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "pthread");
+#if defined(XR_OS_LINUX) && defined(XRT_TLS_SSL_LIBRARY)
+    snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
+             "%s", "dl");
 #endif
-    uint8_t digest[32];
-    char identity[512];
-    int written = snprintf(identity, sizeof(identity), "%s:%s:%s", target->name,
-                           out->artifacts[0].sha256, out->artifacts[1].sha256);
-    if (written < 0 || (size_t) written >= sizeof(identity))
-        return false;
-    xr_sha256((const uint8_t *) identity, (size_t) written, digest);
-    char digest_hex[65];
-    xtc_sha256_hex(digest, digest_hex);
-    snprintf(out->sdk_digest, sizeof(out->sdk_digest), "sha256:%s", digest_hex);
+#endif
+    xtc_runtime_build_tree_digest(target, out);
     return true;
 #else
     (void) target;

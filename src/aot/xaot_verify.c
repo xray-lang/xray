@@ -1345,17 +1345,7 @@ static const XiValue *verify_transfer_source_move(const XiValue *value) {
 
 static bool verify_transfer_type_is_sync_handle(const XrType *type) {
     return xi_type_is_channel(type) || xi_type_is_task(type) || xi_type_is_thread(type) ||
-           xi_type_is_named_instance(type, "Atomic") ||
-           xi_type_is_named_instance(type, "WorkQueue") ||
-           xi_type_is_named_instance(type, "ResultGroup") ||
-           xi_type_is_named_instance(type, "CountdownLatch") ||
-           xi_type_is_named_instance(type, "Semaphore") ||
-           xi_type_is_named_instance(type, "EventCount");
-}
-
-static bool verify_transfer_type_is_shared_native_handle(const XrType *type) {
-    return xr_type_is_builtin_named_class(type, "NetConn") ||
-           xr_type_is_builtin_named_class(type, "NetListener");
+           xi_type_is_named_instance(type, "Atomic");
 }
 
 static bool verify_transfer_type_is_inline(const XrType *type) {
@@ -1385,8 +1375,7 @@ static uint8_t verify_transfer_action(const XiValue *value, uint8_t mode) {
     const XrType *type = value && value->type ? value->type : (origin ? origin->type : NULL);
     switch ((XrTransferMode) mode) {
         case XR_TRANSFER_SHARE:
-            if (type && (verify_transfer_type_is_sync_handle(type) ||
-                         verify_transfer_type_is_shared_native_handle(type)))
+            if (type && verify_transfer_type_is_sync_handle(type))
                 return XR_TRANSFER_SYNC_SHARE;
             if (type && verify_transfer_type_is_inline(type))
                 return XR_TRANSFER_INLINE_COPY;

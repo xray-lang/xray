@@ -2,23 +2,23 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 
 const semaphore = Semaphore(1)
 assert(semaphore.tryAcquire())
-assert(semaphore.release())
+assert(semaphore.release() == 1)
 
 const latch = CountdownLatch(1)
 latch.done()
 assert(latch.wait())
 
 const event = EventCount(0)
-assert(event.advance())
+assert(event.advance() == 1)
 assert(event.epoch == 1)
 
-const queue: WorkQueue<i64> = WorkQueue<i64>(2, 2)
+var queue: WorkQueue<i64> = WorkQueue<i64>(2, 2)
 assert(queue.push(7))
 var (popped, poppedOk) = queue.tryPop()
 assert(poppedOk)
 assert(popped == 7)
 
-const results: ResultGroup = ResultGroup(2)
+var results: ResultGroup = ResultGroup(2)
 assert(results.add(4))
 assert(results.add(5))
 assert(results.recv() == 9)

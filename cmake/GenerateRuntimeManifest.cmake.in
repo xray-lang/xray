@@ -4,11 +4,27 @@ set(_xray_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
 set(_xray_runtime_dir "${_xray_root}/lib/xray/aot/@XRAY_HOST_TARGET_ABI@")
 set(_xray_aot_core "${_xray_runtime_dir}/@CMAKE_STATIC_LIBRARY_PREFIX@xray_aot_core@CMAKE_STATIC_LIBRARY_SUFFIX@")
 set(_xray_rt_coro "${_xray_runtime_dir}/@CMAKE_STATIC_LIBRARY_PREFIX@xray_rt_coro@CMAKE_STATIC_LIBRARY_SUFFIX@")
+set(_xray_tls_complete TRUE)
+set(_xray_tls_artifacts "")
+if(@XRAY_RUNTIME_TLS_ENABLED@)
+    set(_xray_tls_ssl "${_xray_runtime_dir}/@XRAY_RUNTIME_TLS_SSL_FILE@")
+    set(_xray_tls_crypto "${_xray_runtime_dir}/@XRAY_RUNTIME_TLS_CRYPTO_FILE@")
+    if(NOT EXISTS "${_xray_tls_ssl}" OR NOT EXISTS "${_xray_tls_crypto}")
+        set(_xray_tls_complete FALSE)
+    else()
+        file(SHA256 "${_xray_tls_ssl}" _xray_tls_ssl_sha256)
+        file(SHA256 "${_xray_tls_crypto}" _xray_tls_crypto_sha256)
+        string(APPEND _xray_tls_artifacts
+            ",\n    {\"id\":\"xray-tls-ssl-@XRAY_HOST_TARGET_ABI@-v1\",\"kind\":\"static-library\",\"path\":\"@XRAY_RUNTIME_TLS_SSL_FILE@\",\"sha256\":\"${_xray_tls_ssl_sha256}\"}"
+            ",\n    {\"id\":\"xray-tls-crypto-@XRAY_HOST_TARGET_ABI@-v1\",\"kind\":\"static-library\",\"path\":\"@XRAY_RUNTIME_TLS_CRYPTO_FILE@\",\"sha256\":\"${_xray_tls_crypto_sha256}\"}"
+        )
+    endif()
+endif()
 
 # Component installs may run this script before or without XraySDK. Only publish
 # a manifest once the complete artifact set is present; a partial set is never
 # advertised as usable.
-if(EXISTS "${_xray_aot_core}" AND EXISTS "${_xray_rt_coro}")
+if(EXISTS "${_xray_aot_core}" AND EXISTS "${_xray_rt_coro}" AND _xray_tls_complete)
     file(SHA256 "${_xray_aot_core}" _xray_aot_core_sha256)
     file(SHA256 "${_xray_rt_coro}" _xray_rt_coro_sha256)
     file(WRITE "${_xray_runtime_dir}/manifest.json"
@@ -20,7 +36,7 @@ if(EXISTS "${_xray_aot_core}" AND EXISTS "${_xray_rt_coro}")
 "  \"providers\":[@XRAY_RUNTIME_PROVIDERS_JSON@],\n"
 "  \"artifacts\":[\n"
 "    {\"id\":\"xray-aot-core-@XRAY_HOST_TARGET_ABI@-v1\",\"kind\":\"static-library\",\"path\":\"@CMAKE_STATIC_LIBRARY_PREFIX@xray_aot_core@CMAKE_STATIC_LIBRARY_SUFFIX@\",\"sha256\":\"${_xray_aot_core_sha256}\"},\n"
-"    {\"id\":\"xray-rt-coro-@XRAY_HOST_TARGET_ABI@-v1\",\"kind\":\"static-library\",\"path\":\"@CMAKE_STATIC_LIBRARY_PREFIX@xray_rt_coro@CMAKE_STATIC_LIBRARY_SUFFIX@\",\"sha256\":\"${_xray_rt_coro_sha256}\"}\n"
+"    {\"id\":\"xray-rt-coro-@XRAY_HOST_TARGET_ABI@-v1\",\"kind\":\"static-library\",\"path\":\"@CMAKE_STATIC_LIBRARY_PREFIX@xray_rt_coro@CMAKE_STATIC_LIBRARY_SUFFIX@\",\"sha256\":\"${_xray_rt_coro_sha256}\"}${_xray_tls_artifacts}\n"
 "  ],\n"
 "  \"systemLibraries\":[@XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON@]\n"
 "}\n")

@@ -1,6 +1,6 @@
 schema = 1
 module = "io"
-contract_revision = 2
+contract_revision = 3
 legacy_commit = "0a9f6fdb5bd77e5c1a5d729bd68a1064b1c5e6e7"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/io/legacy_expected.jsonl"
@@ -16,7 +16,10 @@ intentional_semantic_changes = [
   "text file APIs keep string storage and binary file APIs carry Array<u8>",
   "readFileBytes and writeFileBytes preserve arbitrary byte values including NUL and 0xff",
   "future net/io buffer convergence must keep text and binary entry points distinct",
-  "path ownership remains Path-based rather than reintroducing string path overloads"
+  "path ownership remains Path-based rather than reintroducing string path overloads",
+  "cwd composes the os module's sole working-directory query instead of duplicating the host ABI",
+  "directory aggregation, deterministic name sorting, dot-entry filtering, and lexical iterator cleanup are implemented in io.xr over open-next-close host leaves",
+  "recursive removal deletes dangling symlinks directly when following-stat metadata is unavailable"
 ]
 known_legacy_bugs = [
   "legacy callers could still route arbitrary bytes through string APIs in adjacent modules"

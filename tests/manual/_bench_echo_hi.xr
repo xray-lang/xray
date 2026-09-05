@@ -3,6 +3,7 @@
 // Run via tests/manual; not a regression test. conns/rounds chosen to keep the
 // total round-trip count comparable while scaling connection fan-out.
 import net
+import { NetConn, NetListener } from net
 import time
 
 fn echoConn(c: NetConn) {
@@ -44,7 +45,7 @@ fn bench_echo_hi() {
     var conns = 1000
     var rounds = 50
     var lst = net.listen(0, 1024)!
-    var port = lst.port()
+    var port = net.port(lst)
 
     const ready = Channel(1)
     go server(lst, ready)

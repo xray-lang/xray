@@ -37,10 +37,10 @@ hybrid, or reloadable adapters remain inactive. Runtime-kernel policy remains a 
 the active object/string identity, RC/weak/panic/OOM policies, and generation protocol. No executor
 slot, native register, or common local physical plan is stored here.
 
-anchor-sha256: src/plan/target/xr_target_profile.h 2b3843da897b8c1ff4d5954354619d62dc9cab820bd87e2c137dc6b3823a29cf
+anchor-sha256: src/plan/target/xr_target_profile.h c657834d5a0c233707e531c8712521d9781a2ec2fe4598703cfdcdcc30ff5399
 anchor-sha256: src/plan/target/xr_target_profile.c 88bef72104a8394c107a90a8373a3c78057a161eb4b253d6addacf0a061c2468
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 4092adc2ff88ab03eccf6e9795b4c32efd7173a8acf96c94dba7932cc5e34ab7
-anchor-sha256: src/plan/target/xr_target_verify.c a9ccb2c7e2fe3010a36c73a0ea76a1310f3fa216f25d8c5087ec7b8f296fad42
+anchor-sha256: src/plan/target/xr_target_verify.c e9fe1ceefb6ecf05f657a99695f5270eb752bb406b4858eeeae850213ec8b763
 anchor-sha256: src/execution/xr_execution.h 03bf038c0a855f2244e98dff0ac126f982a4c76662501c7cb3cc5a03c0c75148
 anchor-sha256: src/execution/xr_execution.c 63bf9ed5c42f5ec6522eadd65c388ffca0783b78b3cadc0c61aa5e3d5e2b7945
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
@@ -50,7 +50,7 @@ anchor-sha256: src/program/xr_program_verify.c 015a93ba589808deef762389cd4421a10
 anchor-sha256: src/program/xr_validated_program_internal.h 30fe60a345331ba8a3f6a372be9a31813405bb9f9da494b78178d221011c8d15
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 85f91cb590821995e321fec074ac7a820b91ffbc0d9009d03996075b78daee26
-anchor-sha256: src/runtime/class/xinstance.h 42cfcf363dcc88dfe35d1d2fa0ccf7e581e4982bb05a11c12db2b2d20ca71462
+anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
 anchor-sha256: tests/unit/plan/test_target_profile.c ebcd1c0fef635f5e4997fd41523f47349b5c6ccaf868eaa491789993abaab8ac
 anchor-sha256: tests/unit/execution/test_xr_execution.c e58485d6ed90a24d77ce47fefe414346dca6a5f25d33e69777f87ccda95632b4
 anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 1c19fb2ae0306cfd84de656ef868289433848497df35a7af04047ff6ffad2748

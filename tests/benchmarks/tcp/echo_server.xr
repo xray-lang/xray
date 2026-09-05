@@ -2,6 +2,7 @@
 // Usage: xray echo_server.xr [-- port mode extra]
 
 import net
+import { NetConn } from net
 import time
 
 fn serveStream(conn: NetConn) {

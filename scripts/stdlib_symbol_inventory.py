@@ -108,6 +108,11 @@ LEAF_OWNERSHIP = {
     "borrowed_static": "the return borrows storage with static lifetime",
 }
 
+
+def leaf_ownership_is_valid(value: str) -> bool:
+    """Keep allowlist ownership aligned with the `.def` ownership grammar."""
+    return value in LEAF_OWNERSHIP or re.fullmatch(r"borrowed_param:[0-9]+", value) is not None
+
 # Effect is a comma-separated token sequence. `nothrow` is exclusive: a leaf
 # that cannot throw and cannot suspend has nothing else to state.
 LEAF_EFFECT_TOKENS = {
@@ -119,7 +124,7 @@ LEAF_EFFECT_TOKENS = {
 # A `.def` entry may state its effect as the set of error variants it raises;
 # those variants are legal effect tokens so the allowlist can restate the
 # declaration without losing which errors it names.
-THROWN_VARIANT_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
+THROWN_VARIANT_RE = re.compile(r"^(?:__)?[A-Z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
 
 LEAF_RECORD_KEYS = {
     "module",
@@ -131,47 +136,6 @@ LEAF_RECORD_KEYS = {
     "provider",
     "deletion_trigger",
 }
-
-# A non-public module is test-only unless it is the prelude, which is
-# unimportable because the language installs it implicitly, not because it is
-# a test fixture.
-PRODUCTION_EXCEPT_NON_PUBLIC = {"prelude"}
-
-# Modules whose semantic source is the compiler's own declaration input rather
-# than a module body, so asking them for an `.xr` source asks for something
-# that cannot exist.
-#
-# The prelude is the only one. `stdlib/prelude/builtin_symbols.def` is expanded
-# by the C preprocessor into eight compiler translation units -- xanalyzer.c,
-# xtype_ref_resolve.c, xanalyzer_builtin_interfaces.c, xanalyzer_builtins.c and
-# xlsp_keywords.c -- so it has to exist before any `.xr` can be parsed at all,
-# and a file resolved at run time cannot feed a table built at C compile time.
-# The module exports nothing (stdlib/prelude/prelude.c: "No exports yet"),
-# while check_stdlib_boundary.py requires an `xray_semantic` module's `.xr` to
-# export at least one item, so the two requirements are mutually exclusive.
-# Re-declaring its enums in Xray would mint a second nominal identity for each
-# -- blockers/a-stdlib-enum-identity-blocks-type-migration.md -- which is a
-# silent wrong answer rather than progress.
-#
-# The exception covers only "must have an `.xr` source" and "must not declare a
-# whole-module native policy". Every other property is still counted, so the
-# prelude's handwritten C semantic owners and its module-specific C loader stay
-# on the ledger.
-COMPILER_OWNED_SEMANTIC_SOURCE = {"prelude"}
-
-
-def has_compiler_owned_semantic_source(module: "ModuleRow", xray_owned_symbols: int) -> bool:
-    """Whether the exception above applies to this module right now.
-
-    Re-checked rather than asserted: the exception holds only while the module
-    still has the shape its reason describes, so a module that grows a public
-    Xray symbol or a `.xr` semantic source loses it automatically.
-    """
-    return (
-        module.name in COMPILER_OWNED_SEMANTIC_SOURCE
-        and module.semantic_source.endswith(".def")
-        and xray_owned_symbols == 0
-    )
 
 # Function-like C constructs that the definition scanner must not mistake for
 # a definition when they start a line.
@@ -339,11 +303,7 @@ def c_without_comments(text: str) -> str:
 
 
 def c_functions(root: Path) -> dict[str, list[tuple[str, str]]]:
-    """Map a module directory to the (function, source file) pairs it defines.
-
-    `stdlib_cache.c` sits directly under `stdlib/` and belongs to no module; it
-    is reported under the synthetic `_stdlib` owner so the C side still closes.
-    """
+    """Map a module directory to the (function, source file) pairs it defines."""
     out: dict[str, list[tuple[str, str]]] = {}
     for path in sorted((root / "stdlib").rglob("*.c")):
         owner = path.parent.name if path.parent != root / "stdlib" else "_stdlib"
@@ -476,6 +436,16 @@ def entry_kind(entry: Any) -> str:
     }.get(type(entry).__name__, type(entry).__name__)
 
 
+def entry_semantic_authority(entry: Any) -> str:
+    """Return the declaration's explicit owner, defaulting to legacy `.def`."""
+    return str(getattr(entry, "semantic_authority", "stdlib_def") or "stdlib_def")
+
+
+def entry_semantic_source(entry: Any, fallback: str) -> str:
+    """Return the source that owns a generated declaration row."""
+    return str(getattr(entry, "semantic_source", "") or fallback)
+
+
 def leaf_class_proposal(module: str, entry: Any) -> tuple[str, str]:
     """Propose an allowlist class for a private native leaf.
 
@@ -575,10 +545,10 @@ def leaf_record_errors(record: LeafRecord, raw: dict[str, Any]) -> list[str]:
             f"class {record.leaf_class or '<empty>'!r} is not one of "
             f"{sorted(LEAF_CLASSES)}"
         )
-    if record.ownership not in LEAF_OWNERSHIP:
+    if not leaf_ownership_is_valid(record.ownership):
         errors.append(
             f"ownership {record.ownership or '<empty>'!r} is not one of "
-            f"{sorted(LEAF_OWNERSHIP)}"
+            f"{sorted(LEAF_OWNERSHIP)} or borrowed_param:<nonnegative ordinal>"
         )
     tokens = record.effect_tokens
     if not tokens:
@@ -774,11 +744,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
     for module in manifest.modules:
         name = str(module["name"])
         public = bool(module.get("public", False))
-        audience = (
-            "production"
-            if public or name in PRODUCTION_EXCEPT_NON_PUBLIC
-            else "test-only"
-        )
+        audience = "production" if public else "test-only"
         policy = str(module.get("policy", ""))
         semantic_source = str(module.get("semantic_source", ""))
         loader_declarations = [
@@ -834,6 +800,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
             symbol = entry_symbol_name(entry)
             if not symbol:
                 continue
+            authority = entry_semantic_authority(entry)
             vm = str(getattr(entry, "vm", "") or "")
             aot = str(getattr(entry, "aot", "") or "")
             # A leaf is a `fn` row that reaches C with an ownership and an
@@ -867,21 +834,30 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                     leaf_reason = f"{leaf_reason}; proposed {proposal}: {why}"
             else:
                 leaf_class, leaf_reason = "", ""
+            source_owned = authority == "xray_schema"
+            compiler_intrinsic = authority == "compiler_intrinsic"
             rows.append(
                 SymbolRow(
                     module=name,
                     symbol=symbol,
                     kind=entry_kind(entry),
                     audience=audience,
-                    semantic_source=def_source,
-                    xray_body=False,
-                    handwritten_c_body=c_body or ("external" if vm else ""),
-                    generated_c_only=False,
+                    semantic_source=entry_semantic_source(entry, def_source),
+                    xray_body=source_owned,
+                    handwritten_c_body=(
+                        "" if source_owned or compiler_intrinsic
+                        else c_body or ("external" if vm else "")
+                    ),
+                    generated_c_only=compiler_intrinsic,
                     native_leaf=is_leaf,
                     leaf_class=leaf_class,
                     leaf_reason=leaf_reason,
                     factory_loader="",
-                    plan_coverage="native_binding",
+                    plan_coverage=(
+                        "xray_schema" if source_owned
+                        else "compiler_intrinsic" if compiler_intrinsic
+                        else "native_binding"
+                    ),
                     vm_binding=vm,
                     aot_binding=aot,
                     covered_c_deletion=c_body,
@@ -1071,6 +1047,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
             continue
         for entry in defs[module]:
             symbol = entry_symbol_name(entry)
+            authority = entry_semantic_authority(entry)
             vm = str(getattr(entry, "vm", "") or "")
             # A leaf outside the manifest is classified through the same
             # allowlist as any other. Skipping it here would let a leaf escape
@@ -1084,25 +1061,36 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                 defects.extend(leaf_row_defects)
             else:
                 leaf_class, leaf_reason = "", ""
+            source_owned = authority == "xray_schema"
+            compiler_intrinsic = authority == "compiler_intrinsic"
             rows.append(
                 SymbolRow(
                     module=module,
                     symbol=symbol,
                     kind=entry_kind(entry),
                     audience="production",
-                    semantic_source="stdlib/defs/core.def",
-                    xray_body=False,
-                    handwritten_c_body="external",
-                    generated_c_only=False,
+                    semantic_source=entry_semantic_source(entry, "stdlib/defs/core.def"),
+                    xray_body=source_owned,
+                    handwritten_c_body=(
+                        "" if source_owned or compiler_intrinsic else "external"
+                    ),
+                    generated_c_only=compiler_intrinsic,
                     native_leaf=is_leaf,
                     leaf_class=leaf_class,
                     leaf_reason=leaf_reason,
                     factory_loader="",
-                    plan_coverage="native_binding",
+                    plan_coverage=(
+                        "xray_schema" if source_owned
+                        else "compiler_intrinsic" if compiler_intrinsic
+                        else "native_binding"
+                    ),
                     vm_binding=vm,
                     aot_binding=str(getattr(entry, "aot", "") or ""),
                     covered_c_deletion="",
-                    blocker="declared module is outside the stdlib boundary manifest",
+                    blocker=(
+                        "" if source_owned or compiler_intrinsic
+                        else "declared module is outside the stdlib boundary manifest"
+                    ),
                 )
             )
 
@@ -1272,7 +1260,6 @@ def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]
             1
             for m in production
             if m.policy in {"native_primitive", "native_library"}
-            and not has_compiler_owned_semantic_source(m, m.xray_body_symbols)
         ),
         "public_native_symbols": sum(len(m.public_native) for m in production),
         "module_specific_c_loaders": sum(
@@ -1285,7 +1272,6 @@ def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]
             1
             for m in production
             if not m.semantic_source.endswith(".xr")
-            and not has_compiler_owned_semantic_source(m, m.xray_body_symbols)
         ),
         "modules_entering_module_graph": sum(
             1 for m in modules if m.enters_module_graph

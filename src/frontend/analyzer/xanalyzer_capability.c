@@ -88,11 +88,6 @@ static uint32_t native_type_capability_flags(const XrType *type) {
     switch (xr_type_to_builtin_id((XrType *) type)) {
         case XR_TID_CHANNEL:
         case XR_TID_ATOMIC:
-        case XR_TID_WORKQUEUE:
-        case XR_TID_RESULTGROUP:
-        case XR_TID_COUNTDOWNLATCH:
-        case XR_TID_SEMAPHORE:
-        case XR_TID_EVENTCOUNT:
             return XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
         default:
             return XA_TYPE_CAP_NONE;

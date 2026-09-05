@@ -181,15 +181,6 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
-typedef struct XrAotRuntimeInfo {
-    int64_t live_bytes;
-    int64_t live_objects;
-    int64_t finalizer_count;
-    int64_t blocks;
-    int64_t free_blocks;
-    int64_t full_blocks;
-} XrAotRuntimeInfo;
-
 typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
 /* Optional hook; when present, it releases owned fields and frees the frame. */
@@ -296,9 +287,9 @@ XR_FUNC XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg);
 XR_FUNC void xr_aot_runtime_delete(XrAotRuntime *runtime);
 XR_FUNC int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx);
+XR_FUNC int64_t xr_aot_runtime_finalizer_count(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_static_bytes(const XrAotContext *ctx);
-XR_FUNC XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_test_yield_simple(void);
 XR_FUNC int64_t xr_aot_test_yield_add(int64_t a, int64_t b);
 XR_FUNC int64_t xr_aot_test_yield_sync(void);
@@ -317,18 +308,6 @@ XR_FUNC struct XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime);
 XR_FUNC struct XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime);
 XR_FUNC const XrAotValueOps *xr_aot_runtime_value_ops(XrAotRuntime *runtime);
 
-enum {
-    XR_AOT_SERVICE_SLOT_CLUSTER = 0,
-    XR_AOT_SERVICE_SLOT_COUNT = 1,
-};
-
-typedef void (*XrAotServiceDestroyFn)(void *service);
-
-XR_FUNC bool xr_aot_runtime_service_install(XrAotRuntime *runtime, uint32_t slot, void *service,
-                                            XrAotServiceDestroyFn destroy);
-XR_FUNC void *xr_aot_runtime_service_acquire(XrAotRuntime *runtime, uint32_t slot);
-XR_FUNC void xr_aot_runtime_service_release(XrAotRuntime *runtime, uint32_t slot);
-XR_FUNC bool xr_aot_runtime_service_remove(XrAotRuntime *runtime, uint32_t slot);
 XR_FUNC void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime);
 XR_FUNC XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index);
 XR_FUNC XrValue xr_aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index);

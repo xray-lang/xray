@@ -542,6 +542,32 @@ static XiFunc *arc_callee_of(const XiFunc *caller, const XiValue *call) {
     return NULL;
 }
 
+/* Map a semantic callee parameter to the operand that carries it at this call
+ * site. Plain calls reserve operand zero for the callable. Namespace calls do
+ * the same for the namespace carrier, while source instance calls place the
+ * receiver in both callee parameter zero and call operand zero. Keeping this
+ * distinction here prevents ownership users from accidentally applying the
+ * free-function +1 offset to an instance method's explicit parameters. */
+static int32_t arc_call_operand_for_parameter(const XiValue *call, const XiFunc *callee,
+                                              int32_t parameter) {
+    if (!call || parameter < 0)
+        return -1;
+    if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) && callee &&
+        callee->has_receiver)
+        return parameter;
+    return parameter == INT32_MAX ? -1 : parameter + 1;
+}
+
+static int32_t arc_call_parameter_for_operand(const XiValue *call, const XiFunc *callee,
+                                              uint16_t operand) {
+    if (!call)
+        return -1;
+    if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) && callee &&
+        callee->has_receiver)
+        return operand;
+    return operand == 0 ? -1 : (int32_t) operand - 1;
+}
+
 static bool arc_type_is_raw_pointer(const XrType *type) {
     return type && XR_TYPE_IS_POINTER(type);
 }
@@ -641,18 +667,28 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
         user->args[0] == member && user->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
         single && single->source_operand == 0)
         return true;
+    /* A declared view-return contract can root a Slice in a non-Slice owner.
+     * `Buffer.asBytes() -> const Slice<u8> from this` is the minimal shape:
+     * the receiver owns provider storage, while the returned value is only a
+     * two-word view into that storage.  ViewEvidence is the lowering-sealed
+     * authority for this relationship.  Consume it before requiring `member`
+     * itself to be a Slice carrier, otherwise ARC releases a class/array owner
+     * immediately after the call and leaves the returned view dangling. */
+    if ((user->op == XI_CALL || user->op == XI_CALL_METHOD ||
+         user->op == XI_CALL_METHOD_DIRECT) &&
+        arc_type_is_span_view(user->type) && user->view_evidence.complete &&
+        user->view_evidence.sources) {
+        for (uint16_t i = 0; i < user->view_evidence.source_count; i++) {
+            int16_t operand = user->view_evidence.sources[i].source_operand;
+            if (operand >= 0 && (uint16_t) operand < user->nargs &&
+                user->args[operand] == member)
+                return true;
+        }
+    }
     if (!arc_value_is_span_view_carrier(member))
         return false;
     if (!arc_type_is_span_view(user->type))
         return false;
-    if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
-        user->view_evidence.complete && user->view_evidence.sources) {
-        for (uint16_t i = 0; i < user->view_evidence.source_count; i++) {
-            int16_t operand = user->view_evidence.sources[i].source_operand;
-            if (operand >= 0 && (uint16_t) operand < user->nargs && user->args[operand] == member)
-                return true;
-        }
-    }
     switch (user->op) {
         case XI_SLICE_AS_BYTES:
         case XI_SLICE_REINTERPRET:
@@ -988,10 +1024,11 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
         if (summary.complete) {
             if (summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM)
                 return summary;
-            uint16_t actual = (uint16_t) (summary.param_index + 1);
-            if (summary.param_index < 0 || actual >= value->nargs)
+            int32_t actual = arc_call_operand_for_parameter(value, callee, summary.param_index);
+            if (actual < 0 || (uint32_t) actual >= value->nargs)
                 return arc_return_unknown();
-            return arc_return_value_ownership(f, value->args[actual], (uint8_t) (depth + 1));
+            return arc_return_value_ownership(f, value->args[(uint16_t) actual],
+                                              (uint8_t) (depth + 1));
         }
         return arc_return_unknown();
     }
@@ -1069,8 +1106,10 @@ XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue
     if (!summary.complete || summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM ||
         summary.param_index < 0)
         return -1;
-    uint32_t operand = (uint32_t) summary.param_index + 1u;
-    return operand < value->nargs && operand <= INT16_MAX ? (int16_t) operand : -1;
+    int32_t operand = arc_call_operand_for_parameter(value, callee, summary.param_index);
+    return operand >= 0 && (uint32_t) operand < value->nargs && operand <= INT16_MAX
+               ? (int16_t) operand
+               : -1;
 }
 
 static XiReturnOwnership arc_infer_return_ownership(XiFunc *f) {
@@ -1133,13 +1172,16 @@ static bool arc_callee_borrows_param(XiFunc *callee, uint16_t pidx) {
  * callee only borrows? A borrowed argument is not consumed: the caller keeps
  * ownership and drops it at the argument's death point, because the callee
  * never releases a borrowed parameter. args[0] is the callee (plain call) or
- * the namespace receiver (module-member call); either way argument `a` maps
- * to callee parameter `a - 1`. */
+ * the namespace receiver (module-member call). A namespace call therefore
+ * maps argument `a` to parameter `a - 1`; a source instance call includes its
+ * receiver as callee parameter zero and maps operand `a` to parameter `a`. */
 static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint16_t a) {
     if (a < 1)
         return false;
     XiFunc *callee = arc_callee_of(f, user);
-    uint16_t parameter = (uint16_t) (a - 1);
+    int32_t parameter = arc_call_parameter_for_operand(user, callee, a);
+    if (parameter < 0 || parameter > UINT16_MAX)
+        return false;
     /* The call-site return contract is the only ownership evidence when a
      * relative module function has no live XiFunc pointer in this compilation.
      * A statically resolved callee is stronger: its fixed-point parameter mode
@@ -1152,9 +1194,9 @@ static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint
         return true;
     if (!callee)
         return false;
-    if (callee->is_vararg && parameter >= callee->nparams)
+    if (callee->is_vararg && (uint32_t) parameter >= callee->nparams)
         parameter = callee->nparams;
-    return arc_callee_borrows_param(callee, parameter);
+    return arc_callee_borrows_param(callee, (uint16_t) parameter);
 }
 
 XR_FUNC bool xi_arc_operand_consumes(const XiFunc *function, const XiValue *operation,

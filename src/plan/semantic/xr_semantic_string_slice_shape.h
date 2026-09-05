@@ -17,6 +17,7 @@
 #define XR_SEMANTIC_STRING_SLICE_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_string_shape.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
@@ -73,11 +74,12 @@ xr_semantic_string_slice_receiver_has_prior_identity(const XrSemanticPlan *plan,
         const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, i);
         if (!parameter || parameter->value != receiver->value)
             continue;
+        /* Requiredness decides whether a caller may omit this parameter; it
+         * does not change the identity or carrier of the value once the body
+         * reads it. Reuse the generic String-parameter judgement so required
+         * and defaulted parameters obey one ownership/storage contract. */
         if (parameter->function != slice->function || parameter->type != receiver->type ||
-            parameter->mode != XR_PARAM_READ ||
-            (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED) ||
-            parameter->transfer_mode != XR_TRANSFER_SHARE ||
-            parameter->flags != XR_SEM_PARAMETER_REQUIRED || parameter->reserved != 0 ||
+            !xr_semantic_direct_local_string_value_parameter_is_exact(plan, parameter, NULL) ||
             !parameter->canonical_key)
             return false;
         matches++;

@@ -106,9 +106,9 @@ def emit_sources(
     # One row per loadable module: the sources this build selected, plus the
     # modules that have native entries but no Xray source yet. Only modules
     # stdlibgen emits a binder for can name one.
-    # A sourceless module may also declare no native entries: `prelude` is one,
-    # because everything it stands for is installed into the isolate itself and
-    # the module exists only so an explicit import resolves to a no-op.
+    # A sourceless module may also declare no native entries. This is reserved
+    # for explicitly selected test modules; production language-core state is
+    # installed by isolate setup and never enters this import descriptor table.
     binder_modules = derive_binder_modules(root)
     descriptors = sorted(
         [(name, f"xr_stdlib_src_{c_ident(name)}_{idx}") for idx, (name, _p, _d) in enumerate(entries)]

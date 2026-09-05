@@ -109,7 +109,7 @@ EXPECTED_CHANGED_PATHS = frozenset(
         "tests/lib/tests/test_binary.py",
         "tests/lib/tests/test_filetests.py",
         "tests/lib/xraytest/binary.py",
-        "tests/regression/10_stdlib/1131_regex_native_field_ownership.xr",
+        "tests/regression/10_stdlib/1131_regex_source_field_ownership.xr",
         "tests/stdlib/contracts/regex/cases.jsonl",
         "tests/stdlib/contracts/regex/contract.toml",
         "tests/unit/analysis/test_xglobal_summary.c",
@@ -159,7 +159,7 @@ EXPECTED_GOVERNED_DELTA = EXPECTED_CHANGED_CONTRACT_INPUTS | frozenset(
         "stdlib/regex/regex.xr",
         "tests/aot/filetests/link/regex_literal_no_aot_owner.xr",
         "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr",
-        "tests/regression/10_stdlib/1131_regex_native_field_ownership.xr",
+        "tests/regression/10_stdlib/1131_regex_source_field_ownership.xr",
     }
 )
 EXPECTED_ENUM_REPORT_SHA256 = {

@@ -10,7 +10,7 @@ var raw = "post /submit?q=1 HTTP/1.1\r\n" +
 
 var head = parseRequestHead(raw)!
 print(head.method)
-print(head.target)
+print(head.requestTarget)
 print(head.version)
 print(head.contentLength)
 print(head.chunked)
@@ -21,7 +21,7 @@ print(head.headers.get("X-Trace")!)
 print(raw.slice(head.headerBytes))
 
 var absolute = parseRequestHead("GET http://example.com/a HTTP/1.1\r\nHost: proxy\r\n\r\n")!
-print(absolute.target)
+print(absolute.requestTarget)
 
 var old = parseRequestHead("GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n")!
 print(old.keepAlive)

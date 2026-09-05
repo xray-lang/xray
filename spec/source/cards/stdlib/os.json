@@ -1,5 +1,5 @@
 {
   "module": "os",
-  "summary": "Operating system interface (env, exec, signals)",
-  "lead": "Operating system interface (env, exec, signals)."
+  "summary": "Operating system interface (environment, bounded process-byte capture, signals)",
+  "lead": "Operating system interface with byte-preserving, independently bounded stdout and stderr capture."
 }

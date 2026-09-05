@@ -15,17 +15,12 @@
 #include "../os/os_random.h"
 #include "../shared/xr_math_core.h"
 
-static inline void xrt_math_random_bytes(void *ctx, unsigned char *buf, size_t len) {
-    (void) ctx;
-    xr_random_bytes(buf, len);
-}
-
 static inline double xrt_math_random_f64(void) {
-    return xr_math_core_random_f64(xrt_math_random_bytes, NULL);
+    return xr_math_core_random_f64(xr_random_bytes_callback, NULL);
 }
 
 static inline int64_t xrt_math_random_i64(int64_t min_val, int64_t max_val) {
-    return xr_math_core_random_i64(xrt_math_random_bytes, NULL, min_val, max_val);
+    return xr_math_core_random_i64(xr_random_bytes_callback, NULL, min_val, max_val);
 }
 
 static inline int64_t xrt_math_int_arg_or(XrValue v, int64_t fallback) {

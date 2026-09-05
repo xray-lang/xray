@@ -21,7 +21,8 @@
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/shared/xobject_shape.h"
 #include "../../../src/stdlib/xstdlib_metadata.h"
-#include "../../../stdlib/stdlib_cache.h"
+#include "../../../src/module/xstdlib_runtime_cache.h"
+#include "../../../src/plan/semantic/xr_semantic_ids.h"
 
 static const XrModuleIdentityAuthority k_native_surface_memory_authority = {
     .kind = XR_MODULE_IDENTITY_MEMORY,
@@ -131,50 +132,34 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_EQ_INT(object_shape_type->object.field_count, 2);
 
-    XrClass *record_class = xr_stdlib_record_class_get(iso, "net", "__CopyBidirectionalResult");
-    ASSERT_NOT_NULL(record_class);
-    int a_to_b_index = xr_class_lookup_field_by_name(iso, record_class, "aToB");
-    int b_to_a_index = xr_class_lookup_field_by_name(iso, record_class, "bToA");
-    int expected_a_to_b =
-        xg_object_stable_name_key("bToA") < xg_object_stable_name_key("aToB") ? 1 : 0;
-    ASSERT_EQ_INT(a_to_b_index, expected_a_to_b);
-    ASSERT_EQ_INT(b_to_a_index, 1 - expected_a_to_b);
-
-    const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "NetError");
-    ASSERT_NOT_NULL(enum_decl);
-    ASSERT_EQ_INT(enum_decl->variant_count, 10);
-    ASSERT_TRUE(enum_decl->layout_id != 0);
-    ASSERT_TRUE(strcmp(enum_decl->variants[0].name, "Timeout") == 0);
-    ASSERT_TRUE(strcmp(enum_decl->variants[9].name, "OutOfMemory") == 0);
-
-    XaEnumInfo *enum_info = NULL;
-    XrType *enum_type = xa_builtin_enum_decl_type(iso, enum_decl, &enum_info);
-    ASSERT_NOT_NULL(enum_type);
-    ASSERT_EQ_INT(enum_type->kind, XR_KIND_ENUM);
-    ASSERT_NOT_NULL(enum_info);
-    ASSERT_EQ_INT(enum_info->variant_count, 10);
-    ASSERT_EQ_INT(enum_type->enum_type.layout_id, enum_decl->layout_id);
-
-    XrEnumType *runtime_enum = xr_stdlib_enum_type_get(iso, "net", "NetError");
-    ASSERT_NOT_NULL(runtime_enum);
-    ASSERT_TRUE(runtime_enum == xr_stdlib_enum_type_get(iso, "net", "NetError"));
-    ASSERT_NOT_NULL(runtime_enum->layout);
-    ASSERT_EQ_INT(runtime_enum->layout->layout_id, enum_decl->layout_id);
-    ASSERT_EQ_INT(runtime_enum->members[0].ctor->layout_id, enum_decl->layout_id);
-    xa_enum_info_free(enum_info);
-
     const XaBuiltinMember *connect_fd = find_module_member("net", "__connectFd");
     ASSERT_NOT_NULL(connect_fd);
     ASSERT_TRUE(connect_fd->is_internal);
-    XrType *fn = xa_builtin_parse_full_signature(iso, connect_fd->signature);
+    XrType *fn = xa_builtin_parse_full_signature_for_module(iso, "net", connect_fd->signature);
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
-    /* __connectFd returns NetConn? (a nullable builtin handle), never a
-     * `NetConn | int` union: unioning a native handle with a scalar poisons
-     * handle typing module-wide (see xray-docs/known_bugs.md 2026-08-09). */
+    /* __connectFd returns private nullable provider storage. Public NetConn
+     * identity is declared only by net.xr and wraps a successful result. */
     ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_INSTANCE);
     ASSERT_TRUE(fn->function.return_type->is_nullable);
+    ASSERT_STR_EQ(fn->function.return_type->instance.class_name, "__NetConnStorage");
+
+    const XaBuiltinClass *conn_bridge = xa_builtin_find_source_provider_bridge("net", "NetConn");
+    ASSERT_NOT_NULL(conn_bridge);
+    ASSERT_TRUE(conn_bridge->is_internal);
+    ASSERT_STR_EQ(conn_bridge->name, "__NetConnStorage");
+    ASSERT_STR_EQ(conn_bridge->source_storage_field, "_storage");
+    ASSERT_NULL(xa_builtin_find_source_provider_bridge("http", "NetConn"));
+
+    XrType *net_conn_leaf_type = xa_builtin_parse_type_string_for_module(iso, "net", "NetConn");
+    ASSERT_NOT_NULL(net_conn_leaf_type);
+    ASSERT_EQ_INT(net_conn_leaf_type->kind, XR_KIND_INSTANCE);
+    ASSERT_STR_EQ(net_conn_leaf_type->instance.class_name, "NetConn");
+    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(iso, "http", "NetConn")->kind,
+                  XR_KIND_ERROR);
+    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(iso, "http", "__NetConnStorage")->kind,
+                  XR_KIND_ERROR);
 
     /* ws is a pure-script module: its entire connection layer (WsConn,
      * connect, send/recv, serve) lives in stdlib/ws/ws.xr, so ws exposes no
@@ -184,73 +169,89 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NULL(xa_builtin_get_object_shape("ws", "WsConnectOptions"));
     ASSERT_NULL(xa_builtin_get_module_func_signature("ws", "connect"));
 
-    const XaBuiltinObjectShape *cluster_config =
-        xa_builtin_get_object_shape("cluster", "ClusterConfig");
-    const XaBuiltinObjectShape *cluster_info =
-        xa_builtin_get_object_shape("cluster", "ClusterInfo");
-    ASSERT_NULL(cluster_config);
-    ASSERT_NOT_NULL(cluster_info);
-    ASSERT_TRUE(cluster_info->is_exact);
-    ASSERT_EQ_INT(cluster_info->field_count, 10);
-    ASSERT_TRUE(strcmp(cluster_info->fields[4].name, "listeners") == 0);
-    ASSERT_TRUE(strcmp(cluster_info->fields[5].name, "deadNodes") == 0);
-
-    XrClass *cluster_info_class = xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo");
-    ASSERT_NOT_NULL(cluster_info_class);
-    ASSERT_TRUE(cluster_info_class == xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo"));
+    /* Peer records, metrics, framing, queues and lifecycle are pure cluster.xr
+     * state. Native metadata therefore exposes no source records, transport
+     * snapshot shapes or private lifecycle leaves. */
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterConfig"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterInfo"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterNodeSnapshot"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterRuntimeSnapshot"));
+    ASSERT_NULL(xr_stdlib_record_class_get(iso, "cluster", "__ClusterNodeSnapshot"));
 
     const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
-    ASSERT_NOT_NULL(cluster_state);
-    ASSERT_EQ_INT(cluster_state->variant_count, 5);
-    ASSERT_TRUE(cluster_state->layout_id != 0);
-    ASSERT_TRUE(strcmp(cluster_state->variants[3].name, "Connected") == 0);
-    XrEnumType *runtime_cluster_state = xr_stdlib_enum_type_get(iso, "cluster", "ClusterNodeState");
-    ASSERT_NOT_NULL(runtime_cluster_state);
-    ASSERT_EQ_INT(runtime_cluster_state->layout->layout_id, cluster_state->layout_id);
+    ASSERT_NULL(cluster_state);
+    ASSERT_NULL(xr_stdlib_enum_type_get(iso, "cluster", "ClusterNodeState"));
 
-    const char *cluster_start_signature = xa_builtin_get_module_func_signature("cluster", "start");
-    const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
-    const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
-    const XaBuiltinMember *cluster_info_primitive = find_module_member("cluster", "__info");
-    ASSERT_NULL(cluster_start_signature);
-    ASSERT_NOT_NULL(cluster_start_primitive);
-    ASSERT_TRUE(cluster_start_primitive->is_internal);
-    ASSERT_NULL(cluster_info_signature);
-    ASSERT_NOT_NULL(cluster_info_primitive);
-    ASSERT_TRUE(cluster_info_primitive->is_internal);
-    XrType *cluster_start_fn =
-        xa_builtin_parse_full_signature(iso, cluster_start_primitive->signature);
-    XrType *cluster_info_fn =
-        xa_builtin_parse_full_signature(iso, cluster_info_primitive->signature);
-    ASSERT_NOT_NULL(cluster_start_fn);
-    ASSERT_NOT_NULL(cluster_info_fn);
-    ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 11);
-    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRING);
-    ASSERT_EQ_INT(cluster_start_fn->function.params[1].type->kind, XR_KIND_INT);
-    ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);
-    ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
-    ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
+    ASSERT_NULL(xa_builtin_get_module_func_signature("cluster", "start"));
+    ASSERT_NULL(xa_builtin_get_module_func_signature("cluster", "info"));
+    ASSERT_NULL(find_module_member("cluster", "__start"));
+    ASSERT_NULL(find_module_member("cluster", "__stop"));
+    ASSERT_NULL(find_module_member("cluster", "__info"));
+    ASSERT_NULL(find_module_member("cluster", "__registerNodeMonitor"));
+    ASSERT_NULL(find_module_member("cluster", "__registerCoroutineMonitor"));
+    ASSERT_NULL(find_module_member("cluster", "__peerName"));
+    ASSERT_NULL(find_module_member("cluster", "__peerGeneration"));
+    ASSERT_NULL(find_module_member("cluster", "__readPeer"));
+    ASSERT_NULL(find_module_member("cluster", "__writePeer"));
+    ASSERT_NULL(find_module_member("cluster", "__peerEnqueue"));
+    ASSERT_NULL(find_module_member("cluster", "__broadcast"));
+
+    /* Whole-input buffering and path metadata projections are io.xr policy.
+     * The native registry retains only the descriptor read and stat leaves. */
+    ASSERT_NULL(find_module_member("io", "__readFile"));
+    ASSERT_NULL(find_module_member("io", "__readFileBytes"));
+    ASSERT_NULL(find_module_member("io", "__readStdin"));
+    ASSERT_NULL(find_module_member("io", "__readStdinBytes"));
+    ASSERT_NULL(find_module_member("io", "__exists"));
+    ASSERT_NULL(find_module_member("io", "__fileSize"));
+    ASSERT_NULL(find_module_member("io", "__isDir"));
+    ASSERT_NULL(find_module_member("io", "__isFile"));
+    ASSERT_NULL(find_module_member("io", "__isSymlink"));
+    ASSERT_NOT_NULL(find_module_member("io", "__fileRead"));
+    ASSERT_NOT_NULL(find_module_member("io", "__stat"));
 
     xray_vm_delete(iso);
 }
 
-TEST(native_direct_member_resolves_each_page_alloc_arity) {
-    const XrStdlibDefEntry *one =
-        xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 1);
-    const XrStdlibDefEntry *two =
-        xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 2);
+TEST(native_direct_member_resolves_private_page_alloc_leaf) {
+    const XrStdlibDefEntry *leaf =
+        xr_stdlib_metadata_exact_native_direct_member("mem", "__pageAlloc", 2);
 
-    ASSERT_NOT_NULL(one);
-    ASSERT_NOT_NULL(two);
-    ASSERT_TRUE(one != two);
-    ASSERT_EQ_INT(one->argc, 1);
-    ASSERT_EQ_INT(two->argc, 2);
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 0));
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 3));
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "missing", 1));
-    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("missing", "pageAlloc", 1));
+    ASSERT_NOT_NULL(leaf);
+    ASSERT_EQ_INT(leaf->argc, 2);
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "__pageAlloc", 1));
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 2));
+}
+
+TEST(native_direct_fresh_net_results_publish_exact_provider_abi) {
+    const XrStdlibDefEntry *udp_bind =
+        xr_stdlib_metadata_exact_native_direct_member("net", "__udpBind", 2);
+    const XrStdlibDefEntry *multicast =
+        xr_stdlib_metadata_exact_native_direct_member("net", "__udpMulticastBind", 4);
+
+    ASSERT_NOT_NULL(udp_bind);
+    ASSERT_NOT_NULL(multicast);
+    ASSERT_STR_EQ(udp_bind->return_ownership, "fresh");
+    ASSERT_STR_EQ(multicast->return_ownership, "fresh");
+    ASSERT_STR_EQ(udp_bind->arg_spec, "vv");
+    ASSERT_STR_EQ(multicast->arg_spec, "vvvv");
+    const XrStdlibNativeClassDefEntry *storage =
+        xr_stdlib_metadata_fresh_result_native_class(multicast);
+    ASSERT_NOT_NULL(storage);
+    ASSERT_STR_EQ(storage->module, "net");
+    ASSERT_STR_EQ(storage->name, "__NetConnStorage");
+    ASSERT_STR_EQ(storage->builtin_kind, "XR_BK_NET_CONN_STORAGE");
+    ASSERT_TRUE(xr_stdlib_metadata_unique_native_class_span("net", 3, "__NetConnStorage", 16) ==
+                storage);
+    ASSERT_NULL(xr_stdlib_metadata_unique_native_class_span("http", 4, "__NetConnStorage", 16));
+
+    XrFingerprint identity;
+    XrFingerprint mutated_identity;
+    xr_stdlib_metadata_native_class_fingerprint(storage, &identity);
+    XrStdlibNativeClassDefEntry mutation = *storage;
+    mutation.builtin_kind = "XR_BK_NET_LISTENER_STORAGE";
+    xr_stdlib_metadata_native_class_fingerprint(&mutation, &mutated_identity);
+    ASSERT_FALSE(xr_fingerprint_equal(identity, mutated_identity));
 }
 
 TEST(native_direct_member_identity_rejects_duplicate_tuple) {
@@ -274,6 +275,7 @@ RUN_TEST(native_type_protocol_rejects_null_isolate);
 RUN_TEST(native_receiver_alias_contracts_are_typed_data);
 RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
 RUN_TEST(native_module_object_and_enum_metadata);
-RUN_TEST(native_direct_member_resolves_each_page_alloc_arity);
+RUN_TEST(native_direct_member_resolves_private_page_alloc_leaf);
+RUN_TEST(native_direct_fresh_net_results_publish_exact_provider_abi);
 RUN_TEST(native_direct_member_identity_rejects_duplicate_tuple);
 TEST_MAIN_END()

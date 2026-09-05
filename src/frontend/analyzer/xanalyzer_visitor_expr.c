@@ -24,7 +24,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
-#include "../../../stdlib/prelude/prelude.h"
+#include "../../module/xprelude_runtime.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../shared/xr_accessor_name.h"
 #include "../../shared/xr_target_query_registry_gen.h"
@@ -181,9 +181,7 @@ static bool xa_type_has_len_query(XrType *type) {
                     XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
                     type->kind == XR_KIND_FIXED_ARRAY || type->kind == XR_KIND_CHANNEL ||
                     xr_type_is_builtin_named_class(type, "StringBuilder") ||
-                    xr_type_is_builtin_named_class(type, "Buffer") ||
-                    xr_type_is_builtin_named_class(type, "WorkQueue") ||
-                    xr_type_is_builtin_named_class(type, "ResultGroup"));
+                    xr_type_is_builtin_named_class(type, "Buffer"));
 }
 
 static void xa_report_span_member_error(XaInferContext *ctx, AstNode *node, XrType *type,
@@ -401,6 +399,8 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
     if (!spec)
         return "receiver";
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_STRING:
+            return "string";
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return "integer";
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
@@ -415,6 +415,8 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
             return "Slice<u8>";
         case XA_BUILTIN_RECEIVER_POD_SLICE:
             return xa_type_is_u8_slice_type(receiver) ? "Slice<u8>" : "Slice";
+        case XA_BUILTIN_RECEIVER_RANGE:
+            return "Range";
     }
     return "receiver";
 }
@@ -431,6 +433,8 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
             return xr_type_new_int(X);
         case XA_BUILTIN_TYPE_STRING:
             return xr_type_new_string(X);
+        case XA_BUILTIN_TYPE_ARRAY_OF_STRING:
+            return xr_type_new_array(X, xr_type_new_string(X));
         case XA_BUILTIN_TYPE_U8:
             return xr_type_new_int_width(X, XR_NATIVE_U8);
         case XA_BUILTIN_TYPE_U8_ARRAY:
@@ -2743,21 +2747,6 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
-    if (xr_type_is_builtin_named_class(obj_type, "RegexMatch")) {
-        if (strcmp(ma->name, "start") == 0 || strcmp(ma->name, "end") == 0)
-            return xr_type_new_int(NULL);
-        if (strcmp(ma->name, "text") == 0)
-            return xr_type_new_string(NULL);
-        if (strcmp(ma->name, "groups") == 0)
-            return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_string(NULL));
-        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        char msg[160];
-        snprintf(msg, sizeof(msg), "RegexMatch has no member '%s'", ma->name ? ma->name : "");
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                                   msg, &loc);
-        return xr_type_new_error(ctx->analyzer->isolate);
-    }
-
     if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_ref) {
         XrClassInfo *class_info = obj_type->instance.class_ref;
         struct XrClassInfo *member_owner = NULL;
@@ -2837,7 +2826,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
             // Substitute generic type parameters with actual container types:
             //   Array<T>/Set<T>/Channel<T>: T -> element_type
-            //   Task<T>/WorkQueue<T>/Atomic<T>: T -> instance type argument
+            //   Task<T>/Atomic<T>: T -> instance type argument
             //   Map<K,V>: K -> key_type, V -> value_type
             if (fn_type) {
                 XrType *single_type_arg = NULL;
@@ -2846,7 +2835,6 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     obj_type->container.element_type) {
                     single_type_arg = obj_type->container.element_type;
                 } else if ((xr_type_is_builtin_named_class(obj_type, "Task") ||
-                            xr_type_is_builtin_named_class(obj_type, "WorkQueue") ||
                             xr_type_is_builtin_named_class(obj_type, "Atomic") ||
                             xr_type_is_builtin_named_class(obj_type, "Thread") ||
                             xr_type_is_builtin_named_class(obj_type, "CoroLocal")) &&
@@ -4178,7 +4166,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
      * resolve its type arguments explicitly, contextually, or from a value
      * argument; an erased success type is never constructed.
      *
-     * A user class of the same name shadows the builtin (prelude.h documents
+     * A user class of the same name shadows the builtin (xprelude_runtime.h documents
      * the Rust prelude rule), so it has to be resolved through the ordinary
      * class path below. Bypassing that would type `StringBuilder(3)` as the
      * builtin even where `class StringBuilder { }` is in scope, and every

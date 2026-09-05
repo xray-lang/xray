@@ -15,6 +15,7 @@
 #include "xr_semantic_coroutine_lifecycle_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_string_runes_shape.h"
+#include "xr_semantic_builtin_runtime_method_shape.h"
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_iterator_rune_nth_shape.h"
@@ -2692,6 +2693,20 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     return true;
 }
 
+static const XrStdlibDefEntry *resolve_native_direct_callee(const XiFunc *caller,
+                                                            const XiValue *call) {
+    if (!call || call->op != XI_CALL || call->nargs == 0)
+        return NULL;
+    const XiValue *callee = strip_identity_copies(caller, call->args[0]);
+    if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
+        return NULL;
+    const XiImportRef *ref = (const XiImportRef *) callee->aux;
+    return xi_import_ref_is_grounded_native(ref)
+               ? xr_stdlib_metadata_exact_native_direct_call(ref->module_path, ref->member_name,
+                                                             (uint16_t) (call->nargs - 1u))
+               : NULL;
+}
+
 static const XrStdlibDefEntry *xi_native_target_leaf_scalar_call_exact(const XiFunc *caller,
                                                                        const XiValue *call) {
     if (!caller || !call || call->op != XI_CALL || call->nargs == 0 ||
@@ -3361,7 +3376,7 @@ static bool append_builtin_instance_yieldable_call_target(XrSemanticBuildContext
 static int resolve_source_instance_method_local(const XrSemanticBuildContext *ctx,
                                                 const XiValue *value, uint32_t operation,
                                                 uint32_t *receiver_type_out,
-                                                uint8_t *out_class_flags) {
+                                                uint8_t *target_kind_out) {
     if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 || !value->args[0] ||
         !value->aux || (value->aux_int & 1) != 0 || operation >= ctx->plan->operation_count)
         return -1;
@@ -3385,15 +3400,21 @@ static int resolve_source_instance_method_local(const XrSemanticBuildContext *ct
         return -1;
     const XrSemanticSourceClassRecord *source_class =
         &ctx->plan->source_classes[source_class_index];
-    /* A runtime type and a non-generic declaration are what make one body
-     * nameable at all. Being final is a different question: it is what makes
-     * binding that body safe without seeing the whole graph. Report it instead
-     * of requiring it, so the caller can record an obligation for the layer
-     * that does see the graph. */
-    if (!xr_semantic_source_class_can_name_one_method(source_class->flags))
+    /* Ordinary instance authority comes from the receiver's frozen runtime
+     * class. A generic receiver deliberately has no such identity, so it gets
+     * the narrower template authority only when this call uses the enclosing
+     * method's exact self parameter. This is the same declaration relation the
+     * Xi coroutine resolver uses; neither selector spelling nor generic type
+     * spelling alone is sufficient. */
+    bool template_self = exact_self && caller->source_class == source_class_index &&
+                         xr_semantic_source_class_can_name_template_method(source_class->flags);
+    bool ordinary_instance = xr_semantic_source_class_can_name_one_method(source_class->flags);
+    if (!ordinary_instance && !template_self)
         return -1;
-    if (out_class_flags)
-        *out_class_flags = source_class->flags;
+    if (target_kind_out)
+        *target_kind_out = template_self
+                               ? XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL
+                               : xr_semantic_source_instance_method_call_kind(source_class->flags);
     int match = -1;
     for (uint32_t f = 0; f < ctx->function_count; f++) {
         const XrFunctionMapEntry *candidate = &ctx->functions[f];
@@ -3416,9 +3437,9 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
                                                             const XiValue *value,
                                                             uint32_t operation) {
     uint32_t receiver_type = XR_SEMANTIC_INDEX_NONE;
-    uint8_t class_flags = 0;
+    uint8_t target_kind = 0;
     int function =
-        resolve_source_instance_method_local(ctx, value, operation, &receiver_type, &class_flags);
+        resolve_source_instance_method_local(ctx, value, operation, &receiver_type, &target_kind);
     if (function < 0)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
@@ -3438,15 +3459,17 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
     record->source_export = XR_SEMANTIC_INDEX_NONE;
     record->callee_function = ctx->plan->functions[function].id;
     record->callable_type = receiver_type;
-    /* Final says no subclass can exist anywhere, so the binding stands on its
-     * own. Without it the binding holds only if the final graph carries no
-     * override, which this module cannot know -- the row states that
-     * obligation and the graph-holding layer discharges it. */
-    record->kind = xr_semantic_source_instance_method_call_kind(class_flags);
+    /* A template self-call binds through the caller's source-method membership,
+     * not through a generic class object. Ordinary final/sealed calls keep
+     * their existing class-instance authority. */
+    record->kind = target_kind;
     XrTextBuilder key = {0};
+    bool template_method = record->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL;
     bool valid =
         text_append_format(&key,
-                           "call-target-v7:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+                           template_method ? "call-target-v11:schema=%u:operation="
+                                           : "call-target-v7:schema=%u:operation=",
+                           XR_SEMANTIC_SCHEMA_VERSION) &&
         text_append_stable_id(&key, call->id) && text_append(&key, ":source-class=") &&
         text_append_stable_id(&key, ctx->plan->source_classes[source_class].id) &&
         text_append(&key, ":selector=") && text_append_component(&key, (const char *) value->aux) &&
@@ -3464,9 +3487,9 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
     return true;
 }
 
-static bool append_source_instance_method_open_call_target(XrSemanticBuildContext *ctx,
-                                                           const XiValue *value,
-                                                           uint32_t operation) {
+static bool append_source_instance_method_dependency_call_target(XrSemanticBuildContext *ctx,
+                                                                 const XiValue *value,
+                                                                 uint32_t operation) {
     if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 || !value->aux ||
         (value->aux_int & 1) != 0 || operation >= ctx->plan->operation_count)
         return true;
@@ -3500,14 +3523,14 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
                     ? &plan->source_classes[candidate->source_class]
                     : NULL;
             uint8_t class_required = XR_SEM_SOURCE_CLASS_RUNTIME_TYPE;
-            uint8_t method_required =
-                XR_SEM_SOURCE_METHOD_INSTANCE | XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
+            uint8_t method_required = XR_SEM_SOURCE_METHOD_INSTANCE;
+            if (source_class && (source_class->flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0)
+                method_required |= XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
             if (!source_class ||
                 !xr_stable_id_equal(source_class->id, type->source_class_identity) ||
                 (source_class->flags & class_required) != class_required ||
-                (source_class->flags &
-                 (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_GENERIC)) != 0 ||
-                (candidate->flags & method_required) != method_required ||
+                (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0 ||
+                candidate->flags != method_required ||
                 candidate->parameter_count != call->operand_count ||
                 candidate->function >= plan->function_count || !suspendable[candidate->function] ||
                 strcmp(candidate->name, (const char *) value->aux) != 0)
@@ -3536,7 +3559,7 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
     record->source_export = XR_SEMANTIC_INDEX_NONE;
     record->export_identity = match_method->id;
     record->callable_type = receiver->type;
-    record->kind = XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN;
+    record->kind = XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY;
     XrTextBuilder key = {0};
     bool valid =
         text_append_format(&key,
@@ -3553,7 +3576,7 @@ static bool append_source_instance_method_open_call_target(XrSemanticBuildContex
     XrFingerprint digest;
     if (!valid || !record->canonical_key ||
         !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
-        return fail(ctx, "XR_SEM_0019", "open source method call identity is incomplete");
+        return fail(ctx, "XR_SEM_0019", "dependency source method call identity is incomplete");
     return true;
 }
 
@@ -3741,7 +3764,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
             return false;
         return ctx->plan->call_target_count != before
                    ? true
-                   : append_source_instance_method_open_call_target(ctx, value, operation);
+                   : append_source_instance_method_dependency_call_target(ctx, value, operation);
     }
     if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
         return true;
@@ -3798,20 +3821,32 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     bool native_yieldable = !local_program_bound && function < 0 &&
                             resolve_native_yieldable_callee(ctx->functions[caller].source, value,
                                                             &native_module, &native_member);
+    const XrStdlibDefEntry *native_direct =
+        !local_program_bound && function < 0 && !native_yieldable &&
+                ctx->plan->operations[operation].intrinsic_kind == XR_SEM_INTRINSIC_NONE
+            ? resolve_native_direct_callee(ctx->functions[caller].source, value)
+            : NULL;
+    const XrStdlibDefEntry *frozen_native_direct = NULL;
+    if (native_direct &&
+        (!xr_semantic_native_direct_call_shape_is_exact(
+             ctx->plan, &ctx->plan->operations[operation], &frozen_native_direct, NULL) ||
+         frozen_native_direct != native_direct))
+        native_direct = NULL;
     const XiValue *indirect_callee = local_program_bound ? NULL : value->args[0];
     while (!local_program_bound && indirect_callee && xi_copy_is_identity_alias(indirect_callee) &&
            indirect_callee->nargs == 1)
         indirect_callee = indirect_callee->args[0];
     bool indirect_callable =
-        !local_program_bound && function < 0 && !native_yieldable && value->op == XI_CALL &&
-        value->args[0] && value->args[0]->type && value->args[0]->type->kind == XR_KIND_FUNCTION &&
-        indirect_callee && indirect_callee->op != XI_IMPORT_REF &&
-        indirect_callee->op != XI_GET_BUILTIN &&
+        !local_program_bound && function < 0 && !native_yieldable && !native_direct &&
+        value->op == XI_CALL && value->args[0] && value->args[0]->type &&
+        value->args[0]->type->kind == XR_KIND_FUNCTION && indirect_callee &&
+        indirect_callee->op != XI_IMPORT_REF && indirect_callee->op != XI_GET_BUILTIN &&
         (indirect_callee->op != XI_GET_SHARED ||
          call_has_coroutine_state(ctx->functions[caller].source, value)) &&
         indirect_callee->op != XI_CLOSURE_NEW &&
         !(indirect_callee->op == XI_STACK_ALLOC && indirect_callee->aux_int == XI_CLOSURE_NEW);
-    if (!local_program_bound && function < 0 && !native_yieldable && !indirect_callable)
+    if (!local_program_bound && function < 0 && !native_yieldable && !native_direct &&
+        !indirect_callable)
         return append_source_class_constructor_call_target(ctx, value, operation);
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
@@ -3826,6 +3861,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     record->source_export = XR_SEMANTIC_INDEX_NONE;
     record->callable_type = XR_SEMANTIC_INDEX_NONE;
     record->kind = function >= 0      ? XR_SEM_CALL_TARGET_DIRECT_LOCAL
+                   : native_direct    ? XR_SEM_CALL_TARGET_NATIVE_DIRECT
                    : native_yieldable ? XR_SEM_CALL_TARGET_NATIVE_YIELDABLE
                                       : XR_SEM_CALL_TARGET_INDIRECT_CALLABLE;
     if (indirect_callable) {
@@ -3842,6 +3878,9 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     if (valid && native_yieldable)
         valid = text_append(&key, ":native=") && text_append(&key, native_module) &&
                 text_append(&key, ".") && text_append(&key, native_member);
+    if (valid && native_direct)
+        valid = text_append(&key, ":native-direct=") && text_append(&key, native_direct->module) &&
+                text_append(&key, ".") && text_append(&key, native_direct->name);
     if (valid && indirect_callable)
         valid = text_append(&key, ":callable-type=") &&
                 text_append_stable_id(&key, ctx->plan->types[record->callable_type].id);
@@ -4966,6 +5005,13 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!xr_semantic_string_runes_is_exact(ctx->plan, record, NULL))
             return fail(ctx, "XR_SEM_0019", "String.runes authority is not exact");
     }
+    const XaBuiltinReceiverMethodSpec *builtin_runtime_method =
+        xr_semantic_builtin_runtime_method_live_spec(value);
+    if (builtin_runtime_method) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD;
+        record->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] =
+            builtin_runtime_method->method_id;
+    }
     if (xi_iterator_rune_has_next_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_ITERATOR_RUNE_HAS_NEXT;
         if (!xr_semantic_iterator_rune_has_next_is_exact(ctx->plan, record, NULL))
@@ -5160,6 +5206,9 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!append_operation_allocation_identity(ctx, record))
             return false;
     }
+    if (record->intrinsic_kind == XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD &&
+        !xr_semantic_builtin_runtime_method_is_exact(ctx->plan, record, NULL, NULL))
+        return fail(ctx, "XR_SEM_0019", "builtin runtime method authority is not exact");
     return append_call_target(ctx, value, index);
 }
 

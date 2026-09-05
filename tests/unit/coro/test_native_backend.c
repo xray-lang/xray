@@ -70,6 +70,14 @@ static void native_increment(void *arg) {
         (*value)++;
 }
 
+TEST(time_sleep_duration_policy_is_backend_neutral) {
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(INT64_MIN), 0);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(0), 0);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(1), 1);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(XR_TIME_SLEEP_MAX_MS), XR_TIME_SLEEP_MAX_MS);
+    ASSERT_EQ_INT(xr_time_sleep_normalize_ms(INT64_MAX), XR_TIME_SLEEP_MAX_MS);
+}
+
 typedef struct NativeYieldableFixture {
     int entries;
     int destroys;
@@ -106,33 +114,6 @@ static _Atomic int64_t aot_par_for_seen_mask;
 static _Atomic int64_t aot_par_for_lane_begin[8];
 static _Atomic int64_t aot_par_for_lane_end[8];
 static _Atomic int64_t aot_par_for_lane_calls[8];
-static int aot_service_destroy_count;
-static _Atomic bool aot_service_lease_acquired;
-static _Atomic bool aot_service_lease_matched;
-
-typedef struct AotServiceLeaseFixture {
-    XrAotRuntime *runtime;
-    void *expected;
-} AotServiceLeaseFixture;
-
-static void aot_test_service_destroy(void *service) {
-    ASSERT_NOT_NULL(service);
-    aot_service_destroy_count++;
-}
-
-static void *aot_test_hold_service_lease(void *argument) {
-    AotServiceLeaseFixture *fixture = (AotServiceLeaseFixture *) argument;
-    void *service = xr_aot_runtime_service_acquire(fixture->runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
-    atomic_store_explicit(&aot_service_lease_matched, service == fixture->expected,
-                          memory_order_relaxed);
-    atomic_store_explicit(&aot_service_lease_acquired, true, memory_order_release);
-    if (service != fixture->expected)
-        return NULL;
-    xr_thread_sleep_ms(20);
-    xr_aot_runtime_service_release(fixture->runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
-    return NULL;
-}
-
 static void aot_par_for_reset_lane_records(void) {
     for (int i = 0; i < 8; i++) {
         atomic_store_explicit(&aot_par_for_lane_begin[i], -1, memory_order_relaxed);
@@ -720,53 +701,6 @@ TEST(aot_runtime_owns_core_without_isolate) {
     xr_aot_runtime_delete(runtime);
 }
 
-TEST(aot_runtime_service_slots_lease_and_destroy_services) {
-    XrAotRuntime *runtime = aot_test_runtime_new();
-    ASSERT_NOT_NULL(runtime);
-    int first = 1;
-    int duplicate = 2;
-    int second = 3;
-    aot_service_destroy_count = 0;
-
-    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &first,
-                                               aot_test_service_destroy));
-    ASSERT_FALSE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &duplicate,
-                                                aot_test_service_destroy));
-    ASSERT_TRUE(xr_aot_runtime_service_acquire(runtime, XR_AOT_SERVICE_SLOT_CLUSTER) == &first);
-    xr_aot_runtime_service_release(runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
-    ASSERT_TRUE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
-    ASSERT_EQ_INT(aot_service_destroy_count, 1);
-    ASSERT_FALSE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
-
-    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &second,
-                                               aot_test_service_destroy));
-    xr_aot_runtime_delete(runtime);
-    ASSERT_EQ_INT(aot_service_destroy_count, 2);
-}
-
-TEST(aot_runtime_service_removal_waits_for_active_lease) {
-    XrAotRuntime *runtime = aot_test_runtime_new();
-    ASSERT_NOT_NULL(runtime);
-    int service = 1;
-    aot_service_destroy_count = 0;
-    atomic_store_explicit(&aot_service_lease_acquired, false, memory_order_relaxed);
-    atomic_store_explicit(&aot_service_lease_matched, false, memory_order_relaxed);
-    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &service,
-                                               aot_test_service_destroy));
-
-    AotServiceLeaseFixture fixture = {.runtime = runtime, .expected = &service};
-    xr_thread_t holder;
-    ASSERT_TRUE(xr_thread_create(&holder, aot_test_hold_service_lease, &fixture));
-    while (!atomic_load_explicit(&aot_service_lease_acquired, memory_order_acquire))
-        xr_thread_yield();
-    ASSERT_TRUE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
-    ASSERT_EQ_INT(aot_service_destroy_count, 1);
-    ASSERT_EQ_INT(xr_thread_join(holder, NULL), 0);
-    ASSERT_TRUE(atomic_load_explicit(&aot_service_lease_matched, memory_order_relaxed));
-
-    xr_aot_runtime_delete(runtime);
-}
-
 TEST(aot_runtime_creates_scheduler_for_runtime_caps) {
     XrAotRuntimeConfig cfg;
     aot_test_runtime_config_init(&cfg);
@@ -797,10 +731,9 @@ TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&ctx), 0);
     ASSERT_TRUE(xr_aot_root_descriptor_begin(runtime));
 
-    XrAotRuntimeInfo active = xr_aot_runtime_info(&ctx);
-    ASSERT_GE(active.live_bytes, 0);
-    ASSERT_GE(active.live_objects, 0);
-    ASSERT_GE(active.finalizer_count, 0);
+    ASSERT_GE(xr_aot_runtime_live_bytes(&ctx), 0);
+    ASSERT_GE(xr_aot_runtime_live_objects(&ctx), 0);
+    ASSERT_GE(xr_aot_runtime_finalizer_count(&ctx), 0);
 
     ASSERT_TRUE(xr_aot_root_descriptor_end(runtime));
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&ctx), 0);
@@ -809,6 +742,7 @@ TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
     memset(&detached, 0, sizeof(detached));
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&detached), 0);
     ASSERT_EQ_INT(xr_aot_runtime_live_objects(&detached), 0);
+    ASSERT_EQ_INT(xr_aot_runtime_finalizer_count(&detached), 0);
 
     xr_aot_runtime_delete(runtime);
 }
@@ -1031,8 +965,7 @@ TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
     };
     XrCopyContext copy;
     xr_copy_context_init_core(&copy, core, NULL);
-    XrValue bridged = xr_deep_copy_with_ctx(
-        &copy, (XrValue) {.tag = 14, .ptr = &literal});
+    XrValue bridged = xr_deep_copy_with_ctx(&copy, (XrValue) {.tag = 14, .ptr = &literal});
     xr_copy_context_cleanup(&copy);
 
     ASSERT_TRUE(XR_IS_STRING(bridged));
@@ -1042,14 +975,12 @@ TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
     size_t object_size = (size_t) xr_runtime_string_object_allocation_bytes(5);
     XrString *materialized = (XrString *) xr_calloc(1, object_size);
     ASSERT_NOT_NULL(materialized);
-    ASSERT_EQ_INT(xr_runtime_string_object_init(
-                      materialized, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL, 5,
-                      5, 0, XR_RUNTIME_STRING_TRAIT_LOCAL),
+    ASSERT_EQ_INT(xr_runtime_string_object_init(materialized, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+                                                5, 5, 0, XR_RUNTIME_STRING_TRAIT_LOCAL),
                   XR_RUNTIME_ABI_OK);
     memcpy(materialized->data, chars, sizeof(chars));
     xr_copy_context_init_core(&copy, core, NULL);
-    bridged = xr_deep_copy_with_ctx(
-        &copy, (XrValue) {.tag = 19, .ptr = materialized});
+    bridged = xr_deep_copy_with_ctx(&copy, (XrValue) {.tag = 19, .ptr = materialized});
     xr_copy_context_cleanup(&copy);
     ASSERT_TRUE(XR_IS_STRING(bridged));
     ASSERT_EQ_INT((int) XR_TO_STRING(bridged)->length, 5);
@@ -1057,8 +988,7 @@ TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
 
     materialized->reserved16 = 1;
     xr_copy_context_init_core(&copy, core, NULL);
-    bridged = xr_deep_copy_with_ctx(
-        &copy, (XrValue) {.tag = 19, .ptr = materialized});
+    bridged = xr_deep_copy_with_ctx(&copy, (XrValue) {.tag = 19, .ptr = materialized});
     xr_copy_context_cleanup(&copy);
     ASSERT_TRUE(XR_IS_NULL(bridged));
     xr_free(materialized);
@@ -1911,6 +1841,7 @@ TEST(parallel_reduce_state_agg_runs_range_reducer) {
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Native Coroutine Backend");
+RUN_TEST(time_sleep_duration_policy_is_backend_neutral);
 RUN_TEST(native_coroutine_uses_native_backend_without_vm_state);
 RUN_TEST(native_yieldable_coroutine_uses_backend_neutral_continuation_contract);
 RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);
@@ -1919,8 +1850,6 @@ RUN_TEST(aot_coroutine_create_failure_releases_frame);
 RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
 RUN_TEST(aot_frame_alloc_reuses_small_frames_locally);
 RUN_TEST(aot_runtime_owns_core_without_isolate);
-RUN_TEST(aot_runtime_service_slots_lease_and_destroy_services);
-RUN_TEST(aot_runtime_service_removal_waits_for_active_lease);
 RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
 RUN_TEST(aot_runtime_control_plane_uses_root_descriptor_heap);
 RUN_TEST(aot_test_yield_provider_preserves_scalar_and_atomic_contracts);

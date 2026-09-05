@@ -1083,6 +1083,28 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.unary.operand);
             break;
 
+        case AST_LITERAL_REGEX: {
+            const char *pattern = node->as.literal.raw_value.regex.pattern;
+            const char *flags = node->as.literal.raw_value.regex.flags;
+            AstNode *pattern_arg = xr_ast_literal_string(
+                ctx->session, pattern ? pattern : "", XR_LITERAL_ESCAPED,
+                XR_LITERAL_INLINE, node->line);
+            AstNode *flags_arg = xr_ast_literal_string(
+                ctx->session, flags ? flags : "", XR_LITERAL_ESCAPED,
+                XR_LITERAL_INLINE, node->line);
+            AstNode **arguments = (AstNode **) ast_alloc_array(
+                ctx->session, sizeof(AstNode *), 2);
+            arguments[0] = pattern_arg;
+            arguments[1] = flags_arg;
+            AstNode *construction = xr_ast_new_expr(ctx->session, "regex", "Regex", arguments,
+                                                    NULL, 2, NULL, 0, node->line);
+            node->type = AST_NEW_EXPR;
+            node->as.new_expr = construction->as.new_expr;
+            canon_set_node_type(ctx, pattern_arg, xr_type_new_string(NULL));
+            canon_set_node_type(ctx, flags_arg, xr_type_new_string(NULL));
+            break;
+        }
+
         /* ---- Leaf nodes (no expression children) ---- */
         case AST_VARIABLE:
         case AST_LITERAL_INT:
@@ -1094,7 +1116,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_BIGINT:
-        case AST_LITERAL_REGEX:
         case AST_BREAK_STMT:
         case AST_CONTINUE_STMT:
         case AST_THIS_EXPR:

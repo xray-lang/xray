@@ -88,6 +88,61 @@ static void test_post_consume_use(void) {
     xi_func_free(func);
 }
 
+static void test_balanced_retain_does_not_authorize_semantic_use(void) {
+    XiFunc *func = make_func("balanced_retain_does_not_authorize_semantic_use");
+    XiValue *source = array_new(func, func->entry);
+    XiValue *retain = xi_value_new(func, func->entry, XI_RETAIN, &t_array, 1);
+    retain->args[0] = source;
+    XiValue *move = source_move(func, func->entry, source);
+    XiValue *index = xi_const_int(func, func->entry, 0, &t_int);
+    XiValue *use = xi_value_new(func, func->entry, XI_INDEX_GET, &t_int, 2);
+    use->args[0] = source;
+    use->args[1] = index;
+    xi_block_set_return(func->entry, move);
+    expect_status(func, XI_SOURCE_MOVE_VIOLATION, XI_SOURCE_MOVE_C3_USE_AFTER_CONSUME);
+    xi_func_free(func);
+}
+
+static void test_balanced_arc_cleanup_after_move(void) {
+    XiFunc *func = make_func("balanced_arc_cleanup_after_move");
+    XiValue *source = array_new(func, func->entry);
+    XiValue *retain = xi_value_new(func, func->entry, XI_RETAIN, &t_array, 1);
+    retain->args[0] = source;
+    XiValue *move = source_move(func, func->entry, source);
+    XiValue *release = xi_value_new(func, func->entry, XI_RELEASE, &t_array, 1);
+    release->args[0] = source;
+    xi_block_set_return(func->entry, move);
+    expect_status(func, XI_SOURCE_MOVE_PASS, XI_SOURCE_MOVE_CONTRACT_NONE);
+    xi_func_free(func);
+}
+
+static void test_unbalanced_arc_cleanup_after_move(void) {
+    XiFunc *func = make_func("unbalanced_arc_cleanup_after_move");
+    XiValue *source = array_new(func, func->entry);
+    XiValue *move = source_move(func, func->entry, source);
+    XiValue *release = xi_value_new(func, func->entry, XI_RELEASE, &t_array, 1);
+    release->args[0] = source;
+    xi_block_set_return(func->entry, move);
+    expect_status(func, XI_SOURCE_MOVE_VIOLATION, XI_SOURCE_MOVE_C3_USE_AFTER_CONSUME);
+    xi_func_free(func);
+}
+
+static void test_balanced_cross_block_cleanup_after_move(void) {
+    XiFunc *func = make_func("balanced_cross_block_cleanup_after_move");
+    XiBlock *cleanup = xi_block_new(func);
+    cleanup->sealed = true;
+    XiValue *source = array_new(func, func->entry);
+    XiValue *retain = xi_value_new(func, func->entry, XI_RETAIN, &t_array, 1);
+    retain->args[0] = source;
+    XiValue *move = source_move(func, func->entry, source);
+    xi_block_set_jump(func->entry, cleanup);
+    XiValue *release = xi_value_new(func, cleanup, XI_RELEASE, &t_array, 1);
+    release->args[0] = source;
+    xi_block_set_return(cleanup, move);
+    expect_status(func, XI_SOURCE_MOVE_VIOLATION, XI_SOURCE_MOVE_C3_USE_AFTER_CONSUME);
+    xi_func_free(func);
+}
+
 static void test_branch_exclusive_use(void) {
     XiFunc *func = make_func("branch_exclusive_use");
     XiBlock *entry = func->entry;
@@ -112,7 +167,11 @@ int main(void) {
     test_valid_move();
     test_missing_evidence();
     test_post_consume_use();
+    test_balanced_retain_does_not_authorize_semantic_use();
+    test_balanced_arc_cleanup_after_move();
+    test_unbalanced_arc_cleanup_after_move();
+    test_balanced_cross_block_cleanup_after_move();
     test_branch_exclusive_use();
-    printf("test_xi_source_move_verify: 4 passed\n");
+    printf("test_xi_source_move_verify: 8 passed\n");
     return 0;
 }

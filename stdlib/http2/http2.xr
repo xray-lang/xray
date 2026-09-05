@@ -6,12 +6,9 @@
 // state machine and the flow-control accounting. None of it needs a socket,
 // so none of it needs C.
 //
-// What stays native is the part that cannot be stated in Xray at all: opening
-// a TCP connection, negotiating TLS with ALPN "h2", and moving bytes on and
-// off the wire. Those are four leaves — __connect, __send, __recv, __close —
-// and they know nothing about HTTP/2. The old boundary was a single
-// __request leaf that owned the entire protocol; this module encodes the
-// bytes, hands them to a leaf, takes bytes back, and decodes them.
+// Transport is composed entirely from net's generic connection, TLS/ALPN and
+// byte-stream surface. HTTP/2 owns only its protocol choices and byte-level
+// state machine; it has no module-specific native leaves.
 //
 // This module is also the single owner of the HTTP/2 admission rules. They
 // used to exist twice — once here in Xray and once in C — with two different
@@ -19,6 +16,10 @@
 // ProtocolError while a malformed method returned null and became
 // ConnectionFailed. Every rule is now stated once, in _validateRequest, and
 // every rejection leaves through Http2Error.
+
+import net
+import { NetConn, NetError } from net
+import time
 
 // ---- Frame types (RFC 7540 Section 6) ----
 const FRAME_DATA = 0x0
@@ -71,6 +72,11 @@ const DEFAULT_INITIAL_WINDOW_SIZE = 65535
 const DEFAULT_MAX_FRAME_SIZE = 16384
 const MAX_ALLOWED_FRAME_SIZE = 16777215
 const MAX_WINDOW = 2147483647
+
+// Transport policy belongs to this source module. net only exposes generic
+// TLS/ALPN configuration and the negotiated protocol result.
+const H2_ALPN = "h2"
+const MAX_TRANSPORT_TIMEOUT_MS: i64 = 2147483647
 
 // The connection preface a client sends before anything else (RFC 7540
 // Section 3.5). Twenty-four bytes, fixed.
@@ -135,7 +141,7 @@ fn _isTokenByte(c: i64) -> bool {
 // looser -- no control characters and no spaces -- so `GET@X` passed one and
 // failed the other, and the disagreement surfaced as a connection failure.
 fn _methodValid(method: string) -> bool {
-    var b: Slice<u8> = method.bytes()
+    var b: const Slice<u8> = method.bytes()
     if (len(b) == 0) { return false }
     for (var i = 0; i < len(b); i++) {
         if (!_isTokenByte(b[i] as i64)) { return false }
@@ -147,7 +153,7 @@ fn _methodValid(method: string) -> bool {
 // this also rejects the pseudo-headers a caller must not supply -- this
 // module writes those itself.
 fn _headerNameValid(name: string) -> bool {
-    var b: Slice<u8> = name.bytes()
+    var b: const Slice<u8> = name.bytes()
     if (len(b) == 0) { return false }
     for (var i = 0; i < len(b); i++) {
         if (!_isTokenByte(b[i] as i64)) { return false }
@@ -159,7 +165,7 @@ fn _headerNameValid(name: string) -> bool {
 // obs-text above 0x7F. It may not hold a control character, which is what
 // stops header injection.
 fn _headerValueValid(value: string) -> bool {
-    var b: Slice<u8> = value.bytes()
+    var b: const Slice<u8> = value.bytes()
     for (var i = 0; i < len(b); i++) {
         var c = b[i] as i64
         if (c == 9) { continue }
@@ -172,7 +178,7 @@ fn _headerValueValid(value: string) -> bool {
 // field names on the wire, and a conformant peer answers a mixed-case name
 // with RST_STREAM(PROTOCOL_ERROR).
 fn _asciiLower(s: string) -> string {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     var out = Array<u8>(len(b))
     for (var i = 0; i < len(b); i++) {
         var c = b[i] as i64
@@ -182,7 +188,7 @@ fn _asciiLower(s: string) -> string {
 }
 
 fn _trimAscii(s: string) -> string {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     var start = 0
     var end = len(b)
     while (start < end && (b[start] == 32 || b[start] == 9)) { start = start + 1 }
@@ -1031,14 +1037,14 @@ export enum StreamState {
 }
 
 fn _startsWithColon(s: string) -> bool {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     return len(b) > 0 && b[0] == 58
 }
 
 // RFC 7540 Section 8.1.2.4: `:status` is exactly three digits. The C reader
 // accepted any prefix, so `"200abc"` became 200 and `"abc"` became 0.
 fn _parseStatus(value: string) -> i64 {
-    var b: Slice<u8> = value.bytes()
+    var b: const Slice<u8> = value.bytes()
     if (len(b) != 3) { return 0 }
     var status = 0
     for (var i = 0; i < 3; i++) {
@@ -1066,21 +1072,21 @@ final class Target {
     }
 }
 
-fn _indexOfByte(b: Slice<u8>, needle: i64, from: i64) -> i64 {
+fn _indexOfByte(b: const Slice<u8>, needle: i64, from: i64) -> i64 {
     for (var i = from; i < len(b); i++) {
         if ((b[i] as i64) == needle) { return i }
     }
     return -1
 }
 
-fn _sliceString(b: Slice<u8>, start: i64, end: i64) -> string {
+fn _sliceString(b: const Slice<u8>, start: i64, end: i64) -> string {
     var out = Array<u8>(end - start)
     for (var i = start; i < end; i++) { out[i - start] = b[i] }
     return string.fromUtf8Lossy(out[:])
 }
 
 fn _parsePort(text: string) -> i64 {
-    var b: Slice<u8> = text.bytes()
+    var b: const Slice<u8> = text.bytes()
     if (len(b) == 0 || len(b) > 5) {
         throw Http2Error.ProtocolError { reason: "invalid port: " + text }
     }
@@ -1103,7 +1109,7 @@ fn _parsePort(text: string) -> i64 {
 // dance are both out of scope, so anything but https is refused rather than
 // silently downgraded.
 fn _parseTarget(url: string) -> Target {
-    var b: Slice<u8> = url.bytes()
+    var b: const Slice<u8> = url.bytes()
     var schemeEnd = -1
     for (var i = 0; i + 2 < len(b); i++) {
         if ((b[i] as i64) == 58 && (b[i + 1] as i64) == 47 && (b[i + 2] as i64) == 47) {
@@ -1126,7 +1132,7 @@ fn _parseTarget(url: string) -> Target {
         if (c == 47 || c == 63 || c == 35) { authEnd = i; break }
     }
     var authority = _sliceString(b, authStart, authEnd)
-    var ab: Slice<u8> = authority.bytes()
+    var ab: const Slice<u8> = authority.bytes()
     if (len(ab) == 0) {
         throw Http2Error.ProtocolError { reason: "URL has no authority: " + url }
     }
@@ -1186,7 +1192,6 @@ fn _parseTarget(url: string) -> Target {
 // Giving up the pool is what buys the tables a safe home while they live
 // here; it costs a TLS handshake per request and is recorded as such.
 final class Exchange {
-    handle: i64
     outbox: Array<u8>
     buf: Array<u8>
     pos: i64
@@ -1209,8 +1214,7 @@ final class Exchange {
     bodyPos: i64
     bodySent: bool
 
-    constructor(handle: i64) {
-        this.handle = handle
+    constructor() {
         this.outbox = Array<u8>()
         this.buf = Array<u8>()
         this.pos = 0
@@ -1277,13 +1281,13 @@ final class Exchange {
 
     // Build and send the HEADERS frame. The four pseudo-headers come first
     // and in this order, as RFC 7540 Section 8.1.2.1 requires.
-    ref sendHeaders(target: Target, method: string, names: Array<string>,
+    ref sendHeaders(requestTarget: Target, method: string, names: Array<string>,
                 values: Array<string>, endStream: bool) {
         var block = Array<u8>()
         this.encoder.encodeHeader(ref block, ":method", method)
-        this.encoder.encodeHeader(ref block, ":path", target.path)
+        this.encoder.encodeHeader(ref block, ":path", requestTarget.path)
         this.encoder.encodeHeader(ref block, ":scheme", "https")
-        this.encoder.encodeHeader(ref block, ":authority", target.authority)
+        this.encoder.encodeHeader(ref block, ":authority", requestTarget.authority)
         for (var i = 0; i < len(names); i++) {
             this.encoder.encodeHeader(ref block, names[i], values[i])
         }
@@ -1544,9 +1548,8 @@ final class Exchange {
 
 // ---- Public surface ----
 
-// Whether this build can speak HTTP/2 at all. The answer is a property of
-// the host binary's TLS/ALPN support, so the capability probe stays native.
-export fn supported() -> bool { return __supported() }
+// HTTP/2 needs TLS but no additional host capability beyond net's provider.
+export fn supported() -> bool { return net.hasTLS() }
 
 // Run the exchange on an already-open connection. Split out so that the
 // caller can close the handle on every path without a `defer`, which cannot
@@ -1561,20 +1564,21 @@ export fn supported() -> bool { return __supported() }
 // arithmetic over `outbox` and `buf`, and this function is the only place
 // bytes cross the boundary. `ex` is a local, so its fields stay writable
 // here; a borrowed parameter would not be.
-fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
-             values: Array<string>, body: Array<u8>,
-             timeoutMs: i64) -> (i64, Array<string>, Array<string>, Array<u8>) {
-    var ex = Exchange(handle)
+fn _exchange(conn: NetConn, requestTarget: Target, method: string, names: Array<string>,
+             values: Array<string>, body: Array<u8>) ->
+             (i64, Array<string>, Array<string>, Array<u8>) {
+    var ex = Exchange()
     ex.start()
     var hasBody = len(body) > 0
-    ex.sendHeaders(target, method, names, values, !hasBody)
+    ex.sendHeaders(requestTarget, method, names, values, !hasBody)
     ex.bodySent = !hasBody
 
     var frames = 0
     while (true) {
         ex.pushBody(body)
         if (len(ex.outbox) > 0) {
-            if (!__send(handle, ex.outbox)) {
+            var count = net.writeBytes(conn, ex.outbox)
+            if (count != len(ex.outbox)) {
                 throw Http2Error.ConnectionFailed { target: "write failed" }
             }
             ex.outbox = Array<u8>()
@@ -1585,15 +1589,15 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
         }
         ex.compact()
         while (ex.frameShortfall() > 0) {
-            var chunk = __recv(handle, DEFAULT_MAX_FRAME_SIZE, timeoutMs)
-            if (chunk == null) {
+            var chunk = Array<u8>(DEFAULT_MAX_FRAME_SIZE)
+            var received = net.readInto(conn, ref chunk, DEFAULT_MAX_FRAME_SIZE)
+            if (received < 0) {
                 throw Http2Error.ConnectionFailed { target: "read failed" }
             }
-            var got = chunk!
-            if (len(got) == 0) {
+            if (received == 0) {
                 throw Http2Error.ConnectionFailed { target: "connection closed before the response ended" }
             }
-            ex.buf.appendFrom(got[:])
+            ex.buf.appendFrom(chunk[:received])
         }
         ex.consumeOneFrame()
         frames = frames + 1
@@ -1614,39 +1618,59 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
     return (ex.status, ex.headers.names, ex.headers.values, ex.responseBody)
 }
 
+fn _connect(targetText: string, host: string, port: i64, deadline: i64) -> NetConn {
+    if (!net.hasTLS()) { throw Http2Error.TlsUnavailable }
+    var conn: NetConn? = null
+    try {
+        var remaining = deadline - time.monotonic()
+        if (remaining <= 0) {
+            throw Http2Error.ConnectionFailed { target: targetText }
+        }
+        var protocols: Array<string> = [H2_ALPN]
+        conn = net.dial(host, port, net.DialOptions(remaining, true, protocols))
+        var live = conn!
+        if (net.negotiatedProtocol(live) != H2_ALPN) {
+            net.close(live)
+            throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }
+        }
+        if (!net.setDeadline(live, deadline)) {
+            net.close(live)
+            throw Http2Error.ConnectionFailed { target: targetText }
+        }
+        return live
+    } catch (e: NetError) {
+        if (conn != null) { net.close(conn!) }
+        throw Http2Error.ConnectionFailed { target: targetText }
+    }
+}
+
 // Execute one HTTP/2 request and answer (status, headerNames, headerValues,
 // body). The two header arrays are parallel: entry i of `headerNames` pairs
 // with entry i of `headerValues`.
 //
-// Everything but the socket happens here: this validates the request,
-// encodes it, hands the bytes to a leaf, takes bytes back, and decodes them.
+// Everything but the generic net transport happens here: this validates the
+// request, encodes it, moves bytes through NetConn, and decodes the response.
 // Every refusal leaves through Http2Error, so one bad input has one name.
 //
-// Ask `supported()` first. This function does not, and cannot today: a call
-// to the capability leaf anywhere in a function that also reaches a
-// suspending leaf makes the compiler refuse the *importing* module with
-// XR_SEM_0019, blaming an unrelated null check in that module's top level.
-// See blockers/r3-6-7-capability-probe-beside-suspending-leaf.md. Without a
-// TLS provider the connect below simply fails, so the answer is
-// ConnectionFailed rather than TlsUnavailable.
 export fn request(url: string, method: string, headerNames: Array<string>,
                   headerValues: Array<string>, body: Array<u8>,
                   timeoutMs: i64) -> (i64, Array<string>, Array<string>, Array<u8>) {
     _validateRequest(method, headerNames, headerValues)
-    if (timeoutMs <= 0) {
-        throw Http2Error.ProtocolError { reason: "timeout must be positive" }
+    if (timeoutMs <= 0 || timeoutMs > MAX_TRANSPORT_TIMEOUT_MS) {
+        throw Http2Error.ProtocolError { reason: "timeout is outside the transport range" }
     }
-    var target = _parseTarget(url)
+    var requestTarget = _parseTarget(url)
+    var deadline = time.monotonic() + timeoutMs
 
-    var handle = __connect(target.host, target.port, timeoutMs)
-    if (handle < 0) { throw Http2Error.ConnectionFailed { target: url } }
+    var host = requestTarget.host
+    var port = requestTarget.port
+    var conn = _connect(url, host, port, deadline)
     try {
-        var answer = _exchange(handle, target, method, headerNames, headerValues, body,
-                               timeoutMs)
-        __close(handle)
+        var answer = _exchange(conn, requestTarget, method, headerNames, headerValues, body)
+        net.close(conn)
         return answer
     } catch (e) {
-        __close(handle)
+        net.close(conn)
         throw e
     }
 }

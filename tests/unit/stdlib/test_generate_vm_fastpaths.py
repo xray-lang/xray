@@ -22,12 +22,49 @@ SPEC.loader.exec_module(generator)
 
 
 class HostedSignatureTest(unittest.TestCase):
+    def test_payload_enum_does_not_enter_scalar_hosted_abi(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-fastpath-enum-shape-") as raw:
+            root = Path(raw)
+            source = root / "stdlib" / "sample" / "sample.xr"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                """export enum Plain { A, B }
+export enum Payload {
+    Empty,
+    Value { text: string }
+}
+""",
+                encoding="utf-8",
+            )
+            value_types, owners, _classes = generator.hosted_value_types(root, [])
+
+        self.assertEqual("enum:Plain", value_types["Plain"][0])
+        self.assertEqual("sample", owners["Plain"])
+        self.assertNotIn("Payload", value_types)
+        self.assertNotIn("Payload?", value_types)
+
     def test_harness_manifest_declares_project_authority(self) -> None:
         _harness, manifest = generator.render_harness([], "fixture-fingerprint")
         self.assertEqual(
             {"project": {"name": "xray-stdlib-vm-native-fastpaths", "main": "main.xr"}},
             tomllib.loads(manifest),
         )
+
+    def test_harness_receiver_does_not_shadow_target_namespace(self) -> None:
+        entry = {
+            "module": "sample",
+            "member": "value",
+            "kind": "setter",
+            "class_name": "Options",
+            "params": [("p0", "Options", None), ("p1", "i64", None)],
+            "result": "()",
+            "imports": [],
+            "native": "xr_generated_sample_options_set_value",
+        }
+        harness, _manifest = generator.render_harness([entry], "fixture-fingerprint")
+        self.assertIn("    var receiver = p0\n", harness)
+        self.assertIn("    receiver.value = p1\n", harness)
+        self.assertNotIn("var target", harness)
 
     def test_retired_scalar_signature_is_not_hostable(self) -> None:
         value_types = dict(generator.VALUE_TYPES)

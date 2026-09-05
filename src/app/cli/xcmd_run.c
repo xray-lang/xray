@@ -574,10 +574,42 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         xr_coro_monitor_start(iso, opts.coro_watch_interval, opts.coro_http_port);
     }
 
+    /* Compile every source-backed dependency to Xi in the same topological
+     * order as the runtime preload.  Runtime modules still execute their
+     * embedded bytecode, while the entry compiler consumes these live modules
+     * as exact cross-module borrow/effect/storage authority. */
+    XrCompiledModuleGraph graph_compilation = {0};
+    bool has_dependencies = active_graph->topo_count > 1;
+    if (has_dependencies &&
+        (!active_graph_analyzer ||
+         !xr_compile_module_graph_dependencies(session, active_graph_analyzer, active_graph,
+                                               &graph_compilation))) {
+        fprintf(stderr, "Error: failed to compile dependency semantic authority\n");
+        xr_compiler_session_set_module_graph(session, NULL);
+        if (active_graph_analyzer) {
+            xa_analyzer_set_graph(active_graph_analyzer, NULL);
+            xa_analyzer_free(active_graph_analyzer);
+        }
+        xr_module_graph_free(active_graph);
+        if (graph_operation.active)
+            (void) xr_compiler_session_operation_fail(
+                &graph_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
+        xr_compiler_session_set_native_package_plan(session, NULL);
+        xr_cli_graph_authority_close(&graph_authority);
+        xray_vm_delete(iso);
+        return XR_CLI_EXIT_FAIL;
+    }
+
     /* Execute file */
     const XrModuleIdentityAuthority *entry_authority =
         &active_graph->specs[active_graph->entry_index].authority;
-    int result = xr_isolate_dofile(iso, file, entry_authority);
+    int result = has_dependencies
+                     ? xr_isolate_dofile_in_graph(
+                           iso, file, entry_authority, active_graph_analyzer, active_graph,
+                           graph_compilation.modules, graph_compilation.count)
+                     : xr_isolate_dofile(iso, file, entry_authority);
+
+    xr_compiled_module_graph_dispose(&graph_compilation);
 
     xr_compiler_session_set_module_graph(session, NULL);
     if (active_graph_analyzer) {

@@ -1,0 +1,16 @@
+contains=xaot-plan v0
+c_contains=xrt_net_tls_client_handshake_context_try(
+c_contains=xrt_net_tls_server_handshake_context_try(
+c_contains=xrt_source_provider_storage(
+c_contains=xr_str_data(
+c_contains=xr_str_len(
+c_contains=xr_aot_io_wait(
+c_contains=xr_aot_io_wait_resume(
+c_contains=xrt_net_tls_handshake_abort(
+c_contains=net_pending_handle
+c_contains=.run_pending_cleanup =
+c_contains=XRT_NETERR_CANCELLED
+c_contains=_RETRY:;
+c_not_contains=xrt_net_tls_client_handshake_context(
+c_not_contains=xrt_net_tls_server_handshake_context(
+c_not_contains=xrt_call_dynamic(

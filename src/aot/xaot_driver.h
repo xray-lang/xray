@@ -83,6 +83,7 @@ typedef struct {
     bool need_scope;
     bool need_timer;
     bool need_netpoll;
+    bool need_tls;
     bool need_task;
     bool need_atomic;
     bool need_work_queue;

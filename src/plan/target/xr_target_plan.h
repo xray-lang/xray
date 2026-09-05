@@ -76,10 +76,14 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE (UINT64_C(1) << 42)
 #define XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE (UINT64_C(1) << 43)
 #define XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE (UINT64_C(1) << 44)
-#define XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE (UINT64_C(1) << 45)
+#define XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE (UINT64_C(1) << 45)
 #define XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE (UINT64_C(1) << 46)
 #define XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE (UINT64_C(1) << 47)
 #define XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE (UINT64_C(1) << 48)
+#define XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE (UINT64_C(1) << 49)
+#define XR_TARGET_FAMILY_SOURCE_CLASS_FIELD_RESULT_STORAGE (UINT64_C(1) << 50)
+#define XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE (UINT64_C(1) << 51)
+#define XR_TARGET_FAMILY_NATIVE_CLASS_ARGUMENT_STORAGE (UINT64_C(1) << 52)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -105,7 +109,7 @@ typedef enum XrTargetExecutionFamily {
     XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
     /* One pointer-free six-field value product whose exact x64 layout is
      * i64/i64/u8/i64/i64/i64.  Both nullary callers and their common callee
-     * execute only after the complete schema-57 instruction groups prove the
+     * execute only after the complete schema-58 instruction groups prove the
      * layout, ordinal accesses, caller-owned result storage, and return. */
     XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 = UINT64_C(1) << 5,
     /* One source-backed signed-i64 predicate program whose ADD/SUB/MUL answer
@@ -165,6 +169,7 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE |                                  \
                  XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE |                           \
                  XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE |                                  \
+                 XR_TARGET_FAMILY_NATIVE_CLASS_ARGUMENT_STORAGE |                                  \
                  XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE |                                   \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |                            \
                  XR_TARGET_FAMILY_PANIC_CATCH_STORAGE | XR_TARGET_FAMILY_ADT_ENUM_STORAGE |        \
@@ -180,9 +185,13 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_PANIC_INFO_CONSTRUCTOR_STORAGE |                                 \
                  XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE |                                          \
                  XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE |                                  \
-                 XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE | XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE | \
+                 XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE |                                          \
+                 XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE |                                         \
                  XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE |                                          \
-                 XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE))
+                 XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE |                                  \
+                 XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE |                                     \
+                 XR_TARGET_FAMILY_SOURCE_CLASS_FIELD_RESULT_STORAGE |                              \
+                 XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -337,6 +346,8 @@ typedef enum XrTargetCallConvention {
      * symbol, not selector spelling, distinguishes strict and lossy decoding. */
     XR_TARGET_CALL_CONVENTION_STRING_UTF8_STATIC,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CLEAR,
+    XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT,
+    XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD,
     XR_TARGET_CALL_CONVENTION_COUNT,
 } XrTargetCallConvention;
 
@@ -356,9 +367,17 @@ typedef enum XrTargetCallConvention {
  * binds for one imported native module namespace and selector, whose receiver
  * is a module handle rather than a value and whose arguments and result are all
  * plain scalars, so the row carries no argument intent of its own.
+ * NATIVE_DIRECT names a non-suspending plain-call member through the frozen
+ * stdlib registry. Its tagged-value ABI admits managed borrowed arguments and
+ * one freshly owned nullable native-storage result, so the exact semantic
+ * operand/result contract, return-ownership metadata, and registry capability
+ * mask are part of the target identity even though no source callee or
+ * parameter row exists.
  * SOURCE_CLASS_CONSTRUCTOR names the construction of a declared class through
  * its own class object, taken from the SemanticPlan call target of the same
- * name; it names no callee function and carries no argument, and it never
+ * name. It names no target-local callee function, but its ordered argument rows
+ * pair every supplied value with the declared constructor parameter; an
+ * imported class keeps the dependency/export identities on the call. It never
  * suspends. ADT_ENUM_CONSTRUCTOR names one payload-bearing member of an exact
  * source enum through its frozen enum namespace; its ordered payload recipe is
  * projected by CEmissionPlan rather than reconstructed by CGen.
@@ -419,6 +438,8 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE,
     XR_TARGET_CALL_TARGET_STRING_UTF8_STATIC,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR,
+    XR_TARGET_CALL_TARGET_NATIVE_DIRECT,
+    XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD,
     XR_TARGET_CALL_TARGET_COUNT,
 } XrTargetCallTargetKind;
 
@@ -755,6 +776,7 @@ typedef struct XrTargetCallRecord {
     uint32_t callee_function;
     uint32_t source_dependency;
     uint32_t source_export;
+    uint32_t runtime_capabilities;
     XrStableId source_export_identity;
     XrStableId source_callee_identity;
     XrStableId native_callee_identity;

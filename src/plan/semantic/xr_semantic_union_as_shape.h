@@ -62,26 +62,13 @@ static inline bool xr_semantic_union_as_conversion_is_exact(
     if (source_value)
         *source_value = XR_SEMANTIC_INDEX_NONE;
     if (!plan || !operation || !operands || !metadata || !children ||
-        !xr_semantic_dynamic_value_is_exact(plan, operation) || operation->opcode != XI_AS ||
+        !xr_semantic_checked_as_base_is_exact(plan, operation) ||
         operation->operand_count != 1 || operation->operand_begin >= operand_count ||
         operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
         !metadata[operation->metadata_begin] || operation->semantic_immediate < 0 ||
         (operation->semantic_immediate & INT64_C(1)) != 0 ||
         (uint64_t) operation->semantic_immediate > ((uint64_t) UINT32_MAX << 1) ||
-        operation->effects != xi_generated_op_effects(XI_AS) ||
-        operation->flags != xi_generated_op_default_flags(XI_AS) ||
-        operation->ownership_use != xi_generated_op_own_use(XI_AS) ||
-        operation->result_ownership != xi_generated_op_result_ownership(XI_AS) ||
-        operation->transfer_mode != XR_TRANSFER_SHARE || operation->parameter_mode != XR_PARAM_READ ||
-        operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
-        operation->evidence[0] != 0 || operation->evidence[1] != 0 ||
-        operation->evidence[2] != 0 || operation->evidence[3] != 0 ||
-        operation->evidence[4] != 0 || operation->evidence[5] != 0 ||
-        operation->evidence[6] != 0 || operation->evidence[7] != XR_SEMANTIC_INDEX_NONE ||
-        operation->array_element_storage != 0 ||
-        operation->array_hof_kind != XR_SEM_ARRAY_HOF_NONE ||
-        operation->array_result_element_storage != 0 || operation->reserved_view[0] != 0 ||
-        operation->reserved_view[1] != 0)
+        operation->result_alias_operand != -1)
         return false;
 
     const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
@@ -103,7 +90,7 @@ static inline bool xr_semantic_union_as_conversion_is_exact(
     for (uint16_t i = 0; i < source_type->child_count; i++) {
         uint32_t member_index = children[source_type->child_begin + i];
         const XrSemanticTypeRecord *member = xr_semantic_plan_type(plan, member_index);
-        if (xr_semantic_union_as_member_matches_target(
+        if (member_index == operation->result_type && xr_semantic_union_as_member_matches_target(
                 member, target_tid, metadata[operation->metadata_begin]))
             matches++;
     }

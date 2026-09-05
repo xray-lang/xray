@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_type_identity_core.h - Runtime-neutral public type identity rules.
+ * xr_type_identity_core.h - Runtime-neutral core representation identity rules.
  */
 
 #ifndef XR_TYPE_IDENTITY_CORE_H
@@ -14,8 +14,10 @@
 #include "xr_semantic_owner_ids_gen.h"
 #include <stdint.h>
 
-/* These values are the public Type.* ids. Representation adapters select a
- * semantic kind; they do not repeat the observable numeric identity rule. */
+/* These values identify core runtime representations. Public primitive kinds
+ * expose the same Type.* id; private provider-storage kinds remain internal.
+ * Representation adapters select a semantic kind rather than repeating the
+ * numeric identity rule. */
 typedef enum XrTypeIdentityCoreKind {
     XR_TYPE_IDENTITY_CORE_NULL = 0,
     XR_TYPE_IDENTITY_CORE_BOOL = 1,
@@ -42,8 +44,8 @@ typedef enum XrTypeIdentityCoreKind {
     XR_TYPE_IDENTITY_CORE_COROUTINE = 30,
     XR_TYPE_IDENTITY_CORE_RANGE = 31,
     XR_TYPE_IDENTITY_CORE_TASK = 32,
-    XR_TYPE_IDENTITY_CORE_NETCONN = 33,
-    XR_TYPE_IDENTITY_CORE_NETLISTENER = 34,
+    XR_TYPE_IDENTITY_CORE_NET_CONN_STORAGE = 33,
+    XR_TYPE_IDENTITY_CORE_NET_LISTENER_STORAGE = 34,
     XR_TYPE_IDENTITY_CORE_ATOMIC = 35,
     XR_TYPE_IDENTITY_CORE_WORKQUEUE = 36,
     XR_TYPE_IDENTITY_CORE_RESULTGROUP = 37,
@@ -82,8 +84,8 @@ static inline uint8_t xr_type_identity_core_eval_impl(XrTypeIdentityCoreKind kin
         case XR_TYPE_IDENTITY_CORE_COROUTINE:
         case XR_TYPE_IDENTITY_CORE_RANGE:
         case XR_TYPE_IDENTITY_CORE_TASK:
-        case XR_TYPE_IDENTITY_CORE_NETCONN:
-        case XR_TYPE_IDENTITY_CORE_NETLISTENER:
+        case XR_TYPE_IDENTITY_CORE_NET_CONN_STORAGE:
+        case XR_TYPE_IDENTITY_CORE_NET_LISTENER_STORAGE:
         case XR_TYPE_IDENTITY_CORE_ATOMIC:
         case XR_TYPE_IDENTITY_CORE_WORKQUEUE:
         case XR_TYPE_IDENTITY_CORE_RESULTGROUP:

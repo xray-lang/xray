@@ -54,6 +54,34 @@ class ApiInventoryEnumMetadataTest(unittest.TestCase):
         self.assertEqual("none", ordinal["allocation"])
         self.assertEqual("materializes-string", name["allocation"])
 
+    def test_compiler_module_schema_keeps_xray_semantic_source(self) -> None:
+        items = api_inventory.collect_stdlib_metadata(ROOT)
+        coro_items = [entry for entry in items if entry["namespace"] == "Coro"]
+
+        self.assertEqual(27, len(coro_items))
+        self.assertEqual(
+            {"stdlib/types/coro.xr"},
+            {entry["source"] for entry in coro_items},
+        )
+        self.assertEqual(
+            [],
+            api_inventory.check_stdlib_metadata_source(ROOT, {"items": items}),
+        )
+
+    def test_compiler_module_schema_rejects_wrong_source_provenance(self) -> None:
+        items = api_inventory.collect_stdlib_metadata(ROOT)
+        wrong_items = [dict(entry) for entry in items]
+        stats = next(entry for entry in wrong_items if entry["name"] == "CoroStats")
+        stats["source"] = "stdlib/defs/core.def"
+
+        self.assertEqual(
+            [
+                "stdlib API symbol must use declared semantic source "
+                "stdlib/types/coro.xr, not stdlib/defs/core.def: Coro.CoroStats"
+            ],
+            api_inventory.check_stdlib_metadata_source(ROOT, {"items": wrong_items}),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

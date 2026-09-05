@@ -151,12 +151,13 @@ compatibility opcode, reserved hole, or second bounds owner.
     or ordinary-product execution route by themselves.
 22. Every Xi operation projects one exact `observable_contract` source into the
     semantic-owner registry. Generic operations default to this contract; an
-    explicit source-backed operation names its current canonical source.
-    `xi.regex.compile` names `stdlib/regex/regex.xr`, is executable by VM only,
-    and may be rewritten for deterministic AOT refusal but may not be accepted
-    as AOT-backend legal or acquire a fallback compile/match owner.
+    explicit source-backed operation names its current canonical source. Regex
+    literals do not define an Xi operation: post-analysis canonicalization
+    rewrites them to the module-qualified source construction
+    `regex.Regex(pattern, flags)`. A regex-specific opcode, backend rewrite, or
+    native constructor is not a compatible form.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 1edfaa150485a60801b3398d9cf7c0b3828dcdbe1278298b500e3b2f96bb484e
-anchor-sha256: xisa/xi/lowering.def 0ba48fe2a89c94dc0d2ac6a362ccd7edde314edcdcc9331743c3cafeed79dcac
+anchor-sha256: xisa/xi/ops.def 35dd3030a7fd4b40c8f3b76e053cea5202b9e21418c3b7af51c0715dde586cef
+anchor-sha256: xisa/xi/lowering.def 2a5a75b893790028f75fb5b61d11a8c0e6a085ea52f9af4776e646e95fb45c1e

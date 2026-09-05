@@ -166,7 +166,7 @@ typedef enum {
     // more. Array / BigInt / Channel / DateTime / Json / Map /
     // Range / Regex / Set / StringBuilder all reach the parser as plain
     // TK_NAME tokens and resolve through the prelude symbol table — see
-    // stdlib/prelude/prelude.h. Channel additionally gets a contextual
+    // module/xprelude_runtime.h. Channel additionally gets a contextual
     // intercept in xr_parse_variable so that `Channel(...)` still
     // produces a dedicated AST_CHANNEL_NEW node.
     TK_LAST_KEYWORD = TK_USIZE,

@@ -183,6 +183,30 @@ TEST(computed_accessors_are_indexed_by_property_symbol) {
     xray_vm_delete(runtime);
 }
 
+TEST(source_provider_projection_uses_frozen_field_index) {
+    setup();
+
+    XrClassBuilder *builder = xr_class_builder_new(X, "ProviderWrapper", NULL);
+    ASSERT_NOT_NULL(builder);
+    ASSERT_EQ_INT(xr_class_builder_add_field(builder, "decoy", 0), 0);
+    ASSERT_EQ_INT(xr_class_builder_add_field(builder, "_storage", XR_FIELD_PRIVATE), 0);
+    XrClass *wrapper_class = xr_class_builder_finalize(builder);
+    ASSERT_NOT_NULL(wrapper_class);
+    wrapper_class->source_provider_field_index = 1;
+
+    XrObjectInstance *wrapper = xr_instance_new(X, wrapper_class);
+    ASSERT_NOT_NULL(wrapper);
+    xr_instance_set_field_by_index(wrapper, 0, XR_FROM_INT(11));
+    xr_instance_set_field_by_index(wrapper, 1, XR_FROM_INT(29));
+
+    ASSERT_EQ_INT(XR_TO_INT(xr_instance_source_provider_storage(xr_value_from_instance(wrapper))),
+                  29);
+    wrapper_class->source_provider_field_index = -1;
+    ASSERT_TRUE(XR_IS_NULL(
+        xr_instance_source_provider_storage(xr_value_from_instance(wrapper))));
+    teardown();
+}
+
 /* ========== Transition Tests ========== */
 
 TEST(transition_create_first_field) {
@@ -312,6 +336,7 @@ static void run_all_tests(void) {
     RUN_TEST(flattened_method_table_keeps_most_derived_override);
     RUN_TEST(interface_conformance_uses_declaration_list);
     RUN_TEST(computed_accessors_are_indexed_by_property_symbol);
+    RUN_TEST(source_provider_projection_uses_frozen_field_index);
 
     RUN_TEST_SUITE("Dynamic Class Transition");
     RUN_TEST(transition_create_first_field);

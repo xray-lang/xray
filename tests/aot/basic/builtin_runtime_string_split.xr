@@ -1,0 +1,13 @@
+// The typed BUILTIN_RUNTIME_METHOD family currently authorizes exactly the
+// one-argument String.split runtime helper. The broad AOT suite compares this
+// program's VM and native stdout and exit status.
+fn exerciseSplit() {
+    var parts = "a,,b,".split(",")
+    print(len(parts))
+    print(parts[0])
+    print(len(parts[1]))
+    print(parts[2])
+    print(len(parts[3]))
+}
+
+exerciseSplit()

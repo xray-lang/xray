@@ -3745,6 +3745,26 @@ static XrType *xa_mem_with_slice_mut_return_type(XaInferContext *ctx, AstNode *n
     ctx->expected_type = expected_callback;
     XrType *callback = xa_visit_infer_expr(ctx, call->arguments[3]);
     ctx->expected_type = saved_expected;
+    XaSymbol *guard_root = xa_root_variable_symbol_for_expr(ctx, call->arguments[2]);
+    XaSymbolLinks *guard_links =
+        guard_root ? xa_analyzer_get_links(ctx->analyzer, guard_root) : NULL;
+    if (call->arguments[3]->type == AST_FUNCTION_EXPR && guard_links && guard_links->root_id != 0) {
+        for (int i = 0; i < ctx->pending_capture_count; i++) {
+            XaSymbol *captured = ctx->pending_captures[i];
+            XaSymbolLinks *captured_links =
+                captured ? xa_analyzer_get_links(ctx->analyzer, captured) : NULL;
+            if (!captured_links || captured_links->root_id != guard_links->root_id)
+                continue;
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "mem.withSliceMut<T>() callback cannot capture guard owner '%s' while its "
+                     "mutable Slice is active",
+                     guard_root->name ? guard_root->name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_BORROW_CONFLICT, msg, &loc);
+            break;
+        }
+    }
     if (!callback || callback->kind != XR_KIND_FUNCTION || callback->function.param_count != 1) {
         char msg[256];
         snprintf(msg, sizeof(msg),
@@ -3992,16 +4012,6 @@ static const char *xa_math_call_member(XaInferContext *ctx, CallExprNode *call,
         return NULL;
     return fn_links->import_member_name ? fn_links->import_member_name
                                         : call->callee->as.variable.name;
-}
-
-static bool xa_all_args_are_int(XrType **arg_types, int arg_count) {
-    if (!arg_types || arg_count <= 0)
-        return false;
-    for (int i = 0; i < arg_count; i++) {
-        if (!arg_types[i] || !XR_TYPE_IS_INT(arg_types[i]))
-            return false;
-    }
-    return true;
 }
 
 static bool xa_freestanding_math_call_supported(const char *member, XrType **arg_types,
@@ -4883,8 +4893,6 @@ static bool xa_method_stores_argument(XrType *receiver_type, const char *method_
                (strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
                 strcmp(method_name, "sendTimeout") == 0);
     }
-    if (xr_type_is_builtin_named_class(receiver_type, "WorkQueue"))
-        return strcmp(method_name, "push") == 0 && slot == 0;
     return false;
 }
 
@@ -4944,42 +4952,6 @@ static XaSymbol *xa_lookup_visible_class_symbol(XaInferContext *ctx, const char 
 
     sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
     return sym && sym->kind == XA_SYM_CLASS ? sym : NULL;
-}
-
-static bool xa_sync_runtime_class_name(const char *name) {
-    return name && (strcmp(name, "Semaphore") == 0 || strcmp(name, "CountdownLatch") == 0 ||
-                    strcmp(name, "EventCount") == 0 || strcmp(name, "WorkQueue") == 0 ||
-                    strcmp(name, "ResultGroup") == 0);
-}
-
-static bool xa_symbol_is_sync_runtime_class(XaInferContext *ctx, XaSymbol *sym, const char *name) {
-    if (!ctx || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (!links)
-        return false;
-    const char *class_name = links->import_member_name ? links->import_member_name : name;
-    if (!xa_sync_runtime_class_name(class_name))
-        return false;
-    if (links->module_name && strcmp(links->module_name, "sync") == 0)
-        return true;
-    return xa_thread_spawn_path_is_sync_module(links->file_path);
-}
-
-static XrType *xa_sync_runtime_construct_type(XaInferContext *ctx, const char *name,
-                                              CallExprNode *call) {
-    if (!ctx || !name || !xa_sync_runtime_class_name(name))
-        return NULL;
-    if (strcmp(name, "WorkQueue") == 0) {
-        XrType *elem = NULL;
-        if (call && call->type_arg_count > 0 && call->type_args[0])
-            elem = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
-        if (!elem)
-            elem = xr_type_new_unknown(NULL);
-        XrType *args[1] = {elem};
-        return xr_type_new_generic_instance(ctx->analyzer->isolate, "WorkQueue", NULL, args, 1);
-    }
-    return xr_type_new_named_instance(ctx->analyzer->isolate, name);
 }
 
 /* Namespace-imported class construction: for a callee shaped as
@@ -5095,8 +5067,6 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
         }
         return instance;
     }
-    if (xa_specifier_is_named_module(mod_name) && strcmp(mod_name, "sync") == 0)
-        return xa_sync_runtime_construct_type(ctx, ma->name, call);
     return NULL;
 }
 
@@ -6198,7 +6168,7 @@ static bool xa_len_type_supported(XrType *type) {
                 return false;
             return class_name &&
                    (strcmp(class_name, "StringBuilder") == 0 || strcmp(class_name, "Buffer") == 0 ||
-                    strcmp(class_name, "WorkQueue") == 0 || strcmp(class_name, "Range") == 0);
+                    strcmp(class_name, "Range") == 0);
         }
         default:
             return false;
@@ -7243,11 +7213,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_generic_instance(ctx->analyzer->isolate, "Atomic", NULL, args,
                                                     1);
             }
-            XaSymbol *visible_class = xa_lookup_visible_symbol(ctx, name);
-            if (xa_symbol_is_sync_runtime_class(ctx, visible_class, name)) {
-                xa_report_arg_accesses_require_known_contract(ctx, node, call);
-                return xa_sync_runtime_construct_type(ctx, name, call);
-            }
             if (strcmp(name, "Thread") == 0) {
                 xa_report_arg_accesses_require_known_contract(ctx, node, call);
                 XrLocation loc = {
@@ -7276,10 +7241,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         return xr_type_new_error(ctx->analyzer->isolate);
                     return xa_class_constructor_instance_type(ctx, node, call, name, links,
                                                               links->class_info);
-                }
-                if (xa_symbol_is_sync_runtime_class(ctx, sym, name)) {
-                    xa_report_arg_accesses_require_known_contract(ctx, node, call);
-                    return xa_sync_runtime_construct_type(ctx, name, call);
                 }
             }
 
@@ -7354,8 +7315,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     return xa_class_constructor_instance_type(ctx, node, call, class_name, links,
                                                               links->class_info);
                 }
-                if (xa_symbol_is_sync_runtime_class(ctx, class_sym, class_name))
-                    return xa_sync_runtime_construct_type(ctx, class_name, call);
             }
         }
         return xr_type_new_unknown(NULL);

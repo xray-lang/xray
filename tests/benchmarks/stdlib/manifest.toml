@@ -5,7 +5,7 @@ governed_suites = [
   "stdlib/_probe", "stdlib/base64", "stdlib/cluster", "stdlib/codegen", "stdlib/compress", "stdlib/crypto", "stdlib/http2",
   "stdlib/csv", "stdlib/datetime", "stdlib/encoding", "stdlib/http", "stdlib/io",
   "stdlib/log", "stdlib/math", "stdlib/mem", "stdlib/net", "stdlib/os", "stdlib/parallel",
-  "stdlib/path", "stdlib/prelude", "stdlib/regex", "stdlib/runtime", "stdlib/simd",
+  "stdlib/path", "stdlib/regex", "stdlib/runtime", "stdlib/simd",
   "stdlib/sync", "stdlib/sys", "stdlib/test_yield", "stdlib/text", "stdlib/time",
   "stdlib/toml", "stdlib/url", "stdlib/ws", "stdlib/xml", "stdlib/yaml",
 ]
@@ -324,19 +324,6 @@ module = "parallel"
 suite = "stdlib/parallel"
 kind = "tiny_helper"
 source = "tests/diff/cases/semantics/stdlib/parallel_api_reference.xr"
-warmup = 1
-iterations = 5
-quick_iterations = 2
-metrics = ["wall_ns"]
-compare = ["vm", "aot"]
-vm_budget_ratio = 50.0
-
-[[benchmark]]
-id = "prelude.core.contract"
-module = "prelude"
-suite = "stdlib/prelude"
-kind = "tiny_helper"
-source = "tests/benchmarks/stdlib/prelude/prelude_core_ops.xr"
 warmup = 1
 iterations = 5
 quick_iterations = 2

@@ -1,1 +1,1 @@
-{"case":"availability-surface","probe":"tests/diff/cases/semantics/stdlib/http2_surface_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"The built-in http2 module reports target capability identically in VM and AOT"}
+{"case":"availability-surface","probe":"tests/diff/cases/semantics/stdlib/http2_surface_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"The built-in http2 module exposes one bool capability surface; its target-specific value is deliberately not compared"}

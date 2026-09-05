@@ -110,7 +110,7 @@ typedef enum {
  * mapping.  Physical targets may coalesce storage but may not rediscover the
  * action set or state ordering. */
 typedef struct XiCoroFrameAction {
-    uint8_t kind; /* XiCoroFrameActionKind */
+    uint8_t kind;      /* XiCoroFrameActionKind */
     uint8_t edge_kind; /* XiCoroEdgeKind governing this action */
     uint8_t _pad[2];
     uint32_t state_id;
@@ -180,9 +180,9 @@ typedef struct XiCoroSlot {
     XiValue *value;
     struct XrType *type;
     uint32_t owner_value_id; /* stable Xi owner identity across representation aliases */
-    uint8_t logical_rep; /* XrRep value (xtype.h), via xr_type_rep() */
-    uint8_t kind;        /* XiCoroSlotKind */
-    bool is_root; /* logical reference root; physical root kind is target-planned */
+    uint8_t logical_rep;     /* XrRep value (xtype.h), via xr_type_rep() */
+    uint8_t kind;            /* XiCoroSlotKind */
+    bool is_root;            /* logical reference root; physical root kind is target-planned */
     bool needs_release;
     bool needs_runtime_slot;
     bool needs_boundary_clone;
@@ -263,21 +263,9 @@ XR_FUNC bool xi_op_is_coroutine(uint16_t op);
  * send/recv shapes that pre-date precise typing. */
 XR_FUNC bool xi_value_is_channel_method_call(const XiValue *v, const char *method, int nargs);
 XR_FUNC bool xi_value_is_task_method_call(const XiValue *v, const char *method, int nargs);
-XR_FUNC bool xi_value_is_work_queue_method_call(const XiValue *v, const char *method, int nargs);
-XR_FUNC bool xi_value_is_result_group_method_call(const XiValue *v, const char *method, int nargs);
-XR_FUNC bool xi_value_is_countdown_latch_method_call(const XiValue *v, const char *method,
-                                                     int nargs);
-XR_FUNC bool xi_value_is_semaphore_method_call(const XiValue *v, const char *method, int nargs);
-XR_FUNC bool xi_value_is_event_count_method_call(const XiValue *v, const char *method, int nargs);
-
-/* True if 'v' is a Task/WorkQueue method call that may block (and therefore
+/* True if 'v' is a Task method call that may block (and therefore
  * needs a runtime result slot across the suspend). */
 XR_FUNC bool xi_value_is_blocking_task_method_call(const XiValue *v);
-XR_FUNC bool xi_value_is_blocking_work_queue_method_call(const XiValue *v);
-XR_FUNC bool xi_value_is_blocking_result_group_method_call(const XiValue *v);
-XR_FUNC bool xi_value_is_blocking_countdown_latch_method_call(const XiValue *v);
-XR_FUNC bool xi_value_is_blocking_semaphore_method_call(const XiValue *v);
-XR_FUNC bool xi_value_is_blocking_event_count_method_call(const XiValue *v);
 
 /* True if 'v' is a coroutine suspension site.  'resolver' supplies the two
  * context-dependent queries (stdlib module-import for time.sleep, and
@@ -303,7 +291,7 @@ XR_FUNC bool xi_coro_unbox_from_typed_await(const XiFunc *f, const XiValue *v);
 XR_FUNC const XiValue *xi_coro_recv_status_user(const XiFunc *f, const XiValue *recv);
 XR_FUNC bool xi_coro_is_paired_recv_status(const XiFunc *f, const XiValue *v);
 
-/* True if 'v' is a blocking channel/task/work-queue method whose result is
+/* True if 'v' is a blocking channel/task method whose result is
  * delivered through a runtime-managed slot that must persist across suspend. */
 XR_FUNC bool xi_coro_value_needs_runtime_slot(const XiValue *v);
 

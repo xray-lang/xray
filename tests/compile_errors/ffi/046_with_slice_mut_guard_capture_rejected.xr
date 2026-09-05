@@ -1,0 +1,17 @@
+import mem
+
+class Guard {
+    value: i64
+    constructor() { this.value = 0 }
+    ref resize() { this.value = this.value + 1 }
+}
+
+var guard = Guard()
+var pointer = mem.mutPtr<u8>(0)
+unsafe {
+    mem.withSliceMut<u8>(pointer, 0, ref guard,
+        fn(view: ref Slice<u8>) {
+            print(len(view))
+            guard.resize()
+        })
+}

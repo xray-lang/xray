@@ -19,69 +19,19 @@
  * module it is loading.
  */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_CLUSTER
-XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule *module) {
-    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
-        return false;
-    size_t expected_count = 0;
-    (void) expected_count;
-    XRS_EXPORT(module, isolate, "__start", cluster_start_primitive);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__join", cluster_join);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__self", cluster_self);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__nodes", cluster_nodes);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__monitor", cluster_monitor_coro_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__discover", cluster_discover_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__info", cluster_info_fn);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__send", cluster_send_primitive);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__listen", cluster_listen_fn);
-    expected_count++;
-    return module->export_count == expected_count;
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_CLUSTER */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_CRYPTO
 XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
     (void) expected_count;
-    XRS_EXPORT(module, isolate, "__randomBytes", crypto_random_bytes_raw);
+    XRS_EXPORT(module, isolate, "__fillRandomBytes", crypto_fill_random_bytes);
     expected_count++;
     XRS_EXPORT(module, isolate, "__timingSafeEqualBytes", crypto_timing_safe_equal_bytes);
     expected_count++;
     return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
-
-#ifdef XR_STDLIB_VM_BIND_MODULE_HTTP2
-XR_FUNC bool xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *module) {
-    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
-        return false;
-    size_t expected_count = 0;
-    (void) expected_count;
-    XRS_EXPORT(module, isolate, "__supported", h2_supported);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__connect", h2_connect);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__send", h2_send);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__recv", h2_recv);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__close", h2_close);
-    expected_count++;
-    return module->export_count == expected_count;
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP2 */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_IO
 XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *module) {
@@ -92,10 +42,6 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "__chmod", io_chmod);
     expected_count++;
     XRS_EXPORT(module, isolate, "__chdir", io_chdir);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__cwd", io_cwd);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__exists", io_exists);
     expected_count++;
     XRS_EXPORT(module, isolate, "__fileClose", io_fileClose);
     expected_count++;
@@ -111,25 +57,13 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__fileWriteStr", io_fileWriteStr);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__fileSize", io_fileSize);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__isDir", io_isDir);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__isFile", io_isFile);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__isSymlink", io_isSymlink);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__mkdir", io_mkdir);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__readDir", io_readDir);
+    XRS_EXPORT(module, isolate, "__dirOpen", io_dirOpen);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__readFile", io_readFile);
+    XRS_EXPORT(module, isolate, "__dirNext", io_dirNext);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__readFileBytes", io_readFileBytes);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__readStdin", io_readStdin);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__readStdinBytes", io_readStdinBytes);
+    XRS_EXPORT(module, isolate, "__dirClose", io_dirClose);
     expected_count++;
     XRS_EXPORT(module, isolate, "__readlink", io_readlink);
     expected_count++;
@@ -227,14 +161,12 @@ XR_FUNC bool xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *mod
         return false;
     size_t expected_count = 0;
     (void) expected_count;
-    xr_stdlib_vm_register_buffer_class_generated(isolate);
+    xr_stdlib_vm_register___buffer_storage_class_generated(isolate);
     XRS_EXPORT(module, isolate, "__fence", mem_fence);
     expected_count++;
     XRS_EXPORT(module, isolate, "__prefetch", mem_prefetch);
     expected_count++;
     XRS_EXPORT(module, isolate, "__cacheFlush", mem_cache_flush);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__cacheInvalidate", mem_cache_invalidate);
     expected_count++;
     XRS_EXPORT(module, isolate, "__nontemporalStore", mem_nontemporal_store);
     expected_count++;
@@ -246,19 +178,21 @@ XR_FUNC bool xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *mod
     expected_count++;
     XRS_EXPORT(module, isolate, "__allocAligned", mem_alloc_aligned);
     expected_count++;
-    XRS_EXPORT(module, isolate, "pageAlloc", mem_page_alloc);
+    XRS_EXPORT(module, isolate, "__bufferLength", mem_buffer_length);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__bufferAsBytes", mem_buffer_as_bytes);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__bufferBorrowPtr", mem_buffer_borrow_ptr);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__bufferResize", mem_buffer_resize);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__pageAlloc", mem_page_alloc);
     expected_count++;
     XRS_EXPORT(module, isolate, "__pageProtect", mem_page_protect);
     expected_count++;
     XRS_EXPORT(module, isolate, "__pageFree", mem_page_free);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__copy", mem_copy);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__move", mem_move);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__set", mem_set);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__compare", mem_compare);
     expected_count++;
     XRS_EXPORT(module, isolate, "__volatileLoad", mem_volatile_load);
     expected_count++;
@@ -274,11 +208,10 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
         return false;
     size_t expected_count = 0;
     (void) expected_count;
+    xr_stdlib_vm_register___tls_context_storage_class_generated(isolate);
     XRS_EXPORT_YIELDABLE(module, isolate, "__resolveAll", net_resolve_all_yieldable);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__connectFd", net_connect_fd_yieldable);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__nowMs", net_now_ms_fn);
     expected_count++;
     XRS_EXPORT(module, isolate, "__lastConnectCode", net_last_connect_code);
     expected_count++;
@@ -290,37 +223,51 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeBytes", net_write_bytes_yieldable);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__copyBidirectional", net_copy_bidirectional_yieldable);
+    XRS_EXPORT(module, isolate, "__shutdownDirection", net_shutdown_direction);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__shutdownRead", net_shutdown_read);
+    XRS_EXPORT(module, isolate, "__closeConn", net_close_handle);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__shutdownWrite", net_shutdown_write);
+    XRS_EXPORT(module, isolate, "__closeListener", net_close_handle);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__shutdown", net_shutdown_conn);
+    XRS_EXPORT(module, isolate, "__connFd", net_fd_handle);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__close", net_close_handle);
+    XRS_EXPORT(module, isolate, "__listenerFd", net_fd_handle);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__fd", net_fd_handle);
+    XRS_EXPORT(module, isolate, "__connIsTLS", net_conn_is_tls);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__setReadDeadline", net_set_read_deadline);
+    XRS_EXPORT(module, isolate, "__tlsNegotiatedProtocol", net_tls_negotiated_protocol);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__setWriteDeadline", net_set_write_deadline);
+    XRS_EXPORT(module, isolate, "__listenerPort", net_listener_port);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__setDeadline", net_set_deadline);
+    XRS_EXPORT(module, isolate, "__setDeadlineDirection", net_set_deadline_direction);
     expected_count++;
     XRS_EXPORT(module, isolate, "__setAcceptDeadline", net_set_accept_deadline);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__lastCode", net_last_code);
+    XRS_EXPORT(module, isolate, "__connLastCode", net_last_code);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__lastErrno", net_last_errno);
+    XRS_EXPORT(module, isolate, "__listenerLastCode", net_last_code);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__connLastErrno", net_last_errno);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__listenerLastErrno", net_last_errno);
     expected_count++;
     XRS_EXPORT(module, isolate, "__hasTLS", net_has_tls);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__newTlsClientContext", net_tls_client_context_new);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__newTlsServerContext", net_tls_server_context_new);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__tlsClientHandshakeWithContext", net_tls_client_handshake_context_yieldable);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__tlsServerHandshakeWithContext", net_tls_server_handshake_context_yieldable);
     expected_count++;
 #ifdef XR_ENABLE_TLS
     XRS_EXPORT_YIELDABLE(module, isolate, "__tlsHandshake", net_tls_handshake_yieldable);
     expected_count++;
 #endif  /* XR_ENABLE_TLS */
     XRS_EXPORT(module, isolate, "__udpBind", net_udp_bind_handle);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__udpMulticastBind", net_udp_multicast_bind_handle);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__udpSendTo", net_udp_send_to_yieldable);
     expected_count++;
@@ -382,14 +329,6 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT(module, isolate, "__loadavg", os_loadavg);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__clock", os_clock);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__sleep", os_sleep);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__exec", os_exec);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__spawn", os_spawn);
-    expected_count++;
     return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */
@@ -400,12 +339,6 @@ XR_FUNC bool xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *m
         return false;
     size_t expected_count = 0;
     (void) expected_count;
-    XRS_EXPORT(module, isolate, "__regexNew", regex_compile);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__regexMatchNew", regex_match_new);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__regexParseFlags", regex_parse_flags);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__unicodePropId", regex_unicode_prop_id);
     expected_count++;
     XRS_EXPORT(module, isolate, "__unicodeHasProp", regex_unicode_has_prop);
@@ -420,11 +353,11 @@ XR_FUNC bool xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule 
         return false;
     size_t expected_count = 0;
     (void) expected_count;
-    XRS_EXPORT(module, isolate, "__stats", runtime_stats);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__liveBytes", runtime_live_bytes);
     expected_count++;
     XRS_EXPORT(module, isolate, "__liveObjects", runtime_live_objects);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__finalizerCount", runtime_finalizer_count);
     expected_count++;
     XRS_EXPORT(module, isolate, "__sharedLiveBytes", runtime_shared_bytes);
     expected_count++;
@@ -434,51 +367,15 @@ XR_FUNC bool xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule 
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_RUNTIME */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_SYNC
-XR_FUNC bool xr_stdlib_vm_bind_sync_generated(XrVMRuntime *isolate, XrModule *module) {
-    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
-        return false;
-    size_t expected_count = 0;
-    (void) expected_count;
-    xr_module_export_native_type_class(isolate, module, "CountdownLatch", XR_TCOUNTDOWNLATCH);
-    expected_count++;
-    xr_module_export_native_type_class(isolate, module, "EventCount", XR_TEVENTCOUNT);
-    expected_count++;
-    xr_module_export_native_type_class(isolate, module, "ResultGroup", XR_TRESULTGROUP);
-    expected_count++;
-    xr_module_export_native_type_class(isolate, module, "Semaphore", XR_TSEMAPHORE);
-    expected_count++;
-    xr_module_export_native_type_class(isolate, module, "WorkQueue", XR_TWORKQUEUE);
-    expected_count++;
-    return module->export_count == expected_count;
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_SYNC */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_SYS
 XR_FUNC bool xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *module) {
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
     (void) expected_count;
-    XRS_EXPORT(module, isolate, "OsMutex", sys_mutex_new);
+    XRS_EXPORT(module, isolate, "__threadYield", sys_thread_yield);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__osMutexNew", sys_mutex_new);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "OsRwLock", sys_rwlock_new);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "OsCondvar", sys_condvar_new);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "OsBarrier", sys_barrier_new);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "OsOnce", sys_once_new);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "cpuCount", sys_cpu_count);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "threadYield", sys_thread_yield);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "sleepMs", sys_sleep_ms);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "pinToCpu", sys_pin_to_cpu);
+    XRS_EXPORT(module, isolate, "__pinToCpu", sys_pin_to_cpu);
     expected_count++;
     XRS_EXPORT(module, isolate, "__threadLocalId", sys_thread_local_id);
     expected_count++;
@@ -495,8 +392,6 @@ XR_FUNC bool xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "__dylibLastError", sys_dylib_last_error);
     expected_count++;
     XRS_EXPORT(module, isolate, "__processSpawn", sys_process_spawn);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__processWait", sys_process_wait_yieldable);
     expected_count++;
     XRS_EXPORT(module, isolate, "__processTryWait", sys_process_try_wait);
     expected_count++;
@@ -564,7 +459,7 @@ XR_FUNC bool xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *mo
     expected_count++;
     XRS_EXPORT(module, isolate, "__utcOffsetAt", time_utcOffsetAt);
     expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "sleep", xr_time_sleep);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__sleep", xr_time_sleep);
     expected_count++;
     return module->export_count == expected_count;
 }

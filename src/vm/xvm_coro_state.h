@@ -32,7 +32,7 @@ typedef union {
         void (*func)(void *);
         void *arg;
     } native;
-    XrCFuncResult (*cfunc)(struct XrVMRuntime *, XrValue *, int, XrValue *);
+    XrCoroCFuncEntry cfunc;
 } XrCoroEntry;
 
 struct XrVmCoroState {
@@ -44,6 +44,8 @@ struct XrVmCoroState {
      * release must return the block to the owner's per-coroutine heap, not to
      * whatever coroutine happens to drop the last reference. */
     struct XrCoroHeap *entry_closure_owner;
+    void *entry_context;
+    XrCoroContextDestroy destroy_entry_context;
     XrValue *args;
     int arg_count;
     XrValue inline_args[4];

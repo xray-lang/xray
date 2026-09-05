@@ -195,14 +195,15 @@ def def_native_classes(root: Path) -> dict[str, set[str]]:
 
 
 def check_builtin_distribution(root: Path) -> list[str]:
-    """Keep the retained native-library modules inside the one stdlib boundary.
+    """Keep provider-backed and source-only modules in their exact boundaries.
 
-    ws left this set once its connection layer became pure Xray: it now has no
-    core.def binding block and, like http, is loaded from its source alone.
-    compress follows the same source-only path after moving its coder into Xray.
+    ws and http2 left this set once their connection layers became pure Xray:
+    they now have no core.def binding blocks and, like http, are loaded from
+    source alone. cluster and compress follow the same source-only path.
     """
     errors: list[str] = []
-    expected = {"cluster", "http2", "crypto"}
+    expected = {"crypto"}
+    source_only = {"cluster", "compress", "http2"}
     manifest = load_manifest(root)
     names = set(manifest.by_name)
     core_def = (root / "stdlib/defs/core.def").read_text(encoding="utf-8")
@@ -226,21 +227,30 @@ def check_builtin_distribution(root: Path) -> list[str]:
         if entry.get("perf_suite") != f"stdlib/{name}":
             errors.append(f"built-in standard module {name}: perf_suite must be stdlib/{name}")
 
-    compress = manifest.by_name.get("compress", {})
-    if not compress:
-        errors.append("built-in standard module compress: missing boundary entry")
-    elif not compress.get("def_migration_complete"):
-        errors.append("built-in standard module compress: source-only migration is not complete")
-    if re.search(r"^module\s+compress\s*\{", core_def, re.M):
-        errors.append("built-in standard module compress: obsolete binding block remains")
-    if "compress" in binders:
-        errors.append("built-in standard module compress: obsolete native-entry binder remains")
+    for name in sorted(source_only):
+        entry = manifest.by_name.get(name, {})
+        if not entry:
+            errors.append(f"built-in standard module {name}: missing boundary entry")
+        elif not entry.get("def_migration_complete"):
+            errors.append(
+                f"built-in standard module {name}: source-only migration is not complete"
+            )
+        if not (root / "stdlib" / name).is_dir():
+            errors.append(f"built-in standard module {name}: missing stdlib/{name}")
+        if re.search(rf"^module\s+{re.escape(name)}\s*\{{", core_def, re.M):
+            errors.append(f"built-in standard module {name}: obsolete binding block remains")
+        if name in binders:
+            errors.append(
+                f"built-in standard module {name}: obsolete native-entry binder remains"
+            )
+        if entry.get("perf_suite") != f"stdlib/{name}":
+            errors.append(f"built-in standard module {name}: perf_suite must be stdlib/{name}")
 
     forbidden = (
         "packages/official",
         "XR_PACKAGE_",
         "XR_OFFICIAL_PACKAGE",
-        *(f"xray/{name}" for name in sorted(expected)),
+        *(f"xray/{name}" for name in sorted(expected | source_only)),
     )
     checked = {
         "CMakeLists.txt": cmake,
@@ -251,6 +261,24 @@ def check_builtin_distribution(root: Path) -> list[str]:
         for marker in forbidden:
             if marker in text:
                 errors.append(f"{label}: removed official-package marker remains: {marker}")
+
+    package_import = re.compile(
+        r"(?m)^\s*import\s+(?:\{[^}\n]+\}\s+from\s+)?"
+        rf"(?:[\"'])?xray/(?:{'|'.join(sorted(expected | source_only))})\b"
+    )
+    for base in ("stdlib", "tests"):
+        for path in sorted((root / base).rglob("*.xr")):
+            match = package_import.search(path.read_text(encoding="utf-8"))
+            if match:
+                errors.append(
+                    f"{path.relative_to(root)}: removed package import remains: "
+                    f"{match.group(0).strip()}"
+                )
+
+    errors.extend(
+        f"obsolete nested http2 path remains: {path.relative_to(root)}"
+        for path in (root / "stdlib/http").glob("http2*")
+    )
     package_root = root / "packages" / "official"
     if package_root.exists() and any(path.is_file() for path in package_root.rglob("*")):
         errors.append("packages/official must contain no files after the atomic stdlib cutover")
@@ -267,10 +295,11 @@ def check_builtin_schema(root: Path) -> list[str]:
     if not re.search(r"(?m)^class\s+Iterator<T>\s*\{", text):
         errors.append("stdlib/types/iterator.xr must declare class Iterator<T>")
     declared = set(re.findall(r"(?m)^\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", text))
-    expected = {"hasNext", "next", "nth"}
+    expected = {"hasNext", "next", "nth", "iterator", "toString"}
     if declared != expected:
         errors.append(
-            "Iterator declaration methods must be exactly hasNext/next/nth; got "
+            "Iterator declaration methods must be exactly "
+            "hasNext/next/nth/iterator/toString; got "
             + ", ".join(sorted(declared))
         )
 
@@ -282,11 +311,10 @@ def check_builtin_schema(root: Path) -> list[str]:
         implementation,
         re.S,
     )
-    implemented = set(re.findall(r'\{"([A-Za-z_][A-Za-z0-9_]*)"', table_match.group("body"))) if table_match else set()
-    if implemented != expected:
+    if table_match:
         errors.append(
-            "compiler Iterator method table must match stdlib/types/iterator.xr; got "
-            + ", ".join(sorted(implemented))
+            "compiler must not register a second Iterator interface method table; "
+            "stdlib/types/iterator.xr owns the sealed native class surface"
         )
 
     items = api_inventory(root).get("items", [])
@@ -340,7 +368,7 @@ def check_l2_thinning(root: Path) -> list[str]:
     expected_native = {
         "io": set(),
         "os": set(),
-        "net": {"NetError"},
+        "net": set(),
     }
     expected_sources = {
         "io": "stdlib/io/io.xr",
@@ -488,7 +516,7 @@ def check_error_model_policy(root: Path) -> list[str]:
 
     high_risk_sources = (
         root / "src/base/xglobal_indices.h",
-        root / "stdlib/prelude/prelude.c",
+        root / "src/module/xprelude_runtime.c",
         root / "src/frontend/analyzer/xanalyzer.c",
         root / "src/api/xisolate_runtime.c",
         root / "src/coro/xaot_coro.c",

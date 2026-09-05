@@ -208,7 +208,6 @@ typedef struct XiLower {
     struct XrType *type_unit;
     struct XrType *type_any;
     struct XrType *type_bigint;
-    struct XrType *type_regex;
 
     /* Self-reference for recursive named functions.
      * Set to a dummy XI_CONST in xi_lower_func so the function body

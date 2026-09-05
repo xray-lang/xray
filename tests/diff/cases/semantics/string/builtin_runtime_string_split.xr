@@ -1,0 +1,10 @@
+fn exerciseSplit() {
+    var parts = "a,,b,".split(",")
+    print(len(parts))
+    print(parts[0])
+    print(len(parts[1]))
+    print(parts[2])
+    print(len(parts[3]))
+}
+
+exerciseSplit()

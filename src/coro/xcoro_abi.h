@@ -26,10 +26,10 @@ typedef struct XrCoroutine XrCoroutine;
 typedef struct XrWorker XrWorker;
 typedef struct XrClosure XrClosure;
 
-typedef XrCFuncResult (*XrCoroCFuncEntry)(XrVMRuntime *isolate, XrValue *args, int nargs,
-                                          XrValue *result);
+typedef XrCFuncResult (*XrCoroCFuncEntry)(XrVMRuntime *isolate, void *context, XrValue *result);
+typedef void (*XrCoroContextDestroy)(void *context);
 typedef XrCFuncResult (*XrNativeCoroEntry)(XrVMRuntime *isolate, void *context, XrValue *result);
-typedef void (*XrNativeCoroContextDestroy)(void *context);
+typedef XrCoroContextDestroy XrNativeCoroContextDestroy;
 
 /* ========== Backend Identity ========== */
 
@@ -133,8 +133,8 @@ typedef struct XrCoroBackendVTable {
     void (*reset_entry_state_no_free)(XrCoroutine *coro);
     bool (*bind_closure_entry)(XrCoroutine *coro, XrVMRuntime *isolate, XrClosure *closure,
                                XrValue *args, int arg_count, bool copy_args);
-    bool (*bind_cfunc_entry)(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
-                             int arg_count);
+    bool (*bind_cfunc_entry)(XrCoroutine *coro, XrCoroCFuncEntry cfunc, void *context,
+                             XrCoroContextDestroy destroy_context);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
     const char *(*debug_name)(const XrCoroutine *coro);

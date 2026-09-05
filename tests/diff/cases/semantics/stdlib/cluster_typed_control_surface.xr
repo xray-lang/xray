@@ -2,20 +2,16 @@ import {
     ClusterConfig,
     ClusterInfo,
     ClusterNodeInfo,
-    ClusterNodeState,
-    ClusterTlsOptions,
-    ClusterTlsStatus
+    ClusterTlsOptions
 } from cluster
 
 fn accepts(
     config: ClusterConfig?,
     info: ClusterInfo?,
     node: ClusterNodeInfo?,
-    tlsOptions: ClusterTlsOptions?,
-    tlsStatus: ClusterTlsStatus?
+    tlsOptions: ClusterTlsOptions?
 ) -> bool {
     return true
 }
 
-print(accepts(null, null, null, null, null))
-print(ClusterNodeState.Connected.name)
+print(accepts(null, null, null, null))

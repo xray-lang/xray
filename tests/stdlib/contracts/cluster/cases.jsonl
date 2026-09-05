@@ -1,1 +1,2 @@
 {"case":"protocol-address-and-topic","probe":"tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"cluster address grammar plus declared topic wildcard contract"}
+{"case":"wire-handshake-auth-known-answers","probe":"tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"Xray-owned frame bytes, handshake shapes, proof construction, and malformed-input refusals"}

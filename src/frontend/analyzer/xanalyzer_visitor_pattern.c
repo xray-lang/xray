@@ -53,8 +53,6 @@ static XrTypeKind type_member_to_kind(const char *name) {
         return XR_KIND_STRUCT_OBJECT;
     if (strcmp(name, "function") == 0)
         return XR_KIND_FUNCTION;
-    if (strcmp(name, "Regex") == 0)
-        return XR_KIND_INSTANCE;
     if (strcmp(name, "BigInt") == 0)
         return XR_KIND_INSTANCE;
     if (strcmp(name, "Channel") == 0)

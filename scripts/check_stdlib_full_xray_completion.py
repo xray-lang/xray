@@ -39,20 +39,19 @@ from stdlib_symbol_inventory import (  # noqa: E402
     QUEUE_ORDER,
     SymbolRow,
     build_rows,
-    has_compiler_owned_semantic_source,
     is_semantic_c_owner,
     leaf_is_approved,
     summarize,
 )
 
 
-SCHEMA = 2
+SCHEMA = 3
 
 CURRENT_PLAN_SCHEMAS = {
     "psc_schema": 9,
-    "semantic_schema": 45,
-    "target_schema": 56,
-    "xtp_schema": 56,
+    "semantic_schema": 49,
+    "target_schema": 60,
+    "xtp_schema": 60,
 }
 
 HEX_32_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -100,9 +99,8 @@ UNRUN_BANNER = (
 # have approved every misspelling instead.
 
 
-# Probe field spellings. The probe writer and this reader are separate
-# programs, so each fact is looked up under every name it plausibly carries
-# and an unrecognised shape degrades to "no verdict" rather than to a crash.
+# Probe fields are one exact schema shared with the producer. Missing explicit
+# verdicts degrade to "no verdict" rather than being inferred from process data.
 TRUE_WORDS = {
     "pass", "passed", "ok", "true", "yes", "success", "succeeded", "green",
     "1", "complete", "reproducible", "identical", "match", "matched", "same",
@@ -114,15 +112,11 @@ FALSE_WORDS = {
     "skipped", "missing",
 }
 
-MODULE_NAME_KEYS = ("module", "name", "module_name")
-MODULE_LIST_KEYS = ("modules", "results", "probes", "entries", "records")
-VM_KEYS = ("vm", "vm_ok", "vm_status", "vm_result", "vm_pass", "vm_passed")
-AOT_KEYS = ("aot", "aot_ok", "aot_status", "aot_result", "aot_pass", "aot_passed")
-STATUS_KEYS = ("ok", "status", "result", "passed", "pass", "success")
-# A backend that records the invocation rather than a verdict states the
-# outcome as a process result, where success is a zero return code.
-RETURNCODE_KEYS = ("returncode", "return_code", "exit_code", "rc")
-TIMEOUT_KEYS = ("timed_out", "timeout", "timed-out")
+MODULE_NAME_KEY = "module"
+MODULE_LIST_KEY = "modules"
+VM_KEY = "vm"
+AOT_KEY = "aot"
+STATUS_KEY = "ok"
 REFUSAL_KEYS = (
     "first_refusal", "first_refusal_message", "first_refusal_reason", "refusal",
     "refusal_message", "diagnostic", "reason", "message", "error",
@@ -282,7 +276,7 @@ class ProbeModuleEvidence:
         """Report whether both backends consumed one plan, with the reason.
 
         A successful exit code is never a plan identity.  PASS requires two
-        complete, independently verified PSC9/Semantic45/Target56/GCI/XTP56
+        complete, independently verified PSC9/Semantic49/Target60/GCI/XTP60
         identities that are byte-for-byte equal across every canonical field.
         """
         if self.vm_ok is None or self.aot_ok is None:
@@ -348,7 +342,7 @@ def as_bool(value: Any) -> bool | None:
             return False
         return None
     if isinstance(value, dict):
-        return as_bool(pick(value, STATUS_KEYS))
+        return as_bool(value.get(STATUS_KEY))
     return None
 
 
@@ -371,26 +365,29 @@ def refusal_text(value: Any) -> str:
     return as_text(value)
 
 
-def backend_verdict(entry: dict[str, Any], keys: tuple[str, ...]) -> tuple[bool | None, str]:
-    """Read one backend's verdict and any refusal it carries.
-
-    A backend is recorded either as a scalar verdict or as a nested object. The
-    nested form may state the outcome as a verdict or as the process result of
-    the invocation, where a zero return code is the success and a timeout is a
-    failure with no return code at all.
-    """
-    value = pick(entry, keys)
+def backend_verdict(
+    entry: dict[str, Any], key: str, require_semantic: bool = False
+) -> tuple[bool | None, str]:
+    """Read only the producer's explicit backend verdict."""
+    value = entry.get(key)
     if not isinstance(value, dict):
-        return as_bool(value), ""
+        return None, ""
     refusal = refusal_text(pick(value, REFUSAL_KEYS))
-    verdict = as_bool(pick(value, STATUS_KEYS))
-    if verdict is None:
-        if as_bool(pick(value, TIMEOUT_KEYS)) is True:
-            verdict = False
-        else:
-            code = pick(value, RETURNCODE_KEYS)
-            if isinstance(code, int) and not isinstance(code, bool):
-                verdict = code == 0
+    semantic = value.get("semantic")
+    if not refusal and isinstance(semantic, dict):
+        semantic_errors = semantic.get("errors")
+        if isinstance(semantic_errors, list):
+            refusal = "; ".join(item for item in semantic_errors if isinstance(item, str))
+    verdict = value.get(STATUS_KEY)
+    if not isinstance(verdict, bool):
+        return None, refusal
+    if require_semantic:
+        if not isinstance(semantic, dict) or not isinstance(semantic.get("ok"), bool):
+            return None, refusal
+        semantic_verdict = semantic["ok"]
+        if verdict != semantic_verdict:
+            return False, refusal or "backend and semantic verdicts disagree"
+        verdict = semantic_verdict
     return verdict, refusal
 
 
@@ -439,27 +436,17 @@ def generated_c_reproducible(entry: dict[str, Any]) -> bool | None:
 
 
 def probe_module_records(payload: Any) -> list[dict[str, Any]]:
-    """Normalise the probe file's module records to a list of objects.
-
-    The records are accepted as a bare list, as a list under one of several
-    container keys, or as a name-keyed object.
-    """
-    container: Any = payload
-    if isinstance(payload, dict):
-        found = pick(payload, MODULE_LIST_KEYS)
-        container = found if found is not None else payload
-    records: list[dict[str, Any]] = []
-    if isinstance(container, list):
-        records = [item for item in container if isinstance(item, dict)]
-    elif isinstance(container, dict):
-        for key, value in container.items():
-            if not isinstance(value, dict):
-                continue
-            entry = dict(value)
-            if not as_text(pick(entry, MODULE_NAME_KEYS)):
-                entry["module"] = key
-            records.append(entry)
-    return [r for r in records if as_text(pick(r, MODULE_NAME_KEYS))]
+    """Read module records from the exact current probe schema."""
+    if not isinstance(payload, dict):
+        return []
+    records = payload.get(MODULE_LIST_KEY)
+    if not isinstance(records, list):
+        return []
+    return [
+        record
+        for record in records
+        if isinstance(record, dict) and as_text(record.get(MODULE_NAME_KEY))
+    ]
 
 
 def current_source_commit(root: Path) -> str:
@@ -485,7 +472,7 @@ def probe_authority_errors(payload: dict[str, Any], expected_commit: str) -> lis
     if schemas != CURRENT_PLAN_SCHEMAS:
         errors.append(
             f"probe schemas {schemas!r} do not equal current "
-            "PSC9/Semantic45/Target56/XTP56"
+            "PSC9/Semantic49/Target60/XTP60"
         )
     if authority.get("schema_errors") not in ([], None):
         errors.append("probe reports source schema errors")
@@ -553,8 +540,8 @@ def load_probe_evidence(path_text: str, expected_commit: str = "") -> ProbeEvide
                 source=str(path),
                 error=f"probe evidence {path} has a missing or duplicate module name {name!r}",
             )
-        vm_ok, vm_refusal = backend_verdict(record, VM_KEYS)
-        aot_ok, aot_refusal = backend_verdict(record, AOT_KEYS)
+        vm_ok, vm_refusal = backend_verdict(record, VM_KEY, require_semantic=True)
+        aot_ok, aot_refusal = backend_verdict(record, AOT_KEY)
         refusal = refusal_text(pick(record, REFUSAL_KEYS)) or aot_refusal or vm_refusal
         vm_plan, vm_plan_errors = PlanIdentity.parse(record.get("vm_plan"))
         aot_plan, aot_plan_errors = PlanIdentity.parse(record.get("aot_plan"))
@@ -625,17 +612,6 @@ def drift_note(gate_subject: str, derived: int, counts: dict[str, Any], key: str
     return []
 
 
-def compiler_owned_exception_note(module: ModuleRow, xray_owned: dict[str, int]) -> str | None:
-    """State the exception for one module, or answer None when it does not hold."""
-    if not has_compiler_owned_semantic_source(module, xray_owned.get(module.name, 0)):
-        return None
-    return (
-        f"{module.name}: semantic source {module.semantic_source} is the compiler's built-in "
-        f"symbol registry, expanded at C compile time and exporting nothing, so this gate has "
-        f"no question to ask it; every other gate still counts it"
-    )
-
-
 def gate_source_coverage(
     root: Path, modules: list[ModuleRow], rows: list[SymbolRow], counts: dict[str, Any]
 ) -> GateResult:
@@ -654,10 +630,6 @@ def gate_source_coverage(
 
     for module in sorted(modules, key=lambda m: m.name):
         if module.audience != "production":
-            continue
-        exception = compiler_owned_exception_note(module, xray_owned)
-        if exception:
-            notes.append(exception)
             continue
         source = module.semantic_source
         if not source.endswith(".xr"):
@@ -712,18 +684,9 @@ def gate_no_whole_module_native_policy(
     all, which is the coarsest form of the defect the other gates count symbol
     by symbol.
     """
-    xray_owned: dict[str, int] = {}
-    for row in rows:
-        if row.xray_body:
-            xray_owned[row.module] = xray_owned.get(row.module, 0) + 1
-    notes: list[str] = []
     offenders: list[str] = []
     for m in sorted(modules, key=lambda m: m.name):
         if m.audience != "production" or m.policy not in {"native_primitive", "native_library"}:
-            continue
-        exception = compiler_owned_exception_note(m, xray_owned)
-        if exception:
-            notes.append(exception)
             continue
         offenders.append(
             f"{m.name}: policy {m.policy} (layer {m.layer or '<none>'}, "
@@ -733,7 +696,7 @@ def gate_no_whole_module_native_policy(
         "stdlib_no_whole_module_native_policy",
         "production modules declared native_primitive or native_library",
         offenders,
-        notes,
+        [],
         singular="production module declared native_primitive or native_library",
     )
     result.notes.extend(
@@ -1038,7 +1001,7 @@ def gate_unified_target_plan_coverage(
             message=(
                 f"probe evidence covers {len(production) - len(uncovered)} of {len(production)} "
                 f"production modules; the rest carry no complete verified "
-                f"PSC9/Semantic45/Target56/GCI/XTP56 identity"
+                f"PSC9/Semantic49/Target60/GCI/XTP60 identity"
             ),
             observed=len(uncovered),
             evidence=[

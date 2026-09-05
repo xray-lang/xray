@@ -176,10 +176,10 @@ BASELINES = (
         ),
     ),
     Baseline(
-        category="BINARY_NATIVE_RANDOMIZED_FUZZ_HARNESS",
+        category="BINARY_ALGORITHM_RANDOMIZED_FUZZ_HARNESS",
         path="tests/diff/fuzz_binary_native_stdlib.py",
         contains=(
-            "Seeded cross-oracle fuzzing for task-200 native binary stdlib baselines.",
+            "Seeded cross-oracle fuzzing for binary stdlib algorithms.",
             "zlib.crc32(data)",
             "zlib.adler32(data)",
             "hashlib.sha256(data).hexdigest()",

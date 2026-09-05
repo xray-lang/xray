@@ -535,6 +535,10 @@ static const char *xaot_verified_runtime_path(const XrToolchainSelection *plan,
         id_prefix = "xray-rt-coro-";
     else if (strcmp(logical_name, "xray_aot_core") == 0)
         id_prefix = "xray-aot-core-";
+    else if (strcmp(logical_name, "xray_tls_ssl") == 0)
+        id_prefix = "xray-tls-ssl-";
+    else if (strcmp(logical_name, "xray_tls_crypto") == 0)
+        id_prefix = "xray-tls-crypto-";
     else
         return NULL;
     size_t prefix_len = strlen(id_prefix);
@@ -567,12 +571,11 @@ static bool xaot_cli_link_add_verified_runtime(XaotCliLinkCommand *cmd,
  * archive itself goes on the link line. That is unconditional: see
  * xaot_cli_link_add_aot_core. */
 static bool xaot_cli_stdlib_object_uses_aot_core(const char *value) {
-    return value && (strncmp(value, "crypto.", 7) == 0 || strncmp(value, "cluster.", 8) == 0 ||
-                     strncmp(value, "regex.", 6) == 0 || strncmp(value, "compress.", 9) == 0 ||
-                     strcmp(value, "math.random") == 0 || strcmp(value, "math.randomInt") == 0 ||
-                     strcmp(value, "time.now") == 0 || strcmp(value, "time.monotonic") == 0 ||
-                     strcmp(value, "time.nanos") == 0 || strcmp(value, "time.micros") == 0 ||
-                     strcmp(value, "time.clock") == 0);
+    return value && (strncmp(value, "crypto.", 7) == 0 || strncmp(value, "regex.", 6) == 0 ||
+                     strncmp(value, "compress.", 9) == 0 || strcmp(value, "math.random") == 0 ||
+                     strcmp(value, "math.randomInt") == 0 || strcmp(value, "time.now") == 0 ||
+                     strcmp(value, "time.monotonic") == 0 || strcmp(value, "time.nanos") == 0 ||
+                     strcmp(value, "time.micros") == 0 || strcmp(value, "time.clock") == 0);
 }
 
 static bool xaot_cli_stdlib_object_uses_aot_core_for_target(const char *value,

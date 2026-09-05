@@ -22,6 +22,7 @@
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xa_node_table.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_typed_program.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
@@ -903,7 +904,6 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMR
     l->type_unit = xr_type_new_unit(isolate);
     l->type_any = xr_type_new_unknown(isolate);
     l->type_bigint = xr_type_new_bigint(isolate);
-    l->type_regex = xr_type_new_regex(isolate);
 }
 
 XR_FUNC void xi_lower_cleanup(XiLower *l) {
@@ -2629,19 +2629,14 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     XR_DCHECK(vid >= 0 && vid < l->var_cap,
                               "prescan_top_level_bindings: var_id overflow (import member)");
                     l->shared_map[vid] = (int16_t) next_shared;
-                    bool runtime_builtin = s->as.import_stmt.module_name &&
-                                           strcmp(s->as.import_stmt.module_name, "sync") == 0 &&
-                                           xi_lower_sync_runtime_class_global_index(m->name) >= 0;
-                    if (!runtime_builtin) {
-                        XiImportRef *ref =
-                            prescan_import_ref(l, s, s->as.import_stmt.module_name, m->name);
-                        if (!ref || next_shared >= (uint16_t) l->var_cap) {
-                            l->had_error = true;
-                            prescan_slot_meta_free(&slot_meta);
-                            return;
-                        }
-                        l->shared_slot_imports[next_shared] = ref;
+                    XiImportRef *ref =
+                        prescan_import_ref(l, s, s->as.import_stmt.module_name, m->name);
+                    if (!ref || next_shared >= (uint16_t) l->var_cap) {
+                        l->had_error = true;
+                        prescan_slot_meta_free(&slot_meta);
+                        return;
                     }
+                    l->shared_slot_imports[next_shared] = ref;
                     next_shared++;
                 }
                 continue;

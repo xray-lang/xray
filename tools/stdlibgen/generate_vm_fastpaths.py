@@ -212,7 +212,7 @@ def hosted_value_types(
             # First enum batch is nominal scalar/unit variants. Payload-bearing
             # recursive ADTs join the class/container batch once their nested
             # value view and ownership rules are available.
-            if re.search(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(", body):
+            if re.search(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:\(|\{)", body):
                 continue
             name = declaration.group(1)
             value_types[name] = (f"enum:{name}", "XrValue", "", "", "")
@@ -817,7 +817,7 @@ def render_harness(entries: list[dict[str, Any]], fingerprint: str) -> tuple[str
         return_decl = "" if result == "()" else f" -> {harness_type(module, result)}"
         xr_lines.append(f"export fn {wrapper}({declaration}){return_decl} {{")
         if kind in {"method", "setter"}:
-            xr_lines.append(f"    var target = {params[0][0]}")
+            xr_lines.append(f"    var receiver = {params[0][0]}")
 
         has_defaults = any(default is not None for _, _, default in params)
         receiver_count = 1 if kind in {"method", "getter", "setter"} else 0
@@ -832,13 +832,13 @@ def render_harness(entries: list[dict[str, Any]], fingerprint: str) -> tuple[str
             if kind == "constructor":
                 call = f"{class_name}({call_args})"
             elif kind == "method":
-                call = f"target.{member}({call_args})"
+                call = f"receiver.{member}({call_args})"
             elif kind == "static":
                 call = f"{class_name}.{member}({call_args})"
             elif kind == "getter":
                 call = f"{params[0][0]}.{member}"
             elif kind == "setter":
-                call = f"target.{member} = {params[1][0]}"
+                call = f"receiver.{member} = {params[1][0]}"
             else:
                 call = f"{module}.{member}({call_args})"
 

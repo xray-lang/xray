@@ -1,6 +1,7 @@
 import os
 import io
 import path
+import time
 
 print(len(os.platform()) > 0)
 print(len(os.arch()) > 0)
@@ -20,7 +21,7 @@ print(len(load) == 3)
 print(load[0] >= 0.0)
 print(load[1] >= 0.0)
 print(load[2] >= 0.0)
-print(os.clock() >= 0.0)
+print(time.clock() >= 0)
 print(os.getenv("XRAY_TEST_NONEXISTENT_VAR_12345") == null)
 print(os.setenv("XRAY_AOT_OS_QUERY_TMP", "hello-aot"))
 print(os.getenv("XRAY_AOT_OS_QUERY_TMP") == "hello-aot")

@@ -31,8 +31,8 @@ which rows have a production source owner. Checked overflow, wrapping overflow, 
 also compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
-anchor-sha256: CMakeLists.txt 100df49512a0a67e30f3e2025ee89b40115afe70cfa2031fffb856ee68931648
-anchor-sha256: tests/unit/CMakeLists.txt a4fc11daa1720d43c2e9e93b74848f726f45b8c6dcf8810214483cb1b6fb1156
+anchor-sha256: CMakeLists.txt 55e5ce6bd4d0ba52f0f6a361d934796dc7e4d40f9e079e0e220a7e5ce4aeaf65
+anchor-sha256: tests/unit/CMakeLists.txt 120f5c1a3f02921ada7d4040c1f7ab40ca47098f68fcdf0bb72909fe2e6b28c1
 anchor-sha256: xisa/core/registry.json 7fa5c92be0b89b9f1654d9bdeb7ffb23e6ea96c5a5c8619e09f37c63559f6e91
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 069b5565ff1cec2a7aebe77e4a80ddfbe08835d70ff2bcba1cdab70ad13e3472

@@ -396,11 +396,10 @@ XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer) {
 }
 
 XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name) {
-    static const char *modules[] = {"prelude",  "time", "math",     "path",   "base64", "regex",
-                                    "mem",      "sync", "parallel", "simd",   "sys",    "url",
-                                    "datetime", "log",  "encoding", "_probe", "io",     "os",
-                                    "json",     "net",  "http",     "crypto", "csv",    "toml",
-                                    "yaml",     "xml",  "compress", "ws"};
+    static const char *modules[] = {
+        "time", "math", "path",     "base64", "regex",    "mem",    "sync", "parallel", "simd",
+        "sys",  "url",  "datetime", "log",    "encoding", "_probe", "io",   "os",       "json",
+        "net",  "http", "crypto",   "csv",    "toml",     "yaml",   "xml",  "compress", "ws"};
     if (!module_name)
         return false;
     for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
@@ -416,9 +415,8 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
     /* `codegen` is admissible because its whole surface is compiler barriers
      * (opaque / compilerFence) that lower to inline expressions over <stdint.h>
      * with no runtime, libc, or allocation dependency. */
-    return strcmp(module_name, "prelude") == 0 || strcmp(module_name, "math") == 0 ||
-           strcmp(module_name, "mem") == 0 || strcmp(module_name, "simd") == 0 ||
-           strcmp(module_name, "codegen") == 0;
+    return strcmp(module_name, "math") == 0 || strcmp(module_name, "mem") == 0 ||
+           strcmp(module_name, "simd") == 0 || strcmp(module_name, "codegen") == 0;
 }
 
 static bool xa_freestanding_math_member_allowed(const char *member_name) {
@@ -3255,7 +3253,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                  import->module_name ? import->module_name : "?");
         xa_freestanding_report_unavailable(
             ctx, node, feature,
-            "only prelude, math, mem, simd, and codegen are in the freestanding allowlist");
+            "only math, mem, simd, and codegen are in the freestanding allowlist");
     }
 
     // For whole module import: import math or import math as m
@@ -5102,6 +5100,25 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
+static XrType *xa_visit_regex_literal(XaInferContext *ctx, AstNode *node) {
+    xa_freestanding_report_unavailable(ctx, node, "regex literal",
+                                       "regex compilation is hosted-only");
+
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, "regex");
+    XaSymbol *regex_class = exports ? (XaSymbol *) xr_hashmap_get(exports, "Regex") : NULL;
+    XaSymbolLinks *links = regex_class && regex_class->kind == XA_SYM_CLASS
+                               ? xa_analyzer_get_links(ctx->analyzer, regex_class)
+                               : NULL;
+    if (links && links->class_info)
+        return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(
+        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
+        "regex literal requires `import regex`; Regex is owned by the source module", &loc);
+    return xr_type_new_error(ctx->analyzer->isolate);
+}
+
 XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -5159,9 +5176,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xr_type_new_bigint(ctx->analyzer->isolate);
             break;
         case AST_LITERAL_REGEX:
-            xa_freestanding_report_unavailable(ctx, node, "regex literal",
-                                               "regex compilation is hosted-only");
-            result = xr_type_new_regex(ctx->analyzer->isolate);
+            result = xa_visit_regex_literal(ctx, node);
             break;
         case AST_LITERAL_NULL:
             result = xr_type_new_null(NULL);

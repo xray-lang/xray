@@ -138,6 +138,11 @@ typedef struct XaBuiltinEnum {
 typedef struct XaBuiltinClass {
     const char *name;
     bool is_internal;
+    /* Optional stdlib-only bridge from an exported source wrapper to this
+     * private provider storage class.  The mapping is declaration metadata,
+     * not a user-visible member or language-level escape hatch. */
+    const char *source_wrapper;
+    const char *source_storage_field;
 } XaBuiltinClass;
 
 // Built-in C module info (for net, ws, http, etc.)
@@ -240,6 +245,12 @@ XR_FUNC const char *xa_builtin_get_type_name(XrType *type);
 // Get module info by name
 XR_FUNC const XaBuiltinModule *xa_builtin_get_module_info(const char *module_name);
 
+/* Resolve a stdlib source-wrapper/provider pair in its declaring module.
+ * Returning NULL for every other module keeps private leaf signatures from
+ * manufacturing a cross-module wrapper identity. */
+XR_FUNC const XaBuiltinClass *
+xa_builtin_find_source_provider_bridge(const char *module_name, const char *source_wrapper);
+
 // Iterate all builtin module declarations known to the analyzer.
 XR_FUNC int xa_builtin_get_module_count(void);
 XR_FUNC const XaBuiltinModule *xa_builtin_get_module_at(int index);
@@ -317,6 +328,8 @@ XR_FUNC void xa_builtin_set_script_dir(const char *dir);
 
 // Parse a type string (e.g., "f64", "i64?", "Array<string>") into XrType
 XR_FUNC XrType *xa_builtin_parse_type_string(XrVMRuntime *X, const char *s);
+XR_FUNC XrType *xa_builtin_parse_type_string_for_module(XrVMRuntime *X, const char *module_name,
+                                                        const char *s);
 
 // Parse return type from signature string (e.g., "(x: i64): string" -> string type)
 XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char *sig);
@@ -324,5 +337,8 @@ XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char
 // Parse full function signature including parameter types
 // e.g., "(data: string, level?: i64): string?" -> fn(string, int): string?
 XR_FUNC XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig);
+XR_FUNC XrType *xa_builtin_parse_full_signature_for_module(XrVMRuntime *X,
+                                                           const char *module_name,
+                                                           const char *sig);
 
 #endif  // XANALYZER_BUILTINS_H

@@ -1,12 +1,12 @@
 schema = 1
 module = "cluster"
-contract_revision = 1
+contract_revision = 2
 legacy_commit = "40b1e8608921ef21b92d287e59ef1e14564cce72"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/cluster/legacy_expected.jsonl"
 legacy_public_surface = ["parseAddress", "validNodeName", "validTopicName", "validTopicPattern", "topicMatches"]
 intentional_semantic_changes = [
-  "parseAddress returns NodeAddress instead of Json",
+  "parseAddress returns the shared net.Endpoint value instead of Json",
   "invalid addresses throw typed AddressError variants instead of returning null",
 ]
 known_legacy_bugs = ["unbracketed IPv6 addresses were accepted ambiguously by last-colon splitting"]

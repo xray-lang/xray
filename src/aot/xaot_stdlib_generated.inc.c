@@ -38,31 +38,33 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "math.__random";
     if (strcmp(symbol, "math.__randomInt") == 0)
         return "math.__randomInt";
-    if (strcmp(symbol, "crypto.__randomBytes") == 0)
-        return "crypto.__randomBytes";
-    if (strcmp(symbol, "cluster.__start") == 0)
-        return "cluster.__start";
-    if (strcmp(symbol, "cluster.__join") == 0)
-        return "cluster.__join";
-    if (strcmp(symbol, "cluster.__stop") == 0)
-        return "cluster.__stop";
-    if (strcmp(symbol, "cluster.__send") == 0)
-        return "cluster.__send";
-    if (strcmp(symbol, "cluster.__listen") == 0)
-        return "cluster.__listen";
+    if (strcmp(symbol, "crypto.__fillRandomBytes") == 0)
+        return "crypto.__fillRandomBytes";
     return NULL;
 }
 
 static const char *xaot_stdlib_generated_define_for_symbol(const char *symbol) {
     if (!symbol)
         return NULL;
+    if (strcmp(symbol, "net.__hasTLS") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__newTlsClientContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__newTlsServerContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__tlsClientHandshakeWithContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__tlsServerHandshakeWithContext") == 0)
+        return "XRT_ENABLE_TLS";
+    if (strcmp(symbol, "net.__tlsHandshake") == 0)
+        return "XRT_ENABLE_TLS";
     return NULL;
 }
 
 static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
     if (!symbol)
         return 0;
-    if (strcmp(symbol, "time.sleep") == 0)
+    if (strcmp(symbol, "time.__sleep") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_TIMER;
     if (strcmp(symbol, "net.__resolveAll") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
@@ -74,30 +76,20 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__writeBytes") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "net.__copyBidirectional") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "net.__close") == 0)
+    if (strcmp(symbol, "net.__closeConn") == 0)
         return XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__closeListener") == 0)
+        return XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__tlsClientHandshakeWithContext") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__tlsServerHandshakeWithContext") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__tlsHandshake") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__udpSendTo") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__udpFromHost") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "http2.__connect") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "http2.__send") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "http2.__recv") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "cluster.__start") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__join") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__stop") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__send") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
-    if (strcmp(symbol, "cluster.__listen") == 0)
-        return XAOT_STDLIB_CAP_CHANNEL;
     return 0;
 }
 
@@ -175,8 +167,6 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.__cacheFlush") == 0)
         return true;
-    if (strcmp(symbol, "mem.__cacheInvalidate") == 0)
-        return true;
     if (strcmp(symbol, "mem.__nontemporalStore") == 0)
         return true;
     if (strcmp(symbol, "mem.__cacheLineSize") == 0)
@@ -187,13 +177,7 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.__allocAligned") == 0)
         return true;
-    if (strcmp(symbol, "mem.__copy") == 0)
-        return true;
     if (strcmp(symbol, "mem.__move") == 0)
-        return true;
-    if (strcmp(symbol, "mem.__set") == 0)
-        return true;
-    if (strcmp(symbol, "mem.__compare") == 0)
         return true;
     if (strcmp(symbol, "mem.__volatileLoad") == 0)
         return true;

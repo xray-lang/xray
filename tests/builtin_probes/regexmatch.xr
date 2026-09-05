@@ -1,2 +1,4 @@
+import { RegexMatch } from regex
+
 fn use(value: RegexMatch) -> bool { return true }
 print(true)

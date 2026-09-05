@@ -41,9 +41,9 @@ def valid_plan() -> completion.PlanIdentity:
     identity, errors = completion.PlanIdentity.parse(
         {
             "psc_schema": 9,
-            "semantic_schema": 45,
-            "target_schema": 56,
-            "xtp_schema": 56,
+            "semantic_schema": 49,
+            "target_schema": 60,
+            "xtp_schema": 60,
             "module_count": 3,
             "dependency_count": 2,
             "program_fingerprint": "1" * 64,
@@ -65,7 +65,7 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
         schemas, errors = probe.source_schema_authority(ROOT)
         self.assertEqual([], errors)
         self.assertEqual(
-            (9, 45, 56, 56),
+            (9, 49, 60, 60),
             (
                 schemas.psc_schema,
                 schemas.semantic_schema,
@@ -85,14 +85,14 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
                     f"psc={'1' * 64} gci={'3' * 32}"
                 ),
                 *(
-                    f"target-plan module={index} schema=56 fingerprint={target} "
+                    f"target-plan module={index} schema=60 fingerprint={target} "
                     f"semantic={semantic} profile={'7' * 64}"
                     for index in range(3)
                 ),
             ]
         )
         observation = probe.parse_aot_plan_observation(
-            stdout, probe.SchemaAuthority(9, 45, 56, 56)
+            stdout, probe.SchemaAuthority(9, 49, 60, 60)
         )
         self.assertEqual(3, observation.module_count)
         self.assertEqual(2, observation.dependency_count)
@@ -178,6 +178,97 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
         self.assertTrue(any("not independently verified" in item for item in errors))
 
 
+class ProbeSemanticVerdictTest(unittest.TestCase):
+    def test_well_formed_true_observation_passes(self) -> None:
+        verdict = probe.probe_semantic_verdict(
+            '{"case":"ready","outcome":"value","value":true,"error":null,"effects":{}}\n',
+            {"ready"},
+            "fixture.xr",
+        )
+
+        self.assertTrue(verdict.ok)
+        self.assertEqual(1, verdict.observations)
+        self.assertEqual(["ready"], verdict.required_observations)
+        self.assertEqual([], verdict.errors)
+
+    def test_value_false_fails_even_with_successful_json(self) -> None:
+        verdict = probe.probe_semantic_verdict(
+            '{"case":"ready","outcome":"value","value":false,"error":null,"effects":{}}\n',
+            {"ready"},
+            "fixture.xr",
+        )
+
+        self.assertFalse(verdict.ok)
+        self.assertTrue(any("reported value false" in error for error in verdict.errors))
+
+        command = probe.CommandResult(
+            argv=["xray", "run", "fixture.xr"],
+            ok=verdict.ok,
+            returncode=0,
+            timed_out=False,
+            stdout="",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            semantic=verdict,
+        )
+        recorded = asdict(command)
+        self.assertFalse(recorded["ok"])
+        self.assertFalse(recorded["semantic"]["ok"])
+
+    def test_probe_summary_uses_explicit_verdict_not_returncode(self) -> None:
+        result = SimpleNamespace(
+            probe_present=True,
+            vm=SimpleNamespace(ok=False, returncode=0),
+            aot=SimpleNamespace(ok=True, returncode=0),
+            generated_c=None,
+        )
+
+        counts = probe.summarize([result])
+
+        self.assertEqual(0, counts["vm_ok"])
+        self.assertEqual(1, counts["vm_failed"])
+        self.assertEqual(1, counts["aot_ok"])
+
+    def test_malformed_observation_fails(self) -> None:
+        verdict = probe.probe_semantic_verdict(
+            '{"case":"ready","outcome":"value"}\n',
+            {"ready"},
+            "fixture.xr",
+        )
+
+        self.assertFalse(verdict.ok)
+        self.assertTrue(any("missing fields" in error for error in verdict.errors))
+
+    def test_non_utf8_observation_fails(self) -> None:
+        verdict = probe.probe_semantic_verdict(
+            b'\xff\n'.decode("utf-8", errors="surrogateescape"),
+            {"ready"},
+            "fixture.xr",
+        )
+
+        self.assertFalse(verdict.ok)
+        self.assertTrue(any("surrogates not allowed" in error for error in verdict.errors))
+
+    def test_missing_required_observation_fails(self) -> None:
+        verdict = probe.probe_semantic_verdict(
+            '{"case":"other","outcome":"value","value":true,"error":null,"effects":{}}\n',
+            {"ready"},
+            "fixture.xr",
+        )
+
+        self.assertFalse(verdict.ok)
+        self.assertTrue(any("required observation 'ready'" in error for error in verdict.errors))
+
+    def test_repository_contract_drives_required_observations(self) -> None:
+        required, errors = probe.required_observation_ids(ROOT, "ws")
+
+        self.assertEqual([], errors)
+        self.assertIn("rfc6455-accept-key", required)
+        self.assertIn("connection-layer-pure-xray", required)
+        self.assertNotIn("close-reason-array-render", required)
+
+
 class StrictProbeReaderTest(unittest.TestCase):
     def load(self, payload: dict[str, object]) -> completion.ProbeEvidence:
         temporary = tempfile.TemporaryDirectory()
@@ -186,10 +277,10 @@ class StrictProbeReaderTest(unittest.TestCase):
         path.write_text(json.dumps(payload), encoding="utf-8")
         return completion.load_probe_evidence(str(path), COMMIT)
 
-    def test_legacy_unified_flag_cannot_create_a_pass(self) -> None:
+    def test_returncode_without_explicit_verdict_cannot_create_a_pass(self) -> None:
         evidence = self.load(
             {
-                "schema": 2,
+                "schema": 3,
                 "authority": valid_authority(),
                 "modules": [
                     {
@@ -207,17 +298,41 @@ class StrictProbeReaderTest(unittest.TestCase):
         verdict, _ = evidence.modules["time"].plan_verdict()
         self.assertIsNone(verdict)
 
+    def test_vm_backend_verdict_requires_explicit_semantic_verdict(self) -> None:
+        evidence = self.load(
+            {
+                "schema": 3,
+                "authority": valid_authority(),
+                "modules": [
+                    {
+                        "module": "time",
+                        "vm": {"ok": True, "returncode": 0, "timed_out": False},
+                        "aot": {"ok": True, "returncode": 0, "timed_out": False},
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(evidence.available)
+        self.assertIsNone(evidence.modules["time"].vm_ok)
+        self.assertTrue(evidence.modules["time"].aot_ok)
+
     def test_current_complete_plan_identity_survives_strict_reader(self) -> None:
         identity = asdict(valid_plan())
         evidence = self.load(
             {
-                "schema": 2,
+                "schema": 3,
                 "authority": valid_authority(),
                 "modules": [
                     {
                         "module": "csv",
-                        "vm": {"returncode": 0, "timed_out": False},
-                        "aot": {"returncode": 0, "timed_out": False},
+                        "vm": {
+                            "ok": True,
+                            "returncode": 0,
+                            "timed_out": False,
+                            "semantic": {"ok": True, "errors": []},
+                        },
+                        "aot": {"ok": True, "returncode": 0, "timed_out": False},
                         "vm_plan": identity,
                         "aot_plan": identity,
                     }
@@ -230,10 +345,10 @@ class StrictProbeReaderTest(unittest.TestCase):
 
     def test_old_probe_schema_is_unavailable(self) -> None:
         evidence = self.load(
-            {"schema": 1, "authority": valid_authority(), "modules": [{"module": "time"}]}
+            {"schema": 2, "authority": valid_authority(), "modules": [{"module": "time"}]}
         )
         self.assertFalse(evidence.available)
-        self.assertIn("not current schema 2", evidence.error)
+        self.assertIn("not current schema 3", evidence.error)
 
     def test_mismatched_compiler_commit_is_unavailable(self) -> None:
         authority = valid_authority()
@@ -241,42 +356,118 @@ class StrictProbeReaderTest(unittest.TestCase):
         compiler["commit"] = "c" * 40
         authority["compiler"] = compiler
         evidence = self.load(
-            {"schema": 2, "authority": authority, "modules": [{"module": "time"}]}
+            {"schema": 3, "authority": authority, "modules": [{"module": "time"}]}
         )
         self.assertFalse(evidence.available)
         self.assertIn("source and compiler commits differ", evidence.error)
 
+    def test_explicit_semantic_failure_overrides_zero_returncode(self) -> None:
+        evidence = self.load(
+            {
+                "schema": 3,
+                "authority": valid_authority(),
+                "modules": [
+                    {
+                        "module": "ws",
+                        "vm": {
+                            "ok": False,
+                            "returncode": 0,
+                            "timed_out": False,
+                            "semantic": {
+                                "ok": False,
+                                "errors": ["observation 'upgrade-handshake' reported value false"],
+                            },
+                        },
+                        "aot": {"ok": True, "returncode": 0, "timed_out": False},
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(evidence.available)
+        module = evidence.modules["ws"]
+        self.assertFalse(module.vm_ok)
+        self.assertTrue(module.aot_ok)
+        self.assertIn("reported value false", module.first_refusal)
+
 
 class InventoryTraceTest(unittest.TestCase):
-    def test_sync_manual_native_classes_are_traceable(self) -> None:
+    def test_prelude_is_language_core_not_a_stdlib_module(self) -> None:
+        modules, rows, defects = inventory.build_rows(ROOT)
+        self.assertEqual([], defects)
+        self.assertNotIn("prelude", {module.name for module in modules})
+        self.assertEqual([], [row for row in rows if row.module == "prelude"])
+        api_items = inventory.api_inventory(ROOT)["items"]
+        self.assertFalse(
+            any(
+                item.get("category") == "stdlib-module"
+                and item.get("namespace") == "prelude"
+                for item in api_items
+            )
+        )
+        implicit_names = {
+            item["name"] for item in api_items if item.get("category") == "prelude"
+        }
+        self.assertTrue({"Array", "Map", "Ordering"} <= implicit_names)
+
+    def test_coro_schema_separates_xray_types_from_compiler_intrinsics(self) -> None:
+        _modules, rows, defects = inventory.build_rows(ROOT)
+        self.assertFalse(any("Coro" in item for item in defects))
+        embedded_native_types = (
+            ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("xr_native_def_coro[]", embedded_native_types)
+        coro_rows = {row.symbol: row for row in rows if row.module == "Coro"}
+        self.assertEqual(
+            {
+                "CoroState",
+                "CoroGroupKey",
+                "CoroMetric",
+                "CoroStats",
+                "CoroInfo",
+                "CoroDeadlock",
+                "CoroLocal.set",
+                "CoroLocal.get",
+            },
+            set(coro_rows),
+        )
+        for name in (
+            "CoroState",
+            "CoroGroupKey",
+            "CoroMetric",
+            "CoroStats",
+            "CoroInfo",
+            "CoroDeadlock",
+        ):
+            self.assertTrue(coro_rows[name].xray_body)
+            self.assertEqual("xray_schema", coro_rows[name].plan_coverage)
+            self.assertFalse(inventory.is_semantic_c_owner(coro_rows[name]))
+        for name in ("CoroLocal.set", "CoroLocal.get"):
+            self.assertFalse(coro_rows[name].xray_body)
+            self.assertTrue(coro_rows[name].generated_c_only)
+            self.assertEqual("compiler_intrinsic", coro_rows[name].plan_coverage)
+            self.assertFalse(inventory.is_semantic_c_owner(coro_rows[name]))
+
+    def test_sync_source_classes_need_no_manual_native_export_rows(self) -> None:
         manifest = inventory.load_manifest(ROOT)
         sync_module = next(
             module for module in manifest.modules if module["name"] == "sync"
         )
         traced = inventory.manual_native_class_exports(sync_module)
-        self.assertEqual(
-            {"CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"},
-            set(traced),
-        )
+        self.assertEqual({}, traced)
         modules, rows, defects = inventory.build_rows(ROOT)
         self.assertFalse(any("sync." in item for item in defects))
-        sync_rows = {
-            row.symbol: row
-            for row in rows
-            if row.module == "sync" and row.kind == "manual-native-class"
-        }
-        self.assertEqual(set(traced), set(sync_rows))
-        self.assertTrue(
-            all(
-                row.semantic_source == "stdlib/stdlib_boundary.toml"
-                for row in sync_rows.values()
-            )
+        self.assertFalse(
+            any(row.module == "sync" and row.kind == "manual-native-class" for row in rows)
         )
+        source_classes = {
+            row.symbol.split(".", 1)[0]
+            for row in rows
+            if row.module == "sync" and row.kind == "type" and row.xray_body
+        }
         self.assertTrue(
-            all(
-                row.vm_binding == f"{traced[row.symbol][1]}:{row.symbol}"
-                for row in sync_rows.values()
-            )
+            {"CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"}
+            <= source_classes
         )
         self.assertTrue(any(module.name == "sync" for module in modules))
 
@@ -410,6 +601,22 @@ class NativeLeafAllowlistTest(unittest.TestCase):
         self.assertEqual("unclassified", leaf_class)
         self.assertIn("contradicts the .def return_ownership", reason)
         self.assertEqual(1, len(defects))
+
+    def test_borrowed_parameter_ownership_uses_the_def_grammar(self) -> None:
+        body = GOOD_LEAF_RECORD.replace('ownership = "none"',
+                                        'ownership = "borrowed_param:12"')
+        records, defects = self.load(body)
+        self.assertEqual([], defects)
+        leaf_class, _reason, classification_defects = inventory.classify_leaf(
+            "os", "__getpid", def_entry(return_ownership="borrowed_param:12"), records
+        )
+        self.assertEqual("host_abi_leaf", leaf_class)
+        self.assertEqual([], classification_defects)
+
+        _records, malformed_defects = self.load(
+            body.replace("borrowed_param:12", "borrowed_param:-1")
+        )
+        self.assertTrue(any("is not one of" in item for item in malformed_defects))
 
     def test_a_yieldable_leaf_must_declare_that_it_suspends(self) -> None:
         records, _ = self.load(GOOD_LEAF_RECORD)

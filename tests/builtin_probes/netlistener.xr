@@ -1,2 +1,0 @@
-fn use(l: NetListener) -> bool { return true }
-print(true)

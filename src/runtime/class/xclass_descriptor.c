@@ -41,6 +41,11 @@ bool xr_class_descriptor_validate(const XrClassDescriptor *descriptor) {
             "class", "descriptor validation: instance_field_count > 0 but instance_fields is NULL");
         return false;
     }
+    if (descriptor->source_provider_field_ordinal > descriptor->instance_field_count ||
+        descriptor->source_provider_field_ordinal > (uint16_t) INT16_MAX + 1u) {
+        xr_log_warning("class", "descriptor validation: source provider field is out of bounds");
+        return false;
+    }
 
     if (descriptor->static_field_count > 0 && !descriptor->static_fields) {
         xr_log_warning("class",

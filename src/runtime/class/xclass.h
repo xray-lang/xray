@@ -137,15 +137,13 @@ typedef enum {
     XR_BK_STRUCT_OBJECT,
     XR_BK_STRINGBUILDER,
     XR_BK_ITERATOR,
-    XR_BK_REGEX,
-    XR_BK_REGEX_MATCH,
     XR_BK_SYSMUTEX,
     XR_BK_SYSRWLOCK,
     XR_BK_SYSCONDVAR,
     XR_BK_SYSBARRIER,
     XR_BK_SYSONCE,
-    XR_BK_NETCONN,
-    XR_BK_NETLISTENER,
+    XR_BK_NET_CONN_STORAGE,
+    XR_BK_NET_LISTENER_STORAGE,
     XR_BK_BIGINT,
     XR_BK_TUPLE,
     XR_BK_ADT_ENUM,
@@ -204,6 +202,9 @@ struct XrClass {
     uint16_t field_count;      // Total fields (including inherited)
     uint16_t own_field_count;  // Own fields (excluding inherited)
     uint16_t instance_size;    // Instance size in bytes
+    /* Exact flattened field index for a generated stdlib source/provider
+     * bridge, or -1. Hot leaf calls project through this index directly. */
+    int16_t source_provider_field_index;
 
     // Field lookup: Symbol -> index
     int *field_symbol_to_index;

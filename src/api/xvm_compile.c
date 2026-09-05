@@ -223,6 +223,73 @@ XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, XaAnalyzer *shared_
                                 graph_module_count, out_module, shared_analyzer);
 }
 
+XrProto *xr_compile_source_in_graph(XrCompilerSession *session, XaAnalyzer *shared_analyzer,
+                                    const char *source, const char *source_file,
+                                    const XrModuleGraph *graph, XiModule **graph_modules,
+                                    int graph_module_count, XiModule **out_module,
+                                    const XrModuleIdentityAuthority *authority) {
+    if (out_module)
+        *out_module = NULL;
+    if (!compile_session_available(session, "compile_source_in_graph") || !shared_analyzer ||
+        !source || !graph || !graph_modules || graph_module_count <= 0 || !out_module ||
+        !authority)
+        return NULL;
+    AstNode *ast = xr_parse_with_source(session, source, source_file);
+    if (!ast)
+        return NULL;
+    XrProto *proto = compile_ast_internal(session, ast, source_file, authority, graph, graph_modules,
+                                          graph_module_count, out_module, shared_analyzer);
+    xr_program_destroy(ast);
+    return proto;
+}
+
+void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation) {
+    if (!compilation)
+        return;
+    for (int i = 0; i < compilation->count; i++)
+        if (compilation->units && compilation->units[i])
+            xr_instruction_unit_free(compilation->units[i]);
+    xr_free(compilation->units);
+    xr_free(compilation->modules);
+    memset(compilation, 0, sizeof(*compilation));
+}
+
+bool xr_compile_module_graph_dependencies(XrCompilerSession *session,
+                                          XaAnalyzer *shared_analyzer,
+                                          const XrModuleGraph *graph,
+                                          XrCompiledModuleGraph *out) {
+    if (!out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (!session || !shared_analyzer || !graph || graph->topo_count <= 0 ||
+        !graph->topo_order)
+        return false;
+    out->count = graph->topo_count;
+    out->modules = (XiModule **) xr_calloc((size_t) out->count, sizeof(*out->modules));
+    out->units = (XrProto **) xr_calloc((size_t) out->count, sizeof(*out->units));
+    if (!out->modules || !out->units)
+        goto failure;
+
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int index = graph->topo_order[ti];
+        if (index < 0 || index >= graph->spec_count)
+            goto failure;
+        XrModuleSpec *spec = &graph->specs[index];
+        if (index == graph->entry_index || !spec->ast || !spec->source_path)
+            continue;
+        out->units[ti] = xr_compile_ast_in_graph(
+            session, shared_analyzer, spec->ast, spec->source_path, graph, out->modules,
+            out->count, &out->modules[ti], &spec->authority);
+        if (!out->units[ti])
+            goto failure;
+    }
+    return true;
+
+failure:
+    xr_compiled_module_graph_dispose(out);
+    return false;
+}
+
 XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
                                      const char *source_file,
                                      const XrModuleIdentityAuthority *authority) {

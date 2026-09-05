@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused task-198 compress decompressor typed native error ABI gate.
+"""Focused compress decompressor typed-error VM/AOT parity gate.
 
 The contract this guards did not change when compress stopped having a native
 runtime: a decompression failure is a typed CompressionError value, the same one

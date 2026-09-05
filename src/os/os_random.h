@@ -35,6 +35,14 @@ extern "C" {
 // crypto/rand and Rust's getrandom crate.
 XR_FUNC void xr_random_bytes(unsigned char *buf, size_t len);
 
+/* Adapter for shared algorithms that accept an injectable entropy callback.
+ * The context is deliberately ignored by the system provider; tests can pass
+ * their own stateful callback without giving production entropy global state. */
+static inline void xr_random_bytes_callback(void *context, unsigned char *buf, size_t len) {
+    (void) context;
+    xr_random_bytes(buf, len);
+}
+
 #ifdef __cplusplus
 }
 #endif

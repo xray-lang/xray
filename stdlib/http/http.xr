@@ -19,7 +19,7 @@ import http2
 import { Http2Error } from http2
 import io
 import net
-import { DialOptions, NetError } from net
+import { DialOptions, NetConn, NetError, NetListener } from net
 import path as pathutil
 import time
 
@@ -336,11 +336,11 @@ export class CookieJar {
     }
 
     ref clearDomain(domain: string) {
-        var target = text.lower(domain)
+        var domainKey = text.lower(domain)
         var next: Array<Cookie> = []
         for (var i = 0; i < len(this.cookies); i++) {
             var c = this.cookies[i]
-            if (text.lower(c.domain) != target) { next.push(c) }
+            if (text.lower(c.domain) != domainKey) { next.push(c) }
         }
         this.cookies = next
     }
@@ -769,27 +769,27 @@ class _ServerRouter {
     }
 }
 
-fn _serverTargetPath(target: string) -> string {
-    var q = target.indexOf("?")
-    if (q >= 0) { return target.slice(0, q) }
-    return target
+fn _serverTargetPath(requestTarget: string) -> string {
+    var q = requestTarget.indexOf("?")
+    if (q >= 0) { return requestTarget.slice(0, q) }
+    return requestTarget
 }
 
-fn _serverQuery(target: string) -> QueryParams {
-    var q = target.indexOf("?")
+fn _serverQuery(requestTarget: string) -> QueryParams {
+    var q = requestTarget.indexOf("?")
     if (q < 0) { return QueryParams() }
 
-    var end = len(target)
-    var hash = _findCharBefore(target, '#', q + 1, end)
+    var end = len(requestTarget)
+    var hash = _findCharBefore(requestTarget, '#', q + 1, end)
     if (hash >= 0) { end = hash }
-    return parseQuery(target.slice(q + 1, end))
+    return parseQuery(requestTarget.slice(q + 1, end))
 }
 
 fn _serverRequest(msg: _HttpRequestBytes, params: Map<string, string>) -> HttpRequest {
     return HttpRequest(
         HttpMethod(msg.head.method),
-        _serverTargetPath(msg.head.target),
-        _serverQuery(msg.head.target),
+        _serverTargetPath(msg.head.requestTarget),
+        _serverQuery(msg.head.requestTarget),
         msg.head.headers,
         _copyByteArray(msg.body),
         msg.head.contentLength,
@@ -910,7 +910,7 @@ fn _serverGracefulClose(conn: NetConn) {
 }
 
 fn _serverDispatch(router: _ServerRouter, conn: NetConn, msg: _HttpRequestBytes) -> bool {
-    var path = _serverTargetPath(msg.head.target)
+    var path = _serverTargetPath(msg.head.requestTarget)
     var found = router.find(msg.head.method, path)
     if (found == null) {
         return _serverWriteAll(conn, _serverStatusResponse(404, "Not Found", msg.head.keepAlive)) &&
@@ -1409,8 +1409,8 @@ fn _hostHeaderValue(host: string) -> string? {
     return h
 }
 
-fn _headerKeyEquals(name: string, target: string) -> bool {
-    return text.lower(name) == text.lower(target)
+fn _headerKeyEquals(name: string, expectedName: string) -> bool {
+    return text.lower(name) == text.lower(expectedName)
 }
 
 fn _sensitiveHeader(name: string) -> bool {
@@ -1542,7 +1542,7 @@ fn _contentLengthFrom(headers: Headers) -> i64? {
 }
 
 fn _byteCrlfIndex(raw: string, start: i64) -> i64 {
-    var bytes: Slice<u8> = raw.bytes()
+    var bytes: const Slice<u8> = raw.bytes()
     var pos = start
     while (pos + 1 < len(bytes)) {
         if (bytes[pos] == 13 && bytes[pos + 1] == 10) {
@@ -1562,7 +1562,7 @@ fn _byteSlice(raw: string, start: i64, end: i64) -> string? {
 }
 
 fn _byteCrlfAt(raw: string, pos: i64) -> bool {
-    var bytes: Slice<u8> = raw.bytes()
+    var bytes: const Slice<u8> = raw.bytes()
     return pos + 1 < len(bytes) &&
            bytes[pos] == 13 &&
            bytes[pos + 1] == 10
@@ -1722,7 +1722,15 @@ export fn jsonResponse<T: JSON.Encodable>(
     status: i64 = 200,
     headers: Headers? = null
 ) -> HttpResponse {
-    var responseHeaders = headers ?? Headers()
+    // A response builder owns its header map. Never mutate a borrowed map the
+    // caller may reuse for another response.
+    var responseHeaders = Headers()
+    if (headers != null) {
+        var pairs = headers!.entries()
+        for (var i = 0; i < len(pairs); i++) {
+            responseHeaders.add(pairs[i].0, pairs[i].1)
+        }
+    }
     if (!responseHeaders.contains("Content-Type")) {
         responseHeaders.add("Content-Type", "application/json; charset=utf-8")
     }
@@ -2176,9 +2184,9 @@ fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Header
         values.push(pairs[i].1)
     }
 
-    var target = _httpRequestUrlText(url)
+    var requestUrl = _httpRequestUrlText(url)
     try {
-        var raw = http2.request(target, method.token, names, values, body, timeoutMs)
+        var raw = http2.request(requestUrl, method.token, names, values, body, timeoutMs)
         var responseHeaders = Headers()
         for (var i = 0; i < len(raw.1); i++) {
             responseHeaders.add(raw.1[i], raw.2[i])
@@ -2202,7 +2210,9 @@ fn _http2ToHttpError(e: Http2Error) -> HttpError {
         Http2Error.ProtocolError { reason } -> { return HttpError.ProtocolError { reason: reason } }
         Http2Error.FramingError { reason } -> { return HttpError.ProtocolError { reason: reason } }
         Http2Error.CompressionError { reason } -> { return HttpError.ProtocolError { reason: reason } }
-        Http2Error.ConnectionFailed { target } -> { return HttpError.ConnectionFailed { target: target } }
+        Http2Error.ConnectionFailed { target: connectionTarget } -> {
+            return HttpError.ConnectionFailed { target: connectionTarget }
+        }
         Http2Error.TlsUnavailable -> { return HttpError.UnsupportedVersion { version: HttpVersion.Http2 } }
     }
 }
@@ -2352,7 +2362,7 @@ export class ChunkedBody {
 // RequestHead - Parsed HTTP/1.x request line and headers.
 export class RequestHead {
     method: string
-    target: string
+    requestTarget: string
     version: string
     headers: Headers
     headerBytes: i64
@@ -2362,7 +2372,7 @@ export class RequestHead {
 
     constructor(
         method: string,
-        target: string,
+        requestTarget: string,
         version: string,
         headers: Headers,
         headerBytes: i64,
@@ -2371,7 +2381,7 @@ export class RequestHead {
         keepAlive: bool
     ) {
         this.method = method
-        this.target = target
+        this.requestTarget = requestTarget
         this.version = version
         this.headers = headers
         this.headerBytes = headerBytes
@@ -2528,9 +2538,9 @@ export fn parseRequestHead(raw: string, maxHeaders: i64 = 100) -> RequestHead? {
     if (secondSpace <= 0) { return null }
 
     var method = _requestMethod(requestLine.slice(0, firstSpace))
-    var target = _requestTarget(rest.slice(0, secondSpace))
+    var requestTarget = _requestTarget(rest.slice(0, secondSpace))
     var version = rest.slice(secondSpace + 1)
-    if (method == null || target == null) { return null }
+    if (method == null || requestTarget == null) { return null }
     if (version != "HTTP/1.0" && version != "HTTP/1.1") { return null }
 
     var headers = Headers()
@@ -2549,7 +2559,7 @@ export fn parseRequestHead(raw: string, maxHeaders: i64 = 100) -> RequestHead? {
     if (chunked == null || (chunked! && contentLength! >= 0)) { return null }
     return RequestHead(
         method!,
-        target!,
+        requestTarget!,
         version,
         headers,
         end,

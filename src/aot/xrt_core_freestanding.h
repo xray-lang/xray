@@ -2526,10 +2526,6 @@ static inline XrValue xrt_mem_page_alloc(XrValue bytes, XrValue prot) {
     return xr_mkptr(xr_hook_page_alloc((size_t) n, xrt_mem_int_arg(prot)), XR_TAG_PTR);
 }
 
-static inline XrValue xrt_mem_page_alloc_default(XrValue bytes) {
-    return xrt_mem_page_alloc(bytes, XR_FROM_INT(XRT_MEM_PROT_READ | XRT_MEM_PROT_WRITE));
-}
-
 static inline XrValue xrt_mem_page_protect(XrValue ptr, XrValue bytes, XrValue prot) {
     int64_t n = xrt_mem_int_arg(bytes);
     if (!ptr.ptr || n <= 0)
@@ -2556,23 +2552,9 @@ static inline XrValue xrt_mem_addr(XrValue ptr) {
     return XR_FROM_INT((int64_t) (intptr_t) ptr.ptr);
 }
 
-static inline XrValue xrt_mem_copy(XrValue dst, XrValue src, XrValue n) {
-    memcpy(dst.ptr, src.ptr, (size_t) xrt_mem_int_arg(n));
-    return XR_NULL_VAL;
-}
-
 static inline XrValue xrt_mem_move(XrValue dst, XrValue src, XrValue n) {
     memmove(dst.ptr, src.ptr, (size_t) xrt_mem_int_arg(n));
     return XR_NULL_VAL;
-}
-
-static inline XrValue xrt_mem_set(XrValue dst, XrValue byte, XrValue n) {
-    memset(dst.ptr, (int) xrt_mem_int_arg(byte), (size_t) xrt_mem_int_arg(n));
-    return XR_NULL_VAL;
-}
-
-static inline XrValue xrt_mem_compare(XrValue a, XrValue b, XrValue n) {
-    return XR_FROM_INT(memcmp(a.ptr, b.ptr, (size_t) xrt_mem_int_arg(n)));
 }
 
 static inline void xrt_mem_cache_maintain_range(void *ptr, size_t n) {
@@ -2597,13 +2579,6 @@ static inline void xrt_mem_cache_maintain_range(void *ptr, size_t n) {
 }
 
 static inline XrValue xrt_mem_cache_flush(XrValue ptr, XrValue n) {
-    int64_t len = xrt_mem_int_arg(n);
-    if (len > 0)
-        xrt_mem_cache_maintain_range(ptr.ptr, (size_t) len);
-    return XR_NULL_VAL;
-}
-
-static inline XrValue xrt_mem_cache_invalidate(XrValue ptr, XrValue n) {
     int64_t len = xrt_mem_int_arg(n);
     if (len > 0)
         xrt_mem_cache_maintain_range(ptr.ptr, (size_t) len);

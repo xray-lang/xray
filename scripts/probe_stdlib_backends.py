@@ -36,15 +36,16 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from stdlib_manifest import load_manifest  # noqa: E402
+from stdlib_manifest import load_manifest, load_toml  # noqa: E402
+from stdlib_legacy_oracle import parse_observations  # noqa: E402
 
 
-SCHEMA = 2
+SCHEMA = 3
 
 CURRENT_PSC_SCHEMA = 9
-CURRENT_SEMANTIC_SCHEMA = 45
-CURRENT_TARGET_SCHEMA = 56
-CURRENT_XTP_SCHEMA = 56
+CURRENT_SEMANTIC_SCHEMA = 49
+CURRENT_TARGET_SCHEMA = 60
+CURRENT_XTP_SCHEMA = 60
 
 SCHEMA_DEFINES = {
     "psc_schema": (
@@ -151,16 +152,28 @@ WARNING_MARKER_RE = re.compile(r"\b(?:warning|Warning|WARNING)\b")
 
 
 @dataclass
+class SemanticVerdict:
+    """Fail-closed interpretation of one current-probe JSONL stream."""
+
+    ok: bool
+    observations: int
+    required_observations: list[str]
+    errors: list[str]
+
+
+@dataclass
 class CommandResult:
     """One compiler invocation, recorded as it behaved."""
 
     argv: list[str]
+    ok: bool
     returncode: int | None
     timed_out: bool
     stdout: str
     stderr: str
     stdout_truncated: bool
     stderr_truncated: bool
+    semantic: SemanticVerdict | None = None
 
 
 @dataclass
@@ -344,6 +357,62 @@ def clip(raw: bytes) -> tuple[str, bool]:
     return text[:CAPTURE_CHARS], True
 
 
+def required_observation_ids(root: Path, module: str) -> tuple[set[str], list[str]]:
+    """Read the required current-probe cases from the module contract."""
+    path = root / PROBE_ROOT / module / "contract.toml"
+    try:
+        contract = load_toml(path)
+    except (OSError, ValueError) as exc:
+        return set(), [f"{path}: cannot read observation contract: {exc}"]
+    rows = contract.get("legacy_behavior")
+    if not isinstance(rows, list):
+        return set(), [f"{path}: legacy_behavior must be an array"]
+    required: set[str] = set()
+    errors: list[str] = []
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            errors.append(f"{path}: legacy_behavior row {index} must be an object")
+            continue
+        if row.get("classification") != "required":
+            continue
+        case = row.get("id")
+        if not isinstance(case, str) or not case:
+            errors.append(f"{path}: required legacy_behavior row {index} has no id")
+            continue
+        if case in required:
+            errors.append(f"{path}: duplicate required observation {case!r}")
+            continue
+        required.add(case)
+    return required, errors
+
+
+def probe_semantic_verdict(
+    stdout: str,
+    required: set[str],
+    source: str,
+    contract_errors: list[str] | None = None,
+) -> SemanticVerdict:
+    """Validate current-probe JSONL and reject false or missing observations."""
+    errors = list(contract_errors or ())
+    try:
+        observations = parse_observations(stdout.encode("utf-8"), source)
+    except (UnicodeEncodeError, ValueError) as exc:
+        errors.append(str(exc))
+        observations = []
+    observed = {str(row["case"]) for row in observations}
+    for row in observations:
+        if row["outcome"] == "value" and row["value"] is False:
+            errors.append(f"{source}: observation {row['case']!r} reported value false")
+    for case in sorted(required - observed):
+        errors.append(f"{source}: required observation {case!r} was not emitted")
+    return SemanticVerdict(
+        ok=not errors,
+        observations=len(observations),
+        required_observations=sorted(required),
+        errors=errors,
+    )
+
+
 def run_command(
     argv: list[str], cwd: Path, timeout: float
 ) -> tuple[CommandResult, str, str]:
@@ -374,6 +443,7 @@ def run_command(
     return (
         CommandResult(
             argv=argv,
+            ok=returncode == 0 and not timed_out,
             returncode=returncode,
             timed_out=timed_out,
             stdout=stdout,
@@ -381,8 +451,8 @@ def run_command(
             stdout_truncated=stdout_truncated,
             stderr_truncated=stderr_truncated,
         ),
-        out_raw.decode("utf-8", errors="replace"),
-        err_raw.decode("utf-8", errors="replace"),
+        out_raw.decode("utf-8", errors="surrogateescape"),
+        err_raw.decode("utf-8", errors="surrogateescape"),
     )
 
 
@@ -463,7 +533,7 @@ def compare_regeneration(
     first = out_c.read_bytes()
     out_c.unlink()
     second_result, _, _ = run_command(aot_argv(xray, source, out_c), root, timeout)
-    if second_result.returncode != 0 or not out_c.is_file():
+    if not second_result.ok or not out_c.is_file():
         return GeneratedC(
             checked=False,
             identical=None,
@@ -515,7 +585,23 @@ def measure_module(
     scratch.mkdir(parents=True, exist_ok=True)
     out_c = scratch / f"{module}.c"
 
-    vm_result, _, _ = run_command(vm_argv(xray, probe), root, timeout)
+    vm_result, vm_stdout, _ = run_command(vm_argv(xray, probe), root, timeout)
+    required, contract_errors = required_observation_ids(root, module)
+    semantic = probe_semantic_verdict(
+        vm_stdout,
+        required,
+        str(probe),
+        contract_errors,
+    )
+    if not vm_result.ok:
+        semantic.errors.insert(
+            0,
+            "probe process did not complete successfully "
+            f"(returncode={vm_result.returncode}, timed_out={vm_result.timed_out})",
+        )
+        semantic.ok = False
+    vm_result.semantic = semantic
+    vm_result.ok = vm_result.ok and semantic.ok
     aot_result, aot_stdout, aot_stderr = run_command(
         aot_argv(xray, probe, out_c), root, timeout
     )
@@ -525,7 +611,7 @@ def measure_module(
     generated_c: GeneratedC | None = None
     first_refusal: FirstRefusal | None = None
     aot_plan: PlanObservation | None = None
-    if aot_result.returncode == 0:
+    if aot_result.ok:
         aot_plan = parse_aot_plan_observation(aot_stdout, schemas)
         if out_c.is_file():
             payload = out_c.read_bytes()
@@ -567,7 +653,7 @@ def measure_baseline(
     aot_result, aot_stdout, aot_stderr = run_command(
         aot_argv(xray, source, out_c), root, timeout
     )
-    refusal = None if aot_result.returncode == 0 else extract_first_refusal(aot_stderr)
+    refusal = None if aot_result.ok else extract_first_refusal(aot_stderr)
     c_bytes = out_c.stat().st_size if out_c.is_file() else None
     payload = {
         "source": BASELINE_SOURCE,
@@ -578,11 +664,11 @@ def measure_baseline(
         "vm_plan": None,
         "aot_plan": (
             asdict(parse_aot_plan_observation(aot_stdout, schemas))
-            if aot_result.returncode == 0
+            if aot_result.ok
             else None
         ),
     }
-    return aot_result.returncode == 0, payload
+    return aot_result.ok, payload
 
 
 def cluster_refusals(results: list[ModuleResult]) -> dict[str, dict[str, Any]]:
@@ -605,10 +691,10 @@ def summarize(results: list[ModuleResult]) -> dict[str, Any]:
     return {
         "modules": len(results),
         "probes_missing": sum(1 for r in results if not r.probe_present),
-        "vm_ok": sum(1 for r in measured if r.vm and r.vm.returncode == 0),
-        "vm_failed": sum(1 for r in measured if r.vm and r.vm.returncode != 0),
-        "aot_ok": sum(1 for r in measured if r.aot and r.aot.returncode == 0),
-        "aot_failed": sum(1 for r in measured if r.aot and r.aot.returncode != 0),
+        "vm_ok": sum(1 for r in measured if r.vm and r.vm.ok),
+        "vm_failed": sum(1 for r in measured if r.vm and not r.vm.ok),
+        "aot_ok": sum(1 for r in measured if r.aot and r.aot.ok),
+        "aot_failed": sum(1 for r in measured if r.aot and not r.aot.ok),
         "generated_c_compared": len(checked),
         "generated_c_identical": sum(1 for r in checked if r.generated_c and r.generated_c.identical),
         "generated_c_divergent": sum(

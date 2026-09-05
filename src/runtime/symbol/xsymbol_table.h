@@ -262,7 +262,7 @@ enum {
     SYMBOL_COPYFROM,
     SYMBOL_REPEATFROM,
 
-    // Regex methods
+    // Common source method spellings (including regex)
     SYMBOL_TEST,
     SYMBOL_FINDALL,
     SYMBOL_PATTERN,

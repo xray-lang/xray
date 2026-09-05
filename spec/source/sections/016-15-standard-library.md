@@ -16,7 +16,7 @@ order: 016
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<u8>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
+> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<u8>` 是 `Array` 的具体化；`DateTime`、`Logger`、`NetConn`、`NetListener` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -33,7 +33,7 @@ order: 016
 
 | 模块 | 主题 | 关键 API |
 |--|--|--|
-| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
+| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `readInto` `readBytes` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `TlsClientContext` `TlsServerContext` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL 解析与构造 | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
@@ -54,7 +54,7 @@ TCP 等待操作使用协程友好的 netpoll 路径。`setReadDeadline(conn, de
 
 `shutdownRead(conn)`、`shutdownWrite(conn)` 和 `shutdown(conn)` 暴露 TCP 半关闭语义。通用 proxy/relay 应优先使用 `copyBidirectional(a, b)`，它会在单向 EOF 后半关闭对端写侧，并返回两个方向的字节统计。
 
-TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, hostname, timeout?)` 提供；TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
+TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, alpnProtocols))`；需要自定义 CA、客户端证书或 STARTTLS 时使用 `TlsClientContext`。`TlsServerContext` 接受按服务端优先级排列的 ALPN 列表，`negotiatedProtocol(conn)` 返回双方协商的协议或 `null`。ALPN 只配置协商能力，是否接受选中结果仍由 HTTP/2、WebSocket 等协议模块决定。TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
 
 ### 15.3 数据格式
 
@@ -112,7 +112,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
 | `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
-| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`cpuCount()`、`sleepMs()`、`threadYield()`、`pinToCpu()`、`onSignal()` |
+| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`threadYield()`、`pinToCpu()`、`onSignal()`；主机 CPU 拓扑统一使用 `os.cpuCount()`，协程友好延时统一使用 `time.sleep(ms)` |
 
 ### 15.10 并行
 
@@ -152,7 +152,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<u8>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
+> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<u8>` is an `Array` specialization; module types such as `DateTime`, `Logger`, `NetConn`, and `NetListener` must be imported. See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
@@ -169,7 +169,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | Module | Topic | Key APIs |
 |--|--|--|
-| `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
+| `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `readInto` `readBytes` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `TlsClientContext` `TlsServerContext` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
@@ -190,7 +190,7 @@ TCP waiting operations use the coroutine-friendly netpoll path. `setReadDeadline
 
 `shutdownRead(conn)`, `shutdownWrite(conn)`, and `shutdown(conn)` expose TCP half-close semantics. Generic proxy and relay code should prefer `copyBidirectional(a, b)`, which half-closes the opposite write side after one-way EOF and returns byte counts for both directions.
 
-The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeTLS(conn, hostname, timeout?)`; TLS read/write/copy share the same deadline, diagnostic error, and typed-handle lifecycle semantics as plain TCP.
+TLS clients use the single `dial(host, port, DialOptions(timeoutMs, true, alpnProtocols))` entry point. `TlsClientContext` supplies custom trust, client identity, and STARTTLS policy. `TlsServerContext` accepts an ALPN list in server-preference order, while `negotiatedProtocol(conn)` returns the selected protocol or `null`. ALPN configures negotiation only; HTTP/2, WebSocket, and other protocol modules own acceptance of the selected value. TLS read/write/copy share the same deadline, diagnostic error, and typed-handle lifecycle semantics as plain TCP.
 
 ### 15.3 Data Formats
 
@@ -248,7 +248,7 @@ Decimal text parsing is owned by exact scalar static namespaces: `i64.parse(s)` 
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
 | `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
-| `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `cpuCount()`, `sleepMs()`, `threadYield()`, `pinToCpu()`, and `onSignal()` |
+| `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `threadYield()`, `pinToCpu()`, and `onSignal()`; use `os.cpuCount()` for host CPU topology and `time.sleep(ms)` for coroutine-friendly delays |
 
 ### 15.10 Parallelism
 

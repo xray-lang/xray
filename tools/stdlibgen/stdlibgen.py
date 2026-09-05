@@ -92,16 +92,12 @@ FREESTANDING_HEADER_ONLY_SYMBOLS = {
     "mem.__fence",
     "mem.__prefetch",
     "mem.__cacheFlush",
-    "mem.__cacheInvalidate",
     "mem.__nontemporalStore",
     "mem.__cacheLineSize",
     "mem.__alloc",
     "mem.__allocZeroed",
     "mem.__allocAligned",
-    "mem.__copy",
     "mem.__move",
-    "mem.__set",
-    "mem.__compare",
     "mem.__volatileLoad",
     "mem.__volatileStore",
 }
@@ -362,6 +358,9 @@ class StdlibObjectShapeEntry:
     fields: tuple[StdlibHandleFieldEntry, ...]
     exact: bool
     visibility: str
+    semantic_source: str = ""
+    semantic_authority: str = "stdlib_def"
+    source_line: int = 0
 
     @property
     def symbol(self) -> str:
@@ -385,6 +384,9 @@ class StdlibEnumEntry:
     doc: str
     variants: tuple[StdlibEnumVariantEntry, ...]
     visibility: str
+    semantic_source: str = ""
+    semantic_authority: str = "stdlib_def"
+    source_line: int = 0
 
     @property
     def symbol(self) -> str:
@@ -442,6 +444,9 @@ class StdlibTypeMethodEntry:
     allocation: str
     receiver_mode: str
     visibility: str
+    semantic_source: str = ""
+    semantic_authority: str = "stdlib_def"
+    source_line: int = 0
 
     @property
     def symbol(self) -> str:
@@ -462,6 +467,8 @@ class StdlibNativeClassEntry:
     flags: str
     builtin_kind: str
     visibility: str
+    source_wrapper: str
+    source_storage_field: str
 
     @property
     def symbol(self) -> str:
@@ -610,6 +617,38 @@ def parse_function_signature_shape(signature: str) -> tuple[list[str], str]:
     return split_top_level_csv(signature[1:close]), tail[1:].strip()
 
 
+def function_parameter_type(fragment: str, context: str) -> str:
+    """Return the exact top-level type spelling for one signature parameter."""
+    depth = 0
+    colon = -1
+    for index, char in enumerate(fragment):
+        if char in "<([":
+            depth += 1
+        elif char in ">)]":
+            depth = max(depth - 1, 0)
+        elif char == ":" and depth == 0:
+            colon = index
+            break
+    if colon < 0:
+        raise ValueError(f"{context}: parameter has no top-level type separator: {fragment!r}")
+
+    type_text = fragment[colon + 1 :].strip()
+    depth = 0
+    default = len(type_text)
+    for index, char in enumerate(type_text):
+        if char in "<([":
+            depth += 1
+        elif char in ">)]":
+            depth = max(depth - 1, 0)
+        elif char == "=" and depth == 0:
+            default = index
+            break
+    type_text = type_text[:default].strip()
+    if not type_text:
+        raise ValueError(f"{context}: parameter has an empty type: {fragment!r}")
+    return type_text
+
+
 _NON_RC_RETURN_RE = re.compile(
     r"^(?:\(\)|unit|bool|rune|i(?:8|16|32|64)|u(?:8|16|32|64)|f(?:32|64)|isize|usize)(?:\?)?$"
 )
@@ -669,6 +708,428 @@ def parse_enum_variants(raw: str, context: str) -> tuple[StdlibEnumVariantEntry,
     return tuple(variants)
 
 
+@dataclasses.dataclass(frozen=True)
+class CompilerModuleSchema:
+    """Xray-syntax declarations consumed by a compiler-owned namespace."""
+
+    module: str
+    semantic_source: str
+    object_shapes: tuple[StdlibObjectShapeEntry, ...]
+    enums: tuple[StdlibEnumEntry, ...]
+    intrinsic_methods: tuple[StdlibTypeMethodEntry, ...]
+
+
+COMPILER_MODULE_RE = re.compile(
+    r"^\s*//\s*@compiler-module\s+([A-Za-z_][A-Za-z0-9_]*)\s*$", re.MULTILINE
+)
+COMPILER_ENUM_RE = re.compile(
+    r"^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", re.MULTILINE
+)
+COMPILER_OBJECT_RE = re.compile(
+    r"^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{", re.MULTILINE
+)
+COMPILER_CLASS_RE = re.compile(
+    r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{", re.MULTILINE
+)
+COMPILER_INTRINSIC_RE = re.compile(
+    r"^\s*//\s*@compiler-intrinsic(?:\s+allocation=(no_heap|may_heap))?\s*$"
+)
+COMPILER_METHOD_RE = re.compile(
+    r"^\s*(?:(ref|move)\s+)?([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:<[^>{]+>)?\s*(\([^)]*\))\s*(?:->\s*(.+?))?\s*$"
+)
+
+
+def matching_source_brace(text: str, open_index: int, context: str) -> int:
+    """Find a schema declaration's closing brace."""
+    depth = 0
+    for index in range(open_index, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    raise SystemExit(f"{context}: declaration has no matching closing brace")
+
+
+def source_line(text: str, offset: int) -> int:
+    return text.count("\n", 0, offset) + 1
+
+
+def source_top_level_lines(body: str) -> list[tuple[int, str]]:
+    """Return source lines that begin at class-body depth zero.
+
+    This small lexer is sufficient to distinguish fields from constructor and
+    method bodies without teaching stdlibgen the whole Xray grammar. Braces
+    and comment markers inside strings are ignored.
+    """
+    result: list[tuple[int, str]] = []
+    depth = 0
+    in_string = False
+    escaped = False
+    in_line_comment = False
+    line_no = 1
+    line_start_depth = 0
+    line: list[str] = []
+    index = 0
+    while index < len(body):
+        ch = body[index]
+        next_ch = body[index + 1] if index + 1 < len(body) else ""
+        if in_line_comment:
+            if ch == "\n":
+                if line_start_depth == 0:
+                    stripped = "".join(line).strip()
+                    if stripped:
+                        result.append((line_no, stripped))
+                line = []
+                line_no += 1
+                line_start_depth = depth
+                in_line_comment = False
+            index += 1
+            continue
+        if not in_string and ch == "/" and next_ch == "/":
+            in_line_comment = True
+            index += 2
+            continue
+        if escaped:
+            escaped = False
+        elif in_string and ch == "\\":
+            escaped = True
+        elif ch == '"':
+            in_string = not in_string
+        elif not in_string and ch == "{":
+            depth += 1
+        elif not in_string and ch == "}":
+            depth -= 1
+        if ch == "\n":
+            if line_start_depth == 0:
+                stripped = "".join(line).strip()
+                if stripped:
+                    result.append((line_no, stripped))
+            line = []
+            line_no += 1
+            line_start_depth = depth
+        else:
+            line.append(ch)
+        index += 1
+    if line_start_depth == 0:
+        stripped = "".join(line).strip()
+        if stripped:
+            result.append((line_no, stripped))
+    return result
+
+
+def validate_source_provider_bridges(
+    root: Path,
+    entries: list[StdlibEntry],
+    native_classes: list[StdlibNativeClassEntry],
+) -> None:
+    """Freeze module-private source-wrapper/provider bridge contracts."""
+    for storage in native_classes:
+        if not storage.is_internal:
+            continue
+        storage_re = re.compile(
+            rf"(?<![A-Za-z0-9_]){re.escape(storage.name)}(?![A-Za-z0-9_])"
+        )
+        for entry in entries:
+            if not storage_re.search(entry.signature):
+                continue
+            if entry.module != storage.module:
+                raise SystemExit(
+                    f"{entry.symbol}: private native storage {storage.name} belongs to module "
+                    f"{storage.module}, not {entry.module}"
+                )
+            if not entry.is_internal:
+                raise SystemExit(
+                    f"{entry.symbol}: private native storage {storage.name} is stdlib-internal "
+                    "only"
+                )
+
+    providers = [entry for entry in native_classes if entry.source_wrapper]
+    wrappers_by_name: dict[str, set[str]] = {}
+    providers_by_module_wrapper: dict[tuple[str, str], StdlibNativeClassEntry] = {}
+    for provider in providers:
+        wrappers_by_name.setdefault(provider.source_wrapper, set()).add(provider.module)
+        providers_by_module_wrapper[(provider.module, provider.source_wrapper)] = provider
+
+        path = root / "stdlib" / provider.module / f"{provider.module}.xr"
+        if not path.is_file():
+            raise SystemExit(f"{provider.symbol}: source provider wrapper requires {path}")
+        text = path.read_text(encoding="utf-8")
+        class_re = re.compile(
+            rf"^\s*export\s+final\s+class\s+{re.escape(provider.source_wrapper)}\s*\{{",
+            re.MULTILINE,
+        )
+        matches = list(class_re.finditer(text))
+        if len(matches) != 1:
+            raise SystemExit(
+                f"{provider.symbol}: expected exactly one exported final source class "
+                f"{provider.module}.{provider.source_wrapper}, found {len(matches)}"
+            )
+        match = matches[0]
+        open_index = text.find("{", match.start())
+        close_index = matching_source_brace(
+            text,
+            open_index,
+            f"{path}:{source_line(text, match.start())}: {provider.source_wrapper}",
+        )
+        body_start_line = source_line(text, open_index + 1)
+        body = text[open_index + 1 : close_index]
+        field_re = re.compile(
+            r"^(?:(public|private)\s+)?(static\s+)?"
+            r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*"
+            r"([A-Za-z_][A-Za-z0-9_]*)(?:\s*=.*)?$"
+        )
+        fields: list[tuple[int, str, bool, str, str]] = []
+        for relative_line, line in source_top_level_lines(body):
+            field_match = field_re.fullmatch(line)
+            if not field_match:
+                continue
+            visibility = field_match.group(1) or "public"
+            fields.append(
+                (
+                    body_start_line + relative_line - 1,
+                    visibility,
+                    field_match.group(2) is not None,
+                    field_match.group(3),
+                    field_match.group(4),
+                )
+            )
+        storage_fields = [field for field in fields if field[3] == provider.source_storage_field]
+        if len(storage_fields) != 1:
+            raise SystemExit(
+                f"{provider.symbol}: source wrapper {provider.source_wrapper} must declare "
+                f"exactly one {provider.source_storage_field} storage field, "
+                f"found {len(storage_fields)}"
+            )
+        field_line, visibility, is_static, field_name, field_type = storage_fields[0]
+        if is_static:
+            raise SystemExit(
+                f"{path}:{field_line}: {provider.source_wrapper}.{field_name} must be an "
+                "instance field"
+            )
+        if visibility != "private":
+            raise SystemExit(
+                f"{path}:{field_line}: {provider.source_wrapper}.{field_name} must be private"
+            )
+        if field_type != provider.name:
+            raise SystemExit(
+                f"{path}:{field_line}: {provider.source_wrapper}.{field_name} must have exact "
+                f"storage type {provider.name}, found {field_type}"
+            )
+
+    if not providers:
+        return
+    for entry in entries:
+        params, return_type = parse_function_signature_shape(entry.signature)
+        for wrapper, owner_modules in wrappers_by_name.items():
+            wrapper_re = re.compile(
+                rf"(?<![A-Za-z0-9_]){re.escape(wrapper)}(?![A-Za-z0-9_])"
+            )
+            used_params: list[int] = []
+            for index, param in enumerate(params):
+                if not wrapper_re.search(param):
+                    continue
+                try:
+                    parameter_type = function_parameter_type(param, entry.symbol)
+                except ValueError as exc:
+                    raise SystemExit(str(exc)) from exc
+                if parameter_type != wrapper:
+                    raise SystemExit(
+                        f"{entry.symbol}: source provider wrapper {wrapper} must be an exact "
+                        "non-nullable nominal parameter type"
+                    )
+                used_params.append(index)
+            if wrapper_re.search(return_type):
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper {wrapper} is valid only in "
+                    "parameters; native leaves must return private storage"
+                )
+            if not used_params:
+                continue
+            if (entry.module, wrapper) not in providers_by_module_wrapper:
+                owners = ", ".join(sorted(owner_modules))
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper {wrapper} belongs to module "
+                    f"{owners}, not {entry.module}"
+                )
+            if not entry.is_internal:
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper parameters are stdlib-internal only"
+                )
+            if entry.argc == "variadic":
+                raise SystemExit(
+                    f"{entry.symbol}: source provider wrapper parameters require fixed arity"
+                )
+
+
+def source_decl_doc(text: str, offset: int, name: str, fallback: str) -> str:
+    """Read the `// Name - ...` sentence immediately above a declaration."""
+    prefix = text[:offset].splitlines()
+    while prefix and not prefix[-1].strip():
+        prefix.pop()
+    if not prefix:
+        return fallback
+    match = re.fullmatch(
+        rf"\s*//\s*{re.escape(name)}\s*(?:-|—|:)\s*(.+?)\s*", prefix[-1]
+    )
+    if not match:
+        return fallback
+    return match.group(1).removesuffix(".")
+
+
+def parse_compiler_intrinsic_methods(
+    root: Path,
+    path: Path,
+    module: str,
+    text: str,
+    class_match: re.Match[str],
+) -> list[StdlibTypeMethodEntry]:
+    """Parse explicitly marked methods from one compiler-schema class."""
+    class_name = class_match.group(1)
+    open_index = text.find("{", class_match.start())
+    close_index = matching_source_brace(
+        text, open_index, f"{path}:{source_line(text, class_match.start())}: {class_name}"
+    )
+    body = text[open_index + 1 : close_index]
+    body_line = source_line(text, open_index + 1)
+    pending_doc: list[str] = []
+    pending_allocation: str | None = None
+    methods: list[StdlibTypeMethodEntry] = []
+    for index, raw in enumerate(body.splitlines(), body_line):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("//"):
+            intrinsic = COMPILER_INTRINSIC_RE.fullmatch(raw)
+            if intrinsic:
+                pending_allocation = intrinsic.group(1) or ""
+            else:
+                pending_doc.append(stripped[2:].strip().removesuffix("."))
+            continue
+        method = COMPILER_METHOD_RE.fullmatch(raw)
+        if not method:
+            raise SystemExit(f"{path}:{index}: unsupported compiler-schema class member")
+        if pending_allocation is None:
+            raise SystemExit(
+                f"{path}:{index}: {module}.{class_name}.{method.group(2)} must carry "
+                "an @compiler-intrinsic marker"
+            )
+        receiver_mode = method.group(1) or "read"
+        return_type = (method.group(4) or "()").strip()
+        methods.append(
+            StdlibTypeMethodEntry(
+                module=module,
+                type_name=class_name,
+                name=method.group(2),
+                signature=f"{method.group(3)}: {return_type}",
+                doc=" ".join(pending_doc) or "Compiler intrinsic",
+                allocation=pending_allocation,
+                receiver_mode=receiver_mode,
+                visibility="public",
+                semantic_source=path.resolve().relative_to(root.resolve()).as_posix(),
+                semantic_authority="compiler_intrinsic",
+                source_line=index,
+            )
+        )
+        pending_doc = []
+        pending_allocation = None
+    return methods
+
+
+def parse_compiler_module_schemas(root: Path) -> list[CompilerModuleSchema]:
+    """Parse Xray declarations that define compiler-owned module namespaces.
+
+    A schema is selected by its own `@compiler-module` marker, not by a module
+    name embedded in this parser. Ordinary enums and structural aliases remain
+    Xray-owned declarations. Only class methods carrying a per-method
+    `@compiler-intrinsic` marker cross into compiler-owned lowering.
+    """
+    schemas: list[CompilerModuleSchema] = []
+    types_dir = root / "stdlib" / "types"
+    for path in sorted(types_dir.glob("*.xr")):
+        text = path.read_text(encoding="utf-8")
+        markers = list(COMPILER_MODULE_RE.finditer(text))
+        if not markers:
+            continue
+        if len(markers) != 1:
+            raise SystemExit(f"{path}: compiler schema requires exactly one @compiler-module")
+        module = markers[0].group(1)
+        semantic_source = path.resolve().relative_to(root.resolve()).as_posix()
+        object_shapes: list[StdlibObjectShapeEntry] = []
+        enums: list[StdlibEnumEntry] = []
+        intrinsic_methods: list[StdlibTypeMethodEntry] = []
+
+        for match in COMPILER_OBJECT_RE.finditer(text):
+            name = match.group(1)
+            open_index = text.find("{", match.start())
+            line = source_line(text, match.start())
+            close_index = matching_source_brace(
+                text, open_index, f"{path}:{line}: {module}.{name}"
+            )
+            fields = parse_handle_fields(
+                " ".join(text[open_index + 1 : close_index].splitlines()),
+                f"{path}:{line}: {module}.{name}",
+            )
+            object_shapes.append(
+                StdlibObjectShapeEntry(
+                    module=module,
+                    name=name,
+                    doc=source_decl_doc(text, match.start(), name, "Exact object shape"),
+                    fields=fields,
+                    exact=True,
+                    visibility="public",
+                    semantic_source=semantic_source,
+                    semantic_authority="xray_schema",
+                    source_line=line,
+                )
+            )
+
+        for match in COMPILER_ENUM_RE.finditer(text):
+            name = match.group(1)
+            open_index = text.find("{", match.start())
+            line = source_line(text, match.start())
+            close_index = matching_source_brace(
+                text, open_index, f"{path}:{line}: {module}.{name}"
+            )
+            variants = parse_enum_variants(
+                " ".join(text[open_index + 1 : close_index].splitlines()),
+                f"{path}:{line}: {module}.{name}",
+            )
+            enums.append(
+                StdlibEnumEntry(
+                    module=module,
+                    name=name,
+                    doc=source_decl_doc(text, match.start(), name, "Enum type"),
+                    variants=variants,
+                    visibility="public",
+                    semantic_source=semantic_source,
+                    semantic_authority="xray_schema",
+                    source_line=line,
+                )
+            )
+
+        for match in COMPILER_CLASS_RE.finditer(text):
+            intrinsic_methods.extend(
+                parse_compiler_intrinsic_methods(root, path, module, text, match)
+            )
+
+        if not object_shapes and not enums and not intrinsic_methods:
+            raise SystemExit(f"{path}: @compiler-module {module} declares no schema rows")
+        schemas.append(
+            CompilerModuleSchema(
+                module=module,
+                semantic_source=semantic_source,
+                object_shapes=tuple(object_shapes),
+                enums=tuple(enums),
+                intrinsic_methods=tuple(intrinsic_methods),
+            )
+        )
+    return schemas
+
+
 def parse_def_metadata(
     root: Path,
 ) -> tuple[
@@ -726,7 +1187,7 @@ def parse_def_metadata(
             aot_kind = str(props.get("aot_kind", "method" if aot_direct else ""))
             ret = str(props.get("ret", "value"))
             aot_enum = str(props.get("aot_enum", ""))
-            if ret not in {"value", "i64", "enum_i64", "str_borrowed", "i64_pair_result"}:
+            if ret not in {"value", "i64", "enum_i64", "str_borrowed"}:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported ret kind for "
                     f"{current_module}.{current_name}: {ret}"
@@ -739,15 +1200,15 @@ def parse_def_metadata(
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_kind requires aot_direct: true"
                 )
-            if ret in {"enum_i64", "i64_pair_result"} and (not aot_direct or not aot_enum):
+            if ret == "enum_i64" and (not aot_direct or not aot_enum):
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} {ret} "
                     "requires aot_direct: true and aot_enum"
                 )
-            if aot_enum and ret not in {"enum_i64", "i64_pair_result"}:
+            if aot_enum and ret != "enum_i64":
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_enum "
-                    "requires ret: enum_i64 or i64_pair_result"
+                    "requires ret: enum_i64"
                 )
             argc_raw = str(props["argc"])
             arg_spec = str(props.get("arg_spec", ""))
@@ -1073,6 +1534,25 @@ def parse_def_metadata(
                     "of native_body or native_body_expr"
                 )
             native_body_expr = f"&{body_symbol}" if body_symbol else body_expr
+            source_wrapper = str(props.get("source_wrapper", "")).strip()
+            source_storage_field = str(props.get("source_storage_field", "")).strip()
+            if bool(source_wrapper) != bool(source_storage_field):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} source_wrapper and "
+                    "source_storage_field must be declared together"
+                )
+            if source_wrapper and not re.fullmatch(r"[A-Z][A-Za-z0-9_]*", source_wrapper):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} source_wrapper must be "
+                    "an exported source type name"
+                )
+            if source_storage_field and not re.fullmatch(
+                r"_[A-Za-z_][A-Za-z0-9_]*", source_storage_field
+            ):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} source_storage_field "
+                    "must be a private-looking field name"
+                )
             native_classes.append(
                 StdlibNativeClassEntry(
                     module=current_module,
@@ -1085,6 +1565,8 @@ def parse_def_metadata(
                     visibility=resolve_visibility(
                         props, "public", f"{path}:{line_no}: {current_module}.{current_name}"
                     ),
+                    source_wrapper=source_wrapper,
+                    source_storage_field=source_storage_field,
                 )
             )
         elif current_kind == "class":
@@ -1281,6 +1763,25 @@ def parse_def_metadata(
         for entry in (*native_classes, *classes)
     }
 
+    provider_wrappers: dict[tuple[str, str], str] = {}
+    for entry in native_classes:
+        if not entry.source_wrapper:
+            continue
+        if not entry.is_internal:
+            raise SystemExit(
+                f"{entry.symbol}: source provider storage must have internal visibility"
+            )
+        key = (entry.module, entry.source_wrapper)
+        previous = provider_wrappers.get(key)
+        if previous:
+            raise SystemExit(
+                f"duplicate source provider wrapper {entry.module}.{entry.source_wrapper}: "
+                f"{previous} and {entry.name}"
+            )
+        provider_wrappers[key] = entry.name
+
+    validate_source_provider_bridges(root, entries, native_classes)
+
     def inherit(entry, owner: str):
         if entry.visibility:
             return entry
@@ -1291,6 +1792,38 @@ def parse_def_metadata(
     type_methods = [inherit(e, e.type_name) for e in type_methods]
     class_methods = [inherit(e, e.class_name) for e in class_methods]
     class_fields = [inherit(e, e.class_name) for e in class_fields]
+
+    object_keys = {(entry.module, entry.name) for entry in object_shapes}
+    enum_keys = {(entry.module, entry.name) for entry in enums}
+    intrinsic_keys = {(entry.module, entry.type_name, entry.name) for entry in type_methods}
+    for schema in parse_compiler_module_schemas(root):
+        for entry in schema.object_shapes:
+            key = (entry.module, entry.name)
+            if key in object_keys:
+                raise SystemExit(
+                    f"{entry.semantic_source}:{entry.source_line}: duplicate object schema "
+                    f"{entry.module}.{entry.name}"
+                )
+            object_keys.add(key)
+            object_shapes.append(entry)
+        for entry in schema.enums:
+            key = (entry.module, entry.name)
+            if key in enum_keys:
+                raise SystemExit(
+                    f"{entry.semantic_source}:{entry.source_line}: duplicate enum schema "
+                    f"{entry.module}.{entry.name}"
+                )
+            enum_keys.add(key)
+            enums.append(entry)
+        for entry in schema.intrinsic_methods:
+            key = (entry.module, entry.type_name, entry.name)
+            if key in intrinsic_keys:
+                raise SystemExit(
+                    f"{entry.semantic_source}:{entry.source_line}: duplicate intrinsic method "
+                    f"{entry.module}.{entry.type_name}.{entry.name}"
+                )
+            intrinsic_keys.add(key)
+            type_methods.append(entry)
 
     return (
         entries,
@@ -1455,8 +1988,6 @@ def ret_expr(entry: StdlibEntry) -> str:
         return "CG_AOT_RET_ENUM_I64"
     if entry.ret == "str_borrowed":
         return "CG_AOT_RET_STR_BORROWED"
-    if entry.ret == "i64_pair_result":
-        return "CG_AOT_RET_I64_PAIR_RESULT"
     raise SystemExit(f"unsupported ret kind for {entry.symbol}: {entry.ret}")
 
 
@@ -1474,11 +2005,38 @@ def emit_aot_methods(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
     enums: list[StdlibEnumEntry],
+    native_classes: list[StdlibNativeClassEntry],
 ) -> str:
     rows = [e for e in entries if e.aot_direct and e.aot_kind == "method"]
     builtin_rows = [e for e in entries if e.aot_direct and e.aot_kind == "builtin"]
     const_rows = [c for c in constants if c.aot_const_kind]
     enum_by_symbol = {enum.symbol: enum for enum in enums}
+    wrappers_by_module: dict[str, frozenset[str]] = {}
+    for storage in native_classes:
+        if storage.source_wrapper:
+            wrappers_by_module[storage.module] = frozenset(
+                (*wrappers_by_module.get(storage.module, frozenset()), storage.source_wrapper)
+            )
+
+    def source_provider_arg_spec(entry: StdlibEntry) -> str | None:
+        if entry.argc == "variadic":
+            return None
+        wrappers = wrappers_by_module.get(entry.module, frozenset())
+        params, _ = parse_function_signature_shape(entry.signature)
+        spec: list[str] = []
+        for fragment in params:
+            try:
+                type_text = function_parameter_type(fragment, entry.symbol)
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+            spec.append("w" if type_text in wrappers else ".")
+        expected = int(entry.argc)
+        if len(spec) != expected:
+            raise SystemExit(
+                f"{entry.symbol}: source provider arg spec length {len(spec)} "
+                f"does not match argc {expected}"
+            )
+        return "".join(spec)
     lines = generated_header("xstdlib_aot_methods_generated.inc.c - AOT stdlib direct-call table")
     for e in rows:
         if not e.aot_enum:
@@ -1496,6 +2054,7 @@ def emit_aot_methods(
     for e in rows:
         if not e.aot:
             raise SystemExit(f"{e.symbol}: aot_direct requires aot symbol")
+        provider_spec = source_provider_arg_spec(e)
         enum = (
             enum_by_symbol.get(f"{e.module}.{e.aot_enum}") if e.aot_enum else None
         )
@@ -1510,7 +2069,9 @@ def emit_aot_methods(
         lines.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {argc_expr(e)}, {c_string(e.aot)}, "
-            f"{c_string(e.arg_spec)}, {ret_expr(e)}, NULL, UINT32_C({layout_id}), "
+            f"{c_string(e.arg_spec)}, "
+            f"{c_string(provider_spec) if provider_spec is not None else 'NULL'}, "
+            f"{ret_expr(e)}, NULL, UINT32_C({layout_id}), "
             f"{enum_name}, {variants_ref}, {variant_count}"
             "},"
         )
@@ -2020,6 +2581,7 @@ def emit_defs_header(
             "    const char *define;",
             "    const char *layer;",
             "    const char *aot_kind;",
+            "    const char *return_ownership;",
             "    uint32_t runtime_capabilities;",
             "    uint16_t argc;",
             "    uint16_t target_leaf;",
@@ -2099,6 +2661,8 @@ def emit_defs_header(
             "    const char *native_body_expr;",
             "    const char *flags;",
             "    const char *builtin_kind;",
+            "    const char *source_wrapper;",
+            "    const char *source_storage_field;",
             "} XrStdlibNativeClassDefEntry;",
             "",
             "typedef struct XrStdlibClassDefEntry {",
@@ -2148,7 +2712,8 @@ def emit_defs_header(
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
             f"{c_string(e.aot_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
-            f"{c_string(e.aot_kind)}, {runtime_caps}, {argc}, {TARGET_LEAF_KINDS[e.target_leaf]}, "
+            f"{c_string(e.aot_kind)}, {c_string(e.return_ownership)}, {runtime_caps}, {argc}, "
+            f"{TARGET_LEAF_KINDS[e.target_leaf]}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )
@@ -2312,7 +2877,8 @@ def emit_defs_header(
             "    {"
             f"{c_string(cls.module)}, {c_string(cls.name)}, {c_string(cls.super_slot)}, "
             f"{c_string(cls.core_slot)}, {c_string(cls.native_body_expr)}, {c_string(cls.flags)}, "
-            f"{c_string(cls.builtin_kind)}"
+            f"{c_string(cls.builtin_kind)}, {c_string(cls.source_wrapper)}, "
+            f"{c_string(cls.source_storage_field)}"
             "},"
         )
     lines.extend(
@@ -2399,7 +2965,7 @@ def output_paths(root: Path) -> dict[Path, str]:
     declarations = parse_module_declarations(root)
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
-            entries, constants, enums
+            entries, constants, enums, native_classes
         ),
         root / "src" / "aot" / "xaot_stdlib_generated.inc.c": emit_driver_metadata(
             entries, constants

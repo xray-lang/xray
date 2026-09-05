@@ -58,8 +58,6 @@ typedef struct XrayCoreClasses {
     // Native-body migrated types
     XrClass *rangeClass;
     XrClass *iteratorClass;
-    XrClass *regexClass;
-    XrClass *regexMatchClass;
     XrClass *sysMutexClass;
     XrClass *sysRwLockClass;
     XrClass *sysCondvarClass;
@@ -67,6 +65,7 @@ typedef struct XrayCoreClasses {
     XrClass *sysOnceClass;
     XrClass *netConnClass;
     XrClass *netListenerClass;
+    XrClass *tlsContextStorageClass;
     XrClass *memBufferClass;
 
     // Tuples: one XrClass per arity (lazy-built on first use). Each class

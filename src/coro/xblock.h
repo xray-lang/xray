@@ -54,6 +54,16 @@ typedef struct {
     bool active;
 } XrCoroBlockSnapshot;
 
+#define XR_TIME_SLEEP_MAX_MS INT64_C(86400000)
+
+/* Namespace-form time.sleep calls are lowered directly by both backends, so
+ * the runtime boundary must preserve the same duration policy as time.xr. */
+static inline int64_t xr_time_sleep_normalize_ms(int64_t milliseconds) {
+    if (milliseconds <= 0)
+        return 0;
+    return milliseconds > XR_TIME_SLEEP_MAX_MS ? XR_TIME_SLEEP_MAX_MS : milliseconds;
+}
+
 XR_FUNC bool xr_slot_store_value(XrSlotRef slot, XrValue value);
 XR_FUNC bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value);
 XR_FUNC XrValue *xr_slot_value_address(XrSlotRef slot);

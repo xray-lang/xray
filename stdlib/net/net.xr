@@ -1,13 +1,15 @@
 // net — network semantics over private socket/TLS/netpoll primitives.
 //
-// The native layer exposes only single-shot yieldable primitives plus the
-// NetConn/NetListener handles. Everything with a policy dimension is decided
-// here: address resolution and multi-address dial fallback (RFC 8305 order),
+// The native layer exposes only single-shot yieldable primitives plus private
+// socket storage. Public NetConn/NetListener identity and every policy
+// dimension are decided here: address resolution and multi-address dial fallback (RFC 8305 order),
 // timeout defaults and deadline composition, error classification into
 // NetError, stream copy pumps, and datagram shaping. Connection setup
 // failures throw typed NetError values; per-operation I/O keeps in-band
 // results (byte counts, null on timeout) with lastError for the reason,
 // so poll-style loops stay exception-free.
+
+import time
 
 // Portable error codes stored by the native layer (net.__lastCode). The
 // numbering mirrors XrNetErrorKind and is a frozen contract with the
@@ -27,6 +29,41 @@ const _DEFAULT_BACKLOG: i64 = 1024
 const _DEFAULT_COPY_BUFFER: i64 = 65536
 const _MIN_COPY_BUFFER: i64 = 1024
 const _MAX_COPY_BUFFER: i64 = 1048576
+const _MAX_ALPN_PROTOCOL_BYTES: i64 = 255
+const _MAX_ALPN_WIRE_BYTES: i64 = 65535
+const _DIRECTION_READ: i64 = 0
+const _DIRECTION_WRITE: i64 = 1
+const _DIRECTION_BOTH: i64 = 2
+
+export enum NetError {
+    Timeout,
+    Closed,
+    Reset,
+    Refused,
+    Dns,
+    Tls,
+    Io,
+    Invalid,
+    Cancelled,
+    OutOfMemory
+}
+
+// Public socket identities are ordinary final Xray classes. The private
+// provider storage owns the OS/TLS resource and is projected only at generated
+// module-private native-leaf call sites. Constructors are capability-sealed by
+// their unexported storage parameter: external modules can neither name nor
+// manufacture that argument, and no raw-storage getter exists.
+export final class NetConn {
+    private _storage: __NetConnStorage
+
+    constructor(storage: __NetConnStorage) { this._storage = storage }
+}
+
+export final class NetListener {
+    private _storage: __NetListenerStorage
+
+    constructor(storage: __NetListenerStorage) { this._storage = storage }
+}
 
 fn _classify(code: i64) -> NetError {
     if (code == _CODE_TIMEOUT) { return NetError.Timeout }
@@ -61,21 +98,19 @@ export final class Endpoint {
 export final class DialOptions {
     timeoutMs: i64
     tls: bool
+    alpnProtocols: Array<string>?
 
-    constructor(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false) {
+    constructor(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false,
+                alpnProtocols: Array<string>? = null) {
         this.timeoutMs = timeoutMs
         this.tls = tls
+        this.alpnProtocols = alpnProtocols
     }
 }
 
-export final class CopyBidirectionalResult {
+export struct CopyBidirectionalResult {
     aToB: i64
     bToA: i64
-
-    constructor(aToB: i64, bToA: i64) {
-        this.aToB = aToB
-        this.bToA = bToA
-    }
 }
 
 // Sender identity attached to a received datagram.
@@ -116,10 +151,10 @@ fn _dialTcp(host: string, port: i64, deadline: i64) -> NetConn {
     if (len(addrs) == 0) { throw NetError.Dns }
     var lastCode = _CODE_IO
     for (var i = 0; i < len(addrs); i++) {
-        var remaining = deadline - __nowMs()
+        var remaining = deadline - time.monotonic()
         if (remaining <= 0) { throw NetError.Timeout }
-        var conn = __connectFd(addrs[i], port, remaining)
-        if (conn != null) { return conn! }
+        var storage = __connectFd(addrs[i], port, deadline)
+        if (storage != null) { return NetConn(storage!) }
         lastCode = __lastConnectCode()
         if (lastCode == _CODE_TIMEOUT || lastCode == _CODE_CANCELLED) { throw _classify(lastCode) }
     }
@@ -129,9 +164,9 @@ fn _dialTcp(host: string, port: i64, deadline: i64) -> NetConn {
 // The TLS arm hands the fresh TCP conn straight into the handshake
 // primitive, which returns the same handle on success and closes it on
 // failure.
-fn _dialTls(host: string, port: i64, deadline: i64) -> NetConn {
+fn _dialTls(host: string, port: i64, deadline: i64, alpnWire: Array<u8>) -> NetConn {
     var conn = _dialTcp(host, port, deadline)
-    var code = __tlsHandshake(conn, host, deadline)
+    var code = __tlsHandshake(conn, host, deadline, alpnWire)
     if (code != 0) { throw _classify(code) }
     return conn
 }
@@ -142,9 +177,11 @@ fn _dialTls(host: string, port: i64, deadline: i64) -> NetConn {
 export fn dial(host: string, port: i64, options: DialOptions? = null) -> NetConn {
     var opts = options ?? DialOptions()
     if (port < 0 || port > 65535 || opts.timeoutMs <= 0) { throw NetError.Invalid }
+    var alpnWire = _encodeAlpnProtocols(opts.alpnProtocols)
+    if (!opts.tls && len(alpnWire) > 0) { throw NetError.Invalid }
     if (opts.tls && !__hasTLS()) { throw NetError.Tls }
-    var deadline = __nowMs() + opts.timeoutMs
-    if (opts.tls) { return _dialTls(host, port, deadline) }
+    var deadline = time.monotonic() + opts.timeoutMs
+    if (opts.tls) { return _dialTls(host, port, deadline, alpnWire) }
     return _dialTcp(host, port, deadline)
 }
 
@@ -158,11 +195,93 @@ export fn dialEndpoint(endpoint: Endpoint, options: DialOptions? = null) -> NetC
 export fn upgradeTLS(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS) {
     if (timeoutMs <= 0) { throw NetError.Invalid }
     if (!__hasTLS()) { throw NetError.Tls }
-    var code = __tlsHandshake(conn, hostname, __nowMs() + timeoutMs)
+    var code = __tlsHandshake(conn, hostname, time.monotonic() + timeoutMs, Array<u8>())
     if (code != 0) { throw _classify(code) }
 }
 
 export fn hasTLS() -> bool { return __hasTLS() }
+
+fn _containsZeroByte(value: string) -> bool {
+    var bytes: const Slice<u8> = value.bytes()
+    for (var i = 0; i < len(bytes); i++) {
+        if (bytes[i] == 0) { return true }
+    }
+    return false
+}
+
+fn _encodeAlpnProtocols(protocols: Array<string>?) -> Array<u8> {
+    var wire = Array<u8>()
+    if (protocols == null) { return wire }
+    var values = protocols!
+    for (var i = 0; i < len(values); i++) {
+        var bytes: const Slice<u8> = values[i].bytes()
+        if (len(bytes) == 0 || len(bytes) > _MAX_ALPN_PROTOCOL_BYTES ||
+            len(wire) + len(bytes) + 1 > _MAX_ALPN_WIRE_BYTES) {
+            throw NetError.Invalid
+        }
+        wire.push(len(bytes) as u8)
+        wire.appendFrom(bytes)
+    }
+    return wire
+}
+
+// Public context identities and policy live in Xray. Their only native field
+// is an opaque, non-copyable OpenSSL storage object whose destroy hook runs
+// after the final Xray reference dies.
+export final class TlsClientContext {
+    private _storage: __TlsContextStorage
+
+    private constructor(storage: __TlsContextStorage) { this._storage = storage }
+
+    static create(caFile: string = "", certFile: string = "", keyFile: string = "",
+                  verifyPeer: bool = true,
+                  alpnProtocols: Array<string>? = null) -> TlsClientContext {
+        var alpnWire = _encodeAlpnProtocols(alpnProtocols)
+        if (!__hasTLS()) { throw NetError.Tls }
+        if (_containsZeroByte(caFile) || _containsZeroByte(certFile) ||
+            _containsZeroByte(keyFile) || (len(certFile) == 0) != (len(keyFile) == 0)) {
+            throw NetError.Invalid
+        }
+        var storage = __newTlsClientContext(caFile, certFile, keyFile, verifyPeer, alpnWire)
+        if (storage == null) { throw NetError.Tls }
+        return TlsClientContext(storage!)
+    }
+
+    upgrade(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS) {
+        if (timeoutMs <= 0 || _containsZeroByte(hostname)) { throw NetError.Invalid }
+        var code = __tlsClientHandshakeWithContext(
+            this._storage, conn, hostname, time.monotonic() + timeoutMs)
+        if (code != 0) { throw _classify(code) }
+    }
+}
+
+export final class TlsServerContext {
+    private _storage: __TlsContextStorage
+
+    private constructor(storage: __TlsContextStorage) { this._storage = storage }
+
+    static create(certFile: string, keyFile: string, caFile: string = "",
+                  requireClientCertificate: bool = false,
+                  alpnProtocols: Array<string>? = null) -> TlsServerContext {
+        var alpnWire = _encodeAlpnProtocols(alpnProtocols)
+        if (len(certFile) == 0 || len(keyFile) == 0 || _containsZeroByte(certFile) ||
+            _containsZeroByte(keyFile) || _containsZeroByte(caFile)) {
+            throw NetError.Invalid
+        }
+        if (!__hasTLS()) { throw NetError.Tls }
+        var storage = __newTlsServerContext(
+            certFile, keyFile, caFile, requireClientCertificate, alpnWire)
+        if (storage == null) { throw NetError.Tls }
+        return TlsServerContext(storage!)
+    }
+
+    accept(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS) {
+        if (timeoutMs <= 0) { throw NetError.Invalid }
+        var code = __tlsServerHandshakeWithContext(
+            this._storage, conn, time.monotonic() + timeoutMs)
+        if (code != 0) { throw _classify(code) }
+    }
+}
 
 
 
@@ -171,9 +290,9 @@ export fn hasTLS() -> bool { return __hasTLS() }
 // Native bind failures have no handle to carry an errno, so every socket,
 // bind, or listen failure surfaces as the coarse NetError.Io.
 fn _listenChecked(port: i64, backlog: i64, forceV4: bool) -> NetListener {
-    var listener = __listenFd(port, backlog, forceV4)
-    if (listener == null) { throw NetError.Io }
-    return listener!
+    var storage = __listenFd(port, backlog, forceV4)
+    if (storage == null) { throw NetError.Io }
+    return NetListener(storage!)
 }
 
 export fn listen(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false) -> NetListener {
@@ -183,7 +302,11 @@ export fn listen(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = fal
 
 // Null means the accept deadline elapsed or the listener was closed;
 // lastError(listener) distinguishes the two so accept loops stay cheap.
-export fn accept(listener: NetListener) -> NetConn? { return __accept(listener) }
+export fn accept(listener: NetListener) -> NetConn? {
+    var storage = __accept(listener)
+    if (storage == null) { return null }
+    return NetConn(storage!)
+}
 
 // ========== Byte I/O ==========
 
@@ -208,22 +331,48 @@ export fn writeBytes(conn: NetConn, data: Array<u8>) -> i64 {
     return __writeBytes(conn, data)
 }
 
-export fn shutdownRead(conn: NetConn) -> bool { return __shutdownRead(conn) }
-export fn shutdownWrite(conn: NetConn) -> bool { return __shutdownWrite(conn) }
-export fn shutdown(conn: NetConn) -> bool { return __shutdown(conn) }
-export fn close(handle: NetConn | NetListener) { __close(handle) }
-export fn fd(handle: NetConn | NetListener) -> i64 { return __fd(handle) }
+export fn shutdownRead(conn: NetConn) -> bool {
+    return __shutdownDirection(conn, _DIRECTION_READ)
+}
+
+export fn shutdownWrite(conn: NetConn) -> bool {
+    return __shutdownDirection(conn, _DIRECTION_WRITE)
+}
+
+export fn shutdown(conn: NetConn) -> bool {
+    return __shutdownDirection(conn, _DIRECTION_BOTH)
+}
+
+export fn close(handle: NetConn | NetListener) {
+    if (handle is NetConn) {
+        __closeConn(handle as NetConn)
+    } else {
+        __closeListener(handle as NetListener)
+    }
+}
+
+export fn fd(handle: NetConn | NetListener) -> i64 {
+    if (handle is NetConn) { return __connFd(handle as NetConn) }
+    return __listenerFd(handle as NetListener)
+}
+
+export fn isClosed(handle: NetConn | NetListener) -> bool { return fd(handle) < 0 }
+export fn isTLS(conn: NetConn) -> bool { return __connIsTLS(conn) }
+export fn negotiatedProtocol(conn: NetConn) -> string? {
+    return __tlsNegotiatedProtocol(conn)
+}
+export fn port(listener: NetListener) -> i64 { return __listenerPort(listener) }
 
 export fn setReadDeadline(conn: NetConn, deadline: i64) -> bool {
-    return __setReadDeadline(conn, deadline)
+    return __setDeadlineDirection(conn, deadline, _DIRECTION_READ)
 }
 
 export fn setWriteDeadline(conn: NetConn, deadline: i64) -> bool {
-    return __setWriteDeadline(conn, deadline)
+    return __setDeadlineDirection(conn, deadline, _DIRECTION_WRITE)
 }
 
 export fn setDeadline(conn: NetConn, deadline: i64) -> bool {
-    return __setDeadline(conn, deadline)
+    return __setDeadlineDirection(conn, deadline, _DIRECTION_BOTH)
 }
 
 export fn setAcceptDeadline(listener: NetListener, deadline: i64) -> bool {
@@ -231,12 +380,20 @@ export fn setAcceptDeadline(listener: NetListener, deadline: i64) -> bool {
 }
 
 export fn lastError(handle: NetConn | NetListener) -> NetError? {
-    var code = __lastCode(handle)
+    var code = 0
+    if (handle is NetConn) {
+        code = __connLastCode(handle as NetConn)
+    } else {
+        code = __listenerLastCode(handle as NetListener)
+    }
     if (code == 0) { return null }
     return _classify(code)
 }
 
-export fn lastErrno(handle: NetConn | NetListener) -> i64 { return __lastErrno(handle) }
+export fn lastErrno(handle: NetConn | NetListener) -> i64 {
+    if (handle is NetConn) { return __connLastErrno(handle as NetConn) }
+    return __listenerLastErrno(handle as NetListener)
+}
 
 // ========== Stream copy ==========
 
@@ -249,13 +406,16 @@ fn _clampCopyBuffer(size: i64) -> i64 {
 // Pump src to dst until EOF or error; returns bytes copied. readInto sets
 // buffer.length to the chunk size, so writeBytes sends exactly the received
 // bytes without any per-iteration slicing or copying.
-fn _pump(src: NetConn, dst: NetConn, bufferSize: i64) -> i64 {
+fn _pump(src: NetConn, dst: NetConn, bufferSize: i64, halfCloseOnEof: bool) -> i64 {
     var buffer = Array<u8>(bufferSize)
     var total = 0
     while (true) {
         var n = __readInto(src, buffer, bufferSize)
         if (n < 0) { return total }
-        if (n == 0) { return total }
+        if (n == 0) {
+            if (halfCloseOnEof) { shutdownWrite(dst) }
+            return total
+        }
         var sent = __writeBytes(dst, buffer)
         if (sent < n) { return total + (sent > 0 ? sent : 0) }
         total = total + n
@@ -266,26 +426,79 @@ fn _pump(src: NetConn, dst: NetConn, bufferSize: i64) -> i64 {
 // Copy src to dst until EOF. Returns bytes copied; a mid-stream error stops
 // the pump and the reason stays queryable via lastError on either handle.
 export fn copy(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER) -> i64 {
-    return _pump(src, dst, _clampCopyBuffer(bufferSize))
+    return _pump(src, dst, _clampCopyBuffer(bufferSize), false)
 }
 
-// Full-duplex relay. The two direction pumps run as native coroutines: the
-// analyzer accepts spawning them from Xray, but the AOT cross-execution
-// transfer planner has no verified plan yet for handing the same two handles
-// to two child tasks, so the pair-pump stays a native primitive until that
-// plan lands.
+fn _pumpAndHalfClose(src: NetConn, dst: NetConn) -> i64 {
+    return _pump(src, dst, _DEFAULT_COPY_BUFFER, true)
+}
+
+// Full-duplex relay is source-owned structured concurrency: each direction
+// runs the ordinary source pump, and EOF half-closes the peer write side so
+// request/response protocols can drain without closing either handle.
 export fn copyBidirectional(a: NetConn, b: NetConn) -> CopyBidirectionalResult {
-    var raw = __copyBidirectional(a, b)
-    return CopyBidirectionalResult(raw.aToB, raw.bToA)
+    if (isClosed(a) || isClosed(b)) { throw NetError.Closed }
+    if (fd(a) == fd(b)) { throw NetError.Invalid }
+    const left = a
+    const right = b
+    var first = 0
+    var second = 0
+    scope {
+        var aToB = go _pumpAndHalfClose(left, right)
+        var bToA = go _pumpAndHalfClose(right, left)
+        first = await aToB
+        second = await bToA
+    }
+    return CopyBidirectionalResult{aToB: first, bToA: second}
 }
 
 // ========== UDP ==========
 
 export fn udpBind(port: i64, address: string = "") -> NetConn {
     if (port < 0 || port > 65535) { throw NetError.Invalid }
-    var conn = __udpBind(port, address)
-    if (conn == null) { throw NetError.Io }
-    return conn!
+    var storage = __udpBind(port, address)
+    if (storage == null) { throw NetError.Io }
+    return NetConn(storage!)
+}
+
+fn _validIpv4MulticastGroup(group: string) -> bool {
+    const bytes: Slice<u8> = group.bytes()
+    var octets = 0
+    var digits = 0
+    var value = 0
+    for (var i = 0; i < len(bytes); i++) {
+        const byte = bytes[i] as i64
+        if (byte == 46) {
+            if (digits == 0 || value > 255 || octets >= 3) { return false }
+            if (octets == 0 && (value < 224 || value > 239)) { return false }
+            octets += 1
+            digits = 0
+            value = 0
+        } else {
+            if (byte < 48 || byte > 57 || digits >= 3) { return false }
+            value = value * 10 + byte - 48
+            digits += 1
+        }
+    }
+    if (digits == 0 || value > 255) { return false }
+    return octets == 3
+}
+
+// Open one IPv4 multicast datagram socket. Group syntax and option ranges are
+// source-owned; the leaf below only performs the portable socket operations.
+export fn udpMulticastBind(group: string, port: i64, ttl: i64 = 1,
+                           loopback: bool = false) -> NetConn {
+    if (!_validIpv4MulticastGroup(group) || port <= 0 || port > 65535 || ttl < 0 || ttl > 255) {
+        throw NetError.Invalid
+    }
+    var storage = __udpMulticastBind(group, port, ttl, loopback)
+    if (storage == null) { throw NetError.Io }
+    return NetConn(storage!)
+}
+
+fn _deadlineFromTimeout(timeoutMs: i64) -> i64 {
+    if (timeoutMs < 0) { return 0 }
+    return time.monotonic() + timeoutMs
 }
 
 // Resolve once, send one datagram. Argument and resolution failures throw;
@@ -295,7 +508,7 @@ export fn sendTo(handle: NetConn, data: Array<u8>, host: string, port: i64,
     if (port < 0 || port > 65535) { throw NetError.Invalid }
     var addrs = __resolveAll(host)
     if (len(addrs) == 0) { throw NetError.Dns }
-    return __udpSendTo(handle, data, addrs[0], port, timeoutMs)
+    return __udpSendTo(handle, data, addrs[0], port, _deadlineFromTimeout(timeoutMs))
 }
 
 // Receive one datagram into the caller buffer. A negative timeout waits
@@ -303,7 +516,7 @@ export fn sendTo(handle: NetConn, data: Array<u8>, host: string, port: i64,
 // The sender identity is read back from the handle, so recvFrom assumes one
 // reader per UDP socket.
 export fn recvFrom(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1) -> UdpFrom? {
-    var n = __udpRecvInto(handle, buffer, timeoutMs)
+    var n = __udpRecvInto(handle, buffer, _deadlineFromTimeout(timeoutMs))
     if (n < 0) { return null }
     return UdpFrom(n, __udpFromHost(handle), __udpFromPort(handle))
 }

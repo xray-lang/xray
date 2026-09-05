@@ -34,8 +34,7 @@
 #include "../frontend/parser/xast.h"
 #include "../runtime/class/xtype_registry.h"
 #include "../module/xmodule.h"
-#include "../../stdlib/prelude/prelude.h"
-#include "../runtime/xstdlib_bridge.h"
+#include "../module/xprelude_runtime.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/mem/xcycle_detector.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -44,7 +43,7 @@
 #include "../coro/xscope_transfer.h"
 
 #include "../base/xmalloc.h"
-#include "../../stdlib/stdlib_cache.h"
+#include "../module/xstdlib_runtime_cache.h"
 #include "../base/xglobal_indices.h"
 #include "../frontend/analyzer/xanalyzer_native_types.h"
 #include "../toolchain/xcompiler_session.h"
@@ -66,8 +65,8 @@ static bool isolate_config_is_valid(const XrVMConfig *params) {
     return true;
 }
 
-static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *script_file,
-                                            int argc, char **argv) {
+static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *script_file, int argc,
+                                            char **argv) {
     if (!isolate || !isolate->core_rt || !isolate->core || !isolate->core->processClass)
         return false;
 
@@ -176,8 +175,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // runtime-owned native classes and the canonical builtin enums are isolate
     // state that every module load already assumes is in place. Built-in type
     // names (Array, Map, Json, BigInt, ...) resolve from here, so user code
-    // never writes `import prelude` -- and when it does, the module system
-    // resolves it to a no-op module through the same generic path as any other.
+    // never imports it. `prelude` is deliberately absent from the module graph.
     xr_prelude_install(isolate);
 
     // Module system
@@ -188,7 +186,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
                                  xr_compile_ast_with_source, xr_compile_source_with_path,
                                  xr_program_destroy);
 
-    // Native XrClasses for Regex / NetConn / NetListener are registered up
+    // Private native storage classes for net source wrappers are registered up
     // front inside stdlib loaders. Pure stdlib classes such as
     // datetime.DateTime must be imported from their module.
 
@@ -212,21 +210,6 @@ static int isolate_init_full(XrVMRuntime *isolate) {
         if (isolate->core->jsonClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_JSON] =
                 xr_value_from_class(isolate->core->jsonClass);
-        if (isolate->core_rt->native_type_classes[XR_TWORKQUEUE])
-            isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TWORKQUEUE]);
-        if (isolate->core_rt->native_type_classes[XR_TRESULTGROUP])
-            isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]);
-        if (isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH])
-            isolate->vm.builtins[XR_GLOBAL_VAR_COUNTDOWNLATCH] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TCOUNTDOWNLATCH]);
-        if (isolate->core_rt->native_type_classes[XR_TSEMAPHORE])
-            isolate->vm.builtins[XR_GLOBAL_VAR_SEMAPHORE] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TSEMAPHORE]);
-        if (isolate->core_rt->native_type_classes[XR_TEVENTCOUNT])
-            isolate->vm.builtins[XR_GLOBAL_VAR_EVENTCOUNT] =
-                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TEVENTCOUNT]);
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
@@ -315,6 +298,7 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
         return NULL;
     }
     memset(isolate, 0, sizeof(XrVMRuntime));
+    xr_amutex_init(&isolate->provider_lifecycle_lock);
 
     isolate->params = *params;
 
@@ -350,8 +334,7 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
         (isolate->params.script_file || isolate->params.script_argc != 0 ||
          isolate->params.script_argv) &&
         !isolate_materialize_script_info(isolate, isolate->params.script_file,
-                                         isolate->params.script_argc,
-                                         isolate->params.script_argv))
+                                         isolate->params.script_argc, isolate->params.script_argv))
         init_result = -1;
     xr_exec_context_restore(previous);
     if (init_result != 0) {

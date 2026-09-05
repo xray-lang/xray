@@ -1367,10 +1367,10 @@ static inline XrTypeIdentityCoreKind xrt_type_identity_kind(XrValue v) {
             return XR_TYPE_IDENTITY_CORE_ENUM_VALUE;
         case XR_TAG_BIGINT:
             return XR_TYPE_IDENTITY_CORE_BIGINT;
-        case XR_TAG_NET_CONN:
-            return XR_TYPE_IDENTITY_CORE_NETCONN;
-        case XR_TAG_NET_LISTENER:
-            return XR_TYPE_IDENTITY_CORE_NETLISTENER;
+        case XR_TAG_NET_CONN_STORAGE:
+            return XR_TYPE_IDENTITY_CORE_NET_CONN_STORAGE;
+        case XR_TAG_NET_LISTENER_STORAGE:
+            return XR_TYPE_IDENTITY_CORE_NET_LISTENER_STORAGE;
         default:
             return XR_TYPE_IDENTITY_CORE_INSTANCE;
     }
@@ -1439,8 +1439,8 @@ static inline XrValue xrt_typename(XrValue v) {
     XRT_STR_LIT_DEF(xs_tuple, "tuple");
     XRT_STR_LIT_DEF(xs_range, TYPE_NAME_RANGE);
     XRT_STR_LIT_DEF(xs_bigint, TYPE_NAME_BIGINT);
-    XRT_STR_LIT_DEF(xs_net_conn, TYPE_NAME_NETCONN);
-    XRT_STR_LIT_DEF(xs_net_listener, TYPE_NAME_NETLISTENER);
+    XRT_STR_LIT_DEF(xs_net_conn, TYPE_NAME_NET_CONN_STORAGE);
+    XRT_STR_LIT_DEF(xs_net_listener, TYPE_NAME_NET_LISTENER_STORAGE);
     XRT_STR_LIT_DEF(xs_object, TYPE_NAME_OBJECT);
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
@@ -1489,9 +1489,9 @@ static inline XrValue xrt_typename(XrValue v) {
         }
         case XR_TAG_BIGINT:
             return xr_str_lit(&xs_bigint);
-        case XR_TAG_NET_CONN:
+        case XR_TAG_NET_CONN_STORAGE:
             return xr_str_lit(&xs_net_conn);
-        case XR_TAG_NET_LISTENER:
+        case XR_TAG_NET_LISTENER_STORAGE:
             return xr_str_lit(&xs_net_listener);
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {

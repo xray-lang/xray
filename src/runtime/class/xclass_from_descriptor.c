@@ -227,6 +227,16 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
         return NULL;
     }
 
+    if (desc->source_provider_field_ordinal != 0) {
+        uint32_t field_index = (uint32_t) desc->source_provider_field_ordinal - 1u;
+        if (field_index >= (uint32_t) xr_class_instance_field_count(cls)) {
+            xr_log_warning("class", "from_descriptor: invalid source provider field for '%s'",
+                           desc->class_name);
+            return NULL;
+        }
+        cls->source_provider_field_index = (int16_t) field_index;
+    }
+
     // Backfill field type_name from descriptor entries (for type metadata).
     //
     // Two index spaces meet here and they are not the same one. A field

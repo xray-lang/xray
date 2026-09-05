@@ -23,6 +23,7 @@
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
 #include "../../../src/plan/ownership/xr_ownership_check.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_graph.h"
 #include "../../../src/plan/semantic/xr_semantic_ops.h"
@@ -113,6 +114,30 @@ static XrType stub_string = {
     .id = 3,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_string_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 33,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_string},
+};
+static XrType stub_range = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 34,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "Range"},
+};
+static XrClassInfo stub_shadow_range_class = {
+    .name = "Range",
+};
+static XrType stub_shadow_range = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 35,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {.class_name = "Range", .class_ref = &stub_shadow_range_class},
 };
 static XrType stub_unit = {
     .kind = XR_KIND_UNIT,
@@ -1042,11 +1067,9 @@ static XrSemanticPlan *build_builtin_instance_yieldable_plan(XrType *receiver_ty
     return plan;
 }
 
-static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_final,
-                                                               bool publish_state,
-                                                               bool expect_success,
-                                                               const char *identity_override,
-                                                               const char *expected_error) {
+static XrSemanticPlan *build_source_instance_method_local_plan(
+    bool explicit_final, bool generic_template, bool exact_self_receiver, bool publish_state,
+    bool expect_success, const char *identity_override, const char *expected_error) {
     XiFunc *root = xi_func_new("source_instance_root", &stub_unit);
     XiFunc *callee = xi_func_new("wait", &stub_unit);
     XiFunc *caller = xi_func_new("run", &stub_unit);
@@ -1066,11 +1089,19 @@ static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_fin
     XiValue *caller_this = xi_param(caller, caller_entry, 0, &stub_source_instance);
     REQUIRE(callee_this != NULL && caller_this != NULL);
     callee->params = (XiValue **) xr_malloc(sizeof(*callee->params));
-    caller->params = (XiValue **) xr_malloc(sizeof(*caller->params));
+    caller->params =
+        (XiValue **) xr_malloc((exact_self_receiver ? 1u : 2u) * sizeof(*caller->params));
     REQUIRE(callee->params != NULL && caller->params != NULL);
     callee->params[0] = callee_this;
     caller->params[0] = caller_this;
-    callee->nparams = caller->nparams = 1;
+    callee->nparams = 1;
+    caller->nparams = exact_self_receiver ? 1 : 2;
+    XiValue *call_receiver = caller_this;
+    if (!exact_self_receiver) {
+        call_receiver = xi_param(caller, caller_entry, 1, &stub_source_instance);
+        REQUIRE(call_receiver != NULL);
+        caller->params[1] = call_receiver;
+    }
     callee->has_receiver = true;
     callee->receiver_mode = XR_PARAM_REF;
     callee->receiver_borrowed = true;
@@ -1082,7 +1113,7 @@ static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_fin
     xi_block_set_return(callee_entry, yield);
     XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
     REQUIRE(call != NULL);
-    call->args[0] = caller_this;
+    call->args[0] = call_receiver;
     call->aux = "wait";
     call->aux_int = 0;
     XiCallPlan call_plan = {
@@ -1125,6 +1156,7 @@ static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_fin
         .nmethod = 2,
         .child_idx = child_indices,
         .ninst = 2,
+        .is_generic_skeleton = generic_template,
         .explicit_final = explicit_final,
         .needs_runtime_type = true,
     };
@@ -1148,9 +1180,10 @@ static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_fin
     return plan;
 }
 
-static XrSemanticPlan *build_source_instance_method_open_plan(XrSemanticPlan **dependency_out,
-                                                              bool publish_state,
-                                                              bool expect_success) {
+static XrSemanticPlan *build_source_instance_method_dependency_plan(XrSemanticPlan **dependency_out,
+                                                                    bool explicit_final,
+                                                                    bool publish_state,
+                                                                    bool expect_success) {
     XiFunc *dependency_root = xi_func_new("open_worker_root", &stub_unit);
     XiFunc *wait = xi_func_new("wait", &stub_unit);
     REQUIRE(dependency_root != NULL && wait != NULL);
@@ -1199,7 +1232,7 @@ static XrSemanticPlan *build_source_instance_method_open_plan(XrSemanticPlan **d
         .nmethod = 1,
         .child_idx = &child,
         .ninst = 1,
-        .explicit_final = false,
+        .explicit_final = explicit_final,
         .needs_runtime_type = true,
         .xg_class_id = 42,
     };
@@ -2573,7 +2606,7 @@ static void test_source_enum_identity_and_mutations(void) {
             type = &plan->types[i];
     REQUIRE(
         type != NULL && type->source_enum_key != NULL &&
-        strstr(type->source_enum_key, "source-enum-v1:schema=45:owner=13:stdlib/base64:") != NULL &&
+        strstr(type->source_enum_key, "source-enum-v1:schema=49:owner=13:stdlib/base64:") != NULL &&
         strstr(type->source_enum_key, ":name=14:Base64Alphabet:members=2:m0=8:Standard:payloads=0:"
                                       "m1=7:UrlSafe:payloads=0") != NULL &&
         type->enum_layout_id == layout->layout_id && type->enum_member_count == 2 &&
@@ -2722,7 +2755,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "60ffda97746cadf58574b9eee3cb19ce") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "610d07b6968c747f165e9c0bb3795c20") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(
@@ -2747,7 +2780,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "0116e921042eb821008deef671323489") == 0);
+    REQUIRE(strcmp(loan_id_hex, "c529f0eb0fb29cc241a272f6fc270b88") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -2794,9 +2827,9 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "dfd6db4f2d5fd4e6313bdc2fde1f56dca4d9b621690fd31dc421280cb6e73e3f") == 0);
+                   "9743054ce3600d906852a7344b0908102084625ed37def7ea8c178fcfafdcfe2") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "75057d7a9a8a4b6b5a0a11bed5222e11eab00f4af3a0e1bb6cf4f2d6767348bf") == 0);
+                   "651c2ee842d665edb66cad32a357b711bec46cd5b621f3e5c94eb3be2c63922b") == 0);
     /* Re-anchored because the SemanticPlan fingerprint covers the whole stdlib
      * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def
@@ -2813,9 +2846,11 @@ static void test_immutable_owned_snapshot(void) {
      * Old operation registry digest:
      * 3593ec2325d8c2037b519b897ec010dce84407adae1068593b4eea6877989692.
      * Old semantic digest:
-     * 57dd0bc1ba04a29a4b2bcccd26d8f8f317f17dc5e63b39ef0ad38a668991e005. */
+     * 57dd0bc1ba04a29a4b2bcccd26d8f8f317f17dc5e63b39ef0ad38a668991e005.
+     * Removing the duplicate sys CPU-count leaf changed the whole-registry
+     * component from 2223c318a41b2ca38ded4084ec06aae6a6477dc5e111528fff8e809a6a377e89. */
     REQUIRE(strcmp(semantic_hex,
-                   "44847e223b42ab7dd88aaae2e20444b434fbb2f0b14e81a50971ae02f84a9780") == 0);
+                   "a98c45a80fb79002782926e58da6b2878d6a85aff69ac0af0684b95874e0c37a") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3124,7 +3159,7 @@ static void test_xsm_roundtrip_and_determinism(void) {
 }
 
 static void test_xsm_program_provenance_roundtrip(void) {
-    REQUIRE(XR_SEMANTIC_SCHEMA_VERSION == UINT32_C(45));
+    REQUIRE(XR_SEMANTIC_SCHEMA_VERSION == UINT32_C(49));
     REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(9));
     REQUIRE(XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION == UINT32_C(5));
     XrSemanticPlan *plan = build_xsm_scalar_program_plan();
@@ -3659,12 +3694,12 @@ static void test_direct_local_call_target_authority(void) {
     REQUIRE(target->function == 1 && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(plan->operations[target->operation].effects == xi_generated_op_effects(XI_CALL));
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=45:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=49:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":function=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "ca0f041c2698d81df5b90e1f57d08099") == 0);
+    REQUIRE(strcmp(target_id_hex, "c82178225e60725e31ba52a2f2ec2363") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -3746,12 +3781,12 @@ static void test_indirect_callable_state_authority(void) {
             target->callable_type < plan->type_count &&
             plan->types[target->callable_type].kind == XR_KIND_FUNCTION);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=45:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=49:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":callable-type=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=4") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "ab0c52c8cff5fe4ca7cb0e1f4cfd70a4") == 0);
+    REQUIRE(strcmp(target_id_hex, "a3e081cd6dce721b370aa03fc5e44e9b") == 0);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -3892,9 +3927,9 @@ static void test_source_export_call_target_authority(void) {
      * dependency fingerprint and the target that embeds it.
      * Previous dependency_id: 9f8c98c148e046642c7b0aefef7549a4.
      * Previous target_id:     62dd0c02696c9089a81fc8e1b4527e0b. */
-    REQUIRE(strcmp(dependency_id, "904d9b9e2e484fe691d4a0ab86983d0c") == 0);
-    REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
-    REQUIRE(strcmp(target_id, "3b660a4be90a4865ddb2d67ebd94e846") == 0);
+    REQUIRE(strcmp(dependency_id, "657ac4bb60f288bd78fddff0c0a422ed") == 0);
+    REQUIRE(strcmp(export_id, "e6c5f7ae334037299a1f5f282751a948") == 0);
+    REQUIRE(strcmp(target_id, "5c0816e3d1531ed5eccd1d6f7e7184c5") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -3964,15 +3999,15 @@ static void test_source_export_call_target_authority(void) {
 
 static void test_native_yieldable_call_target_authority(void) {
     XrSemanticPlan *plan =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_CALL, 1, true, true);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_CALL, 1, true, true);
     REQUIRE(xr_semantic_plan_call_target_count(plan) == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
     REQUIRE(target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE &&
             target->function == XR_SEMANTIC_INDEX_NONE &&
             target->operation < plan->operation_count &&
             plan->operations[target->operation].opcode == XI_CALL);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=45:operation=") != NULL);
-    REQUIRE(strstr(target->canonical_key, ":native=os.__sleep:kind=2") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=49:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, ":native=time.__sleep:kind=2") != NULL);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE;
@@ -4025,7 +4060,7 @@ static void test_native_yieldable_call_target_authority(void) {
     xr_semantic_plan_free(plan);
 
     XrSemanticPlan *unknown =
-        build_native_yieldable_call_target_plan("os", "__not_a_native", XI_CALL, 1, false, false);
+        build_native_yieldable_call_target_plan("time", "__not_a_native", XI_CALL, 1, false, false);
     REQUIRE(unknown->call_target_count == 0);
     xr_semantic_plan_free(unknown);
     XrSemanticPlan *non_yieldable =
@@ -4033,19 +4068,19 @@ static void test_native_yieldable_call_target_authority(void) {
     REQUIRE(non_yieldable->call_target_count == 0);
     xr_semantic_plan_free(non_yieldable);
     XrSemanticPlan *wrong_arity =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_CALL, 0, false, false);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_CALL, 0, false, false);
     REQUIRE(wrong_arity->call_target_count == 0);
     xr_semantic_plan_free(wrong_arity);
     XrSemanticPlan *relative =
-        build_native_yieldable_call_target_plan("./os", "__sleep", XI_CALL, 1, false, false);
+        build_native_yieldable_call_target_plan("./time", "__sleep", XI_CALL, 1, false, false);
     REQUIRE(relative->call_target_count == 0);
     xr_semantic_plan_free(relative);
     XrSemanticPlan *tail =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_TAIL_CALL, 1, false, false);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_TAIL_CALL, 1, false, false);
     REQUIRE(tail->call_target_count == 0);
     xr_semantic_plan_free(tail);
     XrSemanticPlan *method =
-        build_native_yieldable_call_target_plan("os", "__sleep", XI_CALL_METHOD, 1, false, false);
+        build_native_yieldable_call_target_plan("time", "__sleep", XI_CALL_METHOD, 1, false, false);
     REQUIRE(method->call_target_count == 0);
     xr_semantic_plan_free(method);
 }
@@ -4163,10 +4198,10 @@ static void test_native_module_scalar_call_authority(void) {
     REQUIRE(xr_semantic_plan_verify(nullary, error, sizeof(error)));
     xr_semantic_plan_free(nullary);
 
-    /* `sys.cpuCount` proves the family is not one module's private arrangement:
+    /* `os.__cpuCount` proves the family is not one module's private arrangement:
      * a second module path reaches the same authority through the same rows. */
     XrSemanticPlan *other_module = build_native_module_scalar_call_plan(
-        "sys", NULL, "cpuCount", 0, NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0),
+        "os", NULL, "__cpuCount", 0, NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0),
         &stub_i64);
     REQUIRE(native_module_call_operation(other_module)->intrinsic_kind ==
             XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
@@ -4430,7 +4465,7 @@ static void test_native_namespace_yieldable_authority(void) {
             target->dependency == XR_SEMANTIC_INDEX_NONE &&
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             target->callable_type == XR_SEMANTIC_INDEX_NONE);
-    REQUIRE(strstr(target->canonical_key, "call-target-v5:schema=45:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v5:schema=49:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":native-namespace=time.sleep:kind=5") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
@@ -4542,7 +4577,7 @@ static void test_builtin_instance_yieldable_authority(void) {
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             target->callable_type < plan->type_count &&
             plan->types[target->callable_type].builtin_type == XR_TID_SEMAPHORE);
-    REQUIRE(strstr(target->canonical_key, "call-target-v6:schema=45:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v6:schema=49:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":builtin-instance=Semaphore.acquire:type=") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
@@ -4623,14 +4658,15 @@ static void test_builtin_instance_yieldable_authority(void) {
 }
 
 static void test_source_instance_method_local_authority(void) {
-    XrSemanticPlan *plan = build_source_instance_method_local_plan(true, true, true, NULL, NULL);
+    XrSemanticPlan *plan =
+        build_source_instance_method_local_plan(true, false, true, true, true, NULL, NULL);
     REQUIRE(plan != NULL && plan->source_class_count == 1);
     REQUIRE(plan->functions[0].is_module_initializer == 1);
     XrSemanticSourceClassRecord *source_class = &plan->source_classes[0];
     REQUIRE(source_class->ordinal == 0 && source_class->method_count == 2);
     REQUIRE(source_class->flags ==
             (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE));
-    REQUIRE(strstr(source_class->canonical_key, "source-class-v1:schema=45:module=") != NULL);
+    REQUIRE(strstr(source_class->canonical_key, "source-class-v1:schema=49:module=") != NULL);
     REQUIRE(strstr(source_class->canonical_key,
                    ":path=50:memory-module-v1:id=27:semantic-source-instance-v1:") != NULL);
     REQUIRE(strstr(source_class->canonical_key, ":name=11:FinalWorker:") != NULL);
@@ -4667,7 +4703,7 @@ static void test_source_instance_method_local_authority(void) {
     REQUIRE(plan->functions[target->function].source_class == 0);
     REQUIRE(plan->types[target->callable_type].source_class == 0);
     REQUIRE(xr_stable_id_equal(target->callee_function, plan->functions[target->function].id));
-    REQUIRE(strstr(target->canonical_key, "call-target-v7:schema=45:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v7:schema=49:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":selector=4:wait:") != NULL);
 
     uint32_t call_states = 0;
@@ -4752,27 +4788,83 @@ static void test_source_instance_method_local_authority(void) {
     plan->entity_count = saved_entity_count;
     xr_semantic_plan_free(plan);
 
-    XrSemanticPlan *open = build_source_instance_method_local_plan(false, false, true, NULL, NULL);
-    REQUIRE(open != NULL && open->source_class_count == 1 && open->call_target_count == 1);
-    REQUIRE((open->source_classes[0].flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0);
-    REQUIRE(open->call_targets[0].kind ==
+    (void) build_source_instance_method_local_plan(false, false, true, false, false, NULL,
+                                                   "XR_SEM_0019");
+    XrSemanticPlan *sealed =
+        build_source_instance_method_local_plan(false, false, true, true, true, NULL, NULL);
+    REQUIRE(sealed != NULL && sealed->source_class_count == 1 && sealed->call_target_count == 1);
+    REQUIRE((sealed->source_classes[0].flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0);
+    REQUIRE(sealed->call_targets[0].kind ==
             XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE);
-    xr_semantic_plan_free(open);
-    (void) build_source_instance_method_local_plan(false, true, false, NULL, NULL);
+    char module_set_error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify_module_set(sealed, NULL, 0, module_set_error,
+                                               sizeof(module_set_error)));
+    xr_semantic_plan_free(sealed);
 }
 
-static void test_source_instance_method_open_authority(void) {
+static void test_source_template_method_local_authority(void) {
+    XrSemanticPlan *plan =
+        build_source_instance_method_local_plan(false, true, true, true, true, NULL, NULL);
+    REQUIRE(plan != NULL && plan->source_class_count == 1 && plan->call_target_count == 1);
+    REQUIRE((plan->source_classes[0].flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0);
+    REQUIRE((plan->source_classes[0].flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) == 0);
+    XrSemanticCallTargetRecord *target = &plan->call_targets[0];
+    REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL);
+    REQUIRE(target->function < plan->function_count && target->callable_type < plan->type_count);
+    REQUIRE(plan->functions[target->function].source_class == 0);
+    REQUIRE(xr_stable_id_equal(target->callee_function, plan->functions[target->function].id));
+    REQUIRE(strstr(target->canonical_key, "call-target-v11:schema=49:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, ":selector=4:wait:") != NULL);
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify_module_set(plan, NULL, 0, error, sizeof(error)));
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
+    REQUIRE(decoded->call_target_count == 1 &&
+            decoded->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL);
+    REQUIRE(xr_fingerprint_equal(xr_semantic_plan_fingerprint(plan),
+                                 xr_semantic_plan_fingerprint(decoded)));
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+
+    uint8_t saved_kind = target->kind;
+    target->kind = XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    target->kind = saved_kind;
+    uint8_t saved_flags = plan->source_classes[0].flags;
+    plan->source_classes[0].flags &= (uint8_t) ~XR_SEM_SOURCE_CLASS_GENERIC;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->source_classes[0].flags = saved_flags;
+    xr_semantic_plan_free(plan);
+
+    /* The same generic type spelling on another parameter is not self and
+     * therefore does not acquire template-local target authority. */
+    XrSemanticPlan *other_receiver =
+        build_source_instance_method_local_plan(false, true, false, false, true, NULL, NULL);
+    REQUIRE(other_receiver != NULL && other_receiver->call_target_count == 0);
+    xr_semantic_plan_free(other_receiver);
+    (void) build_source_instance_method_local_plan(false, true, false, true, false, NULL,
+                                                   "XR_SEM_0019");
+    (void) build_source_instance_method_local_plan(false, true, true, false, false, NULL,
+                                                   "XR_SEM_0019");
+}
+
+static void test_source_instance_method_dependency_authority(void) {
     XrSemanticPlan *dependency = NULL;
-    XrSemanticPlan *plan = build_source_instance_method_open_plan(&dependency, true, true);
+    XrSemanticPlan *plan =
+        build_source_instance_method_dependency_plan(&dependency, false, true, true);
     REQUIRE(plan != NULL && dependency != NULL);
     REQUIRE(dependency->source_class_count == 1 && dependency->source_method_count == 1);
     const XrSemanticSourceMethodRecord *method = &dependency->source_methods[0];
     REQUIRE(method->flags == (XR_SEM_SOURCE_METHOD_INSTANCE | XR_SEM_SOURCE_METHOD_OPEN_DOMAIN));
-    REQUIRE(strstr(method->canonical_key, "source-method-v1:schema=45:class=") != NULL);
+    REQUIRE(strstr(method->canonical_key, "source-method-v1:schema=49:class=") != NULL);
     REQUIRE(strstr(method->canonical_key, "xg") == NULL);
     REQUIRE(plan->dependency_count == 1 && plan->call_target_count == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];
-    REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN);
+    REQUIRE(target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
     REQUIRE(target->function == XR_SEMANTIC_INDEX_NONE &&
             target->source_export == XR_SEMANTIC_INDEX_NONE && target->dependency == 0 &&
             target->callable_type < plan->type_count);
@@ -4782,7 +4874,7 @@ static void test_source_instance_method_open_authority(void) {
     const XrSemanticTypeRecord *receiver = &plan->types[target->callable_type];
     REQUIRE(receiver->source_class == XR_SEMANTIC_INDEX_NONE);
     REQUIRE(xr_stable_id_equal(receiver->source_class_identity, dependency->source_classes[0].id));
-    REQUIRE(strstr(target->canonical_key, "call-target-v8:schema=45:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v8:schema=49:operation=") != NULL);
     char error[512] = {0};
     const XrSemanticPlan *dependencies[1] = {dependency};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -4805,7 +4897,7 @@ static void test_source_instance_method_open_authority(void) {
     REQUIRE(xr_xsm_decode_module_set(bytes, size, decoded_dependencies, 1, &decoded, error,
                                      sizeof(error)));
     REQUIRE(decoded->source_method_count == 0 && decoded->call_target_count == 1 &&
-            decoded->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN);
+            decoded->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
     xr_semantic_plan_free(decoded);
     xr_semantic_plan_free(decoded_dependency);
     uint8_t *old_schema = copy_bytes(bytes, size);
@@ -4862,7 +4954,36 @@ static void test_source_instance_method_open_authority(void) {
     target->id.bytes[0] = saved_key;
     xr_semantic_plan_free(plan);
     xr_semantic_plan_free(dependency);
-    (void) build_source_instance_method_open_plan(NULL, false, false);
+    (void) build_source_instance_method_dependency_plan(NULL, false, false, false);
+
+    XrSemanticPlan *final_dependency = NULL;
+    XrSemanticPlan *final_plan =
+        build_source_instance_method_dependency_plan(&final_dependency, true, true, true);
+    REQUIRE(final_plan != NULL && final_dependency != NULL &&
+            final_dependency->source_class_count == 1 &&
+            final_dependency->source_method_count == 1);
+    REQUIRE((final_dependency->source_classes[0].flags &
+             (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE)) ==
+            (XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE));
+    REQUIRE(final_dependency->source_methods[0].flags == XR_SEM_SOURCE_METHOD_INSTANCE);
+    REQUIRE(final_plan->call_target_count == 1 &&
+            final_plan->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY);
+    const XrSemanticPlan *final_dependencies[1] = {final_dependency};
+    REQUIRE(xr_semantic_plan_verify_module_set(final_plan, final_dependencies, 1, error,
+                                               sizeof(error)));
+    uint8_t saved_final_method_flags = final_dependency->source_methods[0].flags;
+    final_dependency->source_methods[0].flags |= XR_SEM_SOURCE_METHOD_OPEN_DOMAIN;
+    REQUIRE(!xr_semantic_plan_verify_module_set(final_plan, final_dependencies, 1, error,
+                                                sizeof(error)));
+    final_dependency->source_methods[0].flags = saved_final_method_flags;
+    uint8_t saved_final_class_flags = final_dependency->source_classes[0].flags;
+    final_dependency->source_classes[0].flags &= (uint8_t) ~XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL;
+    REQUIRE(!xr_semantic_plan_verify_module_set(final_plan, final_dependencies, 1, error,
+                                                sizeof(error)));
+    final_dependency->source_classes[0].flags = saved_final_class_flags;
+    xr_semantic_plan_free(final_plan);
+    xr_semantic_plan_free(final_dependency);
+    (void) build_source_instance_method_dependency_plan(NULL, true, false, false);
 }
 
 static void test_shared_direct_call_target_authority(void) {
@@ -4874,11 +4995,11 @@ static void test_shared_direct_call_target_authority(void) {
     REQUIRE(call->function == 2 && call->opcode == XI_CALL);
     REQUIRE((call->effects & XI_EFFECT_MAY_SUSPEND) == 0);
     REQUIRE((call->flags & XI_FLAG_MAY_SUSPEND) == 0);
-    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=45:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v3:schema=49:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "5520dfaa6509c7c1cb91ab11981242ed") == 0);
+    REQUIRE(strcmp(target_id_hex, "d82bc974ffe5d9eaeb790d5291e797a3") == 0);
 
     uint32_t coroutine_states = 0;
     bool call_has_state = false;
@@ -5236,6 +5357,242 @@ static void expect_ownership_failure_at(XrSemanticPlan *plan, const char *code, 
 }
 
 #define expect_ownership_failure(plan, code) expect_ownership_failure_at((plan), (code), __LINE__)
+
+static XrSemanticPlan *build_builtin_runtime_string_split_plan(void) {
+    XiFunc *function = xi_func_new("builtin_runtime_string_split", &stub_string_array);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *receiver = xi_const_str(function, entry, "a,,b,", &stub_string);
+    XiValue *separator = xi_const_str(function, entry, ",", &stub_string);
+    XiValue *split = xi_value_new(function, entry, XI_CALL_METHOD, &stub_string_array, 2);
+    REQUIRE(receiver != NULL && separator != NULL && split != NULL);
+    split->args[0] = receiver;
+    split->args[1] = separator;
+    split->aux = (void *) "split";
+    split->aux_int = (int64_t) XI_METHOD_SYMBOL_SPLIT << 1;
+    split->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    xi_block_set_return(entry, split);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime String.split SemanticPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static void test_builtin_runtime_string_split_authority(void) {
+    XrSemanticPlan *plan = build_builtin_runtime_string_split_plan();
+    XrSemanticOperationRecord *split = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].intrinsic_kind != XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+            continue;
+        REQUIRE(split == NULL);
+        split = &plan->operations[i];
+    }
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(split != NULL &&
+            xr_semantic_builtin_runtime_method_is_exact(plan, split, &spec, &receiver) &&
+            spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_STRING_SPLIT &&
+            spec->method_symbol == XI_METHOD_SYMBOL_SPLIT && receiver != XR_SEMANTIC_INDEX_NONE);
+
+    uint32_t saved_registry_id =
+        split->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID];
+    split->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] =
+        XA_BUILTIN_RECEIVER_METHOD_COUNT;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    split->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] = saved_registry_id;
+
+    int64_t saved_immediate = split->semantic_immediate;
+    split->semantic_immediate = (int64_t) XI_METHOD_SYMBOL_REPLACE << 1;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    split->semantic_immediate = saved_immediate;
+
+    uint32_t saved_result_type = split->result_type;
+    split->result_type = plan->operands[split->operand_begin].type;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    split->result_type = saved_result_type;
+
+    uint32_t saved_argument_type = plan->operands[split->operand_begin + 1u].type;
+    plan->operands[split->operand_begin + 1u].type = split->result_type;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->operands[split->operand_begin + 1u].type = saved_argument_type;
+
+    const char *saved_metadata = plan->metadata[split->metadata_begin];
+    plan->metadata[split->metadata_begin] = "replace";
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->metadata[split->metadata_begin] = saved_metadata;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+}
+
+static XrSemanticPlan *build_builtin_runtime_range_to_string_plan(void) {
+    XiFunc *function = xi_func_new("builtin_runtime_range_to_string", &stub_string);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *start = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *end = xi_const_int(function, entry, 5, &stub_int);
+    XiValue *range = xi_value_new(function, entry, XI_RANGE, &stub_range, 2);
+    XiValue *to_string = xi_value_new(function, entry, XI_CALL_METHOD, &stub_string, 1);
+    REQUIRE(start != NULL && end != NULL && range != NULL && to_string != NULL);
+    range->args[0] = start;
+    range->args[1] = end;
+    to_string->args[0] = range;
+    to_string->aux = (void *) "toString";
+    to_string->aux_int = (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1;
+    to_string->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    xi_block_set_return(entry, to_string);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime Range.toString SemanticPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_builtin_runtime_range_contains_plan(void) {
+    XiFunc *function = xi_func_new("builtin_runtime_range_contains", &stub_bool);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *start = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *end = xi_const_int(function, entry, 5, &stub_int);
+    XiValue *range = xi_value_new(function, entry, XI_RANGE, &stub_range, 2);
+    XiValue *needle = xi_const_int(function, entry, 4, &stub_int);
+    XiValue *contains = xi_value_new(function, entry, XI_CALL_METHOD, &stub_bool, 2);
+    REQUIRE(start != NULL && end != NULL && range != NULL && needle != NULL && contains != NULL);
+    range->args[0] = start;
+    range->args[1] = end;
+    contains->args[0] = range;
+    contains->args[1] = needle;
+    contains->aux = (void *) "contains";
+    contains->aux_int = (int64_t) XI_METHOD_SYMBOL_CONTAINS << 1;
+    xi_block_set_return(entry, contains);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime Range.contains SemanticPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static void test_builtin_runtime_range_contains_authority(void) {
+    XrSemanticPlan *plan = build_builtin_runtime_range_contains_plan();
+    XrSemanticOperationRecord *range = NULL;
+    XrSemanticOperationRecord *contains = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        XrSemanticOperationRecord *operation = &plan->operations[i];
+        if (operation->opcode == XI_RANGE)
+            range = operation;
+        if (operation->intrinsic_kind == XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+            contains = operation;
+    }
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(range != NULL && xr_semantic_range_value_is_exact(plan, range));
+    REQUIRE(contains != NULL &&
+            xr_semantic_builtin_runtime_method_is_exact(plan, contains, &spec, &receiver) &&
+            spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_RANGE_CONTAINS &&
+            spec->method_symbol == XI_METHOD_SYMBOL_CONTAINS && receiver == range->result_value &&
+            xr_semantic_builtin_runtime_method_result_class(spec) ==
+                XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_SCALAR &&
+            contains->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+            contains->return_parameter == -1 && contains->return_provenance == XR_SEM_RETURN_NONE &&
+            contains->return_complete == 0);
+
+    uint8_t saved_result_ownership = contains->result_ownership;
+    contains->result_ownership = XI_GEN_RESULT_OWNERSHIP_OWNED;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    contains->result_ownership = saved_result_ownership;
+
+    uint32_t saved_argument_type = plan->operands[contains->operand_begin + 1u].type;
+    plan->operands[contains->operand_begin + 1u].type = contains->result_type;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->operands[contains->operand_begin + 1u].type = saved_argument_type;
+
+    uint32_t saved_registry_id =
+        contains->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID];
+    contains->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] =
+        XA_BUILTIN_RECEIVER_METHOD_RANGE_TO_STRING;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    contains->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] = saved_registry_id;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+}
+
+static void test_builtin_runtime_range_to_string_authority(void) {
+    XrSemanticPlan *plan = build_builtin_runtime_range_to_string_plan();
+    XrSemanticOperationRecord *range = NULL;
+    XrSemanticOperationRecord *to_string = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        XrSemanticOperationRecord *operation = &plan->operations[i];
+        if (operation->opcode == XI_RANGE)
+            range = operation;
+        if (operation->intrinsic_kind == XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+            to_string = operation;
+    }
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(range != NULL && xr_semantic_range_value_is_exact(plan, range));
+    REQUIRE(to_string != NULL &&
+            xr_semantic_builtin_runtime_method_is_exact(plan, to_string, &spec, &receiver) &&
+            spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_RANGE_TO_STRING &&
+            spec->method_symbol == XI_METHOD_SYMBOL_TOSTRING && receiver == range->result_value &&
+            xr_semantic_builtin_runtime_method_result_class(spec) ==
+                XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC);
+    REQUIRE(!xa_builtin_receiver_matches_type(&stub_shadow_range, XA_BUILTIN_RECEIVER_RANGE));
+
+    uint32_t saved_registry_id =
+        to_string->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID];
+    to_string->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] =
+        XA_BUILTIN_RECEIVER_METHOD_STRING_SPLIT;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    to_string->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] = saved_registry_id;
+
+    uint32_t saved_receiver_type = plan->operands[to_string->operand_begin].type;
+    plan->operands[to_string->operand_begin].type = to_string->result_type;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->operands[to_string->operand_begin].type = saved_receiver_type;
+
+    const char *saved_metadata = plan->metadata[to_string->metadata_begin];
+    plan->metadata[to_string->metadata_begin] = "split";
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->metadata[to_string->metadata_begin] = saved_metadata;
+
+    uint32_t saved_range_type = range->result_type;
+    range->result_type = to_string->result_type;
+    expect_verify_failure(plan, "XR_SEM_0015");
+    range->result_type = saved_range_type;
+
+    int64_t saved_inclusive = range->semantic_immediate;
+    range->semantic_immediate = 2;
+    REQUIRE(!xr_semantic_range_value_is_exact(plan, range));
+    range->semantic_immediate = saved_inclusive;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+}
 
 static void test_semantic_side_table_partitions(void) {
     XrSemanticPlan *plan = build_entity_identity_plan();
@@ -6417,7 +6774,7 @@ static void test_owned_string_coroutine_lifecycle_identity(void) {
         const XrSemanticEntityRecord *entity = &plan->entities[lifecycle[role]];
         REQUIRE(entity->parent < plan->entity_count &&
                 plan->entities[entity->parent].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
-                strstr(entity->canonical_key, "entity-v1:schema=45:") != NULL &&
+                strstr(entity->canonical_key, "entity-v1:schema=49:") != NULL &&
                 strstr(entity->canonical_key, ":value-operation=") != NULL &&
                 strstr(entity->canonical_key, ":release=") != NULL &&
                 strstr(entity->canonical_key, ":owner=") != NULL);
@@ -6458,14 +6815,29 @@ static void test_owned_string_coroutine_lifecycle_identity(void) {
 }
 
 static void test_semantic_build_requires_typed_module_identity(void) {
-    (void) build_source_instance_method_local_plan(true, true, false, "", "XR_SEM_0019");
-    (void) build_source_instance_method_local_plan(true, true, false, "<eval>", "XR_SEM_0019");
+    (void) build_source_instance_method_local_plan(true, false, true, true, false, "",
+                                                   "XR_SEM_0019");
+    (void) build_source_instance_method_local_plan(true, false, true, true, false, "<eval>",
+                                                   "XR_SEM_0019");
 }
 
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "source-class-xsm-roundtrip") == 0) {
         test_source_instance_method_local_authority();
+        test_source_template_method_local_authority();
         puts("Source-class XSM round-trip tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "builtin-runtime-method-authority") == 0) {
+        test_builtin_runtime_string_split_authority();
+        test_builtin_runtime_range_contains_authority();
+        test_builtin_runtime_range_to_string_authority();
+        puts("Builtin runtime method SemanticPlan authority tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "source-dependency-method-authority") == 0) {
+        test_source_instance_method_dependency_authority();
+        puts("Source dependency method SemanticPlan authority tests passed");
         return 0;
     }
     test_semantic_build_requires_typed_module_identity();
@@ -6475,6 +6847,9 @@ int main(int argc, char **argv) {
     test_incomplete_debug_span_fails_closed();
     test_non_singleton_borrow_origin_set_fails_scalar_projection();
     test_operation_registry();
+    test_builtin_runtime_string_split_authority();
+    test_builtin_runtime_range_contains_authority();
+    test_builtin_runtime_range_to_string_authority();
     test_immutable_owned_snapshot();
     test_string_builder_constructor_allocation_authority();
     test_string_byte_slice_view_authority();
@@ -6498,7 +6873,8 @@ int main(int argc, char **argv) {
     test_native_namespace_yieldable_authority();
     test_builtin_instance_yieldable_authority();
     test_source_instance_method_local_authority();
-    test_source_instance_method_open_authority();
+    test_source_template_method_local_authority();
+    test_source_instance_method_dependency_authority();
     test_source_export_call_target_authority();
     test_shared_direct_call_target_authority();
     test_parameter_and_capture_contracts();
