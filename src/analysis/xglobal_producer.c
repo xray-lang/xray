@@ -91,12 +91,12 @@ typedef struct XgEnumNameRow {
     uint32_t source_span_id;
 } XgEnumNameRow;
 
-typedef struct XgStdlibImportRow {
+typedef struct XgModuleImportRow {
     XgModuleId module_id;
     const char *local_name;
     const char *module_name;
     const char *member_name;
-} XgStdlibImportRow;
+} XgModuleImportRow;
 
 typedef struct XgLocalType XgLocalType;
 typedef struct XgLocalName XgLocalName;
@@ -116,9 +116,9 @@ typedef struct XgProducer {
     XgFuncNameRow *funcs;
     uint32_t nfuncs;
     uint32_t func_cap;
-    XgStdlibImportRow *stdlib_imports;
-    uint32_t nstdlib_imports;
-    uint32_t stdlib_import_cap;
+    XgModuleImportRow *module_imports;
+    uint32_t nmodule_imports;
+    uint32_t module_import_cap;
     struct XgPendingBody *bodies;
     uint32_t nbodies;
     uint32_t body_cap;
@@ -651,10 +651,6 @@ producer_unique_class_field_source_node_id(const XgProducer *p, XgModuleId modul
 
 static bool producer_stdlib_module_known(const char *name) {
     return xr_stdlib_metadata_link_dependency_module_known(name);
-}
-
-static bool producer_vm_control_module_known(const char *name) {
-    return name && (strcmp(name, "runtime") == 0 || strcmp(name, "test_yield") == 0);
 }
 
 static bool producer_stdlib_member_is_constant(const char *module, const char *member) {
@@ -1384,31 +1380,32 @@ static XgModuleId producer_module_id_for_coordinate(const XgProducer *p,
     return producer_module_id_for_identity(p, resolved_identity);
 }
 
-static bool producer_reserve_stdlib_imports(XgProducer *p, uint32_t needed) {
+static bool producer_reserve_module_imports(XgProducer *p, uint32_t needed) {
     uint32_t new_cap;
-    XgStdlibImportRow *rows;
-    if (p->stdlib_import_cap >= needed)
+    XgModuleImportRow *rows;
+    if (p->module_import_cap >= needed)
         return true;
-    new_cap = p->stdlib_import_cap < 8 ? 8 : p->stdlib_import_cap;
+    new_cap = p->module_import_cap < 8 ? 8 : p->module_import_cap;
     while (new_cap < needed)
         new_cap *= 2;
-    rows = (XgStdlibImportRow *) xr_realloc(p->stdlib_imports, (size_t) new_cap * sizeof(*rows));
+    rows = (XgModuleImportRow *) xr_realloc(p->module_imports,
+                                            (size_t) new_cap * sizeof(*rows));
     if (!rows)
         return false;
-    p->stdlib_imports = rows;
-    p->stdlib_import_cap = new_cap;
+    p->module_imports = rows;
+    p->module_import_cap = new_cap;
     return true;
 }
 
-static bool producer_register_stdlib_import(XgProducer *p, XgModuleId module_id,
+static bool producer_register_module_import(XgProducer *p, XgModuleId module_id,
                                             const char *local_name, const char *module_name,
                                             const char *member_name) {
-    XgStdlibImportRow *row;
+    XgModuleImportRow *row;
     if (!local_name || !local_name[0] || !module_name || !module_name[0])
         return true;
-    if (!producer_reserve_stdlib_imports(p, p->nstdlib_imports + 1))
+    if (!producer_reserve_module_imports(p, p->nmodule_imports + 1))
         return false;
-    row = &p->stdlib_imports[p->nstdlib_imports++];
+    row = &p->module_imports[p->nmodule_imports++];
     row->module_id = module_id;
     row->local_name = local_name;
     row->module_name = module_name;
@@ -1416,12 +1413,12 @@ static bool producer_register_stdlib_import(XgProducer *p, XgModuleId module_id,
     return true;
 }
 
-static const XgStdlibImportRow *
-producer_lookup_stdlib_import(const XgProducer *p, XgModuleId module_id, const char *local_name) {
+static const XgModuleImportRow *
+producer_lookup_module_import(const XgProducer *p, XgModuleId module_id, const char *local_name) {
     if (!p || !local_name)
         return NULL;
-    for (uint32_t i = p->nstdlib_imports; i > 0; i--) {
-        const XgStdlibImportRow *row = &p->stdlib_imports[i - 1];
+    for (uint32_t i = p->nmodule_imports; i > 0; i--) {
+        const XgModuleImportRow *row = &p->module_imports[i - 1];
         if (row->module_id == module_id && row->local_name &&
             strcmp(row->local_name, local_name) == 0)
             return row;
@@ -2579,6 +2576,50 @@ static XgMethodSummary *producer_find_method_by_name_in_hierarchy(XgProducer *p,
     return NULL;
 }
 
+static XgMethodSummary *producer_find_method_for_symbol_in_hierarchy(
+    XgProducer *producer, XgClassId class_id, const XaSymbol *method_symbol) {
+    const AstNode *declaration = method_symbol ? method_symbol->links.function_decl_node : NULL;
+    XgClassNameRow *row = producer_lookup_class_row_by_id(producer, class_id);
+    uint32_t depth = 0u;
+    if (!producer || !producer->evidence || !declaration ||
+        declaration->type != AST_METHOD_DECL)
+        return NULL;
+    while (row && depth++ < 64u) {
+        const AstNode *class_node = row->class_node;
+        if (!class_node || (class_node->type != AST_CLASS_DECL &&
+                            class_node->type != AST_STRUCT_DECL &&
+                            class_node->type != AST_UNION_DECL) ||
+            row->summary_index >= producer->evidence->nclasses)
+            return NULL;
+        const ClassDeclNode *class_decl = &class_node->as.class_decl;
+        const XgClassSummary *class_summary =
+            &producer->evidence->classes[row->summary_index];
+        if (class_summary->method_start == 0u ||
+            class_summary->method_count != (uint32_t) class_decl->method_count)
+            return NULL;
+        for (int ordinal = 0; class_decl->methods && ordinal < class_decl->method_count;
+             ++ordinal) {
+            if (class_decl->methods[ordinal] != declaration)
+                continue;
+            uint32_t method_index = class_summary->method_start - 1u + (uint32_t) ordinal;
+            XgMethodSummary *method =
+                method_index < producer->evidence->nmethods
+                    ? &producer->evidence->methods[method_index]
+                    : NULL;
+            const MethodDeclNode *method_decl = &declaration->as.method_decl;
+            return method && method->owner_class_id == class_summary->class_id &&
+                           method->name_id == hash_name32(method_decl->name) &&
+                           method->signature_key == hash_method_signature(method_decl)
+                       ? method
+                       : NULL;
+        }
+        if (class_summary->parent_class_id == XG_NO_ID)
+            break;
+        row = producer_lookup_class_row_by_id(producer, class_summary->parent_class_id);
+    }
+    return NULL;
+}
+
 static bool producer_finalize_class_field_slots_rec(XgProducer *p, uint32_t class_index,
                                                     uint8_t *state, uint32_t *instance_counts) {
     XgClassSummary *summary;
@@ -3431,6 +3472,10 @@ static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr)
         case AST_AS_EXPR:
             return producer_lookup_class_from_tref(bc->producer, expr->as.as_expr.type);
         case AST_MEMBER_ACCESS: {
+            XgClassNameRow *module_class =
+                body_resolve_module_member_class(bc, &expr->as.member_access);
+            if (module_class)
+                return module_class->class_id;
             XgClassId receiver_class = body_resolve_expr_class(bc, expr->as.member_access.object);
             const char *field_name = expr->as.member_access.name;
             const XgClassFieldSummary *field = body_find_class_field_in_hierarchy(
@@ -3723,25 +3768,25 @@ static bool body_member_receiver_is_module(const MemberAccessNode *member, const
     return strcmp(member->object->as.variable.name, name) == 0;
 }
 
-static const XgStdlibImportRow *body_stdlib_import_for_expr(XgBodyCollect *bc,
+static const XgModuleImportRow *body_module_import_for_expr(XgBodyCollect *bc,
                                                             const AstNode *expr) {
     if (!bc || !expr)
         return NULL;
     if (expr->type == AST_GROUPING)
-        return body_stdlib_import_for_expr(bc, expr->as.grouping);
+        return body_module_import_for_expr(bc, expr->as.grouping);
     if (expr->type != AST_VARIABLE)
         return NULL;
-    return producer_lookup_stdlib_import(bc->producer, bc->module_id, expr->as.variable.name);
+    return producer_lookup_module_import(bc->producer, bc->module_id, expr->as.variable.name);
 }
 
-static const char *body_stdlib_module_for_expr(XgBodyCollect *bc, const AstNode *expr) {
-    const XgStdlibImportRow *row = body_stdlib_import_for_expr(bc, expr);
+static const char *body_module_coordinate_for_expr(XgBodyCollect *bc, const AstNode *expr) {
+    const XgModuleImportRow *row = body_module_import_for_expr(bc, expr);
     if (row)
         return row->member_name ? NULL : row->module_name;
     if (!bc || !expr)
         return NULL;
     if (expr->type == AST_GROUPING)
-        return body_stdlib_module_for_expr(bc, expr->as.grouping);
+        return body_module_coordinate_for_expr(bc, expr->as.grouping);
     if (expr->type == AST_VARIABLE && expr->as.variable.name &&
         !body_has_name_local(bc, expr->as.variable.name) &&
         producer_stdlib_module_known(expr->as.variable.name))
@@ -3755,7 +3800,7 @@ static XgClassNameRow *body_resolve_module_member_class(XgBodyCollect *bc,
     XgModuleId module_id;
     if (!bc || !member || !member->name)
         return NULL;
-    module = body_stdlib_module_for_expr(bc, member->object);
+    module = body_module_coordinate_for_expr(bc, member->object);
     module_id = producer_module_id_for_coordinate(bc->producer, bc->module_id, module);
     return producer_lookup_class_row_scoped(bc->producer, module_id, hash_name32(member->name),
                                             false);
@@ -4183,7 +4228,7 @@ static const XgPendingBody *body_find_call_body(XgBodyCollect *bc, const CallExp
     }
     if (callee->type == AST_MEMBER_ACCESS && callee->as.member_access.name) {
         const MemberAccessNode *member = &callee->as.member_access;
-        const char *module = body_stdlib_module_for_expr(bc, member->object);
+        const char *module = body_module_coordinate_for_expr(bc, member->object);
         XgModuleId module_id =
             producer_module_id_for_coordinate(bc->producer, bc->module_id, module);
         XgFuncNameRow *module_target =
@@ -9183,8 +9228,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     callee = call->as.call_expr.callee;
     if (callee && callee->type == AST_VARIABLE) {
         const char *callee_name = callee->as.variable.name;
-        const XgStdlibImportRow *import =
-            producer_lookup_stdlib_import(bc->producer, bc->module_id, callee_name);
+        const XgModuleImportRow *import =
+            producer_lookup_module_import(bc->producer, bc->module_id, callee_name);
         XgFuncNameRow *target = import && import->member_name
                                     ? producer_lookup_func_row_scoped(
                                           bc->producer,
@@ -9303,21 +9348,21 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 ? xa_node_table_get_symbol((const XaNodeTable *) bc->producer->analyzer->node_table,
                                            callee)
                 : NULL;
-        const char *stdlib_module =
-            body_stdlib_module_for_expr(bc, callee->as.member_access.object);
-        XgModuleId stdlib_module_id =
-            producer_module_id_for_coordinate(bc->producer, bc->module_id, stdlib_module);
-        XgFuncNameRow *stdlib_target = producer_lookup_func_row_scoped(
-            bc->producer, stdlib_module_id, callee->as.member_access.name);
-        XgClassNameRow *stdlib_class =
+        const char *module_coordinate =
+            body_module_coordinate_for_expr(bc, callee->as.member_access.object);
+        XgModuleId target_module_id = producer_module_id_for_coordinate(
+            bc->producer, bc->module_id, module_coordinate);
+        XgFuncNameRow *module_target = producer_lookup_func_row_scoped(
+            bc->producer, target_module_id, callee->as.member_access.name);
+        XgClassNameRow *module_class =
             body_resolve_module_member_class(bc, &callee->as.member_access);
-        XgClassSummary *stdlib_class_summary =
-            stdlib_class && stdlib_class->summary_index < bc->evidence->nclasses
-                ? &bc->evidence->classes[stdlib_class->summary_index]
+        XgClassSummary *module_class_summary =
+            module_class && module_class->summary_index < bc->evidence->nclasses
+                ? &bc->evidence->classes[module_class->summary_index]
                 : NULL;
-        XgMethodSummary *stdlib_constructor =
-            stdlib_class_summary
-                ? producer_find_class_method_by_name(bc->evidence, stdlib_class_summary,
+        XgMethodSummary *module_constructor =
+            module_class_summary
+                ? producer_find_class_method_by_name(bc->evidence, module_class_summary,
                                                      hash_name32("constructor"), true)
                 : NULL;
         const XaBuiltinReceiverMethodSpec *builtin_receiver_method =
@@ -9334,34 +9379,35 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         uint32_t method_name_id = hash_name32(callee->as.member_access.name);
         generic_name = callee->as.member_access.name;
         generic_kind = XG_GENERIC_INST_METHOD;
-        if (stdlib_module && producer_stdlib_module_known(stdlib_module))
+        if (module_coordinate && producer_stdlib_module_known(module_coordinate))
             (void) producer_add_stdlib_symbol_dependency(
                 bc->producer, bc->module_id, bc->owner_func_id, (uint32_t) call->line,
-                stdlib_module, callee->as.member_access.name);
+                module_coordinate, callee->as.member_access.name);
         bc->capability_bits |=
             body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
-        if (stdlib_class)
+        if (module_class)
             bc->capability_bits |= XG_CAP_OBJECTS;
-        if (stdlib_target && (stdlib_target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0) {
+        if (module_target &&
+            (module_target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0) {
             row.kind = XG_CALL_DIRECT_FUNC;
-            row.static_target_func_id = stdlib_target->func_id;
-            generic_origin_decl_id = stdlib_target->decl_id;
-            generic_origin_func_id = stdlib_target->func_id;
+            row.static_target_func_id = module_target->func_id;
+            generic_origin_decl_id = module_target->decl_id;
+            generic_origin_func_id = module_target->func_id;
             generic_kind = XG_GENERIC_INST_FUNCTION;
-        } else if (stdlib_constructor) {
+        } else if (module_constructor) {
             row.kind = XG_CALL_METHOD;
-            row.receiver_static_class_id = stdlib_class->class_id;
-            row.method_id = stdlib_constructor->method_id;
-            row.method_name_id = stdlib_constructor->name_id;
-            row.method_signature_key = stdlib_constructor->signature_key;
+            row.receiver_static_class_id = module_class->class_id;
+            row.method_id = module_constructor->method_id;
+            row.method_name_id = module_constructor->name_id;
+            row.method_signature_key = module_constructor->signature_key;
             generic_kind = XG_GENERIC_INST_CLASS;
-            generic_origin_class_id = stdlib_class->class_id;
-            generic_origin_method_id = stdlib_constructor->method_id;
-        } else if (stdlib_class && stdlib_class_summary) {
+            generic_origin_class_id = module_class->class_id;
+            generic_origin_method_id = module_constructor->method_id;
+        } else if (module_class && module_class_summary) {
             row.kind = XG_CALL_CLASS_ALLOC;
-            row.receiver_static_class_id = stdlib_class->class_id;
+            row.receiver_static_class_id = module_class->class_id;
             generic_kind = XG_GENERIC_INST_CLASS;
-            generic_origin_class_id = stdlib_class->class_id;
+            generic_origin_class_id = module_class->class_id;
         } else if (receiver_interface != XG_NO_ID) {
             const XgInterfaceMethodSummary *interface_method =
                 bc->producer->analyzer
@@ -9384,8 +9430,6 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                                                  bc->producer, receiver_interface, method_name_id);
         } else {
             XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
-            XgMethodSummary *method = producer_find_method_by_name_in_hierarchy(
-                bc->producer, receiver_class, method_name_id, false);
             /* A function-typed field called directly (obj.field(args)) is an
              * indirect closure call, not a method dispatch: the field holds a
              * function value, so lowering emits XI_CALL. Recording it as a
@@ -9399,9 +9443,27 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                         field_sel->result_type
                     ? xr_type_non_nullable(bc->producer->analyzer->isolate, field_sel->result_type)
                     : NULL;
+            bool static_receiver =
+                analyzer_receiver_type && analyzer_receiver_type->kind == XR_KIND_CLASS;
+            XgMethodSummary *method = NULL;
+            /* Static dispatch must join the analyzer-selected declaration to
+             * the stable Xglobal method row. Instance dispatch retains its
+             * existing hierarchy lookup until that broader domain publishes
+             * exact selections for every generic receiver. */
+            if (bc->producer->analyzer && static_receiver && analyzer_target_symbol) {
+                method = producer_find_method_for_symbol_in_hierarchy(
+                    bc->producer, receiver_class, analyzer_target_symbol);
+            } else if (!static_receiver) {
+                method = producer_find_method_by_name_in_hierarchy(
+                    bc->producer, receiver_class, method_name_id, false);
+            }
             if (field_result && field_result->kind == XR_KIND_FUNCTION) {
                 row.kind = XG_CALL_CLOSURE;
             } else if (receiver_class != XG_NO_ID) {
+                if (bc->producer->analyzer && static_receiver && !method) {
+                    bc->producer->failed = true;
+                    return;
+                }
                 row.kind = XG_CALL_METHOD;
                 row.receiver_static_class_id = receiver_class;
                 row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
@@ -9805,10 +9867,10 @@ static bool body_stdlib_call_identity(XgBodyCollect *bc, const AstNode *call,
         return false;
     if (callee->type == AST_MEMBER_ACCESS) {
         name = callee->as.member_access.name;
-        module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+        module = body_module_coordinate_for_expr(bc, callee->as.member_access.object);
     } else {
-        const XgStdlibImportRow *row =
-            producer_lookup_stdlib_import(bc->producer, bc->module_id, callee->as.variable.name);
+        const XgModuleImportRow *row =
+            producer_lookup_module_import(bc->producer, bc->module_id, callee->as.variable.name);
         name = row ? row->member_name : NULL;
         module = row ? row->module_name : NULL;
         /* A stdlib script module calls its private native primitives as local
@@ -9884,10 +9946,10 @@ static bool body_stdlib_call_observes_coro_heap(XgBodyCollect *bc, const AstNode
     if (callee->type == AST_MEMBER_ACCESS) {
         if (!callee->as.member_access.name)
             return false;
-        module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+        module = body_module_coordinate_for_expr(bc, callee->as.member_access.object);
     } else {
-        const XgStdlibImportRow *row =
-            producer_lookup_stdlib_import(bc->producer, bc->module_id, callee->as.variable.name);
+        const XgModuleImportRow *row =
+            producer_lookup_module_import(bc->producer, bc->module_id, callee->as.variable.name);
         module = row && row->member_name ? row->module_name : NULL;
     }
     return module && (strcmp(module, "runtime") == 0 || strcmp(module, "test_yield") == 0);
@@ -10202,7 +10264,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_VARIABLE:
             body_note_variable_read(bc, &node->as.variable);
             {
-                const XgStdlibImportRow *import = producer_lookup_stdlib_import(
+                const XgModuleImportRow *import = producer_lookup_module_import(
                     bc->producer, bc->module_id, node->as.variable.name);
                 if (import && import->member_name &&
                     producer_stdlib_module_known(import->module_name))
@@ -10500,7 +10562,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (is_target_query)
                 break;
             const char *stdlib_module =
-                body_stdlib_module_for_expr(bc, node->as.member_access.object);
+                body_module_coordinate_for_expr(bc, node->as.member_access.object);
             if (!body_member_access_is_scalar_builtin(bc, &node->as.member_access) &&
                 !body_member_access_is_enum_member(bc, node))
                 bc->effect_bits |= XG_BODY_MAY_READ_MEM;
@@ -11816,27 +11878,25 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
                                      derive_flags, NULL, 0);
 }
 
-static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, const AstNode *node) {
+static bool add_import_contract(XgProducer *p, XgModuleId module_id, const AstNode *node) {
     const ImportStmtNode *import;
     bool link_known;
     if (!p || !node || node->type != AST_IMPORT_STMT)
         return true;
     import = &node->as.import_stmt;
     link_known = producer_stdlib_module_known(import->module_name);
-    if (!link_known && !producer_vm_control_module_known(import->module_name))
-        return true;
     if (link_known &&
         !producer_add_link_dependency(p, module_id, XG_NO_ID, XG_NO_ID, (uint32_t) node->line,
                                       XG_LINK_DEP_STDLIB_MODULE, import->module_name))
         return false;
     if (import->member_count == 0) {
         const char *local_name = import->alias ? import->alias : import->module_name;
-        return producer_register_stdlib_import(p, module_id, local_name, import->module_name, NULL);
+        return producer_register_module_import(p, module_id, local_name, import->module_name, NULL);
     }
     for (int i = 0; i < import->member_count; i++) {
         const ImportMember *member = &import->members[i];
         const char *local_name = member->alias ? member->alias : member->name;
-        if (!producer_register_stdlib_import(p, module_id, local_name, import->module_name,
+        if (!producer_register_module_import(p, module_id, local_name, import->module_name,
                                              member->name))
             return false;
     }
@@ -11952,7 +12012,7 @@ static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstN
         case AST_ENUM_DECL:
             return add_enum_decl(p, module_id, stmt);
         case AST_IMPORT_STMT:
-            return add_import_link_dependencies(p, module_id, stmt);
+            return add_import_contract(p, module_id, stmt);
         case AST_TYPE_ALIAS:
             return add_type_alias_object_shape(p, module_id, stmt);
         default:
@@ -12196,7 +12256,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
             xr_free(producer.interfaces);
             xr_free(producer.enums);
             xr_free(producer.funcs);
-            xr_free(producer.stdlib_imports);
+            xr_free(producer.module_imports);
             producer_free_bodies(&producer);
             xg_global_evidence_free(evidence);
             return false;
@@ -12232,7 +12292,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
                 xr_free(producer.interfaces);
                 xr_free(producer.enums);
                 xr_free(producer.funcs);
-                xr_free(producer.stdlib_imports);
+                xr_free(producer.module_imports);
                 producer_free_bodies(&producer);
                 xg_global_evidence_free(evidence);
                 return false;
@@ -12252,7 +12312,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
             xr_free(producer.interfaces);
             xr_free(producer.enums);
             xr_free(producer.funcs);
-            xr_free(producer.stdlib_imports);
+            xr_free(producer.module_imports);
             producer_free_bodies(&producer);
             xg_global_evidence_free(evidence);
             return false;
@@ -12266,7 +12326,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
         xr_free(producer.interfaces);
         xr_free(producer.enums);
         xr_free(producer.funcs);
-        xr_free(producer.stdlib_imports);
+        xr_free(producer.module_imports);
         producer_free_bodies(&producer);
         xg_global_evidence_free(evidence);
         return false;
@@ -12275,7 +12335,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
     xr_free(producer.interfaces);
     xr_free(producer.enums);
     xr_free(producer.funcs);
-    xr_free(producer.stdlib_imports);
+    xr_free(producer.module_imports);
     producer_free_bodies(&producer);
     return true;
 }

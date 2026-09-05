@@ -107,6 +107,8 @@ static bool analyze_all_modules(ImportedCallableFixture *fixture) {
 static bool build_imported_callable_fixture(ImportedCallableFixture *fixture,
                                             XrCompilerSession *session, XrVMRuntime *isolate,
                                             bool fail_after_source_write,
+                                            const char *library_source_override,
+                                            const char *consumer_source_override,
                                             char *created_directory, size_t created_directory_size) {
     static unsigned int serial;
     static const char library_source[] =
@@ -121,6 +123,10 @@ static bool build_imported_callable_fixture(ImportedCallableFixture *fixture,
         "  return action(value)\n"
         "}\n"
         "fn root() -> i64 { return apply(true, 41) }\n";
+    const char *selected_library_source =
+        library_source_override ? library_source_override : library_source;
+    const char *selected_consumer_source =
+        consumer_source_override ? consumer_source_override : consumer_source;
 
     if (!fixture)
         return false;
@@ -149,8 +155,8 @@ static bool build_imported_callable_fixture(ImportedCallableFixture *fixture,
         consumer_path_length < 0 ||
         (size_t) consumer_path_length >= sizeof(fixture->consumer_path))
         goto fail;
-    if (!write_source_file(fixture->library_path, library_source) ||
-        !write_source_file(fixture->consumer_path, consumer_source))
+    if (!write_source_file(fixture->library_path, selected_library_source) ||
+        !write_source_file(fixture->consumer_path, selected_consumer_source))
         goto fail;
     if (fail_after_source_write)
         goto fail;
@@ -278,6 +284,7 @@ static bool imported_callable_path_exists(const char *path) {
 TEST(imported_callable_fixture_failure_cleans_directory) {
     char created_directory[XR_TEST_PATH_MAX] = {0};
     ASSERT_FALSE(build_imported_callable_fixture(&g_active_fixture, NULL, NULL, true,
+                                                 NULL, NULL,
                                                  created_directory,
                                                  sizeof(created_directory)));
     ASSERT_TRUE(created_directory[0] != '\0');
@@ -432,7 +439,8 @@ TEST(test_imported_callable_multi_target_program) {
     ASSERT_TRUE(xr_compiler_session_set_target_profile(session, profile));
 
     ImportedCallableFixture *fixture = &g_active_fixture;
-    ASSERT_TRUE(build_imported_callable_fixture(fixture, session, isolate, false, NULL, 0u));
+    ASSERT_TRUE(build_imported_callable_fixture(fixture, session, isolate, false, NULL, NULL,
+                                                NULL, 0u));
     XiModule *consumer = fixture->modules[fixture->consumer_index];
     XiModule *library = fixture->modules[fixture->library_index];
     ASSERT_NOT_NULL(consumer);
@@ -817,6 +825,99 @@ TEST(test_imported_callable_multi_target_program) {
     xray_vm_delete(isolate);
 }
 
+TEST(imported_static_method_uses_exact_cross_module_evidence) {
+    static const char library_source[] =
+        "export class Worker {\n"
+        "  static child(value: i64) -> i64 {\n"
+        "    Coro.yield()\n"
+        "    return value\n"
+        "  }\n"
+        "}\n";
+    static const char consumer_source[] =
+        "import \"./library\" as library\n"
+        "fn answer() -> i64 { return library.Worker.child(7) }\n";
+    XrVMConfig vm_config = {0};
+    XrVMRuntime *isolate = xray_vm_new_full(&vm_config);
+    ASSERT_NOT_NULL(isolate);
+    XrCompilerSession *original_session = xr_compiler_session_current_for_isolate(isolate);
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    ASSERT_NOT_NULL(session);
+    ASSERT_EQ_PTR(xr_compiler_session_attach_isolate(isolate, session), original_session);
+    char diagnostic[512] = {0};
+    XrTargetProfile *profile = NULL;
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, diagnostic,
+                                                              sizeof(diagnostic)));
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(session, profile));
+
+    ImportedCallableFixture *fixture = &g_active_fixture;
+    ASSERT_TRUE(build_imported_callable_fixture(
+        fixture, session, isolate, false, library_source, consumer_source, NULL, 0u));
+    XiFunc *answer = find_module_function(fixture->modules[fixture->consumer_index], "answer");
+    ASSERT_NOT_NULL(answer);
+    XiValue *method_call = NULL;
+    for (uint32_t block_index = 0u; block_index < answer->nblocks; ++block_index) {
+        XiBlock *block = answer->blocks[block_index];
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            XiValue *candidate = block->values[value_index];
+            if (!candidate || (candidate->op != XI_CALL_METHOD &&
+                               candidate->op != XI_CALL_METHOD_DIRECT))
+                continue;
+            ASSERT_NULL(method_call);
+            method_call = candidate;
+        }
+    }
+    ASSERT_NOT_NULL(method_call);
+    ASSERT_NE(method_call->xg_callsite_id, XG_NO_ID);
+    const XgCallsiteSummary *callsite = xg_global_evidence_find_callsite(
+        &fixture->evidence, (XgCallsiteId) method_call->xg_callsite_id);
+    ASSERT_NOT_NULL(callsite);
+    ASSERT_EQ_UINT(callsite->kind, XG_CALL_METHOD);
+    ASSERT_NE(callsite->receiver_static_class_id, XG_NO_ID);
+    ASSERT_NE(callsite->method_id, XG_NO_ID);
+    ASSERT_NE(callsite->method_id, callsite->method_name_id);
+    ASSERT_EQ_UINT(method_call->xg_method_id, callsite->method_id);
+
+    const XgMethodSummary *method = NULL;
+    for (uint32_t index = 0u; index < fixture->evidence.nmethods; ++index) {
+        if (fixture->evidence.methods[index].method_id != callsite->method_id)
+            continue;
+        ASSERT_NULL(method);
+        method = &fixture->evidence.methods[index];
+    }
+    ASSERT_NOT_NULL(method);
+    ASSERT_EQ_UINT(method->owner_class_id, callsite->receiver_static_class_id);
+    ASSERT_TRUE((method->flags & XG_METHOD_STATIC) != 0u);
+    ASSERT_TRUE((method->flags & (XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE)) == 0u);
+    ASSERT_EQ_UINT(method->signature_key, callsite->method_signature_key);
+
+    const XgClassSummary *owner_class = NULL;
+    for (uint32_t index = 0u; index < fixture->evidence.nclasses; ++index) {
+        if (fixture->evidence.classes[index].class_id != method->owner_class_id)
+            continue;
+        ASSERT_NULL(owner_class);
+        owner_class = &fixture->evidence.classes[index];
+    }
+    ASSERT_NOT_NULL(owner_class);
+
+    const XgBodySummary *body = NULL;
+    for (uint32_t index = 0u; index < fixture->evidence.nbodies; ++index) {
+        if (fixture->evidence.bodies[index].owner_method_id != method->method_id)
+            continue;
+        ASSERT_NULL(body);
+        body = &fixture->evidence.bodies[index];
+    }
+    ASSERT_NOT_NULL(body);
+    ASSERT_EQ_UINT(body->module_id, owner_class->module_id);
+    ASSERT_EQ_UINT(body->signature_key, method->signature_key);
+
+    destroy_imported_callable_fixture(fixture);
+    xr_target_profile_free(profile);
+    ASSERT_EQ_PTR(xr_compiler_session_attach_isolate(isolate, original_session), session);
+    xr_compiler_session_delete(session);
+    xray_vm_delete(isolate);
+}
+
 TEST_MAIN_BEGIN()
 g_generated_c_path = argc == 2 ? argv[1] : NULL;
 if (argc > 2)
@@ -824,5 +925,7 @@ if (argc > 2)
 RUN_TEST(imported_callable_fixture_failure_cleans_directory);
 destroy_imported_callable_fixture(&g_active_fixture);
 RUN_TEST(test_imported_callable_multi_target_program);
+destroy_imported_callable_fixture(&g_active_fixture);
+RUN_TEST(imported_static_method_uses_exact_cross_module_evidence);
 destroy_imported_callable_fixture(&g_active_fixture);
 TEST_MAIN_END()

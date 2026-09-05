@@ -102,6 +102,20 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.call.method",
+      "result_type": "any",
+      "projection_kind": "sealed-direct-call",
+      "core_operation": "core.call.sealed_direct",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.call.method.direct",
+      "result_type": "any",
+      "projection_kind": "sealed-direct-call",
+      "core_operation": "core.call.sealed_direct",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.tuple.new",
       "result_type": "any",
       "projection_kind": "aggregate-construct",

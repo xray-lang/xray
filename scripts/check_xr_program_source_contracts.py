@@ -89,6 +89,8 @@ def validate(root: Path) -> None:
     pipeline_header = read(root, "src/ir/xi_pipeline.h")
     pipeline = read(root, "src/ir/xi_pipeline.c")
     test = read(root, "tests/unit/ir/test_xi_pipeline.c")
+    global_producer = read(root, "src/analysis/xglobal_producer.c")
+    imported_callable_test = read(root, "tests/unit/ir/test_xr_program_imported_callable.c")
     projection = json.loads(read(root, "xisa/program/xi-source-projection.json"))
     projection_header = read(root, "src/program/xr_program_xi_projection_gen.h")
     projection_source = read(root, "src/program/xr_program_xi_projection_gen.c")
@@ -182,6 +184,7 @@ def validate(root: Path) -> None:
         "source_owner_single_module_is_deterministic_and_detached",
         "source_owner_two_module_graph_is_deterministic",
         "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors",
+        "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors",
         "source_owner_module_initializer_is_a_canonical_entry",
         "source_owner_rejects_non_authoritative_entry_identity",
         "source_owner_rejects_module_budget_before_analysis",
@@ -206,7 +209,7 @@ def validate(root: Path) -> None:
     for token in (
         "source_semantic_module_present",
         "XI_STAGE_OPTIMIZED",
-        "resolved_direct_callee",
+        "resolved_sealed_callee",
         "close_block_arguments",
         "validate_input_value_identities",
         "xr_program_xi_projection",
@@ -223,6 +226,25 @@ def validate(root: Path) -> None:
         require(token in producer, f"source producer lacks {token}")
     for token in ("program_semantic_closure", "psc_", "semantic_function"):
         require(token not in producer, f"source producer regained legacy authority: {token}")
+    for token in (
+        "XgModuleImportRow",
+        "producer_register_module_import",
+        "producer_find_method_for_symbol_in_hierarchy",
+    ):
+        require(token in global_producer,
+                f"global evidence lacks exact cross-module method ownership: {token}")
+    for forbidden in ("XgStdlibImportRow", "producer_lookup_stdlib_import"):
+        require(forbidden not in global_producer,
+                f"global evidence regained stdlib-only import ownership: {forbidden}")
+    for token in (
+        "imported_static_method_uses_exact_cross_module_evidence",
+        "XG_CALL_METHOD",
+        "callsite->receiver_static_class_id",
+        "method_call->xg_method_id",
+        "XG_METHOD_STATIC",
+    ):
+        require(token in imported_callable_test,
+                f"cross-module static method evidence lacks {token}")
     for token in (
         "case XI_ADD", "case XI_SUB", "case XI_MUL", "case XI_DIV",
         "case XI_EQ", "case XI_NE", "case XI_LT", "case XI_LE", "case XI_GT", "case XI_GE",
@@ -308,6 +330,10 @@ def validate(root: Path) -> None:
             "pure aggregate update is not exact")
     require(("xi.call.builtin", "owner-copy", "core.owner.copy") in projection_rows,
             "explicit source copy is not exact")
+    require(("xi.call.method", "sealed-direct-call", "core.call.sealed_direct") in
+            projection_rows, "static method call projection is not exact")
+    require(("xi.call.method.direct", "sealed-direct-call", "core.call.sealed_direct") in
+            projection_rows, "direct static method call projection is not exact")
     require(("xi.target.pointer.bits", "target-query", "core.target.pointer_width") in
             projection_rows, "target.pointerBits projection is not exact")
     structural_rows = {
@@ -510,7 +536,9 @@ def self_test(root: Path) -> None:
             "src/program/xr_reference_evaluator.c",
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
+            "src/analysis/xglobal_producer.c",
             "tests/unit/ir/test_xi_pipeline.c",
+            "tests/unit/ir/test_xr_program_imported_callable.c",
             "tests/unit/CMakeLists.txt",
             "tests/unit/program/test_xr_program_source_build.c",
             "tests/cli/run_canonical_source_route_tests.py",

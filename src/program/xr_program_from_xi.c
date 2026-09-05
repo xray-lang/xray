@@ -1366,7 +1366,7 @@ static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *ty
     return map_type_recursive(context, type, type_id, NULL, 0u);
 }
 
-static const XiFunc *resolved_direct_callee(const XrXiBuildContext *context, const XiFunc *caller,
+static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, const XiFunc *caller,
                                             const XiValue *call);
 
 static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *context,
@@ -1406,8 +1406,9 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                                 "Xi throw v%u does not publish typed PanicInfo", value->id);
                 found = true;
             }
-            if (value->op == XI_CALL) {
-                const XiFunc *callee = resolved_direct_callee(context, function, value);
+            if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
+                value->op == XI_CALL_METHOD_DIRECT) {
+                const XiFunc *callee = resolved_sealed_callee(context, function, value);
                 if (!callee)
                     continue;
                 bool callee_panic = false;
@@ -1542,7 +1543,7 @@ static const XrXiFunctionStorage *find_xi_function(const XrXiBuildContext *conte
 static bool map_callable_target_type(XrXiBuildContext *context, const XrType *type,
                                      const XiFunc *target, uint16_t *type_id);
 
-static const XiFunc *resolved_direct_callee(const XrXiBuildContext *context, const XiFunc *caller,
+static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, const XiFunc *caller,
                                             const XiValue *call);
 static const XiValue *logical_value_identity(const XiValue *value);
 static const XiClassData *resolved_empty_class_allocation(const XrXiBuildContext *context,
@@ -1550,6 +1551,10 @@ static const XiClassData *resolved_empty_class_allocation(const XrXiBuildContext
                                                           const XiValue *call);
 static const XiClassData *resolved_empty_struct_literal(const XrXiBuildContext *context,
                                                         const XiFunc *caller, const XiValue *call);
+static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context,
+                                                 const XiFunc *caller, const XiValue *value,
+                                                 XgClassId expected_class_id,
+                                                 uint32_t *module_index_out);
 static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *context,
                                                     const XiFunc *caller, const XiValue *load,
                                                     uint32_t *variant_ordinal);
@@ -1574,9 +1579,12 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                 bool elided = false;
                 if (argument == 0u &&
                     (consumer->op == XI_VARIANT_CONSTRUCT ||
-                     (consumer->op == XI_CALL &&
-                      (resolved_direct_callee(context, function, consumer) ||
+                     (((consumer->op == XI_CALL || consumer->op == XI_CALL_METHOD ||
+                        consumer->op == XI_CALL_METHOD_DIRECT) &&
+                       resolved_sealed_callee(context, function, consumer)) ||
+                      (consumer->op == XI_CALL &&
                        resolved_empty_class_allocation(context, function, consumer))) ||
+                     resolved_class_carrier(context, function, consumer, XG_NO_ID, NULL) ||
                      resolved_empty_struct_literal(context, function, consumer) ||
                      resolved_unit_enum_literal(context, function, consumer, NULL))) {
                     elided = true;
@@ -1680,9 +1688,208 @@ static const XgClassSummary *find_xg_class_by_id(const XgGlobalEvidence *evidenc
     return found;
 }
 
-static const XiFunc *resolved_direct_callee(const XrXiBuildContext *context, const XiFunc *caller,
+static bool resolved_module_namespace_carrier(const XrXiBuildContext *context,
+                                              const XiFunc *caller,
+                                              const XiValue *value) {
+    value = logical_value_identity(value);
+    const XiImportRef *ref = xi_value_import_ref(caller, value);
+    if (!context || !context->source || !value || value->op != XI_GET_SHARED || !ref ||
+        ref->member_name || !ref->resolution_attempted || ref->resolved_mod_index < 0 ||
+        (uint32_t) ref->resolved_mod_index >= context->source->module_count ||
+        ref->resolved_shared_slot >= 0 || ref->resolved_export_slot >= 0 ||
+        ref->resolved_func || !ref->resolved_module)
+        return false;
+    const XiFunc *root = context->source->module_roots[ref->resolved_mod_index];
+    return root && root->module == ref->resolved_module && ref->resolved_module->init == root;
+}
+
+static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context,
+                                                 const XiFunc *caller, const XiValue *value,
+                                                 XgClassId expected_class_id,
+                                                 uint32_t *module_index_out) {
+    if (module_index_out)
+        *module_index_out = UINT32_MAX;
+    value = logical_value_identity(value);
+    if (!context || !context->source || !caller || !value)
+        return NULL;
+
+    if (value->op == XI_LOAD_FIELD) {
+        const XiValue *namespace_value =
+            value->nargs == 1u && value->args ? value->args[0] : NULL;
+        const XiImportRef *namespace_ref =
+            xi_value_import_ref(caller, namespace_value);
+        if (!resolved_module_namespace_carrier(context, caller, namespace_value) ||
+            !namespace_ref || !value->type || value->type->kind != XR_KIND_CLASS ||
+            !value->type->instance.class_ref ||
+            value->type->instance.class_ref->xg_class_id == XG_NO_ID)
+            return NULL;
+        uint32_t module_index = (uint32_t) namespace_ref->resolved_mod_index;
+        const XiFunc *root = context->source->module_roots[module_index];
+        const XiModule *module = root ? root->module : NULL;
+        XgClassId class_id = value->type->instance.class_ref->xg_class_id;
+        const XiClassData *class_data = NULL;
+        for (uint16_t index = 0u; module && module->classes && index < module->nclasses; ++index) {
+            const XiClassData *candidate = module->classes[index];
+            if (!candidate || candidate->xg_class_id != class_id)
+                continue;
+            if (class_data)
+                return NULL;
+            class_data = candidate;
+        }
+        const XiModuleExport *export_row = NULL;
+        for (uint16_t index = 0u; module && module->exports && index < module->nexports; ++index) {
+            const XiModuleExport *candidate = &module->exports[index];
+            if (candidate->class_data != class_data)
+                continue;
+            if (export_row)
+                return NULL;
+            export_row = candidate;
+        }
+        const XgClassSummary *class_row =
+            class_data ? find_xg_class_by_id(context->source->global_evidence, class_id) : NULL;
+        if (!module || module->init != root || !class_data || !export_row || export_row->function ||
+            export_row->shared_slot >= module->nslots || !module->slot_classes ||
+            module->slot_classes[export_row->shared_slot] != class_data || !class_row ||
+            class_row->module_id != (XgModuleId) (module_index + 1u) ||
+            (expected_class_id != XG_NO_ID && class_id != expected_class_id))
+            return NULL;
+        if (module_index_out)
+            *module_index_out = module_index;
+        return class_data;
+    }
+
+    if (value->op != XI_GET_SHARED || value->aux_int < 0)
+        return NULL;
+    const XiImportRef *ref = xi_value_import_ref(caller, value);
+    uint32_t module_index = UINT32_MAX;
+    const XiModule *module = NULL;
+    const XiClassData *class_data = NULL;
+    if (ref) {
+        if (!ref->resolution_attempted || ref->resolved_mod_index < 0 ||
+            (uint32_t) ref->resolved_mod_index >= context->source->module_count ||
+            ref->resolved_shared_slot < 0 || ref->resolved_export_slot < 0 ||
+            !ref->resolved_module || ref->resolved_func)
+            return NULL;
+        module_index = (uint32_t) ref->resolved_mod_index;
+        const XiFunc *root = context->source->module_roots[module_index];
+        module = root ? root->module : NULL;
+        uint32_t slot = (uint32_t) ref->resolved_shared_slot;
+        uint32_t export_slot = (uint32_t) ref->resolved_export_slot;
+        if (!module || module != ref->resolved_module || module->init != root ||
+            slot >= module->nslots || export_slot >= module->nexports ||
+            !module->slot_classes || !module->exports)
+            return NULL;
+        class_data = module->slot_classes[slot];
+        const XiModuleExport *export_row = &module->exports[export_slot];
+        if (!class_data || export_row->shared_slot != slot || export_row->function ||
+            export_row->class_data != class_data)
+            return NULL;
+    } else {
+        if (!find_xi_function(context, caller, &module_index, NULL) ||
+            module_index >= context->source->module_count)
+            return NULL;
+        const XiFunc *root = context->source->module_roots[module_index];
+        module = root ? root->module : NULL;
+        uint32_t slot = (uint32_t) value->aux_int;
+        if (!module || module->init != root || slot >= module->nslots || !module->slot_classes)
+            return NULL;
+        class_data = module->slot_classes[slot];
+    }
+    const XgClassSummary *class_row =
+        class_data ? find_xg_class_by_id(context->source->global_evidence,
+                                         class_data->xg_class_id)
+                   : NULL;
+    if (!class_row || class_row->class_id == XG_NO_ID ||
+        class_row->module_id != (XgModuleId) (module_index + 1u) ||
+        (expected_class_id != XG_NO_ID && class_row->class_id != expected_class_id))
+        return NULL;
+    if (value->type && value->type->kind != XR_KIND_UNKNOWN &&
+        (value->type->kind != XR_KIND_CLASS || !value->type->instance.class_ref ||
+         value->type->instance.class_ref->xg_class_id != class_row->class_id))
+        return NULL;
+    if (module_index_out)
+        *module_index_out = module_index;
+    return class_data;
+}
+
+static const XiFunc *resolved_static_method_callee(const XrXiBuildContext *context,
+                                                   const XiFunc *caller,
+                                                   const XiValue *call) {
+    if (!context || !caller || !call ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs == 0u || !call->args)
+        return NULL;
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    if (!row || row->kind != XG_CALL_METHOD || row->receiver_static_class_id == XG_NO_ID ||
+        row->method_id == XG_NO_ID || call->xg_method_id != row->method_id ||
+        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
+        row->arg_count == UINT16_MAX || call->nargs != (uint16_t) (row->arg_count + 1u))
+        return NULL;
+
+    uint32_t module_index = UINT32_MAX;
+    const XiClassData *class_data = resolved_class_carrier(
+        context, caller, call->args[0], row->receiver_static_class_id, &module_index);
+    const XgGlobalEvidence *evidence = context->source->global_evidence;
+    const XgClassSummary *class_row =
+        class_data ? find_xg_class_by_id(evidence, row->receiver_static_class_id) : NULL;
+    const XgMethodSummary *method = NULL;
+    for (uint32_t index = 0u; evidence && index < evidence->nmethods; ++index) {
+        const XgMethodSummary *candidate = &evidence->methods[index];
+        if (candidate->method_id != row->method_id)
+            continue;
+        if (method)
+            return NULL;
+        method = candidate;
+    }
+    if (!class_row || !method || method->owner_class_id != class_row->class_id ||
+        (method->flags & XG_METHOD_STATIC) == 0u ||
+        (method->flags & (XG_METHOD_CONSTRUCTOR | XG_METHOD_NATIVE |
+                          XG_METHOD_GENERIC_TEMPLATE | XG_METHOD_OVERRIDDEN)) != 0u)
+        return NULL;
+
+    const XgBodySummary *body = NULL;
+    for (uint32_t index = 0u; index < evidence->nbodies; ++index) {
+        const XgBodySummary *candidate = &evidence->bodies[index];
+        if (candidate->kind != XG_BODY_METHOD ||
+            candidate->owner_method_id != method->method_id)
+            continue;
+        if (body)
+            return NULL;
+        body = candidate;
+    }
+    if (!body || body->func_id == XG_NO_ID || body->module_id != class_row->module_id ||
+        body->module_id != (XgModuleId) (module_index + 1u) ||
+        body->owner_decl_id != class_row->decl_id ||
+        body->owner_class_id != class_row->class_id ||
+        body->source_node_id != method->source_node_id || body->name_id != method->name_id ||
+        body->signature_key == 0u || body->signature_key != method->signature_key ||
+        (body->flags & XG_BODY_GENERIC_TEMPLATE) != 0u)
+        return NULL;
+
+    const XiFunc *callee = find_xi_function_by_xg_id(context, body->func_id);
+    const XiFunc *root = context->source->module_roots[module_index];
+    uint32_t matches = 0u;
+    for (uint16_t index = 0u; class_data && class_data->methods && class_data->child_idx && root &&
+                               index < class_data->nmethod;
+         ++index) {
+        uint16_t child = class_data->child_idx[index];
+        const XiClassMethod *xi_method = &class_data->methods[index];
+        if (child >= root->nchildren || root->children[child] != callee)
+            continue;
+        if (!xi_method->is_static || xi_method->is_constructor || xi_method->is_static_constructor)
+            return NULL;
+        ++matches;
+    }
+    return callee && matches == 1u ? callee : NULL;
+}
+
+static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, const XiFunc *caller,
                                             const XiValue *call) {
-    if (!call || call->op != XI_CALL || call->nargs == 0u)
+    if (!call || call->nargs == 0u)
+        return NULL;
+    if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT)
+        return resolved_static_method_callee(context, caller, call);
+    if (call->op != XI_CALL)
         return NULL;
     const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
     if (!row || row->kind != XG_CALL_DIRECT_FUNC || row->static_target_func_id == XG_NO_ID)
@@ -2782,10 +2989,13 @@ static const XiValue *block_typed_invoke_call(const XrXiBuildContext *context,
     if (!producer || !canonical_block_is_reachable(context, function, producer->block))
         return NULL;
     if (producer->op == XI_CALL)
-        return resolved_direct_callee(context, function, producer) ||
+        return resolved_sealed_callee(context, function, producer) ||
                        resolved_callable_call_targets(context, function, producer, NULL)
                    ? producer
                    : NULL;
+    if ((producer->op == XI_CALL_METHOD || producer->op == XI_CALL_METHOD_DIRECT) &&
+        resolved_sealed_callee(context, function, producer))
+        return producer;
     if ((producer->op == XI_CALL_METHOD || producer->op == XI_CALL_METHOD_DIRECT) &&
         producer->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE)
         return resolved_witness_callsite(context, function, producer) ? producer : NULL;
@@ -3277,6 +3487,8 @@ static const XiImportRef *imported_callable_ref(const XrXiBuildContext *context,
                                                 const XiFunc *function, const XiValue *value) {
     if (!context || !function || !value || value->op != XI_GET_SHARED || value->aux_int < 0)
         return NULL;
+    if (resolved_module_namespace_carrier(context, function, value))
+        return NULL;
     uint32_t consumer_module_index = UINT32_MAX;
     if (!find_xi_function(context, function, &consumer_module_index, NULL) ||
         consumer_module_index >= context->source->module_count)
@@ -3356,7 +3568,7 @@ static bool imported_callable_checktype_is_only_exact_direct_callee(const XrXiBu
                     continue;
                 const XgCallsiteSummary *row = resolved_callsite(context, function, consumer);
                 if (argument != 0u || consumer->op != XI_CALL ||
-                    resolved_direct_callee(context, function, consumer) != target || !row ||
+                    resolved_sealed_callee(context, function, consumer) != target || !row ||
                     row->kind != XG_CALL_DIRECT_FUNC ||
                     row->static_target_func_id != target->xg_body_func_id ||
                     (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
@@ -3491,7 +3703,8 @@ static XrProgramBuildStatus validate_imported_callable_bindings(const XrXiBuildC
                 for (uint32_t value_index = 0u; block && value_index < block->nvalues;
                      ++value_index) {
                     const XiValue *value = block->values[value_index];
-                    if (!value || !imported_callable_ref(context, function, value))
+                    if (!value || !imported_callable_ref(context, function, value) ||
+                        resolved_class_carrier(context, function, value, XG_NO_ID, NULL))
                         continue;
                     if (!resolved_imported_callable_target(context, function, value, NULL))
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -3527,7 +3740,7 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                      ++value_index) {
                     const XiValue *call = block->values[value_index];
                     if (!call || call->op != XI_CALL ||
-                        resolved_direct_callee(context, function, call) ||
+                        resolved_sealed_callee(context, function, call) ||
                         resolved_empty_class_allocation(context, function, call))
                         continue;
 
@@ -4107,18 +4320,22 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
         return XR_PROGRAM_BUILD_OK;
     }
-    if (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE)
+    if (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE &&
+        callsite->kind != XG_CALL_METHOD)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi call v%u uses unsupported global callsite kind %u", value->id,
                     callsite->kind);
     if ((callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi call v%u lacks verified callsite error evidence", value->id);
-    const XiFunc *callee = resolved_direct_callee(context, function->xi, value);
+    const XiFunc *callee = resolved_sealed_callee(context, function->xi, value);
     uint32_t callee_module_index = UINT32_MAX;
     uint32_t callee_function_index = UINT32_MAX;
     const XrXiFunctionStorage *callee_storage =
         find_xi_function(context, callee, &callee_module_index, &callee_function_index);
+    if (!callee && callsite->kind == XG_CALL_METHOD)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi static method call v%u has no exact class/method/body join", value->id);
     if (!callee) {
         if ((callsite->flags & XG_CALL_MAY_ERROR) != 0u)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -5125,8 +5342,12 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
      * retain/release counts. */
     if (value->op == XI_RETAIN || value->op == XI_RELEASE)
         return true;
+    if (resolved_module_namespace_carrier(context, function, value))
+        return value_is_only_elided_operand(context, function, value);
     if (imported_callable_value_is_exact(context, function, value))
         return false;
+    if (resolved_class_carrier(context, function, value, XG_NO_ID, NULL))
+        return value_is_only_elided_operand(context, function, value);
     return (value->op == XI_GET_SHARED || value->op == XI_GET_BUILTIN) &&
            value_is_only_elided_operand(context, function, value);
 }
@@ -5195,8 +5416,10 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
             return status;
     }
     uint16_t begin = value->op == XI_VARIANT_CONSTRUCT ||
-                             (value->op == XI_CALL &&
-                              (resolved_direct_callee(context, function->xi, value) != NULL ||
+                             (((value->op == XI_CALL || value->op == XI_CALL_METHOD ||
+                                value->op == XI_CALL_METHOD_DIRECT) &&
+                               resolved_sealed_callee(context, function->xi, value) != NULL) ||
+                              (value->op == XI_CALL &&
                                resolved_empty_class_allocation(context, function->xi, value))) ||
                              resolved_empty_struct_literal(context, function->xi, value) ||
                              resolved_unit_enum_literal(context, function->xi, value, NULL)
@@ -5277,7 +5500,7 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
         const XiValue *call = block_typed_invoke_call(context, function->xi, source);
         if (!call)
             continue;
-        const XiFunc *callee = resolved_direct_callee(context, function->xi, call);
+        const XiFunc *callee = resolved_sealed_callee(context, function->xi, call);
         bool witness = call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE;
         bool indirect = callee == NULL && !witness;
         const XgCallsiteSummary *callsite =
@@ -6064,8 +6287,10 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
                     "Xi function %s cooperative yield lacks exact logical plan/evidence closure",
                     xi->name ? xi->name : "<anonymous>");
     bool exact_call = false;
-    if (point->kind == XI_CORO_SUSP_CALL && point->op->op == XI_CALL) {
-        const XiFunc *callee = resolved_direct_callee(context, xi, point->op);
+    if (point->kind == XI_CORO_SUSP_CALL &&
+        (point->op->op == XI_CALL || point->op->op == XI_CALL_METHOD ||
+         point->op->op == XI_CALL_METHOD_DIRECT)) {
+        const XiFunc *callee = resolved_sealed_callee(context, xi, point->op);
         const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
         const XiCoroPlan *callee_plan = callee ? callee->coro_plan : NULL;
         const XiCoroEdge *child = xi_coro_point_find_edge(point, XI_CORO_EDGE_CHILD);
@@ -6552,7 +6777,7 @@ static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildCont
     if (invoke && invoke->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE)
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE);
     if (invoke)
-        return xr_core_spec_operation_by_id(resolved_direct_callee(context, function, invoke)
+        return xr_core_spec_operation_by_id(resolved_sealed_callee(context, function, invoke)
                                                 ? XR_CORE_OP_CORE_CALL_SEALED_INVOKE
                                                 : XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE);
     if (exact_infallible_empty_class_allocation_in_block(context, function, block))
@@ -6712,11 +6937,17 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
                             (value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT ||
                              value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE);
-                        if (!value || (value->op != XI_CALL && !witness))
+                        bool sealed_method =
+                            value &&
+                            (value->op == XI_CALL_METHOD ||
+                             value->op == XI_CALL_METHOD_DIRECT) &&
+                            value->xg_existential_kind == XI_EXISTENTIAL_NONE;
+                        if (!value || (value->op != XI_CALL && !witness && !sealed_method))
                             continue;
-                        if (resolved_empty_class_allocation(context, storage->xi, value))
+                        if (resolved_empty_class_allocation(context, storage->xi, value) ||
+                            resolved_empty_struct_literal(context, storage->xi, value))
                             continue;
-                        const XiFunc *callee = resolved_direct_callee(context, storage->xi, value);
+                        const XiFunc *callee = resolved_sealed_callee(context, storage->xi, value);
                         bool invoke = block_typed_invoke_call(context, storage->xi, block) == value;
                         if (witness) {
                             uint32_t witness_effects = 0u;
@@ -6748,6 +6979,11 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             capabilities |= callee_storage->closed_capability_mask;
                             continue;
                         }
+                        if (sealed_method)
+                            return fail(diagnostic, diagnostic_size,
+                                        XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                        "Xi function contract has an unresolved static method "
+                                        "target");
                         XrXiCallableTargetSet target_set = {0};
                         if (!resolved_callable_call_targets(context, storage->xi, value,
                                                             &target_set))
@@ -7081,7 +7317,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (invoke_call) {
-            const XiFunc *callee = resolved_direct_callee(context, xi, invoke_call);
+            const XiFunc *callee = resolved_sealed_callee(context, xi, invoke_call);
             bool witness = invoke_call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE;
             bool indirect = callee == NULL && !witness;
             const XrXiFunctionStorage *callee_storage =
@@ -7303,11 +7539,16 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                              value->op == XI_CALL_METHOD_DIRECT) &&
                             (value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT ||
                              value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE);
-                        if (value->op != XI_CALL && !witness)
+                        bool sealed_method =
+                            (value->op == XI_CALL_METHOD ||
+                             value->op == XI_CALL_METHOD_DIRECT) &&
+                            value->xg_existential_kind == XI_EXISTENTIAL_NONE;
+                        if (value->op != XI_CALL && !witness && !sealed_method)
                             continue;
-                        if (resolved_empty_class_allocation(context, function->xi, value))
+                        if (resolved_empty_class_allocation(context, function->xi, value) ||
+                            resolved_empty_struct_literal(context, function->xi, value))
                             continue;
-                        const XiFunc *callee = resolved_direct_callee(context, function->xi, value);
+                        const XiFunc *callee = resolved_sealed_callee(context, function->xi, value);
                         bool invoke =
                             block_typed_invoke_call(context, function->xi, block) == value;
                         if (witness) {
@@ -7344,6 +7585,11 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                                                 .capability_mask;
                             continue;
                         }
+                        if (sealed_method)
+                            return fail(diagnostic, diagnostic_size,
+                                        XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                        "Xi effect closure has an unresolved static method "
+                                        "target");
                         XrXiCallableTargetSet target_set = {0};
                         if (!resolved_callable_call_targets(context, function->xi, value,
                                                             &target_set))

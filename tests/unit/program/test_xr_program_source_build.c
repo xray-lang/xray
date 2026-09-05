@@ -284,15 +284,8 @@ TEST(source_owner_module_initializer_is_a_canonical_entry) {
     source_build_fixture_free(&fixture);
 }
 
-TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors) {
-    static const char library_source[] =
-        "export fn child(value: i64) -> i64 {\n"
-        "  Coro.yield()\n"
-        "  return value\n"
-        "}\n";
-    static const char entry_source[] =
-        "import { child } from \"./library\"\n"
-        "fn answer() -> i64 { return child(7) }\n";
+static void assert_cross_module_coroutine_program(const char *entry_source,
+                                                  const char *library_source) {
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
     XrTargetProfile *profile =
@@ -307,6 +300,13 @@ TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_execut
     XrProgramSourceDiagnostic diagnostic;
     assert_source_build_ok(&fixture.input, &first, &diagnostic);
     assert_source_build_ok(&fixture.input, &second, &diagnostic);
+    if (!first.program || !second.program) {
+        xr_program_source_product_free(&second);
+        xr_program_source_product_free(&first);
+        xr_target_profile_free(profile);
+        source_build_fixture_free(&fixture);
+        return;
+    }
     assert_products_equal(&first, &second);
 
     const XrValidatedProgram *program = first.program;
@@ -437,6 +437,32 @@ TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_execut
     xr_target_profile_free(profile);
 }
 
+TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors) {
+    static const char library_source[] =
+        "export fn child(value: i64) -> i64 {\n"
+        "  Coro.yield()\n"
+        "  return value\n"
+        "}\n";
+    static const char entry_source[] =
+        "import { child } from \"./library\"\n"
+        "fn answer() -> i64 { return child(7) }\n";
+    assert_cross_module_coroutine_program(entry_source, library_source);
+}
+
+TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors) {
+    static const char library_source[] =
+        "export class Worker {\n"
+        "  static child(value: i64) -> i64 {\n"
+        "    Coro.yield()\n"
+        "    return value\n"
+        "  }\n"
+        "}\n";
+    static const char entry_source[] =
+        "import \"./library\" as library\n"
+        "fn answer() -> i64 { return library.Worker.child(7) }\n";
+    assert_cross_module_coroutine_program(entry_source, library_source);
+}
+
 TEST(source_owner_rejects_non_authoritative_entry_identity) {
     static const char source[] = "fn answer() -> i64 { return 42 }\n";
     SourceBuildFixture fixture;
@@ -523,6 +549,7 @@ else if (argc != 1)
 RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
 RUN_TEST(source_owner_two_module_graph_is_deterministic);
 RUN_TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors);
+RUN_TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);
 RUN_TEST(source_owner_rejects_module_budget_before_analysis);

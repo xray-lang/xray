@@ -113,6 +113,20 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL,
     },
     {
+        XI_CALL_METHOD,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL,
+    },
+    {
+        XI_CALL_METHOD_DIRECT,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL,
+    },
+    {
         XI_TUPLE_NEW,
         XR_PROGRAM_XI_ANY_RESULT_TYPE,
         XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
