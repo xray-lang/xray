@@ -62,6 +62,7 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
     ctx->current_line = 1;
     ctx->current_column = 0;
     ctx->source_file = NULL;
+    ctx->source_content = NULL;
     ctx->global_var_count = 0;
     ctx->shared_var_count = 0;
     ctx->had_error = false;
@@ -157,6 +158,7 @@ void xr_compiler_context_reset(XrCompilerContext *ctx) {
         return;
 
     ctx->current_line = 1;
+    ctx->source_content = NULL;
     ctx->global_var_count = 0;
     ctx->had_error = false;
     ctx->panic_mode = false;

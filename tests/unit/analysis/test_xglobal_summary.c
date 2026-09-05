@@ -8040,6 +8040,69 @@ TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry) {
+    setup_parser_session();
+    AstNode *exact_ast = xr_parse(g_session, "enum ExactIdentity { One, Two }\n");
+    ASSERT_NOT_NULL(exact_ast);
+
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = exact_ast;
+    spec.source_path = "explicit-analyzer-registry.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XaAnalyzer *exact_analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(exact_analyzer);
+    xa_analyzer_set_graph(exact_analyzer, &graph);
+    xa_analyzer_analyze(exact_analyzer, spec.source_path, exact_ast);
+    ASSERT_EQ_UINT(exact_analyzer->diagnostic_count, 0);
+    AstNode *exact_enum = exact_ast->as.program.statements[0];
+    ASSERT_NOT_NULL(exact_enum);
+    ASSERT_EQ_UINT(exact_enum->type, AST_ENUM_DECL);
+    uint32_t exact_symbol_id = exact_enum->as.enum_decl.symbol_id;
+    ASSERT_NE(exact_symbol_id, 0);
+
+    /* Installing and using another analyzer on the same thread must not
+     * redirect evidence lookup away from the analyzer passed to the producer. */
+    XaAnalyzer *other_analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(other_analyzer);
+    AstNode *other_ast = xr_parse(g_session, "var wrongIdentity = 1\n");
+    ASSERT_NOT_NULL(other_ast);
+    xa_analyzer_analyze(other_analyzer, "other-analyzer-registry.xr", other_ast);
+    ASSERT_EQ_UINT(other_analyzer->diagnostic_count, 0);
+    AstNode *wrong_decl = other_ast->as.program.statements[0];
+    ASSERT_NOT_NULL(wrong_decl);
+    ASSERT_EQ_UINT(wrong_decl->type, AST_VAR_DECL);
+    ASSERT_EQ_UINT(wrong_decl->as.var_decl.symbol_id, exact_symbol_id);
+    XaSymbol *wrong_symbol = xa_analyzer_symbol_by_id(other_analyzer, exact_symbol_id);
+    XaSymbol *exact_symbol = xa_analyzer_symbol_by_id(exact_analyzer, exact_symbol_id);
+    ASSERT_NOT_NULL(wrong_symbol);
+    ASSERT_NOT_NULL(exact_symbol);
+    ASSERT_EQ_UINT(wrong_symbol->kind, XA_SYM_VARIABLE);
+    ASSERT_EQ_UINT(exact_symbol->kind, XA_SYM_ENUM);
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, exact_analyzer));
+    ASSERT_EQ_UINT(evidence.ndecls, 1);
+    ASSERT_EQ_UINT(evidence.decls[0].kind, XG_DECL_ENUM);
+
+    xg_global_evidence_free(&evidence);
+    xr_program_destroy(other_ast);
+    xa_analyzer_free(other_analyzer);
+    xa_analyzer_set_graph(exact_analyzer, NULL);
+    xa_analyzer_free(exact_analyzer);
+    xr_program_destroy(exact_ast);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key) {
     setup_parser_session();
     const char *source = "interface Marker {\n"
@@ -8407,6 +8470,48 @@ TEST(global_evidence_composes_recursive_direct_call_effects) {
     ASSERT_TRUE((composed_effects & XG_BODY_MAY_SUSPEND) == 0);
 
     xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_closes_transitive_named_nested_function_calls) {
+    setup_parser_session();
+    const char *source = "fn outer() -> i64 {\n"
+                         "    var x = 10\n"
+                         "    fn middle() -> i64 {\n"
+                         "        fn inner() -> i64 { return x + 1 }\n"
+                         "        return inner()\n"
+                         "    }\n"
+                         "    return middle()\n"
+                         "}\n"
+                         "var result = outer()\n";
+    XgGlobalEvidence ev = {0};
+    XaAnalyzer *analyzer = NULL;
+
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, NULL));
+    const XgBodySummary *outer = evidence_find_body_by_name(&ev, "outer");
+    const XgBodySummary *middle = evidence_find_body_by_name(&ev, "middle");
+    const XgBodySummary *inner = evidence_find_body_by_name(&ev, "inner");
+    ASSERT_NOT_NULL(outer);
+    ASSERT_NOT_NULL(middle);
+    ASSERT_NOT_NULL(inner);
+    ASSERT_EQ_UINT(middle->callsite_count, 1);
+
+    const XgCallsiteSummary *inner_call =
+        xg_global_evidence_find_callsite(&ev, middle->callsite_start);
+    ASSERT_NOT_NULL(inner_call);
+    ASSERT_EQ_UINT(inner_call->kind, XG_CALL_CLOSURE);
+    const XgCallableTargetSummary *targets = NULL;
+    uint32_t target_count = 0;
+    ASSERT_TRUE(xg_global_evidence_callable_targets(&ev, inner_call, &targets, &target_count));
+    ASSERT_EQ_UINT(target_count, 1);
+    ASSERT_EQ_UINT(targets[0].target_func_id, inner->func_id);
+
+    uint32_t composed_effects = UINT32_MAX;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, outer, &composed_effects));
+    ASSERT_TRUE((composed_effects & XG_BODY_MAY_SUSPEND) == 0);
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
     teardown_parser_session();
 }
 
@@ -14980,12 +15085,14 @@ RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity);
+RUN_TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry);
 RUN_TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key);
 RUN_TEST(global_evidence_producer_requires_stable_identity_for_core_print);
 RUN_TEST(global_evidence_producer_keeps_shadowing_print_and_dump_as_closures);
 RUN_TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites);
 RUN_TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_composes_recursive_direct_call_effects);
+RUN_TEST(global_evidence_closes_transitive_named_nested_function_calls);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_methods);

@@ -4411,6 +4411,17 @@ TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
     xr_instruction_unit_free(p);
 }
 
+TEST(e2e_imported_generic_method_uses_dependency_semantic_authority_after_vm_detach) {
+    const char *source =
+        "import parallel\n"
+        "var plan = parallel.Plan<i64>(parallel.Options(1), (lane) -> lane)\n"
+        "plan.forEach(0..1, (state, item) -> { print(state + item) })\n";
+    XrProto *p = compile_source_with_module_graph("xi-pipeline-generic-dependency", source);
+    PIPELINE_TEST_REQUIRE(p != NULL);
+    PIPELINE_TEST_REQUIRE(has_opcode(p, OP_PAR_FOR));
+    xr_instruction_unit_free(p);
+}
+
 /* ========== Main ========== */
 
 /* Release strips assert(), so a case whose only checks are asserts reports PASS
@@ -4657,6 +4668,7 @@ int main(int argc, char **argv) {
     run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
     run_e2e_time_sleep_uses_dedicated_vm_suspend();
     run_e2e_generic_this_method_call_uses_frozen_member_identity();
+    run_e2e_imported_generic_method_uses_dependency_semantic_authority_after_vm_detach();
 
     teardown();
 

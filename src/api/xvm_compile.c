@@ -332,6 +332,7 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
 
     ctx->source_file = source_file;
+    ctx->source_content = source;
 
     // Now parse with valid type pool
     AstNode *ast = xr_parse_with_source(session, source, source_file);

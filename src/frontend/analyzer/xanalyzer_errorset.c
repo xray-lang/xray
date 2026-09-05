@@ -5288,58 +5288,64 @@ static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     xa_effect_summary_clear(&summary);
 }
 
-static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **out, int *count,
-                              int *cap) {
-    if (!node)
+typedef struct FunctionCollectCtx {
+    XaAnalyzer *analyzer;
+    FuncEntry **out;
+    int *count;
+    int *cap;
+    bool failed;
+} FunctionCollectCtx;
+
+static void collect_function_pre(AstNode *node, void *userdata) {
+    FunctionCollectCtx *ctx = (FunctionCollectCtx *) userdata;
+    if (!ctx || ctx->failed || !ctx->analyzer || !node)
         return;
 
     if (node->type == AST_FUNCTION_DECL || node->type == AST_METHOD_DECL) {
-        XaSymbol *sym = resolve_func_symbol(analyzer, node);
+        XaSymbol *sym = resolve_func_symbol(ctx->analyzer, node);
         /* Rejected duplicate declarations resolve to the first symbol through
          * the by-name fallback. Two bodies feeding one summary would make the
          * fixpoint oscillate forever, so only the first body per symbol is
          * inferred; the redefinition diagnostic already rejects the program. */
-        for (int k = 0; sym && k < *count; k++) {
-            if ((*out)[k].sym == sym) {
+        for (int k = 0; sym && k < *ctx->count; k++) {
+            if ((*ctx->out)[k].sym == sym) {
                 sym = NULL;
                 break;
             }
         }
         if (sym) {
-            if (*count >= *cap) {
-                int new_cap = *cap == 0 ? 32 : *cap * 2;
+            if (*ctx->count >= *ctx->cap) {
+                int new_cap = *ctx->cap == 0 ? 32 : *ctx->cap * 2;
                 FuncEntry *new_arr = (FuncEntry *) xr_malloc((size_t) new_cap * sizeof(FuncEntry));
-                if (*out && *count > 0)
-                    memcpy(new_arr, *out, (size_t) (*count) * sizeof(FuncEntry));
-                xr_free(*out);
-                *out = new_arr;
-                *cap = new_cap;
+                if (!new_arr) {
+                    ctx->failed = true;
+                    return;
+                }
+                if (*ctx->out && *ctx->count > 0)
+                    memcpy(new_arr, *ctx->out, (size_t) (*ctx->count) * sizeof(FuncEntry));
+                xr_free(*ctx->out);
+                *ctx->out = new_arr;
+                *ctx->cap = new_cap;
             }
-            (*out)[*count].node = node;
-            (*out)[*count].sym = sym;
-            (*count)++;
+            (*ctx->out)[*ctx->count].node = node;
+            (*ctx->out)[*ctx->count].sym = sym;
+            (*ctx->count)++;
         }
     }
+}
 
-    if (node->type == AST_PROGRAM) {
-        for (int i = 0; i < node->as.program.count; i++)
-            collect_functions(analyzer, node->as.program.statements[i], out, count, cap);
-    }
-
-    if (node->type == AST_CLASS_DECL) {
-        for (int i = 0; i < node->as.class_decl.method_count; i++)
-            collect_functions(analyzer, node->as.class_decl.methods[i], out, count, cap);
-    }
-
-    if (node->type == AST_STRUCT_DECL) {
-        for (int i = 0; i < node->as.struct_decl.method_count; i++)
-            collect_functions(analyzer, node->as.struct_decl.methods[i], out, count, cap);
-    }
-
-    if (node->type == AST_ENUM_DECL) {
-        for (int i = 0; i < node->as.enum_decl.method_count; i++)
-            collect_functions(analyzer, node->as.enum_decl.methods[i], out, count, cap);
-    }
+static bool collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **out, int *count,
+                              int *cap) {
+    FunctionCollectCtx ctx = {
+        .analyzer = analyzer,
+        .out = out,
+        .count = count,
+        .cap = cap,
+    };
+    if (!analyzer || !node || !out || !count || !cap)
+        return false;
+    xa_ast_walk(node, collect_function_pre, NULL, &ctx);
+    return !ctx.failed;
 }
 
 static XrFnThrowEffect function_value_target_throw_effect(ErrorSetCtx *ctx,
@@ -5802,7 +5808,8 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     /* Phase 1: Collect all function declarations */
     FuncEntry *funcs = NULL;
     int func_count = 0, func_cap = 0;
-    collect_functions(analyzer, ast, &funcs, &func_count, &func_cap);
+    if (!collect_functions(analyzer, ast, &funcs, &func_count, &func_cap))
+        ctx.call_error_effect_publication_failed = true;
 
     FunctionExprList function_exprs = {0};
     xa_ast_walk(ast, collect_function_expr_pre, NULL, &function_exprs);

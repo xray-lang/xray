@@ -711,6 +711,7 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, 
         return result;
     }
     ctx->source_file = "<repl>";
+    ctx->source_content = source;
     ctx->repl_mode = true;
     ctx->post_analyze_hook = repl_elaborate_last_expr;
     ctx->post_analyze_user_data = &echo_plan;

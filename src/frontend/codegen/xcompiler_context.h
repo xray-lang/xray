@@ -55,6 +55,7 @@ struct XrCompilerContext {
     int current_line;
     int current_column;
     const char *source_file;
+    const char *source_content;  // Borrowed exact source bytes for standalone evidence identity.
     XrGlobalVar *global_vars;
     int global_var_count;
 

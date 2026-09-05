@@ -121,8 +121,6 @@ static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
         int error_count = 0;
         for (int ti = 0; ti < graph->topo_count; ti++) {
             int index = graph->topo_order[ti];
-            if (index == graph->entry_index)
-                continue;
             XrModuleSpec *spec = &graph->specs[index];
             if (!spec->ast || !spec->source_path)
                 continue;

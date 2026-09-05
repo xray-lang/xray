@@ -540,8 +540,7 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
         xr_semantic_plan_source_class(plan, source_class);
     if (!semantic_class || semantic_class->ordinal != source_class || !semantic_class->name ||
         !class_data->class_name || strcmp(semantic_class->name, class_data->class_name) != 0 ||
-        (semantic_class->flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) == 0 ||
-        (semantic_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0)
+        (semantic_class->flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) == 0)
         return -1;
 
     uint16_t member = UINT16_MAX;
@@ -580,6 +579,14 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
         function->source_kind != XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD ||
         function->parameter_count != call->nargs)
         return -1;
+    /* A dependency's VM emission detaches its Xi children, including generic
+     * template methods.  The verified SemanticPlan deliberately retains the
+     * exact source-class/member/function relation and the template's closed
+     * local call graph.  That relation is sufficient to classify suspension;
+     * it is not used as an executable direct-call target.  Rejecting generic
+     * classes here discarded the only surviving authority for compiler-made
+     * calls on imported generic instances (for example lifecycle calls
+     * introduced by a semantic intrinsic). */
     return xi_pipeline_coro_plan_function_suspendability(plan, method->function);
 }
 

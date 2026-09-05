@@ -512,10 +512,8 @@ static XaSymbolLinks *producer_function_links(const XgProducer *p, const Functio
     XaSymbol *sym = NULL;
     if (!p || !p->analyzer || !fn)
         return NULL;
-    if (fn->symbol_id && p->analyzer->global_scope)
-        sym = xa_scope_lookup_by_id(p->analyzer->global_scope, fn->symbol_id);
-    if (!sym && fn->name)
-        sym = xa_scope_lookup(p->analyzer->global_scope, fn->name);
+    if (fn->symbol_id)
+        sym = xa_analyzer_symbol_by_id(p->analyzer, fn->symbol_id);
     return sym && sym->kind == XA_SYM_FUNCTION ? xa_analyzer_get_links(p->analyzer, sym) : NULL;
 }
 
@@ -523,10 +521,8 @@ static XaSymbolLinks *producer_class_links(const XgProducer *p, const ClassDeclN
     XaSymbol *sym = NULL;
     if (!p || !p->analyzer || !cls)
         return NULL;
-    if (cls->symbol_id && p->analyzer->global_scope)
-        sym = xa_scope_lookup_by_id(p->analyzer->global_scope, cls->symbol_id);
-    if (!sym && cls->name)
-        sym = xa_scope_lookup(p->analyzer->global_scope, cls->name);
+    if (cls->symbol_id)
+        sym = xa_analyzer_symbol_by_id(p->analyzer, cls->symbol_id);
     return sym && sym->kind == XA_SYM_CLASS ? xa_analyzer_get_links(p->analyzer, sym) : NULL;
 }
 
@@ -2962,7 +2958,7 @@ static bool body_owned_local_rebind_is_scalar(XgBodyCollect *bc, const char *nam
     if (!body_has_owned_symbol_local(bc, name, symbol_id) || symbol_id == 0 || !bc->producer ||
         !bc->producer->analyzer)
         return false;
-    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, symbol_id);
+    symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer, symbol_id);
     type = symbol ? xa_analyzer_get_type(bc->producer->analyzer, symbol) : NULL;
     if (symbol && symbol->kind == XA_SYM_PARAMETER && symbol->passing_mode == XR_PARAM_REF)
         return false;
@@ -2986,7 +2982,7 @@ static const XrCoreIntrinsicDesc *body_variable_core_intrinsic(XgBodyCollect *bc
 
     if (!bc || !bc->producer || !bc->producer->analyzer || !variable || variable->symbol_id == 0)
         return NULL;
-    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, variable->symbol_id);
+    symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer, variable->symbol_id);
     if (!symbol || symbol->kind != XA_SYM_FUNCTION || !symbol->is_builtin)
         return NULL;
     links = xa_analyzer_get_links(bc->producer->analyzer, symbol);
@@ -3004,7 +3000,7 @@ static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) 
     if (body_variable_core_intrinsic(bc, var))
         return;
     if (bc->producer && bc->producer->analyzer && var->symbol_id != 0) {
-        symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, var->symbol_id);
+        symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer, var->symbol_id);
         links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
         if (symbol && symbol->is_const && !symbol->is_rebindable && links && links->has_ct_value)
             return;
@@ -3916,7 +3912,7 @@ static XaSymbolLinks *body_variable_stdlib_native_function_links(XgBodyCollect *
     XaSymbolLinks *links;
     if (!bc || !bc->producer || !bc->producer->analyzer || !variable || variable->symbol_id == 0)
         return NULL;
-    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, variable->symbol_id);
+    symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer, variable->symbol_id);
     if (!symbol || symbol->kind != XA_SYM_FUNCTION || !symbol->is_builtin)
         return NULL;
     links = xa_analyzer_get_links(bc->producer->analyzer, symbol);
@@ -7585,10 +7581,10 @@ static bool body_class_implements_hashable(XgBodyCollect *bc, const XgClassSumma
                 : node && node->type == AST_STRUCT_DECL ? &node->as.struct_decl
                 : node && node->type == AST_UNION_DECL  ? &node->as.union_decl
                                                         : NULL;
-            XaSymbol *symbol =
-                decl && decl->symbol_id != 0 && bc->producer->analyzer->global_scope
-                    ? xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, decl->symbol_id)
-                    : NULL;
+            XaSymbol *symbol = decl && decl->symbol_id != 0
+                                   ? xa_analyzer_symbol_by_id(bc->producer->analyzer,
+                                                              decl->symbol_id)
+                                   : NULL;
             class_info = symbol && symbol->kind == XA_SYM_CLASS ? symbol->links.class_info : NULL;
             break;
         }
@@ -9495,10 +9491,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
 }
 
 static XaSymbolLinks *producer_enum_links(const XgProducer *p, const EnumDeclNode *enumeration) {
-    if (!p || !p->analyzer || !p->analyzer->global_scope || !enumeration ||
-        enumeration->symbol_id == 0)
+    if (!p || !p->analyzer || !enumeration || enumeration->symbol_id == 0)
         return NULL;
-    XaSymbol *symbol = xa_scope_lookup_by_id(p->analyzer->global_scope, enumeration->symbol_id);
+    XaSymbol *symbol = xa_analyzer_symbol_by_id(p->analyzer, enumeration->symbol_id);
     return symbol && symbol->kind == XA_SYM_ENUM ? xa_analyzer_get_links(p->analyzer, symbol)
                                                  : NULL;
 }
@@ -9823,8 +9818,8 @@ static bool body_stdlib_call_identity(XgBodyCollect *bc, const AstNode *call,
          * for imported public calls and private wrapper calls. */
         if ((!module || !name) && callee->as.variable.symbol_id != 0 && bc->producer &&
             bc->producer->analyzer) {
-            XaSymbol *symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope,
-                                                     callee->as.variable.symbol_id);
+            XaSymbol *symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer,
+                                                        callee->as.variable.symbol_id);
             XaSymbolLinks *links = symbol && symbol->kind == XA_SYM_FUNCTION && symbol->is_builtin
                                        ? xa_analyzer_get_links(bc->producer->analyzer, symbol)
                                        : NULL;
@@ -9984,8 +9979,8 @@ static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
     bool has_fact = xa_analyzer_get_target_query(bc->producer->analyzer, node, &fact);
     if (!receiver || receiver->type != AST_VARIABLE || receiver->as.variable.symbol_id == 0)
         return true;
-    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope,
-                                   receiver->as.variable.symbol_id);
+    symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer,
+                                      receiver->as.variable.symbol_id);
     links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
     if (!symbol || !symbol->is_builtin || symbol->kind != XA_SYM_MODULE || !links ||
         links->target_namespace_id != XA_TARGET_NAMESPACE_TARGET)
@@ -10071,8 +10066,8 @@ static bool body_add_suspend_point(XgBodyCollect *bc, const AstNode *node,
         return strcmp(member->object->as.variable.name ? member->object->as.variable.name : "",
                       "Coro") != 0;
     XaSymbol *symbol = member->object->as.variable.symbol_id
-                           ? xa_scope_lookup_by_id(bc->producer->analyzer->global_scope,
-                                                   member->object->as.variable.symbol_id)
+                           ? xa_analyzer_symbol_by_id(bc->producer->analyzer,
+                                                      member->object->as.variable.symbol_id)
                            : NULL;
     if (!xa_symbol_is_builtin_module(bc->producer->analyzer, symbol, "Coro"))
         return true;
@@ -11504,10 +11499,9 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
     XgInterfaceNameRow *interface_row =
         producer_lookup_interface_row_exact_name(p, module_id, iface->name);
     XgInterfaceId interface_id = interface_row ? interface_row->interface_id : XG_NO_ID;
-    XaSymbol *interface_symbol =
-        p->analyzer && iface->symbol_id && p->analyzer->global_scope
-            ? xa_scope_lookup_by_id(p->analyzer->global_scope, iface->symbol_id)
-            : NULL;
+    XaSymbol *interface_symbol = p->analyzer && iface->symbol_id
+                                     ? xa_analyzer_symbol_by_id(p->analyzer, iface->symbol_id)
+                                     : NULL;
     XrClassInfo *interface_info = interface_symbol && interface_symbol->kind == XA_SYM_CLASS
                                       ? interface_symbol->links.class_info
                                       : NULL;
@@ -12225,10 +12219,9 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
         for (int i = 0; i < spec->ast->as.program.count; i++) {
             const AstNode *node = spec->ast->as.program.statements[i];
             XaSymbol *symbol = analyzer && node && node->type == AST_INTERFACE_DECL &&
-                                       node->as.interface_decl.symbol_id != 0 &&
-                                       analyzer->global_scope
-                                   ? xa_scope_lookup_by_id(analyzer->global_scope,
-                                                           node->as.interface_decl.symbol_id)
+                                       node->as.interface_decl.symbol_id != 0
+                                   ? xa_analyzer_symbol_by_id(
+                                         analyzer, node->as.interface_decl.symbol_id)
                                    : NULL;
             XrClassInfo *info =
                 symbol && symbol->kind == XA_SYM_CLASS ? symbol->links.class_info : NULL;

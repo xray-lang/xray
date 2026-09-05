@@ -2140,9 +2140,13 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
                          xr_compiler_session_push_arena(analyzer->compiler_session,
                                                         ast->as.program.arena, file, &ast_scope);
 
-    // Set current type pool and symbol ID counter (eliminates global state)
+    /* Install the complete analyzer-owned allocation and identity context.
+     * Compiler sessions can retain more than one analyzer on the same thread;
+     * selecting only the type pool and id counter lets a later analysis write
+     * symbols into whichever registry another analyzer installed last. */
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
+    xa_symbol_set_registry(analyzer->symbols_by_id);
 
     // Track file
     XaFileEntry *entry = find_or_create_file(analyzer, file);

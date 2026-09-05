@@ -87,10 +87,16 @@ static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrMod
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int idx = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[idx];
-        if (idx == graph->entry_index || !spec->ast)
+        /* Whole-program evidence is built while dependencies are compiled, so
+         * every graph-owned AST, including the entry, must already carry its
+         * analyzer identity. The later source parse reuses the same file scope
+         * and exact declarations; skipping the entry leaves its symbol ids at
+         * zero and makes evidence construction order-dependent. */
+        if (!spec->ast)
             continue;
 
-        xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        const char *analysis_file = spec->source_path ? spec->source_path : spec->canonical;
+        xa_analyzer_analyze(analyzer, analysis_file, (XrAstNode *) spec->ast);
         spec->export_symbols =
             xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
 
