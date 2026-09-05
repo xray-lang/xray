@@ -996,12 +996,29 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.kind = XR_VM_VALUE_TARGET_ENDIAN;
                     produced.as.value.as.target_enum = context->code->endianness;
                     break;
-                case XR_CORE_OP_CORE_PROVIDER_CALL: {
+                case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY: {
                     int64_t provider_result = 0;
-                    XrExecutionProviderCallResult call = xr_execution_lease_provider_call_i64(
+                    XrExecutionProviderCallResult call =
+                        xr_execution_lease_provider_call_i64_unary(
                         context->lease, instruction.immediate.provider_operation.requirement_index,
                         instruction.immediate.provider_operation.operation_index,
                         values[instruction.operands[0]].as.value.as.i64, &provider_result);
+                    if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
+                        result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_VM_VALUE_I64;
+                    produced.as.value.as.i64 = provider_result;
+                    break;
+                }
+                case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY: {
+                    int64_t provider_result = 0;
+                    XrExecutionProviderCallResult call =
+                        xr_execution_lease_provider_call_i64_nullary(
+                            context->lease,
+                            instruction.immediate.provider_operation.requirement_index,
+                            instruction.immediate.provider_operation.operation_index,
+                            &provider_result);
                     if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
                         result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
                         goto done;

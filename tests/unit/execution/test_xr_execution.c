@@ -48,7 +48,8 @@ static XrCoreIrKey test_key(const char *text) {
     return xr_core_ir_key(text, strlen(text));
 }
 
-static XrValidatedProgram *build_validated_program(const XrTargetProfile *requirements_profile) {
+static XrValidatedProgram *build_validated_provider_program(
+    const XrTargetProfile *requirements_profile, bool nullary) {
     XrCoreIrConstantInput constant = {
         .key = test_key("execution:constant:42"),
         .type_id = XR_CORE_TYPE_I64,
@@ -59,35 +60,39 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
     XrCoreIrKey provider_value = test_key("execution:value:provider-result");
     XrCoreIrKey provider_operand[] = {value};
     XrCoreIrKey return_operand[] = {provider_value};
-    XrCoreIrInstructionInput instructions[] = {
-        {
+    XrCoreIrInstructionInput instructions[3] = {0};
+    uint32_t instruction_count = 0u;
+    if (!nullary) {
+        instructions[instruction_count++] = (XrCoreIrInstructionInput) {
             .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
             .result = value,
             .result_type_id = XR_CORE_TYPE_I64,
             .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
             .immediate.key = constant.key,
-        },
-        {
-            .operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
-            .result = provider_value,
-            .result_type_id = XR_CORE_TYPE_I64,
-            .operands = provider_operand,
-            .operand_count = 1,
-            .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
-        },
-        {
+        };
+    }
+    uint32_t provider_instruction = instruction_count;
+    instructions[instruction_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = nullary ? XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY
+                                : XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
+        .result = provider_value,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .operands = nullary ? NULL : provider_operand,
+        .operand_count = nullary ? 0u : 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
+    };
+    instructions[instruction_count++] = (XrCoreIrInstructionInput) {
             .operation_id = XR_CORE_OP_CORE_RETURN,
             .result_type_id = XR_CORE_TYPE_VOID,
             .operands = return_operand,
             .operand_count = 1,
             .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
-        },
     };
     XrCoreIrKey block_key = test_key("execution:block:entry");
     XrCoreIrBlockInput block = {
         .key = block_key,
         .instructions = instructions,
-        .instruction_count = 3,
+        .instruction_count = instruction_count,
     };
     XrCoreIrFunctionInput function = {
         .key = test_key("execution:function:entry"),
@@ -101,8 +106,8 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
     };
     XrCoreIrModuleInput module = {
         .key = test_key("execution:module"),
-        .constants = &constant,
-        .constant_count = 1,
+        .constants = nullary ? NULL : &constant,
+        .constant_count = nullary ? 0u : 1u,
         .functions = &function,
         .function_count = 1,
     };
@@ -120,8 +125,9 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
     }
     REQUIRE(required_contract != NULL && required_contract->operation_count != 0u);
     XrStableId operation_id = required_contract->operations[0].stable_id;
-    instructions[1].immediate.provider_operation.contract_id = required_contract->contract_id;
-    instructions[1].immediate.provider_operation.operation_id = operation_id;
+    instructions[provider_instruction].immediate.provider_operation.contract_id =
+        required_contract->contract_id;
+    instructions[provider_instruction].immediate.provider_operation.operation_id = operation_id;
     XrCoreIrProviderRequirementInput provider_requirement = {
         .contract_id = required_contract->contract_id,
         .operation_ids = &operation_id,
@@ -161,11 +167,23 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
     return validated;
 }
 
+static XrValidatedProgram *build_validated_program(
+    const XrTargetProfile *requirements_profile) {
+    return build_validated_provider_program(requirements_profile, false);
+}
+
 static XrProviderCallStatus test_provider_entry(void *context, int64_t argument,
                                                 int64_t *result_out) {
     if (!context || !result_out)
         return XR_PROVIDER_CALL_FAILED;
     *result_out = argument + 1;
+    return XR_PROVIDER_CALL_OK;
+}
+
+static XrProviderCallStatus test_nullary_provider_entry(void *context, int64_t *result_out) {
+    if (!context || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    *result_out = 73;
     return XR_PROVIDER_CALL_OK;
 }
 
@@ -191,7 +209,7 @@ static XrProviderCallStatus reentrant_provider_entry(void *opaque, int64_t argum
         REQUIRE(diagnostic.kind == XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY);
         ++context->depth;
         int64_t nested = 0;
-        XrExecutionProviderCallResult call = xr_execution_lease_provider_call_i64(
+        XrExecutionProviderCallResult call = xr_execution_lease_provider_call_i64_unary(
             context->lease, 0u, 0u, argument, &nested);
         --context->depth;
         if (call != XR_EXECUTION_PROVIDER_CALL_OK)
@@ -229,7 +247,7 @@ static XrProviderCallStatus blocking_provider_entry(void *opaque, int64_t argume
 static void *blocking_provider_call_worker(void *opaque) {
     BlockingProviderCall *call = opaque;
     call->status =
-        xr_execution_lease_provider_call_i64(call->lease, 0u, 0u, 41, &call->result);
+        xr_execution_lease_provider_call_i64_unary(call->lease, 0u, 0u, 41, &call->result);
     return NULL;
 }
 
@@ -282,8 +300,14 @@ static void build_provider_bindings(const XrValidatedProgram *program,
             XrProviderOperationBinding *operation =
                 &bindings->operations[provider_index][operation_index];
             operation->operation_id = contract_operation->stable_id;
-            operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_TO_I64;
-            operation->entry.i64_to_i64 = test_provider_entry;
+            if (contract_operation->call_abi.parameter_count == 0u) {
+                operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
+                operation->entry.i64_nullary = test_nullary_provider_entry;
+            } else {
+                REQUIRE(contract_operation->call_abi.parameter_count == 1u);
+                operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_UNARY;
+                operation->entry.i64_unary = test_provider_entry;
+            }
             operation->context = operation;
         }
     }
@@ -421,9 +445,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-                        "f0dc4e318254cea47ae2ac9c97e6edde94bcdfa53a4fb75620ac517d348b9c59");
+                        "7ebe8cffb7bd22654371bd1e1bd2f18dd1c73120a75fd2cdc034c6d095392cfd");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "b064dde65e46a4d3b48de5f54ac3f6398fe5f32b25c2825c57240a3e78c9c9fb");
+                        "18484d7edb5d093e7a7a171481310bad0b8b78516da1fd694e2f7d54463eea34");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));
@@ -446,15 +470,15 @@ static void test_execution_identity_and_lifecycle(void) {
     REQUIRE(lease.ticket != 0u && lease.ticket != independent_lease.ticket);
     REQUIRE(xr_execution_instance_generation(first) == 1u);
     int64_t provider_result = 0;
-    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 41, &provider_result) ==
+    REQUIRE(xr_execution_lease_provider_call_i64_unary(&lease, 0u, 0u, 41, &provider_result) ==
             XR_EXECUTION_PROVIDER_CALL_OK);
     REQUIRE(provider_result == 42);
-    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 41, NULL) ==
+    REQUIRE(xr_execution_lease_provider_call_i64_unary(&lease, 0u, 0u, 41, NULL) ==
             XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE);
     REQUIRE(xr_execution_instance_lease_count(first) == 2);
     XrExecutionDiagnostic diagnostic;
     REQUIRE(xr_execution_instance_begin_drain(first, &diagnostic) == XR_EXECUTION_OK);
-    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, -2, &provider_result) ==
+    REQUIRE(xr_execution_lease_provider_call_i64_unary(&lease, 0u, 0u, -2, &provider_result) ==
             XR_EXECUTION_PROVIDER_CALL_OK);
     REQUIRE(provider_result == -1);
     XrExecutionLease refused = {.instance = first, .ticket = UINT64_MAX};
@@ -468,14 +492,14 @@ static void test_execution_identity_and_lifecycle(void) {
     REQUIRE(!xr_execution_lease_release(&copied_lease));
     REQUIRE(xr_execution_instance_lease_count(first) == 1);
     REQUIRE(xr_execution_lease_is_valid(&independent_lease));
-    REQUIRE(xr_execution_lease_provider_call_i64(&independent_lease, 0u, 0u, 0,
+    REQUIRE(xr_execution_lease_provider_call_i64_unary(&independent_lease, 0u, 0u, 0,
                                                  &provider_result) ==
             XR_EXECUTION_PROVIDER_CALL_OK);
     REQUIRE(provider_result == 1);
     REQUIRE(!xr_execution_lease_is_valid(&lease));
     REQUIRE(xr_execution_lease_retain_program(&lease) == NULL);
     REQUIRE(xr_execution_lease_retain_profile(&lease) == NULL);
-    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 0, &provider_result) ==
+    REQUIRE(xr_execution_lease_provider_call_i64_unary(&lease, 0u, 0u, 0, &provider_result) ==
             XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE);
     REQUIRE(!xr_execution_lease_release(&lease));
     REQUIRE(xr_execution_lease_release(&independent_lease));
@@ -510,7 +534,7 @@ static void test_reentrant_provider_call_pins_lease_without_holding_lock(void) {
     TestProviderBindings bindings;
     build_provider_bindings(program, profile, &bindings);
     ReentrantProviderContext context = {0};
-    bindings.operations[0][0].entry.i64_to_i64 = reentrant_provider_entry;
+    bindings.operations[0][0].entry.i64_unary = reentrant_provider_entry;
     bindings.operations[0][0].context = &context;
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     XrExecutionLease lease = {0};
@@ -519,7 +543,7 @@ static void test_reentrant_provider_call_pins_lease_without_holding_lock(void) {
     context.lease = &lease;
 
     int64_t result = 0;
-    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 40, &result) ==
+    REQUIRE(xr_execution_lease_provider_call_i64_unary(&lease, 0u, 0u, 40, &result) ==
             XR_EXECUTION_PROVIDER_CALL_OK);
     REQUIRE(result == 42);
     REQUIRE(xr_execution_lease_is_valid(&lease));
@@ -551,7 +575,7 @@ static void test_concurrent_release_drain_and_retire_during_provider_call(void) 
         .entered = ATOMIC_VAR_INIT(false),
         .return_allowed = ATOMIC_VAR_INIT(false),
     };
-    bindings.operations[0][0].entry.i64_to_i64 = blocking_provider_entry;
+    bindings.operations[0][0].entry.i64_unary = blocking_provider_entry;
     bindings.operations[0][0].context = &provider;
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     XrExecutionLease lease = {0};
@@ -700,8 +724,8 @@ static void test_provider_admission_matrix(void) {
     REQUIRE(unrequired_contract != NULL && unrequired_contract->operation_count != 0u);
     XrProviderOperationBinding unrequired_operation = {
         .operation_id = unrequired_contract->operations[0].stable_id,
-        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_TO_I64,
-        .entry.i64_to_i64 = test_provider_entry,
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_UNARY,
+        .entry.i64_unary = test_provider_entry,
     };
     unrequired_operation.context = &unrequired_operation;
     XrProviderBinding unrequired_provider = {
@@ -720,9 +744,9 @@ static void test_provider_admission_matrix(void) {
     bindings.operations[0][0].operation_id.bytes[0] ^= 1u;
     require_provider_reject(&input, XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION);
     bindings.operations[0][0].operation_id.bytes[0] ^= 1u;
-    bindings.operations[0][0].entry.i64_to_i64 = NULL;
+    bindings.operations[0][0].entry.i64_unary = NULL;
     require_provider_reject(&input, XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION);
-    bindings.operations[0][0].entry.i64_to_i64 = test_provider_entry;
+    bindings.operations[0][0].entry.i64_unary = test_provider_entry;
     bindings.providers[0].operation_count++;
     require_provider_reject(&input, XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION);
     bindings.providers[0].operation_count--;
@@ -766,6 +790,33 @@ static void test_provider_admission_matrix(void) {
     xr_validated_program_free(program);
 }
 
+static void test_nullary_provider_call_shape(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_nullary_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    REQUIRE(profile != NULL);
+    XrValidatedProgram *program = build_validated_provider_program(profile, true);
+    TestProviderBindings bindings;
+    build_provider_bindings(program, profile, &bindings);
+    REQUIRE(bindings.operations[0][0].trampoline_kind ==
+            XR_PROVIDER_TRAMPOLINE_I64_NULLARY);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(instance, &lease));
+    int64_t result = 0;
+    REQUIRE(xr_execution_lease_provider_call_i64_nullary(&lease, 0u, 0u, &result) ==
+            XR_EXECUTION_PROVIDER_CALL_OK);
+    REQUIRE(result == 73);
+    REQUIRE(xr_execution_lease_provider_call_i64_nullary(&lease, 0u, 0u, NULL) ==
+            XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE);
+    REQUIRE(xr_execution_lease_provider_call_i64_unary(&lease, 0u, 0u, 1, &result) ==
+            XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE);
+    REQUIRE(xr_execution_lease_release(&lease));
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 int main(void) {
     test_profile_partitions_and_foreign_authority();
     test_execution_identity_and_lifecycle();
@@ -773,6 +824,7 @@ int main(void) {
     test_concurrent_release_drain_and_retire_during_provider_call();
     test_concurrent_pin_and_drain();
     test_provider_admission_matrix();
+    test_nullary_provider_call_shape();
     puts("execution binding tests passed");
     return 0;
 }

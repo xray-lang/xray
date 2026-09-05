@@ -26,7 +26,10 @@ _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id dri
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY == 136,
+               "unary provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY == 139,
+               "nullary provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,

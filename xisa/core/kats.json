@@ -1896,7 +1896,7 @@
     },
     {
       "id": "provider-call-valid",
-      "operation": "core.provider.call",
+      "operation": "core.provider.call.i64.unary",
       "kind": "contract",
       "actual": {
         "operand_type": "i64",
@@ -1913,7 +1913,7 @@
     },
     {
       "id": "provider-call-missing-requirement",
-      "operation": "core.provider.call",
+      "operation": "core.provider.call.i64.unary",
       "kind": "contract",
       "actual": {
         "operand_type": "i64",
@@ -1923,6 +1923,36 @@
         "operand_ownership": "non-owner",
         "result_ownership": "non-owner",
         "provider_requirement": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "provider-call-i64-nullary-valid",
+      "operation": "core.provider.call.i64.nullary",
+      "kind": "contract",
+      "actual": {
+        "operand_count": 0,
+        "result_type": "i64",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "provider_requirement": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "provider-call-i64-nullary-rejects-operand",
+      "operation": "core.provider.call.i64.nullary",
+      "kind": "contract",
+      "actual": {
+        "operand_count": 1,
+        "result_type": "i64",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "provider_requirement": true
       },
       "expect": {
         "valid": false

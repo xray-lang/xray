@@ -312,8 +312,10 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
         !append_text(buffer, "\n"))
         return false;
     if (!append_text(buffer,
-                     "typedef int (*XrAotProviderCallI64)(void *context, uint32_t requirement, "
+                     "typedef int (*XrAotProviderCallI64Unary)(void *context, uint32_t requirement, "
                      "uint32_t operation, int64_t argument, int64_t *result);\n"
+                     "typedef int (*XrAotProviderCallI64Nullary)(void *context, uint32_t "
+                     "requirement, uint32_t operation, int64_t *result);\n"
                      "typedef int (*XrAotProviderOutputWrite)(void *context, uint32_t "
                      "requirement, uint32_t operation, const uint8_t *bytes, size_t size);\n\n"))
         return false;
@@ -327,7 +329,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                          "typedef struct XrAotContext {\n"
                          "    XrAotAllocation *allocations;\n"
                          "    void *provider_context;\n"
-                         "    XrAotProviderCallI64 provider_call_i64;\n"
+                         "    XrAotProviderCallI64Unary provider_call_i64_unary;\n"
+                         "    XrAotProviderCallI64Nullary provider_call_i64_nullary;\n"
                          "    XrAotProviderOutputWrite provider_output_write;\n"
                          "} XrAotContext;\n\n"
                          "static inline void *xr_aot_alloc(XrAotContext *context, size_t size) "
@@ -354,7 +357,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
             return false;
     } else if (!append_text(buffer, "typedef struct XrAotContext {\n"
                                     "    void *provider_context;\n"
-                                    "    XrAotProviderCallI64 provider_call_i64;\n"
+                                    "    XrAotProviderCallI64Unary provider_call_i64_unary;\n"
+                                    "    XrAotProviderCallI64Nullary provider_call_i64_nullary;\n"
                                     "    XrAotProviderOutputWrite provider_output_write;\n"
                                     "} XrAotContext;\n\n")) {
         return false;
@@ -1435,15 +1439,24 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
             return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
                                  ir->endianness);
-        case XR_CORE_OP_CORE_PROVIDER_CALL:
+        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:
             return append_format(
                 buffer,
-                "        if (!xr_ctx->provider_call_i64 || "
-                "xr_ctx->provider_call_i64(xr_ctx->provider_context, UINT32_C(%u), "
+                "        if (!xr_ctx->provider_call_i64_unary || "
+                "xr_ctx->provider_call_i64_unary(xr_ctx->provider_context, UINT32_C(%u), "
                 "UINT32_C(%u), v%u, &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
                 instruction->immediate.provider_operation.requirement_index,
                 instruction->immediate.provider_operation.operation_index,
                 instruction->operands[0], instruction->result_id);
+        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:
+            return append_format(
+                buffer,
+                "        if (!xr_ctx->provider_call_i64_nullary || "
+                "xr_ctx->provider_call_i64_nullary(xr_ctx->provider_context, UINT32_C(%u), "
+                "UINT32_C(%u), &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
+                instruction->immediate.provider_operation.requirement_index,
+                instruction->immediate.provider_operation.operation_index,
+                instruction->result_id);
         case XR_CORE_OP_CORE_OUTPUT_GROUP_I64:
             return append_format(
                 buffer,

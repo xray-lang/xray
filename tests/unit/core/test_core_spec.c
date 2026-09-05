@@ -86,7 +86,7 @@ static void test_operation_metadata(void) {
     const XrCoreOperationSpec *variant =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_PROJECT);
     const XrCoreOperationSpec *provider =
-        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL);
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY);
     const XrCoreOperationSpec *yield =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_YIELD);
     const XrCoreOperationSpec *coroutine_call =

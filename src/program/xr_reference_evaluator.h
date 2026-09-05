@@ -60,16 +60,19 @@ typedef struct XrReferenceBudget {
     uint32_t max_call_depth;
 } XrReferenceBudget;
 
-typedef bool (*XrReferenceProviderCallI64)(void *context, uint32_t requirement_index,
-                                           uint32_t operation_index, int64_t argument,
-                                           int64_t *result_out);
+typedef bool (*XrReferenceProviderCallI64Unary)(void *context, uint32_t requirement_index,
+                                                uint32_t operation_index, int64_t argument,
+                                                int64_t *result_out);
+typedef bool (*XrReferenceProviderCallI64Nullary)(void *context, uint32_t requirement_index,
+                                                  uint32_t operation_index, int64_t *result_out);
 typedef bool (*XrReferenceProviderOutputWrite)(void *context, uint32_t requirement_index,
                                                uint32_t operation_index, const uint8_t *bytes,
                                                size_t size);
 
 typedef struct XrReferenceProviderBinding {
     void *context;
-    XrReferenceProviderCallI64 call_i64;
+    XrReferenceProviderCallI64Unary call_i64_unary;
+    XrReferenceProviderCallI64Nullary call_i64_nullary;
     XrReferenceProviderOutputWrite output_write;
 } XrReferenceProviderBinding;
 

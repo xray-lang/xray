@@ -33,7 +33,10 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY == 136,
+               "unary provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY == 139,
+               "nullary provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,
@@ -905,7 +908,8 @@ static XrValidatedProgram *build_binary_program(uint16_t operation_id, int64_t l
     return validate_functions(constants, sizeof(constants) / sizeof(constants[0]), &function, 1u);
 }
 
-static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *profile) {
+static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *profile,
+                                                       bool nullary) {
     const XrTargetProviderContract *contract = NULL;
     for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
@@ -926,31 +930,37 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
     XrCoreIrKey result = fixture_key("aot-provider:result");
     XrCoreIrKey call_operands[] = {argument};
     XrCoreIrKey returned[] = {result};
-    XrCoreIrInstructionInput instructions[] = {
-        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+    XrCoreIrInstructionInput instructions[3] = {0};
+    uint32_t instruction_count = 0u;
+    if (!nullary) {
+        instructions[instruction_count++] = (XrCoreIrInstructionInput) {
+         .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = argument,
          .result_type_id = XR_CORE_TYPE_I64,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
-         .immediate.key = constant.key},
-        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
+         .immediate.key = constant.key};
+    }
+    instructions[instruction_count++] = (XrCoreIrInstructionInput) {
+         .operation_id = nullary ? XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY
+                                 : XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
          .result = result,
          .result_type_id = XR_CORE_TYPE_I64,
-         .operands = call_operands,
-         .operand_count = 1u,
+         .operands = nullary ? NULL : call_operands,
+         .operand_count = nullary ? 0u : 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
          .immediate.provider_operation = {.contract_id = contract->contract_id,
-                                          .operation_id = operation_id}},
-        {.operation_id = XR_CORE_OP_CORE_RETURN,
+                                          .operation_id = operation_id}};
+    instructions[instruction_count++] = (XrCoreIrInstructionInput) {
+         .operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = returned,
          .operand_count = 1u,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
-    };
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE};
     XrCoreIrKey block_key = fixture_key("aot-provider:block");
     XrCoreIrBlockInput block = {
         .key = block_key,
         .instructions = instructions,
-        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .instruction_count = instruction_count,
     };
     XrCoreIrFunctionInput function = {
         .key = fixture_key("aot-provider:function"),
@@ -965,8 +975,8 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
     };
     XrCoreIrModuleInput module = {
         .key = fixture_key("aot-provider:module"),
-        .constants = &constant,
-        .constant_count = 1u,
+        .constants = nullary ? NULL : &constant,
+        .constant_count = nullary ? 0u : 1u,
         .functions = &function,
         .function_count = 1u,
     };
@@ -1515,44 +1525,55 @@ static void test_foreign_profile_and_translation_mutation(void) {
 }
 
 static void test_provider_call_lowering_and_mutation(void) {
-    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
-    REQUIRE(profile != NULL);
-    XrValidatedProgram *program = build_provider_call_program(profile);
-    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
-    XrBackendInstruction *provider_call = NULL;
-    for (uint32_t function = 0u; function < ir->function_count; ++function) {
-        for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
-            XrBackendBlock *row = &ir->functions[function].blocks[block];
-            for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
-                if (row->instructions[instruction].operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
-                    REQUIRE(provider_call == NULL);
-                    provider_call = &row->instructions[instruction];
+    for (uint32_t shape = 0u; shape < 2u; ++shape) {
+        bool nullary = shape != 0u;
+        XrTargetProfile *profile = nullary
+            ? xr_test_target_profile_build_with_nullary_clock(
+                  false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+                  XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER)
+            : xr_test_target_profile_build_with_scalar_clock(
+                  false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+                  XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+        REQUIRE(profile != NULL);
+        XrValidatedProgram *program = build_provider_call_program(profile, nullary);
+        XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+        XrBackendInstruction *provider_call = NULL;
+        uint16_t expected_operation = nullary ? XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY
+                                              : XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY;
+        for (uint32_t function = 0u; function < ir->function_count; ++function) {
+            for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
+                XrBackendBlock *row = &ir->functions[function].blocks[block];
+                for (uint32_t instruction = 0u; instruction < row->instruction_count;
+                     ++instruction) {
+                    if (row->instructions[instruction].operation_id == expected_operation) {
+                        REQUIRE(provider_call == NULL);
+                        provider_call = &row->instructions[instruction];
+                    }
                 }
             }
         }
+        REQUIRE(provider_call != NULL);
+        REQUIRE(provider_call->immediate.provider_operation.requirement_index == 0u);
+        REQUIRE(provider_call->immediate.provider_operation.operation_index == 0u);
+        XrGeneratedC generated = {0};
+        XrBackendDiagnostic diagnostic;
+        REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+        REQUIRE(strstr(generated.bytes, nullary ? "provider_call_i64_nullary"
+                                                : "provider_call_i64_unary") != NULL);
+        REQUIRE(strstr(generated.bytes, "UINT32_C(0), UINT32_C(0)") != NULL);
+        REQUIRE(strstr(generated.bytes, "xr_aot_make(1, 0, 7)") != NULL);
+
+        provider_call->immediate.provider_operation.requirement_index = 1u;
+        REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+        REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+        provider_call->immediate.provider_operation.requirement_index = 0u;
+        REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+
+        xr_generated_c_free(&generated);
+        xr_backend_ir_free(ir);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
     }
-    REQUIRE(provider_call != NULL);
-    REQUIRE(provider_call->immediate.provider_operation.requirement_index == 0u);
-    REQUIRE(provider_call->immediate.provider_operation.operation_index == 0u);
-    XrGeneratedC generated = {0};
-    XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
-    REQUIRE(strstr(generated.bytes, "provider_call_i64") != NULL);
-    REQUIRE(strstr(generated.bytes, "UINT32_C(0), UINT32_C(0)") != NULL);
-    REQUIRE(strstr(generated.bytes, "xr_aot_make(1, 0, 7)") != NULL);
-
-    provider_call->immediate.provider_operation.requirement_index = 1u;
-    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
-    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
-    provider_call->immediate.provider_operation.requirement_index = 0u;
-    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
-
-    xr_generated_c_free(&generated);
-    xr_backend_ir_free(ir);
-    xr_target_profile_free(profile);
-    xr_validated_program_free(program);
 }
 
 static void test_provider_output_lowering_and_mutation(void) {
@@ -1651,7 +1672,7 @@ static void write_provider_generated_fixture(const char *path,
                     "int main(void) {\n"
                     "    uint8_t provider_context = UINT8_C(1);\n"
                     "    XrAotContext context = {.provider_context = &provider_context, "
-                    ".provider_call_i64 = xr_test_provider};\n"
+                    ".provider_call_i64_unary = xr_test_provider};\n"
                     "    XrAotOutcome outcome = xr_aot_fn_%u(&context);\n"
                     "    return outcome.kind == UINT32_C(0) ? "
                     "(int)((uint64_t)outcome.i64 & UINT64_C(255)) : 255;\n"
@@ -1775,7 +1796,7 @@ int main(int argc, char **argv) {
                                                            : XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     if (provider_call_mode)
-        program = build_provider_call_program(profile);
+        program = build_provider_call_program(profile, false);
     if (provider_output_mode)
         program = build_output_program(42);
     if (seal_mode) {

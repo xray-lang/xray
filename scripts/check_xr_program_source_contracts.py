@@ -458,7 +458,10 @@ def validate(root: Path) -> None:
     }
     wave_five_coroutine_yield = {"core.coroutine.yield"}
     canonical_coroutine_call = {"core.coroutine.call.sealed"}
-    wave_five_provider = {"core.provider.call"}
+    wave_five_provider = {
+        "core.provider.call.i64.unary",
+        "core.provider.call.i64.nullary",
+    }
     canonical_source_output = {"core.output.group.i64"}
     wave_three_slice_two = {
         "core.owner.move",

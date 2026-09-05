@@ -163,14 +163,16 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
             "provider admission does not compare the exact provider contract")
     for token in ("xr_validated_program_provider_requirement_count",
                   "xr_validated_program_provider_requirement", "find_profile_provider",
-                  "find_profile_operation", "provider_operation_uses_scalar_i64_trampoline",
+                  "find_profile_operation", "provider_operation_uses_i64_unary_trampoline",
+                  "provider_operation_uses_i64_nullary_trampoline",
                   "provider_operation_uses_output_write_trampoline",
                   "XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER",
                   "XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE"):
         require(token in execution_source, f"program-required provider subset omits {token}")
     for token in ("xr_execution_instance_acquire", "xr_execution_lease_release",
                   "xr_execution_lease_retain_program", "xr_execution_lease_retain_profile",
-                  "xr_execution_lease_provider_call_i64",
+                  "xr_execution_lease_provider_call_i64_unary",
+                  "xr_execution_lease_provider_call_i64_nullary",
                   "xr_execution_lease_provider_output_write"):
         require(token in execution_source, f"generation lease contract omits {token}")
     for token in ("uint64_t ticket", "lease_tickets", "lease_ticket_is_active_locked",
@@ -246,7 +248,7 @@ def self_test(root: Path) -> None:
     else:
         raise GateError("missing release-once lease ticket validation was accepted")
 
-    mutated = execution.replace("provider_operation_uses_scalar_i64_trampoline",
+    mutated = execution.replace("provider_operation_uses_i64_unary_trampoline",
                                 "provider_operation_abi_check_removed")
     require(mutated != execution, "provider ABI mutation did not apply")
     try:

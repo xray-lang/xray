@@ -1780,7 +1780,8 @@ static bool provider_operation_flat_index(const XrCoreIrProgram *program,
 }
 
 static bool operation_is_provider_backed(uint16_t operation_id) {
-    return operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
+    return operation_id == XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY ||
+           operation_id == XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY ||
            operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP_I64;
 }
 

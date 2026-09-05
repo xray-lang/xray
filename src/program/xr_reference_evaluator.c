@@ -873,14 +873,29 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value.kind = XR_REFERENCE_VALUE_TARGET_ENDIAN;
                     produced.as.value.as.target_enum = context->profile.endianness;
                     break;
-                case XR_CORE_OP_CORE_PROVIDER_CALL: {
+                case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY: {
                     int64_t provider_result = 0;
-                    if (!context->providers || !context->providers->call_i64 ||
-                        !context->providers->call_i64(
+                    if (!context->providers || !context->providers->call_i64_unary ||
+                        !context->providers->call_i64_unary(
                             context->providers->context,
                             instruction->immediate.provider_operation.requirement_index,
                             instruction->immediate.provider_operation.operation_index,
                             values[instruction->operands[0]].as.value.as.i64, &provider_result)) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+                        goto done;
+                    }
+                    produced.as.value.kind = XR_REFERENCE_VALUE_I64;
+                    produced.as.value.as.i64 = provider_result;
+                    break;
+                }
+                case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY: {
+                    int64_t provider_result = 0;
+                    if (!context->providers || !context->providers->call_i64_nullary ||
+                        !context->providers->call_i64_nullary(
+                            context->providers->context,
+                            instruction->immediate.provider_operation.requirement_index,
+                            instruction->immediate.provider_operation.operation_index,
+                            &provider_result)) {
                         result = trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
                         goto done;
                     }

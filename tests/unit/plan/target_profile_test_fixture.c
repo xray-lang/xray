@@ -199,6 +199,50 @@ XrTargetProfile *xr_test_target_profile_build_with_scalar_clock(
     return profile;
 }
 
+XrTargetProfile *xr_test_target_profile_build_with_nullary_clock(
+    bool ilp32, uint8_t runtime_profile, uint8_t scalar_value_kind) {
+    XrTestTargetProfileFixture fixture;
+    if (!xr_test_target_profile_fixture_init(&fixture, ilp32, runtime_profile))
+        return NULL;
+    if (scalar_value_kind != XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER &&
+        scalar_value_kind != XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER)
+        return NULL;
+
+    XrTargetProviderContract providers[3] = {0};
+    memcpy(providers, fixture.providers, sizeof(fixture.providers));
+    uint32_t availability =
+        runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+            ? XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING
+            : XR_TARGET_PROVIDER_AVAILABLE_HOSTED;
+    XrTargetProviderCallSlotAbi scalar =
+        make_call_slot(scalar_value_kind, 8u, 8u,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0u);
+    XrTargetProviderCallAbiContract scalar_abi = make_call_abi(scalar, NULL, 0u);
+    retarget_call_abi(&scalar_abi,
+                      (uint8_t) fixture.input.machine.data_layout.pointer.size,
+                      (uint8_t) fixture.input.machine.data_layout.endian);
+    providers[2] = (XrTargetProviderContract) {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .contract_id = make_id(203u),
+        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .flags = availability,
+        .operation_count = 1u,
+        .runtime_profile = runtime_profile,
+        .provider_kind = XR_TARGET_PROVIDER_CLOCK,
+    };
+    providers[2].operations[0] = make_operation(22u, scalar_abi, 0u, 0u, 0u);
+    fixture.input.providers = providers;
+    fixture.input.provider_count = 3u;
+
+    XrTargetProfile *profile = NULL;
+    char error[512] = {0};
+    if (!xr_target_profile_build(&fixture.input, &profile, error, sizeof(error))) {
+        fprintf(stderr, "nullary clock target profile fixture failed: %s\n", error);
+        return NULL;
+    }
+    return profile;
+}
+
 XrTargetProfile *xr_test_target_profile_build_with_output(bool ilp32,
                                                           uint8_t runtime_profile) {
     XrTestTargetProfileFixture fixture;

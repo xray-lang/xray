@@ -33,7 +33,10 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY == 136,
+               "unary provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY == 139,
+               "nullary provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,
@@ -1011,7 +1014,8 @@ static const XrTargetProviderContract *scalar_clock_contract(const XrTargetProfi
     return NULL;
 }
 
-static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *profile) {
+static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *profile,
+                                                       bool nullary) {
     const XrTargetProviderContract *contract = scalar_clock_contract(profile);
     REQUIRE(contract && contract->operation_count != 0u);
     XrCoreIrConstantInput constant = {
@@ -1024,30 +1028,36 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
     XrCoreIrKey result_value = fixture_key("provider:value:result");
     XrCoreIrKey call_operand[] = {input_value};
     XrCoreIrKey return_operand[] = {result_value};
-    XrCoreIrInstructionInput instructions[] = {
-        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+    XrCoreIrInstructionInput instructions[3] = {0};
+    uint32_t instruction_count = 0u;
+    if (!nullary) {
+        instructions[instruction_count++] = (XrCoreIrInstructionInput) {
+         .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = input_value,
          .result_type_id = XR_CORE_TYPE_I64,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
-         .immediate.key = constant.key},
-        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
+         .immediate.key = constant.key};
+    }
+    instructions[instruction_count++] = (XrCoreIrInstructionInput) {
+         .operation_id = nullary ? XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY
+                                 : XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
          .result = result_value,
          .result_type_id = XR_CORE_TYPE_I64,
-         .operands = call_operand,
-         .operand_count = 1u,
+         .operands = nullary ? NULL : call_operand,
+         .operand_count = nullary ? 0u : 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
          .immediate.provider_operation = {.contract_id = contract->contract_id,
-                                          .operation_id = contract->operations[0].stable_id}},
-        {.operation_id = XR_CORE_OP_CORE_RETURN,
+                                          .operation_id = contract->operations[0].stable_id}};
+    instructions[instruction_count++] = (XrCoreIrInstructionInput) {
+         .operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = return_operand,
          .operand_count = 1u,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
-    };
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE};
     XrCoreIrKey block_key = fixture_key("provider:block:entry");
     XrCoreIrBlockInput block = {.key = block_key,
                                 .instructions = instructions,
-                                .instruction_count = 3u};
+                                .instruction_count = instruction_count};
     XrCoreIrFunctionInput function = {
         .key = fixture_key("provider:function:entry"),
         .result_type_id = XR_CORE_TYPE_I64,
@@ -1059,8 +1069,8 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
     XrCoreIrModuleInput module = {.key = fixture_key("provider:module"),
-                                  .constants = &constant,
-                                  .constant_count = 1u,
+                                  .constants = nullary ? NULL : &constant,
+                                  .constant_count = nullary ? 0u : 1u,
                                   .functions = &function,
                                   .function_count = 1u};
     XrCoreIrKey semantic = fixture_key("provider:semantic");
@@ -1102,8 +1112,15 @@ static XrProviderCallStatus provider_increment(void *context, int64_t argument,
     return XR_PROVIDER_CALL_OK;
 }
 
+static XrProviderCallStatus provider_nullary(void *context, int64_t *result_out) {
+    if (!context || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    *result_out = 73;
+    return XR_PROVIDER_CALL_OK;
+}
+
 static void build_scalar_clock_binding(const XrTargetProfile *profile,
-                                       TestProviderBindings *bindings) {
+                                       bool nullary, TestProviderBindings *bindings) {
     memset(bindings, 0, sizeof(*bindings));
     const XrTargetProviderContract *contract = scalar_clock_contract(profile);
     REQUIRE(contract && contract->operation_count != 0u);
@@ -1115,8 +1132,12 @@ static void build_scalar_clock_binding(const XrTargetProfile *profile,
     bindings->providers[0].operations = bindings->operations[0];
     bindings->providers[0].operation_count = 1u;
     bindings->operations[0][0].operation_id = contract->operations[0].stable_id;
-    bindings->operations[0][0].trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_TO_I64;
-    bindings->operations[0][0].entry.i64_to_i64 = provider_increment;
+    bindings->operations[0][0].trampoline_kind =
+        nullary ? XR_PROVIDER_TRAMPOLINE_I64_NULLARY : XR_PROVIDER_TRAMPOLINE_I64_UNARY;
+    if (nullary)
+        bindings->operations[0][0].entry.i64_nullary = provider_nullary;
+    else
+        bindings->operations[0][0].entry.i64_unary = provider_increment;
     bindings->operations[0][0].context = &bindings->operations[0][0];
 }
 
@@ -1292,51 +1313,67 @@ static void run_program(XrValidatedProgram *program, bool ilp32,
 static bool reference_provider_call(void *context, uint32_t requirement_index,
                                     uint32_t operation_index, int64_t argument,
                                     int64_t *result_out) {
-    return xr_execution_lease_provider_call_i64(context, requirement_index, operation_index,
-                                                argument, result_out) ==
+    return xr_execution_lease_provider_call_i64_unary(context, requirement_index, operation_index,
+                                                      argument, result_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static bool reference_provider_call_nullary(void *context, uint32_t requirement_index,
+                                            uint32_t operation_index, int64_t *result_out) {
+    return xr_execution_lease_provider_call_i64_nullary(
+               context, requirement_index, operation_index, result_out) ==
            XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
 static void test_provider_call_differential(void) {
-    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
-    REQUIRE(profile != NULL);
-    XrValidatedProgram *program = build_provider_call_program(profile);
-    TestProviderBindings bindings;
-    build_scalar_clock_binding(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
-    XrVmCodeOptions baseline_options = xr_vm_code_default_options();
-    XrVmCodeOptions fixed_options = baseline_options;
-    fixed_options.decode_policy = XR_VM_DECODE_FIXED_ROWS;
-    XrVmCode *baseline = NULL;
-    XrVmCode *fixed = NULL;
-    XrVmCodeDiagnostic diagnostic;
-    REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) ==
-            XR_VM_CODE_OK);
-    REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) == XR_VM_CODE_OK);
-    XrExecutionLease lease = {0};
-    REQUIRE(xr_execution_instance_acquire(instance, &lease));
-    XrReferenceProviderBinding reference_binding = {
-        .context = &lease,
-        .call_i64 = reference_provider_call,
-    };
-    uint32_t entry = xr_validated_program_entry_function(program);
-    XrReferenceOutcome reference =
-        xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
-    XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
-    XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
-    compare_outcomes(reference, baseline_result);
-    compare_outcomes(reference, fixed_result);
-    REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
-    REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    REQUIRE(reference.value.as.i64 == 42);
-    REQUIRE(xr_execution_lease_release(&lease));
-    xr_vm_code_free(fixed);
-    xr_vm_code_free(baseline);
-    retire_and_free(&instance);
-    xr_target_profile_free(profile);
-    xr_validated_program_free(program);
+    for (uint32_t shape = 0u; shape < 2u; ++shape) {
+        bool nullary = shape != 0u;
+        XrTargetProfile *profile = nullary
+            ? xr_test_target_profile_build_with_nullary_clock(
+                  false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+                  XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER)
+            : xr_test_target_profile_build_with_scalar_clock(
+                  false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+                  XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+        REQUIRE(profile != NULL);
+        XrValidatedProgram *program = build_provider_call_program(profile, nullary);
+        TestProviderBindings bindings;
+        build_scalar_clock_binding(profile, nullary, &bindings);
+        XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+        XrVmCodeOptions baseline_options = xr_vm_code_default_options();
+        XrVmCodeOptions fixed_options = baseline_options;
+        fixed_options.decode_policy = XR_VM_DECODE_FIXED_ROWS;
+        XrVmCode *baseline = NULL;
+        XrVmCode *fixed = NULL;
+        XrVmCodeDiagnostic diagnostic;
+        REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) ==
+                XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) ==
+                XR_VM_CODE_OK);
+        XrExecutionLease lease = {0};
+        REQUIRE(xr_execution_instance_acquire(instance, &lease));
+        XrReferenceProviderBinding reference_binding = {
+            .context = &lease,
+            .call_i64_unary = reference_provider_call,
+            .call_i64_nullary = reference_provider_call_nullary,
+        };
+        uint32_t entry = xr_validated_program_entry_function(program);
+        XrReferenceOutcome reference = xr_reference_evaluate_bound(
+            program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+        XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
+        XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
+        compare_outcomes(reference, baseline_result);
+        compare_outcomes(reference, fixed_result);
+        REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+        REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
+        REQUIRE(reference.value.as.i64 == (nullary ? 73 : 42));
+        REQUIRE(xr_execution_lease_release(&lease));
+        xr_vm_code_free(fixed);
+        xr_vm_code_free(baseline);
+        retire_and_free(&instance);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+    }
 }
 
 typedef struct OutputCapture {
