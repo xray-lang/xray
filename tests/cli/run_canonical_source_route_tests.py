@@ -42,12 +42,12 @@ def main() -> int:
     args = parser.parse_args()
 
     zero = invoke(args.binary, "run", str(args.fixtures / "main_zero.xr"))
-    require(zero.returncode == 0, f"zero main failed: {zero.stderr}")
-    require(zero.stdout == "", f"zero main produced stdout: {zero.stdout!r}")
+    require(zero.returncode == 0, f"zero initializer failed: {zero.stderr}")
+    require(zero.stdout == "", f"zero initializer produced stdout: {zero.stdout!r}")
 
     printed = invoke_bytes(args.binary, "run", str(args.fixtures / "main_print.xr"))
-    require(printed.returncode == 0, f"print main failed: {printed.stderr!r}")
-    require(printed.stdout == b"42\n", f"print main bytes drifted: {printed.stdout!r}")
+    require(printed.returncode == 0, f"print initializer failed: {printed.stderr!r}")
+    require(printed.stdout == b"42\n", f"initializer output bytes drifted: {printed.stdout!r}")
 
     implicit = invoke(args.binary, str(args.fixtures / "main_zero.xr"))
     require(implicit.returncode == 0, f"implicit source run failed: {implicit.stderr}")
@@ -61,18 +61,12 @@ def main() -> int:
             f"source fingerprint drifted across CRLF ingestion: {normalized.stderr}",
         )
 
-    seven = invoke(args.binary, "run", str(args.fixtures / "main_seven.xr"))
-    require(seven.returncode == 7, f"main status 7 became {seven.returncode}")
-    require(
-        "XR_RUN_6012: main returned process status 7" in seven.stderr,
-        f"non-zero main lost its exact result: {seven.stderr!r}",
+    declaration_only = invoke(
+        args.binary, "run", str(args.fixtures / "declaration_only.xr")
     )
-
-    missing = invoke(args.binary, "run", str(args.fixtures / "missing_main.xr"))
-    require(missing.returncode != 0, "missing explicit main was accepted")
     require(
-        "stage=9 status=entry-rejected" in missing.stderr,
-        f"missing main did not fail at exact entry selection: {missing.stderr!r}",
+        declaration_only.returncode == 0,
+        f"declaration-only module initializer failed: {declaration_only.stderr}",
     )
 
     retired = invoke(

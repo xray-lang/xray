@@ -143,16 +143,7 @@ static int report_execution_outcome(XrVmOutcome outcome) {
         case XR_VM_OUTCOME_RETURN:
             if (outcome.value.kind == XR_VM_VALUE_VOID)
                 return XR_CLI_EXIT_OK;
-            if (outcome.value.kind == XR_VM_VALUE_I64 && outcome.value.as.i64 == 0)
-                return XR_CLI_EXIT_OK;
-            if (outcome.value.kind == XR_VM_VALUE_I64 && outcome.value.as.i64 > 0 &&
-                outcome.value.as.i64 <= 255) {
-                fprintf(stderr, "XR_RUN_6012: main returned process status %" PRId64 "\n",
-                        outcome.value.as.i64);
-                return (int) outcome.value.as.i64;
-            }
-            fprintf(stderr,
-                    "XR_RUN_6007: main must return void or an i64 process status in [0, 255]\n");
+            fprintf(stderr, "XR_RUN_6007: module initializer must return void\n");
             return XR_CLI_EXIT_FAIL;
         case XR_VM_OUTCOME_TRAP:
             fprintf(stderr,
@@ -252,8 +243,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_USAGE;
     }
     if (inv->passthrough_argc != 0) {
-        fprintf(stderr, "XR_RUN_6010: canonical main arguments are not implemented; no legacy "
-                        "argument path exists\n");
+        fprintf(stderr, "XR_RUN_6010: a module initializer does not accept arguments\n");
         return XR_CLI_EXIT_FAIL;
     }
     const char *source_path = inv->positionals[0];
@@ -287,7 +277,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         .schema_version = XR_CLI_CANONICAL_SOURCE_SCHEMA_VERSION,
         .compiler_host = compiler_host,
         .entry_source_path = source_path,
-        .entry_function = "main",
+        .entry_function = NULL,
+        .entry_kind = XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER,
         .source_profile = XR_PROGRAM_SOURCE_PROFILE_DEVELOPMENT,
         .semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile),
     };

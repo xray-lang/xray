@@ -1426,11 +1426,8 @@ static XrProgramBuildStatus map_function_panic_type(XrXiBuildContext *context,
     if (!context || !function || !panic_type_id)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     uint32_t capacity = 1u;
-    for (uint32_t module = 0u; module < context->source->module_count; ++module) {
-        const XiFunc *root = context->source->module_roots[module];
-        if (root && root->module)
-            capacity += root->module->nfuncs;
-    }
+    for (uint32_t module = 0u; module < context->source->module_count; ++module)
+        capacity += context->storage[module].function_count;
     const XiFunc **stack = xr_calloc(capacity, sizeof(*stack));
     if (!stack)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -1450,6 +1447,20 @@ static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
     if (!context || !function || !error_type_id)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     *error_type_id = XR_CORE_TYPE_VOID;
+    if (function->module && function->module->init == function) {
+        bool publishes_error = false;
+        for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+            const XiBlock *block = function->blocks[block_index];
+            if (!canonical_block_is_reachable(context, function, block))
+                continue;
+            publishes_error |= block && block->control && block->control->op == XI_ERR_RETURN;
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index)
+                publishes_error |= block->values[value_index] &&
+                                   block->values[value_index]->op == XI_ERR_RETURN;
+        }
+        if (!publishes_error)
+            return XR_PROGRAM_BUILD_OK;
+    }
     if (function->error_effect_nothrow)
         return XR_PROGRAM_BUILD_OK;
     const XaAnalyzer *analyzer = function->analyzer;
@@ -4992,6 +5003,91 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
     }
 }
 
+/* Top-level function declarations are already represented by immutable
+ * canonical function rows and exact call-target keys. Their Xi shared-slot
+ * publication is compiler scaffolding, not runtime state. Erase it only when
+ * the initializer store, closure target, and module slot table all name the
+ * same source function and the closure has no other use. */
+static bool static_function_publication_store_is_exact(const XiFunc *function,
+                                                       const XiValue *store) {
+    const XiModule *module = function ? function->module : NULL;
+    if (!module || module->init != function || !store || store->op != XI_SET_SHARED ||
+        store->aux_int < 0 || (uint64_t) store->aux_int >= module->nslots ||
+        store->nargs != 1u || !store->args || !store->args[0] || !module->slot_funcs)
+        return false;
+    const XiValue *closure = logical_value_identity(store->args[0]);
+    const XiFunc *target = closure ? resolved_callable_target(function, closure) : NULL;
+    return closure && closure->op == XI_CLOSURE_NEW && closure->nargs == 0u && target &&
+           module->slot_funcs[store->aux_int] == target && target->parent_func == function;
+}
+
+static bool resolved_import_reference_is_exact(const XrXiBuildContext *context,
+                                               const XiValue *import) {
+    import = logical_value_identity(import);
+    const XiImportRef *reference =
+        import && import->op == XI_IMPORT_REF ? (const XiImportRef *) import->aux : NULL;
+    if (!reference || !reference->resolution_attempted || reference->resolved_mod_index < 0 ||
+        !reference->resolved_module || !context || !context->source ||
+        (uint32_t) reference->resolved_mod_index >= context->source->module_count)
+        return false;
+    const XiFunc *target_root =
+        context->source->module_roots[reference->resolved_mod_index];
+    return target_root && target_root->module == reference->resolved_module;
+}
+
+static bool static_import_publication_store_is_exact(const XrXiBuildContext *context,
+                                                     const XiFunc *function,
+                                                     const XiValue *store) {
+    const XiModule *module = function ? function->module : NULL;
+    if (!module || module->init != function || !store || store->op != XI_SET_SHARED ||
+        store->aux_int < 0 || (uint64_t) store->aux_int >= module->nslots ||
+        store->nargs != 1u || !store->args || !store->args[0] ||
+        !resolved_import_reference_is_exact(context, store->args[0]))
+        return false;
+    const XiValue *import = logical_value_identity(store->args[0]);
+    const XiImportRef *reference = (const XiImportRef *) import->aux;
+    return !module->slot_imports || !module->slot_imports[store->aux_int] ||
+           module->slot_imports[store->aux_int] == reference;
+}
+
+static bool static_function_publication_source_is_exact(const XiFunc *function,
+                                                        const XiValue *value) {
+    if (!function || !value || value->op != XI_CLOSURE_NEW || value->nargs != 0u)
+        return false;
+    bool found = false;
+    for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+        const XiBlock *block = function->blocks[block_index];
+        if (block && block->control == value)
+            return false;
+        for (uint32_t user_index = 0u; block && user_index < block->nvalues; ++user_index) {
+            const XiValue *user = block->values[user_index];
+            for (uint16_t argument = 0u; user && argument < user->nargs; ++argument) {
+                if (!user->args || logical_value_identity(user->args[argument]) != value)
+                    continue;
+                if (argument != 0u ||
+                    !static_function_publication_store_is_exact(function, user))
+                    return false;
+                found = true;
+            }
+        }
+    }
+    return found;
+}
+
+static bool static_function_publication_is_exact(const XiFunc *function, const XiValue *value) {
+    if (static_function_publication_store_is_exact(function, value))
+        return true;
+    return static_function_publication_source_is_exact(function, value);
+}
+
+static bool static_import_publication_is_exact(const XrXiBuildContext *context,
+                                               const XiFunc *function, const XiValue *value) {
+    if (static_import_publication_store_is_exact(context, function, value))
+        return true;
+    return value && value->op == XI_IMPORT_REF && value->nargs == 0u &&
+           resolved_import_reference_is_exact(context, value);
+}
+
 static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *function,
                              const XiValue *value) {
     const XrXiFunctionStorage *function_storage =
@@ -5003,6 +5099,10 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         block_storage->static_branch_outcome != XR_XI_STATIC_BRANCH_UNKNOWN)
         return true;
     if (value_is_invoke_scaffold(context, function, value))
+        return true;
+    if (static_function_publication_is_exact(function, value))
+        return true;
+    if (static_import_publication_is_exact(context, function, value))
         return true;
     if (imported_callable_checktype_is_exact(context, function, value))
         return true;
@@ -6939,29 +7039,47 @@ static bool append_nested_functions(const XiFunc *function, const XiFunc **funct
     return true;
 }
 
-static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage, char *diagnostic,
+static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage,
+                                                     bool include_initializer, char *diagnostic,
                                                      size_t diagnostic_size) {
     const XiModule *module = storage && storage->root ? storage->root->module : NULL;
-    if (!module || module->nfuncs == 0u || !module->functions)
+    if (!module || module->init != storage->root ||
+        (!include_initializer && module->nfuncs == 0u) ||
+        (module->nfuncs != 0u && !module->functions))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi module has no source functions");
-    uint32_t count = module->nfuncs;
-    for (uint16_t function = 0; function < module->nfuncs; ++function)
-        if (!module->functions[function] ||
-            !count_nested_functions(module->functions[function], &count))
+                    "Xi module has no exact initializer function tree");
+    uint32_t count = include_initializer ? 1u : module->nfuncs;
+    if (include_initializer) {
+        if (!count_nested_functions(storage->root, &count))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi module function tree is malformed or too large");
+    } else {
+        for (uint16_t function = 0u; function < module->nfuncs; ++function)
+            if (!module->functions[function] ||
+                !count_nested_functions(module->functions[function], &count))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi module function tree is malformed or too large");
+    }
     const XiFunc **functions = xr_calloc(count, sizeof(*functions));
     if (!functions)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     uint32_t cursor = 0u;
-    for (uint16_t function = 0; function < module->nfuncs; ++function)
-        functions[cursor++] = module->functions[function];
-    for (uint16_t function = 0; function < module->nfuncs; ++function) {
-        if (!append_nested_functions(module->functions[function], functions, count, &cursor)) {
+    if (include_initializer) {
+        functions[cursor++] = storage->root;
+        if (!append_nested_functions(storage->root, functions, count, &cursor)) {
             xr_free(functions);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi module function tree cannot be flattened");
+        }
+    } else {
+        for (uint16_t function = 0u; function < module->nfuncs; ++function)
+            functions[cursor++] = module->functions[function];
+        for (uint16_t function = 0u; function < module->nfuncs; ++function) {
+            if (!append_nested_functions(module->functions[function], functions, count, &cursor)) {
+                xr_free(functions);
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi module function tree cannot be flattened");
+            }
         }
     }
     if (cursor != count) {
@@ -6993,8 +7111,8 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi module %u is not verified canonical-program input", module_index);
         storage->source_authority = &root->module->source_semantic_module;
-        XrProgramBuildStatus collect_status =
-            collect_module_functions(storage, diagnostic, diagnostic_size);
+        XrProgramBuildStatus collect_status = collect_module_functions(
+            storage, root == context->source->entry_function, diagnostic, diagnostic_size);
         if (collect_status != XR_PROGRAM_BUILD_OK)
             return collect_status;
         output->key = key_from_stable_id(UINT8_C(0x4d), storage->source_authority->module_identity);

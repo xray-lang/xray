@@ -1,3 +1,3 @@
-fn main() -> i64 {
+fn unused() -> i64 {
     return 0
 }

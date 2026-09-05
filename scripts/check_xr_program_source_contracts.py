@@ -102,6 +102,7 @@ def validate(root: Path) -> None:
         "module_identity",
         "function_name",
         "source_content_fingerprint",
+        "XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER",
         "XrProgramSourceProduct",
         "XrValidatedProgram *program",
         "XrProgramSourceDiagnostic",
@@ -115,7 +116,7 @@ def validate(root: Path) -> None:
         "xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer",
         "xi_pipeline_program_input_config",
         "xi_resolve_imports",
-        "entry_function = entry",
+        ".entry_function = entry",
         "xr_program_write_from_xi",
         "xr_program_validate",
         "xr_program_source_product_free",
@@ -137,7 +138,7 @@ def validate(root: Path) -> None:
         "xr_vm_code_build",
         "xr_vm_code_execute",
         "xr_vm_execution_create",
-        '.entry_function = "main"',
+        ".entry_kind = XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER",
         'strcmp(path + length - 3u, ".xr")',
         "XR_RUN_6013",
     ):
@@ -170,9 +171,8 @@ def validate(root: Path) -> None:
                 f"run command schema regained retired option {retired_option}")
     for token in (
         "main_zero.xr",
-        "main_seven.xr",
-        "missing_main.xr",
-        "XR_RUN_6012: main returned process status 7",
+        "declaration_only.xr",
+        "declaration-only module initializer failed",
         "unknown option '--semantic-plan'",
         "source fingerprint drifted across CRLF ingestion",
     ):
@@ -180,6 +180,7 @@ def validate(root: Path) -> None:
     for token in (
         "source_owner_single_module_is_deterministic_and_detached",
         "source_owner_two_module_graph_is_deterministic",
+        "source_owner_module_initializer_is_a_canonical_entry",
         "source_owner_rejects_non_authoritative_entry_identity",
         "source_owner_rejects_module_budget_before_analysis",
         "source_owner_reports_structured_analysis_failure",

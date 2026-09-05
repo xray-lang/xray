@@ -22,7 +22,7 @@ struct XrCompilerSession;
 struct XrModuleIdentityAuthority;
 struct XrModuleResolver;
 
-#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(1)
+#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(2)
 #define XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES UINT32_C(1024)
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE 512u
 
@@ -38,11 +38,14 @@ typedef enum XrProgramSourceProfile {
 typedef enum XrProgramSourceEntryKind {
     XR_PROGRAM_SOURCE_ENTRY_INVALID = 0,
     XR_PROGRAM_SOURCE_ENTRY_FUNCTION,
+    XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER,
 } XrProgramSourceEntryKind;
 
 /* A source entry is identified before compiler-local evidence IDs exist.
  * Canonical module identity, exact source bytes, and the source declaration
- * name select one function without consulting an insertion-order ID. */
+ * name select one function without consulting an insertion-order ID. A module
+ * initializer has no declaration name and therefore requires function_name to
+ * be NULL. */
 typedef struct XrProgramSourceEntryIdentity {
     uint8_t kind;
     uint8_t reserved8[3];

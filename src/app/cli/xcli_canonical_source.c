@@ -54,10 +54,14 @@ static bool fingerprint_present(XrFingerprint fingerprint) {
 }
 
 static bool request_valid(const XrCliCanonicalSourceRequest *request) {
+    bool function_entry = request && request->entry_kind == XR_PROGRAM_SOURCE_ENTRY_FUNCTION;
+    bool initializer_entry =
+        request && request->entry_kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER;
     if (!request || request->schema_version != XR_CLI_CANONICAL_SOURCE_SCHEMA_VERSION ||
         !request->compiler_host || !request->entry_source_path ||
-        request->entry_source_path[0] == '\0' || !request->entry_function ||
-        request->entry_function[0] == '\0' ||
+        request->entry_source_path[0] == '\0' || (!function_entry && !initializer_entry) ||
+        (function_entry && (!request->entry_function || request->entry_function[0] == '\0')) ||
+        (initializer_entry && request->entry_function != NULL) ||
         !fingerprint_present(request->semantic_profile_fingerprint))
         return false;
     for (size_t index = 0u; index < sizeof(request->reserved8); ++index)
@@ -147,7 +151,7 @@ xr_cli_canonical_source_build(const XrCliCanonicalSourceRequest *request,
         .entry_authority = &authority.entry_authority,
         .entry =
             {
-                .kind = XR_PROGRAM_SOURCE_ENTRY_FUNCTION,
+                .kind = request->entry_kind,
                 .module_identity = module_identity,
                 .function_name = request->entry_function,
                 .source_content_fingerprint = source_fingerprint,

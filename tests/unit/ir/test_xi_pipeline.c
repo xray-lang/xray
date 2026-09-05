@@ -4113,7 +4113,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     variant_project->type = saved_projection_type;
 
     XrProgramFromXiInput invalid_entry_input = producer_input;
-    invalid_entry_input.entry_function = result.ir;
+    XiFunc foreign_entry = {0};
+    invalid_entry_input.entry_function = &foreign_entry;
     XrProgramArtifact invalid_entry_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&invalid_entry_input, &invalid_entry_artifact, producer_diagnostic,

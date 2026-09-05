@@ -209,6 +209,8 @@ static XrProgramSourceBuildStatus validate_entry_identity(
                       XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
                       context->entry_topological_index, 0u, 0u,
                       "entry module has no exact source program");
+    if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER)
+        return XR_PROGRAM_SOURCE_BUILD_OK;
     uint32_t matches = 0u;
     uint32_t source_line = 0u;
     for (int index = 0; index < spec->ast->as.program.count; ++index) {
@@ -361,9 +363,13 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
                                                 XrProgramSourceDiagnostic *diagnostic) {
     XiFunc *initializer = context->pipelines[context->entry_topological_index].ir;
     XiModule *module = initializer ? initializer->module : NULL;
-    XiFunc *entry = NULL;
+    XiFunc *entry = context->input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER
+                        ? initializer
+                        : NULL;
     uint32_t matches = 0u;
-    if (module && module->init == initializer) {
+    if (entry)
+        matches = module && module->init == initializer ? 1u : 0u;
+    else if (module && module->init == initializer) {
         for (uint16_t index = 0u; index < module->nfuncs; ++index) {
             XiFunc *candidate = module->functions[index];
             if (!candidate || candidate->parent_func != initializer || !candidate->name ||
@@ -373,11 +379,11 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
             matches++;
         }
     }
-    if (context->input->entry.kind != XR_PROGRAM_SOURCE_ENTRY_FUNCTION || matches != 1u)
+    if (matches != 1u)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
                       XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
                       context->entry_topological_index, 0u, 0u,
-                      "entry identity resolved to %u Xi source functions", matches);
+                      "entry identity resolved to %u Xi functions", matches);
     XrProgramFromXiInput writer_input = {
         .module_roots = context->module_roots,
         .module_count = context->module_count,
@@ -414,13 +420,18 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
 }
 
 static bool input_valid(const XrProgramSourceBuildInput *input) {
+    bool function_entry = input && input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_FUNCTION;
+    bool initializer_entry =
+        input && input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER;
     if (!input || input->schema_version != XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION ||
         input->max_modules == 0u || !input->session || !input->resolver ||
         !input->entry_source_path || !input->entry_authority ||
-        input->entry.kind != XR_PROGRAM_SOURCE_ENTRY_FUNCTION ||
+        (!function_entry && !initializer_entry) ||
         input->entry.reserved8[0] != 0u || input->entry.reserved8[1] != 0u ||
         input->entry.reserved8[2] != 0u || !input->entry.module_identity ||
-        !input->entry.function_name || input->entry.function_name[0] == '\0' ||
+        (function_entry &&
+         (!input->entry.function_name || input->entry.function_name[0] == '\0')) ||
+        (initializer_entry && input->entry.function_name != NULL) ||
         !xr_module_identity_valid(input->entry.module_identity, NULL) ||
         !fingerprint_present(input->entry.source_content_fingerprint) ||
         !source_profile_valid(input->source_profile) ||

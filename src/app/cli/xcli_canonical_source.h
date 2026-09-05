@@ -19,7 +19,7 @@
 
 struct XrVMRuntime;
 
-#define XR_CLI_CANONICAL_SOURCE_SCHEMA_VERSION UINT32_C(1)
+#define XR_CLI_CANONICAL_SOURCE_SCHEMA_VERSION UINT32_C(2)
 #define XR_CLI_CANONICAL_SOURCE_DIAGNOSTIC_SIZE 512u
 
 typedef struct XrCliCanonicalSourceRequest {
@@ -27,8 +27,9 @@ typedef struct XrCliCanonicalSourceRequest {
     struct XrVMRuntime *compiler_host;
     const char *entry_source_path;
     const char *entry_function;
+    uint8_t entry_kind;
     uint8_t source_profile;
-    uint8_t reserved8[7];
+    uint8_t reserved8[6];
     XrFingerprint semantic_profile_fingerprint;
 } XrCliCanonicalSourceRequest;
 

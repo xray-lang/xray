@@ -11,12 +11,14 @@
 #include "../test_framework.h"
 
 #include "base/xmalloc.h"
+#include "aot/program/xr_backend_ir.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_identity.h"
 #include "module/xmodule_resolver.h"
 #include "program/xr_program_source_build.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
+#include "plan/target_profile_test_fixture.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -239,6 +241,43 @@ TEST(source_owner_two_module_graph_is_deterministic) {
     source_build_fixture_free(&fixture);
 }
 
+TEST(source_owner_module_initializer_is_a_canonical_entry) {
+    static const char source[] = "print(42)\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    fixture.input.entry.kind = XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER;
+    fixture.input.entry.function_name = NULL;
+    XrTargetProfile *profile =
+        xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    fixture.input.semantic_profile_fingerprint =
+        xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    ASSERT_EQ_UINT(xr_validated_program_function_count(product.program), 1u);
+    ASSERT_EQ_UINT(xr_validated_program_entry_function(product.program), 0u);
+    ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(product.program), 1u);
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendIR *backend_ir = NULL;
+    XrBackendDiagnostic backend_diagnostic;
+    ASSERT_EQ_INT(xr_backend_ir_build(product.program, profile, &options, &backend_ir,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_NOT_NULL(generated.bytes);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int main(void)"));
+
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_rejects_non_authoritative_entry_identity) {
     static const char source[] = "fn answer() -> i64 { return 42 }\n";
     SourceBuildFixture fixture;
@@ -320,6 +359,7 @@ TEST(source_owner_reports_structured_analysis_failure) {
 TEST_MAIN_BEGIN()
 RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
 RUN_TEST(source_owner_two_module_graph_is_deterministic);
+RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);
 RUN_TEST(source_owner_rejects_module_budget_before_analysis);
 RUN_TEST(source_owner_reports_structured_analysis_failure);

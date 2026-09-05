@@ -82,7 +82,8 @@ set_tests_properties(test_xr_program_verify PROPERTIES
 )
 
 add_xray_unit_test(test_xr_program_source_build
-    program/test_xr_program_source_build.c)
+    program/test_xr_program_source_build.c
+    plan/target_profile_test_fixture.c)
 set_tests_properties(test_xr_program_source_build PROPERTIES
     LABELS "unit;canonical-program;source-owner;module-graph;task-302")
 
