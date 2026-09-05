@@ -129,6 +129,7 @@ static XrProto *compile_wrapper(const char *source) {
      * analyze an unnamed file while the Xi path below names it, so the two
      * paths disagree about enum ownership.  Name both the same. */
     ctx->source_file = "compare.xr";
+    ctx->source_content = source;
     /* Mirror the production compile path: bind the session module graph so
      * declaration analysis (e.g. enums) resolves the same way as the CLI. */
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
@@ -2103,11 +2104,11 @@ TEST(cmp_chan_recv_match_uses_raw_opcode) {
                       "ch.send(0)\n"
                       "ch.send(null)\n"
                       "var zero = match (ch.recv()) {\n"
-                      "  Recv.Value(v) -> v\n"
+                      "  Recv.Value { value: v } -> v\n"
                       "  _ -> -1\n"
                       "}\n"
                       "var nil = match (ch.recv()) {\n"
-                      "  Recv.Value(v) -> v\n"
+                      "  Recv.Value { value: v } -> v\n"
                       "  _ -> 7\n"
                       "}\n"
                       "print(zero)\n"
