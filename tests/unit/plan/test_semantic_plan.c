@@ -2827,9 +2827,9 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "9743054ce3600d906852a7344b0908102084625ed37def7ea8c178fcfafdcfe2") == 0);
+                   "3a3ed5f5568c62b050ec0bb1502c2bed82c0c643cc135d9592d43c7a8db8caee") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "651c2ee842d665edb66cad32a357b711bec46cd5b621f3e5c94eb3be2c63922b") == 0);
+                   "3ad410995d50cb11c5cc1475a3279e15c7fbaf43c3482a35a8f3f89b0d5ce629") == 0);
     /* Re-anchored because the SemanticPlan fingerprint covers the whole stdlib
      * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def
@@ -2850,7 +2850,7 @@ static void test_immutable_owned_snapshot(void) {
      * Removing the duplicate sys CPU-count leaf changed the whole-registry
      * component from 2223c318a41b2ca38ded4084ec06aae6a6477dc5e111528fff8e809a6a377e89. */
     REQUIRE(strcmp(semantic_hex,
-                   "a98c45a80fb79002782926e58da6b2878d6a85aff69ac0af0684b95874e0c37a") == 0);
+                   "744f387451b4a17da7cb52f034e3ff24cb6b0f27856f0ec7a3dbdaef66cf6bb5") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);

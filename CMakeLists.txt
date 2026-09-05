@@ -1091,7 +1091,11 @@ if(ENABLE_UBSAN)
             /clang:-fno-sanitize=function
             /Oy-
         )
-        if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_HOST_WIN32)
+        if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_HOST_WIN32 AND NOT ENABLE_ASAN)
+            # clang-cl's dynamic ASan runtime already owns sanitizer-common and
+            # the undefined-behavior handlers. Linking standalone UBSan into a
+            # combined ASan+UBSan executable duplicates that runtime and makes
+            # lld-link reject conflicting alternatename directives.
             set(_XRAY_WINDOWS_UBSAN_RUNTIME
                 "${XRAY_WINDOWS_ASAN_RUNTIME_DIR}/clang_rt.ubsan_standalone-x86_64.lib")
             if(NOT EXISTS "${_XRAY_WINDOWS_UBSAN_RUNTIME}")

@@ -18,6 +18,7 @@
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/frontend/analyzer/xanalyzer_mono.h"
@@ -169,6 +170,112 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
 
     XrProto *proto = res.proto;
     xi_pipeline_result_free(&res);
+    return proto;
+}
+
+static XrProto *compile_source_with_module_graph(const char *namespace_id, const char *source) {
+    XrCompilerSession *original_session = xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    bool session_attached =
+        session && xr_compiler_session_attach_isolate(g_iso, session) == original_session;
+    XrCompilerSessionOperationScope operation = {0};
+    bool operation_active =
+        session_attached && xr_compiler_session_operation_begin(session, &operation);
+    XrModuleResolverConfig resolver_config = {0};
+    XrModuleResolver *resolver = operation_active ? xr_module_resolver_new(&resolver_config) : NULL;
+    XrModuleGraph *graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
+    XaAnalyzer *analyzer = NULL;
+    XrCompiledModuleGraph compilation = {0};
+    XrProto *proto = NULL;
+    XrModuleGraph *previous_graph = xr_compiler_session_module_graph(session);
+    bool graph_installed = false;
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = namespace_id,
+    };
+    char *error = NULL;
+
+    if (!graph || xr_module_graph_build_source(graph, &authority, source, &error) != 0) {
+        fprintf(stderr, "module graph build failed: %s\n",
+                error ? error : "unknown graph error");
+        goto cleanup;
+    }
+    xr_free(error);
+    error = NULL;
+    if (xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle ||
+        !graph->topo_order || graph->topo_count <= 0 || graph->entry_index < 0)
+        goto cleanup;
+
+    analyzer = xa_analyzer_new(session);
+    if (!analyzer)
+        goto cleanup;
+    xa_analyzer_set_graph(analyzer, graph);
+    for (int topo = 0; topo < graph->topo_count; ++topo) {
+        int index = graph->topo_order[topo];
+        XrModuleSpec *spec = &graph->specs[index];
+        if (index == graph->entry_index || !spec->ast)
+            continue;
+        xa_analyzer_analyze(analyzer, spec->source_path, spec->ast);
+        int diagnostic_count = 0;
+        for (XaDiagnostic *diagnostic =
+                 xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+             diagnostic; diagnostic = diagnostic->next) {
+            if (diagnostic->severity == XR_DIAG_SEV_ERROR) {
+                fprintf(stderr, "%s:%d:%d: error: %s\n", spec->source_path,
+                        diagnostic->location.line, diagnostic->location.column,
+                        diagnostic->message);
+                goto cleanup;
+            }
+        }
+        if (spec->export_symbols)
+            xr_hashmap_free(spec->export_symbols);
+        spec->export_symbols = NULL;
+        if (!xa_analyzer_collect_export_symbols_checked(analyzer, spec->ast,
+                                                        &spec->export_symbols))
+            goto cleanup;
+        spec->status = XR_MODSPEC_ANALYZED;
+        xa_analyzer_clear_diagnostics(analyzer);
+    }
+
+    xr_compiler_session_set_module_graph(session, graph);
+    graph_installed = true;
+    if (!xr_compile_module_graph_dependencies(session, analyzer, graph, &compilation)) {
+        fprintf(stderr, "module graph dependency compilation failed\n");
+        goto cleanup;
+    }
+    XrModuleSpec *entry = &graph->specs[graph->entry_index];
+    XiModule *entry_module = NULL;
+    proto = xr_compile_source_in_graph(session, analyzer, source, entry->canonical, graph,
+                                       compilation.modules, compilation.count, &entry_module,
+                                       &authority);
+    if (!proto)
+        fprintf(stderr, "module graph entry compilation failed\n");
+
+cleanup:
+    xr_free(error);
+    if (graph_installed)
+        xr_compiler_session_set_module_graph(session, previous_graph);
+    xr_compiled_module_graph_dispose(&compilation);
+    if (analyzer) {
+        xa_analyzer_set_graph(analyzer, NULL);
+        xa_analyzer_free(analyzer);
+    }
+    xr_module_graph_free(graph);
+    xr_module_resolver_free(resolver);
+    if (operation.active) {
+        bool committed = proto ? xr_compiler_session_operation_succeed(&operation)
+                               : xr_compiler_session_operation_fail(
+                                     &operation, XR_COMPILER_SESSION_OPERATION_FATAL);
+        if (!committed && proto) {
+            xr_instruction_unit_free(proto);
+            proto = NULL;
+        }
+    }
+    if (session_attached)
+        PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, original_session) ==
+                              session);
+    xr_compiler_session_delete(session);
     return proto;
 }
 
@@ -4280,7 +4387,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
 }
 
 TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
-    XrProto *p = compile_source("import time\ntime.sleep(1)\nprint(7)", NULL);
+    XrProto *p = compile_source_with_module_graph(
+        "xi-pipeline-time-sleep", "import time\ntime.sleep(1)\nprint(7)");
     assert(p != NULL);
     assert(has_opcode(p, OP_SLEEP));
     assert(xr_entry_plan_derive(p));

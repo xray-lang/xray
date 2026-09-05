@@ -449,7 +449,7 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt ab85e7a0caeaeeb4d9a7b6e673a44a164d165e9c17f13621333f6cfccbc23d70
+anchor-sha256: CMakeLists.txt 98c0a12f8f1d3c2cce6bb8e91c631c50f8dd0139b7f690e76fdacfad0b02fc2f
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
@@ -458,7 +458,7 @@ anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b1
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h e2e28c2cc4d84d8f6325682709556edb1ffaed813f4a29ecc4dc8aedc92b5c91
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 9d3e0364e97435b3b7ed879fdc682ca53d446d0e5d2296772fef3dd8aebc02e4
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 79ee5def223bb0c098b3ff3694208b30790073098309e4e5168ea19a80d364bb
 anchor-sha256: src/plan/format/xr_xtp_schema.h e3e19471701e6ea2d341d72a7e12e1d125a36895b41285bcb36347e948164afc
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
@@ -491,7 +491,7 @@ anchor-sha256: src/runtime/xr_runtime_api.c 3cbd014aa9037a69efc4eacc2bbe70e723d6
 anchor-sha256: src/app/cli/xcmd_run.c a23189ff73af7f4b9f3e265961fdee8fdb20ef9623b220cc1175fd0ee17df4ec
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c 640ed8ebebf8c2bf965401729120a747323359c2df49099a6ea9c999b9cae1a5
+anchor-sha256: tests/unit/plan/test_target_plan.c 54d40d57c49c04e7ff5a968401e62c6ee7300f47c00f5766e88d1b16ceed19c2
 anchor-sha256: tests/unit/plan/test_xtp_format.c f8476491ca33e9aa709c017d7c9b657dce372392b5b416c28363748c275fea86
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 57201fe01683630e4960c911f739acfada9b33c8342f2aa2709b700f51ff7b7b

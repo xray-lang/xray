@@ -250,8 +250,8 @@ static void test_profile_bound_layouts(bool ilp32) {
     REQUIRE(u16->cleanup_kind == XR_BOUNDARY_CLEANUP_TRIVIAL);
     REQUIRE(u16->size == 2u && u16->alignment == 2u);
     require_fingerprint(u16->id,
-                        ilp32 ? "de62d2eb7d4724e873c56c11670c07756b87a9e7b2bbb1f25be90752b35c9682"
-                              : "c898f2f92f770c9faf0b6fbcd340e3a9542990345b8c16de5dfe89cdb196ed00");
+                        ilp32 ? "abe7d6d07618e0e100a16dfc961584f10623dacf30177e5cb77384c4e8105315"
+                              : "ad00f23628dec5c76a8bd0f85ebe75c544fd06299b83f519e3c274b40d6d8c90");
     REQUIRE(xr_fingerprint_equal(aggregate->id, call->arguments[0].type_layout_id));
     REQUIRE(xr_fingerprint_equal(variant->id, call->arguments[1].type_layout_id));
     REQUIRE(xr_fingerprint_equal(u16->id, call->arguments[2].type_layout_id));
@@ -259,14 +259,14 @@ static void test_profile_bound_layouts(bool ilp32) {
     uint16_t aggregate_type_id = aggregate->type_id;
 
     require_fingerprint(aggregate->id,
-                        ilp32 ? "b534ef6061b960e6fb65ac71008c633282bf6a5486f1f07ddca8aca7741bd5af"
-                              : "88c167086df6a691f341746f12ad8ce7ca494fdbf2065e17811927beeca8a3e0");
+                        ilp32 ? "8dfd83ce96baea9b701de27382e3d05e0197b953978ed649c8d5db1fa4931885"
+                              : "02b67b7c98fdbc0021c3e7fce4bc0948ced1f77a8666be4e976703bd069193b9");
     require_fingerprint(variant->id,
-                        ilp32 ? "f5e649569edff711a0995d00746aa8ffb5f589dc4609b50d7adbc8db5d8f7ecb"
-                              : "7e61fa47b659734d2b9c026a05bddedde53b094ffe4afa670e59c337763b3c81");
+                        ilp32 ? "1ecd1b6b677b03e5c307fb5fd7f4224132fa2ed85e99f94c1429644faaefbcb9"
+                              : "8f0402b06566c55055920afeb3f80c21ee7c67b549a9ec7709280b8f26a691a5");
     require_fingerprint(call->id,
-                        ilp32 ? "d88d26796de8b39499fb048cb1af12a122f67ca18bd979c304a633afed9cd7bb"
-                              : "48276f1a9f39ef693bbd37c6f6c2a9837cfa59432ab6aa4f8d54ca22f9a9f3c6");
+                        ilp32 ? "c00b4b65d93daee936a596779797202fe1a652cb86ea681cb41794514307898e"
+                              : "b0459de78a1803d63d6c9a64926b510a82ce7151af385a8d8931dbb3b8d4dcca");
 
     XrBoundaryTypeLayoutId public_id = aggregate->id;
     xr_boundary_type_layout_free(u16);

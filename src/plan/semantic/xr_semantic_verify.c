@@ -5422,10 +5422,30 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
                             : dynamic_suspend;
         if (work.state_counts[operation_index] != (uint8_t) expected) {
             char detail[256];
+            const XrSemanticCallTargetRecord *target =
+                target_index != XR_SEMANTIC_INDEX_NONE ? &plan->call_targets[target_index] : NULL;
+            const char *selector =
+                operation->metadata_count != 0 && operation->metadata_begin < plan->metadata_count
+                    ? plan->metadata[operation->metadata_begin]
+                    : "";
+            const char *caller_name = operation->function < plan->function_count
+                                          ? plan->functions[operation->function].name
+                                          : NULL;
+            const char *callee_name = target && target->function < plan->function_count
+                                          ? plan->functions[target->function].name
+                                          : NULL;
             snprintf(detail, sizeof(detail),
                      "module-set coroutine state disagrees with frozen dependency authority "
-                     "function=%u operation=%u opcode=%u expected=%u actual=%u",
-                     operation->function, operation_index, operation->opcode, expected ? 1u : 0u,
+                     "function=%u(%s) operation=%u opcode=%u selector=%s target=%u kind=%u "
+                     "callee=%u(%s) "
+                     "dependency=%u export=%u expected=%u actual=%u",
+                     operation->function, caller_name ? caller_name : "?", operation_index,
+                     operation->opcode, selector, target_index,
+                     target ? (unsigned) target->kind : (unsigned) UINT8_MAX,
+                     target ? target->function : XR_SEMANTIC_INDEX_NONE,
+                     callee_name ? callee_name : "?",
+                     target ? target->dependency : XR_SEMANTIC_INDEX_NONE,
+                     target ? target->source_export : XR_SEMANTIC_INDEX_NONE, expected ? 1u : 0u,
                      work.state_counts[operation_index]);
             coroutine_authority_work_dispose(&work);
             return report(error, error_size, "XR_SEM_0019", detail);

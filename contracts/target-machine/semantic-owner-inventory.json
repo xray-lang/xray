@@ -5352,31 +5352,6 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": null,
-      "current_shared_owner": "stdlib/regex/regex.xr",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
-      "effects": [
-        "side-effect",
-        "memory-write",
-        "allocates"
-      ],
-      "error_panic_suspend_cancel_publication": [],
-      "family": "allocation-and-ownership",
-      "future_semantic_owner": "stdlib.regex.compile-match",
-      "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
-      "migration_task": 278,
-      "observable_contract": "stdlib/regex/regex.xr",
-      "observable_edges": [],
-      "operation_id": "xi.regex.compile",
-      "ownership": "consume",
-      "targets": [
-        "vm-bytecode",
-        "aot-verify"
-      ]
-    },
-    {
-      "benchmark_anchor": "target-machine/allocation-and-ownership",
-      "capabilities": [],
       "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_release",
       "current_shared_owner": "src/shared/xr_reference_count_core.h",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",

@@ -1087,45 +1087,192 @@ XR_FUNC bool xi_coro_plan_rebase(XiFunc *f) {
     return true;
 }
 
-/* Partition a function tree into target-neutral logical state machines.  The
- * current function's exceptional continuations are validated before children
- * are committed, so an ordinary semantic rejection cannot leave a rewritten
- * child under an unlowered parent. */
-static bool coro_lower_func(XiFunc *f, const XiCoroResolver *resolver) {
-    if (!f)
-        return false;
-    if (f->stage != XI_STAGE_SEMANTIC_LOWERED ||
-        f->invariant_mask != xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED))
-        return false;
+typedef struct CoroAnalysisEntry {
+    XiFunc *function;
+    XiCoroPlan *prior_plan;
+    bool suspendable;
+} CoroAnalysisEntry;
 
-    XiCoroPlan *prior_plan = f->coro_plan;
-    XiCoroPlan *plan = xi_coro_analyze(f, resolver);
-    if (!plan)
+typedef struct CoroTreeResolverCtx {
+    const XiCoroResolver *source;
+    CoroAnalysisEntry *entries;
+    uint32_t count;
+    const XiFunc *selected;
+} CoroTreeResolverCtx;
+
+static const XiFunc *coro_tree_resolve_callee(void *ud, const XiFunc *current,
+                                              const XiValue *callee) {
+    CoroTreeResolverCtx *ctx = (CoroTreeResolverCtx *) ud;
+    return ctx && ctx->source && ctx->source->resolve_callee
+               ? ctx->source->resolve_callee(ctx->source->ud, current, callee)
+               : NULL;
+}
+
+static const XiFunc *coro_tree_resolve_method(void *ud, const XiFunc *current,
+                                              const XiValue *call) {
+    CoroTreeResolverCtx *ctx = (CoroTreeResolverCtx *) ud;
+    return ctx && ctx->source && ctx->source->resolve_method
+               ? ctx->source->resolve_method(ctx->source->ud, current, call)
+               : NULL;
+}
+
+static int coro_tree_func_suspendability(void *ud, const XiFunc *function) {
+    CoroTreeResolverCtx *ctx = (CoroTreeResolverCtx *) ud;
+    if (!ctx || !function)
+        return -1;
+    for (uint32_t i = 0; i < ctx->count; i++) {
+        if (ctx->entries[i].function != function)
+            continue;
+        /* The selected function must inspect its own body. Every other local
+         * function is an edge whose current monotone fact closes this pass. */
+        return function == ctx->selected ? -1 : (ctx->entries[i].suspendable ? 1 : 0);
+    }
+    return ctx->source && ctx->source->func_suspendability
+               ? ctx->source->func_suspendability(ctx->source->ud, function)
+               : -1;
+}
+
+static int coro_tree_call_suspendability(void *ud, const XiFunc *current,
+                                         const XiValue *call) {
+    CoroTreeResolverCtx *ctx = (CoroTreeResolverCtx *) ud;
+    return ctx && ctx->source && ctx->source->call_suspendability
+               ? ctx->source->call_suspendability(ctx->source->ud, current, call)
+               : -1;
+}
+
+static bool coro_tree_value_is_module_import(void *ud, const XiFunc *function,
+                                             const XiValue *value, const char *module) {
+    CoroTreeResolverCtx *ctx = (CoroTreeResolverCtx *) ud;
+    return ctx && ctx->source && ctx->source->value_is_module_import &&
+           ctx->source->value_is_module_import(ctx->source->ud, function, value, module);
+}
+
+static bool coro_tree_call_is_module_member(void *ud, const XiFunc *function,
+                                            const XiValue *call, const char *module,
+                                            const char *member) {
+    CoroTreeResolverCtx *ctx = (CoroTreeResolverCtx *) ud;
+    return ctx && ctx->source && ctx->source->call_is_module_member &&
+           ctx->source->call_is_module_member(ctx->source->ud, function, call, module, member);
+}
+
+static XiCoroResolver coro_tree_resolver(CoroTreeResolverCtx *ctx) {
+    XiCoroResolver resolver = {
+        .resolve_callee = coro_tree_resolve_callee,
+        .resolve_method = coro_tree_resolve_method,
+        .func_suspendability = coro_tree_func_suspendability,
+        .call_suspendability = coro_tree_call_suspendability,
+        .value_is_module_import = coro_tree_value_is_module_import,
+        .call_is_module_member = coro_tree_call_is_module_member,
+        .ud = ctx,
+    };
+    return resolver;
+}
+
+static bool coro_count_functions(const XiFunc *function, uint32_t *count) {
+    if (!function || !count || *count == UINT32_MAX)
         return false;
-    if (!coro_exception_continuations_supported(f, plan)) {
-        if (!prior_plan)
-            f->coro_plan = NULL;
+    (*count)++;
+    for (uint16_t i = 0; i < function->nchildren; i++)
+        if (!coro_count_functions(function->children[i], count))
+            return false;
+    return true;
+}
+
+/* A post-order inventory lets every caller consult the current logical plan of
+ * each local callee. Analyzer summaries are intentionally not the final owner
+ * of dependency-composed suspension, so a parent-first walk can otherwise
+ * freeze a synchronous call before a child discovers its imported coroutine
+ * edge. */
+static bool coro_collect_postorder(XiFunc *function, CoroAnalysisEntry *entries,
+                                   uint32_t capacity, uint32_t *count) {
+    if (!function || !entries || !count)
+        return false;
+    for (uint16_t i = 0; i < function->nchildren; i++)
+        if (!coro_collect_postorder(function->children[i], entries, capacity, count))
+            return false;
+    if (*count >= capacity)
+        return false;
+    entries[*count].function = function;
+    entries[*count].prior_plan = function->coro_plan;
+    (*count)++;
+    return true;
+}
+
+static void coro_restore_analysis_plans(CoroAnalysisEntry *entries, uint32_t count) {
+    for (uint32_t i = 0; entries && i < count; i++)
+        entries[i].function->coro_plan = entries[i].prior_plan;
+}
+
+/* Partition a function tree into target-neutral logical state machines. All
+ * plans are analyzed before the first CFG rewrite, so an ordinary semantic
+ * rejection cannot leave a rewritten child under an unlowered parent. */
+XR_FUNC bool xi_coro_lower(XiFunc *f, const XiCoroResolver *resolver) {
+    uint32_t function_count = 0;
+    if (!f || !coro_count_functions(f, &function_count) || function_count == 0)
+        return false;
+    CoroAnalysisEntry *entries =
+        (CoroAnalysisEntry *) xr_calloc(function_count, sizeof(*entries));
+    if (!entries)
+        return false;
+    uint32_t collected = 0;
+    if (!coro_collect_postorder(f, entries, function_count, &collected) ||
+        collected != function_count) {
+        xr_free(entries);
         return false;
     }
 
-    for (uint16_t i = 0; i < f->nchildren; i++) {
-        if (!coro_lower_func(f->children[i], resolver)) {
-            if (!prior_plan)
-                f->coro_plan = NULL;
+    /* Local functions may call siblings declared later, and cross-module
+     * suspension can make any such sibling suspendable only after import
+     * resolution. Compute the least fixed point for the whole local set. The
+     * selected function scans its body while every local callee reads the
+     * previous monotone fact, so declaration order and the recursion depth
+     * guard cannot change the answer. */
+    CoroTreeResolverCtx tree_ctx = {
+        .source = resolver,
+        .entries = entries,
+        .count = function_count,
+    };
+    XiCoroResolver tree_resolver = coro_tree_resolver(&tree_ctx);
+    bool changed;
+    do {
+        changed = false;
+        for (uint32_t i = 0; i < function_count; i++) {
+            if (entries[i].suspendable)
+                continue;
+            tree_ctx.selected = entries[i].function;
+            if (xi_coro_func_is_suspendable(entries[i].function, &tree_resolver)) {
+                entries[i].suspendable = true;
+                changed = true;
+            }
+        }
+    } while (changed);
+    tree_ctx.selected = NULL;
+
+    for (uint32_t i = 0; i < function_count; i++) {
+        XiFunc *function = entries[i].function;
+        if (function->stage != XI_STAGE_SEMANTIC_LOWERED ||
+            function->invariant_mask != xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED)) {
+            coro_restore_analysis_plans(entries, i);
+            xr_free(entries);
+            return false;
+        }
+        XiCoroPlan *plan = xi_coro_analyze(function, &tree_resolver);
+        if (!plan || !coro_exception_continuations_supported(function, plan)) {
+            coro_restore_analysis_plans(entries, i + 1);
+            xr_free(entries);
             return false;
         }
     }
 
-    if (!coro_rewrite_func(f, plan, resolver)) {
-        if (!prior_plan)
-            f->coro_plan = NULL;
-        return false;
+    for (uint32_t i = 0; i < function_count; i++) {
+        XiFunc *function = entries[i].function;
+        if (!coro_rewrite_func(function, function->coro_plan, &tree_resolver)) {
+            xr_free(entries);
+            return false;
+        }
     }
+    xr_free(entries);
     return true;
-}
-
-XR_FUNC bool xi_coro_lower(XiFunc *f, const XiCoroResolver *resolver) {
-    return f && coro_lower_func(f, resolver);
 }
 
 XR_FUNC bool xi_coro_plan_is_current(const XiFunc *f, const XiCoroPlan *plan) {

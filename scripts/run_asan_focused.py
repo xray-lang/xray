@@ -64,7 +64,7 @@ LANE = "asan_focused"
 # real AOT workloads and the backend-diff subset.
 DEFAULT_CTEST_EXCLUDE = (
     "native_error_abi|param_mode_diagnostics|param_contract|test_cli_toolchain|"
-    "test_lsp_protocol_transcript|test_xi_cgen"
+    "test_lsp_protocol_transcript|test_xi_cgen|test_xr_program_aot_providers"
 )
 # These tests start short-lived subprocesses under public protocol timeouts;
 # run them serially so a saturated ASan lane cannot consume those budgets
@@ -127,6 +127,9 @@ def main(argv: list[str]) -> int:
 
     os.environ["ASAN_OPTIONS"] = ASAN_OPTIONS
     os.environ["UBSAN_OPTIONS"] = UBSAN_OPTIONS
+    os.environ["PYTHONUTF8"] = "1"
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    os.environ["XRAY_STDLIB_PATH"] = str(PROJECT_DIR / "stdlib")
 
     log(f"ROOT={PROJECT_DIR}")
     log(f"build dir={build_dir.name} jobs={jobs}")

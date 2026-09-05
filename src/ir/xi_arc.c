@@ -1176,8 +1176,6 @@ static bool arc_callee_borrows_param(XiFunc *callee, uint16_t pidx) {
  * maps argument `a` to parameter `a - 1`; a source instance call includes its
  * receiver as callee parameter zero and maps operand `a` to parameter `a`. */
 static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint16_t a) {
-    if (a < 1)
-        return false;
     XiFunc *callee = arc_callee_of(f, user);
     int32_t parameter = arc_call_parameter_for_operand(user, callee, a);
     if (parameter < 0 || parameter > UINT16_MAX)

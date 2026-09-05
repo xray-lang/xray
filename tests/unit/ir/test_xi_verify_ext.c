@@ -2991,6 +2991,65 @@ TEST(coro_depth_bound_fails_closed) {
         xi_func_free(chain[i]);
 }
 
+typedef struct CoroLocalTreeResolverCtx {
+    XiFunc *caller;
+    XiFunc *callee;
+} CoroLocalTreeResolverCtx;
+
+static const XiFunc *coro_local_tree_resolve_callee(void *ud, const XiFunc *caller,
+                                                    const XiValue *callee) {
+    (void) callee;
+    CoroLocalTreeResolverCtx *ctx = (CoroLocalTreeResolverCtx *) ud;
+    return ctx && caller == ctx->caller ? ctx->callee : NULL;
+}
+
+static int coro_local_tree_stale_sync_summary(void *ud, const XiFunc *function) {
+    (void) ud;
+    (void) function;
+    return 0;
+}
+
+TEST(coro_lower_analyzes_local_callees_before_callers) {
+    XiFunc *root = make_func("coro_local_tree_root");
+    XiFunc *caller = make_func("coro_local_tree_caller");
+    XiFunc *callee = make_func("coro_local_tree_callee");
+    ASSERT(root != NULL && caller != NULL && callee != NULL);
+    root->children = (XiFunc **) xr_malloc(2u * sizeof(*root->children));
+    ASSERT(root->children != NULL);
+    root->children[0] = caller;
+    root->children[1] = callee;
+    root->nchildren = root->children_cap = 2;
+    caller->parent_func = callee->parent_func = root;
+
+    XiValue *callee_value = xi_value_new(caller, caller->entry, XI_CONST, &stub_func, 0);
+    XiValue *call = xi_value_new(caller, caller->entry, XI_CALL, &stub_int, 1);
+    ASSERT(callee_value != NULL && call != NULL);
+    call->args[0] = callee_value;
+    xi_block_set_return(caller->entry, call);
+
+    XiValue *yield = xi_value_new(callee, callee->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *result = xi_const_int(callee, callee->entry, 7, &stub_int);
+    ASSERT(yield != NULL && result != NULL);
+    xi_block_set_return(callee->entry, result);
+    xi_block_set_return(root->entry, NULL);
+
+    mark_coro_lower_input(root);
+    mark_coro_lower_input(caller);
+    mark_coro_lower_input(callee);
+    CoroLocalTreeResolverCtx ctx = {.caller = caller, .callee = callee};
+    XiCoroResolver resolver = {0};
+    resolver.resolve_callee = coro_local_tree_resolve_callee;
+    resolver.func_suspendability = coro_local_tree_stale_sync_summary;
+    resolver.ud = &ctx;
+
+    ASSERT(xi_coro_lower(root, &resolver));
+    ASSERT(callee->coro_plan != NULL && callee->coro_plan->nstates == 1);
+    ASSERT(caller->coro_plan != NULL && caller->coro_plan->nstates == 1);
+    ASSERT(caller->coro_plan->points[0].op == call);
+    ASSERT(root->coro_plan != NULL && root->coro_plan->nstates == 0);
+    xi_func_free(root);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -3001,6 +3060,7 @@ int main(void) {
     run_semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity();
     run_semantic_snapshot_rejects_ambiguous_enum_payload_fields();
     run_coro_depth_bound_fails_closed();
+    run_coro_lower_analyzes_local_callees_before_callers();
 
     run_non_unit_return_requires_value();
     run_unit_return_rejects_value();
