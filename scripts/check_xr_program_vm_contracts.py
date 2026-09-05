@@ -36,6 +36,7 @@ RUNTIME_SOURCES = (
     "src/program/xr_program_identity.c",
     "src/program/xr_program_decode.c",
     "src/program/xr_program_verify.c",
+    "src/execution/xr_execution_identity.c",
     "src/execution/xr_execution.c",
     "src/execution/xr_boundary_materialization.c",
     "src/vm/xr_program_vm.c",

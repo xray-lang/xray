@@ -469,7 +469,7 @@
     "all_capabilities_closed": false,
     "all_routes_canonical_only": false,
     "all_deletion_nodes_zero": false,
-    "aot_compile_input_pure": false,
+    "aot_compile_input_pure": true,
     "runtime_only_embed_closed": false,
     "matching_source_binary_qualified": false,
     "state": "BLOCKED"

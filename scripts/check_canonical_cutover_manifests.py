@@ -56,6 +56,8 @@ REQUIRED_ROUTE_IDS = {
     "runtime-only-program-embed",
 }
 RETAINED_LEGACY_OWNER_IDS = {"aot-generated-c-verifier"}
+AOT_HEADER = Path("src/aot/program/xr_backend_ir.h")
+AOT_LOWERING = Path("src/aot/program/xr_backend_ir.c")
 
 
 class ManifestError(ValueError):
@@ -262,10 +264,24 @@ def validate_product(root: Path, data: dict[str, Any], legacy_ids: set[str],
     require(set(gate) == booleans | {"state"}, "cutover gate field set drifted")
     require(all(isinstance(gate[field], bool) for field in booleans),
             "cutover gate facts must be booleans")
+    aot_compiler = read_text(root / AOT_HEADER) + read_text(root / AOT_LOWERING)
+    forbidden_aot_inputs = (
+        "XrInstance",
+        "XrExecutionLease",
+        "xr_execution_instance_",
+        "xr_execution_lease_",
+    )
+    aot_compile_input_pure = (
+        "const XrValidatedProgram *program" in aot_compiler and
+        "const XrTargetProfile *profile" in aot_compiler and
+        "const XrBackendOptions *options" in aot_compiler and
+        all(token not in aot_compiler for token in forbidden_aot_inputs)
+    )
     derived = {
         "all_capabilities_closed": all_capabilities_closed,
         "all_routes_canonical_only": all(row["state"] == "CANONICAL_ONLY" for row in routes),
         "all_deletion_nodes_zero": all(row["state"] == "ZERO" for row in nodes),
+        "aot_compile_input_pure": aot_compile_input_pure,
     }
     for field, expected in derived.items():
         require(gate[field] == expected, f"cutover gate {field} is not derived from rows")
@@ -327,6 +343,11 @@ def self_test(root: Path) -> None:
     nonzero_terminal["deletion_nodes"][0]["final_reachable_count"] = 1
     expect_rejected("nonzero deletion target",
                     lambda: validate_all(root, capability, nonzero_terminal))
+
+    stale_pure_aot = deepcopy(product)
+    stale_pure_aot["cutover_gate"]["aot_compile_input_pure"] = False
+    expect_rejected("stale pure-AOT input fact",
+                    lambda: validate_all(root, capability, stale_pure_aot))
 
     with tempfile.TemporaryDirectory(prefix="xray-cutover-manifest-") as raw:
         malformed = Path(raw) / "noncanonical.json"

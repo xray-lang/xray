@@ -16,10 +16,7 @@
 #ifndef XR_EXECUTION_H
 #define XR_EXECUTION_H
 
-#include "../plan/target/xr_target_profile.h"
-#include "../program/xr_program_verify.h"
-
-typedef XrFingerprint XrExecutionId;
+#include "xr_execution_identity.h"
 
 #define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(2)
 

@@ -12,7 +12,6 @@
 
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../base/xsha256.h"
 
 #include <stdatomic.h>
 #include <string.h>
@@ -217,29 +216,6 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
     return XR_EXECUTION_OK;
 }
 
-static void hash_identity(XrSHA256Context *context, XrFingerprint identity) {
-    xr_sha256_update(context, identity.bytes, sizeof(identity.bytes));
-}
-
-static XrExecutionId compute_execution_id(const XrValidatedProgram *program,
-                                          const XrTargetProfile *profile) {
-    static const uint8_t domain[] = "xray-execution-id-v1\0";
-    XrSHA256Context context;
-    XrProgramId program_id = xr_validated_program_id(program);
-    XrFingerprint profile_id = xr_target_profile_fingerprint(profile);
-    const XrBoundaryAbi *boundary = xr_target_profile_boundary_abi(profile);
-    const XrRuntimeKernelContract *kernel = xr_target_profile_runtime_kernel(profile);
-    xr_sha256_init(&context);
-    xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    xr_sha256_update(&context, program_id.bytes, sizeof(program_id.bytes));
-    hash_identity(&context, profile_id);
-    hash_identity(&context, boundary->id);
-    hash_identity(&context, kernel->id);
-    XrExecutionId id;
-    xr_sha256_final(&context, id.bytes);
-    return id;
-}
-
 static void destroy_instance(XrInstance *instance) {
     if (!instance)
         return;
@@ -309,7 +285,12 @@ XrExecutionStatus xr_execution_instance_create(const XrExecutionBindingInput *in
     instance->program = xr_validated_program_retain(input->program);
     instance->profile = xr_target_profile_retain(input->profile);
     instance->generation = input->generation;
-    instance->execution_id = compute_execution_id(input->program, input->profile);
+    if (!xr_execution_id_compute(input->program, input->profile, &instance->execution_id)) {
+        destroy_instance(instance);
+        return reject(diagnostic_out, XR_EXECUTION_DIAGNOSTIC_PROFILE, 0, 0,
+                      (XrStableId) {{0}}, (XrStableId) {{0}},
+                      XR_EXECUTION_PROFILE_REJECTED);
+    }
     atomic_init(&instance->state, XR_INSTANCE_ACTIVE);
     atomic_init(&instance->leases, 0u);
     atomic_init(&instance->lease_lock, false);

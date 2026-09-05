@@ -14,6 +14,8 @@ PROFILE_HEADER = Path("src/plan/target/xr_target_profile.h")
 PROFILE_SOURCE = Path("src/plan/target/xr_target_profile.c")
 EXECUTION_HEADER = Path("src/execution/xr_execution.h")
 EXECUTION_SOURCE = Path("src/execution/xr_execution.c")
+EXECUTION_IDENTITY_HEADER = Path("src/execution/xr_execution_identity.h")
+EXECUTION_IDENTITY_SOURCE = Path("src/execution/xr_execution_identity.c")
 BOUNDARY_HEADER = Path("src/execution/xr_boundary_materialization.h")
 BOUNDARY_SOURCE = Path("src/execution/xr_boundary_materialization.c")
 OBJECT_INSTANCE_HEADER = Path("src/runtime/class/xinstance.h")
@@ -24,6 +26,11 @@ EXPECTED_COVERAGE = {
     "profile_schema_version": 5,
     "boundary_abi_schema_version": 3,
     "execution_binding_schema_version": 2,
+    "execution_identity": {
+        "inputs": ["ProgramId", "TargetProfileId", "BoundaryAbiId", "RuntimeKernelId"],
+        "compile_time_owner": "xr_execution_id_compute",
+        "runtime_instance_required": False,
+    },
     "profile_partitions": [
         {"name": "target-semantics", "identity": "XrTargetSemanticsId", "status": "COMPLETE"},
         {"name": "boundary-abi", "identity": "XrBoundaryAbiId", "status": "ACTIVE_COPY_VALUE"},
@@ -99,6 +106,7 @@ def canonical_json(value: object) -> str:
 
 def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     paths = (PROFILE_HEADER, PROFILE_SOURCE, EXECUTION_HEADER, EXECUTION_SOURCE,
+             EXECUTION_IDENTITY_HEADER, EXECUTION_IDENTITY_SOURCE,
              BOUNDARY_HEADER, BOUNDARY_SOURCE, OBJECT_INSTANCE_HEADER)
     sources = {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
@@ -108,6 +116,8 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     profile_source = sources[PROFILE_SOURCE]
     execution_header = sources[EXECUTION_HEADER]
     execution_source = sources[EXECUTION_SOURCE]
+    execution_identity_header = sources[EXECUTION_IDENTITY_HEADER]
+    execution_identity_source = sources[EXECUTION_IDENTITY_SOURCE]
     boundary_header = sources[BOUNDARY_HEADER]
     boundary_source = sources[BOUNDARY_SOURCE]
 
@@ -125,6 +135,14 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
         require(token in execution_header, f"missing execution contract token {token}")
     require("#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(2)" in execution_header,
             "execution header schema version is not synchronized with coverage")
+    require("xr_execution_id_compute" in execution_identity_header and
+            "xray-execution-id-v1" in execution_identity_source,
+            "pure program/profile execution identity owner is missing")
+    for forbidden in ("XrInstance", "XrExecutionLease", "XrProviderBinding"):
+        require(forbidden not in execution_identity_header + execution_identity_source,
+                f"pure execution identity depends on runtime state {forbidden}")
+    require("xr_execution_id_compute(input->program, input->profile" in execution_source,
+            "runtime binding does not consume the shared execution identity")
     for token in ("XrProviderCallStatus", "XR_PROVIDER_CALL_OK", "int64_t argument",
                   "int64_t *result_out", "XR_EXECUTION_DIAGNOSTIC_PROVIDER_ABI"):
         require(token in execution_header, f"typed provider trampoline omits {token}")
@@ -165,6 +183,7 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
         require(token in boundary_source, f"boundary layout identity omits {token}")
 
     combined = (profile_header + profile_source + execution_header + execution_source +
+                execution_identity_header + execution_identity_source +
                 boundary_header + boundary_source)
     for forbidden in ("sizeof(void *)", "sizeof(void*)", "__APPLE__", "_WIN32",
                       "__linux__", "TARGET_OS_", "XrVmCode", "XrBackendIR",

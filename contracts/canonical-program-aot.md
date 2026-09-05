@@ -1,9 +1,10 @@
 # Canonical XrProgram AOT contract
 
-The AOT compiler accepts only `XrValidatedProgram` bound through one `XrInstance`. It pins that
-execution authority while building a private `XrBackendIR`, copies the verified operation graph,
-and adds only physical value representations and target literals. Lowering and emission do not
-query source, AST, Xi, TargetPlan, VM-private code, or the reference evaluator.
+The AOT compiler accepts only an `XrValidatedProgram`, the exact immutable `XrTargetProfile`, and
+`XrBackendOptions`. It builds a private `XrBackendIR`, copies the verified operation graph, and adds
+only physical value representations and target literals. Compilation cannot name or acquire a live
+`XrInstance`, provider instance, generation, or lease. Lowering and emission do not query source,
+AST, Xi, TargetPlan, VM-private code, or the reference evaluator.
 
 Every BackendIR build runs an independent invariant verifier and an exact structural translation
 validator. The portable optimization policy currently introduces no high-risk semantic rewrite;
@@ -19,10 +20,10 @@ verifier runs before bytes leave the emitter. Strict Clang, Zig CC, and clang-cl
 compile the real generated translation unit.
 
 The `core.provider.call` executor foundation lowers an exact program requirement/operation index
-to a typed callback in the private `XrAotContext` and normalizes refusal to the canonical trap.
-The standalone native harness supplies an arbitrary callback only to prove portable lowering and
-native execution. It does not prove that an AOT artifact has captured an exact generation binding;
-that closure remains inactive until the generated entry adapter owns a live generation lease.
+to a typed callback slot in the private runtime `XrAotContext` and normalizes refusal to the
+canonical trap. The compiler neither receives nor captures that runtime provider instance. The
+standalone native harness supplies a callback only at generated-code execution time to prove
+portable lowering and native execution; product provider qualification remains separately gated.
 
 `XrNativeArtifact` owns actual native bytes. `NativeArtifactId` hashes `ExecutionId`, `BackendId`,
 `ToolchainId`, `OptimizationPolicyId`, and those bytes. Toolchain identity is reconstructible from
@@ -37,19 +38,21 @@ which rows have a production source owner. Checked overflow, wrapping overflow, 
 also compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
-anchor-sha256: CMakeLists.txt 55e5ce6bd4d0ba52f0f6a361d934796dc7e4d40f9e079e0e220a7e5ce4aeaf65
+anchor-sha256: CMakeLists.txt ca4552209c5c428195208fdfb94d85348468734831896381f96ef11d7e495089
 anchor-sha256: tests/unit/CMakeLists.txt f560b1ded79a30d635d1a84fa7d317a2bbd5e5fcf74b14f2189eeb9271021e98
 anchor-sha256: xisa/core/registry.json 86a6f14d8971d7217de112cef7147c78b9b2328f7e778530ab9317cd8525555c
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json c1b203f8a59f82075ca33e6916b18ce2d0d4bdd874a45993f5173d944dd952b9
-anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json bc57cfc8c759990bd3eebf2f137b833e71e9988651b1185837c0cfe3c29036d4
-anchor-sha256: src/aot/program/xr_backend_ir.h d0cafeda3702e5a406b09573adab96223942321f9dab06f4ef0ac32ed6a30349
+anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 5e445629b30bebb2b16ed69659d091b7c586bab1bb26966d17dea22a04fc3184
+anchor-sha256: src/aot/program/xr_backend_ir.h 72d7f3e9368b29dd39d2858cf0c2b8b3ab866f6bf68e239ae9747217fbde5d37
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h 63f79292db4bf8586ec45e9436a53b26194afb6683adffaea070960b3817225d
-anchor-sha256: src/aot/program/xr_backend_ir.c e325bee331bcc92ed0cfe581668644515a8ab3956a3f846c408ff3e71aa736cb
+anchor-sha256: src/aot/program/xr_backend_ir.c 03f10e7d88edbde1e632626882df6643d2d777b3097916721deab9deae01b1db
 anchor-sha256: src/aot/program/xr_backend_ir_verify.c d1a907fc82739ba4cd081810e25662d3e6171185000c9ec5a61e4e35073b443d
 anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 02e8947f746a950d7eae9c737bdf06d5c6f3ece2aafb2804f5615bd252983642
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
-anchor-sha256: scripts/check_xr_program_aot_contracts.py 61657cd5870e1b965a20800fbaff4bbec7f4b3695bfad1830df0b2a8f7d06285
+anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
+anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf
+anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f376ebedb92e0efe7d838e5d95286509e64d2af2d96
 anchor-sha256: scripts/check_xr_program_aot_native.py a90027218e16c75351ca8de8dbb68f188d20255ba4ad23324a08416af0eda56d
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
-anchor-sha256: tests/unit/aot/test_xr_program_aot.c 88db48ca6bdc86b83754b0b21edf0a364ebcf68bc35f659337f439c592fccd2a
+anchor-sha256: tests/unit/aot/test_xr_program_aot.c 96d1b3a31d25c28a11da6b7b58e77bed72c9b559b25bc5d4052922c8c2266b2e

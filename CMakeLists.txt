@@ -657,6 +657,8 @@ add_custom_target(check-xr-execution-contracts
             ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.c
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.c
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.h
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.c
             ${CMAKE_SOURCE_DIR}/src/execution/xr_boundary_materialization.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_boundary_materialization.c
     COMMENT "Checking exact target-profile and execution-binding contracts"
@@ -687,6 +689,8 @@ add_custom_target(check-xr-program-aot-contracts
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_verify.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_native_artifact.c
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.h
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.c
             ${CMAKE_SOURCE_DIR}/tests/unit/aot/test_xr_program_aot.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-aot-coverage.json
     COMMENT "Checking XrProgram AOT lowering and native artifact contracts"
@@ -915,6 +919,19 @@ elseif(XRAY_C_MSVC_FRONTEND)
     # UTF-8 source / execution charset so string literals and the
     # console match what every other platform uses.
     add_compile_options(/utf-8)
+endif()
+
+# Windows' UCRT marks portable C/POSIX spellings as deprecated independently
+# of the compiler frontend. The sanitizer lane deliberately uses clang's GNU
+# frontend, so keep the same explicit portable-code policy there as under
+# MSVC/clang-cl instead of turning UCRT annotations into -Werror failures.
+if(WIN32 AND NOT XRAY_C_MSVC_FRONTEND)
+    add_compile_definitions(
+        _CRT_SECURE_NO_WARNINGS
+        _CRT_NONSTDC_NO_WARNINGS
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+    )
 endif()
 
 # ============================================================================
@@ -1811,6 +1828,7 @@ set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
     src/program/xr_program_identity.c
     src/program/xr_program_decode.c
     src/program/xr_program_verify.c
+    src/execution/xr_execution_identity.c
     src/execution/xr_execution.c
     src/execution/xr_boundary_materialization.c
     src/vm/xr_program_vm.c

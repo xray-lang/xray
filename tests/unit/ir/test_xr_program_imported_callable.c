@@ -777,8 +777,8 @@ TEST(test_imported_callable_multi_target_program) {
     XrBackendIR *backend_ir = NULL;
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
-    ASSERT_EQ_INT(xr_backend_ir_build(instance, &backend_options, &backend_ir,
-                                      &backend_diagnostic),
+    ASSERT_EQ_INT(xr_backend_ir_build(validated, profile, &backend_options, &backend_ir,
+                                     &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));

@@ -16,7 +16,7 @@
 #ifndef XR_BACKEND_IR_H
 #define XR_BACKEND_IR_H
 
-#include "../../execution/xr_execution.h"
+#include "../../execution/xr_execution_identity.h"
 
 #define XR_BACKEND_IR_SCHEMA_VERSION UINT32_C(1)
 #define XR_AOT_TOOLCHAIN_SCHEMA_VERSION UINT32_C(1)
@@ -48,7 +48,6 @@ typedef struct XrBackendOptions {
 typedef enum XrBackendStatus {
     XR_BACKEND_OK = 0,
     XR_BACKEND_INVALID_INPUT,
-    XR_BACKEND_INSTANCE_UNAVAILABLE,
     XR_BACKEND_UNSUPPORTED_OPERATION,
     XR_BACKEND_RESOURCE_LIMIT,
     XR_BACKEND_OUT_OF_MEMORY,
@@ -129,7 +128,9 @@ typedef struct XrNativeArtifact {
 } XrNativeArtifact;
 
 XR_FUNC XrBackendOptions xr_backend_default_options(void);
-XR_FUNC XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions *options,
+XR_FUNC XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
+                                            const XrTargetProfile *profile,
+                                            const XrBackendOptions *options,
                                             XrBackendIR **ir_out,
                                             XrBackendDiagnostic *diagnostic_out);
 XR_FUNC void xr_backend_ir_free(XrBackendIR *ir);

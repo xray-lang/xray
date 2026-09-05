@@ -1884,7 +1884,8 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     XrBackendIR *backend_ir = NULL;
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(instance, &backend_options, &backend_ir,
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
+                                              &backend_ir,
                                               &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
@@ -2036,7 +2037,8 @@ TEST(e2e_program_target_os_member_equality_is_executable) {
     XrBackendIR *backend_ir = NULL;
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(instance, &backend_options, &backend_ir,
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
+                                              &backend_ir,
                                               &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
@@ -4154,7 +4156,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrBackendIR *backend_ir = NULL;
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(instance, &backend_options, &backend_ir,
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, profile, &backend_options, &backend_ir,
                                               &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));

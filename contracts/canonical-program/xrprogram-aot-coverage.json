@@ -1,8 +1,8 @@
 {
   "schema": "xray-program-aot-coverage/1",
   "task": 300,
-  "input_authority": "XrValidatedProgram",
-  "execution_authority": "XrInstance",
+  "input_authority": "XrValidatedProgram + exact XrTargetProfile + XrBackendOptions",
+  "execution_authority": "not-an-AOT-compiler-input",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@1",
   "operation_count": 44,
@@ -383,6 +383,9 @@
     "native-bytes"
   ],
   "pure_aot": {
+    "live_instance": false,
+    "provider_instance": false,
+    "generation_lease": false,
     "program_loader": false,
     "vm": false,
     "compiler": false,

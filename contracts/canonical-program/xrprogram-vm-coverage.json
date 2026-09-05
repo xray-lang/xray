@@ -390,7 +390,7 @@
   ],
   "runtime_product": {
     "target": "xray_program_vm_runtime",
-    "source_count": 17,
+    "source_count": 18,
     "forbidden_closures": [
       "frontend",
       "CoreIR-writer",

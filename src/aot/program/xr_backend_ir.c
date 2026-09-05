@@ -489,41 +489,32 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
     xr_sha256_final(&context, digest_out->bytes);
 }
 
-XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions *options,
-                                    XrBackendIR **ir_out, XrBackendDiagnostic *diagnostic_out) {
+XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
+                                    const XrTargetProfile *profile,
+                                    const XrBackendOptions *options, XrBackendIR **ir_out,
+                                    XrBackendDiagnostic *diagnostic_out) {
     if (ir_out)
         *ir_out = NULL;
     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OK, 0u, 0u, 0u, 0u);
-    if (!instance || !ir_out || !options_valid(options)) {
+    if (!program || !profile || !ir_out || !options_valid(options) ||
+        !xr_target_profile_verify(profile, NULL, 0)) {
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INVALID_INPUT;
     }
-    XrExecutionLease lease = {0};
-    if (!xr_execution_instance_acquire(instance, &lease)) {
-        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INSTANCE_UNAVAILABLE, 0u, 0u, 0u, 0u);
-        return XR_BACKEND_INSTANCE_UNAVAILABLE;
-    }
-    XrValidatedProgram *program = xr_execution_lease_retain_program(&lease);
-    XrTargetProfile *profile = xr_execution_lease_retain_profile(&lease);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
-    if (!program || !profile || !machine) {
-        xr_target_profile_free(profile);
-        xr_validated_program_free(program);
-        (void) xr_execution_lease_release(&lease);
-        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INSTANCE_UNAVAILABLE, 0u, 0u, 0u, 0u);
-        return XR_BACKEND_INSTANCE_UNAVAILABLE;
+    XrExecutionId execution_id;
+    if (!machine || !xr_execution_id_compute(program, profile, &execution_id)) {
+        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
+        return XR_BACKEND_INVALID_INPUT;
     }
     XrBackendIR *ir = xr_calloc(1u, sizeof(*ir));
     if (!ir) {
-        xr_target_profile_free(profile);
-        xr_validated_program_free(program);
-        (void) xr_execution_lease_release(&lease);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
         return XR_BACKEND_OUT_OF_MEMORY;
     }
-    ir->program = program;
-    ir->profile = profile;
-    ir->execution_id = xr_execution_instance_id(instance);
+    ir->program = xr_validated_program_retain(program);
+    ir->profile = xr_target_profile_retain(profile);
+    ir->execution_id = execution_id;
     ir->backend_id = xr_backend_compute_id();
     ir->optimization_policy_id = xr_backend_compute_optimization_policy_id(options);
     ir->options = *options;
@@ -538,21 +529,18 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
     ir->constant_count = program->constant_count;
     if (program->function_count > options->max_functions ||
         (ir->pointer_width != 32u && ir->pointer_width != 64u)) {
-        (void) xr_execution_lease_release(&lease);
         xr_backend_ir_free(ir);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_RESOURCE_LIMIT;
     }
     if (program->constant_count != 0u) {
         if ((size_t) program->constant_count > SIZE_MAX / sizeof(*ir->constants)) {
-            (void) xr_execution_lease_release(&lease);
             xr_backend_ir_free(ir);
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
             return XR_BACKEND_RESOURCE_LIMIT;
         }
         ir->constants = xr_malloc((size_t) program->constant_count * sizeof(*ir->constants));
         if (!ir->constants) {
-            (void) xr_execution_lease_release(&lease);
             xr_backend_ir_free(ir);
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
             return XR_BACKEND_OUT_OF_MEMORY;
@@ -561,14 +549,12 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
                (size_t) program->constant_count * sizeof(*ir->constants));
     }
     if ((size_t) program->function_count > SIZE_MAX / sizeof(*ir->functions)) {
-        (void) xr_execution_lease_release(&lease);
         xr_backend_ir_free(ir);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_RESOURCE_LIMIT;
     }
     ir->functions = xr_calloc(program->function_count, sizeof(*ir->functions));
     if (!ir->functions) {
-        (void) xr_execution_lease_release(&lease);
         xr_backend_ir_free(ir);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
         return XR_BACKEND_OUT_OF_MEMORY;
@@ -587,7 +573,6 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
                 uint16_t operation_id =
                     source->blocks[block].instructions[instruction].operation_id;
                 if (!operation_is_supported(operation_id)) {
-                    (void) xr_execution_lease_release(&lease);
                     xr_backend_ir_free(ir);
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION,
                                               operation_id, function, block, instruction);
@@ -597,7 +582,6 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
         }
         if (blocks > options->max_blocks || instructions > options->max_instructions ||
             values > options->max_values || !lower_function(source, &ir->functions[function])) {
-            (void) xr_execution_lease_release(&lease);
             xr_backend_ir_free(ir);
             XrBackendStatus status = blocks > options->max_blocks ||
                                              instructions > options->max_instructions ||
@@ -612,7 +596,6 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
     xr_backend_compute_lowering_digest(ir, &ir->lowering_digest);
     bool verified = xr_backend_ir_verify(ir, diagnostic_out) &&
                     xr_backend_ir_translation_validate(ir, diagnostic_out);
-    (void) xr_execution_lease_release(&lease);
     if (!verified) {
         XrBackendStatus status =
             diagnostic_out ? diagnostic_out->status : XR_BACKEND_INVARIANT_REJECTED;
@@ -662,8 +645,6 @@ const char *xr_backend_status_name(XrBackendStatus status) {
             return "ok";
         case XR_BACKEND_INVALID_INPUT:
             return "invalid-input";
-        case XR_BACKEND_INSTANCE_UNAVAILABLE:
-            return "instance-unavailable";
         case XR_BACKEND_UNSUPPORTED_OPERATION:
             return "unsupported-operation";
         case XR_BACKEND_RESOURCE_LIMIT:

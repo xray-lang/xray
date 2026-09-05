@@ -3,6 +3,16 @@
   "profile_schema_version": 5,
   "boundary_abi_schema_version": 3,
   "execution_binding_schema_version": 2,
+  "execution_identity": {
+    "inputs": [
+      "ProgramId",
+      "TargetProfileId",
+      "BoundaryAbiId",
+      "RuntimeKernelId"
+    ],
+    "compile_time_owner": "xr_execution_id_compute",
+    "runtime_instance_required": false
+  },
   "profile_partitions": [
     {
       "name": "target-semantics",

@@ -21,6 +21,8 @@ TEST = Path("tests/unit/aot/test_xr_program_aot.c")
 CMAKE = Path("CMakeLists.txt")
 TEST_CMAKE = Path("tests/unit/CMakeLists.txt")
 IDENTITY = Path("contracts/canonical-program/architecture-identity.toml")
+EXECUTION_IDENTITY_HEADER = Path("src/execution/xr_execution_identity.h")
+EXECUTION_IDENTITY_SOURCE = Path("src/execution/xr_execution_identity.c")
 COVERAGE = Path("contracts/canonical-program/xrprogram-aot-coverage.json")
 
 
@@ -65,8 +67,8 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": "xray-program-aot-coverage/1",
         "task": 300,
-        "input_authority": "XrValidatedProgram",
-        "execution_authority": "XrInstance",
+        "input_authority": "XrValidatedProgram + exact XrTargetProfile + XrBackendOptions",
+        "execution_authority": "not-an-AOT-compiler-input",
         "private_realization": "XrBackendIR",
         "backend": "xray-c11-aot@1",
         "operation_count": len(operations),
@@ -90,6 +92,9 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
             "native-bytes",
         ],
         "pure_aot": {
+            "live_instance": False,
+            "provider_instance": False,
+            "generation_lease": False,
             "program_loader": False,
             "vm": False,
             "compiler": False,
@@ -107,7 +112,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
 
 def sources(root: Path, overrides: dict[Path, str] | None = None) -> dict[Path, str]:
     paths = (HEADER, LOWERING, VERIFY, EMITTER, ARTIFACT, TEST, CMAKE, TEST_CMAKE,
-             IDENTITY)
+             IDENTITY, EXECUTION_IDENTITY_HEADER, EXECUTION_IDENTITY_SOURCE)
     return {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
         for path in paths
@@ -126,6 +131,8 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     cmake = text[CMAKE]
     test_cmake = text[TEST_CMAKE]
     identity = text[IDENTITY]
+    execution_identity_header = text[EXECUTION_IDENTITY_HEADER]
+    execution_identity_source = text[EXECUTION_IDENTITY_SOURCE]
 
     for token in (
         "XrBackendIR",
@@ -135,9 +142,27 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
         "XrOptimizationPolicyId",
     ):
         require(token in header, f"missing AOT contract type {token}")
-    require("xr_execution_instance_acquire" in lowering and
-            "xr_execution_lease_release" in lowering,
-            "AOT lowering does not hold an exact generation lease")
+    aot_sources = header + lowering + verifier + emitter + artifact
+    for forbidden in (
+        "XrInstance",
+        "XrExecutionLease",
+        "xr_execution_instance_",
+        "xr_execution_lease_",
+        "XR_BACKEND_INSTANCE_UNAVAILABLE",
+    ):
+        require(forbidden not in aot_sources,
+                f"pure AOT compiler depends on runtime execution authority {forbidden}")
+    require(re.search(
+        r"xr_backend_ir_build\s*\(\s*const\s+XrValidatedProgram\s*\*\s*program\s*,\s*"
+        r"const\s+XrTargetProfile\s*\*\s*profile\s*,\s*"
+        r"const\s+XrBackendOptions\s*\*\s*options",
+        header,
+    ) is not None, "AOT build input is not program + exact profile + backend options")
+    require("xr_execution_id_compute(program, profile" in lowering,
+            "AOT lowering does not derive identity from its immutable inputs")
+    require("xr_execution_id_compute" in execution_identity_header and
+            "xray-execution-id-v1" in execution_identity_source,
+            "shared pure execution identity owner is missing")
     require("xr_backend_ir_translation_validate" in lowering and
             "xr_backend_ir_translation_validate" in emitter,
             "translation validation is not mandatory at lowering and emission")
@@ -209,6 +234,8 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
             "real pointer-width generated-C/native gate is missing")
     require("xray_program_aot_compiler" in cmake and "-Wall -Wextra -Werror" in cmake,
             "private AOT compiler warning target is missing")
+    require("src/execution/xr_execution_identity.c" in cmake,
+            "pure execution identity is absent from the canonical product closure")
     require("include/xr_backend_ir.h" not in cmake and
             not (root / "include/xr_backend_ir.h").exists(),
             "private BackendIR leaked into the public include tree")
@@ -242,6 +269,16 @@ def self_test(root: Path) -> None:
         pass
     else:
         raise GateError("forbidden AOT owner mutation was accepted")
+
+    mutated = lowering.replace("#include <string.h>",
+                               "#include <string.h>\n/* XrInstance */", 1)
+    require(mutated != lowering, "live-instance mutation did not apply")
+    try:
+        validate_sources(root, {LOWERING: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("live XrInstance AOT input was accepted")
 
     mutated, mutation_count = re.subn(
         r"(case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:\s*"

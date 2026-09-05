@@ -53,49 +53,6 @@ static void build_bindings(const XrTargetProfile *profile, TestBindings *binding
     memset(bindings, 0, sizeof(*bindings));
 }
 
-static XrProviderCallStatus test_provider_entry(void *context, int64_t argument,
-                                                int64_t *result_out) {
-    if (!context || !result_out)
-        return XR_PROVIDER_CALL_FAILED;
-    *result_out = argument + 1;
-    return XR_PROVIDER_CALL_OK;
-}
-
-static const XrTargetProviderContract *find_provider_contract(const XrTargetProfile *profile,
-                                                              XrStableId contract_id) {
-    for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
-        const XrTargetProviderContract *contract = xr_target_profile_provider(profile, index);
-        if (contract && memcmp(contract->contract_id.bytes, contract_id.bytes,
-                               XR_STABLE_ID_BYTES) == 0)
-            return contract;
-    }
-    return NULL;
-}
-
-static void build_provider_bindings(const XrValidatedProgram *program,
-                                    const XrTargetProfile *profile, TestBindings *bindings) {
-    memset(bindings, 0, sizeof(*bindings));
-    REQUIRE(xr_validated_program_provider_requirement_count(program) == 1u);
-    XrProgramProviderRequirementView requirement = {0};
-    REQUIRE(xr_validated_program_provider_requirement(program, 0u, &requirement));
-    REQUIRE(requirement.operation_count == 1u);
-    const XrTargetProviderContract *contract =
-        find_provider_contract(profile, requirement.contract_id);
-    REQUIRE(contract != NULL && contract->operation_count != 0u);
-    REQUIRE(memcmp(contract->operations[0].stable_id.bytes, requirement.operation_ids[0].bytes,
-                   XR_STABLE_ID_BYTES) == 0);
-    bindings->providers[0].contract_id = contract->contract_id;
-    REQUIRE(xr_target_provider_contract_fingerprint(
-                contract, &bindings->providers[0].contract_fingerprint) == XR_RUNTIME_ABI_OK);
-    bindings->providers[0].behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
-    bindings->providers[0].operations = bindings->operations[0];
-    bindings->providers[0].operation_count = 1u;
-    bindings->operations[0][0].operation_id = contract->operations[0].stable_id;
-    bindings->operations[0][0].entry = test_provider_entry;
-    bindings->operations[0][0].context = bindings;
-    bindings->count = 1u;
-}
-
 static XrCoreIrKey fixture_key(const char *text) {
     return xr_core_ir_key(text, strlen(text));
 }
@@ -1117,12 +1074,14 @@ static XrAotToolchainBinding toolchain_for(XrFingerprint profile_id) {
     return binding;
 }
 
-static XrBackendIR *build_ir(XrInstance *instance, uint8_t optimization_policy) {
+static XrBackendIR *build_ir(const XrValidatedProgram *program,
+                            const XrTargetProfile *profile,
+                            uint8_t optimization_policy) {
     XrBackendOptions options = xr_backend_default_options();
     options.optimization_policy = optimization_policy;
     XrBackendDiagnostic diagnostic;
     XrBackendIR *ir = NULL;
-    REQUIRE(xr_backend_ir_build(instance, &options, &ir, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(ir != NULL);
     REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
     REQUIRE(xr_backend_ir_translation_validate(ir, &diagnostic));
@@ -1154,7 +1113,7 @@ static void test_affine_copy_lowering(void) {
     REQUIRE(vm.value.as.i64 == 42);
     xr_vm_code_free(code);
 
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     REQUIRE(ir->instruction_count == 7u);
     bool found_copy = false;
     for (uint32_t function = 0; function < ir->function_count; ++function) {
@@ -1188,10 +1147,7 @@ static void test_empty_aggregate_has_portable_private_c_storage(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
-    TestBindings bindings;
-    build_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 76u);
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1201,7 +1157,6 @@ static void test_empty_aggregate_has_portable_private_c_storage(void) {
 
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
 }
@@ -1218,10 +1173,7 @@ static void test_sealed_invoke_typed_error_cleanup_lowering(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
-    TestBindings bindings;
-    build_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 77u);
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1232,7 +1184,6 @@ static void test_sealed_invoke_typed_error_cleanup_lowering(void) {
     REQUIRE(strstr(generated.bytes, "goto xr_f") != NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
@@ -1250,10 +1201,7 @@ static void test_typed_panic_cleanup_lowering(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
-    TestBindings bindings;
-    build_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 78u);
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1264,7 +1212,6 @@ static void test_typed_panic_cleanup_lowering(void) {
     REQUIRE(strstr(generated.bytes, "goto xr_f") != NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
@@ -1275,10 +1222,7 @@ static void test_existential_pack_test_project_lowering(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
-    TestBindings bindings;
-    build_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 79u);
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1293,7 +1237,6 @@ static void test_existential_pack_test_project_lowering(void) {
     REQUIRE(strstr(generated.bytes, "selector") == NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
 }
@@ -1303,10 +1246,7 @@ static void test_callable_pack_and_indirect_call_lowering(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
-    TestBindings bindings;
-    build_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 80u);
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1318,12 +1258,13 @@ static void test_callable_pack_and_indirect_call_lowering(void) {
     REQUIRE(strstr(generated.bytes, "selector") == NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
 }
 
-static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstance *instance) {
+static void test_reference_vm_aot_identity(XrValidatedProgram *program,
+                                           XrTargetProfile *profile,
+                                           XrInstance *instance) {
     XrReferenceProfile reference_profile = {.pointer_width = 64u};
     XrReferenceOutcome reference = xr_reference_evaluate(
         program, xr_validated_program_entry_function(program), NULL, 0u, &reference_profile, NULL);
@@ -1341,8 +1282,11 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
     REQUIRE(vm.value.as.i64 == reference.value.as.i64);
     xr_vm_code_free(code);
 
-    XrBackendIR *none = build_ir(instance, XR_BACKEND_OPTIMIZATION_NONE);
-    XrBackendIR *portable = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *none = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_NONE);
+    XrBackendIR *portable = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrExecutionId pure_execution_id;
+    REQUIRE(xr_execution_id_compute(program, profile, &pure_execution_id));
+    REQUIRE(xr_fingerprint_equal(pure_execution_id, xr_execution_instance_id(instance)));
     REQUIRE(xr_fingerprint_equal(xr_backend_ir_execution_id(none),
                                  xr_backend_ir_execution_id(portable)));
     REQUIRE(!xr_fingerprint_equal(xr_backend_ir_optimization_policy_id(none),
@@ -1407,10 +1351,7 @@ static void test_foreign_profile_and_translation_mutation(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
     REQUIRE(profile != NULL);
-    TestBindings bindings;
-    build_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 7u);
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1457,13 +1398,16 @@ static void test_foreign_profile_and_translation_mutation(void) {
     XrBackendOptions constrained = xr_backend_default_options();
     constrained.max_instructions = 1u;
     XrBackendIR *rejected = NULL;
-    REQUIRE(xr_backend_ir_build(instance, &constrained, &rejected, &diagnostic) ==
+    REQUIRE(xr_backend_ir_build(NULL, profile, &constrained, &rejected, &diagnostic) ==
+            XR_BACKEND_INVALID_INPUT);
+    REQUIRE(xr_backend_ir_build(program, NULL, &constrained, &rejected, &diagnostic) ==
+            XR_BACKEND_INVALID_INPUT);
+    REQUIRE(xr_backend_ir_build(program, profile, &constrained, &rejected, &diagnostic) ==
             XR_BACKEND_RESOURCE_LIMIT);
     REQUIRE(rejected == NULL);
 
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
 
@@ -1487,9 +1431,7 @@ static void test_foreign_profile_and_translation_mutation(void) {
                                              cases[index].capability);
         profile = xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
         REQUIRE(profile != NULL);
-        build_bindings(profile, &bindings);
-        instance = create_instance(program, profile, &bindings, 8u + index);
-        ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+        ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
         generated = (XrGeneratedC) {0};
         REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
         char literal[48];
@@ -1498,7 +1440,6 @@ static void test_foreign_profile_and_translation_mutation(void) {
         REQUIRE(strstr(generated.bytes, "sizeof(void") == NULL);
         xr_generated_c_free(&generated);
         xr_backend_ir_free(ir);
-        retire_instance(&instance);
         xr_target_profile_free(profile);
         xr_validated_program_free(program);
     }
@@ -1506,16 +1447,13 @@ static void test_foreign_profile_and_translation_mutation(void) {
     program = build_target_enum_equality_program();
     profile = xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
     REQUIRE(profile != NULL);
-    build_bindings(profile, &bindings);
-    instance = create_instance(program, profile, &bindings, 20u);
-    ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     generated = (XrGeneratedC) {0};
     REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "UINT16_C(4)") != NULL);
     REQUIRE(strstr(generated.bytes, " == ") != NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
 }
@@ -1526,10 +1464,7 @@ static void test_provider_call_lowering_and_mutation(void) {
         XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
     REQUIRE(profile != NULL);
     XrValidatedProgram *program = build_provider_call_program(profile);
-    TestBindings bindings;
-    build_provider_bindings(program, profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 81u);
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrBackendInstruction *provider_call = NULL;
     for (uint32_t function = 0u; function < ir->function_count; ++function) {
         for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
@@ -1560,13 +1495,13 @@ static void test_provider_call_lowering_and_mutation(void) {
 
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
 }
 
-static void write_generated_fixture(const char *path, XrInstance *instance, bool standalone_main) {
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+static void write_generated_fixture(const char *path, const XrValidatedProgram *program,
+                                    const XrTargetProfile *profile, bool standalone_main) {
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, standalone_main, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1578,9 +1513,11 @@ static void write_generated_fixture(const char *path, XrInstance *instance, bool
     xr_backend_ir_free(ir);
 }
 
-static void write_provider_generated_fixture(const char *path, XrInstance *instance,
-                                             uint32_t entry_function) {
-    write_generated_fixture(path, instance, false);
+static void write_provider_generated_fixture(const char *path,
+                                              const XrValidatedProgram *program,
+                                              const XrTargetProfile *profile,
+                                              uint32_t entry_function) {
+    write_generated_fixture(path, program, profile, false);
     FILE *output = fopen(path, "ab");
     REQUIRE(output != NULL);
     REQUIRE(fprintf(output,
@@ -1603,7 +1540,8 @@ static void write_provider_generated_fixture(const char *path, XrInstance *insta
     REQUIRE(fclose(output) == 0);
 }
 
-static void seal_native_file(const char *path, XrInstance *instance) {
+static void seal_native_file(const char *path, const XrValidatedProgram *program,
+                             const XrTargetProfile *profile) {
     FILE *input = fopen(path, "rb");
     REQUIRE(input != NULL);
     REQUIRE(fseek(input, 0, SEEK_END) == 0);
@@ -1616,7 +1554,7 @@ static void seal_native_file(const char *path, XrInstance *instance) {
     REQUIRE(fread(bytes, 1u, size, input) == size);
     REQUIRE(fclose(input) == 0);
 
-    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
@@ -1711,22 +1649,20 @@ int main(int argc, char **argv) {
     REQUIRE(profile != NULL);
     if (provider_call_mode)
         program = build_provider_call_program(profile);
-    TestBindings bindings;
-    if (provider_call_mode)
-        build_provider_bindings(program, profile, &bindings);
-    else
-        build_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     if (seal_mode) {
-        seal_native_file(argv[2], instance);
+        seal_native_file(argv[2], program, profile);
     } else if (argc >= 2) {
         if (provider_call_mode)
-            write_provider_generated_fixture(argv[1], instance,
-                                             xr_validated_program_entry_function(program));
+            write_provider_generated_fixture(argv[1], program, profile,
+                                              xr_validated_program_entry_function(program));
         else
-            write_generated_fixture(argv[1], instance, !invoke_object_mode && !panic_object_mode);
+            write_generated_fixture(argv[1], program, profile,
+                                    !invoke_object_mode && !panic_object_mode);
     } else {
-        test_reference_vm_aot_identity(program, instance);
+        TestBindings bindings;
+        build_bindings(profile, &bindings);
+        XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+        test_reference_vm_aot_identity(program, profile, instance);
         test_affine_copy_lowering();
         test_empty_aggregate_has_portable_private_c_storage();
         test_sealed_invoke_typed_error_cleanup_lowering();
@@ -1736,8 +1672,8 @@ int main(int argc, char **argv) {
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();
         puts("canonical XrProgram AOT tests passed");
+        retire_instance(&instance);
     }
-    retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
     return 0;
