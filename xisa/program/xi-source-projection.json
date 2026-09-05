@@ -261,6 +261,13 @@
       "projection_kind": "coroutine-yield",
       "core_operation": "core.coroutine.yield",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.print",
+      "result_type": "void",
+      "projection_kind": "output-group-i64",
+      "core_operation": "core.output.group.i64",
+      "immediate_u32": 0
     }
   ],
   "semantic_mappings": [

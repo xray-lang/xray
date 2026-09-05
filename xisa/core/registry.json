@@ -3350,6 +3350,80 @@
           "task": 300
         }
       }
+    },
+    {
+      "stable_id": 137,
+      "spelling": "core.output.group.i64",
+      "class": "provider-output",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64"
+        ],
+        "result": "void",
+        "immediates": {
+          "provider_operation": "program-provider-requirement-operation-index"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "trap",
+        "call",
+        "provider-call"
+      ],
+      "capability_requirements": [
+        "provider.binding"
+      ],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "provider_contract",
+      "materialization": "atomic-i64-line-output-trampoline",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one exact output-write provider event containing the canonical signed decimal i64 representation followed by one line-feed byte; provider failure normalizes to trap 7"
+      },
+      "kat_validator": "output-group-i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
     }
   ]
 }

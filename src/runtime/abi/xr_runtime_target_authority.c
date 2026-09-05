@@ -9,6 +9,7 @@
  */
 
 #include "xr_runtime_target_authority.h"
+#include "xr_builtin_provider_contract.h"
 #include "../value/xvalue.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 
@@ -622,6 +623,18 @@ static bool make_hosted_providers(
                        XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE),
         usize_slot,
     };
+    XrTargetProviderCallSlotAbi status_result =
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 1, 1,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi output_parameters[] = {
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+                       pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE),
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+                       pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE),
+        usize_slot,
+    };
     memset(providers, 0, XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT * sizeof(providers[0]));
     providers[0] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -659,12 +672,28 @@ static bool make_hosted_providers(
         .provider_kind = XR_TARGET_PROVIDER_PANIC,
         .panic_behavior = XR_TARGET_PROVIDER_PANIC_UNWINDS,
     };
-    return canonical_id("xray.runtime.provider.v1/hosted/panic", &providers[1].contract_id) &&
-           make_operation(&providers[1].operations[0],
-                          "xray.runtime.provider-operation.v1/hosted/panic/raise",
-                          make_call_abi(void_result, panic_parameters, 2, target_endian),
-                          XR_TARGET_PROVIDER_EFFECT_PANICS, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
-                          XR_TARGET_PROVIDER_FAILURE_PANICS);
+    if (!canonical_id("xray.runtime.provider.v1/hosted/panic", &providers[1].contract_id) ||
+        !make_operation(&providers[1].operations[0],
+                        "xray.runtime.provider-operation.v1/hosted/panic/raise",
+                        make_call_abi(void_result, panic_parameters, 2, target_endian),
+                        XR_TARGET_PROVIDER_EFFECT_PANICS, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+                        XR_TARGET_PROVIDER_FAILURE_PANICS))
+        return false;
+
+    providers[2] = (XrTargetProviderContract) {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
+        .operation_count = 1,
+        .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        .provider_kind = XR_TARGET_PROVIDER_IO,
+    };
+    return canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[2].contract_id) &&
+           make_operation(&providers[2].operations[0],
+                          XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
+                          make_call_abi(status_result, output_parameters, 3, target_endian),
+                          XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+                          XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS);
 }
 
 static bool make_freestanding_providers(
@@ -773,20 +802,19 @@ static bool make_freestanding_providers(
             .runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING,
             .provider_kind = XR_TARGET_PROVIDER_IO,
         };
-        if (!canonical_id("xray.runtime.provider.v1/freestanding/io-hooks",
-                          &providers[2].contract_id))
+        if (!canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[2].contract_id))
             return false;
         uint16_t slot = 0;
         if (has_report &&
             !make_operation(&providers[2].operations[slot++],
-                            "xray.runtime.provider-operation.v1/io/assertion-report",
+                            XR_PROVIDER_IO_ASSERTION_REPORT_OPERATION_KEY,
                             make_call_abi(status_result, report_parameters, 3, target_endian),
                             XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
                             XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS))
             return false;
         if (has_output &&
             !make_operation(&providers[2].operations[slot++],
-                            "xray.runtime.provider-operation.v1/io/output-write",
+                            XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
                             make_call_abi(status_result, report_parameters, 3, target_endian),
                             XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
                             XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS))
@@ -872,7 +900,7 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuth
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     XrFingerprint fingerprint;
     uint64_t provider_mask = 0;
-    const size_t hosted_provider_count = 2;
+    const size_t hosted_provider_count = 3;
     status = xr_target_provider_set_fingerprint(authority.providers, hosted_provider_count,
                                                 &provider_mask, &fingerprint);
     if (status != XR_RUNTIME_ABI_OK)

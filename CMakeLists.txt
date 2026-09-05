@@ -889,7 +889,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang" AND NOT XRAY_C_MSVC_FRONTE
     endif()
 
 elseif(XRAY_C_MSVC_FRONTEND)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    if(ENABLE_ASAN AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        # clang-cl's Windows ASan runtime interposes the dynamic release CRT.
+        # Keep this a build invariant instead of allowing a Debug generator to
+        # silently select the incompatible static debug runtime.
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    elseif(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
     # MSVC needs explicit opt-in for C11 atomics. /std:c11 sets the
     # language version; /experimental:c11atomics turns on the
     # _Atomic keyword path (still flagged "experimental" in VS 2022
@@ -1017,11 +1024,15 @@ if(ENABLE_ASAN)
         # Visual C++ ASan import library or its dynamic-runtime thunk, so make
         # those exact developer-toolchain artifacts available to the verified
         # probe and AOT link plan.  Release payloads never define these paths.
-        get_filename_component(_XRAY_MSVC_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
-        get_filename_component(_XRAY_MSVC_HOST_DIR "${_XRAY_MSVC_BIN_DIR}" DIRECTORY)
-        get_filename_component(_XRAY_MSVC_BIN_ROOT "${_XRAY_MSVC_HOST_DIR}" DIRECTORY)
-        get_filename_component(_XRAY_MSVC_TOOL_ROOT "${_XRAY_MSVC_BIN_ROOT}" DIRECTORY)
-        set(_XRAY_MSVC_ASAN_LIB_DIR "${_XRAY_MSVC_TOOL_ROOT}/lib/x64")
+        if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+            set(_XRAY_MSVC_ASAN_LIB_DIR "${XRAY_WINDOWS_ASAN_RUNTIME_DIR}")
+        else()
+            get_filename_component(_XRAY_MSVC_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+            get_filename_component(_XRAY_MSVC_HOST_DIR "${_XRAY_MSVC_BIN_DIR}" DIRECTORY)
+            get_filename_component(_XRAY_MSVC_BIN_ROOT "${_XRAY_MSVC_HOST_DIR}" DIRECTORY)
+            get_filename_component(_XRAY_MSVC_TOOL_ROOT "${_XRAY_MSVC_BIN_ROOT}" DIRECTORY)
+            set(_XRAY_MSVC_ASAN_LIB_DIR "${_XRAY_MSVC_TOOL_ROOT}/lib/x64")
+        endif()
         set(_XRAY_MSVC_ASAN_IMPORT
             "${_XRAY_MSVC_ASAN_LIB_DIR}/clang_rt.asan_dynamic-x86_64.lib")
         set(_XRAY_MSVC_ASAN_THUNK
@@ -1033,6 +1044,17 @@ if(ENABLE_ASAN)
             XRT_BUILD_ASAN_WINDOWS_IMPORT="${_XRAY_MSVC_ASAN_IMPORT}"
             XRT_BUILD_ASAN_WINDOWS_THUNK="${_XRAY_MSVC_ASAN_THUNK}"
         )
+        if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+            # CMake invokes lld-link directly for clang-cl's MSVC frontend, so
+            # the compiler driver cannot inject its ASan runtime link plan.
+            # Mirror clang-cl's own plan exactly for every executable created
+            # below this directory: dynamic runtime plus whole-archive thunk.
+            add_link_options(
+                "${_XRAY_MSVC_ASAN_IMPORT}"
+                "/INCLUDE:__asan_seh_interceptor"
+                "/WHOLEARCHIVE:${_XRAY_MSVC_ASAN_THUNK}"
+            )
+        endif()
         # MSVC AddressSanitizer is incompatible with /RTC and incremental
         # linking. CMake's Debug defaults enable both, so remove only those
         # incompatible defaults and retain debuginfo plus frame pointers.
@@ -1063,12 +1085,28 @@ if(ENABLE_UBSAN)
     # - Null pointer dereference
     # - Out-of-bounds array access
     # - Use after scope, etc.
-    add_compile_options(
-        -fsanitize=undefined
-        -fno-sanitize=function
-        -fno-omit-frame-pointer
-    )
-    add_link_options(-fsanitize=undefined -fno-sanitize=function)
+    if(XRAY_C_MSVC_FRONTEND)
+        add_compile_options(
+            /clang:-fsanitize=undefined
+            /clang:-fno-sanitize=function
+            /Oy-
+        )
+        if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_HOST_WIN32)
+            set(_XRAY_WINDOWS_UBSAN_RUNTIME
+                "${XRAY_WINDOWS_ASAN_RUNTIME_DIR}/clang_rt.ubsan_standalone-x86_64.lib")
+            if(NOT EXISTS "${_XRAY_WINDOWS_UBSAN_RUNTIME}")
+                message(FATAL_ERROR "Clang x64 UBSan runtime library is missing")
+            endif()
+            link_libraries("${_XRAY_WINDOWS_UBSAN_RUNTIME}")
+        endif()
+    else()
+        add_compile_options(
+            -fsanitize=undefined
+            -fno-sanitize=function
+            -fno-omit-frame-pointer
+        )
+        add_link_options(-fsanitize=undefined -fno-sanitize=function)
+    endif()
 endif()
 
 # ThreadSanitizer configuration

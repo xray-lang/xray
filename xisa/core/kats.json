@@ -1927,6 +1927,42 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "id": "output-group-i64-valid",
+      "operation": "core.output.group.i64",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "i64",
+        "result_type": "void",
+        "operand_category": "value",
+        "operand_ownership": "non-owner",
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-i64-rejects-non-atomic-write",
+      "operation": "core.output.group.i64",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "i64",
+        "result_type": "void",
+        "operand_category": "value",
+        "operand_ownership": "non-owner",
+        "provider_requirement": true,
+        "atomic_group": false,
+        "separator": "space",
+        "terminator": "line-feed"
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

@@ -80,7 +80,7 @@ static void test_runtime_owner_publishes_validated_structures(void) {
     XrFingerprint second;
     uint64_t provider_mask = 0;
     CHECK(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
-    CHECK(authority.provider_count == 2);
+    CHECK(authority.provider_count == 3);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &first) == XR_RUNTIME_ABI_OK);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &second) ==
           XR_RUNTIME_ABI_OK);
@@ -89,6 +89,8 @@ static void test_runtime_owner_publishes_validated_structures(void) {
                                              &provider_mask, &second) == XR_RUNTIME_ABI_OK);
     CHECK(provider_mask == (XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
                             XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
+                            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
+                            XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE) |
                             XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY)));
     CHECK(xr_runtime_string_object_contract_verify(&authority.string_contract) ==
           XR_RUNTIME_ABI_OK);
@@ -142,9 +144,10 @@ static void test_freestanding_authority_is_not_hosted_projection(void) {
         CHECK(freestanding.providers[i].runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
         CHECK(freestanding.providers[i].flags == XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING);
         CHECK(freestanding.providers[i].provider_kind == expected_kinds[i]);
-        CHECK(memcmp(freestanding.providers[i].contract_id.bytes,
-                     hosted.providers[i].contract_id.bytes,
-                     sizeof(freestanding.providers[i].contract_id.bytes)) != 0);
+        CHECK((i == 2u) ==
+              (memcmp(freestanding.providers[i].contract_id.bytes,
+                      hosted.providers[i].contract_id.bytes,
+                      sizeof(freestanding.providers[i].contract_id.bytes)) == 0));
     }
     CHECK(xr_runtime_target_authority_native_freestanding(
               XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR), &minimal) ==

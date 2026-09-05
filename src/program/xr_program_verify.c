@@ -3077,6 +3077,17 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             return true;
+        case XR_CORE_OP_CORE_OUTPUT_GROUP_I64:
+            if (!expect_shape(context, instruction, location, 1, 0,
+                              XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION, XR_CORE_TYPE_VOID,
+                              false) ||
+                !operand_type_is(function, instruction, 0, XR_CORE_TYPE_I64) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE) ||
+                !operand_ownership_is(function, instruction, 0, XR_CORE_IR_NON_OWNER)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             const XrValidatedType *callable =
                 xr_validated_program_type(context->program, instruction->result_type_id);
@@ -3779,7 +3790,8 @@ static bool verify_provider_requirements_are_exact(VerifyContext *context) {
             for (uint32_t instruction = 0; instruction < block_row->instruction_count;
                  ++instruction) {
                 const XrValidatedInstruction *op = &block_row->instructions[instruction];
-                if (op->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL)
+                if (op->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL &&
+                    op->operation_id != XR_CORE_OP_CORE_OUTPUT_GROUP_I64)
                     continue;
                 size_t flat = op->immediate.provider_operation.operation_index;
                 for (uint32_t requirement = 0;

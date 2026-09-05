@@ -57,12 +57,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", type=Path, required=True)
     parser.add_argument("--expected-exit", type=int, required=True)
+    parser.add_argument("--expected-stdout-hex")
     args = parser.parse_args()
     executable = args.executable.resolve()
     if not executable.is_file():
         print(f"missing pure-AOT executable: {executable}", file=sys.stderr)
         return 1
-    result = subprocess.run([str(executable)], check=False)
+    result = subprocess.run([str(executable)], check=False, stdout=subprocess.PIPE)
     expected_exit = expected_process_exit(args.expected_exit, windows=os.name == "nt")
     if result.returncode != expected_exit:
         print(
@@ -72,6 +73,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if args.expected_stdout_hex is not None:
+        expected_stdout = bytes.fromhex(args.expected_stdout_hex)
+        if result.stdout != expected_stdout:
+            print(
+                f"pure-AOT stdout mismatch: expected {expected_stdout!r}, got {result.stdout!r}",
+                file=sys.stderr,
+            )
+            return 1
     symbol_text, symbol_error = load_symbol_inventory(executable)
     if symbol_text is None:
         print(f"pure-AOT symbol inspection failed: {symbol_error}", file=sys.stderr)

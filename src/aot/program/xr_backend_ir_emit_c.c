@@ -262,10 +262,12 @@ static bool conformance_id(const XrValidatedProgram *program, uint16_t concrete_
     return false;
 }
 
-static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, bool *arena) {
+static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, bool *arena,
+                         bool *output) {
     *checked = false;
     *wrapping = false;
     *arena = false;
+    *output = false;
     for (uint32_t function = 0; function < ir->function_count; ++function) {
         const XrBackendFunction *fn = &ir->functions[function];
         for (uint32_t block = 0; block < fn->block_count; ++block) {
@@ -283,24 +285,37 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, b
                 if (op->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
                     (op->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK && op->operand_count != 0u))
                     *arena = true;
+                if (op->operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP_I64)
+                    *output = true;
             }
         }
     }
 }
 
-static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
+static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone_main) {
     bool checked = false;
     bool wrapping = false;
     bool arena = false;
-    scan_helpers(ir, &checked, &wrapping, &arena);
+    bool output = false;
+    scan_helpers(ir, &checked, &wrapping, &arena, &output);
     if (!append_text(buffer, "#include <stdint.h>\n"
                              "#include <limits.h>\n"
                              "#include <stddef.h>\n") ||
-        (arena && !append_text(buffer, "#include <stdlib.h>\n")) || !append_text(buffer, "\n"))
+        (arena && !append_text(buffer, "#include <stdlib.h>\n")) ||
+        (output && standalone_main &&
+         !append_text(buffer,
+                      "#include <stdio.h>\n"
+                      "#if defined(_WIN32)\n"
+                      "#include <fcntl.h>\n"
+                      "#include <io.h>\n"
+                      "#endif\n")) ||
+        !append_text(buffer, "\n"))
         return false;
     if (!append_text(buffer,
                      "typedef int (*XrAotProviderCallI64)(void *context, uint32_t requirement, "
-                     "uint32_t operation, int64_t argument, int64_t *result);\n\n"))
+                     "uint32_t operation, int64_t argument, int64_t *result);\n"
+                     "typedef int (*XrAotProviderOutputWrite)(void *context, uint32_t "
+                     "requirement, uint32_t operation, const uint8_t *bytes, size_t size);\n\n"))
         return false;
     if (arena) {
         if (!append_text(buffer,
@@ -313,6 +328,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
                          "    XrAotAllocation *allocations;\n"
                          "    void *provider_context;\n"
                          "    XrAotProviderCallI64 provider_call_i64;\n"
+                         "    XrAotProviderOutputWrite provider_output_write;\n"
                          "} XrAotContext;\n\n"
                          "static inline void *xr_aot_alloc(XrAotContext *context, size_t size) "
                          "{\n"
@@ -339,6 +355,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
     } else if (!append_text(buffer, "typedef struct XrAotContext {\n"
                                     "    void *provider_context;\n"
                                     "    XrAotProviderCallI64 provider_call_i64;\n"
+                                    "    XrAotProviderOutputWrite provider_output_write;\n"
                                     "} XrAotContext;\n\n")) {
         return false;
     }
@@ -366,6 +383,40 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
                              "    if (bits <= (uint64_t)INT64_MAX) return (int64_t)bits;\n"
                              "    return -(int64_t)(~bits) - INT64_C(1);\n"
                              "}\n\n"))
+        return false;
+    if (output &&
+        !append_text(buffer,
+                     "static size_t xr_aot_format_i64_line(int64_t value, uint8_t output[22]) "
+                     "{\n"
+                     "    uint8_t reverse[20];\n"
+                     "    size_t count = 0;\n"
+                     "    uint64_t magnitude = value < 0 ? UINT64_C(0) - (uint64_t)value : "
+                     "(uint64_t)value;\n"
+                     "    do {\n"
+                     "        reverse[count++] = (uint8_t)('0' + magnitude % UINT64_C(10));\n"
+                     "        magnitude /= UINT64_C(10);\n"
+                     "    } while (magnitude != 0);\n"
+                     "    size_t cursor = 0;\n"
+                     "    if (value < 0) output[cursor++] = (uint8_t)'-';\n"
+                     "    while (count != 0) output[cursor++] = reverse[--count];\n"
+                     "    output[cursor++] = (uint8_t)'\\n';\n"
+                     "    return cursor;\n"
+                     "}\n\n"))
+        return false;
+    if (output && standalone_main &&
+        !append_text(buffer,
+                     "static int xr_aot_host_output_write(void *context, uint32_t requirement, "
+                     "uint32_t operation, const uint8_t *bytes, size_t size) {\n"
+                     "    (void)context;\n"
+                     "    (void)requirement;\n"
+                     "    (void)operation;\n"
+                     "#if defined(_WIN32)\n"
+                     "    if (_setmode(_fileno(stdout), _O_BINARY) == -1) return 1;\n"
+                     "#endif\n"
+                     "    if ((!bytes && size != 0) || fwrite(bytes, 1, size, stdout) != size) "
+                     "return 1;\n"
+                     "    return 0;\n"
+                     "}\n\n"))
         return false;
     if (checked &&
         !append_text(buffer, "int xr_aot_checked_add(int64_t left, int64_t right, int64_t *out) {\n"
@@ -1251,6 +1302,20 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                 instruction->immediate.provider_operation.requirement_index,
                 instruction->immediate.provider_operation.operation_index,
                 instruction->operands[0], instruction->result_id);
+        case XR_CORE_OP_CORE_OUTPUT_GROUP_I64:
+            return append_format(
+                buffer,
+                "        {\n"
+                "            uint8_t xr_output[22];\n"
+                "            size_t xr_output_size = xr_aot_format_i64_line(v%u, xr_output);\n"
+                "            if (!xr_ctx->provider_output_write || "
+                "xr_ctx->provider_output_write(xr_ctx->provider_context, UINT32_C(%u), "
+                "UINT32_C(%u), xr_output, xr_output_size) != 0) "
+                "return xr_aot_make(1, 0, 7);\n"
+                "        }\n",
+                instruction->operands[0],
+                instruction->immediate.provider_operation.requirement_index,
+                instruction->immediate.provider_operation.operation_index);
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             uint32_t target_id = instruction->immediate.function_id;
             if (instruction->operand_count == 0u)
@@ -1512,7 +1577,8 @@ static bool emit_coroutine_entry_adapter(CBuffer *buffer, const XrBackendIR *ir)
     bool checked = false;
     bool wrapping = false;
     bool arena = false;
-    scan_helpers(ir, &checked, &wrapping, &arena);
+    bool output = false;
+    scan_helpers(ir, &checked, &wrapping, &arena, &output);
     if (!append_format(buffer,
                        "typedef struct XrAotEntryCoroutineFrame {\n"
                        "    XrAotContext context;\n"
@@ -1607,10 +1673,15 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     bool checked = false;
     bool wrapping = false;
     bool arena = false;
-    scan_helpers(ir, &checked, &wrapping, &arena);
+    bool output = false;
+    scan_helpers(ir, &checked, &wrapping, &arena, &output);
     if (entry->parameter_count != 0u)
         return false;
     if (!append_text(buffer, "int main(void) {\n    XrAotContext xr_ctx = {0};\n"))
+        return false;
+    if (output &&
+        !append_text(buffer,
+                     "    xr_ctx.provider_output_write = xr_aot_host_output_write;\n"))
         return false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
         char storage[32];
@@ -1702,7 +1773,21 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
         return diagnostic_out ? diagnostic_out->status : XR_BACKEND_INVALID_INPUT;
     }
     CBuffer buffer = {0};
-    bool emitted = emit_prelude(&buffer, ir);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(ir->profile);
+    if (standalone_main && machine &&
+        machine->runtime_profile != XR_TARGET_RUNTIME_PROFILE_HOSTED) {
+        bool checked = false;
+        bool wrapping = false;
+        bool arena = false;
+        bool output = false;
+        scan_helpers(ir, &checked, &wrapping, &arena, &output);
+        if (output) {
+            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_EMISSION_REJECTED, 0u, 0u, 0u,
+                                      0u);
+            return XR_BACKEND_EMISSION_REJECTED;
+        }
+    }
+    bool emitted = emit_prelude(&buffer, ir, standalone_main);
     emitted = emitted && emit_coroutine_frames(&buffer, ir);
     for (uint32_t function = 0; emitted && function < ir->function_count; ++function)
         emitted = emit_function_signature(&buffer, &ir->functions[function], ir, function, true);

@@ -17,6 +17,7 @@
 #include "../program/xr_program_invoke_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
+#include "../program/xr_program_output_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
@@ -1007,6 +1009,19 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
     return program;
 }
 
+static XrValidatedProgram *build_output_program(int64_t value) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_output_fixture_write(value, &artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
 static XrValidatedProgram *build_existential_program(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -1538,6 +1553,70 @@ static void test_provider_call_lowering_and_mutation(void) {
     xr_validated_program_free(program);
 }
 
+static void test_provider_output_lowering_and_mutation(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_output(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrValidatedProgram *program = build_output_program(INT64_MIN);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendInstruction *output = NULL;
+    for (uint32_t function = 0u; function < ir->function_count; ++function) {
+        for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
+            XrBackendBlock *row = &ir->functions[function].blocks[block];
+            for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
+                if (row->instructions[instruction].operation_id ==
+                    XR_CORE_OP_CORE_OUTPUT_GROUP_I64) {
+                    REQUIRE(output == NULL);
+                    output = &row->instructions[instruction];
+                }
+            }
+        }
+    }
+    REQUIRE(output != NULL);
+    REQUIRE(output->immediate.provider_operation.requirement_index == 0u);
+    REQUIRE(output->immediate.provider_operation.operation_index == 0u);
+    XrGeneratedC embedded = {0};
+    XrGeneratedC standalone = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &embedded, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(embedded.bytes, "provider_output_write") != NULL);
+    REQUIRE(strstr(embedded.bytes, "xr_aot_format_i64_line") != NULL);
+    REQUIRE(strstr(embedded.bytes, "fwrite") == NULL);
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &standalone, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(standalone.bytes, "xr_aot_host_output_write") != NULL);
+    REQUIRE(strstr(standalone.bytes, "fwrite(bytes, 1, size, stdout)") != NULL);
+    REQUIRE(strstr(standalone.bytes,
+                   "xr_ctx.provider_output_write = xr_aot_host_output_write") != NULL);
+
+    output->immediate.provider_operation.operation_index = 1u;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    output->immediate.provider_operation.operation_index = 0u;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+
+    xr_generated_c_free(&standalone);
+    xr_generated_c_free(&embedded);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+
+    profile = xr_test_target_profile_build_with_output(
+        true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+    REQUIRE(profile != NULL);
+    program = build_output_program(42);
+    ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    embedded = (XrGeneratedC) {0};
+    standalone = (XrGeneratedC) {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &embedded, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &standalone, &diagnostic) ==
+            XR_BACKEND_EMISSION_REJECTED);
+    REQUIRE(standalone.bytes == NULL && standalone.size == 0u);
+    xr_generated_c_free(&embedded);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void write_generated_fixture(const char *path, const XrValidatedProgram *program,
                                     const XrTargetProfile *profile, bool standalone_main) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
@@ -1626,6 +1705,7 @@ int main(int argc, char **argv) {
     bool foreign_target_mode = pointer_width_mode || operating_system_mode || architecture_mode ||
                                native_abi_mode || endianness_mode;
     bool provider_call_mode = argc == 3 && strcmp(argv[2], "provider-call") == 0;
+    bool provider_output_mode = argc == 3 && strcmp(argv[2], "provider-output") == 0;
     XrValidatedProgram *program = NULL;
     if (seal_mode)
         program = build_full_program();
@@ -1661,7 +1741,7 @@ int main(int argc, char **argv) {
         program = build_target_query_program(XR_CORE_OP_CORE_TARGET_ENDIANNESS,
                                              XR_CORE_TYPE_TARGET_ENDIAN,
                                              XR_CORE_CAPABILITY_PROFILE_ENDIANNESS);
-    else if (provider_call_mode) {
+    else if (provider_call_mode || provider_output_mode) {
         /* The exact profile owns the provider contract used to build this Program. */
     }
     else if (invoke_object_mode || panic_object_mode) {
@@ -1685,12 +1765,17 @@ int main(int argc, char **argv) {
             ? xr_test_target_profile_build_with_scalar_clock(
                   false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
                   XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER)
+            : provider_output_mode
+                  ? xr_test_target_profile_build_with_output(
+                        false, XR_TARGET_RUNTIME_PROFILE_HOSTED)
             : xr_test_target_profile_build(
                   foreign_target_mode, foreign_target_mode ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
                                                            : XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     if (provider_call_mode)
         program = build_provider_call_program(profile);
+    if (provider_output_mode)
+        program = build_output_program(42);
     if (seal_mode) {
         seal_native_file(argv[2], program, profile);
     } else if (argc >= 2) {
@@ -1715,6 +1800,7 @@ int main(int argc, char **argv) {
         test_coroutine_private_state_machine_lowering();
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();
+        test_provider_output_lowering_and_mutation();
         puts("canonical XrProgram AOT tests passed");
         retire_instance(&instance);
     }

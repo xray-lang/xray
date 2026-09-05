@@ -25,7 +25,7 @@ EXPECTED_COVERAGE = {
     "schema": "xray-execution-binding-coverage/1",
     "profile_schema_version": 5,
     "boundary_abi_schema_version": 3,
-    "execution_binding_schema_version": 2,
+    "execution_binding_schema_version": 3,
     "execution_identity": {
         "inputs": ["ProgramId", "TargetProfileId", "BoundaryAbiId", "RuntimeKernelId"],
         "compile_time_owner": "xr_execution_id_compute",
@@ -58,6 +58,8 @@ EXPECTED_COVERAGE = {
         "non-null-operation-entry",
         "typed-i64-trampoline",
         "exact-i64-call-abi",
+        "typed-output-write-trampoline",
+        "exact-output-byte-sink-call-abi",
         "extra-binding-rejected",
         "thread-safety",
         "reentrancy",
@@ -138,7 +140,7 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     for token in ("XrExecutionId", "XrInstance", "XrExecutionLease", "contract_fingerprint",
                   "XR_INSTANCE_ACTIVE", "XR_INSTANCE_DRAINING", "XR_INSTANCE_RETIRED"):
         require(token in execution_header, f"missing execution contract token {token}")
-    require("#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(2)" in execution_header,
+    require("#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(3)" in execution_header,
             "execution header schema version is not synchronized with coverage")
     require("xr_execution_id_compute" in execution_identity_header and
             "xray-execution-id-v1" in execution_identity_source,
@@ -149,7 +151,9 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     require("xr_execution_id_compute(input->program, input->profile" in execution_source,
             "runtime binding does not consume the shared execution identity")
     for token in ("XrProviderCallStatus", "XR_PROVIDER_CALL_OK", "int64_t argument",
-                  "int64_t *result_out", "XR_EXECUTION_DIAGNOSTIC_PROVIDER_ABI"):
+                  "int64_t *result_out", "XrProviderTrampolineKind",
+                  "XrProviderOutputWriteEntry", "const uint8_t *bytes", "size_t size",
+                  "XR_EXECUTION_DIAGNOSTIC_PROVIDER_ABI"):
         require(token in execution_header, f"typed provider trampoline omits {token}")
     for token in ("XrBoundaryTypeLayout", "XrBoundaryCallLayout",
                   "XrBoundaryMaterializationBudget", "XR_BOUNDARY_CALL_FRAME_V1"):
@@ -160,12 +164,14 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     for token in ("xr_validated_program_provider_requirement_count",
                   "xr_validated_program_provider_requirement", "find_profile_provider",
                   "find_profile_operation", "provider_operation_uses_scalar_i64_trampoline",
+                  "provider_operation_uses_output_write_trampoline",
                   "XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER",
                   "XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE"):
         require(token in execution_source, f"program-required provider subset omits {token}")
     for token in ("xr_execution_instance_acquire", "xr_execution_lease_release",
                   "xr_execution_lease_retain_program", "xr_execution_lease_retain_profile",
-                  "xr_execution_lease_provider_call_i64"):
+                  "xr_execution_lease_provider_call_i64",
+                  "xr_execution_lease_provider_output_write"):
         require(token in execution_source, f"generation lease contract omits {token}")
     for token in ("uint64_t ticket", "lease_tickets", "lease_ticket_is_active_locked",
                   "next_lease_ticket", "in_flight_calls"):

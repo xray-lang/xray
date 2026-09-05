@@ -20,6 +20,16 @@ def invoke(binary: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def invoke_bytes(binary: Path, *arguments: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        [str(binary), *arguments],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        timeout=30,
+    )
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -34,6 +44,10 @@ def main() -> int:
     zero = invoke(args.binary, "run", str(args.fixtures / "main_zero.xr"))
     require(zero.returncode == 0, f"zero main failed: {zero.stderr}")
     require(zero.stdout == "", f"zero main produced stdout: {zero.stdout!r}")
+
+    printed = invoke_bytes(args.binary, "run", str(args.fixtures / "main_print.xr"))
+    require(printed.returncode == 0, f"print main failed: {printed.stderr!r}")
+    require(printed.stdout == b"42\n", f"print main bytes drifted: {printed.stdout!r}")
 
     implicit = invoke(args.binary, str(args.fixtures / "main_zero.xr"))
     require(implicit.returncode == 0, f"implicit source run failed: {implicit.stderr}")

@@ -17,8 +17,11 @@
 #include "xcli_spec.h"
 #include "../toolchain/xtc_target_profile.h"
 #include "../../api/xisolate_profile.h"
+#include "../../base/xplatform.h"
 #include "../../execution/xr_execution.h"
+#include "../../plan/semantic/xr_semantic_ids.h"
 #include "../../plan/target/xr_target_profile.h"
+#include "../../runtime/abi/xr_builtin_provider_contract.h"
 #include "../../vm/xr_program_vm.h"
 
 #include "xray_vm.h"
@@ -26,6 +29,10 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
+#if XR_OS_WINDOWS
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 static bool is_exact_source_path(const char *path) {
     size_t length = path ? strlen(path) : 0u;
@@ -50,6 +57,75 @@ static bool retire_instance(XrInstance **instance) {
         xr_execution_instance_retire(*instance, &diagnostic) != XR_EXECUTION_OK)
         return false;
     return xr_execution_instance_free(instance, &diagnostic) == XR_EXECUTION_OK;
+}
+
+static bool stable_id_equal(XrStableId left, XrStableId right) {
+    return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
+}
+
+static bool builtin_provider_id(const char *key, XrStableId *out) {
+    XrFingerprint digest;
+    return xr_stable_id_from_key(key, out, &digest);
+}
+
+static const XrTargetProviderContract *find_profile_provider(
+    const XrTargetProfile *profile, XrStableId contract_id) {
+    for (size_t index = 0; index < xr_target_profile_provider_count(profile); ++index) {
+        const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
+        if (candidate && stable_id_equal(candidate->contract_id, contract_id))
+            return candidate;
+    }
+    return NULL;
+}
+
+static XrProviderCallStatus stdout_output_write(void *context, const uint8_t *bytes, size_t size) {
+    FILE *stream = context;
+    if (!stream || (!bytes && size != 0u))
+        return XR_PROVIDER_CALL_FAILED;
+#if XR_OS_WINDOWS
+    if (_setmode(_fileno(stream), _O_BINARY) == -1)
+        return XR_PROVIDER_CALL_FAILED;
+#endif
+    return fwrite(bytes, 1u, size, stream) == size ? XR_PROVIDER_CALL_OK
+                                                   : XR_PROVIDER_CALL_FAILED;
+}
+
+static bool build_run_provider_binding(const XrValidatedProgram *program,
+                                       const XrTargetProfile *profile,
+                                       XrProviderBinding *provider,
+                                       XrProviderOperationBinding *operation) {
+    if (!program || !profile || !provider || !operation ||
+        xr_validated_program_provider_requirement_count(program) != 1u)
+        return false;
+    XrProgramProviderRequirementView requirement = {0};
+    XrStableId output_contract = {{0}};
+    XrStableId output_operation = {{0}};
+    if (!xr_validated_program_provider_requirement(program, 0u, &requirement) ||
+        requirement.operation_count != 1u ||
+        !builtin_provider_id(XR_PROVIDER_IO_CONTRACT_KEY, &output_contract) ||
+        !builtin_provider_id(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY, &output_operation) ||
+        !stable_id_equal(requirement.contract_id, output_contract) ||
+        !stable_id_equal(requirement.operation_ids[0], output_operation))
+        return false;
+    const XrTargetProviderContract *contract =
+        find_profile_provider(profile, requirement.contract_id);
+    if (!contract || contract->provider_kind != XR_TARGET_PROVIDER_IO ||
+        contract->operation_count != 1u ||
+        !stable_id_equal(contract->operations[0].stable_id, output_operation))
+        return false;
+    memset(provider, 0, sizeof(*provider));
+    memset(operation, 0, sizeof(*operation));
+    operation->operation_id = output_operation;
+    operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE;
+    operation->entry.output_write = stdout_output_write;
+    operation->context = stdout;
+    provider->contract_id = output_contract;
+    provider->behavior_flags =
+        XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT;
+    provider->operations = operation;
+    provider->operation_count = 1u;
+    return xr_target_provider_contract_fingerprint(contract, &provider->contract_fingerprint) ==
+           XR_RUNTIME_ABI_OK;
 }
 
 static int report_source_failure(const XrCliCanonicalSourceDiagnostic *diagnostic) {
@@ -104,16 +180,25 @@ static int report_execution_outcome(XrVmOutcome outcome) {
 }
 
 static int execute_program(XrProgramSourceProduct *product, XrTargetProfile *profile) {
-    if (xr_validated_program_provider_requirement_count(product->program) != 0u) {
-        fprintf(
-            stderr,
-            "XR_RUN_6008: canonical run has no bindings for the program provider requirements\n");
-        return XR_CLI_EXIT_FAIL;
+    XrProviderOperationBinding operation = {0};
+    XrProviderBinding provider = {0};
+    const XrProviderBinding *providers = NULL;
+    uint32_t provider_count = xr_validated_program_provider_requirement_count(product->program);
+    if (provider_count != 0u) {
+        if (!build_run_provider_binding(product->program, profile, &provider, &operation)) {
+            fprintf(stderr,
+                    "XR_RUN_6008: canonical run cannot bind the exact program provider "
+                    "requirements\n");
+            return XR_CLI_EXIT_FAIL;
+        }
+        providers = &provider;
     }
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = product->program,
         .profile = profile,
+        .providers = providers,
+        .provider_count = provider_count,
         .generation = 1u,
     };
     XrExecutionDiagnostic execution_diagnostic;

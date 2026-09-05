@@ -100,6 +100,23 @@ static XrReferenceOutcome trap_outcome(EvalContext *context, XrReferenceTrap tra
     return result;
 }
 
+static size_t format_i64_line(int64_t value, uint8_t output[22]) {
+    uint8_t reverse[20];
+    size_t count = 0u;
+    uint64_t magnitude = value < 0 ? UINT64_C(0) - (uint64_t) value : (uint64_t) value;
+    do {
+        reverse[count++] = (uint8_t) ('0' + magnitude % UINT64_C(10));
+        magnitude /= UINT64_C(10);
+    } while (magnitude != 0u);
+    size_t cursor = 0u;
+    if (value < 0)
+        output[cursor++] = (uint8_t) '-';
+    while (count != 0u)
+        output[cursor++] = reverse[--count];
+    output[cursor++] = (uint8_t) '\n';
+    return cursor;
+}
+
 static XrReferenceValue void_value(void) {
     XrReferenceValue value = {.kind = XR_REFERENCE_VALUE_VOID};
     return value;
@@ -867,6 +884,21 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     }
                     produced.as.value.kind = XR_REFERENCE_VALUE_I64;
                     produced.as.value.as.i64 = provider_result;
+                    break;
+                }
+                case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {
+                    uint8_t bytes[22];
+                    size_t size = format_i64_line(
+                        values[instruction->operands[0]].as.value.as.i64, bytes);
+                    if (!context->providers || !context->providers->output_write ||
+                        !context->providers->output_write(
+                            context->providers->context,
+                            instruction->immediate.provider_operation.requirement_index,
+                            instruction->immediate.provider_operation.operation_index, bytes,
+                            size)) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+                        goto done;
+                    }
                     break;
                 }
                 case XR_CORE_OP_CORE_CALLABLE_PACK: {

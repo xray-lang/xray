@@ -1763,9 +1763,13 @@ static bool provider_operation_flat_index(const XrCoreIrProgram *program,
     return false;
 }
 
-static XrProgramBuildStatus validate_provider_call_requirements(const XrCoreIrProgram *program,
-                                                                char *diagnostic,
-                                                                size_t diagnostic_size) {
+static bool operation_is_provider_backed(uint16_t operation_id) {
+    return operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
+           operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP_I64;
+}
+
+static XrProgramBuildStatus validate_provider_operation_requirements(
+    const XrCoreIrProgram *program, char *diagnostic, size_t diagnostic_size) {
     size_t operation_count = 0u;
     for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
         uint32_t count = program->provider_requirements[provider].operation_count;
@@ -1785,11 +1789,11 @@ static XrProgramBuildStatus validate_provider_call_requirements(const XrCoreIrPr
                 for (uint32_t instruction = 0; instruction < block_row->instruction_count;
                      ++instruction) {
                     const XrCoreIrInstruction *row = &block_row->instructions[instruction];
-                    if (row->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL)
+                    if (!operation_is_provider_backed(row->operation_id))
                         continue;
                     if (row->immediate_kind != XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
-                                                  "provider call lacks provider operation identity");
+                                                  "provider operation lacks provider identity");
                         xr_free(used);
                         return XR_PROGRAM_BUILD_INVALID_INPUT;
                     }
@@ -1798,7 +1802,7 @@ static XrProgramBuildStatus validate_provider_call_requirements(const XrCoreIrPr
                             program, row->immediate.provider_operation.contract_id,
                             row->immediate.provider_operation.operation_id, &flat_index)) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
-                                                  "provider call is absent from requirements");
+                                                  "provider operation is absent from requirements");
                         xr_free(used);
                         return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
                     }
@@ -1811,7 +1815,7 @@ static XrProgramBuildStatus validate_provider_call_requirements(const XrCoreIrPr
         if (used[index] != 0u)
             continue;
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
-                                  "provider requirement has no encoded call");
+                                  "provider requirement has no encoded operation");
         xr_free(used);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -1958,7 +1962,7 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         xr_core_ir_program_free(program);
         return status;
     }
-    status = validate_provider_call_requirements(program, diagnostic, diagnostic_size);
+    status = validate_provider_operation_requirements(program, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK) {
         xr_core_ir_program_free(program);
         return status;

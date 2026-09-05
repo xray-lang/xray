@@ -56,6 +56,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_PROVIDER_CALL:
+        case XR_CORE_OP_CORE_OUTPUT_GROUP_I64:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:

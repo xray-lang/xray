@@ -9,6 +9,8 @@
  */
 
 #include "target_profile_test_fixture.h"
+#include "../../../src/plan/semantic/xr_semantic_ids.h"
+#include "../../../src/runtime/abi/xr_builtin_provider_contract.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -192,6 +194,66 @@ XrTargetProfile *xr_test_target_profile_build_with_scalar_clock(
     char error[512] = {0};
     if (!xr_target_profile_build(&fixture.input, &profile, error, sizeof(error))) {
         fprintf(stderr, "scalar clock target profile fixture failed: %s\n", error);
+        return NULL;
+    }
+    return profile;
+}
+
+XrTargetProfile *xr_test_target_profile_build_with_output(bool ilp32,
+                                                          uint8_t runtime_profile) {
+    XrTestTargetProfileFixture fixture;
+    if (!xr_test_target_profile_fixture_init(&fixture, ilp32, runtime_profile))
+        return NULL;
+
+    XrTargetProviderContract providers[3] = {0};
+    memcpy(providers, fixture.providers, sizeof(fixture.providers));
+    uint8_t pointer_width = (uint8_t) fixture.input.machine.data_layout.pointer.size;
+    uint8_t pointer_alignment = (uint8_t) fixture.input.machine.data_layout.pointer.align;
+    XrTargetProviderCallSlotAbi status = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 1u, 1u,
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0u);
+    XrTargetProviderCallSlotAbi parameters[] = {
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+                       pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE),
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+                       pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE),
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, pointer_width,
+                       pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0u),
+    };
+    XrTargetProviderCallAbiContract call_abi = make_call_abi(status, parameters, 3u);
+    call_abi.target_endian = (uint8_t) fixture.input.machine.data_layout.endian;
+    call_abi.pointer_width = pointer_width;
+    call_abi.pointer_alignment = pointer_alignment;
+    uint32_t availability =
+        runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+            ? XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING
+            : XR_TARGET_PROVIDER_AVAILABLE_HOSTED;
+    providers[2] = (XrTargetProviderContract) {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .flags = availability,
+        .operation_count = 1u,
+        .runtime_profile = runtime_profile,
+        .provider_kind = XR_TARGET_PROVIDER_IO,
+    };
+    providers[2].operations[0] = make_operation(
+        0u, call_abi, XR_TARGET_PROVIDER_EFFECT_IO,
+        XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS);
+    XrFingerprint key_digest;
+    if (!xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY,
+                               &providers[2].contract_id, &key_digest) ||
+        !xr_stable_id_from_key(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
+                               &providers[2].operations[0].stable_id, &key_digest))
+        return NULL;
+    fixture.input.providers = providers;
+    fixture.input.provider_count = 3u;
+    XrTargetProfile *profile = NULL;
+    char error[512] = {0};
+    if (!xr_target_profile_build(&fixture.input, &profile, error, sizeof(error))) {
+        fprintf(stderr, "output target profile fixture failed: %s\n", error);
         return NULL;
     }
     return profile;

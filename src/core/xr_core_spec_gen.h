@@ -9,9 +9,9 @@
 
 #define XR_CORE_SPEC_EPOCH 1u
 /* clang-format off */
-#define XR_CORE_SPEC_SEMANTIC_SHA256 "54c89f86d1c57ce19bb4fdee95124bcfbe6e272e0746520c4ddaf0f73db7dcd6"
+#define XR_CORE_SPEC_SEMANTIC_SHA256 "a61fd038d3a8fcaf07772c46c7ddc7fdc36afe9ff0080c893621602946c6316a"
 /* clang-format on */
-#define XR_CORE_SPEC_OPERATION_COUNT 45u
+#define XR_CORE_SPEC_OPERATION_COUNT 46u
 #define XR_CORE_SPEC_FEATURE_COUNT 1u
 #define XR_CORE_SPEC_VARIADIC_ARITY UINT8_MAX
 
@@ -104,6 +104,7 @@ typedef enum XrCoreOperationId {
     XR_CORE_OP_CORE_PLACE_STORE = 106,
     XR_CORE_OP_CORE_COROUTINE_YIELD = 116,
     XR_CORE_OP_CORE_PROVIDER_CALL = 136,
+    XR_CORE_OP_CORE_OUTPUT_GROUP_I64 = 137,
 } XrCoreOperationId;
 
 typedef enum XrCoreCoverageStatus {

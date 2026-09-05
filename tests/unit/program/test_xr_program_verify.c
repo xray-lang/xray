@@ -12,6 +12,7 @@
 #include "xr_program_invoke_fixture.h"
 #include "xr_program_panic_fixture.h"
 #include "xr_program_coroutine_fixture.h"
+#include "xr_program_output_fixture.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -26,6 +27,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
@@ -3390,6 +3392,68 @@ static void test_coroutine_state_and_exact_liveness(void) {
     xr_program_artifact_free(&artifact);
 }
 
+typedef struct ReferenceOutputCapture {
+    uint8_t bytes[32];
+    size_t size;
+    uint32_t calls;
+    bool fail;
+} ReferenceOutputCapture;
+
+static bool capture_reference_output(void *opaque, uint32_t requirement_index,
+                                     uint32_t operation_index, const uint8_t *bytes,
+                                     size_t size) {
+    ReferenceOutputCapture *capture = opaque;
+    if (!capture || requirement_index != 0u || operation_index != 0u ||
+        (!bytes && size != 0u) || size > sizeof(capture->bytes) - capture->size)
+        return false;
+    ++capture->calls;
+    if (capture->fail)
+        return false;
+    memcpy(capture->bytes + capture->size, bytes, size);
+    capture->size += size;
+    return true;
+}
+
+static void test_provider_output_semantics(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_output_fixture_write(-42, &artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        ReferenceOutputCapture capture = {0};
+        XrReferenceProviderBinding binding = {
+            .context = &capture,
+            .output_write = capture_reference_output,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 0);
+        CHECK(capture.calls == 1u);
+        CHECK(capture.size == 4u);
+        CHECK(memcmp(capture.bytes, "-42\n", 4u) == 0);
+
+        capture = (ReferenceOutputCapture) {.fail = true};
+        result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_TRAP);
+        CHECK(result.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+        CHECK(capture.calls == 1u);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_output_fixture_write_mutated(
+              1, XR_PROGRAM_OUTPUT_FIXTURE_BOOL_OPERAND, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&artifact);
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -3413,6 +3477,7 @@ int main(void) {
     test_existential_pack_test_project();
     test_callable_pack_and_indirect_calls();
     test_coroutine_state_and_exact_liveness();
+    test_provider_output_semantics();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

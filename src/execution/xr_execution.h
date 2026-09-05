@@ -18,7 +18,7 @@
 
 #include "xr_execution_identity.h"
 
-#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(2)
+#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(3)
 
 typedef enum XrProviderBehaviorFlags {
     XR_PROVIDER_BEHAVIOR_THREAD_SAFE = UINT32_C(1) << 0,
@@ -35,15 +35,27 @@ typedef enum XrProviderCallStatus {
     XR_PROVIDER_CALL_FAILED,
 } XrProviderCallStatus;
 
+typedef enum XrProviderTrampolineKind {
+    XR_PROVIDER_TRAMPOLINE_INVALID = 0,
+    XR_PROVIDER_TRAMPOLINE_I64_TO_I64,
+    XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE,
+} XrProviderTrampolineKind;
+
 /* Every admitted provider entry is an execution-owned typed trampoline.  The
- * provider-specific ABI remains behind the trampoline and cannot escape into
- * VM or AOT code.  This initial scalar contract is deterministic i64 -> i64. */
-typedef XrProviderCallStatus (*XrProviderOperationEntry)(void *context, int64_t argument,
-                                                        int64_t *result_out);
+ * provider-specific C ABI remains behind this boundary and cannot escape into
+ * VM or AOT code. */
+typedef XrProviderCallStatus (*XrProviderI64OperationEntry)(void *context, int64_t argument,
+                                                           int64_t *result_out);
+typedef XrProviderCallStatus (*XrProviderOutputWriteEntry)(void *context, const uint8_t *bytes,
+                                                          size_t size);
 
 typedef struct XrProviderOperationBinding {
     XrStableId operation_id;
-    XrProviderOperationEntry entry;
+    XrProviderTrampolineKind trampoline_kind;
+    union {
+        XrProviderI64OperationEntry i64_to_i64;
+        XrProviderOutputWriteEntry output_write;
+    } entry;
     void *context;
 } XrProviderOperationBinding;
 
@@ -142,6 +154,9 @@ XR_FUNC XrTargetProfile *xr_execution_lease_retain_profile(const XrExecutionLeas
 XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_i64(
     const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
     int64_t argument, int64_t *result_out);
+XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_output_write(
+    const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
+    const uint8_t *bytes, size_t size);
 XR_FUNC XrExecutionStatus xr_execution_instance_begin_drain(XrInstance *instance,
                                                             XrExecutionDiagnostic *diagnostic_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_retire(XrInstance *instance,

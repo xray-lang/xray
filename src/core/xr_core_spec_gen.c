@@ -860,6 +860,25 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
     },
+    {
+        137u,
+        1u,
+        0u,
+        1u,
+        UINT32_C(69),
+        UINT32_C(32),
+        "core.output.group.i64",
+        "provider-output",
+        "core.base",
+        "provider_contract",
+        "atomic-i64-line-output-trampoline",
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+    },
 };
 
 const XrCoreOperationSpec *xr_core_spec_operation_by_id(uint16_t stable_id) {

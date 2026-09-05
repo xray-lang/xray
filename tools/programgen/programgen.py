@@ -138,6 +138,7 @@ PROJECTION_KINDS = {
     "callable-pack": "XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK",
     "target-query": "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
     "coroutine-yield": "XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD",
+    "output-group-i64": "XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64",
 }
 SEMANTIC_MAPPING_KEYS = {
     "xi_operation",
@@ -324,7 +325,7 @@ def validate(schema: dict[str, Any]) -> None:
         "interface_table": "semantic-key order; each row contains an ordered object-safe SignatureId slot list",
         "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map",
         "operation_type_immediate_contract": "canonical program TypeId; used only by operations whose law names an exact semantic type and never carries layout or backend representation",
-        "provider_operation_immediate_contract": "dense (ProviderRequirementIndex,OperationIndex) resolving an exact canonical imports row; every requirement operation is referenced by at least one core.provider.call and no call may reference an undeclared operation",
+        "provider_operation_immediate_contract": "dense (ProviderRequirementIndex,OperationIndex) resolving an exact canonical imports row; every requirement operation is referenced by at least one provider-backed CoreSpec operation and no operation may reference an undeclared provider requirement",
         "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
         "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
         "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
@@ -514,6 +515,7 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,",
         "    XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,",
         "    XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD = 18,",
+        "    XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64 = 19,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",

@@ -2,7 +2,7 @@
   "schema": "xray-execution-binding-coverage/1",
   "profile_schema_version": 5,
   "boundary_abi_schema_version": 3,
-  "execution_binding_schema_version": 2,
+  "execution_binding_schema_version": 3,
   "execution_identity": {
     "inputs": [
       "ProgramId",
@@ -63,6 +63,8 @@
     "non-null-operation-entry",
     "typed-i64-trampoline",
     "exact-i64-call-abi",
+    "typed-output-write-trampoline",
+    "exact-output-byte-sink-call-abi",
     "extra-binding-rejected",
     "thread-safety",
     "reentrancy",

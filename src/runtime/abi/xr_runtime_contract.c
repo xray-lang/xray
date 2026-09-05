@@ -9,6 +9,7 @@
  */
 
 #include "xr_runtime_contract.h"
+#include "xr_builtin_provider_contract.h"
 #include "../../base/xsha256.h"
 #include <limits.h>
 #include <stdbool.h>
@@ -1372,13 +1373,11 @@ static bool provider_has_io_byte_sink(const XrTargetProviderContract *provider,
  * byte-sink shape but are distinct identities: a provider offering one has not
  * offered the other. */
 static bool provider_has_assertion_report(const XrTargetProviderContract *provider) {
-    return provider_has_io_byte_sink(provider,
-                                     "xray.runtime.provider-operation.v1/io/assertion-report");
+    return provider_has_io_byte_sink(provider, XR_PROVIDER_IO_ASSERTION_REPORT_OPERATION_KEY);
 }
 
 static bool provider_has_output_write(const XrTargetProviderContract *provider) {
-    return provider_has_io_byte_sink(provider,
-                                     "xray.runtime.provider-operation.v1/io/output-write");
+    return provider_has_io_byte_sink(provider, XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY);
 }
 
 static XrRuntimeAbiStatus verify_provider_set(const XrTargetProviderContract *providers,

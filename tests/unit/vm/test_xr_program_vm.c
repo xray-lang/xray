@@ -15,6 +15,7 @@
 #include "../program/xr_program_callable_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
+#include "../program/xr_program_output_fixture.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -33,6 +34,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
@@ -1111,7 +1113,8 @@ static void build_scalar_clock_binding(const XrTargetProfile *profile,
     bindings->providers[0].operations = bindings->operations[0];
     bindings->providers[0].operation_count = 1u;
     bindings->operations[0][0].operation_id = contract->operations[0].stable_id;
-    bindings->operations[0][0].entry = provider_increment;
+    bindings->operations[0][0].trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_TO_I64;
+    bindings->operations[0][0].entry.i64_to_i64 = provider_increment;
     bindings->operations[0][0].context = &bindings->operations[0][0];
 }
 
@@ -1332,6 +1335,148 @@ static void test_provider_call_differential(void) {
     retire_and_free(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
+}
+
+typedef struct OutputCapture {
+    uint8_t bytes[256];
+    size_t size;
+    uint32_t calls;
+    bool fail;
+} OutputCapture;
+
+static XrProviderCallStatus capture_output_write(void *opaque, const uint8_t *bytes,
+                                                 size_t size) {
+    OutputCapture *capture = opaque;
+    if (!capture || (!bytes && size != 0u) || size > sizeof(capture->bytes) - capture->size)
+        return XR_PROVIDER_CALL_FAILED;
+    ++capture->calls;
+    if (capture->fail)
+        return XR_PROVIDER_CALL_FAILED;
+    memcpy(capture->bytes + capture->size, bytes, size);
+    capture->size += size;
+    return XR_PROVIDER_CALL_OK;
+}
+
+static const XrTargetProviderContract *output_contract(const XrTargetProfile *profile) {
+    const XrTargetProviderContract *result = NULL;
+    for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
+        const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
+        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_IO) {
+            REQUIRE(result == NULL);
+            result = candidate;
+        }
+    }
+    return result;
+}
+
+static void build_output_binding(const XrTargetProfile *profile, OutputCapture *capture,
+                                 TestProviderBindings *bindings) {
+    memset(bindings, 0, sizeof(*bindings));
+    const XrTargetProviderContract *contract = output_contract(profile);
+    REQUIRE(contract && contract->operation_count == 1u);
+    bindings->count = 1u;
+    bindings->providers[0].contract_id = contract->contract_id;
+    REQUIRE(xr_target_provider_contract_fingerprint(
+                contract, &bindings->providers[0].contract_fingerprint) == XR_RUNTIME_ABI_OK);
+    bindings->providers[0].behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
+    bindings->providers[0].operations = bindings->operations[0];
+    bindings->providers[0].operation_count = 1u;
+    bindings->operations[0][0].operation_id = contract->operations[0].stable_id;
+    bindings->operations[0][0].trampoline_kind = XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE;
+    bindings->operations[0][0].entry.output_write = capture_output_write;
+    bindings->operations[0][0].context = capture;
+}
+
+static bool reference_output_write(void *context, uint32_t requirement_index,
+                                   uint32_t operation_index, const uint8_t *bytes,
+                                   size_t size) {
+    return xr_execution_lease_provider_output_write(
+               context, requirement_index, operation_index, bytes, size) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static void test_provider_output_differential(void) {
+    static const struct {
+        int64_t value;
+        const char *line;
+    } cases[] = {
+        {0, "0\n"},
+        {42, "42\n"},
+        {-42, "-42\n"},
+        {INT64_MIN, "-9223372036854775808\n"},
+        {INT64_MAX, "9223372036854775807\n"},
+    };
+    for (size_t case_index = 0u; case_index < sizeof(cases) / sizeof(cases[0]); ++case_index) {
+        XrProgramArtifact artifact = {0};
+        char build_diagnostic[256] = {0};
+        REQUIRE(xr_program_output_fixture_write(cases[case_index].value, &artifact,
+                                                build_diagnostic,
+                                                sizeof(build_diagnostic)) ==
+                XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = NULL;
+        XrProgramDiagnostic verify_diagnostic;
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                    &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+        xr_program_artifact_free(&artifact);
+        XrTargetProfile *profile = xr_test_target_profile_build_with_output(
+            false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile != NULL);
+        OutputCapture capture = {0};
+        TestProviderBindings bindings;
+        build_output_binding(profile, &capture, &bindings);
+        XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+        XrVmCodeOptions baseline_options = xr_vm_code_default_options();
+        XrVmCodeOptions fixed_options = baseline_options;
+        fixed_options.decode_policy = XR_VM_DECODE_FIXED_ROWS;
+        XrVmCode *baseline = NULL;
+        XrVmCode *fixed = NULL;
+        XrVmCodeDiagnostic vm_diagnostic;
+        REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &vm_diagnostic) ==
+                XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &vm_diagnostic) ==
+                XR_VM_CODE_OK);
+        XrExecutionLease lease = {0};
+        REQUIRE(xr_execution_instance_acquire(instance, &lease));
+        XrReferenceProviderBinding reference_binding = {
+            .context = &lease,
+            .output_write = reference_output_write,
+        };
+        uint32_t entry = xr_validated_program_entry_function(program);
+        XrReferenceOutcome reference = xr_reference_evaluate_bound(
+            program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+        XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
+        XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
+        compare_outcomes(reference, baseline_result);
+        compare_outcomes(reference, fixed_result);
+        REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+        REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
+        REQUIRE(reference.value.as.i64 == 0);
+        size_t line_size = strlen(cases[case_index].line);
+        REQUIRE(capture.calls == 3u);
+        REQUIRE(capture.size == line_size * 3u);
+        for (size_t copy = 0u; copy < 3u; ++copy)
+            REQUIRE(memcmp(capture.bytes + copy * line_size, cases[case_index].line,
+                           line_size) == 0);
+
+        capture = (OutputCapture) {.fail = true};
+        reference = xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL,
+                                                &reference_binding);
+        baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
+        fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
+        compare_outcomes(reference, baseline_result);
+        compare_outcomes(reference, fixed_result);
+        REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_TRAP);
+        REQUIRE(reference.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+        REQUIRE(capture.calls == 3u);
+        REQUIRE(capture.size == 0u);
+
+        REQUIRE(xr_execution_lease_release(&lease));
+        xr_vm_code_free(fixed);
+        xr_vm_code_free(baseline);
+        retire_and_free(&instance);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+    }
 }
 
 static void test_sealed_invoke_and_cleanup_cfg(void) {
@@ -1802,6 +1947,7 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
 int main(void) {
     test_operation_semantics();
     test_provider_call_differential();
+    test_provider_output_differential();
     test_sealed_invoke_and_cleanup_cfg();
     test_typed_panic_invoke_and_cleanup_cfg();
     test_existential_pack_test_project();

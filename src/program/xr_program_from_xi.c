@@ -21,6 +21,8 @@
 #include "../ir/xi.h"
 #include "../ir/xi_core_api.h"
 #include "../ir/xi_module.h"
+#include "../plan/semantic/xr_semantic_ids.h"
+#include "../runtime/abi/xr_builtin_provider_contract.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/value/xenum_layout.h"
@@ -133,6 +135,9 @@ typedef struct XrXiBuildContext {
     XrXiConformanceStorage *conformance_storage;
     uint32_t conformance_count;
     uint32_t conformance_capacity;
+    bool requires_output_write;
+    XrStableId output_contract_id;
+    XrStableId output_operation_id;
 } XrXiBuildContext;
 
 typedef struct XrXiCallableTargetSet {
@@ -162,6 +167,11 @@ static XrProgramBuildStatus fail(char *diagnostic, size_t diagnostic_size,
         va_end(arguments);
     }
     return status;
+}
+
+static bool builtin_provider_id(const char *key, XrStableId *out) {
+    XrFingerprint digest;
+    return xr_stable_id_from_key(key, out, &digest);
 }
 
 static void put_u32_be(uint8_t output[4], uint32_t value) {
@@ -4944,6 +4954,37 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
             return XR_PROGRAM_BUILD_OK;
         }
+        case XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64: {
+            const XrPrintPlan *plan = xi_print_plan(value);
+            uint16_t operand_type = XR_CORE_TYPE_VOID;
+            if (value->op != XI_PRINT || value->nargs != 1u || result_type != XR_CORE_TYPE_VOID ||
+                !plan || !xr_print_plan_validate(plan) || plan->arity != 1u ||
+                plan->separator != XR_PRINT_SEPARATOR_SPACE ||
+                plan->terminator != XR_PRINT_TERMINATOR_NEWLINE ||
+                plan->required_capabilities != XR_PRINT_CAPABILITY_OUTPUT_WRITE ||
+                plan->flags != XR_PRINT_PLAN_FLAG_ATOMIC_GROUP ||
+                !map_logical_value_type(context, function->xi, value->args[0], &operand_type) ||
+                operand_type != XR_CORE_TYPE_I64)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi print v%u is not the exact atomic i64-line output contract",
+                            value->id);
+            if (!context->requires_output_write &&
+                (!builtin_provider_id(XR_PROVIDER_IO_CONTRACT_KEY,
+                                      &context->output_contract_id) ||
+                 !builtin_provider_id(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
+                                      &context->output_operation_id)))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "canonical output provider identities are invalid");
+            context->requires_output_write = true;
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result_type_id = XR_CORE_TYPE_VOID;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
+            instruction->immediate.provider_operation.contract_id = context->output_contract_id;
+            instruction->immediate.provider_operation.operation_id =
+                context->output_operation_id;
+            return set_operands(context, instruction, function, block, value->args, 1u,
+                                diagnostic, diagnostic_size);
+        }
         default:
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi operation %u at v%u has an invalid CoreSpec projection", value->op,
@@ -7066,6 +7107,12 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
     XrCoreIrProgram *program = NULL;
     if (status == XR_PROGRAM_BUILD_OK) {
         uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
+        XrStableId output_operation = context.output_operation_id;
+        XrCoreIrProviderRequirementInput output_requirement = {
+            .contract_id = context.output_contract_id,
+            .operation_ids = &output_operation,
+            .operation_count = 1u,
+        };
         XrCoreIrProgramInput core_input = {
             .semantic_profile_fingerprint = input->semantic_profile_fingerprint,
             .required_features = &feature,
@@ -7076,6 +7123,9 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
             .interface_count = context.interface_count,
             .conformances = context.conformance_count ? context.conformances : NULL,
             .conformance_count = context.conformance_count,
+            .provider_requirements =
+                context.requires_output_write ? &output_requirement : NULL,
+            .provider_requirement_count = context.requires_output_write ? 1u : 0u,
             .modules = context.modules,
             .module_count = input->module_count,
         };

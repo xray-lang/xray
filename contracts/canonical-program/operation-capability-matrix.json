@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 44 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; provider.call uses an exact dense provider requirement and operation reference; source publication remains fail closed until its owning slice activates it."
+    "note": "All 46 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; provider-backed operations use exact dense provider requirement and operation references; source publication remains fail closed until its owning slice activates it."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,17 +45,17 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 44 registered operations execute in the independent typed VM and match the reference evaluator. Provider calls use only the lease-pinned typed adapter; private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 46 registered operations execute in the independent typed VM and match the reference evaluator. Provider operations use only ABI-matched lease-pinned typed adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
     "owner_task": 300,
     "input_authority": "XrValidatedProgram",
-    "execution_authority": "XrInstance",
+    "compile_authority": "XrValidatedProgram + XrTargetProfile",
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 44 registered operations lower through an independently verified BackendIR into portable C11. Provider calls currently prove only context-owned typed callback lowering and normalized trap behavior; the arbitrary-callback native harness is not exact-generation AOT closure. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 46 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes ABI-matched typed provider callbacks; hosted standalone output binds directly to a binary stdout sink, and freestanding standalone output without an embedder fails closed. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -547,6 +547,32 @@
       ]
     },
     {
+      "id": "core.output.group.i64",
+      "core_spec_contract": "render one i64 as its canonical signed decimal representation followed by exactly one LF byte and issue one atomic output-write provider event; refusal becomes trap 7",
+      "program_encoding": "i64 operand, void result, and dense ProviderRequirementIndex and OperationIndex for the target-neutral io/output-write identity",
+      "decoder_verifier_evaluator": "exact i64/void shape, complete requirement use, deterministic byte formatting including INT64_MIN, and normalized provider refusal",
+      "vm_implementation": "both private VM decode policies format independently and enter only the lease-pinned output-write trampoline",
+      "aot_lowering": "embedded generated C accepts only the typed byte-output callback; hosted standalone C binds binary stdout directly, while freestanding standalone output without an embedder is rejected",
+      "source_producer": "the exact analyzer XrPrintPlan for one atomic i64 line projects from XI_PRINT into this CoreSpec operation",
+      "old_owner_deletion": "the canonical source run route reaches output only through XrProgram and the exact provider requirement; no TargetPlan or legacy VM output executor is retained on that route",
+      "status": "COMPLETE_CANONICAL_SOURCE_RUN_OUTPUT_SLICE",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/execution/xr_execution.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/app/cli/xcmd_run.c",
+        "tests/cli/run_canonical_source_route_tests.py",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
+      ]
+    },
+    {
       "id": "core.aggregate.construct",
       "core_spec_contract": "construct one logical value aggregate from declaration-ordered operands matching the aggregate type row",
       "program_encoding": "dynamic aggregate TypeId, ordered operand ids, and no layout or target immediate",
@@ -951,6 +977,7 @@
       "planned_operations": [
         "capability.require",
         "provider.call",
+        "output.group.i64",
         "provider.refuse"
       ],
       "status": "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE"

@@ -28,6 +28,7 @@ typedef enum XrProgramXiProjectionKind {
     XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,
     XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,
     XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD = 18,
+    XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64 = 19,
 } XrProgramXiProjectionKind;
 
 typedef enum XrProgramXiSemanticProjectionKind {

@@ -806,6 +806,35 @@ add_xr_program_aot_native_case(endianness endianness 1)
 add_xr_program_aot_native_case(provider_call provider-call 42)
 add_xr_program_aot_native_case(coroutine_yield coroutine-yield 42)
 
+set(XR_PROGRAM_AOT_OUTPUT_SOURCE
+    ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_provider_output.c)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_AOT_OUTPUT_SOURCE}
+    COMMAND $<TARGET_FILE:test_xr_program_aot>
+        ${XR_PROGRAM_AOT_OUTPUT_SOURCE} provider-output
+    DEPENDS test_xr_program_aot
+    COMMENT "Generating provider-output canonical XrProgram C fixture"
+    VERBATIM)
+set_source_files_properties(${XR_PROGRAM_AOT_OUTPUT_SOURCE} PROPERTIES GENERATED TRUE)
+add_executable(test_xr_program_aot_provider_output ${XR_PROGRAM_AOT_OUTPUT_SOURCE})
+xr_enable_pure_aot_symbol_map(test_xr_program_aot_provider_output)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_aot_provider_output PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_aot_provider_output PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_aot_provider_output
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+        --executable $<TARGET_FILE:test_xr_program_aot_provider_output>
+        --expected-exit 0
+        --expected-stdout-hex 34320a)
+set_tests_properties(test_xr_program_aot_provider_output PROPERTIES
+    LABELS "unit;aot;canonical-program;generated-c;native;provider;pure-aot;task-300")
+
 set(XR_PROGRAM_AOT_COROUTINE_STEP_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_coroutine_step.c)
 add_custom_command(

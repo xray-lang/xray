@@ -141,6 +141,10 @@ def main(argv: list[str]) -> int:
     # completing the separate self-hosted-bytecode bootstrap before ASan can
     # execute the compiler under test. Pin both options instead of inheriting a
     # cache/default and accidentally measuring a different compiler.
+    c_compiler = "clang-cl" if platform.IS_WINDOWS else "clang"
+    cxx_compiler = "clang-cl" if platform.IS_WINDOWS else "clang++"
+    resolved_c_compiler = Path(sanitizer.resolve_compiler_command(c_compiler)).as_posix()
+    resolved_cxx_compiler = Path(sanitizer.resolve_compiler_command(cxx_compiler)).as_posix()
     spec = sanitizer.BuildSpec(
         build_dir=build_dir,
         sanitizer_flags=(
@@ -155,6 +159,8 @@ def main(argv: list[str]) -> int:
         # code under test.  Keep Debug code generation while selecting the
         # supported dynamic release CRT explicitly.
         extra_cache=("CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",),
+        c_compiler=c_compiler,
+        cxx_compiler=cxx_compiler,
         targets=build_targets,
         verify_cache_contains=(
             "ENABLE_ASAN=ON",
@@ -162,6 +168,8 @@ def main(argv: list[str]) -> int:
             "XR_STDLIB_FROM_FILE=ON",
             "XRAY_STDLIB_VM_FASTPATHS=OFF",
             "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
+            f"CMAKE_C_COMPILER={resolved_c_compiler}",
+            f"CMAKE_CXX_COMPILER={resolved_cxx_compiler}",
         ),
     )
 

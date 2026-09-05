@@ -282,7 +282,8 @@ static void build_provider_bindings(const XrValidatedProgram *program,
             XrProviderOperationBinding *operation =
                 &bindings->operations[provider_index][operation_index];
             operation->operation_id = contract_operation->stable_id;
-            operation->entry = test_provider_entry;
+            operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_TO_I64;
+            operation->entry.i64_to_i64 = test_provider_entry;
             operation->context = operation;
         }
     }
@@ -420,9 +421,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-                        "8e8ab140ed9e485be1171abe655efa3f5dbdfc3c3358f36d45c47d5cf19b15d2");
+                        "4fbf838c413763f60e0f84347cdfa46f4c1d136de77ec2b4ac419d2bb8af9d9b");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "7e7c0a25af2a349d236125a7ea148dae24bda7559ad5dfb5042726597d26ce4d");
+                        "dde174b7f5e0fd7fe3da6b8027e24d539a48ed38bb6731f144e40186a03812f8");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));
@@ -509,7 +510,7 @@ static void test_reentrant_provider_call_pins_lease_without_holding_lock(void) {
     TestProviderBindings bindings;
     build_provider_bindings(program, profile, &bindings);
     ReentrantProviderContext context = {0};
-    bindings.operations[0][0].entry = reentrant_provider_entry;
+    bindings.operations[0][0].entry.i64_to_i64 = reentrant_provider_entry;
     bindings.operations[0][0].context = &context;
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     XrExecutionLease lease = {0};
@@ -550,7 +551,7 @@ static void test_concurrent_release_drain_and_retire_during_provider_call(void) 
         .entered = ATOMIC_VAR_INIT(false),
         .return_allowed = ATOMIC_VAR_INIT(false),
     };
-    bindings.operations[0][0].entry = blocking_provider_entry;
+    bindings.operations[0][0].entry.i64_to_i64 = blocking_provider_entry;
     bindings.operations[0][0].context = &provider;
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     XrExecutionLease lease = {0};
@@ -699,7 +700,8 @@ static void test_provider_admission_matrix(void) {
     REQUIRE(unrequired_contract != NULL && unrequired_contract->operation_count != 0u);
     XrProviderOperationBinding unrequired_operation = {
         .operation_id = unrequired_contract->operations[0].stable_id,
-        .entry = test_provider_entry,
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_TO_I64,
+        .entry.i64_to_i64 = test_provider_entry,
     };
     unrequired_operation.context = &unrequired_operation;
     XrProviderBinding unrequired_provider = {
@@ -718,9 +720,9 @@ static void test_provider_admission_matrix(void) {
     bindings.operations[0][0].operation_id.bytes[0] ^= 1u;
     require_provider_reject(&input, XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION);
     bindings.operations[0][0].operation_id.bytes[0] ^= 1u;
-    bindings.operations[0][0].entry = NULL;
+    bindings.operations[0][0].entry.i64_to_i64 = NULL;
     require_provider_reject(&input, XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION);
-    bindings.operations[0][0].entry = test_provider_entry;
+    bindings.operations[0][0].entry.i64_to_i64 = test_provider_entry;
     bindings.providers[0].operation_count++;
     require_provider_reject(&input, XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION);
     bindings.providers[0].operation_count--;
