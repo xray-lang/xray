@@ -901,6 +901,17 @@ elseif(XRAY_C_MSVC_FRONTEND)
     add_compile_options(/utf-8)
 endif()
 
+# Clang's GNU-style Windows frontend consumes the same UCRT headers as the
+# MSVC frontend. The portable sources intentionally use the standard/POSIX
+# spellings, so sanitizer builds must suppress the UCRT replacement warnings
+# before promoting diagnostics to errors.
+if(WIN32 AND NOT XRAY_C_MSVC_FRONTEND)
+    add_compile_definitions(
+        _CRT_SECURE_NO_WARNINGS
+        _CRT_NONSTDC_NO_WARNINGS
+    )
+endif()
+
 # ============================================================================
 # Project Configuration Options
 # ============================================================================
@@ -1823,6 +1834,7 @@ set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
     src/aot/program/xr_backend_ir_verify.c
     src/aot/program/xr_backend_ir_emit_c.c
     src/aot/program/xr_native_artifact.c
+    src/aot/xi_cgen_verify_output.c
 )
 add_library(xray_program_aot_compiler STATIC
     ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})

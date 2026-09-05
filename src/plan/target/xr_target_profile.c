@@ -140,7 +140,7 @@ static XrBoundaryValueAbi boundary_value(uint16_t type_id, uint8_t representatio
 }
 
 static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAbi *boundary) {
-    static const uint8_t domain[] = "xray-boundary-abi-v3\0";
+    static const uint8_t domain[] = "xray-boundary-abi-v4\0";
     const XrTargetDataLayout *layout = &facts->machine.data_layout;
     memset(boundary, 0, sizeof(*boundary));
     boundary->schema_version = XR_BOUNDARY_ABI_SCHEMA_VERSION;
@@ -150,6 +150,7 @@ static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAb
     boundary->value_count = XR_BOUNDARY_ABI_VALUE_COUNT;
     boundary->call_convention = XR_BOUNDARY_CALL_FRAME_V1;
     boundary->error_model = XR_BOUNDARY_ERROR_TYPED_CODE;
+    boundary->coroutine_model = XR_BOUNDARY_COROUTINE_MODEL_STACKLESS_LOGICAL_STATE;
     boundary->aggregate_layout_model = XR_BOUNDARY_AGGREGATE_LAYOUT_DECLARATION_ORDER_NATURAL;
     boundary->variant_layout_model = XR_BOUNDARY_VARIANT_LAYOUT_U32_TAG_NATURAL_PAYLOAD;
     boundary->root_model = XR_BOUNDARY_ROOT_MODEL_EXPLICIT_OFFSETS;
@@ -203,7 +204,7 @@ static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAb
 
 static void compute_runtime_kernel(const XrTargetProfileDraft *facts,
                                    XrRuntimeKernelContract *kernel) {
-    static const uint8_t domain[] = "xray-runtime-kernel-v1\0";
+    static const uint8_t domain[] = "xray-runtime-kernel-v2\0";
     memset(kernel, 0, sizeof(*kernel));
     kernel->schema_version = XR_RUNTIME_KERNEL_SCHEMA_VERSION;
     kernel->runtime_profile = facts->machine.runtime_profile;
@@ -212,6 +213,7 @@ static void compute_runtime_kernel(const XrTargetProfileDraft *facts,
     kernel->generation_protocol = 1u;
     kernel->panic_policy = XR_RUNTIME_KERNEL_POLICY_CONTRACTUAL;
     kernel->oom_policy = XR_RUNTIME_KERNEL_POLICY_CONTRACTUAL;
+    kernel->scheduler_hook_mask = XR_RUNTIME_SCHEDULER_HOOK_COOPERATIVE_YIELD;
     kernel->runtime_abi_id = facts->runtime_abi_fingerprint;
 
     XrSHA256Context context;
@@ -239,7 +241,7 @@ void xr_target_profile_compute_partitions(const XrTargetProfileDraft *facts,
 }
 
 void xr_target_profile_compute_fingerprint(const XrTargetProfileDraft *facts, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-profile-v4\0";
+    static const uint8_t domain[] = "xray-target-profile-v5\0";
     XrTargetSemanticsId target_semantics_id;
     XrBoundaryAbi boundary;
     XrRuntimeKernelContract kernel;

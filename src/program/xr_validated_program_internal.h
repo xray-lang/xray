@@ -77,6 +77,16 @@ typedef struct XrValidatedValueRootSet {
     uint32_t root_count;
 } XrValidatedValueRootSet;
 
+typedef struct XrValidatedCoroutineState {
+    uint32_t continuation_block;
+} XrValidatedCoroutineState;
+
+typedef struct XrValidatedCoroutineSafepoint {
+    uint32_t resume_state_id;
+    uint32_t *live_value_ids;
+    uint32_t live_value_count;
+} XrValidatedCoroutineSafepoint;
+
 typedef struct XrValidatedConstant {
     uint16_t type_id;
     XrCoreIrConstantKind kind;
@@ -149,6 +159,10 @@ typedef struct XrValidatedFunction {
     XrValidatedRoot *roots;
     uint32_t root_count;
     XrValidatedValueRootSet *value_root_sets;
+    XrValidatedCoroutineState *coroutine_states;
+    uint32_t coroutine_state_count;
+    XrValidatedCoroutineSafepoint *coroutine_safepoints;
+    uint32_t coroutine_safepoint_count;
     uint32_t value_count;
     uint32_t flags;
 } XrValidatedFunction;

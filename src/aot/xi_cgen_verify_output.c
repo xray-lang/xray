@@ -14,16 +14,27 @@
 
 #include "xi_cgen_verify_output.h"
 
-#include "../os/os_proc.h"
-
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 /* Guard against pathological temp ids from corrupt input. */
 #define XI_CGEN_VERIFY_MAX_TEMP 8388608 /* 8M distinct vN per function */
+
+static int64_t xi_cgen_process_id(void) {
+#ifdef _WIN32
+    return (int64_t) _getpid();
+#else
+    return (int64_t) getpid();
+#endif
+}
 
 static bool ident_char(int c) {
     return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -732,7 +743,7 @@ void xi_cgen_verify_output_or_ice(const char *c_src, size_t len, const char *tu_
 
     char path[1024];
     snprintf(path, sizeof(path), "%s/xray_cgen_ice_%s_%lld.c", dir, safe,
-             (long long) xr_proc_self_pid());
+             (long long) xi_cgen_process_id());
 
     FILE *f = fopen(path, "w");
     if (f) {

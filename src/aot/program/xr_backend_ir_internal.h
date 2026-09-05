@@ -63,6 +63,16 @@ typedef struct XrBackendBlock {
     uint32_t instruction_count;
 } XrBackendBlock;
 
+typedef struct XrBackendCoroutineState {
+    uint32_t continuation_block;
+} XrBackendCoroutineState;
+
+typedef struct XrBackendCoroutineSafepoint {
+    uint32_t resume_state_id;
+    uint32_t *live_value_ids;
+    uint32_t live_value_count;
+} XrBackendCoroutineSafepoint;
+
 typedef struct XrBackendFunction {
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
@@ -80,14 +90,20 @@ typedef struct XrBackendFunction {
     XrCoreIrValueCategory *value_categories;
     XrCoreIrOwnershipDisposition *value_ownerships;
     uint8_t *value_representations;
+    XrBackendCoroutineState *coroutine_states;
+    uint32_t coroutine_state_count;
+    XrBackendCoroutineSafepoint *coroutine_safepoints;
+    uint32_t coroutine_safepoint_count;
     uint32_t value_count;
     uint32_t flags;
 } XrBackendFunction;
 
 struct XrBackendIR {
+    atomic_uint_least32_t references;
     XrValidatedProgram *program;
     XrTargetProfile *profile;
     XrExecutionId execution_id;
+    XrExecutionCacheKey cache_key;
     XrBackendId backend_id;
     XrOptimizationPolicyId optimization_policy_id;
     XrFingerprint lowering_digest;

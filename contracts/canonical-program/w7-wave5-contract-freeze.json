@@ -262,73 +262,177 @@
       "id": "coroutine",
       "layers": {
         "source": {
-          "status": "PRESENT_SOURCE_SURFACE",
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
           "evidence": [
             {
-              "path": "src/frontend/parser/xparse_coroutine.c",
+              "path": "src/frontend/analyzer/xanalyzer_suspend.c",
               "tokens": [
-                "AstNode *xr_parse_go_expr(",
-                "AstNode *xr_parse_await_expr(",
-                "AstNode *xr_parse_cancelled_expr("
+                "sus_call_is_coro_yield",
+                "XA_SUSPEND_POINT_COOPERATIVE_YIELD",
+                "xa_analyzer_set_suspend_point"
+              ]
+            },
+            {
+              "path": "tests/unit/analysis/test_xglobal_summary.c",
+              "tokens": [
+                "global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract",
+                "global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow"
               ]
             }
           ]
         },
         "xglobal": {
-          "status": "PRESENT_COMPILER_PRIVATE_SUMMARY",
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
           "evidence": [
             {
               "path": "src/analysis/xglobal_summary.h",
               "tokens": [
-                "XG_CAP_COROUTINE = XR_CAP_COROUTINE",
-                "XG_BODY_MAY_SUSPEND = XR_EFFECT_MAY_SUSPEND"
+                "typedef struct XgSuspendPointSummary",
+                "xg_global_evidence_find_suspend_point_at"
+              ]
+            },
+            {
+              "path": "src/analysis/xglobal_producer.c",
+              "tokens": [
+                "body_add_suspend_point",
+                "bc->effect_bits |= XG_BODY_MAY_SUSPEND",
+                "bc->capability_bits |= XG_CAP_COROUTINE"
               ]
             }
           ]
         },
         "xi": {
-          "status": "PRESENT_PRECUT_LOGICAL_PLAN",
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
           "evidence": [
             {
-              "path": "src/ir/xi.h",
+              "path": "src/ir/xi_lower_expr.c",
               "tokens": [
-                "XI_GO,",
-                "XI_AWAIT,",
-                "XI_YIELD,",
-                "struct XiCoroPlan *coro_plan;"
+                "xa_typed_program_suspend_point",
+                "xg_global_evidence_find_suspend_point_at",
+                "y->xg_suspend_point_use_id = row->use_id"
               ]
             },
             {
-              "path": "src/ir/xi_coro_analyze.c",
+              "path": "src/ir/xi_verify.c",
               "tokens": [
-                "XR_FUNC XiCoroPlan *xi_coro_analyze("
+                "verify_suspend_point_contract",
+                "XI_YIELD in b%u lacks an exact suspend-point contract"
               ]
             }
           ]
         },
         "corespec": {
-          "status": "ABSENT_CANONICAL",
-          "evidence": []
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "xisa/core/registry.json",
+              "tokens": [
+                "\"stable_id\": 116",
+                "\"spelling\": \"core.coroutine.yield\""
+              ]
+            },
+            {
+              "path": "xisa/core/kats.json",
+              "tokens": [
+                "\"operation\": \"core.coroutine.yield\""
+              ]
+            }
+          ]
         },
         "program": {
-          "status": "ABSENT_CANONICAL",
-          "evidence": []
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "xisa/program/schema.json",
+              "tokens": [
+                "coroutine_state_contract",
+                "coroutine_safepoint_contract",
+                "live_values_per_safepoint"
+              ]
+            },
+            {
+              "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+              "tokens": [
+                "XrCoreIrCoroutineStateInput states[]",
+                "XrCoreIrCoroutineSafepointInput safepoint"
+              ]
+            }
+          ]
         },
         "verifier": {
-          "status": "ABSENT_CANONICAL",
-          "evidence": []
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "src/program/xr_program_verify.c",
+              "tokens": [
+                "case XR_CORE_OP_CORE_COROUTINE_YIELD:",
+                "XR_PROGRAM_DIAGNOSTIC_COROUTINE"
+              ]
+            }
+          ]
         },
         "reference": {
-          "status": "ABSENT_CANONICAL",
-          "evidence": []
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "src/program/xr_reference_evaluator.c",
+              "tokens": [
+                "xr_reference_execution_create",
+                "case XR_CORE_OP_CORE_COROUTINE_YIELD:"
+              ]
+            }
+          ]
         },
         "vm": {
-          "status": "ABSENT_CANONICAL",
-          "evidence": []
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "src/vm/xr_program_vm.c",
+              "tokens": [
+                "xr_vm_execution_create",
+                "case XR_CORE_OP_CORE_COROUTINE_YIELD:",
+                "A one-shot call cannot own a resumable session."
+              ]
+            },
+            {
+              "path": "tests/unit/vm/test_xr_program_vm.c",
+              "tokens": [
+                "XrVmOutcome one_shot = xr_vm_code_execute",
+                "one_shot.kind == XR_VM_OUTCOME_INVALID_INVOCATION",
+                "xr_execution_instance_lease_count(instance) == 1u"
+              ]
+            }
+          ]
         },
         "aot": {
-          "status": "ABSENT_CANONICAL",
-          "evidence": []
+          "status": "COROUTINE_YIELD_CANONICAL_ONLY",
+          "evidence": [
+            {
+              "path": "src/aot/program/xr_backend_ir_emit_c.c",
+              "tokens": [
+                "emit_coroutine_entry_adapter",
+                "xr_aot_entry_coroutine_step(void *opaque)",
+                "frame->live_%u_%u = v%u"
+              ]
+            },
+            {
+              "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+              "tokens": [
+                "xr_backend_execution_create(instance, &xr_aot_entry_coroutine_descriptor",
+                "mismatch.execution_id.bytes[0] ^= UINT8_C(1)",
+                "XR_BACKEND_EXECUTION_SUSPENDED",
+                "XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY"
+              ]
+            },
+            {
+              "path": "src/aot/program/xr_backend_ir.c",
+              "tokens": [
+                "descriptor->execution_id",
+                "xr_execution_instance_id(instance)",
+                "xr_fingerprint_equal"
+              ]
+            }
+          ]
         },
         "legacy_owner": {
           "status": "PRESENT_FROZEN_PRECUT",

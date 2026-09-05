@@ -796,6 +796,12 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->xg_target_query_kind = 0;
     v->xg_target_result_native_type = 0;
     v->xg_target_query_complete = 0;
+    v->xg_suspend_point_use_id = 0;
+    v->xg_suspend_source_node_id = 0;
+    v->xg_suspend_body_ordinal = 0;
+    v->xg_suspend_point_kind = 0;
+    v->xg_suspend_may_suspend = 0;
+    v->xg_suspend_contract_complete = 0;
     v->xg_json_codec_id = 0;
     v->xg_object_access_id = 0;
     v->xg_object_merge_id = 0;

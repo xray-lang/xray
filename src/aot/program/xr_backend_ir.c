@@ -14,7 +14,17 @@
 #include "../../base/xsha256.h"
 #include "../../core/xr_core_spec_gen.h"
 
+#include <limits.h>
 #include <string.h>
+
+struct XrBackendExecution {
+    XrExecutionLease lease;
+    XrBackendNativeStep step;
+    XrBackendNativeDrop drop;
+    void *frame;
+    XrBackendExecutionOutcome last;
+    bool finished;
+};
 
 static bool operation_is_supported(uint16_t operation_id) {
     switch (operation_id) {
@@ -31,6 +41,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
         case XR_CORE_OP_CORE_RETURN:
+        case XR_CORE_OP_CORE_COROUTINE_YIELD:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
@@ -134,6 +145,10 @@ static void free_function(XrBackendFunction *function) {
         xr_free(row->argument_ids);
     }
     xr_free(function->value_representations);
+    for (uint32_t safepoint = 0; safepoint < function->coroutine_safepoint_count; ++safepoint)
+        xr_free(function->coroutine_safepoints[safepoint].live_value_ids);
+    xr_free(function->coroutine_safepoints);
+    xr_free(function->coroutine_states);
     xr_free(function->value_types);
     xr_free(function->value_categories);
     xr_free(function->value_ownerships);
@@ -331,6 +346,8 @@ static bool lower_function(const XrValidatedFunction *source, XrBackendFunction 
     destination->entry_block = source->entry_block;
     destination->block_count = source->block_count;
     destination->value_count = source->value_count;
+    destination->coroutine_state_count = source->coroutine_state_count;
+    destination->coroutine_safepoint_count = source->coroutine_safepoint_count;
     destination->flags = source->flags;
     if (!copy_u16_array(source->parameter_types, source->parameter_count,
                         &destination->parameter_types) ||
@@ -342,6 +359,31 @@ static bool lower_function(const XrValidatedFunction *source, XrBackendFunction 
         !copy_ownership_array(source->value_ownerships, source->value_count,
                               &destination->value_ownerships))
         return false;
+    if (source->coroutine_state_count != 0u) {
+        destination->coroutine_states =
+            xr_calloc(source->coroutine_state_count, sizeof(*destination->coroutine_states));
+        if (!destination->coroutine_states)
+            return false;
+        for (uint32_t state = 0; state < source->coroutine_state_count; ++state)
+            destination->coroutine_states[state].continuation_block =
+                source->coroutine_states[state].continuation_block;
+    }
+    if (source->coroutine_safepoint_count != 0u) {
+        destination->coroutine_safepoints = xr_calloc(source->coroutine_safepoint_count,
+                                                      sizeof(*destination->coroutine_safepoints));
+        if (!destination->coroutine_safepoints)
+            return false;
+        for (uint32_t safepoint = 0; safepoint < source->coroutine_safepoint_count; ++safepoint) {
+            destination->coroutine_safepoints[safepoint].resume_state_id =
+                source->coroutine_safepoints[safepoint].resume_state_id;
+            destination->coroutine_safepoints[safepoint].live_value_count =
+                source->coroutine_safepoints[safepoint].live_value_count;
+            if (!copy_u32_array(source->coroutine_safepoints[safepoint].live_value_ids,
+                                source->coroutine_safepoints[safepoint].live_value_count,
+                                &destination->coroutine_safepoints[safepoint].live_value_ids))
+                return false;
+        }
+    }
     if (source->value_count != 0u) {
         if ((size_t) source->value_count > SIZE_MAX / sizeof(*destination->value_representations))
             return false;
@@ -452,6 +494,17 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
             hash_u32(&context, (uint32_t) fn->value_ownerships[value]);
             hash_u16(&context, fn->value_representations[value]);
         }
+        hash_u32(&context, fn->coroutine_state_count);
+        for (uint32_t state = 0; state < fn->coroutine_state_count; ++state)
+            hash_u32(&context, fn->coroutine_states[state].continuation_block);
+        hash_u32(&context, fn->coroutine_safepoint_count);
+        for (uint32_t safepoint = 0; safepoint < fn->coroutine_safepoint_count; ++safepoint) {
+            const XrBackendCoroutineSafepoint *point = &fn->coroutine_safepoints[safepoint];
+            hash_u32(&context, point->resume_state_id);
+            hash_u32(&context, point->live_value_count);
+            for (uint32_t live = 0; live < point->live_value_count; ++live)
+                hash_u32(&context, point->live_value_ids[live]);
+        }
         hash_u32(&context, fn->block_count);
         for (uint32_t block = 0; block < fn->block_count; ++block) {
             const XrBackendBlock *row = &fn->blocks[block];
@@ -507,9 +560,11 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
         return XR_BACKEND_OUT_OF_MEMORY;
     }
+    atomic_init(&ir->references, 1u);
     ir->program = xr_validated_program_retain(program);
     ir->profile = xr_target_profile_retain(profile);
     ir->execution_id = xr_execution_instance_id(instance);
+    ir->cache_key = xr_execution_instance_cache_key(instance);
     ir->backend_id = xr_backend_compute_id();
     ir->optimization_policy_id = xr_backend_compute_optimization_policy_id(options);
     ir->options = *options;
@@ -613,6 +668,8 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
 void xr_backend_ir_free(XrBackendIR *ir) {
     if (!ir)
         return;
+    if (atomic_fetch_sub_explicit(&ir->references, 1u, memory_order_acq_rel) != 1u)
+        return;
     for (uint32_t function = 0; function < ir->function_count; ++function)
         free_function(&ir->functions[function]);
     xr_free(ir->functions);
@@ -620,6 +677,21 @@ void xr_backend_ir_free(XrBackendIR *ir) {
     xr_target_profile_free(ir->profile);
     xr_validated_program_free(ir->program);
     xr_free(ir);
+}
+
+XrBackendIR *xr_backend_ir_retain(const XrBackendIR *ir) {
+    if (!ir)
+        return NULL;
+    atomic_fetch_add_explicit((atomic_uint_least32_t *) &ir->references, 1u, memory_order_relaxed);
+    return (XrBackendIR *) ir;
+}
+
+bool xr_backend_ir_matches_instance(const XrBackendIR *ir, const XrInstance *instance) {
+    if (!ir || !instance)
+        return false;
+    XrExecutionCacheKey key = xr_execution_instance_cache_key(instance);
+    return key.generation == ir->cache_key.generation &&
+           xr_fingerprint_equal(key.execution_id, ir->cache_key.execution_id);
 }
 
 XrExecutionId xr_backend_ir_execution_id(const XrBackendIR *ir) {
@@ -640,6 +712,67 @@ XrFingerprint xr_backend_ir_lowering_digest(const XrBackendIR *ir) {
 
 size_t xr_backend_ir_instruction_count(const XrBackendIR *ir) {
     return ir ? ir->instruction_count : 0u;
+}
+
+bool xr_backend_execution_create(XrInstance *instance, const XrBackendNativeDescriptor *descriptor,
+                                 XrBackendExecution **execution_out) {
+    if (execution_out)
+        *execution_out = NULL;
+    if (!instance || !descriptor || !execution_out ||
+        descriptor->schema_version != XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION ||
+        descriptor->reserved32 != 0u || descriptor->frame_size == 0u || !descriptor->initialize ||
+        !descriptor->step || !descriptor->drop ||
+        !xr_fingerprint_equal(descriptor->execution_id, xr_execution_instance_id(instance)))
+        return false;
+    XrBackendExecution *execution = xr_calloc(1u, sizeof(*execution));
+    if (!execution)
+        return false;
+    execution->frame = xr_calloc(1u, descriptor->frame_size);
+    if (!execution->frame) {
+        xr_free(execution);
+        return false;
+    }
+    descriptor->initialize(execution->frame);
+    if (!xr_execution_instance_acquire(instance, &execution->lease)) {
+        descriptor->drop(execution->frame);
+        xr_free(execution->frame);
+        xr_free(execution);
+        return false;
+    }
+    execution->step = descriptor->step;
+    execution->drop = descriptor->drop;
+    execution->last.kind = XR_BACKEND_EXECUTION_INVALID;
+    *execution_out = execution;
+    return true;
+}
+
+XrBackendExecutionOutcome xr_backend_execution_step(XrBackendExecution *execution) {
+    if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
+        return (XrBackendExecutionOutcome) {.kind = XR_BACKEND_EXECUTION_INVALID};
+    XrBackendNativeOutcome native = execution->step(execution->frame);
+    execution->last = (XrBackendExecutionOutcome) {
+        .kind = native.kind <= XR_BACKEND_EXECUTION_TRAP
+                    ? (XrBackendExecutionOutcomeKind) native.kind
+                    : XR_BACKEND_EXECUTION_INVALID,
+        .value = native.value,
+        .state_id = native.state_id,
+        .safepoint_id = native.safepoint_id,
+    };
+    if (execution->last.kind != XR_BACKEND_EXECUTION_SUSPENDED) {
+        execution->finished = true;
+        (void) xr_execution_lease_release(&execution->lease);
+    }
+    return execution->last;
+}
+
+void xr_backend_execution_free(XrBackendExecution *execution) {
+    if (!execution)
+        return;
+    if (xr_execution_lease_is_valid(&execution->lease))
+        (void) xr_execution_lease_release(&execution->lease);
+    execution->drop(execution->frame);
+    xr_free(execution->frame);
+    xr_free(execution);
 }
 
 const char *xr_backend_status_name(XrBackendStatus status) {

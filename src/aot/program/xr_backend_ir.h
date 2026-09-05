@@ -19,6 +19,7 @@
 #include "../../execution/xr_execution.h"
 
 #define XR_BACKEND_IR_SCHEMA_VERSION UINT32_C(1)
+#define XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION UINT32_C(1)
 #define XR_AOT_TOOLCHAIN_SCHEMA_VERSION UINT32_C(1)
 #define XR_NATIVE_ARTIFACT_SCHEMA_VERSION UINT32_C(1)
 #define XR_AOT_BACKEND_NAME "xray-c11-aot"
@@ -69,6 +70,45 @@ typedef struct XrBackendDiagnostic {
 } XrBackendDiagnostic;
 
 typedef struct XrBackendIR XrBackendIR;
+typedef struct XrBackendExecution XrBackendExecution;
+
+typedef enum XrBackendExecutionOutcomeKind {
+    XR_BACKEND_EXECUTION_RETURN = 0,
+    XR_BACKEND_EXECUTION_SUSPENDED,
+    XR_BACKEND_EXECUTION_TRAP,
+    XR_BACKEND_EXECUTION_INVALID,
+} XrBackendExecutionOutcomeKind;
+
+typedef struct XrBackendExecutionOutcome {
+    XrBackendExecutionOutcomeKind kind;
+    int64_t value;
+    uint32_t state_id;
+    uint32_t safepoint_id;
+} XrBackendExecutionOutcome;
+
+typedef struct XrBackendNativeOutcome {
+    uint32_t kind;
+    int64_t value;
+    uint32_t state_id;
+    uint32_t safepoint_id;
+} XrBackendNativeOutcome;
+
+// Backend-private adapter for a generated or loaded native step.
+// Owns frame lifecycle and exact-generation authority only.
+// CoreSpec semantics remain exclusively in generated native code.
+typedef XrBackendNativeOutcome (*XrBackendNativeStep)(void *frame);
+typedef void (*XrBackendNativeInitialize)(void *frame);
+typedef void (*XrBackendNativeDrop)(void *frame);
+
+typedef struct XrBackendNativeDescriptor {
+    uint32_t schema_version;
+    uint32_t reserved32;
+    XrExecutionId execution_id;
+    size_t frame_size;
+    XrBackendNativeInitialize initialize;
+    XrBackendNativeStep step;
+    XrBackendNativeDrop drop;
+} XrBackendNativeDescriptor;
 
 typedef struct XrGeneratedC {
     char *bytes;
@@ -133,6 +173,8 @@ XR_FUNC XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBacken
                                             XrBackendIR **ir_out,
                                             XrBackendDiagnostic *diagnostic_out);
 XR_FUNC void xr_backend_ir_free(XrBackendIR *ir);
+XR_FUNC XrBackendIR *xr_backend_ir_retain(const XrBackendIR *ir);
+XR_FUNC bool xr_backend_ir_matches_instance(const XrBackendIR *ir, const XrInstance *instance);
 XR_FUNC bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic_out);
 XR_FUNC bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
                                                 XrBackendDiagnostic *diagnostic_out);
@@ -145,6 +187,11 @@ XR_FUNC XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standal
                                              XrGeneratedC *generated_out,
                                              XrBackendDiagnostic *diagnostic_out);
 XR_FUNC void xr_generated_c_free(XrGeneratedC *generated);
+XR_FUNC bool xr_backend_execution_create(XrInstance *instance,
+                                         const XrBackendNativeDescriptor *descriptor,
+                                         XrBackendExecution **execution_out);
+XR_FUNC XrBackendExecutionOutcome xr_backend_execution_step(XrBackendExecution *execution);
+XR_FUNC void xr_backend_execution_free(XrBackendExecution *execution);
 
 XR_FUNC bool xr_aot_toolchain_binding_build(const XrAotToolchainInput *input,
                                             XrAotToolchainBinding *binding_out);

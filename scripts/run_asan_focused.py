@@ -24,6 +24,7 @@ CMakeLists or CI: dead code that could only rot.
 Environment overrides:
     XR_ASAN_JOBS          parallel build/test jobs (default: all cores)
     XR_ASAN_BUILD_DIR     ASan build directory (default: build-asan)
+    XR_ASAN_BUILD_TARGETS whitespace-separated Ninja targets (default: all)
     XR_ASAN_CTEST_REGEX   unit test name regex (default: ^test_)
     XR_ASAN_CTEST_EXCLUDE unit tests kept out of the memory-safety surface
     XR_ASAN_CTEST_SERIAL_REGEX subprocess tests kept out of the saturated lane
@@ -110,6 +111,7 @@ def main(argv: list[str]) -> int:
     jobs = sanitizer.default_jobs("XR_ASAN_JOBS")
     build_dir = PROJECT_DIR / os.environ.get("XR_ASAN_BUILD_DIR", "build-asan")
     timeout = platform.env_timeout("XR_ASAN_TIMEOUT", 3600)
+    build_targets = tuple(os.environ.get("XR_ASAN_BUILD_TARGETS", "").split())
 
     ctest_regex = os.environ.get("XR_ASAN_CTEST_REGEX", "^test_")
     ctest_exclude = os.environ.get("XR_ASAN_CTEST_EXCLUDE", DEFAULT_CTEST_EXCLUDE)
@@ -128,18 +130,23 @@ def main(argv: list[str]) -> int:
 
     log(f"ROOT={PROJECT_DIR}")
     log(f"build dir={build_dir.name} jobs={jobs}")
+    if build_targets:
+        log(f"build targets={' '.join(build_targets)}")
 
     # The unified target-machine line has one supported bootstrap shape: the
     # optional generated stdlib VM fastpaths are disabled. Their generator is
     # itself a native AOT consumer, so enabling it makes the sanitizer build
-    # depend on target families that this lane is meant to validate. Pin the
-    # option instead of inheriting a cache/default and accidentally measuring a
-    # different compiler.
+    # depend on target families that this lane is meant to validate. Load the
+    # stdlib from source as well: the focused compiler lane must not depend on
+    # completing the separate self-hosted-bytecode bootstrap before ASan can
+    # execute the compiler under test. Pin both options instead of inheriting a
+    # cache/default and accidentally measuring a different compiler.
     spec = sanitizer.BuildSpec(
         build_dir=build_dir,
         sanitizer_flags=(
             "ENABLE_ASAN=ON",
             "ENABLE_UBSAN=ON",
+            "XR_STDLIB_FROM_FILE=ON",
             "XRAY_STDLIB_VM_FASTPATHS=OFF",
         ),
         # clang-cl's ASan runtime interposes the release UCRT allocator.  A
@@ -148,9 +155,11 @@ def main(argv: list[str]) -> int:
         # code under test.  Keep Debug code generation while selecting the
         # supported dynamic release CRT explicitly.
         extra_cache=("CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",),
+        targets=build_targets,
         verify_cache_contains=(
             "ENABLE_ASAN=ON",
             "ENABLE_UBSAN=ON",
+            "XR_STDLIB_FROM_FILE=ON",
             "XRAY_STDLIB_VM_FASTPATHS=OFF",
             "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
         ),
@@ -161,6 +170,8 @@ def main(argv: list[str]) -> int:
 
     xray = build_dir / platform.exe_name("xray")
     reason = sanitizer.rebuild_reason(xray, PROJECT_DIR)
+    if build_targets and reason is None:
+        reason = "explicit build targets requested"
     if reason:
         log(f"building compiler + tests (ASan/UBSan): {reason}")
         if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):

@@ -317,6 +317,7 @@ def validate(root: Path) -> None:
         "core.target.native_abi",
         "core.target.endianness",
     }
+    wave_five_coroutine_yield = {"core.coroutine.yield"}
     wave_three_slice_two = {
         "core.owner.move",
         "core.owner.drop",
@@ -351,6 +352,8 @@ def validate(root: Path) -> None:
         **{operation: "COMPLETE_W7_WAVE5_POINTER" for operation in wave_five_pointer},
         **{operation: "COMPLETE_W7_WAVE5_TARGET_PROFILE"
            for operation in wave_five_target_profile},
+        **{operation: "COROUTINE_YIELD_CANONICAL_ONLY"
+           for operation in wave_five_coroutine_yield},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,

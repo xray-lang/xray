@@ -822,6 +822,25 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
     },
+    {
+        116u,
+        255u,
+        0u,
+        16u,
+        UINT32_C(32),
+        UINT32_C(64),
+        "core.coroutine.yield",
+        "coroutine-terminator",
+        "core.base",
+        "scheduler-yield",
+        "logical-coroutine-control",
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+        XR_CORE_COVERAGE_COMPLETE,
+    },
 };
 
 const XrCoreOperationSpec *xr_core_spec_operation_by_id(uint16_t stable_id) {

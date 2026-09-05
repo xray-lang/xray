@@ -40,6 +40,8 @@ typedef struct XaNodeEntry {
     XaFunctionExprEffectFact function_expr_effect;
     bool has_target_query;
     XaTargetQueryFact target_query;
+    bool has_suspend_point;
+    XaSuspendPointFact suspend_point;
     bool has_callable_target_set;
     XaCallableTargetSetFact callable_target_set;
     struct XaNodeEntry *next;
@@ -173,7 +175,7 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 static bool entry_has_no_facts(const XaNodeEntry *e) {
     return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion &&
            !e->has_call_error_effect && !e->has_function_expr_effect && !e->has_target_query &&
-           !e->has_callable_target_set;
+           !e->has_suspend_point && !e->has_callable_target_set;
 }
 
 static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
@@ -615,6 +617,88 @@ void xa_node_table_clear_target_query(XaNodeTable *t, const struct AstNode *node
         return;
     entry->has_target_query = false;
     entry->target_query = (XaTargetQueryFact) {0};
+    if (entry_has_no_facts(entry))
+        remove_entry_by_id(t, node->node_id);
+}
+
+static bool suspend_point_fact_valid(const XaSuspendPointFact *fact) {
+    return fact && fact->kind == XA_SUSPEND_POINT_COOPERATIVE_YIELD && fact->may_suspend == 1 &&
+           fact->complete == 1;
+}
+
+bool xa_node_table_set_suspend_point(XaNodeTable *t, const struct AstNode *node,
+                                     const XaSuspendPointFact *fact) {
+    if (!t || !node || node->type != AST_CALL_EXPR || !suspend_point_fact_valid(fact))
+        return false;
+    XaNodeEntry *entry = find_or_create(t, node->node_id);
+    if (!entry)
+        return false;
+    entry->has_suspend_point = true;
+    entry->suspend_point = *fact;
+    return true;
+}
+
+bool xa_node_table_get_suspend_point(const XaNodeTable *t, const struct AstNode *node,
+                                     XaSuspendPointFact *out_fact) {
+    if (!t || !node || node->type != AST_CALL_EXPR)
+        return false;
+    const XaNodeEntry *entry = find_entry(t, node->node_id);
+    if (!entry || !entry->has_suspend_point)
+        return false;
+    if (out_fact)
+        *out_fact = entry->suspend_point;
+    return true;
+}
+
+static int compare_node_suspend_point_entry(const void *left, const void *right) {
+    const XaNodeSuspendPointEntry *a = (const XaNodeSuspendPointEntry *) left;
+    const XaNodeSuspendPointEntry *b = (const XaNodeSuspendPointEntry *) right;
+    return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
+}
+
+bool xa_node_table_snapshot_suspend_points(const XaNodeTable *t,
+                                           XaNodeSuspendPointEntry **out_entries,
+                                           uint32_t *out_count) {
+    if (!out_entries || !out_count)
+        return false;
+    *out_entries = NULL;
+    *out_count = 0;
+    if (!t)
+        return false;
+    uint32_t count = 0;
+    for (int i = 0; i < t->bucket_count; i++)
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next)
+            count += entry->has_suspend_point ? 1u : 0u;
+    if (count == 0)
+        return true;
+    XaNodeSuspendPointEntry *entries =
+        (XaNodeSuspendPointEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
+    if (!entries)
+        return false;
+    uint32_t index = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (!entry->has_suspend_point)
+                continue;
+            entries[index].node_id = entry->node_id;
+            entries[index].fact = entry->suspend_point;
+            index++;
+        }
+    }
+    qsort(entries, count, sizeof(*entries), compare_node_suspend_point_entry);
+    *out_entries = entries;
+    *out_count = count;
+    return true;
+}
+
+void xa_node_table_clear_suspend_point(XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return;
+    XaNodeEntry *entry = (XaNodeEntry *) find_entry(t, node->node_id);
+    if (!entry || !entry->has_suspend_point)
+        return;
+    entry->has_suspend_point = false;
+    entry->suspend_point = (XaSuspendPointFact) {0};
     if (entry_has_no_facts(entry))
         remove_entry_by_id(t, node->node_id);
 }

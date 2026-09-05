@@ -108,6 +108,12 @@ static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool in
     hash = hash_u64(hash, value->xg_target_query_kind);
     hash = hash_u64(hash, value->xg_target_result_native_type);
     hash = hash_u64(hash, value->xg_target_query_complete);
+    hash = hash_u64(hash, value->xg_suspend_point_use_id);
+    hash = hash_u64(hash, value->xg_suspend_source_node_id);
+    hash = hash_u64(hash, value->xg_suspend_body_ordinal);
+    hash = hash_u64(hash, value->xg_suspend_point_kind);
+    hash = hash_u64(hash, value->xg_suspend_may_suspend);
+    hash = hash_u64(hash, value->xg_suspend_contract_complete);
     hash = hash_u64(hash, (uintptr_t) value->error_producer);
     if (include_type) {
         hash = hash_u64(hash, (uintptr_t) value->type);

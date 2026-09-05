@@ -28,6 +28,7 @@ typedef uint32_t XgMethodId;
 typedef uint32_t XgInterfaceMethodId;
 typedef uint32_t XgInterfaceObjectUseId;
 typedef uint32_t XgTargetQueryUseId;
+typedef uint32_t XgSuspendPointUseId;
 typedef uint32_t XgInterfaceConformanceId;
 typedef uint32_t XgInterfaceWitnessId;
 typedef uint32_t XgFieldId;
@@ -73,8 +74,9 @@ enum {
      * 49: builtin runtime methods publish frozen method authority.
      * 53: compiler-owned target queries publish stable source occurrence and
      * exact result contracts.
-     * 54: combines the independent schema 49 and schema 53 lineages. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 54,
+     * 54: combines the independent schema 49 and schema 53 lineages.
+     * 55: adds exact cooperative-yield suspend-point evidence. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 55,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -123,6 +125,11 @@ typedef enum XgTargetQueryKind {
     XG_TARGET_QUERY_NATIVE_ABI = 4,
     XG_TARGET_QUERY_ENDIANNESS = 5,
 } XgTargetQueryKind;
+
+typedef enum XgSuspendPointKind {
+    XG_SUSPEND_POINT_NONE = 0,
+    XG_SUSPEND_POINT_COOPERATIVE_YIELD = 1,
+} XgSuspendPointKind;
 
 typedef enum XgDeclKind {
     XG_DECL_FUNC = 1,
@@ -936,6 +943,17 @@ typedef struct XgTargetQuerySummary {
     uint8_t contract_complete;
 } XgTargetQuerySummary;
 
+typedef struct XgSuspendPointSummary {
+    XgSuspendPointUseId use_id;
+    XgFuncId owner_func_id;
+    uint32_t source_node_id;
+    uint32_t source_span_id;
+    uint32_t body_ordinal;
+    uint8_t kind; /* XgSuspendPointKind */
+    uint8_t may_suspend;
+    uint8_t contract_complete;
+} XgSuspendPointSummary;
+
 typedef struct XgBodySummary {
     XgFuncId func_id;
     XgFuncId lexical_parent_func_id;
@@ -1352,6 +1370,7 @@ typedef struct XgGlobalEvidence {
     XgInterfaceMethodParamSummary *interface_method_params;
     XgInterfaceObjectUseSummary *interface_object_uses;
     XgTargetQuerySummary *target_queries;
+    XgSuspendPointSummary *suspend_points;
     XgBodySummary *bodies;
     XgParamStorageSummary *param_storages;
     XgCallsiteSummary *callsites;
@@ -1392,6 +1411,7 @@ typedef struct XgGlobalEvidence {
     uint32_t ninterface_method_params;
     uint32_t ninterface_object_uses;
     uint32_t ntarget_queries;
+    uint32_t nsuspend_points;
     uint32_t nbodies;
     uint32_t nparam_storages;
     uint32_t ncallsites;
@@ -1432,6 +1452,7 @@ typedef struct XgGlobalEvidence {
     uint32_t interface_method_param_cap;
     uint32_t interface_object_use_cap;
     uint32_t target_query_cap;
+    uint32_t suspend_point_cap;
     uint32_t body_cap;
     uint32_t param_storage_cap;
     uint32_t callsite_cap;
@@ -1532,6 +1553,8 @@ XR_FUNC bool xg_global_evidence_reserve_interface_object_uses(XgGlobalEvidence *
                                                               uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_target_queries(XgGlobalEvidence *evidence,
                                                        uint32_t capacity);
+XR_FUNC bool xg_global_evidence_reserve_suspend_points(XgGlobalEvidence *evidence,
+                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_param_storages(XgGlobalEvidence *evidence,
                                                        uint32_t capacity);
@@ -1616,6 +1639,14 @@ xg_global_evidence_find_target_query(const XgGlobalEvidence *evidence,
 XR_FUNC const XgTargetQuerySummary *xg_global_evidence_find_target_query_at(
     const XgGlobalEvidence *evidence, XgFuncId owner_func_id, uint32_t source_node_id,
     uint8_t query_kind);
+XR_FUNC XgSuspendPointSummary *
+xg_global_evidence_add_suspend_point(XgGlobalEvidence *evidence,
+                                     const XgSuspendPointSummary *summary);
+XR_FUNC const XgSuspendPointSummary *
+xg_global_evidence_find_suspend_point(const XgGlobalEvidence *evidence, XgSuspendPointUseId use_id);
+XR_FUNC const XgSuspendPointSummary *
+xg_global_evidence_find_suspend_point_at(const XgGlobalEvidence *evidence, XgFuncId owner_func_id,
+                                         uint32_t source_node_id, uint8_t kind);
 XR_FUNC XgBodySummary *xg_global_evidence_add_body(XgGlobalEvidence *evidence,
                                                    const XgBodySummary *summary);
 XR_FUNC XgParamStorageSummary *
