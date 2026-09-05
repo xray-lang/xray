@@ -81,6 +81,7 @@ def validate(root: Path) -> None:
     owner_header = read(root, "src/program/xr_program_source_build.h")
     owner = read(root, "src/program/xr_program_source_build.c")
     owner_test = read(root, "tests/unit/program/test_xr_program_source_build.c")
+    unit_cmake = read(root, "tests/unit/CMakeLists.txt")
     cli_adapter = read(root, "src/app/cli/xcli_canonical_source.c")
     run_route = read(root, "src/app/cli/xcmd_run.c")
     cli_spec = read(root, "src/app/cli/xcli_spec.c")
@@ -180,14 +181,28 @@ def validate(root: Path) -> None:
     for token in (
         "source_owner_single_module_is_deterministic_and_detached",
         "source_owner_two_module_graph_is_deterministic",
+        "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors",
         "source_owner_module_initializer_is_a_canonical_entry",
         "source_owner_rejects_non_authoritative_entry_identity",
         "source_owner_rejects_module_budget_before_analysis",
         "source_owner_reports_structured_analysis_failure",
         "xr_validated_program_bytes",
         "XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION",
+        "XR_CORE_OP_CORE_COROUTINE_CALL_SEALED",
+        "xr_reference_execution_step",
+        "xr_vm_execution_step",
+        "xr_backend_ir_emit_c",
+        "child_active_0",
     ):
         require(token in owner_test, f"source owner evidence lacks {token}")
+    for token in (
+        "test_xr_program_cross_module_coroutine_aot_native",
+        "task-293-cross-module-coroutine",
+        "--expected-exit 7",
+        "module-graph;coroutine;call;generated-c;native;task-293",
+    ):
+        require(token in unit_cmake,
+                f"cross-module coroutine native evidence lacks {token}")
     for token in (
         "source_semantic_module_present",
         "XI_STAGE_OPTIMIZED",
@@ -496,6 +511,7 @@ def self_test(root: Path) -> None:
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",
+            "tests/unit/CMakeLists.txt",
             "tests/unit/program/test_xr_program_source_build.c",
             "tests/cli/run_canonical_source_route_tests.py",
             "tests/unit/program/test_xr_program_verify.c",

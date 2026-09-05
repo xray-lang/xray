@@ -40,7 +40,7 @@ also compile and execute as independent native cases. Full language operation fa
 optimizations, public loader ABI, and package publication remain inactive.
 
 anchor-sha256: CMakeLists.txt 98c0a12f8f1d3c2cce6bb8e91c631c50f8dd0139b7f690e76fdacfad0b02fc2f
-anchor-sha256: tests/unit/CMakeLists.txt c447e71c49fd2baec518adcc677496e1c1066e12f5e37a24635a24121774228d
+anchor-sha256: tests/unit/CMakeLists.txt 74b9008619ec41085de6d73e25861e471a972310636831a4f6383a07106371ed
 anchor-sha256: xisa/core/registry.json 59afc2fc87be973eb1bea089503b8a5998be2faa9a893d3fbe51ebe97c118bab
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 2dbaca5bc741b55f208a14a94b39bc4588566d1ed04b7a5b36100d9c901cd94c
