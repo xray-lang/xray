@@ -514,6 +514,43 @@ static bool decode_semantic_metadata(Reader *artifact, const XrProgramSectionVie
             prior_value = value_id;
             have_value = true;
         }
+        uint64_t state_count = take_uvar(&section);
+        if (state_count > XR_PROGRAM_LIMIT_COROUTINE_STATES_PER_FUNCTION ||
+            !count_records(&section, state_count)) {
+            section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+            break;
+        }
+        for (uint64_t state = 0; state < state_count; ++state) {
+            uint64_t state_id = take_uvar(&section);
+            uint64_t continuation = take_uvar(&section);
+            if (state_id != state || continuation >= XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION)
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+        }
+        uint64_t safepoint_count = take_uvar(&section);
+        if (safepoint_count > XR_PROGRAM_LIMIT_COROUTINE_SAFEPOINTS_PER_FUNCTION ||
+            !count_records(&section, safepoint_count)) {
+            section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+            break;
+        }
+        for (uint64_t safepoint = 0; safepoint < safepoint_count; ++safepoint) {
+            uint64_t safepoint_id = take_uvar(&section);
+            uint64_t resume_state = take_uvar(&section);
+            uint64_t live_count = take_uvar(&section);
+            if (safepoint_id != safepoint || resume_state == 0u || resume_state >= state_count ||
+                live_count > XR_PROGRAM_LIMIT_LIVE_VALUES_PER_SAFEPOINT ||
+                !count_records(&section, live_count)) {
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                break;
+            }
+            uint64_t prior_live = 0u;
+            for (uint64_t live = 0; live < live_count; ++live) {
+                uint64_t value_id = take_uvar(&section);
+                if (value_id >= XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION ||
+                    (live != 0u && value_id <= prior_live))
+                    section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                prior_live = value_id;
+            }
+        }
     }
     *interface_count_out = interface_count;
     return section_done(&section, artifact);

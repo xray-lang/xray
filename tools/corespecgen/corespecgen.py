@@ -80,9 +80,11 @@ SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
 GENERIC_TYPES = {
     "A", "C", "Capture?", "E", "V", "T", "T...", "R?", "P...",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
+    "suspend-edge-values...",
 }
 VARIADIC_TYPES = {
     "T...", "P...", "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
+    "suspend-edge-values...",
 }
 IMPLEMENTATION_KEYS = {
     "aot_handler",
@@ -310,7 +312,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} references unknown capabilities")
         require(isinstance(operation["ownership"], dict) and operation["ownership"],
                 f"operation {spelling} lacks ownership contract")
-        require(operation["profile_dependency"] in {"none", "pointer_width"},
+        require(operation["profile_dependency"] in {"none", "pointer_width", "scheduler-yield"},
                 f"operation {spelling} has unknown profile dependency")
         require(isinstance(operation["materialization"], str) and operation["materialization"],
                 f"operation {spelling} lacks materialization intent")
@@ -328,6 +330,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-test",
+            "coroutine-yield",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -654,6 +657,12 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("place_category") == "place"
                 and actual.get("value_category") == "value"
                 and actual.get("result_type") == "void")
+    if validator == "coroutine-yield":
+        return (actual.get("result_type") == "void"
+                and actual.get("successor_count") == 1
+                and actual.get("resume_state") == actual.get("continuation_state")
+                and isinstance(actual.get("live_values"), list)
+                and actual.get("live_values") == actual.get("edge_values"))
     raise CoreSpecError(f"KAT {case['id']} has no contract oracle for {validator}")
 
 
@@ -745,6 +754,7 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
             f"    XR_CORE_EFFECT_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
     lines.extend([
         "} XrCoreEffectMask;",
+        f"#define XR_CORE_EFFECT_ALL UINT32_C({sum(1 << (row['stable_id'] - 1) for row in registry['effects'])})",
         "",
         "typedef enum XrCoreCapabilityMask {",
     ])
@@ -753,6 +763,7 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
             f"    XR_CORE_CAPABILITY_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
     lines.extend([
         "} XrCoreCapabilityMask;",
+        f"#define XR_CORE_CAPABILITY_ALL UINT32_C({sum(1 << (row['stable_id'] - 1) for row in registry['capabilities'])})",
         "",
         "typedef enum XrCoreFeatureId {",
     ])

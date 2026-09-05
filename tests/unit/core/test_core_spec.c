@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 37u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 38u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -62,6 +62,8 @@ static void test_operation_metadata(void) {
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT);
     const XrCoreOperationSpec *variant =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_PROJECT);
+    const XrCoreOperationSpec *yield =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_YIELD);
 
     CHECK(constant != NULL);
     CHECK(constant->operand_arity == 0u);
@@ -94,6 +96,17 @@ static void test_operation_metadata(void) {
     CHECK(variant->operand_arity == 1u);
     CHECK(variant->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
     CHECK(variant->effect_mask == UINT32_C(1));
+
+    CHECK(yield != NULL);
+    CHECK(strcmp(yield->spelling, "core.coroutine.yield") == 0);
+    CHECK(strcmp(yield->operation_class, "coroutine-terminator") == 0);
+    CHECK(yield->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
+    CHECK(yield->result_type == XR_CORE_TYPE_VOID);
+    CHECK(yield->successor_mask == UINT8_C(16));
+    CHECK(yield->effect_mask == XR_CORE_EFFECT_SUSPEND);
+    CHECK(yield->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+    CHECK(strcmp(yield->profile_dependency, "scheduler-yield") == 0);
+    CHECK(strcmp(yield->materialization, "logical-coroutine-control") == 0);
 }
 
 int main(void) {

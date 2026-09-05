@@ -237,6 +237,7 @@ typedef struct XgBodyCollect {
     uint32_t key_access_count;
     uint32_t interface_object_use_count;
     uint32_t target_query_count;
+    uint32_t suspend_point_count;
     uint32_t sequence_access_count;
     uint32_t capacity_op_count;
     uint32_t bulk_op_count;
@@ -9988,6 +9989,52 @@ static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
     return true;
 }
 
+static bool body_add_suspend_point(XgBodyCollect *bc, const AstNode *node,
+                                   bool *out_is_suspend_point) {
+    XaSuspendPointFact fact;
+    XgSuspendPointSummary row;
+    if (out_is_suspend_point)
+        *out_is_suspend_point = false;
+    if (!bc || !bc->producer || !bc->evidence || !node || node->type != AST_CALL_EXPR)
+        return false;
+    const CallExprNode *call = &node->as.call_expr;
+    const AstNode *callee = call->callee;
+    if (!callee || callee->type != AST_MEMBER_ACCESS)
+        return true;
+    const MemberAccessNode *member = &callee->as.member_access;
+    if (!member->name || strcmp(member->name, "yield") != 0 || !member->object ||
+        member->object->type != AST_VARIABLE)
+        return true;
+    if (!bc->producer->analyzer)
+        return strcmp(member->object->as.variable.name ? member->object->as.variable.name : "",
+                      "Coro") != 0;
+    XaSymbol *symbol = member->object->as.variable.symbol_id
+                           ? xa_scope_lookup_by_id(bc->producer->analyzer->global_scope,
+                                                   member->object->as.variable.symbol_id)
+                           : NULL;
+    if (!xa_symbol_is_builtin_module(bc->producer->analyzer, symbol, "Coro"))
+        return true;
+    if (out_is_suspend_point)
+        *out_is_suspend_point = true;
+    if (!xa_analyzer_get_suspend_point(bc->producer->analyzer, node, &fact) ||
+        fact.kind != XA_SUSPEND_POINT_COOPERATIVE_YIELD || fact.may_suspend != 1 ||
+        fact.complete != 1 || call->arg_count != 0 || bc->owner_func_id == XG_NO_ID)
+        return false;
+    memset(&row, 0, sizeof(row));
+    row.owner_func_id = bc->owner_func_id;
+    row.source_node_id = producer_source_node_id(bc->module_id, node);
+    row.source_span_id = (uint32_t) node->line;
+    row.body_ordinal = ++bc->suspend_point_count;
+    row.kind = XG_SUSPEND_POINT_COOPERATIVE_YIELD;
+    row.may_suspend = 1;
+    row.contract_complete = 1;
+    if (row.source_node_id == 0 || !xg_global_evidence_add_suspend_point(bc->evidence, &row))
+        return false;
+    bc->effect_bits |= XG_BODY_MAY_SUSPEND;
+    bc->capability_bits |= XG_CAP_COROUTINE;
+    return true;
+}
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -10015,6 +10062,16 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_CALL_EXPR: {
+            bool is_suspend_point = false;
+            if (!body_add_suspend_point(bc, node, &is_suspend_point)) {
+                bc->producer->failed = true;
+                break;
+            }
+            if (is_suspend_point) {
+                for (int i = 0; i < node->as.call_expr.arg_count; i++)
+                    walk_body_for_calls(bc, node->as.call_expr.arguments[i]);
+                break;
+            }
             bool intrinsic_sequence_len = body_add_sequence_len_call(bc, node);
             bool intrinsic_array_data_ptr = body_call_is_array_data_ptr_leaf(bc, node);
             bc->capability_bits |= body_stdlib_suspend_capabilities(bc, node);

@@ -11,7 +11,7 @@
 #ifndef XR_REFERENCE_EVALUATOR_H
 #define XR_REFERENCE_EVALUATOR_H
 
-#include "xr_program_verify.h"
+#include "../execution/xr_execution.h"
 
 typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_VOID = 0,
@@ -53,6 +53,7 @@ typedef struct XrReferenceBudget {
 
 typedef enum XrReferenceOutcomeKind {
     XR_REFERENCE_OUTCOME_RETURN = 0,
+    XR_REFERENCE_OUTCOME_SUSPENDED,
     XR_REFERENCE_OUTCOME_TRAP,
     XR_REFERENCE_OUTCOME_ERROR,
     XR_REFERENCE_OUTCOME_PANIC,
@@ -77,11 +78,21 @@ typedef struct XrReferenceOutcome {
     XrReferenceValue panic_value;
     XrReferenceTrap trap;
     uint64_t steps;
+    uint32_t state_id;
+    uint32_t safepoint_id;
 } XrReferenceOutcome;
+
+typedef struct XrReferenceExecution XrReferenceExecution;
 
 XR_FUNC XrReferenceBudget xr_reference_default_budget(void);
 XR_FUNC XrReferenceOutcome xr_reference_evaluate(
     const XrValidatedProgram *program, uint32_t function_id, const XrReferenceValue *arguments,
     uint32_t argument_count, const XrReferenceProfile *profile, const XrReferenceBudget *budget);
+XR_FUNC bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
+                                           const XrReferenceValue *arguments,
+                                           uint32_t argument_count, const XrReferenceBudget *budget,
+                                           XrReferenceExecution **execution_out);
+XR_FUNC XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution);
+XR_FUNC void xr_reference_execution_free(XrReferenceExecution *execution);
 
 #endif /* XR_REFERENCE_EVALUATOR_H */

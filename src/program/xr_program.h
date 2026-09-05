@@ -251,6 +251,20 @@ typedef struct XrCoreIrValueRootSetInput {
     uint32_t root_count;
 } XrCoreIrValueRootSetInput;
 
+// Coroutine rows are logical program facts. State zero names the entry.
+// Nonzero states name continuation blocks. Physical frame details are private.
+typedef struct XrCoreIrCoroutineStateInput {
+    uint32_t state_id;
+    XrCoreIrKey continuation_block;
+} XrCoreIrCoroutineStateInput;
+
+typedef struct XrCoreIrCoroutineSafepointInput {
+    uint32_t safepoint_id;
+    uint32_t resume_state_id;
+    const XrCoreIrKey *live_values;
+    uint32_t live_value_count;
+} XrCoreIrCoroutineSafepointInput;
+
 typedef struct XrCoreIrFunctionInput {
     XrCoreIrKey key;
     const uint16_t *parameter_types;
@@ -277,6 +291,10 @@ typedef struct XrCoreIrFunctionInput {
     uint32_t root_count;
     const XrCoreIrValueRootSetInput *value_root_sets;
     uint32_t value_root_set_count;
+    const XrCoreIrCoroutineStateInput *coroutine_states;
+    uint32_t coroutine_state_count;
+    const XrCoreIrCoroutineSafepointInput *coroutine_safepoints;
+    uint32_t coroutine_safepoint_count;
     uint32_t flags;
 } XrCoreIrFunctionInput;
 

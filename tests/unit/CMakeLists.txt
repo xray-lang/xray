@@ -73,7 +73,8 @@ target_include_directories(test_xr_program_verify PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(test_xr_program_verify PRIVATE xr_program_test_core)
+target_link_libraries(test_xr_program_verify PRIVATE
+    xr_program_test_core xray_program_vm_runtime)
 add_test(NAME test_xr_program_verify COMMAND $<TARGET_FILE:test_xr_program_verify>)
 set_tests_properties(test_xr_program_verify PROPERTIES
     LABELS "unit;canonical-program;semantic-verifier;reference-evaluator;task-297"
@@ -627,8 +628,22 @@ add_xray_unit_test(test_xr_boundary_materialization
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 set_tests_properties(test_xr_boundary_materialization PROPERTIES
     LABELS "unit;execution;boundary-abi;aggregate;variant;task-298;task-301")
-add_xray_unit_test(test_xr_program_vm vm/test_xr_program_vm.c
+add_executable(test_xr_program_vm vm/test_xr_program_vm.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+if(WIN32)
+    target_sources(test_xr_program_vm PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/os/win/thread_win.c)
+else()
+    target_sources(test_xr_program_vm PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/os/unix/thread_unix.c)
+endif()
+target_compile_definitions(test_xr_program_vm PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_include_directories(test_xr_program_vm PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_xr_program_vm PRIVATE
+    xr_program_test_core xray_program_vm_runtime)
+add_test(NAME test_xr_program_vm COMMAND $<TARGET_FILE:test_xr_program_vm>)
 set_tests_properties(test_xr_program_vm PROPERTIES
     LABELS "unit;vm;canonical-program;differential;target-machine;generation;task-299")
 
@@ -667,6 +682,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
             AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
     target_compile_options(xr_program_vm_fixture_writer PRIVATE /W4 /WX)
     target_compile_options(test_xr_program_vm PRIVATE /W4 /WX)
+    target_compile_options(test_xr_program_vm PRIVATE /wd4101 /clang:-Wno-unused-variable)
     target_compile_options(test_xr_program_vm_runtime PRIVATE /W4 /WX)
 else()
     target_compile_options(xr_program_vm_fixture_writer PRIVATE -Wall -Wextra -Werror)
@@ -678,9 +694,16 @@ add_test(NAME test_xr_program_vm_runtime
 set_tests_properties(test_xr_program_vm_runtime PROPERTIES
     LABELS "unit;vm;canonical-program;runtime-only;embedder;task-299")
 
-add_xray_unit_test(test_xr_program_aot
+add_executable(test_xr_program_aot
     aot/test_xr_program_aot.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+target_compile_definitions(test_xr_program_aot PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_include_directories(test_xr_program_aot PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_xr_program_aot PRIVATE
+    xr_program_test_core xray_program_vm_runtime xray_program_aot_compiler)
+add_test(NAME test_xr_program_aot COMMAND $<TARGET_FILE:test_xr_program_aot>)
 add_dependencies(test_xr_program_aot xray_program_aot_compiler)
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
         OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
@@ -762,6 +785,51 @@ add_xr_program_aot_native_case(division_zero division-zero 212)
 add_xr_program_aot_native_case(existential existential 42)
 add_xr_program_aot_native_case(callable callable 42)
 add_xr_program_aot_native_case(pointer_width pointer-width 32)
+add_xr_program_aot_native_case(coroutine_yield coroutine-yield 42)
+
+set(XR_PROGRAM_AOT_COROUTINE_STEP_C
+    ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_coroutine_step.c)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_AOT_COROUTINE_STEP_C}
+    COMMAND $<TARGET_FILE:test_xr_program_aot>
+        ${XR_PROGRAM_AOT_COROUTINE_STEP_C} coroutine-yield-object
+    DEPENDS test_xr_program_aot
+    COMMENT "Generating coroutine-yield native step fixture"
+    VERBATIM)
+set_source_files_properties(${XR_PROGRAM_AOT_COROUTINE_STEP_C} PROPERTIES GENERATED TRUE)
+add_library(test_xr_program_aot_coroutine_step_object OBJECT
+    ${XR_PROGRAM_AOT_COROUTINE_STEP_C})
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_aot_coroutine_step_object PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_aot_coroutine_step_object PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+add_executable(test_xr_program_aot_coroutine_native_step
+    aot/test_xr_program_aot_coroutine_native_step.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE}
+    $<TARGET_OBJECTS:test_xr_program_aot_coroutine_step_object>)
+target_compile_definitions(test_xr_program_aot_coroutine_native_step
+    PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_include_directories(test_xr_program_aot_coroutine_native_step PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_xr_program_aot_coroutine_native_step PRIVATE
+    xr_program_test_core xray_program_vm_runtime xray_program_aot_compiler)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_aot_coroutine_native_step PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_aot_coroutine_native_step PRIVATE
+        -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_aot_coroutine_native_step
+    COMMAND $<TARGET_FILE:test_xr_program_aot_coroutine_native_step>)
+set_tests_properties(test_xr_program_aot_coroutine_native_step PROPERTIES
+    LABELS "unit;aot;canonical-program;generated-c;native;generation;task-301")
 
 set(XR_PROGRAM_AOT_INVOKE_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_sealed_invoke.c)

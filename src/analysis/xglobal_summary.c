@@ -387,6 +387,19 @@ static uint64_t hash_target_query_summary(uint64_t hash, const XgTargetQuerySumm
     return hash_u8(hash, row->contract_complete);
 }
 
+static uint64_t hash_suspend_point_summary(uint64_t hash, const XgSuspendPointSummary *row) {
+    if (!row)
+        return hash_u32(hash, 0);
+    hash = hash_u32(hash, row->use_id);
+    hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_node_id);
+    hash = hash_u32(hash, row->source_span_id);
+    hash = hash_u32(hash, row->body_ordinal);
+    hash = hash_u8(hash, row->kind);
+    hash = hash_u8(hash, row->may_suspend);
+    return hash_u8(hash, row->contract_complete);
+}
+
 static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -1548,6 +1561,7 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->interface_method_params);
     xr_free(evidence->interface_object_uses);
     xr_free(evidence->target_queries);
+    xr_free(evidence->suspend_points);
     xr_free(evidence->bodies);
     xr_free(evidence->param_storages);
     xr_free(evidence->callsites);
@@ -1610,6 +1624,7 @@ static bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEviden
     XG_CLONE_ARRAY(interface_method_params, ninterface_method_params, interface_method_param_cap);
     XG_CLONE_ARRAY(interface_object_uses, ninterface_object_uses, interface_object_use_cap);
     XG_CLONE_ARRAY(target_queries, ntarget_queries, target_query_cap);
+    XG_CLONE_ARRAY(suspend_points, nsuspend_points, suspend_point_cap);
     XG_CLONE_ARRAY(bodies, nbodies, body_cap);
     XG_CLONE_ARRAY(param_storages, nparam_storages, param_storage_cap);
     XG_CLONE_ARRAY(callsites, ncallsites, callsite_cap);
@@ -1713,6 +1728,13 @@ XR_FUNC bool xg_global_evidence_reserve_target_queries(XgGlobalEvidence *evidenc
     return evidence && reserve_array((void **) &evidence->target_queries,
                                      &evidence->target_query_cap, capacity,
                                      sizeof(XgTargetQuerySummary));
+}
+
+XR_FUNC bool xg_global_evidence_reserve_suspend_points(XgGlobalEvidence *evidence,
+                                                       uint32_t capacity) {
+    return evidence &&
+           reserve_array((void **) &evidence->suspend_points, &evidence->suspend_point_cap,
+                         capacity, sizeof(XgSuspendPointSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_bodies(XgGlobalEvidence *evidence, uint32_t capacity) {
@@ -2119,6 +2141,77 @@ XR_FUNC const XgTargetQuerySummary *xg_global_evidence_find_target_query_at(
         const XgTargetQuerySummary *row = &evidence->target_queries[i];
         if (row->owner_func_id != owner_func_id || row->source_node_id != source_node_id ||
             row->query_kind != query_kind)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    return match;
+}
+
+XR_FUNC XgSuspendPointSummary *
+xg_global_evidence_add_suspend_point(XgGlobalEvidence *evidence,
+                                     const XgSuspendPointSummary *summary) {
+    XgSuspendPointUseId use_id;
+    XgSuspendPointUseId max_use_id = XG_NO_ID;
+    if (!evidence || !summary || summary->owner_func_id == XG_NO_ID ||
+        summary->source_node_id == 0 || summary->body_ordinal == 0 ||
+        summary->kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD || summary->may_suspend != 1 ||
+        summary->contract_complete != 1)
+        return NULL;
+    use_id = summary->use_id;
+    for (uint32_t i = 0; i < evidence->nsuspend_points; i++) {
+        const XgSuspendPointSummary *row = &evidence->suspend_points[i];
+        if (row->use_id > max_use_id)
+            max_use_id = row->use_id;
+        if ((use_id != XG_NO_ID && row->use_id == use_id) ||
+            (row->owner_func_id == summary->owner_func_id &&
+             row->source_node_id == summary->source_node_id && row->kind == summary->kind) ||
+            (row->owner_func_id == summary->owner_func_id &&
+             row->body_ordinal == summary->body_ordinal))
+            return NULL;
+    }
+    if (use_id == XG_NO_ID) {
+        if (max_use_id == UINT32_MAX)
+            return NULL;
+        use_id = max_use_id + 1;
+    }
+    if (!xg_global_evidence_reserve_suspend_points(evidence, evidence->nsuspend_points + 1))
+        return NULL;
+    XgSuspendPointSummary *row = &evidence->suspend_points[evidence->nsuspend_points++];
+    *row = *summary;
+    row->use_id = use_id;
+    return row;
+}
+
+XR_FUNC const XgSuspendPointSummary *
+xg_global_evidence_find_suspend_point(const XgGlobalEvidence *evidence,
+                                      XgSuspendPointUseId use_id) {
+    const XgSuspendPointSummary *match = NULL;
+    if (!evidence || use_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nsuspend_points; i++) {
+        const XgSuspendPointSummary *row = &evidence->suspend_points[i];
+        if (row->use_id != use_id)
+            continue;
+        if (match)
+            return NULL;
+        match = row;
+    }
+    return match;
+}
+
+XR_FUNC const XgSuspendPointSummary *
+xg_global_evidence_find_suspend_point_at(const XgGlobalEvidence *evidence, XgFuncId owner_func_id,
+                                         uint32_t source_node_id, uint8_t kind) {
+    const XgSuspendPointSummary *match = NULL;
+    if (!evidence || owner_func_id == XG_NO_ID || source_node_id == 0 ||
+        kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nsuspend_points; i++) {
+        const XgSuspendPointSummary *row = &evidence->suspend_points[i];
+        if (row->owner_func_id != owner_func_id || row->source_node_id != source_node_id ||
+            row->kind != kind)
             continue;
         if (match)
             return NULL;
@@ -3595,6 +3688,7 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash =
         hash_mix(hash, &evidence->ninterface_object_uses, sizeof(evidence->ninterface_object_uses));
     hash = hash_mix(hash, &evidence->ntarget_queries, sizeof(evidence->ntarget_queries));
+    hash = hash_mix(hash, &evidence->nsuspend_points, sizeof(evidence->nsuspend_points));
     hash = hash_mix(hash, &evidence->nbodies, sizeof(evidence->nbodies));
     hash = hash_mix(hash, &evidence->nparam_storages, sizeof(evidence->nparam_storages));
     hash = hash_mix(hash, &evidence->ncallsites, sizeof(evidence->ncallsites));
@@ -3646,6 +3740,8 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_interface_object_use_summary(hash, &evidence->interface_object_uses[i]);
     for (uint32_t i = 0; i < evidence->ntarget_queries; i++)
         hash = hash_target_query_summary(hash, &evidence->target_queries[i]);
+    for (uint32_t i = 0; i < evidence->nsuspend_points; i++)
+        hash = hash_suspend_point_summary(hash, &evidence->suspend_points[i]);
     for (uint32_t i = 0; i < evidence->nbodies; i++)
         hash = hash_body_summary(hash, &evidence->bodies[i]);
     for (uint32_t i = 0; i < evidence->nparam_storages; i++)
@@ -3780,6 +3876,7 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
             hash = hash_u32(hash, evidence->ncallable_targets);
             hash = hash_u32(hash, evidence->ninterface_object_uses);
             hash = hash_u32(hash, evidence->ntarget_queries);
+            hash = hash_u32(hash, evidence->nsuspend_points);
             hash = hash_u32(hash, evidence->nlink_deps);
             hash = hash_u32(hash, evidence->ngeneric_insts);
             for (uint32_t i = 0; i < evidence->nbodies; i++)
@@ -3794,6 +3891,8 @@ static uint64_t xg_global_evidence_phase_content_hash(const XgGlobalEvidence *ev
                 hash = hash_interface_object_use_summary(hash, &evidence->interface_object_uses[i]);
             for (uint32_t i = 0; i < evidence->ntarget_queries; i++)
                 hash = hash_target_query_summary(hash, &evidence->target_queries[i]);
+            for (uint32_t i = 0; i < evidence->nsuspend_points; i++)
+                hash = hash_suspend_point_summary(hash, &evidence->suspend_points[i]);
             for (uint32_t i = 0; i < evidence->nlink_deps; i++)
                 hash = hash_link_dependency_summary(hash, &evidence->link_deps[i]);
             for (uint32_t i = 0; i < evidence->ngeneric_insts; i++)
@@ -4298,13 +4397,13 @@ static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evide
 static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
             "payload-count bodies=%u param_storages=%u callsites=%u callable_targets=%u "
-            "interface_object_uses=%u target_queries=%u "
+            "interface_object_uses=%u target_queries=%u suspend_points=%u "
             "link_deps=%u generic_insts=%u\n",
             evidence ? evidence->nbodies : 0, evidence ? evidence->nparam_storages : 0,
             evidence ? evidence->ncallsites : 0, evidence ? evidence->ncallable_targets : 0,
-            evidence ? evidence->ninterface_object_uses : 0, evidence ? evidence->ntarget_queries : 0,
-            evidence ? evidence->nlink_deps : 0,
-            evidence ? evidence->ngeneric_insts : 0);
+            evidence ? evidence->ninterface_object_uses : 0,
+            evidence ? evidence->ntarget_queries : 0, evidence ? evidence->nsuspend_points : 0,
+            evidence ? evidence->nlink_deps : 0, evidence ? evidence->ngeneric_insts : 0);
     if (!evidence)
         return;
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
@@ -4372,6 +4471,15 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
                 q->body_ordinal, q->result_type_key, (unsigned) q->namespace_id,
                 (unsigned) q->query_kind, (unsigned) q->result_native_type,
                 (unsigned) q->contract_complete);
+    }
+    for (uint32_t i = 0; i < evidence->nsuspend_points; i++) {
+        const XgSuspendPointSummary *point = &evidence->suspend_points[i];
+        fprintf(out,
+                "suspend-point id=%u owner=%u node=%u span=%u ordinal=%u kind=%u "
+                "may_suspend=%u complete=%u\n",
+                point->use_id, point->owner_func_id, point->source_node_id, point->source_span_id,
+                point->body_ordinal, (unsigned) point->kind, (unsigned) point->may_suspend,
+                (unsigned) point->contract_complete);
     }
     for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *l = &evidence->link_deps[i];
@@ -5139,6 +5247,7 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
     uint32_t callable_target_count = 0;
     uint32_t interface_object_use_count = 0;
     uint32_t target_query_count = 0;
+    uint32_t suspend_point_count = 0;
     uint32_t link_dep_count = 0;
     uint32_t generic_inst_count = 0;
     char trailing = '\0';
@@ -5147,11 +5256,11 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
     if (sscanf(line,
                "payload-count bodies=%" SCNu32 " param_storages=%" SCNu32 " callsites=%" SCNu32
                " callable_targets=%" SCNu32 " interface_object_uses=%" SCNu32
-               " target_queries=%" SCNu32 " link_deps=%" SCNu32
+               " target_queries=%" SCNu32 " suspend_points=%" SCNu32 " link_deps=%" SCNu32
                " generic_insts=%" SCNu32 " %c",
                &body_count, &param_storage_count, &callsite_count, &callable_target_count,
-               &interface_object_use_count, &target_query_count, &link_dep_count,
-               &generic_inst_count, &trailing) != 8)
+               &interface_object_use_count, &target_query_count, &suspend_point_count,
+               &link_dep_count, &generic_inst_count, &trailing) != 9)
         return false;
     if (!xg_global_evidence_reserve_bodies(evidence, body_count) ||
         !xg_global_evidence_reserve_param_storages(evidence, param_storage_count) ||
@@ -5159,6 +5268,7 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         !xg_global_evidence_reserve_callable_targets(evidence, callable_target_count) ||
         !xg_global_evidence_reserve_interface_object_uses(evidence, interface_object_use_count) ||
         !xg_global_evidence_reserve_target_queries(evidence, target_query_count) ||
+        !xg_global_evidence_reserve_suspend_points(evidence, suspend_point_count) ||
         !xg_global_evidence_reserve_link_deps(evidence, link_dep_count) ||
         !xg_global_evidence_reserve_generic_insts(evidence, generic_inst_count))
         return false;
@@ -5302,6 +5412,29 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         row.result_native_type = (uint8_t) native_type;
         row.contract_complete = (uint8_t) complete;
         if (!xg_global_evidence_add_target_query(evidence, &row))
+            return false;
+    }
+    for (uint32_t i = 0; i < suspend_point_count; i++) {
+        XgSuspendPointSummary row;
+        uint32_t kind = 0;
+        uint32_t may_suspend = 0;
+        uint32_t complete = 0;
+        trailing = '\0';
+        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
+            return false;
+        memset(&row, 0, sizeof(row));
+        if (sscanf(line,
+                   "suspend-point id=%" SCNu32 " owner=%" SCNu32 " node=%" SCNu32 " span=%" SCNu32
+                   " ordinal=%" SCNu32 " kind=%" SCNu32 " may_suspend=%" SCNu32 " complete=%" SCNu32
+                   " %c",
+                   &row.use_id, &row.owner_func_id, &row.source_node_id, &row.source_span_id,
+                   &row.body_ordinal, &kind, &may_suspend, &complete, &trailing) != 8 ||
+            kind > UINT8_MAX || may_suspend > UINT8_MAX || complete > UINT8_MAX)
+            return false;
+        row.kind = (uint8_t) kind;
+        row.may_suspend = (uint8_t) may_suspend;
+        row.contract_complete = (uint8_t) complete;
+        if (!xg_global_evidence_add_suspend_point(evidence, &row))
             return false;
     }
     for (uint32_t i = 0; i < link_dep_count; i++) {
@@ -5917,6 +6050,7 @@ typedef struct XgPackageImportOffsets {
     XgInterfaceWitnessId interface_witness_id;
     XgInterfaceObjectUseId interface_object_use_id;
     XgTargetQueryUseId target_query_use_id;
+    XgSuspendPointUseId suspend_point_use_id;
     XgFuncId func_id;
     XgParamStorageId param_storage_id;
     XgCallsiteId callsite_id;
@@ -6102,6 +6236,11 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
         offsets->target_query_use_id =
             max_u32(offsets->target_query_use_id, target->target_queries[i].use_id);
         offsets->func_id = max_u32(offsets->func_id, target->target_queries[i].owner_func_id);
+    }
+    for (uint32_t i = 0; i < target->nsuspend_points; i++) {
+        offsets->suspend_point_use_id =
+            max_u32(offsets->suspend_point_use_id, target->suspend_points[i].use_id);
+        offsets->func_id = max_u32(offsets->func_id, target->suspend_points[i].owner_func_id);
     }
     for (uint32_t i = 0; i < target->nbodies; i++) {
         const XgBodySummary *row = &target->bodies[i];
@@ -6300,6 +6439,7 @@ static bool reserve_import_capacity(XgGlobalEvidence *target, const XgGlobalEvid
     RESERVE_IMPORTED(ninterface_method_params, xg_global_evidence_reserve_interface_method_params);
     RESERVE_IMPORTED(ninterface_object_uses, xg_global_evidence_reserve_interface_object_uses);
     RESERVE_IMPORTED(ntarget_queries, xg_global_evidence_reserve_target_queries);
+    RESERVE_IMPORTED(nsuspend_points, xg_global_evidence_reserve_suspend_points);
     RESERVE_IMPORTED(nbodies, xg_global_evidence_reserve_bodies);
     RESERVE_IMPORTED(ncallsites, xg_global_evidence_reserve_callsites);
     RESERVE_IMPORTED(ncallable_targets, xg_global_evidence_reserve_callable_targets);
@@ -6372,17 +6512,16 @@ static uint32_t package_non_module_row_count(const XgGlobalEvidence *package) {
     return package->ndecls + package->nclasses + package->nclass_fields + package->nmethods +
            package->ninterface_impls + package->ninterface_witnesses + package->ninterface_extends +
            package->ninterface_methods + package->ninterface_method_params +
-           package->ninterface_object_uses + package->ntarget_queries + package->nbodies +
-           package->nparam_storages +
-           package->ncallsites + package->ncallable_targets + package->nlink_deps +
-           package->ngeneric_insts + package->ngeneric_body_uses + package->ngeneric_storages +
-           package->ngeneric_code_sizes + package->nsequence_accesses + package->ncapacity_ops +
-           package->nbulk_ops + package->nencoding_ops + package->nderives +
-           package->nderived_fields + package->nderived_methods + package->njson_codecs +
-           package->nobject_shapes + package->nobject_fields + package->nobject_accesses +
-           package->nobject_access_cases + package->nobject_merges + package->noptions_bags +
-           package->nmap_shapes + package->nmap_entries + package->nkey_accesses +
-           package->nhash_eqs;
+           package->ninterface_object_uses + package->ntarget_queries + package->nsuspend_points +
+           package->nbodies + package->nparam_storages + package->ncallsites +
+           package->ncallable_targets + package->nlink_deps + package->ngeneric_insts +
+           package->ngeneric_body_uses + package->ngeneric_storages + package->ngeneric_code_sizes +
+           package->nsequence_accesses + package->ncapacity_ops + package->nbulk_ops +
+           package->nencoding_ops + package->nderives + package->nderived_fields +
+           package->nderived_methods + package->njson_codecs + package->nobject_shapes +
+           package->nobject_fields + package->nobject_accesses + package->nobject_access_cases +
+           package->nobject_merges + package->noptions_bags + package->nmap_shapes +
+           package->nmap_entries + package->nkey_accesses + package->nhash_eqs;
 }
 
 static bool target_has_module_owned_rows(const XgGlobalEvidence *target, XgModuleId module_id) {
@@ -6745,6 +6884,13 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         REMAP_ID(row.use_id, offsets.target_query_use_id);
         REMAP_ID(row.owner_func_id, offsets.func_id);
         if (!xg_global_evidence_add_target_query(target, &row))
+            goto done;
+    }
+    for (uint32_t i = 0; i < package.nsuspend_points; i++) {
+        XgSuspendPointSummary row = package.suspend_points[i];
+        REMAP_ID(row.use_id, offsets.suspend_point_use_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (!xg_global_evidence_add_suspend_point(target, &row))
             goto done;
     }
     for (uint32_t i = 0; i < package.nbodies; i++) {
@@ -7148,7 +7294,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "counts modules=%u decls=%u classes=%u class_fields=%u methods=%u "
             "interface_impls=%u interface_witnesses=%u interface_extends=%u "
             "interface_methods=%u interface_method_params=%u interface_object_uses=%u "
-            "target_queries=%u "
+            "target_queries=%u suspend_points=%u "
             "bodies=%u param_storages=%u "
             "callsites=%u callable_targets=%u link_deps=%u generic_insts=%u "
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
@@ -7161,7 +7307,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->nmethods, evidence->ninterface_impls, evidence->ninterface_witnesses,
             evidence->ninterface_extends, evidence->ninterface_methods,
             evidence->ninterface_method_params, evidence->ninterface_object_uses,
-            evidence->ntarget_queries, evidence->nbodies,
+            evidence->ntarget_queries, evidence->nsuspend_points, evidence->nbodies,
             evidence->nparam_storages, evidence->ncallsites, evidence->ncallable_targets,
             evidence->nlink_deps, evidence->ngeneric_insts, evidence->ngeneric_body_uses,
             evidence->ngeneric_storages, evidence->ngeneric_code_sizes,
@@ -7298,6 +7444,15 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 q->body_ordinal, q->result_type_key, (unsigned) q->namespace_id,
                 xg_target_query_kind_name(q->query_kind), (unsigned) q->result_native_type,
                 (unsigned) q->contract_complete);
+    }
+    for (uint32_t i = 0; i < evidence->nsuspend_points; i++) {
+        const XgSuspendPointSummary *point = &evidence->suspend_points[i];
+        fprintf(out,
+                "suspend-point %u id=%u owner=%u node=%u span=%u ordinal=%u kind=%u "
+                "may_suspend=%u complete=%u\n",
+                i, point->use_id, point->owner_func_id, point->source_node_id,
+                point->source_span_id, point->body_ordinal, (unsigned) point->kind,
+                (unsigned) point->may_suspend, (unsigned) point->contract_complete);
     }
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *b = &evidence->bodies[i];

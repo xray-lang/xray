@@ -226,6 +226,13 @@
       "projection_kind": "target-query",
       "core_operation": "core.target.pointer_width",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.yield",
+      "result_type": "void",
+      "projection_kind": "coroutine-yield",
+      "core_operation": "core.coroutine.yield",
+      "immediate_u32": 0
     }
   ],
   "semantic_mappings": [

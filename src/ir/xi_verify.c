@@ -560,6 +560,39 @@ static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const 
     return true;
 }
 
+static bool verify_suspend_point_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                          const XiValue *value) {
+    bool carries_contract =
+        value && (value->xg_suspend_point_use_id != XG_NO_ID ||
+                  value->xg_suspend_source_node_id != 0 || value->xg_suspend_body_ordinal != 0 ||
+                  value->xg_suspend_point_kind != XG_SUSPEND_POINT_NONE ||
+                  value->xg_suspend_may_suspend != 0 || value->xg_suspend_contract_complete != 0);
+    if (!value)
+        return true;
+    if (value->op != XI_YIELD) {
+        if (carries_contract) {
+            verr(ctx, "func '%s': v%u %s in b%u carries suspend-point metadata", f->name, value->id,
+                 xi_op_name(value->op), blk->id);
+            return false;
+        }
+        return true;
+    }
+    // Xglobal-backed functions are canonical source products.
+    // A yield cannot be reconstructed from spelling or opcode alone.
+    if (f->xg_body_func_id == XG_NO_ID && !carries_contract)
+        return true;
+    if (value->nargs != 0 || value->aux != NULL || value->aux_int != XI_YIELD_AUX_IMMEDIATE ||
+        value->xg_suspend_point_use_id == XG_NO_ID || value->xg_suspend_source_node_id == 0 ||
+        value->xg_suspend_body_ordinal == 0 ||
+        value->xg_suspend_point_kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD ||
+        value->xg_suspend_may_suspend != 1 || value->xg_suspend_contract_complete != 1) {
+        verr(ctx, "func '%s': v%u XI_YIELD in b%u lacks an exact suspend-point contract", f->name,
+             value->id, blk->id);
+        return false;
+    }
+    return true;
+}
+
 /* Check 4: value-level invariants */
 static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiValue *v) {
     if (ctx->failed)
@@ -644,6 +677,8 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
     if (!verify_existential_metadata_contract(ctx, f, blk, v))
         return;
     if (!verify_target_query_contract(ctx, f, blk, v))
+        return;
+    if (!verify_suspend_point_contract(ctx, f, blk, v))
         return;
 
     // Assertion semantics belong only to an arena-owned typed plan.

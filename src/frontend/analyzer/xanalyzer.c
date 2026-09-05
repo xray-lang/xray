@@ -2435,6 +2435,23 @@ void xa_analyzer_clear_target_query(XaAnalyzer *analyzer, const struct AstNode *
         xa_node_table_clear_target_query((XaNodeTable *) analyzer->node_table, node);
 }
 
+bool xa_analyzer_set_suspend_point(XaAnalyzer *analyzer, const struct AstNode *node,
+                                   const XaSuspendPointFact *fact) {
+    return analyzer && analyzer->node_table && node && fact &&
+           xa_node_table_set_suspend_point((XaNodeTable *) analyzer->node_table, node, fact);
+}
+
+bool xa_analyzer_get_suspend_point(XaAnalyzer *analyzer, const struct AstNode *node,
+                                   XaSuspendPointFact *out_fact) {
+    return analyzer && analyzer->node_table && node &&
+           xa_node_table_get_suspend_point((XaNodeTable *) analyzer->node_table, node, out_fact);
+}
+
+void xa_analyzer_clear_suspend_point(XaAnalyzer *analyzer, const struct AstNode *node) {
+    if (analyzer && analyzer->node_table && node)
+        xa_node_table_clear_suspend_point((XaNodeTable *) analyzer->node_table, node);
+}
+
 bool xa_analyzer_set_callable_target_set(XaAnalyzer *analyzer, const struct AstNode *node,
                                          const XaCallableTargetSetFact *fact) {
     return analyzer && analyzer->node_table &&

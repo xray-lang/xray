@@ -66,6 +66,7 @@ typedef struct XrVmValue {
 
 typedef enum XrVmOutcomeKind {
     XR_VM_OUTCOME_RETURN = 0,
+    XR_VM_OUTCOME_SUSPENDED,
     XR_VM_OUTCOME_TRAP,
     XR_VM_OUTCOME_ERROR,
     XR_VM_OUTCOME_PANIC,
@@ -91,6 +92,8 @@ typedef struct XrVmOutcome {
     XrVmValue panic_value;
     XrVmTrap trap;
     uint64_t steps;
+    uint32_t state_id;
+    uint32_t safepoint_id;
     XrFingerprint logical_trace;
 } XrVmOutcome;
 
@@ -112,11 +115,13 @@ typedef struct XrVmCodeDiagnostic {
 } XrVmCodeDiagnostic;
 
 typedef struct XrVmCode XrVmCode;
+typedef struct XrVmExecution XrVmExecution;
 
 XR_FUNC XrVmCodeOptions xr_vm_code_default_options(void);
 XR_FUNC XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *options,
                                         XrVmCode **code_out, XrVmCodeDiagnostic *diagnostic_out);
 XR_FUNC void xr_vm_code_free(XrVmCode *code);
+XR_FUNC XrVmCode *xr_vm_code_retain(const XrVmCode *code);
 XR_FUNC bool xr_vm_code_matches_instance(const XrVmCode *code, const XrInstance *instance);
 XR_FUNC XrExecutionCacheKey xr_vm_code_cache_key(const XrVmCode *code);
 XR_FUNC XrFingerprint xr_vm_code_private_digest(const XrVmCode *code);
@@ -125,6 +130,11 @@ XR_FUNC XrVmDecodePolicy xr_vm_code_decode_policy(const XrVmCode *code);
 XR_FUNC XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance,
                                        uint32_t function_id, const XrVmValue *arguments,
                                        uint32_t argument_count);
+XR_FUNC bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance,
+                                    uint32_t function_id, const XrVmValue *arguments,
+                                    uint32_t argument_count, XrVmExecution **execution_out);
+XR_FUNC XrVmOutcome xr_vm_execution_step(XrVmExecution *execution);
+XR_FUNC void xr_vm_execution_free(XrVmExecution *execution);
 XR_FUNC const char *xr_vm_code_status_name(XrVmCodeStatus status);
 
 #endif  // XR_PROGRAM_VM_H

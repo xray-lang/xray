@@ -5000,9 +5000,25 @@ static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
      * XI_YIELD suspend point — the same primitive the former bare `yield`
      * statement used. `yield expr` is reserved for generator value production. */
     if (strcmp(method, "yield") == 0) {
+        XaSuspendPointFact fact;
+        const XgSuspendPointSummary *row = NULL;
+        uint32_t source_node_id = xi_lower_source_node_id(l, node);
         if (call->arg_count != 0) {
             fprintf(stderr, "[LOWER] Coro.yield() takes no arguments at line %d\n",
                     (int) node->line);
+            l->had_error = true;
+            return NULL;
+        }
+        bool has_fact = xa_typed_program_suspend_point(l->typed_program, node, &fact);
+        if (l->global_evidence && l->func && l->func->xg_body_func_id != XG_NO_ID)
+            row = xg_global_evidence_find_suspend_point_at(
+                l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
+                XG_SUSPEND_POINT_COOPERATIVE_YIELD);
+        if (!has_fact || !row || source_node_id == 0 ||
+            xg_global_evidence_find_suspend_point(l->global_evidence, row->use_id) != row ||
+            fact.kind != XA_SUSPEND_POINT_COOPERATIVE_YIELD || fact.may_suspend != 1 ||
+            fact.complete != 1 || row->kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD ||
+            row->may_suspend != 1 || row->contract_complete != 1) {
             l->had_error = true;
             return NULL;
         }
@@ -5012,6 +5028,12 @@ static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
         y->aux_int = XI_YIELD_AUX_IMMEDIATE;
         y->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
         y->line = (uint32_t) node->line;
+        y->xg_suspend_point_use_id = row->use_id;
+        y->xg_suspend_source_node_id = row->source_node_id;
+        y->xg_suspend_body_ordinal = row->body_ordinal;
+        y->xg_suspend_point_kind = row->kind;
+        y->xg_suspend_may_suspend = row->may_suspend;
+        y->xg_suspend_contract_complete = row->contract_complete;
         return y;
     }
     int sub = coro_method_sub_type(method);

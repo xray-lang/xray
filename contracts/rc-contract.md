@@ -124,7 +124,7 @@ this one. A contract names what it proves; this line names what it does not.
 
 anchor-sha256: src/ir/xi_arc_verify.c b0344b309501c8daa318f5669974aba949d93187fb5087fd20ecc6a5be4e83a6
 anchor-sha256: src/ir/xi_arc.c 10415b8b4b4f492441e84f14f82a85019be526ab7188519f4ecacc76f852dcf6
-anchor-sha256: src/ir/xi_lower_expr.c acbe17dc52895f6abf557682dcc97328e867650b54742e47e209684527e6242b
+anchor-sha256: src/ir/xi_lower_expr.c 82c1f898dde09bda0fa62129fc143f35098f15d458c088ead1cb17b150d68765
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 037046c334ef5510b6d9a5c22ac27a1e9dfd378eb19549ddab9f96c1bb3f7bbf
 anchor-sha256: src/aot/xrt_coll.h d04cd4b87bbe28e76f75fb3d68077f53976f7a3d91dcb86b307ba63f31fb41a4
 anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3

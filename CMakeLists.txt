@@ -1834,6 +1834,7 @@ set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
     src/aot/program/xr_backend_ir_verify.c
     src/aot/program/xr_backend_ir_emit_c.c
     src/aot/program/xr_native_artifact.c
+    src/aot/xi_cgen_verify_output.c
 )
 add_library(xray_program_aot_compiler STATIC
     ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})

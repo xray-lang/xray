@@ -221,6 +221,10 @@ static void free_function(XrCoreIrFunction *function) {
         xr_free(function->value_root_sets[index].roots);
     xr_free(function->value_root_sets);
     xr_free(function->roots);
+    for (uint32_t index = 0; index < function->coroutine_safepoint_count; ++index)
+        xr_free(function->coroutine_safepoints[index].live_values);
+    xr_free(function->coroutine_safepoints);
+    xr_free(function->coroutine_states);
 }
 
 void xr_core_ir_program_free(XrCoreIrProgram *program) {
@@ -504,6 +508,8 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     output->block_count = input->block_count;
     output->root_count = input->root_count;
     output->value_root_set_count = input->value_root_set_count;
+    output->coroutine_state_count = input->coroutine_state_count;
+    output->coroutine_safepoint_count = input->coroutine_safepoint_count;
     output->flags = input->flags;
     if (!copy_bytes((void **) &output->parameter_types, input->parameter_types,
                     input->parameter_count, sizeof(uint16_t)))
@@ -566,6 +572,38 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
             }
         }
     } else if (input->value_root_sets) {
+        free_function(output);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (!copy_bytes((void **) &output->coroutine_states, input->coroutine_states,
+                    input->coroutine_state_count, sizeof(XrCoreIrCoroutineState))) {
+        free_function(output);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (input->coroutine_safepoint_count != 0u) {
+        if (!input->coroutine_safepoints) {
+            free_function(output);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        output->coroutine_safepoints =
+            xr_calloc(input->coroutine_safepoint_count, sizeof(XrCoreIrCoroutineSafepoint));
+        if (!output->coroutine_safepoints) {
+            free_function(output);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t index = 0; index < input->coroutine_safepoint_count; ++index) {
+            const XrCoreIrCoroutineSafepointInput *source = &input->coroutine_safepoints[index];
+            XrCoreIrCoroutineSafepoint *target = &output->coroutine_safepoints[index];
+            target->safepoint_id = source->safepoint_id;
+            target->resume_state_id = source->resume_state_id;
+            target->live_value_count = source->live_value_count;
+            if (!copy_bytes((void **) &target->live_values, source->live_values,
+                            source->live_value_count, sizeof(XrCoreIrKey))) {
+                free_function(output);
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            }
+        }
+    } else if (input->coroutine_safepoints) {
         free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -1518,6 +1556,9 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 function->block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION ||
                 function->root_count > XR_PROGRAM_LIMIT_ROOTS_PER_FUNCTION ||
                 function->value_root_set_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION ||
+                function->coroutine_state_count > XR_PROGRAM_LIMIT_COROUTINE_STATES_PER_FUNCTION ||
+                function->coroutine_safepoint_count >
+                    XR_PROGRAM_LIMIT_COROUTINE_SAFEPOINTS_PER_FUNCTION ||
                 !find_block(function, function->entry_block) ||
                 !validate_function_roots(program, function)) {
                 xr_program_set_diagnostic(
@@ -1539,6 +1580,42 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                           "entry block does not match function signature");
                 return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
+            if ((function->coroutine_state_count == 0u) !=
+                    (function->coroutine_safepoint_count == 0u) ||
+                (function->coroutine_state_count != 0u &&
+                 (function->coroutine_states[0].state_id != 0u ||
+                  !xr_core_ir_key_equal(function->coroutine_states[0].continuation_block,
+                                        function->entry_block)))) {
+                xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                          "coroutine state zero must name the function entry");
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
+            for (uint32_t state = 0; state < function->coroutine_state_count; ++state) {
+                if (function->coroutine_states[state].state_id != state ||
+                    !find_block(function, function->coroutine_states[state].continuation_block)) {
+                    xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                              "coroutine state is not dense or resolved");
+                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                }
+            }
+            for (uint32_t safepoint = 0; safepoint < function->coroutine_safepoint_count;
+                 ++safepoint) {
+                const XrCoreIrCoroutineSafepoint *row = &function->coroutine_safepoints[safepoint];
+                if (row->safepoint_id != safepoint || row->resume_state_id == 0u ||
+                    row->resume_state_id >= function->coroutine_state_count ||
+                    row->live_value_count > XR_PROGRAM_LIMIT_LIVE_VALUES_PER_SAFEPOINT) {
+                    xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                              "coroutine safepoint is not dense or resolved");
+                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                }
+                for (uint32_t live = 0; live < row->live_value_count; ++live) {
+                    if (!function_has_value(function, row->live_values[live])) {
+                        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                                  "coroutine live value is unresolved");
+                        return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
+                    }
+                }
             }
             for (uint32_t index = 0; index < function->parameter_count; ++index) {
                 XrCoreIrValueCategory expected = function->parameter_modes[index] == XR_PARAM_REF

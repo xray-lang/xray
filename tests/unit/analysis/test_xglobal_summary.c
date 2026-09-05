@@ -22,6 +22,7 @@
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_pipeline.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/shared/xr_derive_flags.h"
 #include "../../../src/toolchain/xcompiler_session.h"
@@ -663,6 +664,240 @@ static XiValue *evidence_find_xi_method_call(XiFunc *func) {
     return NULL;
 }
 
+static XiValue *evidence_find_xi_yield(XiFunc *func) {
+    if (!func)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (value && value->op == XI_YIELD)
+                return value;
+        }
+    }
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        XiValue *found = evidence_find_xi_yield(func->children[i]);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+static AstNode *evidence_first_function_call(AstNode *ast) {
+    if (!ast || ast->type != AST_PROGRAM || ast->as.program.count < 1)
+        return NULL;
+    AstNode *function = ast->as.program.statements[0];
+    AstNode *body = function && function->type == AST_FUNCTION_DECL
+                        ? function->as.function_decl.body
+                        : NULL;
+    AstNode *statement = body && body->type == AST_BLOCK && body->as.block.count > 0
+                             ? body->as.block.statements[0]
+                             : NULL;
+    return statement && statement->type == AST_EXPR_STMT ? statement->as.expr_stmt : NULL;
+}
+
+TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract) {
+    setup_parser_session();
+    XgGlobalEvidence evidence = {0};
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
+        "fn run() -> i64 {\n"
+        "    Coro.yield()\n"
+        "    return 42\n"
+        "}\n",
+        &evidence, &analyzer, &ast));
+
+    AstNode *call = evidence_first_function_call(ast);
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(call->type, AST_CALL_EXPR);
+    XaSuspendPointFact fact = {0};
+    ASSERT_TRUE(xa_analyzer_get_suspend_point(analyzer, call, &fact));
+    ASSERT_EQ_UINT(fact.kind, XA_SUSPEND_POINT_COOPERATIVE_YIELD);
+    ASSERT_EQ_UINT(fact.may_suspend, 1);
+    ASSERT_EQ_UINT(fact.complete, 1);
+
+    ASSERT_EQ_UINT(evidence.nsuspend_points, 1);
+    const XgSuspendPointSummary *point = &evidence.suspend_points[0];
+    ASSERT_TRUE(point->use_id != XG_NO_ID);
+    ASSERT_TRUE(point->owner_func_id != XG_NO_ID);
+    ASSERT_TRUE(point->source_node_id != 0);
+    ASSERT_EQ_UINT(point->body_ordinal, 1);
+    ASSERT_EQ_UINT(point->kind, XG_SUSPEND_POINT_COOPERATIVE_YIELD);
+    ASSERT_EQ_UINT(point->may_suspend, 1);
+    ASSERT_EQ_UINT(point->contract_complete, 1);
+    ASSERT_EQ_PTR(xg_global_evidence_find_suspend_point(&evidence, point->use_id), point);
+    ASSERT_EQ_PTR(xg_global_evidence_find_suspend_point_at(
+                      &evidence, point->owner_func_id, point->source_node_id,
+                      XG_SUSPEND_POINT_COOPERATIVE_YIELD),
+                  point);
+    const XgBodySummary *owner = NULL;
+    for (uint32_t i = 0; i < evidence.nbodies; i++) {
+        if (evidence.bodies[i].func_id == point->owner_func_id) {
+            ASSERT_NULL(owner);
+            owner = &evidence.bodies[i];
+        }
+    }
+    ASSERT_NOT_NULL(owner);
+    ASSERT_EQ_UINT(owner->effect_bits & XG_BODY_MAY_SUSPEND, XG_BODY_MAY_SUSPEND);
+    ASSERT_EQ_UINT(owner->capability_bits & XG_CAP_COROUTINE, XG_CAP_COROUTINE);
+
+    uint64_t evidence_hash = xg_global_evidence_hash(&evidence);
+    char *payload =
+        xg_global_evidence_cache_payload_dump(&evidence, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+    ASSERT_NOT_NULL(strstr(payload, "suspend-point id="));
+    XgGlobalEvidence materialized = {0};
+    ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
+    ASSERT_EQ_UINT(materialized.nsuspend_points, 1);
+    const XgSuspendPointSummary *materialized_point = &materialized.suspend_points[0];
+    ASSERT_EQ_UINT(materialized_point->use_id, point->use_id);
+    ASSERT_EQ_UINT(materialized_point->owner_func_id, point->owner_func_id);
+    ASSERT_EQ_UINT(materialized_point->source_node_id, point->source_node_id);
+    ASSERT_EQ_UINT(materialized_point->body_ordinal, point->body_ordinal);
+    ASSERT_EQ_UINT(materialized_point->kind, point->kind);
+    ASSERT_EQ_UINT(materialized_point->may_suspend, point->may_suspend);
+    ASSERT_EQ_UINT(materialized_point->contract_complete, point->contract_complete);
+    ASSERT_EQ_UINT(xg_global_evidence_hash(&materialized), evidence_hash);
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
+
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    cfg.run_canonicalize = false;
+    cfg.run_optimize = false;
+    cfg.run_select_rep = false;
+    cfg.run_backend_lower = false;
+    cfg.run_escape = false;
+    cfg.run_arc = false;
+    cfg.run_emit = false;
+    cfg.source_file = "xglobal-core-identity.xr";
+    cfg.module_identity = "memory-module-v1:id=18:xglobal-fixture-v1";
+    cfg.global_evidence = &evidence;
+    cfg.global_evidence_module_id = 1;
+    XiPipelineResult result = xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
+    if (result.status != XI_PIPE_OK)
+        fprintf(stderr, "  pipeline failed at stage %d: %s\n", (int) result.error.stage,
+                result.error.detail);
+    ASSERT_EQ_UINT(result.status, XI_PIPE_OK);
+    XiFunc *run = evidence_find_xi_func_by_name(result.ir, "run");
+    ASSERT_NOT_NULL(run);
+    XiValue *yield = evidence_find_xi_yield(run);
+    ASSERT_NOT_NULL(yield);
+    ASSERT_EQ_UINT(yield->xg_suspend_point_use_id, point->use_id);
+    ASSERT_EQ_UINT(yield->xg_suspend_source_node_id, point->source_node_id);
+    ASSERT_EQ_UINT(yield->xg_suspend_body_ordinal, point->body_ordinal);
+    ASSERT_EQ_UINT(yield->xg_suspend_point_kind, point->kind);
+    ASSERT_EQ_UINT(yield->xg_suspend_may_suspend, 1);
+    ASSERT_EQ_UINT(yield->xg_suspend_contract_complete, 1);
+    char verify_error[256] = {0};
+    ASSERT_TRUE(xi_verify(run, verify_error, sizeof(verify_error)));
+    yield->xg_suspend_contract_complete = 0;
+    ASSERT_FALSE(xi_verify(run, verify_error, sizeof(verify_error)));
+    yield->xg_suspend_contract_complete = 1;
+    ASSERT_TRUE(xi_verify(run, verify_error, sizeof(verify_error)));
+
+    xi_pipeline_result_free(&result);
+
+    uint32_t saved_suspend_point_count = evidence.nsuspend_points;
+    evidence.nsuspend_points = 0;
+    XiPipelineResult missing_global =
+        xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
+    ASSERT_NE(missing_global.status, XI_PIPE_OK);
+    xi_pipeline_result_free(&missing_global);
+    evidence.nsuspend_points = saved_suspend_point_count;
+
+    xa_analyzer_clear_suspend_point(analyzer, call);
+    XiPipelineResult missing_analyzer =
+        xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
+    ASSERT_NE(missing_analyzer.status, XI_PIPE_OK);
+    xi_pipeline_result_free(&missing_analyzer);
+    ASSERT_TRUE(xa_analyzer_set_suspend_point(analyzer, call, &fact));
+
+    xg_global_evidence_free(&evidence);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow) {
+    setup_parser_session();
+    const char *source = "fn run() -> i64 {\n"
+                         "    Coro.yield()\n"
+                         "    return 42\n"
+                         "}\n";
+    XgGlobalEvidence analyzerless = {0};
+    ASSERT_FALSE(build_global_evidence_from_source(source, &analyzerless));
+    xg_global_evidence_free(&analyzerless);
+
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "cooperative-yield-missing.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {0};
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
+    AstNode *call = evidence_first_function_call(ast);
+    ASSERT_NOT_NULL(call);
+    XaSuspendPointFact fact = {0};
+    ASSERT_TRUE(xa_analyzer_get_suspend_point(analyzer, call, &fact));
+    xa_analyzer_clear_suspend_point(analyzer, call);
+    ASSERT_FALSE(xa_analyzer_get_suspend_point(analyzer, call, &fact));
+    XgGlobalEvidence rejected = {0};
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &rejected, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&rejected);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+
+    const char *shadow_source = "fn run(Coro: i64) -> i64 {\n"
+                                "    Coro.yield()\n"
+                                "    return 1\n"
+                                "}\n";
+    AstNode *shadow_ast = xr_parse(g_session, shadow_source);
+    ASSERT_NOT_NULL(shadow_ast);
+    XrModuleSpec shadow_spec;
+    init_memory_module_spec(&shadow_spec);
+    shadow_spec.ast = shadow_ast;
+    shadow_spec.source_path = "cooperative-yield-shadow.xr";
+    XrModuleGraph shadow_graph = {0};
+    shadow_graph.specs = &shadow_spec;
+    shadow_graph.spec_count = 1;
+    shadow_graph.topo_order = topo_order;
+    shadow_graph.topo_count = 1;
+    shadow_graph.entry_index = 0;
+    XaAnalyzer *shadow_analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(shadow_analyzer);
+    xa_analyzer_set_graph(shadow_analyzer, &shadow_graph);
+    xa_analyzer_analyze(shadow_analyzer, shadow_spec.source_path, shadow_ast);
+    ASSERT_EQ_UINT(shadow_analyzer->diagnostic_count, 0);
+    AstNode *shadow_call = evidence_first_function_call(shadow_ast);
+    ASSERT_NOT_NULL(shadow_call);
+    ASSERT_FALSE(xa_analyzer_get_suspend_point(shadow_analyzer, shadow_call, &fact));
+    XgGlobalEvidence shadow = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &shadow, &shadow_graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, shadow_analyzer));
+    ASSERT_EQ_UINT(shadow.nsuspend_points, 0);
+    xg_global_evidence_free(&shadow);
+    xa_analyzer_set_graph(shadow_analyzer, NULL);
+    xa_analyzer_free(shadow_analyzer);
+    xr_program_destroy(shadow_ast);
+    teardown_parser_session();
+}
+
 static void assert_single_callsite_rejected(const XgCallsiteSummary *call,
                                             const char *expected_error) {
     XgGlobalEvidence ev;
@@ -1136,7 +1371,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=53 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=54 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1510,15 +1745,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=53 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=54 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -14565,6 +14800,8 @@ RUN_TEST(global_evidence_publishes_exact_target_pointer_bits_query);
 RUN_TEST(global_evidence_rejects_ambiguous_target_query_identity);
 RUN_TEST(global_evidence_rejects_missing_target_query_fact_and_ignores_shadow);
 RUN_TEST(global_evidence_closes_target_query_contract_over_interface_witnesses);
+RUN_TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract);
+RUN_TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow);
 RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_decl_kind_capabilities_are_disjoint);
 RUN_TEST(global_evidence_verifier_rejects_param_storage_key_without_vector);

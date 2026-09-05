@@ -51,6 +51,9 @@ LIMIT_KEYS = {
     "roots_per_value",
     "provider_contracts",
     "provider_operations_per_contract",
+    "coroutine_states_per_function",
+    "coroutine_safepoints_per_function",
+    "live_values_per_safepoint",
 }
 IMPORT_KEYS = {"provider_requirement_table", "target_profile_binding"}
 TYPE_SYSTEM_KEYS = {
@@ -89,6 +92,8 @@ VALUE_SYSTEM_KEYS = {
     "existential_operation_contract",
     "witness_operation_contract",
     "existential_ref_escape_contract",
+    "coroutine_state_contract",
+    "coroutine_safepoint_contract",
 }
 SOURCE_PROJECTION_KEYS = {
     "schema",
@@ -131,6 +136,7 @@ PROJECTION_KINDS = {
     "place-store": "XR_PROGRAM_XI_PROJECTION_PLACE_STORE",
     "callable-pack": "XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK",
     "target-query": "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
+    "coroutine-yield": "XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD",
 }
 SEMANTIC_MAPPING_KEYS = {
     "xi_operation",
@@ -320,6 +326,8 @@ def validate(schema: dict[str, Any]) -> None:
         "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
         "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
         "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
+        "coroutine_state_contract": "function-local dense states; state zero names entry and every nonzero state names one continuation block",
+        "coroutine_safepoint_contract": "function-local dense safepoints name one nonzero resume state and a sorted unique exact live-across ValueId set",
     }, "value-system semantic policy drifted")
 
     imports = schema["imports"]
@@ -503,6 +511,7 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 15,",
         "    XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,",
         "    XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,",
+        "    XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD = 18,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",

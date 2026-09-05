@@ -114,6 +114,7 @@ typedef struct XaSuspendPass {
     XaSuspendRow *rows;
     int row_count;
     int row_capacity;
+    bool resource_failed;
 } XaSuspendPass;
 
 typedef struct XaSuspendScan {
@@ -496,6 +497,7 @@ static bool sus_call_is_mem_with_slice_mut(XaSuspendPass *pass, const CallExprNo
 
 static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+    xa_analyzer_clear_suspend_point(scan->pass->analyzer, node);
     AstNode *callee = sus_identity_expr(call->callee);
     if (!callee)
         return;
@@ -519,6 +521,10 @@ static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
         XaSymbol *target = selection ? selection->target_symbol : NULL;
 
         if (sus_call_is_coro_yield(scan->pass, member)) {
+            XaSuspendPointFact fact = {
+                .kind = XA_SUSPEND_POINT_COOPERATIVE_YIELD, .may_suspend = 1, .complete = 1};
+            if (!xa_analyzer_set_suspend_point(scan->pass->analyzer, node, &fact))
+                scan->pass->resource_failed = true;
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "call", "Coro.yield()");
         } else if (sus_is_suspending_handle_method(receiver, member->name)) {
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "handle method", member->name);
@@ -1088,6 +1094,14 @@ void xa_verify_no_suspend(XaAnalyzer *analyzer, AstNode *ast) {
     sus_collect_functions(&pass, ast);
     for (int i = 0; i < pass.row_count; i++)
         sus_scan_function(&pass, &pass.rows[i]);
+    if (pass.resource_failed) {
+        XrLocation location = {.file = analyzer->current_file,
+                               .line = (uint32_t) ast->line,
+                               .column = (uint32_t) ast->column};
+        xa_analyzer_add_diagnostic(
+            analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "analysis resource failure while publishing source suspend-point facts", &location);
+    }
     sus_publish_summaries(&pass);
     xa_ast_walk(ast, sus_constraint_scan_pre, NULL, &pass);
     for (int i = 0; i < pass.row_count; i++)

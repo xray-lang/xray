@@ -73,6 +73,20 @@ struct XrReferenceCallableValue {
     XrReferenceValue capture;
 };
 
+struct XrReferenceExecution {
+    XrExecutionLease lease;
+    const XrValidatedProgram *program;
+    XrReferenceBudget budget;
+    XrReferenceValue *values;
+    bool *initialized;
+    uint32_t function_id;
+    uint32_t block_id;
+    uint32_t instruction_id;
+    uint32_t state_id;
+    uint64_t steps;
+    bool finished;
+};
+
 static XrReferenceOutcome outcome(XrReferenceOutcomeKind kind, EvalContext *context) {
     XrReferenceOutcome result = {.kind = kind, .steps = context->steps};
     return result;
@@ -964,6 +978,192 @@ done:
     return result;
 }
 
+static XrReferenceOutcome execution_outcome(XrReferenceExecution *execution,
+                                            XrReferenceOutcomeKind kind) {
+    XrReferenceOutcome result = {.kind = kind};
+    if (execution) {
+        result.steps = execution->steps;
+        result.state_id = execution->state_id;
+    }
+    return result;
+}
+
+static bool reference_coroutine_operation_supported(uint16_t operation_id) {
+    return operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
+           operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
+           operation_id == XR_CORE_OP_CORE_ADD_I64 ||
+           operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_RETURN;
+}
+
+bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
+                                   const XrReferenceValue *arguments, uint32_t argument_count,
+                                   const XrReferenceBudget *budget,
+                                   XrReferenceExecution **execution_out) {
+    if (execution_out)
+        *execution_out = NULL;
+    XrReferenceBudget selected = budget ? *budget : xr_reference_default_budget();
+    if (!instance || !execution_out || (argument_count != 0u && !arguments) ||
+        selected.max_steps == 0u || selected.max_value_cells == 0u || selected.max_call_depth == 0u)
+        return false;
+    XrExecutionLease lease = {0};
+    if (!xr_execution_instance_acquire(instance, &lease))
+        return false;
+    const XrValidatedProgram *program = xr_execution_lease_program(&lease);
+    if (!program || function_id >= program->function_count) {
+        (void) xr_execution_lease_release(&lease);
+        return false;
+    }
+    const XrValidatedFunction *function = &program->functions[function_id];
+    if (argument_count != function->parameter_count || function->coroutine_state_count != 2u ||
+        function->coroutine_safepoint_count != 1u ||
+        function->value_count > selected.max_value_cells)
+        goto reject;
+    for (uint32_t block = 0; block < function->block_count; ++block)
+        for (uint32_t instruction = 0; instruction < function->blocks[block].instruction_count;
+             ++instruction)
+            if (!reference_coroutine_operation_supported(
+                    function->blocks[block].instructions[instruction].operation_id))
+                goto reject;
+    XrReferenceExecution *execution = xr_calloc(1u, sizeof(*execution));
+    if (!execution)
+        goto reject;
+    execution->lease = lease;
+    execution->values =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->values));
+    execution->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
+                                       sizeof(*execution->initialized));
+    if (!execution->values || !execution->initialized) {
+        xr_reference_execution_free(execution);
+        return false;
+    }
+    execution->program = program;
+    execution->budget = selected;
+    execution->function_id = function_id;
+    execution->block_id = function->entry_block;
+    for (uint32_t argument = 0; argument < argument_count; ++argument) {
+        uint32_t value_id = function->blocks[function->entry_block].argument_ids[argument];
+        if (function->parameter_modes[argument] == XR_PARAM_REF ||
+            !reference_value_matches_type(program, arguments[argument],
+                                          function->parameter_types[argument])) {
+            xr_reference_execution_free(execution);
+            return false;
+        }
+        execution->values[value_id] = arguments[argument];
+        execution->initialized[value_id] = true;
+    }
+    *execution_out = execution;
+    return true;
+
+reject:
+    (void) xr_execution_lease_release(&lease);
+    return false;
+}
+
+XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) {
+    if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
+        return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    const XrValidatedFunction *function = &execution->program->functions[execution->function_id];
+    for (;;) {
+        const XrValidatedBlock *block = &function->blocks[execution->block_id];
+        if (execution->instruction_id >= block->instruction_count) {
+            execution->finished = true;
+            (void) xr_execution_lease_release(&execution->lease);
+            return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+        }
+        const XrValidatedInstruction *instruction =
+            &block->instructions[execution->instruction_id++];
+        if (++execution->steps > execution->budget.max_steps) {
+            execution->finished = true;
+            (void) xr_execution_lease_release(&execution->lease);
+            return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+        }
+        for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
+            if (!execution->initialized[instruction->operands[operand]]) {
+                execution->finished = true;
+                (void) xr_execution_lease_release(&execution->lease);
+                return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+            }
+        }
+        switch (instruction->operation_id) {
+            case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
+                break;
+            case XR_CORE_OP_CORE_CONSTANT_I64: {
+                const XrValidatedConstant *constant =
+                    &execution->program->constants[instruction->immediate.constant_id];
+                execution->values[instruction->result_id] = (XrReferenceValue) {
+                    .kind = XR_REFERENCE_VALUE_I64,
+                    .as.i64 = constant->value.i64,
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_ADD_I64: {
+                int64_t left = execution->values[instruction->operands[0]].as.i64;
+                int64_t right = execution->values[instruction->operands[1]].as.i64;
+                int64_t value = 0;
+                if (instruction->immediate.u32 == 0u) {
+                    if (!checked_add(left, right, &value)) {
+                        execution->finished = true;
+                        (void) xr_execution_lease_release(&execution->lease);
+                        XrReferenceOutcome result =
+                            execution_outcome(execution, XR_REFERENCE_OUTCOME_TRAP);
+                        result.trap = XR_REFERENCE_TRAP_INTEGER_OVERFLOW;
+                        return result;
+                    }
+                } else {
+                    value = i64_from_bits((uint64_t) left + (uint64_t) right);
+                }
+                execution->values[instruction->result_id] =
+                    (XrReferenceValue) {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = value};
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_COROUTINE_YIELD: {
+                const XrValidatedCoroutineSafepoint *safepoint =
+                    &function->coroutine_safepoints[instruction->immediate.u32];
+                const XrValidatedBlock *resume = &function->blocks[instruction->successors[0]];
+                for (uint32_t live = 0; live < instruction->operand_count; ++live) {
+                    uint32_t target = resume->argument_ids[live];
+                    execution->values[target] = execution->values[instruction->operands[live]];
+                    execution->initialized[target] = true;
+                }
+                execution->state_id = safepoint->resume_state_id;
+                execution->block_id = instruction->successors[0];
+                execution->instruction_id = 0u;
+                XrReferenceOutcome result =
+                    execution_outcome(execution, XR_REFERENCE_OUTCOME_SUSPENDED);
+                result.safepoint_id = instruction->immediate.u32;
+                return result;
+            }
+            case XR_CORE_OP_CORE_RETURN: {
+                execution->finished = true;
+                XrReferenceOutcome result =
+                    execution_outcome(execution, XR_REFERENCE_OUTCOME_RETURN);
+                result.value = instruction->operand_count == 0u
+                                   ? void_value()
+                                   : execution->values[instruction->operands[0]];
+                (void) xr_execution_lease_release(&execution->lease);
+                return result;
+            }
+            default:
+                execution->finished = true;
+                (void) xr_execution_lease_release(&execution->lease);
+                return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+        }
+    }
+}
+
+void xr_reference_execution_free(XrReferenceExecution *execution) {
+    if (!execution)
+        return;
+    xr_free(execution->initialized);
+    xr_free(execution->values);
+    if (xr_execution_lease_is_valid(&execution->lease))
+        (void) xr_execution_lease_release(&execution->lease);
+    xr_free(execution);
+}
+
 XrReferenceBudget xr_reference_default_budget(void) {
     XrReferenceBudget budget = {
         .max_steps = UINT64_C(1000000),
@@ -983,6 +1183,9 @@ XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint
         .profile = profile ? *profile : (XrReferenceProfile) {0},
         .budget = selected,
     };
+    if (program && function_id < program->function_count &&
+        program->functions[function_id].coroutine_safepoint_count != 0u)
+        return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     if (!program || function_id >= program->function_count || (argument_count != 0 && !arguments) ||
         selected.max_steps == 0 || selected.max_value_cells == 0 || selected.max_call_depth == 0)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
