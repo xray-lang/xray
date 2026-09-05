@@ -79,6 +79,11 @@ set_tests_properties(test_xr_program_verify PROPERTIES
     LABELS "unit;canonical-program;semantic-verifier;reference-evaluator;task-297"
 )
 
+add_xray_unit_test(test_xr_program_source_build
+    program/test_xr_program_source_build.c)
+set_tests_properties(test_xr_program_source_build PROPERTIES
+    LABELS "unit;canonical-program;source-owner;module-graph;task-302")
+
 add_executable(test_xr_program_fuzz_entry ../fuzz/fuzz_xr_program_decode.c)
 target_compile_definitions(test_xr_program_fuzz_entry PRIVATE FUZZ_STANDALONE)
 target_include_directories(test_xr_program_fuzz_entry PRIVATE
