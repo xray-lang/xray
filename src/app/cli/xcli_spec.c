@@ -21,21 +21,7 @@
 
 /* ========== Option Specs per Command ========== */
 
-static const XrCliOptionSpec run_options[] = {
-    {"module-id", 0, XR_CLI_VALUE_STRING, false, false, "ID",
-     "Explicit memory-module identity for stdin source"},
-    {"trace", 't', XR_CLI_VALUE_NONE, false, false, NULL, "Trace execution"},
-    {"dump-bytecode", 'd', XR_CLI_VALUE_NONE, false, false, NULL, "Dump bytecode"},
-    {"semantic-plan", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
-     "Bind an exact XSM authority to an XTP input"},
-    {"timings", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Report exact artifact execution stage timings"},
-    {"workers", 'W', XR_CLI_VALUE_INT, false, false, "N", "Number of worker threads"},
-    {"coro-watch", 'w', XR_CLI_VALUE_INT, false, false, "MS", "Coroutine watch interval (ms)"},
-    {"coro-http", 'H', XR_CLI_VALUE_INT, false, false, "PORT", "Coroutine HTTP monitor port"},
-    {"dump-ic", 'I', XR_CLI_VALUE_NONE, false, false, NULL, "Dump inline cache feedback"},
-    XR_CLI_XI_OPT_SPEC,
-    XR_CLI_OPT_END};
+static const XrCliOptionSpec run_options[] = {XR_CLI_XI_OPT_SPEC, XR_CLI_OPT_END};
 
 static const XrCliOptionSpec repl_options[] = {
     {"module-id", 0, XR_CLI_VALUE_STRING, true, false, "ID",
@@ -304,15 +290,14 @@ static const XrCliCommandSpec language_subcommands[] = {
 
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
-    {"run", "Run source, project, or exact target artifacts", NULL, run_options, 0, -1, true, false, NULL, NULL,
-     0},
+    {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, true, false, NULL, NULL, 0},
     {"repl", "Interactive environment", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
     /* Artifact commands */
-    {"compile", "Compile to a C bytecode container", NULL, compile_options, 1, 1, false, false, NULL, NULL,
-     0},
+    {"compile", "Compile to a C bytecode container", NULL, compile_options, 1, 1, false, false,
+     NULL, NULL, 0},
     {"build", "Compile to binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
     {"deps", "Analyze dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
     {"toolchain", "Inspect AOT toolchains", NULL, toolchain_options, 0, -1, false, false, NULL,

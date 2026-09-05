@@ -38,11 +38,11 @@ which rows have a production source owner. Checked overflow, wrapping overflow, 
 also compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
-anchor-sha256: CMakeLists.txt 92ef67f177bd5cb98369c852ce4a4f36b4647186cdfeb0919b1725b46ccc41fc
+anchor-sha256: CMakeLists.txt 7f5171ebf0ab6b0ecc2ef7494e44193014600951061b8476bbeff2e6533e75fa
 anchor-sha256: tests/unit/CMakeLists.txt cf1f8a302fdcfc07ddbdca70b80d158e42022f0d08d6386efc178b74953e9d5e
 anchor-sha256: xisa/core/registry.json cfc0bb16d59982012a09c178ec68311658a75c27223774087e879f5445616258
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
-anchor-sha256: contracts/canonical-program/operation-capability-matrix.json b74c6c797f241b981853b0d82b1b9f5d856d282d83572689a143566f8e3119f7
+anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 159d57ccd13f0e900ee2fc7dc1c8322f77d764341979f150ed9fad15d09e596d
 anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json a08964220eb5ef63ef947f872aa948629989ead5a3c367cbf28a23db63859b02
 anchor-sha256: src/aot/program/xr_backend_ir.h 1d9dca590e0a7ace9034939925bfe69fca8d60eb33b48d3915822cbf4bda42cf
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h 2049ab3ed50c6bf6a82d4eda2c2832d2569c0d4910f69a29ffbfb5cce479a422

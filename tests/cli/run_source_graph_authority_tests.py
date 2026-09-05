@@ -88,16 +88,18 @@ def write_consumer(root: Path, checksum: str | None) -> Path:
             "dependencies = []\n",
         )
     entry = root / "main.xr"
-    write(entry, 'import { answer } from "acme/dep"\nprint(answer())\n')
+    write(
+        entry,
+        'import { answer } from "acme/dep"\n'
+        "fn main() -> i64 { return 0 }\n",
+    )
     return entry
 
 
-def check_positive(binary: Path, home: Path, label: str, entry: Path, output: str) -> None:
+def check_positive(binary: Path, home: Path, label: str, entry: Path) -> None:
     require_success(invoke(binary, home, "check", entry), f"{label} check")
     run = invoke(binary, home, "run", entry)
     require_success(run, f"{label} run")
-    if output not in run.stdout.splitlines():
-        raise AssertionError(f"{label} run did not publish {output!r}:\n{run.stdout}")
 
 
 def main() -> int:
@@ -113,8 +115,11 @@ def main() -> int:
 
         script = root / "script"
         write(script / "dep.xr", "export fn value() -> i64 { return 5 }\n")
-        write(script / "main.xr", 'import { value } from "./dep"\nprint(value())\n')
-        check_positive(binary, home, "script authority", script / "main.xr", "5")
+        write(
+            script / "main.xr",
+            'import { value } from "./dep"\nfn main() -> i64 { return 0 }\n',
+        )
+        check_positive(binary, home, "script authority", script / "main.xr")
 
         package = root / "package"
         write(
@@ -122,18 +127,20 @@ def main() -> int:
             '[package]\nname = "acme/app"\nversion = "1.0.0"\nmain = "main.xr"\n',
         )
         write(package / "dep.xr", "export fn value() -> i64 { return 7 }\n")
-        write(package / "main.xr", 'import { value } from "./dep"\nprint(value())\n')
-        check_positive(binary, home, "package authority", package / "main.xr", "7")
+        write(
+            package / "main.xr",
+            'import { value } from "./dep"\nfn main() -> i64 { return 0 }\n',
+        )
+        check_positive(binary, home, "package authority", package / "main.xr")
 
         consumer = write_consumer(root / "consumer", checksum)
-        check_positive(binary, home, "project lock authority", consumer, "42")
+        check_positive(binary, home, "project lock authority", consumer)
         dump = invoke(binary, home, "run", consumer, "--dump-bytecode")
-        require_success(dump, "project lock bytecode route")
-        if "LOAD_MODULE_SLOT" not in dump.stdout + dump.stderr:
-            raise AssertionError(
-                "project package import did not consume the graph module slot\n"
-                f"stdout:\n{dump.stdout}\nstderr:\n{dump.stderr}"
-            )
+        require_failure(
+            dump,
+            "retired project lock bytecode route",
+            "unknown option '--dump-bytecode'",
+        )
 
         missing_lock = write_consumer(root / "missing-lock", None)
         for command in ("check", "run"):
@@ -156,12 +163,12 @@ def main() -> int:
             invalid_project / "xray.toml",
             '[project]\nname = "mutated/authority"\nmain = "main.xr"\n',
         )
-        write(invalid_project / "main.xr", "print(1)\n")
+        write(invalid_project / "main.xr", "fn main() -> i64 { return 0 }\n")
         for command in ("check", "run"):
             require_failure(
                 invoke(binary, home, command, invalid_project / "main.xr"),
                 f"authority mutation {command}",
-                "cannot establish exact project/package module authority",
+                "a [project] name must be a single segment",
             )
 
     print("source graph authority CLI tests: PASS")

@@ -81,6 +81,10 @@ def validate(root: Path) -> None:
     owner_header = read(root, "src/program/xr_program_source_build.h")
     owner = read(root, "src/program/xr_program_source_build.c")
     owner_test = read(root, "tests/unit/program/test_xr_program_source_build.c")
+    cli_adapter = read(root, "src/app/cli/xcli_canonical_source.c")
+    run_route = read(root, "src/app/cli/xcmd_run.c")
+    cli_spec = read(root, "src/app/cli/xcli_spec.c")
+    run_route_test = read(root, "tests/cli/run_canonical_source_route_tests.py")
     pipeline_header = read(root, "src/ir/xi_pipeline.h")
     pipeline = read(root, "src/ir/xi_pipeline.c")
     test = read(root, "tests/unit/ir/test_xi_pipeline.c")
@@ -120,6 +124,59 @@ def validate(root: Path) -> None:
     for forbidden in ("XrProto", "XrTargetPlan", "XrInstance"):
         require(forbidden not in owner_header and forbidden not in owner,
                 f"source owner regained forbidden product dependency {forbidden}")
+    for token in (
+        "xr_cli_graph_authority_open",
+        "xr_module_identity_from_source",
+        "xr_module_source_fingerprint",
+        "xr_program_source_build",
+    ):
+        require(token in cli_adapter, f"CLI source adapter lacks {token}")
+    for token in (
+        "xr_cli_canonical_source_build",
+        "xr_execution_instance_create",
+        "xr_vm_code_build",
+        "xr_vm_code_execute",
+        "xr_vm_execution_create",
+        '.entry_function = "main"',
+        'strcmp(path + length - 3u, ".xr")',
+        "XR_RUN_6013",
+    ):
+        require(token in run_route, f"canonical run route lacks {token}")
+    for forbidden in (
+        "xr_isolate_dofile",
+        "xr_isolate_dostring",
+        "xr_execute(",
+        "XrProto",
+        "XrTargetPlan",
+        "xr_xtp_",
+        "semantic-plan",
+    ):
+        require(forbidden not in run_route,
+                f"canonical run route regained legacy execution: {forbidden}")
+    require('"run", "Run one exact .xr source entry"' in cli_spec,
+            "run command schema does not expose the canonical source-only contract")
+    run_options = cli_spec.split("static const XrCliOptionSpec repl_options[]", 1)[0]
+    for retired_option in (
+        '"trace"',
+        '"dump-bytecode"',
+        '"semantic-plan"',
+        '"timings"',
+        '"workers"',
+        '"coro-watch"',
+        '"coro-http"',
+        '"dump-ic"',
+    ):
+        require(retired_option not in run_options,
+                f"run command schema regained retired option {retired_option}")
+    for token in (
+        "main_zero.xr",
+        "main_seven.xr",
+        "missing_main.xr",
+        "XR_RUN_6012: main returned process status 7",
+        "unknown option '--semantic-plan'",
+        "source fingerprint drifted across CRLF ingestion",
+    ):
+        require(token in run_route_test, f"canonical run evidence lacks {token}")
     for token in (
         "source_owner_single_module_is_deterministic_and_detached",
         "source_owner_two_module_graph_is_deterministic",
@@ -318,10 +375,10 @@ def validate(root: Path) -> None:
             f"operation matrix differs from CoreSpec: missing={sorted(registry_ids - matrix_ids)} "
             f"extra={sorted(matrix_ids - registry_ids)}")
     require(matrix.get("precut_route_policy") == {
-        "state_during_w7": "single frozen current product; canonical implementation remains off-product",
+        "state_during_w7": "each migrated product route is canonical-only and fail-closed; uncovered capabilities remain explicitly incomplete",
         "canonical_dependency_on_precut_route": "forbidden",
         "physical_deletion_owner": 302,
-        "cutover": "one atomic product-reachability change with no fallback or hidden executor",
+        "cutover": "each development route removes its legacy reachability atomically; terminal closure removes every remaining old product node together",
     }, "operation matrix pre-cut route policy drifted")
     wave_one = {
         "core.constant.i64",
@@ -424,12 +481,16 @@ def self_test(root: Path) -> None:
             "src/program/xr_program_from_xi.c",
             "src/program/xr_program_source_build.h",
             "src/program/xr_program_source_build.c",
+            "src/app/cli/xcli_canonical_source.c",
+            "src/app/cli/xcli_spec.c",
+            "src/app/cli/xcmd_run.c",
             "src/program/xr_program_verify.c",
             "src/program/xr_reference_evaluator.c",
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",
             "tests/unit/program/test_xr_program_source_build.c",
+            "tests/cli/run_canonical_source_route_tests.py",
             "tests/unit/program/test_xr_program_verify.c",
             "tests/unit/program/xr_program_invoke_fixture.h",
             "tests/unit/program/xr_program_panic_fixture.h",

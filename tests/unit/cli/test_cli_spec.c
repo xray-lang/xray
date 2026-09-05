@@ -105,9 +105,8 @@ TEST(spec_option_count) {
     const XrCliCommandSpec *spec = xr_cli_find_command("run");
     ASSERT_NOT_NULL(spec);
     int count = xr_cli_option_count(spec->options);
-    /* run has: module-id, trace, dump-bytecode, semantic-plan, timings,
-     *          workers, coro-watch, coro-http, dump-ic, xi-opt = 10 */
-    ASSERT_EQ_INT(count, 10);
+    /* Canonical source run exposes only the compiler optimization policy. */
+    ASSERT_EQ_INT(count, 1);
 }
 
 TEST(spec_option_count_empty) {
@@ -148,16 +147,16 @@ TEST(optmap_not_present) {
 }
 
 TEST(optmap_present_flag) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    const XrCliCommandSpec *spec = xr_cli_find_command("check");
     ASSERT_NOT_NULL(spec);
 
     int count = xr_cli_option_count(spec->options);
     bool present[16] = {false};
     const char *values[16] = {NULL};
 
-    int trace_index = test_find_option_index(spec->options, "trace");
-    ASSERT_GE(trace_index, 0);
-    present[trace_index] = true;
+    int verbose_index = test_find_option_index(spec->options, "verbose");
+    ASSERT_GE(verbose_index, 0);
+    present[verbose_index] = true;
 
     XrCliOptionMap map = {
         .spec = spec->options,
@@ -166,8 +165,8 @@ TEST(optmap_present_flag) {
         .values = values,
     };
 
-    ASSERT_TRUE(xr_cli_opt_present(&map, "trace"));
-    ASSERT_TRUE(xr_cli_opt_bool(&map, "trace"));
+    ASSERT_TRUE(xr_cli_opt_present(&map, "verbose"));
+    ASSERT_TRUE(xr_cli_opt_bool(&map, "verbose"));
 }
 
 TEST(optmap_present_string) {
@@ -194,17 +193,17 @@ TEST(optmap_present_string) {
 }
 
 TEST(optmap_present_int) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    const XrCliCommandSpec *spec = xr_cli_find_command("test");
     ASSERT_NOT_NULL(spec);
 
     int count = xr_cli_option_count(spec->options);
     bool present[16] = {false};
     const char *values[16] = {NULL};
 
-    int workers_index = test_find_option_index(spec->options, "workers");
-    ASSERT_GE(workers_index, 0);
-    present[workers_index] = true;
-    values[workers_index] = "8";
+    int jobs_index = test_find_option_index(spec->options, "jobs");
+    ASSERT_GE(jobs_index, 0);
+    present[jobs_index] = true;
+    values[jobs_index] = "8";
 
     XrCliOptionMap map = {
         .spec = spec->options,
@@ -213,7 +212,7 @@ TEST(optmap_present_int) {
         .values = values,
     };
 
-    ASSERT_EQ_INT(xr_cli_opt_int(&map, "workers", 0), 8);
+    ASSERT_EQ_INT(xr_cli_opt_int(&map, "jobs", 0), 8);
 }
 
 TEST(optmap_nonexistent_option) {

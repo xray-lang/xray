@@ -35,7 +35,7 @@ REQUIRED_LAYERS = {
 LAYER_STATES = {"OPEN", "CURRENT_ROUTE_ONLY", "PARTIAL_CANONICAL", "PASS"}
 CAPABILITY_STATES = {"OPEN", "CLOSED"}
 QUALIFICATION_STATES = {"OPEN", "PARTIAL", "NOT_QUALIFIED", "QUALIFIED"}
-ROUTE_STATES = {"OPEN", "LEGACY_REACHABLE", "CANONICAL_ONLY"}
+ROUTE_STATES = {"OPEN", "LEGACY_REACHABLE", "CANONICAL_INCOMPLETE", "CANONICAL_ONLY"}
 DELETION_STATES = {"REACHABLE", "ZERO"}
 OBSERVATION_AXES = {
     "value",
@@ -218,6 +218,9 @@ def validate_product(root: Path, data: dict[str, Any], legacy_ids: set[str],
         require(row.get("state") in ROUTE_STATES, f"route {identifier} has invalid state")
         evidence = row.get("completion_evidence")
         require(isinstance(evidence, list), f"route {identifier} evidence must be an array")
+        if row["state"] == "CANONICAL_INCOMPLETE":
+            require_anchor_list(root, evidence, f"route {identifier} in-progress evidence",
+                                files_only=True)
         if row["state"] == "CANONICAL_ONLY":
             require(all_capabilities_closed,
                     f"route {identifier} cut over before all capabilities closed")
@@ -338,6 +341,13 @@ def self_test(root: Path) -> None:
     missing_route["routes"] = missing_route["routes"][1:]
     expect_rejected("missing retained product route",
                     lambda: validate_all(root, capability, missing_route))
+
+    missing_incomplete_evidence = deepcopy(product)
+    incomplete = next(row for row in missing_incomplete_evidence["routes"]
+                      if row["state"] == "CANONICAL_INCOMPLETE")
+    incomplete["completion_evidence"] = []
+    expect_rejected("canonical incomplete route without evidence",
+                    lambda: validate_all(root, capability, missing_incomplete_evidence))
 
     nonzero_terminal = deepcopy(product)
     nonzero_terminal["deletion_nodes"][0]["final_reachable_count"] = 1

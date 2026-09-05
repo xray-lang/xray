@@ -361,7 +361,7 @@ require the independently verified program authority frozen above.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 92ef67f177bd5cb98369c852ce4a4f36b4647186cdfeb0919b1725b46ccc41fc
+anchor-sha256: CMakeLists.txt 7f5171ebf0ab6b0ecc2ef7494e44193014600951061b8476bbeff2e6533e75fa
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1

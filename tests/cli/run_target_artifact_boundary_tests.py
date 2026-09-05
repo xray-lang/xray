@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Prove target artifacts cannot enter source or legacy execution paths."""
+"""Prove retired artifacts cannot enter the canonical source execution route."""
 
 from __future__ import annotations
 
 import argparse
-import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -31,192 +30,87 @@ def require(condition: bool, message: str, output: str = "") -> None:
     raise AssertionError(f"{message}\n{output}")
 
 
-def require_rejection(result: subprocess.CompletedProcess[str], code: str,
-                      message: str) -> None:
+def require_source_boundary(
+    result: subprocess.CompletedProcess[str], message: str
+) -> None:
     require(result.returncode != 0, message, result.stdout)
-    require(code in result.stdout, f"{message} uses {code}", result.stdout)
-    lowered = result.stdout.lower()
-    require("unsupported bytecode version" not in lowered,
-            f"{message} bypasses the legacy bytecode reader", result.stdout)
+    require(
+        "XR_RUN_6013: canonical run accepts only an exact '.xr' source path"
+        in result.stdout,
+        f"{message} stops at the exact source boundary",
+        result.stdout,
+    )
+    for legacy_diagnostic in ("XR_ARTIFACT_", "XR_EXEC_", "unsupported bytecode"):
+        require(
+            legacy_diagnostic not in result.stdout,
+            f"{message} does not invoke a retired artifact reader",
+            result.stdout,
+        )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--xtp-writer", type=Path, required=True)
     args = parser.parse_args()
     binary = args.binary.resolve(strict=True)
-    writer = args.xtp_writer.resolve(strict=True)
 
     with tempfile.TemporaryDirectory(prefix="xray-target-artifact-boundary-") as temporary:
         root = Path(temporary)
 
-        xsm = root / "semantic-module.bin"
-        xsm.write_bytes(b"XRAYXSM\0")
-        require_rejection(run([str(binary), "run", str(xsm)]),
-                          "XR_ARTIFACT_2005", "renamed XSM is not executable")
-
-        malformed_xtp = root / "malformed-target-plan.bin"
-        malformed_xtp.write_bytes(b"XTPF")
-        require_rejection(run([str(binary), "run", str(malformed_xtp)]),
-                          "XR_EXEC_5003", "malformed XTP preserves its decoder diagnostic")
-
-        valid_xtp = root / "verified-target-plan.bin"
-        write = run([str(writer), "--write", str(valid_xtp)])
-        require(write.returncode == 0 and valid_xtp.is_file(),
-                "fixture writer produced a verified current-schema XTP artifact", write.stdout)
-        require_rejection(run([str(binary), "run", str(valid_xtp)]),
-                          "XR_ARTIFACT_2007",
-                          "XTP candidate stops before authority-bound materialization")
-
-        runtime_xsm = root / "runtime-semantic.bin"
-        runtime_xtp = root / "runtime-target.bin"
-        write_runtime = run([
-            str(writer), "--write-runtime-artifacts", str(runtime_xsm),
-            str(runtime_xtp),
-        ])
-        require(write_runtime.returncode == 0 and runtime_xsm.is_file()
-                and runtime_xtp.is_file(),
-                "fixture writer produced a matching exact XSM/XTP pair",
-                write_runtime.stdout)
-        executed_runtime = run([
-            str(binary), "run", str(runtime_xtp),
-            "--semantic-plan", str(runtime_xsm), "--timings",
-        ])
-        require(executed_runtime.returncode == 0,
-                "matching XSM/XTP executes through runtime generation",
-                executed_runtime.stdout)
-        require(re.search(r"(?m)^42$", executed_runtime.stdout) is not None,
-                "sole scalar artifact prints its exact result",
-                executed_runtime.stdout)
-        timing_match = re.search(
-            r"xray-run-timing artifact_read_ns=(\d+) "
-            r"semantic_verify_ns=(\d+) target_verify_ns=(\d+) "
-            r"activation_ns=(\d+) entry_output_ns=(\d+) total_ns=(\d+)",
-            executed_runtime.stdout,
-        )
-        require(timing_match is not None and
-                all(int(value) >= 0 for value in timing_match.groups()),
-                "artifact execution reports every exact stage timing",
-                executed_runtime.stdout)
-
-        corrupt_xsm = root / "corrupt-runtime-semantic.bin"
-        corrupt_bytes = bytearray(runtime_xsm.read_bytes())
-        corrupt_bytes[-1] ^= 1
-        corrupt_xsm.write_bytes(corrupt_bytes)
-        require_rejection(run([
-            str(binary), "run", str(runtime_xtp),
-            "--semantic-plan", str(corrupt_xsm),
-        ]), "XR_ARTIFACT_2002",
-            "corrupt XSM cannot authorize a matching XTP")
-
-        source_with_authority = root / "source-with-authority.xr"
-        source_with_authority.write_text("42\n", encoding="utf-8")
-        require_rejection(run([
-            str(binary), "run", str(source_with_authority),
-            "--semantic-plan", str(runtime_xsm),
-        ]), "XR_ARTIFACT_2006",
-            "semantic authority cannot attach to a source or legacy route")
-        require_rejection(run([
-            str(binary), "run", str(source_with_authority), "--timings",
-        ]), "XR_ARTIFACT_2004",
-            "exact artifact timings cannot decorate a legacy source route")
-
-        old_xtp = root / "removed-target-plan.bin"
-        old_xtp.write_bytes(b"XRAYXTP\0")
-        require_rejection(run([str(binary), "run", str(old_xtp)]),
-                          "XR_ARTIFACT_2000", "removed XTP schema is unsupported")
-
-        for length in range(5, 8):
-            truncated = root / f"truncated-xsm-{length}.bin"
-            truncated.write_bytes(b"XRAYXSM\0"[:length])
-            require_rejection(run([str(binary), "run", str(truncated)]),
-                              "XR_ARTIFACT_2001",
-                              f"{length}-byte XSM prefix is fail-closed")
-
         for name, payload in (
-            ("corrupt-removed.bin", b"XRAYXTP\1"),
-            ("unknown-reserved.bin", b"XRAYQQQ\0"),
-            ("wrong-xrc-version.bin", b"XRAY\x1d\x00"),
+            ("semantic-module.xsm", b"XRAYXSM\0"),
+            ("target-plan.xtp", b"XTPF"),
+            ("legacy-bytecode.xrc", b"XRAY\x1e\x00"),
+            ("renamed-artifact.bin", b"XRAYXTP\0"),
+            ("extensionless-artifact", b"XRAYQQQ\0"),
         ):
-            reserved = root / name
-            reserved.write_bytes(payload)
-            require_rejection(run([str(binary), "run", str(reserved)]),
-                              "XR_ARTIFACT_2000",
-                              f"{name} cannot fall through to legacy XRC")
+            artifact = root / name
+            artifact.write_bytes(payload)
+            require_source_boundary(
+                run([str(binary), "run", str(artifact)]),
+                f"retired artifact {name!r} is unreachable",
+            )
 
-        conflict = root / "wrong.xtp"
-        conflict.write_bytes(b"XRAYXSM\0")
-        require_rejection(run([str(binary), "run", str(conflict)]),
-                          "XR_ARTIFACT_2006", "extension and byte identity conflict")
+        source_with_retired_extension = root / "source.xsm"
+        source_with_retired_extension.write_text(
+            "fn main() -> i64 { return 0 }\n", encoding="utf-8"
+        )
+        require_source_boundary(
+            run([str(binary), "run", str(source_with_retired_extension)]),
+            "source text under a retired artifact extension is not executable",
+        )
 
-        extension_only = root / "source.xsm"
-        extension_only.write_text('print("extension is not identity")\n', encoding="utf-8")
-        extension_result = run([str(binary), "run", str(extension_only)])
-        require_rejection(extension_result, "XR_ARTIFACT_2006",
-                          "reserved extension cannot create an artifact")
-        require("XR_ARTIFACT_2005" not in extension_result.stdout,
-                "extension-only input is not classified as XSM", extension_result.stdout)
+        malformed_source = root / "malformed.xr"
+        malformed_source.write_bytes(b"XRAYXTP\0")
+        malformed = run([str(binary), "run", str(malformed_source)])
+        require(malformed.returncode != 0, "malformed .xr source is rejected", malformed.stdout)
+        require(
+            "XR_RUN_6001: canonical source build failed" in malformed.stdout,
+            "malformed .xr source fails in the shared source owner",
+            malformed.stdout,
+        )
+        require(
+            "XR_ARTIFACT_" not in malformed.stdout and "XR_EXEC_" not in malformed.stdout,
+            "malformed .xr source cannot recover an artifact identity",
+            malformed.stdout,
+        )
 
-        source = root / "legacy-source.xr"
-        source.write_text('print("legacy-route")\n', encoding="utf-8")
-        missing_output = run([str(binary), "compile", str(source)], cwd=root)
-        require_rejection(missing_output, "output is required",
-                          "compile has no implicit artifact output")
-        require("XR_ARTIFACT_2000" not in missing_output.stdout,
-                "missing output has no compatibility diagnostic", missing_output.stdout)
-        for output_name in (
-            "noncanonical-output.bin",
-            "uppercase-output.C",
-            "extensionless-output",
-            "removed-output.xrc",
+        source = root / "source.xr"
+        source.write_text("fn main() -> i64 { return 0 }\n", encoding="utf-8")
+        for option, values in (
+            ("--semantic-plan", ["removed.xsm"]),
+            ("--timings", []),
+            ("--dump-bytecode", []),
+            ("--trace", []),
+            ("--workers", ["2"]),
         ):
-            noncanonical_output = root / output_name
-            compiled = run([
-                str(binary), "compile", str(source), "-o", str(noncanonical_output),
-            ], cwd=root)
-            require_rejection(compiled, "canonical '.c' extension",
-                              f"compile rejects noncanonical output {output_name}")
-            require("XR_ARTIFACT_2000" not in compiled.stdout,
-                    f"noncanonical output {output_name} has no compatibility diagnostic",
-                    compiled.stdout)
-            require(not noncanonical_output.exists(),
-                    f"noncanonical output {output_name} leaves no artifact")
-        retired_output = root / "retired-format-output.c"
-        for retired_format in ("bytecode", "bc", "h", "header", "source"):
-            rejected_format = run([
-                str(binary), "compile", str(source), "--format", retired_format,
-                "--output", str(retired_output),
-            ], cwd=root)
-            require_rejection(rejected_format, f"unknown format '{retired_format}'",
-                              f"retired {retired_format} spelling is not an interface")
-            require("XR_ARTIFACT_2000" not in rejected_format.stdout,
-                    f"retired {retired_format} spelling has no compatibility diagnostic",
-                    rejected_format.stdout)
-        require(not retired_output.exists(), "retired format spellings leave no artifact")
-        noncanonical_output = root / "explicit-noncanonical-output.bin"
-        explicit_noncanonical = run([
-            str(binary), "compile", str(source), "--format", "c",
-            "--output", str(noncanonical_output),
-        ], cwd=root)
-        require_rejection(explicit_noncanonical, "canonical '.c' extension",
-                          "explicit format cannot bypass the output extension identity")
-        require("XR_ARTIFACT_2000" not in explicit_noncanonical.stdout,
-                "explicit noncanonical output has no compatibility diagnostic",
-                explicit_noncanonical.stdout)
-        c_container = root / "offline-container.c"
-        c_compiled = run([
-            str(binary), "compile", str(source), "--format", "c",
-            "--output", str(c_container),
-        ], cwd=root)
-        require(c_compiled.returncode == 0 and c_container.is_file(),
-                "the sole offline C container remains available to compiler development",
-                c_compiled.stdout)
-        removed_artifact = root / "removed-artifact.bin"
-        removed_artifact.write_bytes(b"XRAY\x1e\x00")
-        executed = run([str(binary), "run", str(removed_artifact)], cwd=root)
-        require_rejection(executed, "XR_ARTIFACT_2000",
-                          "legacy XRC magic is rejected before execution")
+            retired = run([str(binary), "run", str(source), option, *values])
+            require(retired.returncode != 0, f"retired option {option} is rejected", retired.stdout)
+            require(
+                f"unknown option '{option}'" in retired.stdout,
+                f"retired option {option} is absent from the command schema",
+                retired.stdout,
+            )
 
     print("Target artifact CLI boundary tests passed")
     return 0

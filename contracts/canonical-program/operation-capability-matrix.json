@@ -4,10 +4,10 @@
   "freeze_task": 294,
   "completion_rule": "An operation becomes COMPLETE only when its CoreSpec law, program encoding, bounded verification, reference evaluation, VM, AOT, source producer, differential evidence, and deletion of every legacy semantic dependency from the canonical pipeline are complete in one vertical slice.",
   "precut_route_policy": {
-    "state_during_w7": "single frozen current product; canonical implementation remains off-product",
+    "state_during_w7": "each migrated product route is canonical-only and fail-closed; uncovered capabilities remain explicitly incomplete",
     "canonical_dependency_on_precut_route": "forbidden",
     "physical_deletion_owner": 302,
-    "cutover": "one atomic product-reachability change with no fallback or hidden executor"
+    "cutover": "each development route removes its legacy reachability atomically; terminal closure removes every remaining old product node together"
   },
   "core_spec_stage": {
     "status": "COMPLETE",

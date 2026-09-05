@@ -17,7 +17,7 @@
       "public_surface": "xray run SOURCE",
       "current_owner_anchors": [
         "src/app/cli/xcmd_run.c",
-        "src/api/xisolate_scripting.c"
+        "src/app/cli/xcli_canonical_source.c"
       ],
       "target_contract": "source request -> shared source owner -> validated XrProgram -> exact profile/providers -> VM-private code -> XrInstance",
       "required_capability_scope": "all capability-denominator rows",
@@ -27,8 +27,12 @@
         "semantic-plan",
         "target-plan"
       ],
-      "completion_evidence": [],
-      "state": "LEGACY_REACHABLE"
+      "completion_evidence": [
+        "src/app/cli/xcli_canonical_source.c",
+        "src/app/cli/xcmd_run.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ],
+      "state": "CANONICAL_INCOMPLETE"
     },
     {
       "id": "cli-test-source",

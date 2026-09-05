@@ -4264,11 +4264,23 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME canonical_source_run_cli
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_canonical_source_route_tests.py
+                --binary $<TARGET_FILE:xray>
+                --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/canonical_run
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(canonical_source_run_cli PROPERTIES
+        LABELS "cli;canonical-program;source-owner;vm;task-302"
+        TIMEOUT 60
+    )
+
+    add_test(
         NAME target_artifact_cli_boundary
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_target_artifact_boundary_tests.py
                 --binary $<TARGET_FILE:xray>
-                --xtp-writer $<TARGET_FILE:test_xtp_format>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(target_artifact_cli_boundary PROPERTIES
