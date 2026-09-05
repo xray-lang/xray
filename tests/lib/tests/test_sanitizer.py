@@ -132,6 +132,59 @@ class CacheInspectionTest(unittest.TestCase):
             self.assertEqual(
                 Path(sanitizer.resolve_compiler_command("clang-cl")), compiler)
 
+    def test_non_windows_does_not_need_msvc_environment(self):
+        with mock.patch.object(sanitizer.platform, "IS_WINDOWS", False):
+            self.assertTrue(sanitizer.activate_windows_msvc_environment(mock.Mock()))
+
+    def test_windows_msvc_environment_is_loaded_from_vsdevcmd(self):
+        installer = self.build / "Microsoft Visual Studio" / "Installer"
+        installer.mkdir(parents=True)
+        vswhere = installer / "vswhere.exe"
+        vswhere.write_bytes(b"binary")
+        installation = self.build / "Visual Studio" / "BuildTools"
+        vsdevcmd = installation / "Common7" / "Tools" / "VsDevCmd.bat"
+        vsdevcmd.parent.mkdir(parents=True)
+        vsdevcmd.write_bytes(b"batch")
+        reports = [
+            sanitizer.proc.ProcResult(
+                argv=(str(vswhere),), returncode=0,
+                stdout=(str(installation) + "\r\n").encode(), stderr=b"",
+                timed_out=False),
+            sanitizer.proc.ProcResult(
+                argv=("cmd.exe",), returncode=0,
+                stdout=("Path=C:\\tools\r\nINCLUDE=C:\\include\r\n"
+                        "LIB=C:\\lib\r\nLIBPATH=C:\\libpath\r\n").encode("utf-16-le"),
+                stderr=b"", timed_out=False),
+        ]
+        messages = []
+
+        def log(message, *, error=False):
+            messages.append((message, error))
+
+        with (mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.object(sanitizer.shutil, "which", return_value=None),
+              mock.patch.object(sanitizer.proc, "run", side_effect=reports),
+              mock.patch.dict(os.environ, {
+                  "ProgramFiles(x86)": str(self.build), "COMSPEC": "cmd.exe",
+              }, clear=True)):
+            self.assertTrue(sanitizer.activate_windows_msvc_environment(log))
+            self.assertEqual(os.environ["INCLUDE"], r"C:\include")
+            self.assertEqual(os.environ["LIB"], r"C:\lib")
+            self.assertEqual(os.environ["PATH"], r"C:\tools")
+        self.assertIn("MSVC x64 SDK environment activated", messages[-1][0])
+
+    def test_windows_msvc_environment_fails_without_vswhere(self):
+        messages = []
+
+        def log(message, *, error=False):
+            messages.append((message, error))
+
+        with (mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.object(sanitizer.shutil, "which", return_value=None),
+              mock.patch.dict(os.environ, {}, clear=True)):
+            self.assertFalse(sanitizer.activate_windows_msvc_environment(log))
+        self.assertTrue(messages[-1][1])
+
     def test_windows_dynamic_asan_runtime_is_inherited_from_clang(self):
         resource = self.build / "LLVM" / "lib" / "clang" / "22"
         runtime = resource / "lib" / "windows"

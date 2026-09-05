@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -102,6 +103,91 @@ def resolve_compiler_command(command: str) -> str:
         if candidate.is_file():
             return str(candidate)
     return command
+
+
+def activate_windows_msvc_environment(log) -> bool:
+    """Make clang-cl builds independent of the caller's terminal setup.
+
+    CMake's Ninja generator deliberately leaves the MSVC and Windows SDK
+    system paths in ``INCLUDE``/``LIB`` instead of spelling them into every
+    command line.  A sanitizer lane can be launched by CTest from an ordinary
+    PowerShell, so inheriting those variables from the caller makes an
+    incremental rebuild non-deterministic: clang-cl may either reject standard
+    headers or discover an unrelated compatibility header first.
+    """
+    if not platform.IS_WINDOWS:
+        return True
+
+    vswhere = shutil.which("vswhere")
+    if not vswhere:
+        program_files_x86 = os.environ.get("ProgramFiles(x86)")
+        if program_files_x86:
+            candidate = (Path(program_files_x86) / "Microsoft Visual Studio" /
+                         "Installer" / "vswhere.exe")
+            if candidate.is_file():
+                vswhere = str(candidate)
+    if not vswhere:
+        log("vswhere.exe was not found; cannot activate the MSVC SDK environment",
+            error=True)
+        return False
+
+    found = proc.run([
+        vswhere, "-products", "*", "-requires",
+        "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+        "-property", "installationPath", "-format", "value", "-latest",
+    ], timeout=30)
+    if not found.ok:
+        log("vswhere.exe could not locate an MSVC x64 toolchain", error=True)
+        return False
+    installation = next(
+        (line.strip() for line in found.stdout.decode("utf-8", "replace").splitlines()
+         if line.strip()),
+        "",
+    )
+    vsdevcmd = Path(installation) / "Common7" / "Tools" / "VsDevCmd.bat"
+    vsdevcmd_text = str(vsdevcmd)
+    if (not vsdevcmd.is_file() or any(char in vsdevcmd_text for char in '"\r\n')):
+        log(f"MSVC developer environment script is missing: {vsdevcmd}", error=True)
+        return False
+
+    cmd = os.environ.get("COMSPEC") or shutil.which("cmd.exe") or "cmd.exe"
+    handle, script_name = tempfile.mkstemp(prefix="xray-vsdevcmd-", suffix=".cmd")
+    os.close(handle)
+    script = Path(script_name)
+    try:
+        script.write_text(
+            "@echo off\n"
+            f'call "{vsdevcmd_text}" -no_logo -arch=x64 -host_arch=x64 >nul\n'
+            "if errorlevel 1 exit /b 1\n"
+            "set\n",
+            encoding="utf-8",
+        )
+        # A command file avoids cmd.exe's special /c quote stripping around a
+        # batch path containing spaces.  /u gives us an encoding-independent
+        # environment dump even when the caller uses a non-UTF-8 code page.
+        activated = proc.run([cmd, "/d", "/u", "/c", script], timeout=30)
+    finally:
+        script.unlink(missing_ok=True)
+    if not activated.ok:
+        detail = activated.stderr.decode("utf-16-le", "replace").strip()
+        suffix = f": {detail}" if detail else ""
+        log(f"VsDevCmd.bat failed to activate the MSVC x64 environment{suffix}",
+            error=True)
+        return False
+
+    values: dict[str, str] = {}
+    text = activated.stdout.decode("utf-16-le", "replace").lstrip("\ufeff")
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        normalized = key.upper()
+        if separator and normalized in {"PATH", "INCLUDE", "LIB", "LIBPATH"}:
+            values[normalized] = value
+    if not all(values.get(key) for key in ("PATH", "INCLUDE", "LIB")):
+        log("VsDevCmd.bat did not publish PATH, INCLUDE, and LIB", error=True)
+        return False
+    os.environ.update(values)
+    log("MSVC x64 SDK environment activated")
+    return True
 
 
 def activate_windows_dynamic_asan_runtime(spec: BuildSpec, log) -> bool:

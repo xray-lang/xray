@@ -176,6 +176,8 @@ def main(argv: list[str]) -> int:
         ),
     )
 
+    if not sanitizer.activate_windows_msvc_environment(log):
+        return 1
     if not sanitizer.activate_windows_dynamic_asan_runtime(spec, log):
         return 1
 
