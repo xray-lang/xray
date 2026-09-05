@@ -11,6 +11,8 @@
 #include "../../../src/aot/xaot_driver.h"
 #include "../../../src/app/toolchain/xtc_target_profile.h"
 #include "../../../src/plan/target/xr_target_profile.h"
+#include "../../../src/plan/semantic/xr_semantic_ids.h"
+#include "../../../src/runtime/abi/xr_builtin_provider_contract.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
 #include "../../../src/toolchain/xcompiler_session.h"
@@ -26,6 +28,58 @@ static int failures;
             failures++;                                                                            \
         }                                                                                          \
     } while (0)
+
+static const XrTargetProviderContract *find_provider(const XrRuntimeTargetAuthority *authority,
+                                                     uint8_t provider_kind) {
+    if (!authority)
+        return NULL;
+    for (size_t i = 0; i < authority->provider_count; i++) {
+        if (authority->providers[i].provider_kind == provider_kind)
+            return &authority->providers[i];
+    }
+    return NULL;
+}
+
+static const XrTargetProviderOperationContract *
+find_operation(const XrTargetProviderContract *provider, const char *canonical_key) {
+    XrStableId expected;
+    XrFingerprint digest;
+    if (!provider || !canonical_key ||
+        !xr_stable_id_from_key(canonical_key, &expected, &digest))
+        return NULL;
+    for (size_t i = 0; i < provider->operation_count; i++) {
+        if (memcmp(provider->operations[i].stable_id.bytes, expected.bytes,
+                   sizeof(expected.bytes)) == 0)
+            return &provider->operations[i];
+    }
+    return NULL;
+}
+
+static void check_signed_i64_operation(const XrTargetProviderOperationContract *operation,
+                                       uint16_t parameter_count) {
+    CHECK(operation != NULL);
+    if (!operation)
+        return;
+    CHECK(operation->call_abi.parameter_count == parameter_count);
+    CHECK(operation->call_abi.calling_convention == XR_TARGET_PROVIDER_CALLING_CONVENTION_C);
+    CHECK(operation->call_abi.variadic == 0);
+    CHECK(operation->call_abi.result.value_kind ==
+          XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    CHECK(operation->call_abi.result.width == sizeof(int64_t));
+    CHECK(operation->call_abi.result.alignment == _Alignof(int64_t));
+    CHECK(operation->call_abi.result.ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE);
+    CHECK(operation->effect_flags == 0);
+    CHECK(operation->lifetime_flags == 0);
+    CHECK(operation->failure_flags == 0);
+    if (parameter_count == 1) {
+        CHECK(operation->call_abi.parameters[0].value_kind ==
+              XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+        CHECK(operation->call_abi.parameters[0].width == sizeof(int64_t));
+        CHECK(operation->call_abi.parameters[0].alignment == _Alignof(int64_t));
+        CHECK(operation->call_abi.parameters[0].ownership ==
+              XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE);
+    }
+}
 
 static bool build_native_profile(XaotTarget *aot_target, XrTargetProfile **out) {
     XrTargetCodegenFacts codegen;
@@ -80,7 +134,7 @@ static void test_runtime_owner_publishes_validated_structures(void) {
     XrFingerprint second;
     uint64_t provider_mask = 0;
     CHECK(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
-    CHECK(authority.provider_count == 3);
+    CHECK(authority.provider_count == 4);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &first) == XR_RUNTIME_ABI_OK);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &second) ==
           XR_RUNTIME_ABI_OK);
@@ -89,9 +143,22 @@ static void test_runtime_owner_publishes_validated_structures(void) {
                                              &provider_mask, &second) == XR_RUNTIME_ABI_OK);
     CHECK(provider_mask == (XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
                             XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
+                            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_CLOCK) |
                             XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
                             XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE) |
                             XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY)));
+    const XrTargetProviderContract *clock =
+        find_provider(&authority, XR_TARGET_PROVIDER_CLOCK);
+    CHECK(clock != NULL);
+    CHECK(clock && clock->operation_count == 4);
+    check_signed_i64_operation(
+        find_operation(clock, XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY), 0);
+    check_signed_i64_operation(
+        find_operation(clock, XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY), 0);
+    check_signed_i64_operation(
+        find_operation(clock, XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY), 0);
+    check_signed_i64_operation(
+        find_operation(clock, XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY), 1);
     CHECK(xr_runtime_string_object_contract_verify(&authority.string_contract) ==
           XR_RUNTIME_ABI_OK);
     CHECK(xr_runtime_string_literal_materialization_contract_verify(
@@ -144,9 +211,13 @@ static void test_freestanding_authority_is_not_hosted_projection(void) {
         CHECK(freestanding.providers[i].runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
         CHECK(freestanding.providers[i].flags == XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING);
         CHECK(freestanding.providers[i].provider_kind == expected_kinds[i]);
-        CHECK((i == 2u) ==
-              (memcmp(freestanding.providers[i].contract_id.bytes,
-                      hosted.providers[i].contract_id.bytes,
+        const XrTargetProviderContract *hosted_provider =
+            find_provider(&hosted, freestanding.providers[i].provider_kind);
+        CHECK(hosted_provider != NULL);
+        CHECK((freestanding.providers[i].provider_kind == XR_TARGET_PROVIDER_IO) ==
+              (hosted_provider &&
+               memcmp(freestanding.providers[i].contract_id.bytes,
+                      hosted_provider->contract_id.bytes,
                       sizeof(freestanding.providers[i].contract_id.bytes)) == 0));
     }
     CHECK(xr_runtime_target_authority_native_freestanding(

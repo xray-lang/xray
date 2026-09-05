@@ -19,6 +19,9 @@
 #include "program/xr_program_source_build.h"
 #include "program/xr_reference_evaluator.h"
 #include "program/xr_validated_program_internal.h"
+#include "runtime/abi/xr_builtin_provider_contract.h"
+#include "runtime/abi/xr_runtime_target_profile.h"
+#include "plan/semantic/xr_semantic_ids.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/xr_program_vm.h"
 #include "xray_vm.h"
@@ -43,6 +46,73 @@ typedef struct SourceBuildFixture {
 
 static const char *cross_module_coroutine_aot_output_path;
 static const char *function_parameter_aot_output_path;
+static const char *clock_provider_aot_output_path;
+
+typedef struct ClockProviderProbe {
+    uint32_t calls;
+    int64_t nanos;
+    int64_t expected_argument;
+} ClockProviderProbe;
+
+static bool stable_id_equal(XrStableId left, XrStableId right) {
+    return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
+}
+
+static const XrTargetProviderContract *
+find_profile_provider(const XrTargetProfile *profile, XrStableId contract_id) {
+    for (size_t i = 0; profile && i < xr_target_profile_provider_count(profile); i++) {
+        const XrTargetProviderContract *provider = xr_target_profile_provider(profile, i);
+        if (provider && stable_id_equal(provider->contract_id, contract_id))
+            return provider;
+    }
+    return NULL;
+}
+
+static const XrTargetProviderOperationContract *
+find_profile_provider_operation(const XrTargetProviderContract *provider,
+                                XrStableId operation_id) {
+    for (uint16_t i = 0; provider && i < provider->operation_count; i++) {
+        if (stable_id_equal(provider->operations[i].stable_id, operation_id))
+            return &provider->operations[i];
+    }
+    return NULL;
+}
+
+static XrProviderCallStatus clock_provider_probe(void *context, int64_t *result_out) {
+    ClockProviderProbe *probe = context;
+    if (!probe || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    ++probe->calls;
+    *result_out = probe->nanos;
+    return XR_PROVIDER_CALL_OK;
+}
+
+static XrProviderCallStatus clock_provider_unary_probe(void *context, int64_t argument,
+                                                       int64_t *result_out) {
+    ClockProviderProbe *probe = context;
+    if (!probe || !result_out || argument != probe->expected_argument)
+        return XR_PROVIDER_CALL_FAILED;
+    ++probe->calls;
+    *result_out = probe->nanos;
+    return XR_PROVIDER_CALL_OK;
+}
+
+static bool reference_clock_provider_call(void *context, uint32_t requirement_index,
+                                          uint32_t operation_index, int64_t *result_out) {
+    const XrExecutionLease *lease = context;
+    return xr_execution_lease_provider_call_i64_nullary(
+               lease, requirement_index, operation_index, result_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static bool reference_clock_provider_call_unary(void *context, uint32_t requirement_index,
+                                                uint32_t operation_index, int64_t argument,
+                                                int64_t *result_out) {
+    const XrExecutionLease *lease = context;
+    return xr_execution_lease_provider_call_i64_unary(
+               lease, requirement_index, operation_index, argument, result_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
 
 static bool write_source_file(const char *path, const char *source) {
     FILE *file = fopen(path, "wb");
@@ -204,6 +274,7 @@ TEST(source_owner_single_module_is_deterministic_and_detached) {
     ASSERT_EQ_INT(diagnostic.status, XR_PROGRAM_SOURCE_BUILD_OK);
     assert_source_build_ok(&fixture.input, &second, &diagnostic);
     assert_products_equal(&first, &second);
+    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 1u);
 
     ASSERT_EQ_INT(xr_test_unlink(fixture.entry_path), 0);
     fixture.entry_path[0] = '\0';
@@ -229,7 +300,8 @@ TEST(source_owner_single_module_is_deterministic_and_detached) {
 
 TEST(source_owner_two_module_graph_is_deterministic) {
     static const char library_source[] =
-        "export fn increment(value: i64) -> i64 { return value + 1 }\n";
+        "export fn increment(value: i64) -> i64 { return value + 1 }\n"
+        "export fn unused(value: i64) -> i64 { return value + 100 }\n";
     static const char entry_source[] =
         "import { increment } from \"./library\"\n"
         "fn answer() -> i64 { return increment(41) }\n";
@@ -241,7 +313,7 @@ TEST(source_owner_two_module_graph_is_deterministic) {
     assert_source_build_ok(&fixture.input, &first, &diagnostic);
     assert_source_build_ok(&fixture.input, &second, &diagnostic);
     assert_products_equal(&first, &second);
-    ASSERT_GE(xr_validated_program_function_count(first.program), 2u);
+    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 2u);
 
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
@@ -564,6 +636,231 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     source_build_fixture_free(&fixture);
 }
 
+TEST(source_owner_clock_provider_is_exact_across_private_executors) {
+    static const char source[] =
+        "import time\n"
+        "fn answer() -> i64 {\n"
+        "  const wall = time.now()\n"
+        "  const monotonic = time.monotonic()\n"
+        "  const cpu = time.clock()\n"
+        "  const offset = time.localOffsetAt(0)\n"
+        "  if (wall <= 0) { return 0 }\n"
+        "  if (monotonic <= 0) { return 0 }\n"
+        "  if (cpu < 0) { return 0 }\n"
+        "  if (offset < -1440) { return 0 }\n"
+        "  if (offset > 1440) { return 0 }\n"
+        "  return 1\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = NULL;
+    char profile_error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
+        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint =
+        xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct first = {0};
+    XrProgramSourceProduct second = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &first, &diagnostic);
+    assert_source_build_ok(&fixture.input, &second, &diagnostic);
+    if (!first.program || !second.program) {
+        xr_program_source_product_free(&second);
+        xr_program_source_product_free(&first);
+        xr_target_profile_free(profile);
+        source_build_fixture_free(&fixture);
+        return;
+    }
+    assert_products_equal(&first, &second);
+    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 5u);
+    ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
+
+    XrProgramProviderRequirementView requirement = {0};
+    ASSERT_TRUE(xr_validated_program_provider_requirement(first.program, 0u, &requirement));
+    ASSERT_EQ_UINT(requirement.operation_count, 4u);
+    XrStableId expected_contract;
+    XrStableId expected_operations[4];
+    static const char *operation_keys[] = {
+        XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY,
+        XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY,
+        XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY,
+        XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
+    };
+    XrFingerprint key_digest;
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_CLOCK_CONTRACT_KEY,
+                                      &expected_contract, &key_digest));
+    for (uint32_t i = 0u; i < 4u; ++i)
+        ASSERT_TRUE(xr_stable_id_from_key(operation_keys[i], &expected_operations[i],
+                                          &key_digest));
+    ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_contract));
+
+    const XrTargetProviderContract *contract =
+        find_profile_provider(profile, requirement.contract_id);
+    ASSERT_NOT_NULL(contract);
+    ClockProviderProbe probes[4] = {
+        {.nanos = INT64_C(73000000)},
+        {.nanos = INT64_C(11000000)},
+        {.nanos = INT64_C(5000000)},
+        {.nanos = INT64_C(7), .expected_argument = 0},
+    };
+    XrProviderOperationBinding operations[4] = {0};
+    for (uint16_t operation_index = 0u; operation_index < requirement.operation_count;
+         ++operation_index) {
+        uint32_t expected_index = UINT32_MAX;
+        for (uint32_t i = 0u; i < 4u; ++i) {
+            if (stable_id_equal(requirement.operation_ids[operation_index],
+                                expected_operations[i]))
+                expected_index = i;
+        }
+        ASSERT_LT(expected_index, 4u);
+        const XrTargetProviderOperationContract *contract_operation =
+            find_profile_provider_operation(contract,
+                                            requirement.operation_ids[operation_index]);
+        ASSERT_NOT_NULL(contract_operation);
+        ASSERT_EQ_INT(contract_operation->call_abi.result.value_kind,
+                      XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+        operations[operation_index].operation_id =
+            requirement.operation_ids[operation_index];
+        operations[operation_index].context = &probes[expected_index];
+        if (expected_index == 3u) {
+            ASSERT_EQ_UINT(contract_operation->call_abi.parameter_count, 1u);
+            operations[operation_index].trampoline_kind =
+                XR_PROVIDER_TRAMPOLINE_I64_UNARY;
+            operations[operation_index].entry.i64_unary = clock_provider_unary_probe;
+        } else {
+            ASSERT_EQ_UINT(contract_operation->call_abi.parameter_count, 0u);
+            operations[operation_index].trampoline_kind =
+                XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
+            operations[operation_index].entry.i64_nullary = clock_provider_probe;
+        }
+    }
+    XrProviderBinding provider = {
+        .contract_id = requirement.contract_id,
+        .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
+        .operations = operations,
+        .operation_count = 4u,
+    };
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
+                      contract, &provider.contract_fingerprint),
+                  XR_RUNTIME_ABI_OK);
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = first.program,
+        .profile = profile,
+        .providers = &provider,
+        .provider_count = 1u,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance,
+                                                &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+    uint32_t entry = xr_validated_program_entry_function(first.program);
+
+    XrExecutionLease lease = {0};
+    ASSERT_TRUE(xr_execution_instance_acquire(instance, &lease));
+    XrReferenceProviderBinding reference_binding = {
+        .context = &lease,
+        .call_i64_unary = reference_clock_provider_call_unary,
+        .call_i64_nullary = reference_clock_provider_call,
+    };
+    XrReferenceOutcome reference = xr_reference_evaluate_bound(
+        first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(reference.value.as.i64, 1);
+    for (uint32_t i = 0u; i < 4u; ++i)
+        ASSERT_EQ_UINT(probes[i].calls, 1u);
+    ASSERT_TRUE(xr_execution_lease_release(&lease));
+
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic),
+                  XR_VM_CODE_OK);
+    XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
+    ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_RETURN);
+    ASSERT_EQ_INT(vm.value.kind, XR_VM_VALUE_I64);
+    ASSERT_EQ_INT(vm.value.as.i64, reference.value.as.i64);
+    for (uint32_t i = 0u; i < 4u; ++i)
+        ASSERT_EQ_UINT(probes[i].calls, 2u);
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(first.program, profile, &options, &backend_ir,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_clock_nullary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_realtime_nanos"));
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    if (clock_provider_aot_output_path) {
+        FILE *output = fopen(clock_provider_aot_output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output),
+                       generated.size);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+    xr_vm_code_free(vm_code);
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    xr_program_source_product_free(&second);
+    xr_program_source_product_free(&first);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed) {
+    static const char source[] =
+        "import time\n"
+        "fn answer() -> i64 { time.sleep(1); return 0 }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = NULL;
+    char profile_error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
+        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint =
+        xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&fixture.input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE);
+    ASSERT_EQ_INT(diagnostic.writer_status, XR_PROGRAM_BUILD_INVALID_INPUT);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "inconsistent callable effect evidence"));
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_NULL(product.program);
+
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_rejects_non_authoritative_entry_identity) {
     static const char source[] = "fn answer() -> i64 { return 42 }\n";
     SourceBuildFixture fixture;
@@ -647,13 +944,17 @@ if (argc >= 2)
     cross_module_coroutine_aot_output_path = argv[1];
 if (argc >= 3)
     function_parameter_aot_output_path = argv[2];
-if (argc > 3)
+if (argc >= 4)
+    clock_provider_aot_output_path = argv[3];
+if (argc > 4)
     return 2;
 RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
 RUN_TEST(source_owner_two_module_graph_is_deterministic);
 RUN_TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors);
 RUN_TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors);
 RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors);
+RUN_TEST(source_owner_clock_provider_is_exact_across_private_executors);
+RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);
 RUN_TEST(source_owner_rejects_module_budget_before_analysis);

@@ -187,6 +187,8 @@ class StdlibEntry:
     semantic_intrinsic: bool
     target_leaf: str
     caps: tuple[str, ...]
+    provider_contract: str = ""
+    provider_operation: str = ""
 
     @property
     def symbol(self) -> str:
@@ -1311,6 +1313,8 @@ def parse_def_metadata(
                     f"type {signature_return!r} and requires explicit return_ownership"
                 )
             target_leaf = str(props.get("target_leaf", ""))
+            provider_contract = str(props.get("provider_contract", ""))
+            provider_operation = str(props.get("provider_operation", ""))
             effect = str(props.get("effect", ""))
             if target_leaf not in TARGET_LEAF_KINDS:
                 raise SystemExit(
@@ -1344,6 +1348,55 @@ def parse_def_metadata(
                 allocation,
                 target_leaf_owners,
             )
+            if bool(provider_contract) != bool(provider_operation):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} provider_contract "
+                    "and provider_operation must be declared together"
+                )
+            provider_contract_match = re.fullmatch(
+                r"xray\.runtime\.provider\.v1/([a-z0-9][a-z0-9-]*)", provider_contract
+            ) if provider_contract else None
+            provider_operation_match = re.fullmatch(
+                r"xray\.runtime\.provider-operation\.v1/([a-z0-9][a-z0-9-]*)/"
+                r"([a-z0-9][a-z0-9-]*)",
+                provider_operation,
+            ) if provider_operation else None
+            if provider_contract and (
+                not provider_contract_match
+                or not provider_operation_match
+                or provider_contract_match.group(1) != provider_operation_match.group(1)
+            ):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} has malformed or "
+                    "cross-family provider identity"
+                )
+            if provider_contract and (
+                visibility != "internal"
+                or effect != "nothrow"
+                or signature_return != "i64"
+                or any(
+                    function_parameter_type(
+                        fragment, f"{current_module}.{current_name} provider parameter"
+                    ) != "i64"
+                    for fragment in signature_params
+                )
+                or len(signature_params) not in {0, 1}
+                or argc_raw != str(len(signature_params))
+                or not aot_direct
+                or aot_kind != "method"
+                or ret != "value"
+                or vm_binding != "normal"
+                or vm_ifdef
+                or str(props.get("define", ""))
+                or caps
+                or return_ownership
+                or semantic_intrinsic
+                or target_leaf
+            ):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} provider operation "
+                    "must be an unconditional internal nothrow nullary/unary i64 native leaf"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -1371,6 +1424,8 @@ def parse_def_metadata(
                     semantic_intrinsic=semantic_intrinsic,
                     target_leaf=target_leaf,
                     caps=caps,
+                    provider_contract=provider_contract,
+                    provider_operation=provider_operation,
                 )
             )
         elif current_kind == "const":
@@ -2582,6 +2637,8 @@ def emit_defs_header(
             "    const char *layer;",
             "    const char *aot_kind;",
             "    const char *return_ownership;",
+            "    const char *provider_contract_key;",
+            "    const char *provider_operation_key;",
             "    uint32_t runtime_capabilities;",
             "    uint16_t argc;",
             "    uint16_t target_leaf;",
@@ -2712,7 +2769,9 @@ def emit_defs_header(
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
             f"{c_string(e.aot_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
-            f"{c_string(e.aot_kind)}, {c_string(e.return_ownership)}, {runtime_caps}, {argc}, "
+            f"{c_string(e.aot_kind)}, {c_string(e.return_ownership)}, "
+            f"{c_string(e.provider_contract)}, {c_string(e.provider_operation)}, "
+            f"{runtime_caps}, {argc}, "
             f"{TARGET_LEAF_KINDS[e.target_leaf]}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"

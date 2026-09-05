@@ -299,7 +299,8 @@ def validate(root: Path) -> None:
     for token in (
         "while (index < limit)",
         "XI_AGG_UPDATE",
-        "invalid_update_artifact",
+        "unreachable_update_artifact",
+        "xr_program_id_equal(unreachable_update_artifact.id, artifact.id)",
         "XR_CORE_OP_CORE_AGGREGATE_UPDATE",
         "program_semantic_closure == NULL",
         "repeated_artifact.size == artifact.size",

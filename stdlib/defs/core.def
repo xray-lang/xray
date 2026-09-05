@@ -11,6 +11,8 @@ module time {
     link_object: true
     layer: "system"
     visibility: "internal"
+    provider_contract: "xray.runtime.provider.v1/clock"
+    provider_operation: "xray.runtime.provider-operation.v1/clock/realtime-nanos"
   }
 
   fn __monotonicNanos {
@@ -25,6 +27,8 @@ module time {
     link_object: true
     layer: "system"
     visibility: "internal"
+    provider_contract: "xray.runtime.provider.v1/clock"
+    provider_operation: "xray.runtime.provider-operation.v1/clock/monotonic-nanos"
   }
 
   fn __cpuNanos {
@@ -39,6 +43,8 @@ module time {
     link_object: true
     layer: "system"
     visibility: "internal"
+    provider_contract: "xray.runtime.provider.v1/clock"
+    provider_operation: "xray.runtime.provider-operation.v1/clock/process-cpu-nanos"
   }
 
   fn __utcOffsetAt {
@@ -53,6 +59,8 @@ module time {
     link_object: true
     layer: "system"
     visibility: "internal"
+    provider_contract: "xray.runtime.provider.v1/clock"
+    provider_operation: "xray.runtime.provider-operation.v1/clock/utc-offset-minutes-at"
   }
 
   fn __sleep {

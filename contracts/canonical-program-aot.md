@@ -41,8 +41,8 @@ which rows have a production source owner. Checked overflow, wrapping overflow, 
 also compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
-anchor-sha256: CMakeLists.txt 98c0a12f8f1d3c2cce6bb8e91c631c50f8dd0139b7f690e76fdacfad0b02fc2f
-anchor-sha256: tests/unit/CMakeLists.txt 536f5c1dca05a4e2baa6b0747b9972126c06611c26cdeb86a45ac40e2ad27961
+anchor-sha256: CMakeLists.txt 2a14f3d1a43bfc8b6f7050c4317b3b7254a70593550a3a47d9c30c9970da899a
+anchor-sha256: tests/unit/CMakeLists.txt a4578a3cfb7afaa79389e57f6a7213d51fe054b21cf17d9c2e727ad94fa02a68
 anchor-sha256: xisa/core/registry.json c5c2b2be5583b82ab439a631fe71ac47f346b92a62d5c169d587b9effaf3758b
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json c9903e9ac14f69b319910c0ee5390499e261e5963a92ea03580042a6e50641dd
@@ -51,7 +51,7 @@ anchor-sha256: src/aot/program/xr_backend_ir.h 1d9dca590e0a7ace9034939925bfe69fc
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
 anchor-sha256: src/aot/program/xr_backend_ir.c 68278180675df0079b23ae4e57a785e77b2b6746bbe0b726ffbd46bd02ca17ba
 anchor-sha256: src/aot/program/xr_backend_ir_verify.c 6ad6e6055ed2c56d1e5b0d0edbf6f00aa7743a7499bfecc2517be50778709054
-anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 029ea36369dcab05044c8270a187b6039f26d28994e6a4ab6ffa0acfc125be71
+anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 068b520a4425c2bc6476b93c06a884087107ef7d77999cb4d22efe03b3259f39
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf

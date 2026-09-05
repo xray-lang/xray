@@ -49,7 +49,7 @@ xr_stdlib_metadata_native_class_fingerprint(const XrStdlibNativeClassDefEntry *e
 }
 
 static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-stdlib-definition-registry-v2\0";
+    static const uint8_t domain[] = "xray-stdlib-definition-registry-v3\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -71,6 +71,8 @@ static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
         xr_stdlib_metadata_hash_string(&ctx, entry->layer);
         xr_stdlib_metadata_hash_string(&ctx, entry->aot_kind);
         xr_stdlib_metadata_hash_string(&ctx, entry->return_ownership);
+        xr_stdlib_metadata_hash_string(&ctx, entry->provider_contract_key);
+        xr_stdlib_metadata_hash_string(&ctx, entry->provider_operation_key);
         xr_stdlib_metadata_hash_u64(&ctx, entry->runtime_capabilities);
         xr_stdlib_metadata_hash_u64(&ctx, entry->argc);
         xr_stdlib_metadata_hash_u64(&ctx, entry->target_leaf);

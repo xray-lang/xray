@@ -16,7 +16,6 @@
 #include <float.h>
 #include <stddef.h>
 #include <stdatomic.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -534,11 +533,13 @@ static bool make_callback(XrRuntimeExtentProviderCallbackAbi *out) {
                    "runtime status authority is incomplete");
     XrCanonicalEncoding entries[XR_RUNTIME_ABI_STATUS_COUNT];
     char keys[XR_RUNTIME_ABI_STATUS_COUNT][80];
+    static const char status_key_prefix[] = "xray.runtime.status.v1/";
     for (size_t i = 0; i < XR_RUNTIME_ABI_STATUS_COUNT; i++) {
-        int written =
-            snprintf(keys[i], sizeof(keys[i]), "xray.runtime.status.v1/%s", status_names[i]);
-        if (written < 0 || (size_t) written >= sizeof(keys[i]))
+        size_t name_length = strlen(status_names[i]);
+        if (sizeof(status_key_prefix) + name_length > sizeof(keys[i]))
             return false;
+        memcpy(keys[i], status_key_prefix, sizeof(status_key_prefix) - 1u);
+        memcpy(keys[i] + sizeof(status_key_prefix) - 1u, status_names[i], name_length + 1u);
         entries[i].key = keys[i];
         entries[i].encoding = i;
     }
@@ -626,6 +627,9 @@ static bool make_hosted_providers(
     XrTargetProviderCallSlotAbi status_result =
         make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 1, 1,
                        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi signed_i64 =
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
     XrTargetProviderCallSlotAbi output_parameters[] = {
         make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
                        pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
@@ -680,7 +684,7 @@ static bool make_hosted_providers(
                         XR_TARGET_PROVIDER_FAILURE_PANICS))
         return false;
 
-    providers[2] = (XrTargetProviderContract) {
+    providers[3] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
@@ -688,12 +692,39 @@ static bool make_hosted_providers(
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
         .provider_kind = XR_TARGET_PROVIDER_IO,
     };
-    return canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[2].contract_id) &&
-           make_operation(&providers[2].operations[0],
-                          XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
-                          make_call_abi(status_result, output_parameters, 3, target_endian),
-                          XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
-                          XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS);
+    if (!canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[3].contract_id) ||
+        !make_operation(&providers[3].operations[0],
+                        XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
+                        make_call_abi(status_result, output_parameters, 3, target_endian),
+                        XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+                        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS))
+        return false;
+
+    providers[2] = (XrTargetProviderContract) {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
+        .operation_count = 4,
+        .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        .provider_kind = XR_TARGET_PROVIDER_CLOCK,
+    };
+    if (!canonical_id(XR_PROVIDER_CLOCK_CONTRACT_KEY, &providers[2].contract_id) ||
+        !make_operation(&providers[2].operations[0],
+                        XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY,
+                        make_call_abi(signed_i64, NULL, 0, target_endian), 0, 0, 0) ||
+        !make_operation(&providers[2].operations[1],
+                        XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY,
+                        make_call_abi(signed_i64, NULL, 0, target_endian), 0, 0, 0) ||
+        !make_operation(&providers[2].operations[2],
+                        XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY,
+                        make_call_abi(signed_i64, NULL, 0, target_endian), 0, 0, 0) ||
+        !make_operation(&providers[2].operations[3],
+                        XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
+                        make_call_abi(signed_i64, &signed_i64, 1, target_endian), 0, 0, 0))
+        return false;
+    qsort(providers[2].operations, providers[2].operation_count,
+          sizeof(providers[2].operations[0]), compare_stable_id_first);
+    return true;
 }
 
 static bool make_freestanding_providers(
@@ -900,7 +931,7 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuth
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     XrFingerprint fingerprint;
     uint64_t provider_mask = 0;
-    const size_t hosted_provider_count = 3;
+    const size_t hosted_provider_count = 4;
     status = xr_target_provider_set_fingerprint(authority.providers, hosted_provider_count,
                                                 &provider_mask, &fingerprint);
     if (status != XR_RUNTIME_ABI_OK)

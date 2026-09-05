@@ -16,7 +16,7 @@
 #include "xr_runtime_string_object.h"
 #include "xr_target_machine_facts.h"
 
-#define XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT 3
+#define XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT 4
 
 /* Owned, pointer-free snapshot. The native runtime constructs this from its
  * concrete C layouts and canonical registries; consumers may copy the value

@@ -21,4 +21,14 @@
 #define XR_PROVIDER_IO_ASSERTION_REPORT_OPERATION_KEY                                           \
     "xray.runtime.provider-operation.v1/io/assertion-report"
 
+#define XR_PROVIDER_CLOCK_CONTRACT_KEY "xray.runtime.provider.v1/clock"
+#define XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY                                          \
+    "xray.runtime.provider-operation.v1/clock/realtime-nanos"
+#define XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY                                         \
+    "xray.runtime.provider-operation.v1/clock/monotonic-nanos"
+#define XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY                                       \
+    "xray.runtime.provider-operation.v1/clock/process-cpu-nanos"
+#define XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY                                   \
+    "xray.runtime.provider-operation.v1/clock/utc-offset-minutes-at"
+
 #endif /* XR_BUILTIN_PROVIDER_CONTRACT_H */

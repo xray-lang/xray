@@ -49,6 +49,14 @@ def main() -> int:
     require(printed.returncode == 0, f"print initializer failed: {printed.stderr!r}")
     require(printed.stdout == b"42\n", f"initializer output bytes drifted: {printed.stdout!r}")
 
+    clock = invoke(args.binary, "run", str(args.fixtures / "time_now.xr"))
+    require(clock.returncode == 0, f"clock provider route failed: {clock.stderr!r}")
+    clock_text = clock.stdout.strip()
+    require(
+        clock_text.isdecimal() and int(clock_text) > 0,
+        f"clock provider did not produce positive epoch milliseconds: {clock.stdout!r}",
+    )
+
     implicit = invoke(args.binary, str(args.fixtures / "main_zero.xr"))
     require(implicit.returncode == 0, f"implicit source run failed: {implicit.stderr}")
 

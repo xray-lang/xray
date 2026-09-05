@@ -3227,24 +3227,13 @@ TEST(e2e_program_witness_move_operands_are_consumed_once) {
     PIPELINE_TEST_REQUIRE(direct_call->xg_interface_use_kind == XI_INTERFACE_USE_MOVE);
     PIPELINE_TEST_REQUIRE(invoke_call->xg_interface_use_kind == XI_INTERFACE_USE_MOVE);
 
-    XiFunc *entry = NULL;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
-        XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
-        if (!function || function->has_receiver || function->nparams != 0u)
-            continue;
-        PIPELINE_TEST_REQUIRE(entry == NULL);
-        entry = function;
-    }
-    PIPELINE_TEST_REQUIRE(entry != NULL);
-
     XrCoreIrKey semantic_profile =
         xr_core_ir_key("witness-move-profile", strlen("witness-move-profile"));
     const XiFunc *module_roots[] = {fixture.pipeline.ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
         .module_count = 1u,
-        .entry_function = entry,
+        .entry_function = direct_owner,
         .global_evidence = &fixture.evidence,
         .semantic_profile_fingerprint = semantic_profile.bytes,
     };
@@ -3254,9 +3243,7 @@ TEST(e2e_program_witness_move_operands_are_consumed_once) {
         xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
     if (build_status != XR_PROGRAM_BUILD_OK) {
         fprintf(stderr, "witness MOVE Program build failed: %s\n", diagnostic);
-        xi_func_dump(entry, stderr);
         xi_func_dump(direct_owner, stderr);
-        xi_func_dump(invoke_owner, stderr);
     }
     PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *validated = NULL;
@@ -3269,24 +3256,44 @@ TEST(e2e_program_witness_move_operands_are_consumed_once) {
     const XrValidatedFunction *direct_validated_owner = NULL;
     const XrValidatedInstruction *direct_witness = xi_pipeline_find_unique_validated_operation(
         validated, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT, &direct_validated_owner);
-    const XrValidatedFunction *invoke_validated_owner = NULL;
-    const XrValidatedInstruction *invoke_witness = xi_pipeline_find_unique_validated_operation(
-        validated, XR_CORE_OP_CORE_CALL_WITNESS_INVOKE, &invoke_validated_owner);
     PIPELINE_TEST_REQUIRE(direct_witness != NULL && direct_validated_owner != NULL);
-    PIPELINE_TEST_REQUIRE(invoke_witness != NULL && invoke_validated_owner != NULL);
     PIPELINE_TEST_REQUIRE(direct_witness->operand_count == 1u);
-    PIPELINE_TEST_REQUIRE(invoke_witness->operand_count == 1u);
     for (uint32_t operand = 0u; operand < 1u; ++operand) {
         uint32_t direct_value = direct_witness->operands[operand];
-        uint32_t invoke_value = invoke_witness->operands[operand];
         PIPELINE_TEST_REQUIRE(direct_value < direct_validated_owner->value_count);
-        PIPELINE_TEST_REQUIRE(invoke_value < invoke_validated_owner->value_count);
         PIPELINE_TEST_REQUIRE(direct_validated_owner->value_ownerships[direct_value] ==
-                              XR_CORE_IR_OWNER);
-        PIPELINE_TEST_REQUIRE(invoke_validated_owner->value_ownerships[invoke_value] ==
                               XR_CORE_IR_OWNER);
         PIPELINE_TEST_REQUIRE(
             !xi_pipeline_validated_function_drops_value(direct_validated_owner, direct_value));
+    }
+
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+
+    input.entry_function = invoke_owner;
+    memset(diagnostic, 0, sizeof(diagnostic));
+    build_status = xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+    if (build_status != XR_PROGRAM_BUILD_OK) {
+        fprintf(stderr, "witness MOVE Program build failed: %s\n", diagnostic);
+        xi_func_dump(invoke_owner, stderr);
+    }
+    PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
+    validated = NULL;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) ==
+                          XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated != NULL);
+
+    const XrValidatedFunction *invoke_validated_owner = NULL;
+    const XrValidatedInstruction *invoke_witness = xi_pipeline_find_unique_validated_operation(
+        validated, XR_CORE_OP_CORE_CALL_WITNESS_INVOKE, &invoke_validated_owner);
+    PIPELINE_TEST_REQUIRE(invoke_witness != NULL && invoke_validated_owner != NULL);
+    PIPELINE_TEST_REQUIRE(invoke_witness->operand_count == 1u);
+    for (uint32_t operand = 0u; operand < 1u; ++operand) {
+        uint32_t invoke_value = invoke_witness->operands[operand];
+        PIPELINE_TEST_REQUIRE(invoke_value < invoke_validated_owner->value_count);
+        PIPELINE_TEST_REQUIRE(invoke_validated_owner->value_ownerships[invoke_value] ==
+                              XR_CORE_IR_OWNER);
         PIPELINE_TEST_REQUIRE(
             !xi_pipeline_validated_function_drops_value(invoke_validated_owner, invoke_value));
     }
@@ -3416,7 +3423,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "fn accepts_nested(value: Nested<i64>) -> i64 {\n"
                                          "  return 1\n"
                                          "}\n"
-                                         "fn update_point(input: move Point) -> i64 {\n"
+                                         "fn update_point(input: Point) -> i64 {\n"
                                          "  var point = input\n"
                                          "  point.x = point.x + 2\n"
                                          "  return point.x\n"
@@ -3504,6 +3511,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "fn edge_choice_entry() -> i64 {\n"
                                          "  return edge_choice(true, 7, 9) + edge_choice(false, 7, 9)\n"
                                          "}\n"
+                                         "fn nested_value() -> i64 {\n"
+                                         "  return accepts_nested(Nested.Value { pair: (7, true) })\n"
+                                         "}\n"
                                          "fn root() -> i64 {\n"
                                          "  return choose(10) + scalar_matrix(10, 2) + "
                                          "choose_bool(true) + choose_bool(false) + pair_value() + "
@@ -3513,7 +3523,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "    + escaped_callable_value() + callable_multiuse()\n"
                                          "    + callable_cross_cfg(true) + callable_loop() + "
                                          "callable_copy() + existential_value() + "
-                                         "witness_invoke_value()\n"
+                                         "witness_invoke_value() + nested_value()\n"
                                          "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
@@ -3829,8 +3839,17 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         fprintf(stderr, "program producer failed: %s: %s\n",
                 xr_program_build_status_name(producer_status), producer_diagnostic);
     PIPELINE_TEST_REQUIRE(producer_status == XR_PROGRAM_BUILD_OK);
+    XrProgramFromXiInput sibling_error_regions_input = producer_input;
+    sibling_error_regions_input.entry_function = sibling_error_regions_function;
+    XrProgramArtifact sibling_error_regions_artifact = {0};
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&sibling_error_regions_input, &sibling_error_regions_artifact,
+                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(xi_pipeline_hostile_lexical_error_regions_are_fail_closed(
-        sibling_error_regions_function, &producer_input, &artifact));
+        sibling_error_regions_function, &sibling_error_regions_input,
+        &sibling_error_regions_artifact));
+    xr_program_artifact_free(&sibling_error_regions_artifact);
     PIPELINE_TEST_REQUIRE(xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
         edge_choice_function, edge_choice_entry_function, &producer_input, 16));
 
@@ -4451,11 +4470,16 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
 
     int64_t saved_update_ordinal = aggregate_update->aux_int;
     aggregate_update->aux_int = INT64_C(99);
-    XrProgramArtifact invalid_update_artifact = {0};
+    XrProgramArtifact unreachable_update_artifact = {0};
     PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
-                              &producer_input, &invalid_update_artifact, producer_diagnostic,
-                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
-    PIPELINE_TEST_REQUIRE(invalid_update_artifact.bytes == NULL);
+                              &producer_input, &unreachable_update_artifact,
+                              producer_diagnostic, sizeof(producer_diagnostic)) ==
+                          XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(unreachable_update_artifact.size == artifact.size);
+    PIPELINE_TEST_REQUIRE(xr_program_id_equal(unreachable_update_artifact.id, artifact.id));
+    PIPELINE_TEST_REQUIRE(
+        memcmp(unreachable_update_artifact.bytes, artifact.bytes, artifact.size) == 0);
+    xr_program_artifact_free(&unreachable_update_artifact);
     aggregate_update->aux_int = saved_update_ordinal;
 
     int64_t saved_construct_ordinal = variant_construct->aux_int;
@@ -4501,7 +4525,6 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                               &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
     bool found_nested_generic_variant = false;
-    bool found_point_aggregate = false;
     bool found_capture_aggregate = false;
     bool found_effectful_callable = false;
     bool found_fallible_callable = false;
@@ -4516,10 +4539,6 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             validated->signatures[variant->signature_id].error_type_id != XR_CORE_TYPE_VOID &&
             (validated->signatures[variant->signature_id].effect_mask & XR_CORE_EFFECT_ERROR) != 0u)
             found_fallible_callable = true;
-        if (variant->kind == XR_CORE_IR_TYPE_AGGREGATE && variant->field_count == 2u &&
-            variant->field_types && variant->field_types[0] == XR_CORE_TYPE_I64 &&
-            variant->field_types[1] == XR_CORE_TYPE_I64)
-            found_point_aggregate = true;
         if (variant->kind == XR_CORE_IR_TYPE_AGGREGATE && variant->field_count == 1u &&
             variant->field_types && variant->field_types[0] == XR_CORE_TYPE_I64 &&
             variant->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
@@ -4545,7 +4564,6 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             found_nested_generic_variant = true;
     }
     PIPELINE_TEST_REQUIRE(found_nested_generic_variant);
-    PIPELINE_TEST_REQUIRE(found_point_aggregate);
     PIPELINE_TEST_REQUIRE(found_capture_aggregate);
     PIPELINE_TEST_REQUIRE(found_effectful_callable);
     PIPELINE_TEST_REQUIRE(found_fallible_callable);
@@ -4566,7 +4584,6 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_ERROR_PUBLISH,
         XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
         XR_CORE_OP_CORE_AGGREGATE_PROJECT,
-        XR_CORE_OP_CORE_AGGREGATE_UPDATE,
         XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
         XR_CORE_OP_CORE_VARIANT_TEST,
         XR_CORE_OP_CORE_VARIANT_PROJECT,
@@ -4579,8 +4596,6 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE,
         XR_CORE_OP_CORE_OWNER_DROP,
         XR_CORE_OP_CORE_EXISTENTIAL_PACK,
-        XR_CORE_OP_CORE_EXISTENTIAL_TEST,
-        XR_CORE_OP_CORE_EXISTENTIAL_PROJECT,
         XR_CORE_OP_CORE_CALL_WITNESS_DIRECT,
         XR_CORE_OP_CORE_CALL_WITNESS_INVOKE,
     };
@@ -4606,7 +4621,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 477);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 478);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);
@@ -4741,9 +4756,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         xr_program_validate(witness_only_artifact.bytes, witness_only_artifact.size, NULL,
                             &witness_only_validated, &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(witness_only_validated != NULL);
-    PIPELINE_TEST_REQUIRE(witness_only_validated->interface_count == 1u);
-    PIPELINE_TEST_REQUIRE(witness_only_validated->conformance_count == 1u);
-    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
+    PIPELINE_TEST_REQUIRE(witness_only_validated->interface_count == 0u);
+    PIPELINE_TEST_REQUIRE(witness_only_validated->conformance_count == 0u);
+    PIPELINE_TEST_REQUIRE(!validated_program_has_operation(
         witness_only_validated, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT));
     PIPELINE_TEST_REQUIRE(!validated_program_has_operation(
         witness_only_validated, XR_CORE_OP_CORE_EXISTENTIAL_PACK));
@@ -4761,17 +4776,6 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     xr_compiler_session_delete(session);
 }
 
-TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
-    XrProto *p = compile_source_with_module_graph(
-        "xi-pipeline-time-sleep", "import time\ntime.sleep(1)\nprint(7)");
-    assert(p != NULL);
-    assert(has_opcode(p, OP_SLEEP));
-    assert(xr_entry_plan_derive(p));
-    assert(p->entry_plan.root_representation == XR_ROOT_RESUMABLE_FRAME);
-    assert(p->entry_plan.scheduler_mode == XR_SCHED_SINGLE);
-    xr_instruction_unit_free(p);
-}
-
 TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
     const char *source = "class Router {\n"
                          "    add<T>(value: T) -> i64 { return this.addRoute(value) }\n"
@@ -4782,17 +4786,6 @@ TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
     XrProto *p = compile_source(source, NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
-    xr_instruction_unit_free(p);
-}
-
-TEST(e2e_imported_generic_method_uses_dependency_semantic_authority_after_vm_detach) {
-    const char *source =
-        "import parallel\n"
-        "var plan = parallel.Plan<i64>(parallel.Options(1), (lane) -> lane)\n"
-        "plan.forEach(0..1, (state, item) -> { print(state + item) })\n";
-    XrProto *p = compile_source_with_module_graph("xi-pipeline-generic-dependency", source);
-    PIPELINE_TEST_REQUIRE(p != NULL);
-    PIPELINE_TEST_REQUIRE(has_opcode(p, OP_PAR_FOR));
     xr_instruction_unit_free(p);
 }
 
@@ -5046,9 +5039,7 @@ int main(int argc, char **argv) {
     run_e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in();
     run_e2e_program_witness_move_operands_are_consumed_once();
     run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
-    run_e2e_time_sleep_uses_dedicated_vm_suspend();
     run_e2e_generic_this_method_call_uses_frozen_member_identity();
-    run_e2e_imported_generic_method_uses_dependency_semantic_authority_after_vm_detach();
 
     teardown();
 

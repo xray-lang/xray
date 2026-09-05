@@ -3035,9 +3035,12 @@ static void test_plan_snapshot_and_determinism(void) {
      * The canonical-program ownership freeze subsequently re-anchored the
      * SemanticPlan owner registries which this target fingerprint includes.
      * Old ownership-freeze digest:
-     * 1b6fd4f3f7ab0f38a264f261835fd21ba56e79ef5f1da4efdc03a474b2298fce. */
+     * 1b6fd4f3f7ab0f38a264f261835fd21ba56e79ef5f1da4efdc03a474b2298fce.
+     * The source-owned clock provider metadata then moved the canonical stdlib
+     * registry fingerprint. Old provider-free digest:
+     * bce8574bb0aad9e5db7433dfc12f880f96295d64a969e5fa2b329209572e4b5f. */
     REQUIRE(strcmp(target_hex,
-                   "bce8574bb0aad9e5db7433dfc12f880f96295d64a969e5fa2b329209572e4b5f") == 0);
+                   "7161b728d4bf51adf03d0bdca414946d468681e8e04379ae4b084c7cba9ff8e1") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -5336,8 +5339,14 @@ static void test_channel_receive_storage_authority(void) {
     binding = xr_target_plan_value_rep(plan, receive->result_value);
     REQUIRE(binding != NULL);
     const XrTargetMachineRepRecord *enum_rep = &plan->machine_reps[binding->memory_rep];
+    uint32_t enum_layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->layouts_count; i++) {
+        if (plan->layouts[i].semantic_type == receive->result_type)
+            enum_layout_index = i;
+    }
+    REQUIRE(enum_layout_index != XR_SEMANTIC_INDEX_NONE);
     REQUIRE(enum_rep->kind == XR_MACHINE_REP_ENUM_ORDINAL &&
-            enum_rep->detail == receive->result_type);
+            enum_rep->detail == enum_layout_index);
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
@@ -6173,8 +6182,12 @@ static void test_channel_close_call_authority(void) {
      * REF permission in SemanticPlan. That contract is part of the call
      * fingerprint by design.
      * Old receiver-contract digest:
-     * b46b26a760a8d76b5bb434fd8ed148a2202c348761be21518fe98e479a8e2d2f. */
-    REQUIRE(strcmp(call_hex, "638ac815ed74ef119cbafa71abf5cb88e276b4fed3ed0a0ba4e46e88bc0dc768") ==
+     * b46b26a760a8d76b5bb434fd8ed148a2202c348761be21518fe98e479a8e2d2f.
+     * The source-owned clock provider metadata then moved the canonical stdlib
+     * registry fingerprint even though this fixture does not call time APIs.
+     * Old provider-free digest:
+     * 638ac815ed74ef119cbafa71abf5cb88e276b4fed3ed0a0ba4e46e88bc0dc768. */
+    REQUIRE(strcmp(call_hex, "267d5e62f4c032721b71bb38d46d17be1700ec30a75a6f09218360940e6006cd") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -7099,10 +7112,13 @@ static void test_direct_local_call_adapter_family(void) {
      * Old ownership-freeze digest:
      * 9e3078b2d60b479b8eab553d5e6a3421b107f303cbc7d0449064977f3b61bd6f.
      * BorrowOriginSet then made normalized borrowed-result origins part of
-     * function type identity and changed the stdlib registry fingerprint. */
-    if (strcmp(call_hex, "94bdd31a214392344cd369fc2fe4379f6541a3649d0c7f5e017b16c55e9b3874") != 0)
+     * function type identity and changed the stdlib registry fingerprint.
+     * Source-owned clock provider metadata then moved that registry again.
+     * Old provider-free digest:
+     * 94bdd31a214392344cd369fc2fe4379f6541a3649d0c7f5e017b16c55e9b3874. */
+    if (strcmp(call_hex, "e134424567eedade4a0840d2477085b6e7d644423d43f663a3ad87d769986669") != 0)
         fprintf(stderr, "direct-local call fingerprint drift: actual=%s\n", call_hex);
-    REQUIRE(strcmp(call_hex, "94bdd31a214392344cd369fc2fe4379f6541a3649d0c7f5e017b16c55e9b3874") ==
+    REQUIRE(strcmp(call_hex, "e134424567eedade4a0840d2477085b6e7d644423d43f663a3ad87d769986669") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -7967,10 +7983,12 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * Old ownership-freeze digest:
      * 6749158010ff69b1cd6d87630c9c7b0ab0acc4b37b8e7e6debd83ea53d4c9d7e.
      * BorrowOriginSet then changed the function-type and stdlib identities
-     * hashed into the enclosing SemanticPlan. */
-    if (strcmp(tail_hex, "3e537461fb50b52a558dd45fb726b46ffbc103fa962a32c821dbacf1757195b8") != 0)
+     * hashed into the enclosing SemanticPlan. Source-owned clock provider
+     * metadata then moved the stdlib registry again. Old provider-free digest:
+     * 3e537461fb50b52a558dd45fb726b46ffbc103fa962a32c821dbacf1757195b8. */
+    if (strcmp(tail_hex, "a57047dc4173efbe39207ff06f9190252411d67241f8e674a32ed91c1a0dfae1") != 0)
         fprintf(stderr, "tail-call fingerprint drift: actual=%s\n", tail_hex);
-    REQUIRE(strcmp(tail_hex, "3e537461fb50b52a558dd45fb726b46ffbc103fa962a32c821dbacf1757195b8") ==
+    REQUIRE(strcmp(tail_hex, "a57047dc4173efbe39207ff06f9190252411d67241f8e674a32ed91c1a0dfae1") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;
@@ -11266,7 +11284,7 @@ static void test_assertion_target_capability_authority(void) {
     XrSemanticPlan *semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
-    REQUIRE(hosted_without_report.provider_count == 3);
+    REQUIRE(hosted_without_report.provider_count == 4);
     bool has_io_provider = false;
     for (size_t provider_index = 0;
          provider_index < hosted_without_report.provider_count;

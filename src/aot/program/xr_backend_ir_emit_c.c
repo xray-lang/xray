@@ -13,6 +13,8 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../core/xr_core_spec_gen.h"
+#include "../../plan/semantic/xr_semantic_ids.h"
+#include "../../runtime/abi/xr_builtin_provider_contract.h"
 #include "../xi_cgen_verify_output.h"
 
 #include <stdarg.h>
@@ -292,16 +294,51 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, b
     }
 }
 
+typedef struct XrAotHostedClockBindings {
+    bool realtime;
+    bool monotonic;
+    bool process_cpu;
+    bool utc_offset;
+    uint32_t realtime_requirement;
+    uint32_t realtime_operation;
+    uint32_t monotonic_requirement;
+    uint32_t monotonic_operation;
+    uint32_t process_cpu_requirement;
+    uint32_t process_cpu_operation;
+    uint32_t utc_offset_requirement;
+    uint32_t utc_offset_operation;
+} XrAotHostedClockBindings;
+
+static XrAotHostedClockBindings hosted_clock_bindings(const XrBackendIR *ir);
+
 static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone_main) {
     bool checked = false;
     bool wrapping = false;
     bool arena = false;
     bool output = false;
     scan_helpers(ir, &checked, &wrapping, &arena, &output);
-    if (!append_text(buffer, "#include <stdint.h>\n"
+    XrAotHostedClockBindings clock = hosted_clock_bindings(ir);
+    bool host_clock = standalone_main &&
+                      (clock.realtime || clock.monotonic || clock.process_cpu ||
+                       clock.utc_offset);
+    if ((host_clock &&
+         !append_text(buffer,
+                      "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)\n"
+                      "#define _POSIX_C_SOURCE 200809L\n"
+                      "#endif\n")) ||
+        !append_text(buffer, "#include <stdint.h>\n"
                              "#include <limits.h>\n"
                              "#include <stddef.h>\n") ||
         (arena && !append_text(buffer, "#include <stdlib.h>\n")) ||
+        (host_clock &&
+         !append_text(buffer,
+                      "#include <time.h>\n"
+                      "#if defined(_WIN32)\n"
+                      "#ifndef WIN32_LEAN_AND_MEAN\n"
+                      "#define WIN32_LEAN_AND_MEAN\n"
+                      "#endif\n"
+                      "#include <windows.h>\n"
+                      "#endif\n")) ||
         (output && standalone_main &&
          !append_text(buffer,
                       "#include <stdio.h>\n"
@@ -422,6 +459,134 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                      "    return 0;\n"
                      "}\n\n"))
         return false;
+    if (host_clock && clock.realtime &&
+        !append_text(buffer,
+                     "static inline uint64_t xr_aot_host_realtime_nanos(void) {\n"
+                     "#if defined(_WIN32)\n"
+                     "    FILETIME value;\n"
+                     "    ULARGE_INTEGER ticks;\n"
+                     "    GetSystemTimePreciseAsFileTime(&value);\n"
+                     "    ticks.LowPart = value.dwLowDateTime;\n"
+                     "    ticks.HighPart = value.dwHighDateTime;\n"
+                     "    return (ticks.QuadPart - UINT64_C(116444736000000000)) * "
+                     "UINT64_C(100);\n"
+                     "#else\n"
+                     "    struct timespec value;\n"
+                     "    if (clock_gettime(CLOCK_REALTIME, &value) != 0) return UINT64_C(0);\n"
+                     "    return (uint64_t)value.tv_sec * UINT64_C(1000000000) + "
+                     "(uint64_t)value.tv_nsec;\n"
+                     "#endif\n"
+                     "}\n\n"))
+        return false;
+    if (host_clock && clock.monotonic &&
+        !append_text(buffer,
+                     "static inline uint64_t xr_aot_host_monotonic_nanos(void) {\n"
+                     "#if defined(_WIN32)\n"
+                     "    LARGE_INTEGER frequency;\n"
+                     "    LARGE_INTEGER counter;\n"
+                     "    if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0 "
+                     "|| !QueryPerformanceCounter(&counter)) return UINT64_C(0);\n"
+                     "    uint64_t scale = (uint64_t)frequency.QuadPart;\n"
+                     "    uint64_t ticks = (uint64_t)counter.QuadPart;\n"
+                     "    return (ticks / scale) * UINT64_C(1000000000) + "
+                     "((ticks % scale) * UINT64_C(1000000000)) / scale;\n"
+                     "#else\n"
+                     "    struct timespec value;\n"
+                     "    if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) return UINT64_C(0);\n"
+                     "    return (uint64_t)value.tv_sec * UINT64_C(1000000000) + "
+                     "(uint64_t)value.tv_nsec;\n"
+                     "#endif\n"
+                     "}\n\n"))
+        return false;
+    if (host_clock && clock.process_cpu &&
+        !append_text(buffer,
+                     "static inline uint64_t xr_aot_host_process_cpu_nanos(void) {\n"
+                     "#if defined(_WIN32)\n"
+                     "    FILETIME creation, exit_time, kernel, user;\n"
+                     "    ULARGE_INTEGER kernel_ticks, user_ticks;\n"
+                     "    if (!GetProcessTimes(GetCurrentProcess(), &creation, &exit_time, "
+                     "&kernel, &user)) return UINT64_C(0);\n"
+                     "    kernel_ticks.LowPart = kernel.dwLowDateTime;\n"
+                     "    kernel_ticks.HighPart = kernel.dwHighDateTime;\n"
+                     "    user_ticks.LowPart = user.dwLowDateTime;\n"
+                     "    user_ticks.HighPart = user.dwHighDateTime;\n"
+                     "    return (kernel_ticks.QuadPart + user_ticks.QuadPart) * UINT64_C(100);\n"
+                     "#else\n"
+                     "#if defined(CLOCK_PROCESS_CPUTIME_ID)\n"
+                     "    struct timespec value;\n"
+                     "    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &value) == 0)\n"
+                     "        return (uint64_t)value.tv_sec * UINT64_C(1000000000) + "
+                     "(uint64_t)value.tv_nsec;\n"
+                     "#endif\n"
+                     "    return (uint64_t)clock() * (UINT64_C(1000000000) / CLOCKS_PER_SEC);\n"
+                     "#endif\n"
+                     "}\n\n"))
+        return false;
+    if (host_clock && clock.utc_offset &&
+        !append_text(buffer,
+                     "static inline int xr_aot_host_utc_offset_at(int64_t seconds, "
+                     "int64_t *result) {\n"
+                     "    if (!result) return 1;\n"
+                     "    time_t probe = (time_t)seconds;\n"
+                     "    struct tm local_value;\n"
+                     "    struct tm utc_value;\n"
+                     "#if defined(_WIN32)\n"
+                     "    if (probe < (time_t)86400) probe = (time_t)86400;\n"
+                     "    if (localtime_s(&local_value, &probe) != 0 || "
+                     "gmtime_s(&utc_value, &probe) != 0) return 1;\n"
+                     "#else\n"
+                     "    if (!localtime_r(&probe, &local_value) || "
+                     "!gmtime_r(&probe, &utc_value)) return 1;\n"
+                     "#endif\n"
+                     "    local_value.tm_isdst = 0;\n"
+                     "    utc_value.tm_isdst = 0;\n"
+                     "    *result = (int64_t)(difftime(mktime(&local_value), "
+                     "mktime(&utc_value)) / 60.0);\n"
+                     "    return 0;\n"
+                     "}\n\n"))
+        return false;
+    if (host_clock && (clock.realtime || clock.monotonic || clock.process_cpu)) {
+        if (!append_text(buffer,
+                         "static int xr_aot_host_clock_nullary(void *context, "
+                         "uint32_t requirement, uint32_t operation, int64_t *result) {\n"
+                         "    (void)context;\n"
+                         "    if (!result) return 1;\n"))
+            return false;
+        if (clock.realtime &&
+            !append_format(buffer,
+                           "    if (requirement == UINT32_C(%u) && operation == "
+                           "UINT32_C(%u)) { *result = (int64_t)xr_aot_host_realtime_nanos(); "
+                           "return 0; }\n",
+                           clock.realtime_requirement, clock.realtime_operation))
+            return false;
+        if (clock.monotonic &&
+            !append_format(buffer,
+                           "    if (requirement == UINT32_C(%u) && operation == "
+                           "UINT32_C(%u)) { *result = (int64_t)xr_aot_host_monotonic_nanos(); "
+                           "return 0; }\n",
+                           clock.monotonic_requirement, clock.monotonic_operation))
+            return false;
+        if (clock.process_cpu &&
+            !append_format(buffer,
+                           "    if (requirement == UINT32_C(%u) && operation == "
+                           "UINT32_C(%u)) { *result = (int64_t)xr_aot_host_process_cpu_nanos(); "
+                           "return 0; }\n",
+                           clock.process_cpu_requirement, clock.process_cpu_operation))
+            return false;
+        if (!append_text(buffer, "    return 1;\n}\n\n"))
+            return false;
+    }
+    if (host_clock && clock.utc_offset &&
+        (!append_text(buffer,
+                      "static int xr_aot_host_clock_unary(void *context, uint32_t requirement, "
+                      "uint32_t operation, int64_t argument, int64_t *result) {\n"
+                      "    (void)context;\n") ||
+         !append_format(buffer,
+                        "    if (requirement == UINT32_C(%u) && operation == UINT32_C(%u)) "
+                        "return xr_aot_host_utc_offset_at(argument, result);\n",
+                        clock.utc_offset_requirement, clock.utc_offset_operation) ||
+         !append_text(buffer, "    return 1;\n}\n\n")))
+        return false;
     if (checked &&
         !append_text(buffer, "int xr_aot_checked_add(int64_t left, int64_t right, int64_t *out) {\n"
                              "    if ((right > 0 && left > INT64_MAX - right) || "
@@ -473,6 +638,62 @@ static const XrBackendInstruction *coroutine_suspension_instruction(
         }
     }
     return found;
+}
+
+static bool stable_id_equal(XrStableId left, XrStableId right) {
+    return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
+}
+
+static bool find_program_provider_operation(const XrValidatedProgram *program,
+                                            const char *contract_key,
+                                            const char *operation_key,
+                                            uint32_t *requirement_out,
+                                            uint32_t *operation_out) {
+    XrFingerprint digest;
+    XrStableId contract_id = {{0}};
+    XrStableId operation_id = {{0}};
+    if (!program || !contract_key || !operation_key || !requirement_out || !operation_out ||
+        !xr_stable_id_from_key(contract_key, &contract_id, &digest) ||
+        !xr_stable_id_from_key(operation_key, &operation_id, &digest))
+        return false;
+    for (uint32_t requirement = 0u;
+         requirement < xr_validated_program_provider_requirement_count(program);
+         ++requirement) {
+        XrProgramProviderRequirementView view = {0};
+        if (!xr_validated_program_provider_requirement(program, requirement, &view) ||
+            !stable_id_equal(view.contract_id, contract_id))
+            continue;
+        for (uint32_t operation = 0u; operation < view.operation_count; ++operation) {
+            if (!stable_id_equal(view.operation_ids[operation], operation_id))
+                continue;
+            *requirement_out = requirement;
+            *operation_out = operation;
+            return true;
+        }
+    }
+    return false;
+}
+
+static XrAotHostedClockBindings hosted_clock_bindings(const XrBackendIR *ir) {
+    XrAotHostedClockBindings bindings = {0};
+    const XrValidatedProgram *program = ir ? ir->program : NULL;
+    bindings.realtime = find_program_provider_operation(
+        program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
+        XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY, &bindings.realtime_requirement,
+        &bindings.realtime_operation);
+    bindings.monotonic = find_program_provider_operation(
+        program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
+        XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY, &bindings.monotonic_requirement,
+        &bindings.monotonic_operation);
+    bindings.process_cpu = find_program_provider_operation(
+        program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
+        XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY,
+        &bindings.process_cpu_requirement, &bindings.process_cpu_operation);
+    bindings.utc_offset = find_program_provider_operation(
+        program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
+        XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
+        &bindings.utc_offset_requirement, &bindings.utc_offset_operation);
+    return bindings;
 }
 
 static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *ir,
@@ -1841,6 +2062,7 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     bool arena = false;
     bool output = false;
     scan_helpers(ir, &checked, &wrapping, &arena, &output);
+    XrAotHostedClockBindings clock = hosted_clock_bindings(ir);
     if (entry->parameter_count != 0u)
         return false;
     if (!append_text(buffer, "int main(void) {\n    XrAotContext xr_ctx = {0};\n"))
@@ -1848,6 +2070,15 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     if (output &&
         !append_text(buffer,
                      "    xr_ctx.provider_output_write = xr_aot_host_output_write;\n"))
+        return false;
+    if ((clock.realtime || clock.monotonic || clock.process_cpu) &&
+        !append_text(buffer,
+                     "    xr_ctx.provider_call_i64_nullary = "
+                     "xr_aot_host_clock_nullary;\n"))
+        return false;
+    if (clock.utc_offset &&
+        !append_text(buffer,
+                     "    xr_ctx.provider_call_i64_unary = xr_aot_host_clock_unary;\n"))
         return false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
         char storage[32];

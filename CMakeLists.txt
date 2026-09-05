@@ -2975,6 +2975,17 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME test_stdlib_provider_metadata
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_provider_metadata.py
+    )
+    set_tests_properties(test_stdlib_provider_metadata PROPERTIES
+        LABELS "stdlib;metadata;provider;canonical-program;task-293;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME test_cluster_aot_boundary
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_cluster_aot_boundary.py
