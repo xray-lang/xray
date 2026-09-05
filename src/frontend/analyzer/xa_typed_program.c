@@ -41,6 +41,8 @@ struct XaTypedProgram {
     uint32_t function_expr_effect_count;
     XaNodeTargetQueryEntry *target_queries;
     uint32_t target_query_count;
+    XaNodeSuspendPointEntry *suspend_points;
+    uint32_t suspend_point_count;
     XaNodeCallableTargetSetEntry *callable_target_sets;
     uint32_t callable_target_set_count;
     bool verified;
@@ -217,9 +219,22 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
         result.detail = "target-query snapshot allocation failed (AnalysisResourceFailure)";
         return result;
     }
+    if (!xa_node_table_snapshot_suspend_points((const XaNodeTable *) analyzer->node_table,
+                                               &program->suspend_points,
+                                               &program->suspend_point_count)) {
+        xr_free(program->target_queries);
+        xr_free(program->function_expr_effects);
+        xr_free(program->call_error_effects);
+        xr_free(program->conversions);
+        xr_free(program);
+        result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
+        result.detail = "suspend-point snapshot allocation failed (AnalysisResourceFailure)";
+        return result;
+    }
     if (!xa_node_table_snapshot_callable_target_sets((const XaNodeTable *) analyzer->node_table,
                                                      &program->callable_target_sets,
                                                      &program->callable_target_set_count)) {
+        xr_free(program->suspend_points);
         xr_free(program->target_queries);
         xr_free(program->function_expr_effects);
         xr_free(program->call_error_effects);
@@ -234,6 +249,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_INVALID) {
         xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                                  program->callable_target_set_count);
+        xr_free(program->suspend_points);
         xr_free(program->target_queries);
         xr_free(program->function_expr_effects);
         xr_free(program->call_error_effects);
@@ -246,6 +262,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_RESOURCE_FAILURE) {
         xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                                  program->callable_target_set_count);
+        xr_free(program->suspend_points);
         xr_free(program->target_queries);
         xr_free(program->function_expr_effects);
         xr_free(program->call_error_effects);
@@ -268,6 +285,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
             closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
             xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                                      program->callable_target_set_count);
+            xr_free(program->suspend_points);
             xr_free(program->target_queries);
             xr_free(program->function_expr_effects);
             xr_free(program->call_error_effects);
@@ -296,6 +314,7 @@ void xa_typed_program_free(XaTypedProgram *program) {
     xr_program_semantic_closure_free(program->program_semantic_closure);
     xa_node_callable_target_set_entries_free(program->callable_target_sets,
                                              program->callable_target_set_count);
+    xr_free(program->suspend_points);
     xr_free(program->target_queries);
     xr_free(program->function_expr_effects);
     xr_free(program->call_error_effects);
@@ -442,6 +461,28 @@ bool xa_typed_program_target_query(const XaTypedProgram *program,
         if (entry->node_id < member_access->node_id) {
             low = mid + 1;
         } else if (entry->node_id > member_access->node_id) {
+            high = mid;
+        } else {
+            if (out_fact)
+                *out_fact = entry->fact;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool xa_typed_program_suspend_point(const XaTypedProgram *program, const struct AstNode *call_node,
+                                    XaSuspendPointFact *out_fact) {
+    if (!xa_typed_program_is_current(program) || !call_node || call_node->type != AST_CALL_EXPR)
+        return false;
+    uint32_t low = 0;
+    uint32_t high = program->suspend_point_count;
+    while (low < high) {
+        uint32_t mid = low + (high - low) / 2;
+        const XaNodeSuspendPointEntry *entry = &program->suspend_points[mid];
+        if (entry->node_id < call_node->node_id) {
+            low = mid + 1;
+        } else if (entry->node_id > call_node->node_id) {
             high = mid;
         } else {
             if (out_fact)

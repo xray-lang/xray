@@ -266,6 +266,13 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         UINT32_C(0),
         XR_PROGRAM_XI_PROJECTION_TARGET_QUERY,
     },
+    {
+        XI_YIELD,
+        XR_CORE_TYPE_VOID,
+        XR_CORE_OP_CORE_COROUTINE_YIELD,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD,
+    },
 };
 
 static const XrProgramXiSemanticProjectionRow

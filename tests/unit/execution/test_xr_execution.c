@@ -321,23 +321,23 @@ static void test_profile_partitions_and_foreign_authority(void) {
     REQUIRE(native && same && foreign);
 
     require_fingerprint(xr_target_profile_fingerprint(native),
-                        "9f2baa86ac31266917b00f544b6fa687b6d7492fd450dd546a2cf0ec8010f652");
+                        "745631840895bfe714599f8686cf82d549da59c68b07a2bb9c5cc8859b96bb84");
     require_fingerprint(xr_target_profile_target_semantics_id(native),
                         "dd824775cc3c64949d9d8421f230fc506a1a5f7018479442e56eba9b7d638d72");
     require_fingerprint(xr_target_profile_boundary_abi(native)->id,
-                        "24c3fc40430f36a7404199c30fb08dc82d2f2260ac58410038e8d5d2694a6532");
+                        "1f77211f058a7a6464d002a86dc4121160f3fcedfa12b0dbee47e6bdbd5d7464");
     require_fingerprint(xr_target_profile_runtime_kernel(native)->id,
-                        "fbebecd9114ba1ad75b8b121c9f6e09aac9d0725ac2c72b503f7ce60dec8cf4a");
+                        "0321f092cacc6245be6ac87aed998c66d50dc9b095d9206efd6ae1380e9597d6");
     require_fingerprint(xr_target_profile_provider_contract_set_id(native),
                         "3142fbdb7105d9da1029f25f02cbd4c71c79a3ce2f0c9e870ebaff90f755812f");
     require_fingerprint(xr_target_profile_fingerprint(foreign),
-                        "847847ea7145592811f9f5d307f3075e1f487204ee9dc8b54b8057a1826cb43e");
+                        "d18add7bfa26da93088cc72d1caeeba28dfb9a3facc362a4a0577d7ae4695b1d");
     require_fingerprint(xr_target_profile_target_semantics_id(foreign),
                         "1787c35ebce26c68f77df851158611abc6f72fb786cb714b58e11b67886f1ff6");
     require_fingerprint(xr_target_profile_boundary_abi(foreign)->id,
-                        "06cf61da2875fdbb11fc63fcd55d4fc44598fa3bf8c7a3629deabc29cb083cd4");
+                        "afccc033804cac95af572d15ba7735271bab46e47cc53cb14256d32d130ad0ed");
     require_fingerprint(xr_target_profile_runtime_kernel(foreign)->id,
-                        "65511a917abd83be9c24a1521e77eb9beca6fa3b3be6417ff176d7317e22471d");
+                        "06f4d3f767462fa702cc5b84540d5845c362b64791aab8c0eb1ec1e820f7259f");
     require_fingerprint(xr_target_profile_provider_contract_set_id(foreign),
                         "136a4ef4f9f56df1e4b8f3ba4323124860f852cedca14dd9a9842a1579a53359");
 
@@ -420,9 +420,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-                        "d074ec8f5e866d90f95b70bdc10c02d6d7df90537b5facae476ca6482c8d0244");
+                        "8e8ab140ed9e485be1171abe655efa3f5dbdfc3c3358f36d45c47d5cf19b15d2");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "0f0373437a556773a6121d5dc45e7b13daea454de6bd809dff1c49b3fa0fcb65");
+                        "7e7c0a25af2a349d236125a7ea148dae24bda7559ad5dfb5042726597d26ce4d");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));

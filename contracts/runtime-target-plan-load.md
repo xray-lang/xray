@@ -449,7 +449,7 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 5f1fa0ef1eefff52eaa31a5873a03cc59bd160805ee09c8f35091d6de501ce0d
+anchor-sha256: CMakeLists.txt 92ef67f177bd5cb98369c852ce4a4f36b4647186cdfeb0919b1725b46ccc41fc
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
@@ -476,8 +476,8 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h ec7f8aba2e76b4e2a10
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 9dbcd9bb6c45929afa99c64cb4dedafcdb1dcb9011344e33fb82c312adfffadb
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.h 8653f30d2ed073fd75d3adab9eb5e0cb27ddf538b7e0634f896ce21704382308
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.c 31918070b7e530780073a8ca0010d2b62f78afbfcdf4d610c41bf27e4da4a5d1
-anchor-sha256: src/plan/target/xr_target_profile.h c657834d5a0c233707e531c8712521d9781a2ec2fe4598703cfdcdcc30ff5399
-anchor-sha256: src/plan/target/xr_target_profile.c 88bef72104a8394c107a90a8373a3c78057a161eb4b253d6addacf0a061c2468
+anchor-sha256: src/plan/target/xr_target_profile.h 0673f198b623c2b6e3f1895b2c2fdeed19b7fae5ed78ff36e04936b60e4596cb
+anchor-sha256: src/plan/target/xr_target_profile.c a132e3f382f6293969649e57445e2543aaf0c133584d5345374680d653f8f9e1
 anchor-sha256: src/plan/target/xr_target_plan.h c64114debd03439d4674d8d4e24cbf1f7fc727aec14ce37990177cac6f7cb578
 anchor-sha256: src/plan/target/xr_target_plan.c 3d19cbcf432e4e5da4b2d45a555cff1823662a19d83c552ceed30d5601f7a6cc
 anchor-sha256: src/plan/target/xr_target_builder.c bc645789fd6de83ff98a37c397b4c4f07834ab27f7cc93bc3d3a88a8716466f3
@@ -495,7 +495,7 @@ anchor-sha256: tests/unit/plan/test_target_plan.c 640ed8ebebf8c2bf965401729120a7
 anchor-sha256: tests/unit/plan/test_xtp_format.c f8476491ca33e9aa709c017d7c9b657dce372392b5b416c28363748c275fea86
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 57201fe01683630e4960c911f739acfada9b33c8342f2aa2709b700f51ff7b7b
-anchor-sha256: tests/unit/CMakeLists.txt 1037b79ccbbe0e0e600231fee7cb7938d8fb9909845ce67d0f171c649495c412
+anchor-sha256: tests/unit/CMakeLists.txt cf1f8a302fdcfc07ddbdca70b80d158e42022f0d08d6386efc178b74953e9d5e
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 30015dd2f75ad8917788a30b367f203d15e85d037af8d394940a4d30af87e69a
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py ac10e972dbd1c43784f78fa5746c5820b999529830b223f83ec3ebbf421e095f
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f

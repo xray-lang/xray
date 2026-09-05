@@ -11,6 +11,7 @@
 #include "xr_program_callable_fixture.h"
 #include "xr_program_invoke_fixture.h"
 #include "xr_program_panic_fixture.h"
+#include "xr_program_coroutine_fixture.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -25,6 +26,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted");
@@ -3364,6 +3366,30 @@ static void test_callable_pack_and_indirect_calls(void) {
     }
 }
 
+static void test_coroutine_state_and_exact_liveness(void) {
+    XrProgramArtifact artifact = {0};
+    XrProgramArtifact repeated = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_coroutine_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_coroutine_fixture_write(&repeated, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    CHECK(artifact.size != 0u && artifact.size == repeated.size);
+    CHECK(artifact.size != 0u && memcmp(artifact.bytes, repeated.bytes, artifact.size) == 0);
+    CHECK(xr_program_id_equal(artifact.id, repeated.id));
+    xr_program_artifact_free(&repeated);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_coroutine_fixture_write_mutated(
+              XR_PROGRAM_COROUTINE_FIXTURE_UNUSED_LIVE, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+    xr_program_artifact_free(&artifact);
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -3386,6 +3412,7 @@ int main(void) {
     test_witness_receiver_capability_and_interface_identity();
     test_existential_pack_test_project();
     test_callable_pack_and_indirect_calls();
+    test_coroutine_state_and_exact_liveness();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

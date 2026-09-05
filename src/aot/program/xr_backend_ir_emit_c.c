@@ -396,9 +396,43 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
     return emit_type_definitions(buffer, ir);
 }
 
+static bool emit_coroutine_frames(CBuffer *buffer, const XrBackendIR *ir) {
+    for (uint32_t function_id = 0; function_id < ir->function_count; ++function_id) {
+        const XrBackendFunction *function = &ir->functions[function_id];
+        if (function->coroutine_safepoint_count == 0u)
+            continue;
+        if (!append_format(buffer, "typedef struct XrAotCoroutineFrame%u {\n    uint32_t state;\n",
+                           function_id))
+            return false;
+        for (uint32_t safepoint = 0; safepoint < function->coroutine_safepoint_count; ++safepoint) {
+            const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
+            uint32_t resume_block =
+                function->coroutine_states[point->resume_state_id].continuation_block;
+            const XrBackendBlock *resume = &function->blocks[resume_block];
+            if (resume->argument_count != point->live_value_count)
+                return false;
+            for (uint32_t live = 0; live < point->live_value_count; ++live) {
+                char storage[32];
+                const char *type = type_c_name(resume->argument_types[live], storage);
+                if (!type || resume->argument_categories[live] != XR_CORE_IR_VALUE ||
+                    !append_format(buffer, "    %s live_%u_%u;\n", type, safepoint, live))
+                    return false;
+            }
+        }
+        if (!append_format(buffer, "} XrAotCoroutineFrame%u;\n\n", function_id))
+            return false;
+    }
+    return true;
+}
+
 static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *function,
                                     const XrBackendIR *ir, uint32_t function_id, bool prototype) {
-    if (!append_format(buffer, "XrAotOutcome xr_aot_fn_%u(XrAotContext *xr_ctx", function_id))
+    const char *suffix = function->coroutine_safepoint_count != 0u ? "_step" : "";
+    if (!append_format(buffer, "XrAotOutcome xr_aot_fn_%u%s(XrAotContext *xr_ctx", function_id,
+                       suffix))
+        return false;
+    if (function->coroutine_safepoint_count != 0u &&
+        !append_format(buffer, ", XrAotCoroutineFrame%u *frame", function_id))
         return false;
     bool aggregate_result =
         xr_validated_program_type(ir->program, function->result_type_id) != NULL;
@@ -1147,7 +1181,26 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                       function_id);
         }
         case XR_CORE_OP_CORE_RETURN:
+            if (function->coroutine_safepoint_count != 0u &&
+                !append_text(buffer, "        frame->state = UINT32_MAX;\n"))
+                return false;
             return emit_return(buffer, function, instruction);
+        case XR_CORE_OP_CORE_COROUTINE_YIELD: {
+            uint32_t safepoint_id = instruction->immediate.u32;
+            const XrBackendCoroutineSafepoint *safepoint =
+                &function->coroutine_safepoints[safepoint_id];
+            if (instruction->operand_count != safepoint->live_value_count)
+                return false;
+            for (uint32_t live = 0; live < instruction->operand_count; ++live) {
+                if (!append_format(buffer, "        frame->live_%u_%u = v%u;\n", safepoint_id, live,
+                                   instruction->operands[live]))
+                    return false;
+            }
+            return append_format(buffer,
+                                 "        frame->state = UINT32_C(%u);\n"
+                                 "        return xr_aot_make(5, UINT32_C(%u), 0);\n",
+                                 safepoint->resume_state_id, safepoint_id);
+        }
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
             return emit_call(buffer, ir, instruction, instruction_id);
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
@@ -1400,8 +1453,40 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
         if (!append_format(buffer, "    v%u = p%u;\n", entry->argument_ids[parameter], parameter))
             return false;
     }
-    if (!append_format(buffer, "    goto xr_f%u_b%u;\n", function_id, function->entry_block))
+    if (function->coroutine_safepoint_count != 0u) {
+        if (!append_text(buffer, "    if (!frame) return xr_aot_make(4, 0, 0);\n"
+                                 "    switch (frame->state) {\n") ||
+            !append_format(buffer, "        case UINT32_C(0): goto xr_f%u_b%u;\n", function_id,
+                           function->entry_block))
+            return false;
+        for (uint32_t state = 1u; state < function->coroutine_state_count; ++state) {
+            uint32_t resume_block = function->coroutine_states[state].continuation_block;
+            const XrBackendBlock *resume = &function->blocks[resume_block];
+            const XrBackendCoroutineSafepoint *point = NULL;
+            uint32_t safepoint_id = 0u;
+            for (; safepoint_id < function->coroutine_safepoint_count; ++safepoint_id) {
+                if (function->coroutine_safepoints[safepoint_id].resume_state_id == state) {
+                    point = &function->coroutine_safepoints[safepoint_id];
+                    break;
+                }
+            }
+            if (!point || resume->argument_count != point->live_value_count ||
+                !append_format(buffer, "        case UINT32_C(%u):\n", state))
+                return false;
+            for (uint32_t live = 0; live < point->live_value_count; ++live) {
+                if (!append_format(buffer, "            v%u = frame->live_%u_%u;\n",
+                                   resume->argument_ids[live], safepoint_id, live))
+                    return false;
+            }
+            if (!append_format(buffer, "            goto xr_f%u_b%u;\n", function_id, resume_block))
+                return false;
+        }
+        if (!append_text(buffer, "        default: return xr_aot_make(4, 0, 0);\n    }\n"))
+            return false;
+    } else if (!append_format(buffer, "    goto xr_f%u_b%u;\n", function_id,
+                              function->entry_block)) {
         return false;
+    }
     uint32_t instruction_serial = 0u;
     for (uint32_t block_id = 0; block_id < function->block_count; ++block_id) {
         const XrBackendBlock *block = &function->blocks[block_id];
@@ -1415,6 +1500,106 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
         }
     }
     return append_text(buffer, "}\n\n");
+}
+
+static bool emit_coroutine_entry_adapter(CBuffer *buffer, const XrBackendIR *ir) {
+    const XrBackendFunction *entry = &ir->functions[ir->entry_function];
+    if (entry->coroutine_safepoint_count == 0u)
+        return true;
+    if (entry->parameter_count != 0u || entry->result_type_id != XR_CORE_TYPE_I64 ||
+        entry->error_type_id != XR_CORE_TYPE_VOID || entry->panic_type_id != XR_CORE_TYPE_VOID)
+        return false;
+    bool checked = false;
+    bool wrapping = false;
+    bool arena = false;
+    scan_helpers(ir, &checked, &wrapping, &arena);
+    if (!append_format(buffer,
+                       "typedef struct XrAotEntryCoroutineFrame {\n"
+                       "    XrAotContext context;\n"
+                       "    XrAotCoroutineFrame%u function;\n"
+                       "} XrAotEntryCoroutineFrame;\n\n"
+                       "typedef struct XrBackendNativeOutcome {\n"
+                       "    uint32_t kind;\n"
+                       "    int64_t value;\n"
+                       "    uint32_t state_id;\n"
+                       "    uint32_t safepoint_id;\n"
+                       "} XrBackendNativeOutcome;\n\n"
+                       "typedef struct XrBackendNativeExecutionId {\n"
+                       "    uint8_t bytes[32];\n"
+                       "} XrBackendNativeExecutionId;\n\n"
+                       "typedef void (*XrBackendNativeInitialize)(void *frame);\n"
+                       "typedef XrBackendNativeOutcome (*XrBackendNativeStep)(void *frame);\n"
+                       "typedef void (*XrBackendNativeDrop)(void *frame);\n\n"
+                       "typedef struct XrBackendNativeDescriptor {\n"
+                       "    uint32_t schema_version;\n"
+                       "    uint32_t reserved32;\n"
+                       "    XrBackendNativeExecutionId execution_id;\n"
+                       "    size_t frame_size;\n"
+                       "    XrBackendNativeInitialize initialize;\n"
+                       "    XrBackendNativeStep step;\n"
+                       "    XrBackendNativeDrop drop;\n"
+                       "} XrBackendNativeDescriptor;\n\n"
+                       "size_t xr_aot_entry_coroutine_frame_size(void) {\n"
+                       "    return sizeof(XrAotEntryCoroutineFrame);\n"
+                       "}\n\n"
+                       "void xr_aot_entry_coroutine_frame_initialize(void *opaque) {\n"
+                       "    if (!opaque) return;\n"
+                       "    XrAotEntryCoroutineFrame zero = {0};\n"
+                       "    *(XrAotEntryCoroutineFrame *)opaque = zero;\n"
+                       "}\n\n",
+                       ir->entry_function))
+        return false;
+    if (!append_text(buffer, "void xr_aot_entry_coroutine_frame_dispose(void *opaque) {\n"
+                             "    if (!opaque) return;\n") ||
+        (arena && !append_text(buffer, "    xr_aot_context_destroy("
+                                       "&((XrAotEntryCoroutineFrame *)opaque)->context);\n")) ||
+        !append_text(buffer,
+                     "    ((XrAotEntryCoroutineFrame *)opaque)->function.state = UINT32_MAX;\n"
+                     "}\n\n") ||
+        !append_format(buffer,
+                       "XrBackendNativeOutcome xr_aot_entry_coroutine_step(void *opaque) {\n"
+                       "    XrBackendNativeOutcome invalid = {UINT32_C(3), 0, 0, 0};\n"
+                       "    if (!opaque) return invalid;\n"
+                       "    XrAotEntryCoroutineFrame *frame = "
+                       "(XrAotEntryCoroutineFrame *)opaque;\n"
+                       "    XrAotOutcome native = xr_aot_fn_%u_step(&frame->context, "
+                       "&frame->function);\n"
+                       "    if (native.kind == UINT32_C(0)) {\n"
+                       "        XrBackendNativeOutcome result = {UINT32_C(0), native.i64, "
+                       "frame->function.state, 0};\n"
+                       "        return result;\n"
+                       "    }\n"
+                       "    if (native.kind == UINT32_C(5)) {\n"
+                       "        XrBackendNativeOutcome result = {UINT32_C(1), 0, "
+                       "frame->function.state, native.value_kind};\n"
+                       "        return result;\n"
+                       "    }\n"
+                       "    if (native.kind == UINT32_C(1)) {\n"
+                       "        XrBackendNativeOutcome result = {UINT32_C(2), 0, "
+                       "frame->function.state, native.trap};\n"
+                       "        return result;\n"
+                       "    }\n"
+                       "    return invalid;\n"
+                       "}\n\n",
+                       ir->entry_function))
+        return false;
+    if (!append_text(buffer, "const XrBackendNativeDescriptor "
+                             "xr_aot_entry_coroutine_descriptor = {\n"
+                             "    UINT32_C(1),\n"
+                             "    UINT32_C(0),\n"
+                             "    {{"))
+        return false;
+    for (size_t index = 0u; index < sizeof(ir->execution_id.bytes); ++index) {
+        if (!append_format(buffer, "%sUINT8_C(%u)", index == 0u ? "" : ", ",
+                           (unsigned) ir->execution_id.bytes[index]))
+            return false;
+    }
+    return append_text(buffer, "}},\n"
+                               "    sizeof(XrAotEntryCoroutineFrame),\n"
+                               "    xr_aot_entry_coroutine_frame_initialize,\n"
+                               "    xr_aot_entry_coroutine_step,\n"
+                               "    xr_aot_entry_coroutine_frame_dispose,\n"
+                               "};\n\n");
 }
 
 static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
@@ -1438,16 +1623,28 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     if (entry->panic_type_id != XR_CORE_TYPE_VOID &&
         !append_text(buffer, "    uint32_t entry_panic = 0;\n"))
         return false;
-    if (!append_format(buffer, "    XrAotOutcome result = xr_aot_fn_%u(&xr_ctx",
-                       ir->entry_function))
+    if (entry->coroutine_safepoint_count != 0u) {
+        if (entry->error_type_id != XR_CORE_TYPE_VOID ||
+            entry->panic_type_id != XR_CORE_TYPE_VOID ||
+            !append_format(buffer,
+                           "    XrAotCoroutineFrame%u frame = {0};\n"
+                           "    XrAotOutcome result;\n"
+                           "    do { result = xr_aot_fn_%u_step(&xr_ctx, &frame); } "
+                           "while (result.kind == UINT32_C(5));\n",
+                           ir->entry_function, ir->entry_function))
+            return false;
+    } else if (!append_format(buffer, "    XrAotOutcome result = xr_aot_fn_%u(&xr_ctx",
+                              ir->entry_function)) {
         return false;
-    if (entry->error_type_id != XR_CORE_TYPE_VOID) {
+    }
+    if (entry->coroutine_safepoint_count == 0u && entry->error_type_id != XR_CORE_TYPE_VOID) {
         if (!append_text(buffer, ", &entry_error"))
             return false;
     }
-    if (entry->panic_type_id != XR_CORE_TYPE_VOID && !append_text(buffer, ", &entry_panic"))
+    if (entry->coroutine_safepoint_count == 0u && entry->panic_type_id != XR_CORE_TYPE_VOID &&
+        !append_text(buffer, ", &entry_panic"))
         return false;
-    if (!append_text(buffer, ");\n"))
+    if (entry->coroutine_safepoint_count == 0u && !append_text(buffer, ");\n"))
         return false;
     if (!append_text(buffer, "    int exit_code = (int)(200u + result.kind * 10u + result.trap);\n"
                              "    if (result.kind == 0) {\n"))
@@ -1506,11 +1703,13 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
     }
     CBuffer buffer = {0};
     bool emitted = emit_prelude(&buffer, ir);
+    emitted = emitted && emit_coroutine_frames(&buffer, ir);
     for (uint32_t function = 0; emitted && function < ir->function_count; ++function)
         emitted = emit_function_signature(&buffer, &ir->functions[function], ir, function, true);
     emitted = emitted && append_text(&buffer, "\n");
     for (uint32_t function = 0; emitted && function < ir->function_count; ++function)
         emitted = emit_function(&buffer, ir, function);
+    emitted = emitted && emit_coroutine_entry_adapter(&buffer, ir);
     if (emitted && standalone_main)
         emitted = emit_main(&buffer, ir);
     XiCgenVerifyResult verify = {0};

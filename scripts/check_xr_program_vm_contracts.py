@@ -265,8 +265,10 @@ def self_test(root: Path) -> None:
     registry = read_json(root / REGISTRY)
     vm = (root / VM_SOURCE).read_text(encoding="utf-8")
     first = enum_token(registry["operations"][0]["spelling"])
-    mutated = vm.replace(f"case {first}:", "case XR_CORE_OP_MISSING:", 1)
-    require(mutated != vm, "missing-operation mutation did not apply")
+    mutated, mutation_count = re.subn(
+        rf"\bcase\s+{re.escape(first)}\s*:", "case XR_CORE_OP_MISSING:", vm
+    )
+    require(mutation_count > 0, "missing-operation mutation did not apply")
     try:
         validate_sources(root, {VM_SOURCE: mutated})
     except GateError:

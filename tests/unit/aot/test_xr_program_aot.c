@@ -16,6 +16,7 @@
 #include "../program/xr_program_callable_fixture.h"
 #include "../program/xr_program_invoke_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
+#include "../program/xr_program_coroutine_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -1031,6 +1033,19 @@ static XrValidatedProgram *build_callable_program(void) {
     return program;
 }
 
+static XrValidatedProgram *build_coroutine_program(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_coroutine_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
 static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile *profile,
                                    const TestBindings *bindings, uint64_t generation) {
     XrExecutionBindingInput input = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -1086,6 +1101,30 @@ static XrBackendIR *build_ir(const XrValidatedProgram *program,
     REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
     REQUIRE(xr_backend_ir_translation_validate(ir, &diagnostic));
     return ir;
+}
+
+static void test_coroutine_private_state_machine_lowering(void) {
+    XrValidatedProgram *program = build_coroutine_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "typedef struct XrAotCoroutineFrame0") != NULL);
+    REQUIRE(strstr(generated.bytes, "switch (frame->state)") != NULL);
+    REQUIRE(strstr(generated.bytes, "frame->live_0_0 = v") != NULL);
+    REQUIRE(strstr(generated.bytes, "return xr_aot_make(5, UINT32_C(0), 0)") != NULL);
+    REQUIRE(strstr(generated.bytes, "xr_aot_entry_coroutine_step(void *opaque)") != NULL);
+    REQUIRE(strstr(generated.bytes, "XrBackendNativeOutcome") != NULL);
+    REQUIRE(strstr(generated.bytes, "xr_aot_entry_coroutine_descriptor") != NULL);
+    REQUIRE(strstr(generated.bytes, "XrBackendNativeExecutionId execution_id") != NULL);
+    REQUIRE(strstr(generated.bytes, "while (result.kind == UINT32_C(5))") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
 }
 
 static void test_affine_copy_lowering(void) {
@@ -1578,6 +1617,7 @@ int main(int argc, char **argv) {
     bool seal_mode = argc == 3 && strcmp(argv[1], "--seal") == 0;
     bool invoke_object_mode = argc == 3 && strcmp(argv[2], "sealed-invoke-object") == 0;
     bool panic_object_mode = argc == 3 && strcmp(argv[2], "typed-panic-object") == 0;
+    bool coroutine_object_mode = argc == 3 && strcmp(argv[2], "coroutine-yield-object") == 0;
     bool pointer_width_mode = argc == 3 && strcmp(argv[2], "pointer-width") == 0;
     bool operating_system_mode = argc == 3 && strcmp(argv[2], "operating-system") == 0;
     bool architecture_mode = argc == 3 && strcmp(argv[2], "architecture") == 0;
@@ -1599,6 +1639,8 @@ int main(int argc, char **argv) {
         program = build_existential_program();
     else if (argc == 3 && strcmp(argv[2], "callable") == 0)
         program = build_callable_program();
+    else if (argc == 3 && (strcmp(argv[2], "coroutine-yield") == 0 || coroutine_object_mode))
+        program = build_coroutine_program();
     else if (pointer_width_mode)
         program = build_target_query_program(XR_CORE_OP_CORE_TARGET_POINTER_WIDTH,
                                              XR_CORE_TYPE_U16,
@@ -1657,7 +1699,8 @@ int main(int argc, char **argv) {
                                               xr_validated_program_entry_function(program));
         else
             write_generated_fixture(argv[1], program, profile,
-                                    !invoke_object_mode && !panic_object_mode);
+                                !invoke_object_mode && !panic_object_mode &&
+                                    !coroutine_object_mode);
     } else {
         TestBindings bindings;
         build_bindings(profile, &bindings);
@@ -1669,6 +1712,7 @@ int main(int argc, char **argv) {
         test_typed_panic_cleanup_lowering();
         test_existential_pack_test_project_lowering();
         test_callable_pack_and_indirect_call_lowering();
+        test_coroutine_private_state_machine_lowering();
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();
         puts("canonical XrProgram AOT tests passed");

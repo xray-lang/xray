@@ -26,6 +26,7 @@
 #include "xa_alloc_effect.h"
 #include "xa_intrinsic_registry.h"
 #include "xa_target_query.h"
+#include "xa_suspend_point.h"
 #include "xa_ownership.h"
 #include "../../shared/xr_core_intrinsic.h"
 #include "../../runtime/value/xtype.h"

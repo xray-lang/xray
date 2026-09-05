@@ -704,6 +704,42 @@ static void encode_semantic_metadata(ByteBuffer *buffer, const XrCoreIrProgram *
                 buffer_put_uvar(buffer, ids[root]);
             xr_free(ids);
         }
+        buffer_put_uvar(buffer, function->coroutine_state_count);
+        for (uint32_t state = 0; state < function->coroutine_state_count; ++state) {
+            uint32_t continuation = 0u;
+            (void) block_id(function, function->coroutine_states[state].continuation_block,
+                            &continuation);
+            buffer_put_uvar(buffer, state);
+            buffer_put_uvar(buffer, continuation);
+        }
+        buffer_put_uvar(buffer, function->coroutine_safepoint_count);
+        for (uint32_t safepoint = 0; safepoint < function->coroutine_safepoint_count; ++safepoint) {
+            const XrCoreIrCoroutineSafepoint *row = &function->coroutine_safepoints[safepoint];
+            uint32_t *ids =
+                xr_calloc(row->live_value_count ? row->live_value_count : 1u, sizeof(uint32_t));
+            if (!ids) {
+                buffer->status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                break;
+            }
+            for (uint32_t live = 0; live < row->live_value_count; ++live)
+                if (!value_id(function, row->live_values[live], &ids[live]))
+                    buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
+            for (uint32_t live = 1; live < row->live_value_count; ++live) {
+                uint32_t value = ids[live];
+                uint32_t position = live;
+                while (position != 0u && ids[position - 1u] > value) {
+                    ids[position] = ids[position - 1u];
+                    --position;
+                }
+                ids[position] = value;
+            }
+            buffer_put_uvar(buffer, safepoint);
+            buffer_put_uvar(buffer, row->resume_state_id);
+            buffer_put_uvar(buffer, row->live_value_count);
+            for (uint32_t live = 0; live < row->live_value_count; ++live)
+                buffer_put_uvar(buffer, ids[live]);
+            xr_free(ids);
+        }
         xr_free(sets);
         xr_free(roots);
         if (buffer->status != XR_PROGRAM_BUILD_OK)

@@ -31,6 +31,7 @@
 #include "xconsteval.h"
 #include "xa_effect_db.h"
 #include "xa_target_query.h"
+#include "xa_suspend_point.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_conversion.h"
 #include "../../runtime/value/xtype.h"
@@ -186,6 +187,15 @@ XR_FUNC bool xa_node_table_snapshot_target_queries(const XaNodeTable *t,
                                                    XaNodeTargetQueryEntry **out_entries,
                                                    uint32_t *out_count);
 XR_FUNC void xa_node_table_clear_target_query(XaNodeTable *t, const struct AstNode *node);
+
+XR_FUNC bool xa_node_table_set_suspend_point(XaNodeTable *t, const struct AstNode *node,
+                                             const XaSuspendPointFact *fact);
+XR_FUNC bool xa_node_table_get_suspend_point(const XaNodeTable *t, const struct AstNode *node,
+                                             XaSuspendPointFact *out_fact);
+XR_FUNC bool xa_node_table_snapshot_suspend_points(const XaNodeTable *t,
+                                                   XaNodeSuspendPointEntry **out_entries,
+                                                   uint32_t *out_count);
+XR_FUNC void xa_node_table_clear_suspend_point(XaNodeTable *t, const struct AstNode *node);
 
 XR_FUNC bool xa_node_table_set_callable_target_set(XaNodeTable *t, const struct AstNode *node,
                                                    const XaCallableTargetSetFact *fact);

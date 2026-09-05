@@ -93,6 +93,18 @@ typedef struct XrCoreIrValueRootSet {
     uint32_t root_count;
 } XrCoreIrValueRootSet;
 
+typedef struct XrCoreIrCoroutineState {
+    uint32_t state_id;
+    XrCoreIrKey continuation_block;
+} XrCoreIrCoroutineState;
+
+typedef struct XrCoreIrCoroutineSafepoint {
+    uint32_t safepoint_id;
+    uint32_t resume_state_id;
+    XrCoreIrKey *live_values;
+    uint32_t live_value_count;
+} XrCoreIrCoroutineSafepoint;
+
 typedef struct XrCoreIrFunction {
     XrCoreIrKey key;
     uint16_t *parameter_types;
@@ -115,6 +127,10 @@ typedef struct XrCoreIrFunction {
     uint32_t root_count;
     XrCoreIrValueRootSet *value_root_sets;
     uint32_t value_root_set_count;
+    XrCoreIrCoroutineState *coroutine_states;
+    uint32_t coroutine_state_count;
+    XrCoreIrCoroutineSafepoint *coroutine_safepoints;
+    uint32_t coroutine_safepoint_count;
     uint32_t flags;
 } XrCoreIrFunction;
 

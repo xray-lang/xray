@@ -1857,6 +1857,44 @@
       }
     },
     {
+      "id": "coroutine-yield-valid",
+      "operation": "core.coroutine.yield",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 1,
+        "resume_state": 1,
+        "continuation_state": 1,
+        "live_values": [
+          2
+        ],
+        "edge_values": [
+          2
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "coroutine-yield-live-set-mismatch",
+      "operation": "core.coroutine.yield",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 1,
+        "resume_state": 1,
+        "continuation_state": 1,
+        "live_values": [
+          2
+        ],
+        "edge_values": []
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "provider-call-valid",
       "operation": "core.provider.call",
       "kind": "contract",

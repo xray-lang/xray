@@ -1636,7 +1636,7 @@ static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
     XiBlock *duplicate_predecessors[2] = {branch, branch};
     XiValue bogus = {0};
     bogus.id = UINT32_MAX;
-    bogus.op = XI_REGEX_COMPILE;
+    bogus.op = XI_EXTRACT;
     bogus.type = edge_function->params[1]->type;
     bogus.block = dead;
     XiValue *bogus_values[1] = {&bogus};

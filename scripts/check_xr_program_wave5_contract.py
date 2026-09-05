@@ -145,6 +145,7 @@ EXPECTED_EXIT_CONDITIONS = [
 
 CANONICAL_COMPLETE = "CANONICAL_COMPLETE"
 LEGACY_CANONICAL_DEPENDENCY_ZERO = "NEW_CANONICAL_DEPENDENCY_ZERO"
+COROUTINE_YIELD_ONLY = "COROUTINE_YIELD_CANONICAL_ONLY"
 
 EXPECTED_TARGET_QUERY_RESULTS = {
     "core.target.operating_system": "TargetOs",
@@ -317,10 +318,13 @@ def validate_inventory(root: Path, data: dict[str, object], ready: bool) -> None
                 require(status == completed,
                         f"Wave 5 READY inventory is incomplete: {family}/{layer}: {status}")
             else:
-                require(status in {baseline, completed},
+                allowed = {baseline, completed}
+                if family == "coroutine" and layer != "legacy_owner":
+                    allowed.add(COROUTINE_YIELD_ONLY)
+                require(status in allowed,
                         f"Wave 5 OPEN inventory status is not a monotonic transition: "
                         f"{family}/{layer}: {status}")
-            if status == completed:
+            if status in {completed, COROUTINE_YIELD_ONLY}:
                 require(bool(row["layers"][layer]["evidence"]),
                         f"Wave 5 completed layer lacks evidence: {family}/{layer}")
 
@@ -517,11 +521,11 @@ def self_test(root: Path) -> None:
         expect_failure(target, "duplicate operation")
         contract_path.write_text(original_contract, encoding="utf-8")
 
-        victim_relative = "src/frontend/parser/xparse_coroutine.c"
+        victim_relative = "src/frontend/analyzer/xanalyzer_suspend.c"
         victim = target / victim_relative
         original_victim = victim.read_text(encoding="utf-8")
-        victim.write_text(original_victim.replace("AstNode *xr_parse_go_expr(",
-                                                  "AstNode *injected_parse_go_expr("),
+        victim.write_text(original_victim.replace("sus_call_is_coro_yield",
+                                                  "injected_call_is_coro_yield"),
                           encoding="utf-8")
         expect_failure(target, "source evidence removal")
         victim.write_text(original_victim, encoding="utf-8")

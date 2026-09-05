@@ -124,11 +124,16 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     for token in ("XrTargetSemanticsId", "XrBoundaryAbiId", "XrRuntimeKernelId",
                   "XrProviderContractSetId"):
         require(token in profile_header, f"missing profile partition identity {token}")
-    for token in ("#define XR_BOUNDARY_ABI_SCHEMA_VERSION UINT32_C(3)",
-                  "#define XR_BOUNDARY_ABI_VALUE_COUNT UINT8_C(6)"):
+    for token in ("#define XR_BOUNDARY_ABI_SCHEMA_VERSION UINT32_C(4)",
+                  "#define XR_RUNTIME_KERNEL_SCHEMA_VERSION UINT32_C(2)",
+                  "#define XR_BOUNDARY_ABI_VALUE_COUNT UINT8_C(6)",
+                  "XR_BOUNDARY_COROUTINE_MODEL_STACKLESS_LOGICAL_STATE",
+                  "XR_RUNTIME_SCHEDULER_HOOK_COOPERATIVE_YIELD"):
         require(token in profile_header, f"boundary ABI u16 contract omits {token}")
-    for token in ("xray-boundary-abi-v3", "boundary->values[5]",
-                  "XR_CORE_TYPE_U16", "layout->u16"):
+    for token in ("xray-boundary-abi-v4", "xray-runtime-kernel-v2", "boundary->values[5]",
+                  "XR_CORE_TYPE_U16", "layout->u16",
+                  "boundary->coroutine_model = XR_BOUNDARY_COROUTINE_MODEL_STACKLESS_LOGICAL_STATE",
+                  "kernel->scheduler_hook_mask = XR_RUNTIME_SCHEDULER_HOOK_COOPERATIVE_YIELD"):
         require(token in profile_source, f"boundary ABI u16 row omits {token}")
     for token in ("XrExecutionId", "XrInstance", "XrExecutionLease", "contract_fingerprint",
                   "XR_INSTANCE_ACTIVE", "XR_INSTANCE_DRAINING", "XR_INSTANCE_RETIRED"):

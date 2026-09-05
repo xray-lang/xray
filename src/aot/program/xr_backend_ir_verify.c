@@ -99,6 +99,10 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
                        XR_CORE_TYPE_TARGET_ENDIAN &&
                    function->value_types[instruction->operands[0]] ==
                        function->value_types[instruction->operands[1]];
+        case XR_CORE_OP_CORE_COROUTINE_YIELD:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
+                   instruction->immediate.u32 < function->coroutine_safepoint_count &&
+                   instruction->successor_count == 1u;
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
@@ -218,6 +222,47 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                                       function_id, 0u, 0u);
             return false;
         }
+        bool coroutine =
+            function->coroutine_state_count != 0u || function->coroutine_safepoint_count != 0u;
+        if ((coroutine &&
+             (function->coroutine_state_count != 2u || function->coroutine_safepoint_count != 1u ||
+              !function->coroutine_states || !function->coroutine_safepoints ||
+              function->parameter_count != 0u ||
+              function->coroutine_states[0].continuation_block != function->entry_block ||
+              function->coroutine_states[1].continuation_block >= function->block_count ||
+              function->coroutine_safepoints[0].resume_state_id != 1u ||
+              function->coroutine_safepoints[0].live_value_count == 0u ||
+              !function->coroutine_safepoints[0].live_value_ids)) ||
+            (!coroutine && (function->coroutine_states || function->coroutine_safepoints))) {
+            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                      function_id, 0u, 0u);
+            return false;
+        }
+        uint32_t yield_count = 0u;
+        if (coroutine) {
+            const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[0];
+            const XrBackendBlock *resume =
+                &function->blocks[function->coroutine_states[point->resume_state_id]
+                                      .continuation_block];
+            if ((function->effect_mask & XR_CORE_EFFECT_SUSPEND) == 0u ||
+                (function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) == 0u ||
+                resume->argument_count != point->live_value_count) {
+                xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                          function_id, 0u, 0u);
+                return false;
+            }
+            for (uint32_t live = 0; live < point->live_value_count; ++live) {
+                if (point->live_value_ids[live] >= function->value_count ||
+                    resume->argument_types[live] !=
+                        function->value_types[point->live_value_ids[live]] ||
+                    resume->argument_categories[live] != XR_CORE_IR_VALUE ||
+                    resume->argument_ownerships[live] != XR_CORE_IR_NON_OWNER) {
+                    xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                              function_id, 0u, 0u);
+                    return false;
+                }
+            }
+        }
         for (uint32_t value = 0; value < function->value_count; ++value) {
             uint8_t expected = 0u;
             if (!xr_backend_representation_for_type(function->value_types[value], &expected) ||
@@ -268,7 +313,27 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                                               instruction_id);
                     return false;
                 }
+                if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
+                    ++yield_count;
+                    const XrBackendCoroutineSafepoint *point =
+                        &function->coroutine_safepoints[instruction->immediate.u32];
+                    if (instruction->successors[0] !=
+                            function->coroutine_states[point->resume_state_id].continuation_block ||
+                        instruction->operand_count != point->live_value_count ||
+                        !array_u32_equal(instruction->operands, point->live_value_ids,
+                                         point->live_value_count)) {
+                        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                  instruction->operation_id, function_id, block_id,
+                                                  instruction_id);
+                        return false;
+                    }
+                }
             }
+        }
+        if (yield_count != function->coroutine_safepoint_count) {
+            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                      XR_CORE_OP_CORE_COROUTINE_YIELD, function_id, 0u, 0u);
+            return false;
         }
         const XrBackendBlock *entry = &function->blocks[function->entry_block];
         if (entry->argument_count != function->parameter_count) {
@@ -358,6 +423,8 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
             source->effect_mask != lowered->effect_mask ||
             source->capability_mask != lowered->capability_mask ||
             source->entry_block != lowered->entry_block ||
+            source->coroutine_state_count != lowered->coroutine_state_count ||
+            source->coroutine_safepoint_count != lowered->coroutine_safepoint_count ||
             source->block_count != lowered->block_count ||
             source->value_count != lowered->value_count || source->flags != lowered->flags ||
             !array_u16_equal(source->parameter_types, lowered->parameter_types,
@@ -372,6 +439,28 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_TRANSLATION_REJECTED, 0u,
                                       function_id, 0u, 0u);
             return false;
+        }
+        for (uint32_t state = 0; state < source->coroutine_state_count; ++state) {
+            if (source->coroutine_states[state].continuation_block !=
+                lowered->coroutine_states[state].continuation_block) {
+                xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_TRANSLATION_REJECTED, 0u,
+                                          function_id, 0u, 0u);
+                return false;
+            }
+        }
+        for (uint32_t safepoint = 0; safepoint < source->coroutine_safepoint_count; ++safepoint) {
+            const XrValidatedCoroutineSafepoint *source_point =
+                &source->coroutine_safepoints[safepoint];
+            const XrBackendCoroutineSafepoint *lowered_point =
+                &lowered->coroutine_safepoints[safepoint];
+            if (source_point->resume_state_id != lowered_point->resume_state_id ||
+                source_point->live_value_count != lowered_point->live_value_count ||
+                !array_u32_equal(source_point->live_value_ids, lowered_point->live_value_ids,
+                                 source_point->live_value_count)) {
+                xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_TRANSLATION_REJECTED, 0u,
+                                          function_id, 0u, 0u);
+                return false;
+            }
         }
         for (uint32_t block_id = 0; block_id < source->block_count; ++block_id) {
             const XrValidatedBlock *source_block = &source->blocks[block_id];

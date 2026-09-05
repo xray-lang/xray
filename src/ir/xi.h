@@ -1380,6 +1380,12 @@ typedef struct XiValue {
     uint8_t xg_target_query_kind;    /* XgTargetQueryKind */
     uint8_t xg_target_result_native_type; /* XrNativeType */
     uint8_t xg_target_query_complete;     /* exact analyzer/Xglobal join is frozen */
+    uint32_t xg_suspend_point_use_id;     /* exact XgSuspendPointUseId, or 0 */
+    uint32_t xg_suspend_source_node_id;   /* exact stable source occurrence, or 0 */
+    uint32_t xg_suspend_body_ordinal;     /* exact body occurrence ordinal, or 0 */
+    uint8_t xg_suspend_point_kind;        /* XgSuspendPointKind */
+    uint8_t xg_suspend_may_suspend;
+    uint8_t xg_suspend_contract_complete;
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t xg_object_access_id; /* stable XgObjectAccessId for evidence-backed structural object
                                      slot access */
@@ -1524,6 +1530,12 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_target_query_kind = src->xg_target_query_kind;
     dst->xg_target_result_native_type = src->xg_target_result_native_type;
     dst->xg_target_query_complete = src->xg_target_query_complete;
+    dst->xg_suspend_point_use_id = src->xg_suspend_point_use_id;
+    dst->xg_suspend_source_node_id = src->xg_suspend_source_node_id;
+    dst->xg_suspend_body_ordinal = src->xg_suspend_body_ordinal;
+    dst->xg_suspend_point_kind = src->xg_suspend_point_kind;
+    dst->xg_suspend_may_suspend = src->xg_suspend_may_suspend;
+    dst->xg_suspend_contract_complete = src->xg_suspend_contract_complete;
     dst->xg_json_codec_id = src->xg_json_codec_id;
     dst->xg_object_access_id = src->xg_object_access_id;
     dst->xg_object_merge_id = src->xg_object_merge_id;
@@ -1717,9 +1729,11 @@ static inline bool xi_copy_is_identity_alias(const XiValue *v) {
            v->xg_target_query_use_id == 0 && v->xg_target_source_node_id == 0 &&
            v->xg_target_body_ordinal == 0 && v->xg_target_namespace_id == 0 &&
            v->xg_target_query_kind == 0 && v->xg_target_result_native_type == 0 &&
-           v->xg_target_query_complete == 0 &&
-           v->enum_metadata_owner == NULL && v->enum_metadata_field == 0 &&
-           v->enum_metadata_kind == 0;
+           v->xg_target_query_complete == 0 && v->xg_suspend_point_use_id == 0 &&
+           v->xg_suspend_source_node_id == 0 && v->xg_suspend_body_ordinal == 0 &&
+           v->xg_suspend_point_kind == 0 && v->xg_suspend_may_suspend == 0 &&
+           v->xg_suspend_contract_complete == 0 && v->enum_metadata_owner == NULL &&
+           v->enum_metadata_field == 0 && v->enum_metadata_kind == 0;
 }
 
 /*

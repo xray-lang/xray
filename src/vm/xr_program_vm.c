@@ -62,6 +62,7 @@ typedef struct XrVmFixedFunction {
 } XrVmFixedFunction;
 
 struct XrVmCode {
+    atomic_uint_least32_t references;
     XrValidatedProgram *program;
     XrExecutionCacheKey cache_key;
     XrFingerprint private_digest;
@@ -141,6 +142,19 @@ typedef struct XrVmRuntimeValue {
         XrVmPlace *place;
     } as;
 } XrVmRuntimeValue;
+
+struct XrVmExecution {
+    XrVmContext context;
+    XrExecutionLease lease;
+    XrVmCode *code;
+    uint32_t function_id;
+    uint32_t block_id;
+    uint32_t instruction_id;
+    uint32_t state_id;
+    XrVmRuntimeValue *values;
+    bool *initialized;
+    bool finished;
+};
 
 struct XrVmExistentialValue {
     uint16_t existential_type_id;
@@ -1293,6 +1307,7 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
             diagnostic_out->status = XR_VM_CODE_OUT_OF_MEMORY;
         return XR_VM_CODE_OUT_OF_MEMORY;
     }
+    atomic_init(&code->references, 1u);
     code->program = program;
     code->cache_key = xr_execution_instance_cache_key(instance);
     code->options = selected;
@@ -1319,9 +1334,19 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
 void xr_vm_code_free(XrVmCode *code) {
     if (!code)
         return;
+    if (atomic_fetch_sub_explicit(&code->references, 1u, memory_order_acq_rel) != 1u)
+        return;
     fixed_view_free(code);
     xr_validated_program_free(code->program);
     xr_free(code);
+}
+
+XrVmCode *xr_vm_code_retain(const XrVmCode *code) {
+    if (!code)
+        return NULL;
+    atomic_fetch_add_explicit((atomic_uint_least32_t *) &code->references, 1u,
+                              memory_order_relaxed);
+    return (XrVmCode *) code;
 }
 
 bool xr_vm_code_matches_instance(const XrVmCode *code, const XrInstance *instance) {
@@ -1350,12 +1375,209 @@ XrVmDecodePolicy xr_vm_code_decode_policy(const XrVmCode *code) {
     return code ? (XrVmDecodePolicy) code->options.decode_policy : XR_VM_DECODE_INVALID;
 }
 
+static bool vm_coroutine_operation_supported(uint16_t operation_id) {
+    return operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
+           operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
+           operation_id == XR_CORE_OP_CORE_ADD_I64 ||
+           operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_RETURN;
+}
+
+static XrVmOutcome vm_execution_outcome(XrVmExecution *execution, XrVmOutcomeKind kind) {
+    XrVmOutcome result = vm_outcome(kind, execution ? &execution->context : NULL);
+    if (!execution)
+        return result;
+    result.state_id = execution->state_id;
+    hash_u32(&execution->context.trace, (uint32_t) kind);
+    hash_u32(&execution->context.trace, result.state_id);
+    XrSHA256Context snapshot = execution->context.trace;
+    xr_sha256_final(&snapshot, result.logical_trace.bytes);
+    return result;
+}
+
+bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t function_id,
+                            const XrVmValue *arguments, uint32_t argument_count,
+                            XrVmExecution **execution_out) {
+    if (execution_out)
+        *execution_out = NULL;
+    if (!code || !instance || !execution_out || function_id >= code->program->function_count ||
+        (argument_count != 0u && !arguments) || !xr_vm_code_matches_instance(code, instance))
+        return false;
+    const XrValidatedFunction *function = &code->program->functions[function_id];
+    if (argument_count != function->parameter_count || function->coroutine_state_count != 2u ||
+        function->coroutine_safepoint_count != 1u ||
+        function->value_count > code->options.max_value_cells)
+        return false;
+    for (uint32_t block = 0; block < function->block_count; ++block)
+        for (uint32_t instruction = 0; instruction < function->blocks[block].instruction_count;
+             ++instruction)
+            if (!vm_coroutine_operation_supported(
+                    function->blocks[block].instructions[instruction].operation_id))
+                return false;
+
+    XrVmExecution *execution = xr_calloc(1u, sizeof(*execution));
+    if (!execution)
+        return false;
+    if (!xr_execution_instance_acquire(instance, &execution->lease)) {
+        xr_free(execution);
+        return false;
+    }
+    execution->context.code = code;
+    execution->code = xr_vm_code_retain(code);
+    execution->function_id = function_id;
+    execution->block_id = function->entry_block;
+    execution->values =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->values));
+    execution->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
+                                       sizeof(*execution->initialized));
+    if (!execution->values || !execution->initialized) {
+        xr_vm_execution_free(execution);
+        return false;
+    }
+    static const uint8_t trace_domain[] = "xray-vm-coroutine-logical-trace-v1\0";
+    xr_sha256_init(&execution->context.trace);
+    xr_sha256_update(&execution->context.trace, trace_domain, sizeof(trace_domain) - 1u);
+    xr_sha256_update(&execution->context.trace, code->cache_key.execution_id.bytes,
+                     sizeof(code->cache_key.execution_id.bytes));
+    hash_u32(&execution->context.trace, function_id);
+    for (uint32_t argument = 0; argument < argument_count; ++argument) {
+        uint32_t value_id = function->blocks[function->entry_block].argument_ids[argument];
+        if (function->parameter_modes[argument] == XR_PARAM_REF ||
+            !value_matches_type(code->program, arguments[argument],
+                                function->parameter_types[argument])) {
+            xr_vm_execution_free(execution);
+            return false;
+        }
+        execution->values[value_id] = (XrVmRuntimeValue) {
+            .category = XR_CORE_IR_VALUE,
+            .as.value = arguments[argument],
+        };
+        execution->initialized[value_id] = true;
+    }
+    *execution_out = execution;
+    return true;
+}
+
+XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
+    if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
+        return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
+    const XrValidatedFunction *function =
+        &execution->context.code->program->functions[execution->function_id];
+    for (;;) {
+        const XrValidatedBlock *block = &function->blocks[execution->block_id];
+        if (execution->instruction_id >= block->instruction_count) {
+            execution->finished = true;
+            (void) xr_execution_lease_release(&execution->lease);
+            return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
+        }
+        uint32_t instruction_id = execution->instruction_id++;
+        XrVmInstructionView instruction = instruction_view(
+            execution->context.code, execution->function_id, execution->block_id, instruction_id);
+        if (execution->context.steps == execution->context.code->options.max_steps) {
+            execution->finished = true;
+            (void) xr_execution_lease_release(&execution->lease);
+            return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
+        }
+        ++execution->context.steps;
+        trace_instruction(&execution->context, execution->function_id, execution->block_id,
+                          instruction_id, instruction.operation_id);
+        for (uint32_t operand = 0; operand < instruction.operand_count; ++operand) {
+            if (!execution->initialized[instruction.operands[operand]]) {
+                execution->finished = true;
+                (void) xr_execution_lease_release(&execution->lease);
+                return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
+            }
+        }
+        switch (instruction.operation_id) {
+            case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
+                break;
+            case XR_CORE_OP_CORE_CONSTANT_I64: {
+                const XrValidatedConstant *constant =
+                    &execution->context.code->program->constants[instruction.immediate.constant_id];
+                execution->values[instruction.result_id] = (XrVmRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = {.kind = XR_VM_VALUE_I64, .as.i64 = constant->value.i64},
+                };
+                execution->initialized[instruction.result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_ADD_I64: {
+                int64_t left = execution->values[instruction.operands[0]].as.value.as.i64;
+                int64_t right = execution->values[instruction.operands[1]].as.value.as.i64;
+                int64_t value = 0;
+                if (instruction.immediate.u32 == 0u) {
+                    if (!checked_add(left, right, &value)) {
+                        execution->finished = true;
+                        (void) xr_execution_lease_release(&execution->lease);
+                        return vm_trap(XR_VM_TRAP_INTEGER_OVERFLOW, &execution->context);
+                    }
+                } else {
+                    value = i64_from_bits((uint64_t) left + (uint64_t) right);
+                }
+                execution->values[instruction.result_id] = (XrVmRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = {.kind = XR_VM_VALUE_I64, .as.i64 = value},
+                };
+                execution->initialized[instruction.result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_COROUTINE_YIELD: {
+                uint32_t safepoint_id = instruction.immediate.u32;
+                const XrValidatedCoroutineSafepoint *safepoint =
+                    &function->coroutine_safepoints[safepoint_id];
+                const XrValidatedBlock *resume = &function->blocks[instruction.successors[0]];
+                for (uint32_t live = 0; live < instruction.operand_count; ++live) {
+                    uint32_t target = resume->argument_ids[live];
+                    execution->values[target] = execution->values[instruction.operands[live]];
+                    execution->initialized[target] = true;
+                }
+                execution->state_id = safepoint->resume_state_id;
+                execution->block_id = instruction.successors[0];
+                execution->instruction_id = 0u;
+                XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_SUSPENDED);
+                result.safepoint_id = safepoint_id;
+                return result;
+            }
+            case XR_CORE_OP_CORE_RETURN: {
+                execution->finished = true;
+                XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_RETURN);
+                result.value = instruction.operand_count == 0u
+                                   ? void_value()
+                                   : execution->values[instruction.operands[0]].as.value;
+                (void) xr_execution_lease_release(&execution->lease);
+                return result;
+            }
+            default:
+                execution->finished = true;
+                (void) xr_execution_lease_release(&execution->lease);
+                return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
+        }
+    }
+}
+
+void xr_vm_execution_free(XrVmExecution *execution) {
+    if (!execution)
+        return;
+    if (xr_execution_lease_is_valid(&execution->lease))
+        (void) xr_execution_lease_release(&execution->lease);
+    free_aggregates(&execution->context);
+    xr_free(execution->initialized);
+    xr_free(execution->values);
+    xr_vm_code_free(execution->code);
+    xr_free(execution);
+}
+
 XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint32_t function_id,
                                const XrVmValue *arguments, uint32_t argument_count) {
     XrVmContext context = {.code = code};
     if (!code || !instance || function_id >= code->program->function_count ||
         (argument_count != 0u && !arguments))
         return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
+    if (code->program->functions[function_id].coroutine_safepoint_count != 0u) {
+        // A one-shot call cannot own a resumable session.
+        // Callers must use the explicit XrVmExecution API.
+        return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
+    }
     XrExecutionLease lease = {0};
     if (!xr_vm_code_matches_instance(code, instance) ||
         !xr_execution_instance_acquire(instance, &lease))

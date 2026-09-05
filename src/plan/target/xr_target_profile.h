@@ -25,10 +25,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(5)
+#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(6)
 #define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(60)
-#define XR_BOUNDARY_ABI_SCHEMA_VERSION UINT32_C(3)
-#define XR_RUNTIME_KERNEL_SCHEMA_VERSION UINT32_C(1)
+#define XR_BOUNDARY_ABI_SCHEMA_VERSION UINT32_C(4)
+#define XR_RUNTIME_KERNEL_SCHEMA_VERSION UINT32_C(2)
 #define XR_BOUNDARY_ABI_VALUE_COUNT UINT8_C(6)
 
 typedef struct XrTargetProfile XrTargetProfile;
@@ -81,6 +81,11 @@ typedef enum XrBoundaryCleanupModel {
     XR_BOUNDARY_CLEANUP_MODEL_EXPLICIT_ACTIONS,
 } XrBoundaryCleanupModel;
 
+typedef enum XrBoundaryCoroutineModel {
+    XR_BOUNDARY_COROUTINE_MODEL_INVALID = 0,
+    XR_BOUNDARY_COROUTINE_MODEL_STACKLESS_LOGICAL_STATE,
+} XrBoundaryCoroutineModel;
+
 typedef struct XrBoundaryValueAbi {
     uint16_t type_id;
     uint8_t representation;
@@ -114,6 +119,10 @@ typedef enum XrRuntimeKernelPolicy {
     XR_RUNTIME_KERNEL_POLICY_INVALID = 0,
     XR_RUNTIME_KERNEL_POLICY_CONTRACTUAL,
 } XrRuntimeKernelPolicy;
+
+typedef enum XrRuntimeSchedulerHook {
+    XR_RUNTIME_SCHEDULER_HOOK_COOPERATIVE_YIELD = UINT64_C(1),
+} XrRuntimeSchedulerHook;
 
 typedef struct XrRuntimeKernelContract {
     uint32_t schema_version;
