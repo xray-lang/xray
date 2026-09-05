@@ -52,6 +52,10 @@ typedef struct XrBackendInstruction {
             uint32_t requirement_index;
             uint32_t operation_index;
         } provider_operation;
+        struct {
+            uint32_t function_id;
+            uint32_t safepoint_id;
+        } coroutine_call;
     } immediate;
     uint32_t *successors;
     uint32_t successor_count;

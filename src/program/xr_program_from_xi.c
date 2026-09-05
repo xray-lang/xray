@@ -5626,6 +5626,43 @@ static XrProgramBuildStatus refine_static_typed_catch_reachability(XrXiBuildCont
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus prepare_coroutine_call_arguments(
+    XrXiBuildContext *context, XrXiFunctionStorage *function, char *diagnostic,
+    size_t diagnostic_size) {
+    const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
+    for (uint32_t point_index = 0u; plan && point_index < plan->nstates; ++point_index) {
+        const XiCoroSuspendPoint *point = &plan->points[point_index];
+        if (point->kind != XI_CORO_SUSP_CALL)
+            continue;
+        XrXiBlockStorage *resume = find_block_storage(function, point->resume_block);
+        uint16_t result_type = XR_CORE_TYPE_VOID;
+        if (!point->op || !resume ||
+            !map_logical_value_type(context, function->xi, point->op, &result_type))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi coroutine call has no exact result continuation");
+        if (result_type == XR_CORE_TYPE_VOID)
+            continue;
+        const XiValue *logical_result =
+            exact_logical_value_identity(context, function->xi, point->op);
+        XrXiBlockArgumentStorage *argument = find_block_argument(resume, logical_result);
+        if (!argument) {
+            XrProgramBuildStatus status = add_block_argument(
+                context, function, resume, point->op, NULL, result_type,
+                XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT, NULL, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+            continue;
+        }
+        if (argument->phi || argument->type_id != result_type ||
+            argument->category != XR_CORE_IR_VALUE)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi coroutine call result continuation is inconsistent");
+        argument->implicit_invoke_kind = XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT;
+        argument->ownership = logical_ownership_for_type(context, result_type);
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                                                   XrXiFunctionStorage *function, char *diagnostic,
                                                   size_t diagnostic_size) {
@@ -5740,6 +5777,10 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi block-parameter closure did not converge");
     }
+    XrProgramBuildStatus coroutine_argument_status = prepare_coroutine_call_arguments(
+        context, function, diagnostic, diagnostic_size);
+    if (coroutine_argument_status != XR_PROGRAM_BUILD_OK)
+        return coroutine_argument_status;
     uint32_t expected_entry_arguments =
         function->xi->nparams + (function->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
     if (entry->argument_count != expected_entry_arguments)
@@ -5982,8 +6023,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         return XR_PROGRAM_BUILD_OK;
     if (!context || !xi || !output || !plan || !plan->is_coroutine ||
         !plan->analysis_complete || !plan->actions_materialized || !plan->cfg_rewritten ||
-        !xi_coro_plan_is_current(xi, plan) || !plan->points || !plan->dispatch ||
-        plan->nstates != yield_count)
+        !xi_coro_plan_is_current(xi, plan) || !plan->points || !plan->dispatch)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %s has no current exact coroutine plan",
                     xi && xi->name ? xi->name : "<anonymous>");
@@ -6001,7 +6041,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
 
     const XiCoroSuspendPoint *point = &plan->points[0];
     const XiCoroEdge *resume = xi_coro_point_find_edge(point, XI_CORO_EDGE_RESUME);
-    if (point->state_id != 1u || point->kind != XI_CORO_SUSP_YIELD || !point->op ||
+    if (point->state_id != 1u || !point->op ||
         point->op->block != point->suspend_block || !point->suspend_block ||
         point->suspend_block->nvalues != 1u || point->suspend_block->values[0] != point->op ||
         point->suspend_block->kind != XI_BLOCK_PLAIN ||
@@ -6012,10 +6052,36 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         plan->dispatch[1].state_id != point->state_id ||
         plan->dispatch[1].target != point->suspend_block || !resume || resume->terminal ||
         resume->source_state_id != point->state_id ||
-        resume->target_state_id != point->state_id || resume->target_block != point->resume_block ||
-        !exact_cooperative_yield_contract(context, function, point->op))
+        resume->target_state_id != point->state_id || resume->target_block != point->resume_block)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi function %s suspension lacks exact logical plan closure",
+                    xi->name ? xi->name : "<anonymous>");
+
+    bool exact_yield = point->kind == XI_CORO_SUSP_YIELD &&
+                       exact_cooperative_yield_contract(context, function, point->op);
+    if (point->kind == XI_CORO_SUSP_YIELD && !exact_yield)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %s cooperative yield lacks exact logical plan/evidence closure",
+                    xi->name ? xi->name : "<anonymous>");
+    bool exact_call = false;
+    if (point->kind == XI_CORO_SUSP_CALL && point->op->op == XI_CALL) {
+        const XiFunc *callee = resolved_direct_callee(context, xi, point->op);
+        const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
+        const XiCoroPlan *callee_plan = callee ? callee->coro_plan : NULL;
+        const XiCoroEdge *child = xi_coro_point_find_edge(point, XI_CORO_EDGE_CHILD);
+        exact_call = callee && callee_storage && point->resolved_callee == callee && child &&
+                     !child->terminal && !child->indirect_child && child->callee == callee &&
+                     callee_plan && callee_plan->is_coroutine && callee_plan->analysis_complete &&
+                     callee_plan->actions_materialized && callee_plan->cfg_rewritten &&
+                     xi_coro_plan_is_current(callee, callee_plan) &&
+                     callee_plan->nstates == 1u && callee_plan->points &&
+                     callee_plan->points[0].kind == XI_CORO_SUSP_YIELD &&
+                     exact_cooperative_yield_contract(context, callee_storage,
+                                                      callee_plan->points[0].op);
+    }
+    if (!exact_yield && !exact_call)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi function %s suspension kind is outside the active canonical Program slice",
                     xi->name ? xi->name : "<anonymous>");
 
     XrXiBlockStorage *resume_block = find_block_storage(function, point->resume_block);
@@ -6033,7 +6099,8 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
     function->coroutine_states[0].state_id = XI_CORO_STATE_ENTRY;
     function->coroutine_states[0].continuation_block = block_key(function, xi->entry);
     function->coroutine_states[1].state_id = point->state_id;
-    function->coroutine_states[1].continuation_block = block_key(function, point->resume_block);
+    function->coroutine_states[1].continuation_block =
+        block_key(function, exact_call ? point->suspend_block : point->resume_block);
     function->coroutine_safepoints[0].safepoint_id = 0u;
     function->coroutine_safepoints[0].resume_state_id = point->state_id;
     output->coroutine_states = function->coroutine_states;
@@ -6109,6 +6176,115 @@ static XrProgramBuildStatus translate_coroutine_yield_terminator(
                (size_t) instruction->operand_count * sizeof(*live_values));
     function->coroutine_safepoints[safepoint_id].live_values = live_values;
     function->coroutine_safepoints[safepoint_id].live_value_count = instruction->operand_count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool coroutine_call_live_set_matches(
+    const XrXiBuildContext *context, const XrXiFunctionStorage *function,
+    const XrXiBlockStorage *resume, const XiCoroSuspendPoint *point,
+    uint32_t implicit_result_count) {
+    if (!context || !function || !resume || !point ||
+        resume->argument_count < implicit_result_count ||
+        point->nlive != resume->argument_count)
+        return false;
+    if (implicit_result_count != 0u &&
+        (resume->argument_storage[0].implicit_invoke_kind !=
+             XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
+         exact_logical_value_identity(context, function->xi,
+                                      resume->argument_storage[0].source) !=
+             exact_logical_value_identity(context, function->xi, point->op)))
+        return false;
+    for (uint32_t argument = implicit_result_count; argument < resume->argument_count;
+         ++argument) {
+        const XiValue *logical = exact_logical_value_identity(
+            context, function->xi, resume->argument_storage[argument].source);
+        uint32_t matches = 0u;
+        for (uint32_t live = 0u; live < point->nlive; ++live)
+            matches += exact_logical_value_identity(context, function->xi, point->live[live]) ==
+                       logical;
+        if (!logical || matches != 1u ||
+            resume->argument_storage[argument].implicit_invoke_kind !=
+                XR_XI_INVOKE_ARGUMENT_NONE ||
+            resume->argument_storage[argument].category != XR_CORE_IR_VALUE ||
+            resume->argument_storage[argument].ownership != XR_CORE_IR_NON_OWNER)
+            return false;
+    }
+    return true;
+}
+
+static XrProgramBuildStatus translate_coroutine_call_terminator(
+    XrXiBuildContext *context, XrXiModuleStorage *module,
+    XrXiFunctionStorage *function, XrXiBlockStorage *block,
+    const XiCoroSuspendPoint *point, XrCoreIrInstructionInput *instruction,
+    char *diagnostic, size_t diagnostic_size) {
+    XrXiBlockStorage *resume = point ? find_block_storage(function, point->resume_block) : NULL;
+    uint32_t safepoint_id = point && point->state_id != 0u ? point->state_id - 1u : UINT32_MAX;
+    XrCoreIrInstructionInput call = {0};
+    XrProgramBuildStatus status =
+        point ? translate_value(context, module, function, point->op, block, &call, diagnostic,
+                                diagnostic_size)
+              : XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    uint32_t implicit_result = call.result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+    const XrXiFunctionStorage *callee =
+        point ? find_xi_function(context, point->resolved_callee, NULL, NULL) : NULL;
+    if (!resume || !callee || safepoint_id >= 1u ||
+        call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+        !xr_core_ir_key_equal(call.immediate.key, callee->key) ||
+        call.successor_count != 0u ||
+        !coroutine_call_live_set_matches(context, function, resume, point, implicit_result)) {
+        xr_free((void *) call.operands);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi coroutine call in b%u has no exact sealed child continuation",
+                    block && block->xi ? block->xi->id : UINT32_MAX);
+    }
+    uint32_t live_count = resume->argument_count - implicit_result;
+    if (call.operand_count > UINT32_MAX - live_count) {
+        xr_free((void *) call.operands);
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    }
+    uint32_t operand_count = call.operand_count + live_count;
+    XrCoreIrKey *operands = operand_count ? xr_calloc(operand_count, sizeof(*operands)) : NULL;
+    if (operand_count && !operands) {
+        xr_free((void *) call.operands);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (call.operand_count)
+        memcpy(operands, call.operands, (size_t) call.operand_count * sizeof(*operands));
+    xr_free((void *) call.operands);
+    for (uint32_t live = 0u; live < live_count; ++live) {
+        const XiValue *incoming = resume->argument_storage[implicit_result + live].source;
+        if (!value_operand_key(context, function, block, incoming,
+                               &operands[call.operand_count + live])) {
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi coroutine call live value is unavailable");
+        }
+    }
+    XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+    XrCoreIrKey *live_values = live_count ? xr_calloc(live_count, sizeof(*live_values)) : NULL;
+    if (!successors || (live_count && !live_values)) {
+        xr_free(live_values);
+        xr_free(successors);
+        xr_free(operands);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (live_count)
+        memcpy(live_values, operands + call.operand_count,
+               (size_t) live_count * sizeof(*live_values));
+    successors[0] = block_key(function, point->resume_block);
+    instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
+    instruction->result_type_id = XR_CORE_TYPE_VOID;
+    instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
+    instruction->immediate.coroutine_call.callee = callee->key;
+    instruction->immediate.coroutine_call.safepoint_id = safepoint_id;
+    instruction->operands = operands;
+    instruction->operand_count = operand_count;
+    instruction->successors = successors;
+    instruction->successor_count = 1u;
+    function->coroutine_safepoints[safepoint_id].live_values = live_values;
+    function->coroutine_safepoints[safepoint_id].live_value_count = live_count;
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -6786,13 +6962,17 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         block_output->key = block_key(storage, xi_block);
         block_output->arguments = block_storage->arguments;
         block_output->argument_count = block_storage->argument_count;
+        const XiCoroSuspendPoint *suspend_point =
+            output->coroutine_safepoint_count != 0u
+                ? coroutine_point_for_block(storage, xi_block)
+                : NULL;
 
         uint32_t emitted = block_storage->argument_count != 0u ? 1u : 0u;
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
             if (value_is_skipped(context, xi, value))
                 continue;
-            if (value->op == XI_YIELD)
+            if (suspend_point && value == suspend_point->op)
                 continue;
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u)
                 ++emitted;
@@ -6833,7 +7013,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             const XiValue *value = xi_block->values[value_index];
             if (value_is_skipped(context, xi, value))
                 continue;
-            if (value->op == XI_YIELD)
+            if (suspend_point && value == suspend_point->op)
                 continue;
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u) {
                 XrCoreIrInstructionInput *capture =
@@ -6887,15 +7067,17 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         XrCoreIrInstructionInput *terminator = &block_storage->instructions[instruction_index++];
         terminator->result_type_id = XR_CORE_TYPE_VOID;
         terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-        const XiCoroSuspendPoint *yield_point =
-            output->coroutine_safepoint_count != 0u
-                ? coroutine_point_for_block(storage, xi_block)
-                : NULL;
         const XiValue *invoke_call = block_typed_invoke_call(context, xi, xi_block);
-        if (yield_point) {
+        if (suspend_point && suspend_point->kind == XI_CORO_SUSP_YIELD) {
             status = translate_coroutine_yield_terminator(context, storage, block_storage,
-                                                          yield_point, terminator, diagnostic,
+                                                          suspend_point, terminator, diagnostic,
                                                           diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        } else if (suspend_point && suspend_point->kind == XI_CORO_SUSP_CALL) {
+            status = translate_coroutine_call_terminator(
+                context, module, storage, block_storage, suspend_point, terminator, diagnostic,
+                diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (invoke_call) {

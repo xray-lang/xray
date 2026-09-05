@@ -41,6 +41,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
@@ -447,6 +448,10 @@ static void hash_immediate(XrSHA256Context *context, const XrBackendInstruction 
         case XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION:
             hash_u32(context, instruction->immediate.provider_operation.requirement_index);
             hash_u32(context, instruction->immediate.provider_operation.operation_index);
+            return;
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_CALL:
+            hash_u32(context, instruction->immediate.coroutine_call.function_id);
+            hash_u32(context, instruction->immediate.coroutine_call.safepoint_id);
             return;
     }
 }

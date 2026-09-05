@@ -29,6 +29,8 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project s
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,
+               "coroutine call stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted");
@@ -169,7 +171,8 @@ static void test_skip_instruction(const uint8_t *bytes, size_t size, size_t *off
     if (immediate != XR_CORE_IR_IMMEDIATE_NONE) {
         (void) test_take_uvar(bytes, size, offset);
         if (immediate == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD ||
-            immediate == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION)
+            immediate == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION ||
+            immediate == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL)
             (void) test_take_uvar(bytes, size, offset);
     }
     uint64_t successors = test_take_uvar(bytes, size, offset);

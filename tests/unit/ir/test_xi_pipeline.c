@@ -76,6 +76,7 @@ static XrVMRuntime *g_iso = NULL;
 static const char *g_source_aot_output_path = NULL;
 static const char *g_pointer_aot_output_path = NULL;
 static const char *g_yield_aot_output_path = NULL;
+static const char *g_coroutine_call_aot_output_path = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
@@ -2010,6 +2011,217 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
         &input, XR_PROGRAM_BUILD_INVALID_INPUT, "logical plan/evidence closure", NULL));
     yield->xg_suspend_contract_complete = saved_complete;
+
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
+}
+
+TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
+    static const char source[] =
+        "fn child(value: i64) -> i64 {\n"
+        "  Coro.yield()\n"
+        "  return value\n"
+        "}\n"
+        "fn parent() -> i64 {\n"
+        "  return child(7)\n"
+        "}\n";
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-sealed-coroutine-call", source));
+
+    XiFunc *parent = NULL;
+    XiFunc *child = NULL;
+    for (uint16_t function_index = 0u;
+         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+        XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
+        if (function && function->name && strcmp(function->name, "parent") == 0)
+            parent = function;
+        else if (function && function->name && strcmp(function->name, "child") == 0)
+            child = function;
+    }
+
+    PIPELINE_TEST_REQUIRE(parent != NULL && child != NULL && parent->return_type != NULL &&
+                          child->return_type != NULL);
+    PIPELINE_TEST_REQUIRE(parent->coro_plan != NULL && parent->coro_plan->is_coroutine &&
+                          parent->coro_plan->nstates == 1u && parent->coro_plan->points != NULL);
+    PIPELINE_TEST_REQUIRE(child->coro_plan != NULL && child->coro_plan->is_coroutine &&
+                          child->coro_plan->nstates == 1u && child->coro_plan->points != NULL);
+    XiCoroSuspendPoint *parent_point = &parent->coro_plan->points[0];
+    XiCoroSuspendPoint *child_point = &child->coro_plan->points[0];
+    PIPELINE_TEST_REQUIRE(parent_point->kind == XI_CORO_SUSP_CALL &&
+                          parent_point->op != NULL && parent_point->op->op == XI_CALL &&
+                          parent_point->resolved_callee == child &&
+                          parent_point->result_slot == parent_point->op &&
+                          parent_point->nlive == 1u && parent_point->live[0] == parent_point->op);
+    PIPELINE_TEST_REQUIRE(child_point->kind == XI_CORO_SUSP_YIELD &&
+                          child_point->op != NULL && child_point->op->op == XI_YIELD);
+
+    XrCoreIrKey semantic_profile = xr_core_ir_key(
+        "sealed-coroutine-call-profile", strlen("sealed-coroutine-call-profile"));
+    const XiFunc *module_roots[] = {fixture.pipeline.ir};
+    XrProgramFromXiInput input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = parent,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    XrProgramBuildStatus build_status =
+        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+    if (build_status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "sealed coroutine call Program build failed: %s\n", diagnostic);
+    PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_OK, NULL, &artifact));
+
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated != NULL && validated->function_count >= 2u);
+    uint32_t entry_function = xr_validated_program_entry_function(validated);
+    PIPELINE_TEST_REQUIRE(entry_function < validated->function_count);
+    const XrValidatedFunction *entry = &validated->functions[entry_function];
+    PIPELINE_TEST_REQUIRE(entry->result_type_id == XR_CORE_TYPE_I64 &&
+                          entry->coroutine_state_count == 2u &&
+                          entry->coroutine_safepoint_count == 1u &&
+                          entry->effect_mask == (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_SUSPEND) &&
+                          entry->capability_mask ==
+                              XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+
+    const XrValidatedInstruction *coroutine_call = NULL;
+    for (uint32_t block_index = 0u; block_index < entry->block_count; ++block_index) {
+        const XrValidatedBlock *block = &entry->blocks[block_index];
+        for (uint32_t instruction_index = 0u;
+             instruction_index < block->instruction_count; ++instruction_index) {
+            const XrValidatedInstruction *candidate = &block->instructions[instruction_index];
+            if (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+                PIPELINE_TEST_REQUIRE(coroutine_call == NULL);
+                coroutine_call = candidate;
+            }
+        }
+    }
+    PIPELINE_TEST_REQUIRE(coroutine_call != NULL &&
+                          coroutine_call->immediate_kind ==
+                              XR_CORE_IR_IMMEDIATE_COROUTINE_CALL &&
+                          coroutine_call->immediate.coroutine_call.safepoint_id == 0u &&
+                          coroutine_call->successor_count == 1u &&
+                          coroutine_call->operand_count == 1u);
+    uint32_t child_function = coroutine_call->immediate.coroutine_call.function_id;
+    PIPELINE_TEST_REQUIRE(child_function < validated->function_count &&
+                          child_function != entry_function);
+    const XrValidatedFunction *validated_child = &validated->functions[child_function];
+    PIPELINE_TEST_REQUIRE(validated_child->parameter_count == 1u &&
+                          validated_child->parameter_types[0] == XR_CORE_TYPE_I64 &&
+                          validated_child->parameter_modes[0] == XR_PARAM_READ &&
+                          validated_child->result_type_id == XR_CORE_TYPE_I64 &&
+                          validated_child->coroutine_state_count == 2u &&
+                          validated_child->coroutine_safepoint_count == 1u &&
+                          validated_child->effect_mask == XR_CORE_EFFECT_SUSPEND &&
+                          validated_child->capability_mask ==
+                              XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
+                          validated_program_has_operation(
+                              validated, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED));
+
+    XrExecutionBindingInput execution_input = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = validated,
+        .profile = fixture.profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
+                                                       &execution_diagnostic) == XR_EXECUTION_OK);
+
+    XrReferenceExecution *reference = NULL;
+    PIPELINE_TEST_REQUIRE(
+        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference));
+    XrReferenceOutcome reference_suspend = xr_reference_execution_step(reference);
+    PIPELINE_TEST_REQUIRE(reference_suspend.kind == XR_REFERENCE_OUTCOME_SUSPENDED &&
+                          reference_suspend.safepoint_id == 0u &&
+                          reference_suspend.state_id == 1u);
+    XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
+    PIPELINE_TEST_REQUIRE(reference_return.kind == XR_REFERENCE_OUTCOME_RETURN &&
+                          reference_return.value.kind == XR_REFERENCE_VALUE_I64 &&
+                          reference_return.value.as.i64 == 7 &&
+                          reference_return.state_id == 1u);
+    xr_reference_execution_free(reference);
+
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
+                          XR_VM_CODE_OK);
+    XrVmExecution *vm_execution = NULL;
+    PIPELINE_TEST_REQUIRE(
+        xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
+    XrVmOutcome vm_suspend = xr_vm_execution_step(vm_execution);
+    PIPELINE_TEST_REQUIRE(vm_suspend.kind == XR_VM_OUTCOME_SUSPENDED &&
+                          vm_suspend.safepoint_id == reference_suspend.safepoint_id &&
+                          vm_suspend.state_id == reference_suspend.state_id);
+    XrVmOutcome vm_return = xr_vm_execution_step(vm_execution);
+    PIPELINE_TEST_REQUIRE(vm_return.kind == XR_VM_OUTCOME_RETURN &&
+                          vm_return.value.kind == XR_VM_VALUE_I64 &&
+                          vm_return.value.as.i64 == reference_return.value.as.i64 &&
+                          vm_return.state_id == reference_return.state_id);
+    xr_vm_execution_free(vm_execution);
+    xr_vm_code_free(vm_code);
+
+    XrBackendIR *backend_ir = NULL;
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendOptions backend_options = xr_backend_default_options();
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
+                                              &backend_ir,
+                                              &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC generated_again = {0};
+    XrBackendStatus emit_status =
+        xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic);
+    if (emit_status != XR_BACKEND_OK)
+        fprintf(stderr,
+                "sealed coroutine call AOT emission failed: status=%u operation=%u function=%u "
+                "block=%u instruction=%u\n",
+                (unsigned) backend_diagnostic.status, backend_diagnostic.operation_id,
+                backend_diagnostic.function_id, backend_diagnostic.block_id,
+                backend_diagnostic.instruction_id);
+    PIPELINE_TEST_REQUIRE(emit_status == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated_again,
+                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u &&
+                          generated_again.size == generated.size &&
+                          memcmp(generated_again.bytes, generated.bytes, generated.size) == 0 &&
+                          strstr(generated.bytes, "child_active_0") != NULL &&
+                          strstr(generated.bytes, "parameter_0") != NULL &&
+                          strstr(generated.bytes, "XrAotCoroutineFrame") != NULL &&
+                          strstr(generated.bytes, "XrProto") == NULL &&
+                          strstr(generated.bytes, "TargetPlan") == NULL);
+    if (g_coroutine_call_aot_output_path) {
+        FILE *generated_file = fopen(g_coroutine_call_aot_output_path, "wb");
+        PIPELINE_TEST_REQUIRE(generated_file != NULL);
+        PIPELINE_TEST_REQUIRE(fwrite(generated.bytes, 1u, generated.size, generated_file) ==
+                              generated.size);
+        PIPELINE_TEST_REQUIRE(fclose(generated_file) == 0);
+    }
+    xr_generated_c_free(&generated_again);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    uint8_t saved_child_contract = child_point->op->xg_suspend_contract_complete;
+    child_point->op->xg_suspend_contract_complete = 0u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_INVALID_INPUT, "logical plan/evidence closure", NULL));
+    child_point->op->xg_suspend_contract_complete = saved_child_contract;
 
     PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
                           XR_EXECUTION_OK);
@@ -4677,12 +4889,14 @@ TEST(e2e_print_group_without_write_is_refused) {
 }
 
 int main(int argc, char **argv) {
-    if (argc == 7 && strcmp(argv[1], "--source-aot-c") == 0 &&
+    if (argc == 9 && strcmp(argv[1], "--source-aot-c") == 0 &&
         strcmp(argv[3], "--pointer-aot-c") == 0 &&
-        strcmp(argv[5], "--yield-aot-c") == 0) {
+        strcmp(argv[5], "--yield-aot-c") == 0 &&
+        strcmp(argv[7], "--coroutine-call-aot-c") == 0) {
         g_source_aot_output_path = argv[2];
         g_pointer_aot_output_path = argv[4];
         g_yield_aot_output_path = argv[6];
+        g_coroutine_call_aot_output_path = argv[8];
     } else if (argc != 1) {
         return 2;
     }
@@ -4820,6 +5034,7 @@ int main(int argc, char **argv) {
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
     run_e2e_program_cooperative_yield_closes_source_reference_vm_and_aot();
+    run_e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot();
     run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
     run_e2e_program_target_os_member_equality_is_executable();
     run_e2e_program_target_query_closes_interface_slot_contract();

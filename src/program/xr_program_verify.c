@@ -969,7 +969,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         instruction->operands[operand] = (uint32_t) value;
     }
     uint64_t immediate_kind = take_uvar(reader);
-    if (immediate_kind > XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION) {
+    if (immediate_kind > XR_CORE_IR_IMMEDIATE_COROUTINE_CALL) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
         return false;
     }
@@ -1064,6 +1064,17 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
             }
             instruction->immediate.provider_operation.requirement_index = (uint32_t) provider;
             instruction->immediate.provider_operation.operation_index = (uint32_t) operation;
+            break;
+        }
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_CALL: {
+            uint64_t function = take_uvar(reader);
+            uint64_t safepoint = take_uvar(reader);
+            if (function >= context->program->function_count || safepoint > UINT32_MAX) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            instruction->immediate.coroutine_call.function_id = (uint32_t) function;
+            instruction->immediate.coroutine_call.safepoint_id = (uint32_t) safepoint;
             break;
         }
         default:
@@ -1735,6 +1746,7 @@ static bool instruction_is_terminator(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
            operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_RETURN || operation_id == XR_CORE_OP_CORE_TRAP ||
            operation_id == XR_CORE_OP_CORE_ERROR_PUBLISH ||
            operation_id == XR_CORE_OP_CORE_PANIC_PUBLISH;
@@ -2476,7 +2488,8 @@ static bool verify_owner_block_closure(VerifyContext *context, uint32_t function
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
-                     terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD;
+                     terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                     terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
     for (uint32_t value = 0; value < function->value_count; ++value) {
         if (function->value_blocks[value] != block_id ||
             function->value_ownerships[value] != XR_CORE_IR_OWNER || consumed[value])
@@ -2554,6 +2567,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                                 instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
                                 instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
                                 instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                                instruction->operation_id ==
+                                    XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
@@ -2752,6 +2767,95 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             return true;
         }
+        case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED: {
+            uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
+            uint32_t safepoint_id = instruction->immediate.coroutine_call.safepoint_id;
+            if (instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_VOID ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_COROUTINE_CALL ||
+                callee_id >= context->program->function_count ||
+                safepoint_id >= function->coroutine_safepoint_count ||
+                instruction->successor_count != 1u ||
+                instruction->successors[0] >= function->block_count) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                return false;
+            }
+            const XrValidatedFunction *callee = &context->program->functions[callee_id];
+            const XrValidatedCoroutineSafepoint *safepoint =
+                &function->coroutine_safepoints[safepoint_id];
+            const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
+            uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+            uint32_t child_yields = 0u;
+            for (uint32_t child_block = 0u; child_block < callee->block_count; ++child_block)
+                for (uint32_t child_instruction = 0u;
+                     child_instruction < callee->blocks[child_block].instruction_count;
+                     ++child_instruction)
+                    child_yields +=
+                        callee->blocks[child_block].instructions[child_instruction].operation_id ==
+                        XR_CORE_OP_CORE_COROUTINE_YIELD;
+            if (callee_id == function_id || callee->coroutine_state_count != 2u ||
+                callee->coroutine_safepoint_count != 1u || child_yields != 1u ||
+                callee->error_type_id != XR_CORE_TYPE_VOID ||
+                callee->panic_type_id != XR_CORE_TYPE_VOID ||
+                safepoint->resume_state_id == 0u ||
+                safepoint->resume_state_id >= function->coroutine_state_count ||
+                function->coroutine_states[safepoint->resume_state_id].continuation_block !=
+                    block_id ||
+                instruction->operand_count !=
+                    callee->parameter_count + safepoint->live_value_count ||
+                normal->argument_count != implicit_result + safepoint->live_value_count ||
+                (implicit_result != 0u &&
+                 (callee->result_type_id < XR_CORE_TYPE_BOOL ||
+                  callee->result_type_id > XR_CORE_TYPE_TARGET_ENDIAN ||
+                  callee->result_type_id == XR_CORE_TYPE_ERROR ||
+                  callee->result_type_id == XR_CORE_TYPE_PANIC_INFO ||
+                  callee->result_ownership != XR_CORE_IR_NON_OWNER ||
+                  normal->argument_types[0] != callee->result_type_id ||
+                  normal->argument_categories[0] != XR_CORE_IR_VALUE ||
+                  normal->argument_ownerships[0] != XR_CORE_IR_NON_OWNER))) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                return false;
+            }
+            for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
+                if (callee->parameter_modes[parameter] != XR_PARAM_READ ||
+                    callee->parameter_types[parameter] < XR_CORE_TYPE_BOOL ||
+                    callee->parameter_types[parameter] > XR_CORE_TYPE_TARGET_ENDIAN ||
+                    callee->parameter_types[parameter] == XR_CORE_TYPE_ERROR ||
+                    callee->parameter_types[parameter] == XR_CORE_TYPE_PANIC_INFO ||
+                    !operand_type_is(function, instruction, parameter,
+                                     callee->parameter_types[parameter]) ||
+                    !operand_category_is(function, instruction, parameter, XR_CORE_IR_VALUE) ||
+                    !operand_ownership_is(function, instruction, parameter,
+                                          XR_CORE_IR_NON_OWNER)) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                    return false;
+                }
+            }
+            for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+                uint32_t operand = callee->parameter_count + live;
+                uint32_t value = safepoint->live_value_ids[live];
+                uint32_t target = implicit_result + live;
+                if (instruction->operands[operand] != value ||
+                    function->value_categories[value] != XR_CORE_IR_VALUE ||
+                    function->value_ownerships[value] != XR_CORE_IR_NON_OWNER ||
+                    normal->argument_types[target] != function->value_types[value] ||
+                    normal->argument_categories[target] != XR_CORE_IR_VALUE ||
+                    normal->argument_ownerships[target] != XR_CORE_IR_NON_OWNER) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                    return false;
+                }
+            }
+            if ((function->effect_mask & callee->effect_mask) != callee->effect_mask) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_EFFECT, location);
+                return false;
+            }
+            if ((function->capability_mask & callee->capability_mask) !=
+                callee->capability_mask) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_CAPABILITY, location);
+                return false;
+            }
+            return true;
+        }
         case XR_CORE_OP_CORE_RETURN: {
             uint32_t expected = function->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
             if (!expect_shape(context, instruction, location, expected, 0,
@@ -2791,6 +2895,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 &context->program->functions[instruction->immediate.function_id];
             if (callee->error_type_id != XR_CORE_TYPE_VOID ||
                 callee->panic_type_id != XR_CORE_TYPE_VOID ||
+                callee->coroutine_safepoint_count != 0u ||
                 instruction->operand_count != callee->parameter_count ||
                 (callee->result_type_id == XR_CORE_TYPE_VOID) !=
                     (instruction->result_id == XR_PROGRAM_LOCATION_NONE) ||
@@ -3674,7 +3779,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     }
     uint32_t local_effects = 0;
     uint32_t local_capabilities = 0;
-    uint32_t yield_count = 0u;
+    uint32_t suspension_count = 0u;
     bool *consumed = xr_calloc(function->value_count ? function->value_count : 1u, sizeof(bool));
     if (!consumed) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
@@ -3693,8 +3798,11 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
         }
         for (uint32_t instruction_id = 0; instruction_id < block->instruction_count;
              ++instruction_id) {
-            if (block->instructions[instruction_id].operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD)
-                ++yield_count;
+            if (block->instructions[instruction_id].operation_id ==
+                    XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                block->instructions[instruction_id].operation_id ==
+                    XR_CORE_OP_CORE_COROUTINE_CALL_SEALED)
+                ++suspension_count;
             if (instruction_id + 1u != block->instruction_count &&
                 instruction_is_terminator(block->instructions[instruction_id].operation_id)) {
                 location.instruction_id = instruction_id;
@@ -3714,7 +3822,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
         }
     }
     xr_free(consumed);
-    if (yield_count != function->coroutine_safepoint_count) {
+    if (suspension_count != function->coroutine_safepoint_count) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
         return false;
     }

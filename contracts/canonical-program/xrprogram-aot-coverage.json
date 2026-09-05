@@ -5,7 +5,7 @@
   "execution_authority": "not-an-AOT-compiler-input",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@1",
-  "operation_count": 46,
+  "operation_count": 47,
   "operations": [
     {
       "stable_id": 1,
@@ -370,6 +370,14 @@
     {
       "stable_id": 137,
       "spelling": "core.output.group.i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 138,
+      "spelling": "core.coroutine.call.sealed",
       "aot": "COMPLETE",
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",

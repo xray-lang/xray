@@ -450,6 +450,11 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
             output->immediate.provider_operation.operation_id =
                 input->immediate.provider_operation.operation_id;
             break;
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_CALL:
+            output->immediate.coroutine_call.callee = input->immediate.coroutine_call.callee;
+            output->immediate.coroutine_call.safepoint_id =
+                input->immediate.coroutine_call.safepoint_id;
+            break;
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -1722,6 +1727,13 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                         !find_function(program, instruction->immediate.key)) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                   "instruction has unresolved function");
+                        return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
+                    }
+                    if (instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL &&
+                        !find_function(program, instruction->immediate.coroutine_call.callee)) {
+                        xr_program_set_diagnostic(
+                            diagnostic, diagnostic_size,
+                            "coroutine call instruction has unresolved function");
                         return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
                     }
                     if (instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_TYPE &&

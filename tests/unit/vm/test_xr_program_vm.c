@@ -36,6 +36,8 @@ _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id dri
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,
+               "coroutine call stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \

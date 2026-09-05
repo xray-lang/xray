@@ -334,7 +334,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-test",
-            "provider-call", "output-group-i64", "coroutine-yield",
+            "provider-call", "output-group-i64", "coroutine-yield", "coroutine-call",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -710,6 +710,17 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("result_type") == "void"
                 and actual.get("successor_count") == 1
                 and actual.get("resume_state") == actual.get("continuation_state")
+                and isinstance(actual.get("live_values"), list)
+                and actual.get("live_values") == actual.get("edge_values"))
+    if validator == "coroutine-call":
+        return (actual.get("result_type") == "void"
+                and actual.get("successor_count") == 1
+                and actual.get("resume_state") == actual.get("continuation_state")
+                and actual.get("callee_coroutine") is True
+                and actual.get("callee_suspend_kind") == "cooperative-yield"
+                and actual.get("callee_error_type") == "void"
+                and actual.get("callee_panic_type") == "void"
+                and actual.get("scalar_non_owner_boundary") is True
                 and isinstance(actual.get("live_values"), list)
                 and actual.get("live_values") == actual.get("edge_values"))
     raise CoreSpecError(f"KAT {case['id']} has no contract oracle for {validator}")

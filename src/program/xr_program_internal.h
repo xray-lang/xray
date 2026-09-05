@@ -67,6 +67,10 @@ typedef struct XrCoreIrInstruction {
             XrStableId contract_id;
             XrStableId operation_id;
         } provider_operation;
+        struct {
+            XrCoreIrKey callee;
+            uint32_t safepoint_id;
+        } coroutine_call;
     } immediate;
     XrCoreIrKey *successors;
     uint32_t successor_count;

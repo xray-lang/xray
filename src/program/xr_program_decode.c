@@ -622,7 +622,7 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 for (uint64_t operand = 0; operand < operand_count; ++operand)
                     (void) take_uvar(&section);
                 uint64_t immediate_kind = take_uvar(&section);
-                if (immediate_kind > XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION) {
+                if (immediate_kind > XR_CORE_IR_IMMEDIATE_COROUTINE_CALL) {
                     section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                     break;
                 }
@@ -644,6 +644,11 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                     if (immediate_kind == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION) {
                         uint64_t operation = take_uvar(&section);
                         if (immediate > UINT32_MAX || operation > UINT32_MAX)
+                            section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                    }
+                    if (immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL) {
+                        uint64_t safepoint = take_uvar(&section);
+                        if (immediate >= function_count || safepoint > UINT32_MAX)
                             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                     }
                     if ((immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD ||

@@ -447,33 +447,105 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     return emit_type_definitions(buffer, ir);
 }
 
-static bool emit_coroutine_frames(CBuffer *buffer, const XrBackendIR *ir) {
-    for (uint32_t function_id = 0; function_id < ir->function_count; ++function_id) {
-        const XrBackendFunction *function = &ir->functions[function_id];
-        if (function->coroutine_safepoint_count == 0u)
-            continue;
-        if (!append_format(buffer, "typedef struct XrAotCoroutineFrame%u {\n    uint32_t state;\n",
-                           function_id))
-            return false;
-        for (uint32_t safepoint = 0; safepoint < function->coroutine_safepoint_count; ++safepoint) {
-            const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
-            uint32_t resume_block =
-                function->coroutine_states[point->resume_state_id].continuation_block;
-            const XrBackendBlock *resume = &function->blocks[resume_block];
-            if (resume->argument_count != point->live_value_count)
-                return false;
-            for (uint32_t live = 0; live < point->live_value_count; ++live) {
-                char storage[32];
-                const char *type = type_c_name(resume->argument_types[live], storage);
-                if (!type || resume->argument_categories[live] != XR_CORE_IR_VALUE ||
-                    !append_format(buffer, "    %s live_%u_%u;\n", type, safepoint, live))
-                    return false;
-            }
+static const XrBackendInstruction *coroutine_suspension_instruction(
+    const XrBackendFunction *function, uint32_t safepoint_id, uint32_t *block_id_out) {
+    const XrBackendInstruction *found = NULL;
+    for (uint32_t block = 0u; function && block < function->block_count; ++block) {
+        const XrBackendBlock *row = &function->blocks[block];
+        for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
+            const XrBackendInstruction *candidate = &row->instructions[instruction];
+            bool matches =
+                (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD &&
+                 candidate->immediate.u32 == safepoint_id) ||
+                (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+                 candidate->immediate.coroutine_call.safepoint_id == safepoint_id);
+            if (!matches)
+                continue;
+            if (found)
+                return NULL;
+            found = candidate;
+            if (block_id_out)
+                *block_id_out = block;
         }
-        if (!append_format(buffer, "} XrAotCoroutineFrame%u;\n\n", function_id))
+    }
+    return found;
+}
+
+static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *ir,
+                                             uint32_t function_id, uint8_t *state) {
+    if (state[function_id] == 2u)
+        return true;
+    if (state[function_id] == 1u)
+        return false;
+    state[function_id] = 1u;
+    const XrBackendFunction *function = &ir->functions[function_id];
+    for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count;
+         ++safepoint) {
+        const XrBackendInstruction *instruction =
+            coroutine_suspension_instruction(function, safepoint, NULL);
+        if (!instruction)
+            return false;
+        if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+            !emit_coroutine_frame_definition(
+                buffer, ir, instruction->immediate.coroutine_call.function_id, state))
             return false;
     }
+    if (!append_format(buffer, "struct XrAotCoroutineFrame%u {\n    uint32_t state;\n",
+                       function_id))
+        return false;
+    for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
+        char storage[32];
+        const char *type = type_c_name(function->parameter_types[parameter], storage);
+        if (!type || function->parameter_modes[parameter] != XR_PARAM_READ ||
+            !append_format(buffer, "    %s parameter_%u;\n", type, parameter))
+            return false;
+    }
+    for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count;
+         ++safepoint) {
+        const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
+        const XrBackendInstruction *instruction =
+            coroutine_suspension_instruction(function, safepoint, NULL);
+        if (!instruction)
+            return false;
+        for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+            char storage[32];
+            const char *type = type_c_name(function->value_types[point->live_value_ids[live]],
+                                           storage);
+            if (!type || !append_format(buffer, "    %s live_%u_%u;\n", type, safepoint, live))
+                return false;
+        }
+        if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+            (!append_format(buffer, "    XrAotCoroutineFrame%u child_%u;\n",
+                            instruction->immediate.coroutine_call.function_id, safepoint) ||
+             !append_format(buffer, "    uint8_t child_active_%u;\n", safepoint)))
+            return false;
+    }
+    if (!append_text(buffer, "};\n\n"))
+        return false;
+    state[function_id] = 2u;
     return true;
+}
+
+static bool emit_coroutine_frames(CBuffer *buffer, const XrBackendIR *ir) {
+    for (uint32_t function_id = 0u; function_id < ir->function_count; ++function_id) {
+        if (ir->functions[function_id].coroutine_safepoint_count != 0u &&
+            !append_format(buffer,
+                           "typedef struct XrAotCoroutineFrame%u XrAotCoroutineFrame%u;\n",
+                           function_id, function_id))
+            return false;
+    }
+    if (!append_text(buffer, "\n"))
+        return false;
+    uint8_t *state = xr_calloc(ir->function_count ? ir->function_count : 1u, sizeof(*state));
+    if (!state)
+        return false;
+    bool emitted = true;
+    for (uint32_t function_id = 0u; emitted && function_id < ir->function_count; ++function_id) {
+        if (ir->functions[function_id].coroutine_safepoint_count != 0u)
+            emitted = emit_coroutine_frame_definition(buffer, ir, function_id, state);
+    }
+    xr_free(state);
+    return emitted;
 }
 
 static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *function,
@@ -1154,6 +1226,73 @@ static bool emit_callable_copy(CBuffer *buffer, const XrBackendIR *ir,
                                "        }\n");
 }
 
+static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
+                                const XrBackendFunction *function,
+                                const XrBackendInstruction *instruction,
+                                uint32_t function_id, uint32_t instruction_id) {
+    uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
+    uint32_t safepoint_id = instruction->immediate.coroutine_call.safepoint_id;
+    const XrBackendFunction *callee = &ir->functions[callee_id];
+    const XrBackendCoroutineSafepoint *point =
+        &function->coroutine_safepoints[safepoint_id];
+    uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+    if (!append_format(buffer,
+                       "        if (!frame->child_active_%u) {\n"
+                       "            XrAotCoroutineFrame%u child_zero_%u = {0};\n"
+                       "            frame->child_%u = child_zero_%u;\n",
+                       safepoint_id, callee_id, instruction_id, safepoint_id, instruction_id))
+        return false;
+    for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
+        if (!append_format(buffer, "            frame->child_%u.parameter_%u = v%u;\n",
+                           safepoint_id, parameter, instruction->operands[parameter]))
+            return false;
+    }
+    if (!append_format(buffer,
+                       "            frame->child_active_%u = UINT8_C(1);\n"
+                       "        }\n"
+                       "        XrAotOutcome child_%u = xr_aot_fn_%u_step(xr_ctx, "
+                       "&frame->child_%u",
+                       safepoint_id, instruction_id, callee_id, safepoint_id))
+        return false;
+    for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
+        if (!append_format(buffer, ", frame->child_%u.parameter_%u", safepoint_id, parameter))
+            return false;
+    }
+    if (!append_text(buffer, ");\n"))
+        return false;
+    if (!append_format(buffer, "        if (child_%u.kind == UINT32_C(5)) {\n", instruction_id))
+        return false;
+    for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+        if (!append_format(buffer, "            frame->live_%u_%u = v%u;\n", safepoint_id,
+                           live, instruction->operands[callee->parameter_count + live]))
+            return false;
+    }
+    if (!append_format(buffer,
+                       "            frame->state = UINT32_C(%u);\n"
+                       "            return xr_aot_make(5, UINT32_C(%u), 0);\n"
+                       "        }\n"
+                       "        if (child_%u.kind != UINT32_C(0)) {\n"
+                       "            frame->state = UINT32_MAX;\n"
+                       "            return child_%u;\n"
+                       "        }\n"
+                       "        frame->child_active_%u = UINT8_C(0);\n",
+                       point->resume_state_id, safepoint_id, instruction_id, instruction_id,
+                       safepoint_id))
+        return false;
+    char result_expression[64];
+    const char *result = NULL;
+    if (implicit_result != 0u) {
+        const char *field = outcome_field(callee->result_type_id);
+        if (!field)
+            return false;
+        (void) snprintf(result_expression, sizeof(result_expression), "child_%u.%s",
+                        instruction_id, field);
+        result = result_expression;
+    }
+    return emit_invoke_edge(buffer, function, instruction, 0u, implicit_result,
+                            callee->parameter_count, function_id, result);
+}
+
 static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                              const XrBackendFunction *function,
                              const XrBackendInstruction *instruction, uint32_t function_id,
@@ -1252,6 +1391,9 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  "        return xr_aot_make(5, UINT32_C(%u), 0);\n",
                                  safepoint->resume_state_id, safepoint_id);
         }
+        case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
+            return emit_coroutine_call(buffer, ir, function, instruction, function_id,
+                                       instruction_id);
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
             return emit_call(buffer, ir, instruction, instruction_id);
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
@@ -1526,7 +1668,6 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
             return false;
         for (uint32_t state = 1u; state < function->coroutine_state_count; ++state) {
             uint32_t resume_block = function->coroutine_states[state].continuation_block;
-            const XrBackendBlock *resume = &function->blocks[resume_block];
             const XrBackendCoroutineSafepoint *point = NULL;
             uint32_t safepoint_id = 0u;
             for (; safepoint_id < function->coroutine_safepoint_count; ++safepoint_id) {
@@ -1535,12 +1676,21 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
                     break;
                 }
             }
-            if (!point || resume->argument_count != point->live_value_count ||
+            const XrBackendInstruction *suspension =
+                point ? coroutine_suspension_instruction(function, safepoint_id, NULL) : NULL;
+            if (!point || !suspension ||
                 !append_format(buffer, "        case UINT32_C(%u):\n", state))
                 return false;
             for (uint32_t live = 0; live < point->live_value_count; ++live) {
-                if (!append_format(buffer, "            v%u = frame->live_%u_%u;\n",
-                                   resume->argument_ids[live], safepoint_id, live))
+                uint32_t target = suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD
+                                      ? function->blocks[resume_block].argument_ids[live]
+                                      : suspension->operands[
+                                            ir->functions[suspension->immediate.coroutine_call
+                                                              .function_id]
+                                                    .parameter_count +
+                                                live];
+                if (!append_format(buffer, "            v%u = frame->live_%u_%u;\n", target,
+                                   safepoint_id, live))
                     return false;
             }
             if (!append_format(buffer, "            goto xr_f%u_b%u;\n", function_id, resume_block))

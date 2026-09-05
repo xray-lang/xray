@@ -3424,6 +3424,82 @@
           "task": 300
         }
       }
+    },
+    {
+      "stable_id": 138,
+      "spelling": "core.coroutine.call.sealed",
+      "class": "coroutine-call-terminator",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "P...",
+          "suspend-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {
+          "callee_id": "program-function-id",
+          "safepoint_id": "function-local-safepoint-id"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": true
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call",
+        "suspend"
+      ],
+      "capability_requirements": [
+        "runtime.cooperative-yield"
+      ],
+      "ownership": {
+        "operands": [
+          "parameter-mode...",
+          "live-across-preserve..."
+        ],
+        "result": "callee result and live-across values are successor block arguments"
+      },
+      "profile_dependency": "scheduler-yield",
+      "materialization": "logical-child-coroutine-control",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends and takes the normal continuation exactly once after the child returns"
+      },
+      "kat_validator": "coroutine-call",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
     }
   ]
 }

@@ -46,6 +46,10 @@ typedef struct XrVmFixedInstruction {
             uint32_t requirement_index;
             uint32_t operation_index;
         } provider_operation;
+        struct {
+            uint32_t function_id;
+            uint32_t safepoint_id;
+        } coroutine_call;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -101,6 +105,10 @@ typedef struct XrVmInstructionView {
             uint32_t requirement_index;
             uint32_t operation_index;
         } provider_operation;
+        struct {
+            uint32_t function_id;
+            uint32_t safepoint_id;
+        } coroutine_call;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -153,6 +161,8 @@ struct XrVmExecution {
     uint32_t state_id;
     XrVmRuntimeValue *values;
     bool *initialized;
+    struct XrVmExecution *child;
+    bool owns_lease;
     bool finished;
 };
 
@@ -1414,7 +1424,69 @@ static bool vm_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_ADD_I64 ||
            operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_RETURN;
+}
+
+static void vm_execution_release_lease(XrVmExecution *execution) {
+    if (execution && execution->owns_lease && xr_execution_lease_is_valid(&execution->lease))
+        (void) xr_execution_lease_release(&execution->lease);
+}
+
+static bool vm_child_execution_create(XrVmExecution *parent,
+                                      const XrVmInstructionView *instruction,
+                                      XrVmExecution **child_out) {
+    if (child_out)
+        *child_out = NULL;
+    if (!parent || !instruction || !child_out ||
+        instruction->immediate.coroutine_call.function_id >=
+            parent->context.code->program->function_count)
+        return false;
+    uint32_t function_id = instruction->immediate.coroutine_call.function_id;
+    const XrValidatedFunction *function =
+        &parent->context.code->program->functions[function_id];
+    if (instruction->operand_count < function->parameter_count ||
+        function->value_count > parent->context.code->options.max_value_cells)
+        return false;
+    XrVmExecution *child = xr_calloc(1u, sizeof(*child));
+    if (!child)
+        return false;
+    child->lease = parent->lease;
+    child->context.code = parent->context.code;
+    child->context.lease = &child->lease;
+    child->code = xr_vm_code_retain(parent->code);
+    child->function_id = function_id;
+    child->block_id = function->entry_block;
+    child->values =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->values));
+    child->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
+                                   sizeof(*child->initialized));
+    if (!child->code || !child->values || !child->initialized) {
+        xr_vm_execution_free(child);
+        return false;
+    }
+    static const uint8_t trace_domain[] = "xray-vm-coroutine-child-logical-trace-v1\0";
+    xr_sha256_init(&child->context.trace);
+    xr_sha256_update(&child->context.trace, trace_domain, sizeof(trace_domain) - 1u);
+    xr_sha256_update(&child->context.trace, parent->code->cache_key.execution_id.bytes,
+                     sizeof(parent->code->cache_key.execution_id.bytes));
+    hash_u32(&child->context.trace, function_id);
+    for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
+        uint32_t source = instruction->operands[parameter];
+        uint32_t target = function->blocks[function->entry_block].argument_ids[parameter];
+        if (!parent->initialized[source] || function->parameter_modes[parameter] != XR_PARAM_READ ||
+            parent->values[source].category != XR_CORE_IR_VALUE ||
+            !value_matches_type(parent->context.code->program,
+                                parent->values[source].as.value,
+                                function->parameter_types[parameter])) {
+            xr_vm_execution_free(child);
+            return false;
+        }
+        child->values[target] = parent->values[source];
+        child->initialized[target] = true;
+    }
+    *child_out = child;
+    return true;
 }
 
 static XrVmOutcome vm_execution_outcome(XrVmExecution *execution, XrVmOutcomeKind kind) {
@@ -1456,7 +1528,9 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
         xr_free(execution);
         return false;
     }
+    execution->owns_lease = true;
     execution->context.code = code;
+    execution->context.lease = &execution->lease;
     execution->code = xr_vm_code_retain(code);
     execution->function_id = function_id;
     execution->block_id = function->entry_block;
@@ -1501,7 +1575,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
         const XrValidatedBlock *block = &function->blocks[execution->block_id];
         if (execution->instruction_id >= block->instruction_count) {
             execution->finished = true;
-            (void) xr_execution_lease_release(&execution->lease);
+            vm_execution_release_lease(execution);
             return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
         }
         uint32_t instruction_id = execution->instruction_id++;
@@ -1509,7 +1583,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
             execution->context.code, execution->function_id, execution->block_id, instruction_id);
         if (execution->context.steps == execution->context.code->options.max_steps) {
             execution->finished = true;
-            (void) xr_execution_lease_release(&execution->lease);
+            vm_execution_release_lease(execution);
             return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
         }
         ++execution->context.steps;
@@ -1518,7 +1592,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
         for (uint32_t operand = 0; operand < instruction.operand_count; ++operand) {
             if (!execution->initialized[instruction.operands[operand]]) {
                 execution->finished = true;
-                (void) xr_execution_lease_release(&execution->lease);
+                vm_execution_release_lease(execution);
                 return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
             }
         }
@@ -1542,7 +1616,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 if (instruction.immediate.u32 == 0u) {
                     if (!checked_add(left, right, &value)) {
                         execution->finished = true;
-                        (void) xr_execution_lease_release(&execution->lease);
+                        vm_execution_release_lease(execution);
                         return vm_trap(XR_VM_TRAP_INTEGER_OVERFLOW, &execution->context);
                     }
                 } else {
@@ -1585,18 +1659,82 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 result.safepoint_id = safepoint_id;
                 return result;
             }
+            case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED: {
+                uint32_t callee_id = instruction.immediate.coroutine_call.function_id;
+                uint32_t safepoint_id = instruction.immediate.coroutine_call.safepoint_id;
+                const XrValidatedFunction *callee =
+                    &execution->context.code->program->functions[callee_id];
+                const XrValidatedCoroutineSafepoint *safepoint =
+                    &function->coroutine_safepoints[safepoint_id];
+                if (!execution->child &&
+                    !vm_child_execution_create(execution, &instruction, &execution->child)) {
+                    execution->finished = true;
+                    vm_execution_release_lease(execution);
+                    return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
+                }
+                uint64_t child_steps = execution->child->context.steps;
+                XrVmOutcome child = xr_vm_execution_step(execution->child);
+                uint64_t child_delta = execution->child->context.steps - child_steps;
+                if (child_delta >
+                    execution->context.code->options.max_steps - execution->context.steps) {
+                    execution->finished = true;
+                    xr_vm_execution_free(execution->child);
+                    execution->child = NULL;
+                    vm_execution_release_lease(execution);
+                    return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
+                }
+                execution->context.steps += child_delta;
+                if (child.kind == XR_VM_OUTCOME_SUSPENDED) {
+                    --execution->instruction_id;
+                    execution->state_id = safepoint->resume_state_id;
+                    XrVmOutcome suspended = vm_execution_outcome(execution,
+                                                                  XR_VM_OUTCOME_SUSPENDED);
+                    suspended.safepoint_id = safepoint_id;
+                    return suspended;
+                }
+                if (child.kind != XR_VM_OUTCOME_RETURN) {
+                    execution->finished = true;
+                    xr_vm_execution_free(execution->child);
+                    execution->child = NULL;
+                    vm_execution_release_lease(execution);
+                    child.steps = execution->context.steps;
+                    child.state_id = execution->state_id;
+                    return child;
+                }
+                const XrValidatedBlock *normal = &function->blocks[instruction.successors[0]];
+                uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+                if (implicit_result != 0u) {
+                    uint32_t target = normal->argument_ids[0];
+                    execution->values[target] = (XrVmRuntimeValue) {
+                        .category = XR_CORE_IR_VALUE,
+                        .as.value = child.value,
+                    };
+                    execution->initialized[target] = true;
+                }
+                for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+                    uint32_t source = instruction.operands[callee->parameter_count + live];
+                    uint32_t target = normal->argument_ids[implicit_result + live];
+                    execution->values[target] = execution->values[source];
+                    execution->initialized[target] = true;
+                }
+                xr_vm_execution_free(execution->child);
+                execution->child = NULL;
+                execution->block_id = instruction.successors[0];
+                execution->instruction_id = 0u;
+                break;
+            }
             case XR_CORE_OP_CORE_RETURN: {
                 execution->finished = true;
                 XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_RETURN);
                 result.value = instruction.operand_count == 0u
                                    ? void_value()
                                    : execution->values[instruction.operands[0]].as.value;
-                (void) xr_execution_lease_release(&execution->lease);
+                vm_execution_release_lease(execution);
                 return result;
             }
             default:
                 execution->finished = true;
-                (void) xr_execution_lease_release(&execution->lease);
+                vm_execution_release_lease(execution);
                 return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
         }
     }
@@ -1605,8 +1743,8 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
 void xr_vm_execution_free(XrVmExecution *execution) {
     if (!execution)
         return;
-    if (xr_execution_lease_is_valid(&execution->lease))
-        (void) xr_execution_lease_release(&execution->lease);
+    xr_vm_execution_free(execution->child);
+    vm_execution_release_lease(execution);
     free_aggregates(&execution->context);
     xr_free(execution->initialized);
     xr_free(execution->values);

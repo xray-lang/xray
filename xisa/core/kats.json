@@ -1963,6 +1963,52 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "id": "coroutine-call-valid",
+      "operation": "core.coroutine.call.sealed",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 1,
+        "resume_state": 1,
+        "continuation_state": 1,
+        "callee_coroutine": true,
+        "callee_suspend_kind": "cooperative-yield",
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "scalar_non_owner_boundary": true,
+        "live_values": [
+          2
+        ],
+        "edge_values": [
+          2
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "coroutine-call-rejects-fallible-child",
+      "operation": "core.coroutine.call.sealed",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 1,
+        "resume_state": 1,
+        "continuation_state": 1,
+        "callee_coroutine": true,
+        "callee_suspend_kind": "cooperative-yield",
+        "callee_error_type": "error",
+        "callee_panic_type": "void",
+        "scalar_non_owner_boundary": true,
+        "live_values": [],
+        "edge_values": []
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

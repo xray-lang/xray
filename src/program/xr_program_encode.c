@@ -836,6 +836,12 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrProgram *progra
             buffer_put_uvar(buffer, operation);
             break;
         }
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_CALL:
+            (void) function_id(functions, function_count,
+                               instruction->immediate.coroutine_call.callee, &id);
+            buffer_put_uvar(buffer, id);
+            buffer_put_uvar(buffer, instruction->immediate.coroutine_call.safepoint_id);
+            break;
         default:
             buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
             return;

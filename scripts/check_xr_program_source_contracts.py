@@ -416,6 +416,7 @@ def validate(root: Path) -> None:
         "core.target.endianness",
     }
     wave_five_coroutine_yield = {"core.coroutine.yield"}
+    canonical_coroutine_call = {"core.coroutine.call.sealed"}
     wave_five_provider = {"core.provider.call"}
     canonical_source_output = {"core.output.group.i64"}
     wave_three_slice_two = {
@@ -454,6 +455,8 @@ def validate(root: Path) -> None:
            for operation in wave_five_target_profile},
         **{operation: "COROUTINE_YIELD_CANONICAL_ONLY"
            for operation in wave_five_coroutine_yield},
+        **{operation: "COROUTINE_CALL_CANONICAL_ONLY"
+           for operation in canonical_coroutine_call},
         **{operation: "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE"
            for operation in wave_five_provider},
         **{operation: "COMPLETE_CANONICAL_SOURCE_RUN_OUTPUT_SLICE"
