@@ -466,6 +466,16 @@ it cannot add, remove, or complete a source-semantic effect dimension.
     came from inference. The diagnostic never changes the function type,
     effect product, exit status, or runtime semantics.
 
+Function-value target propagation is likewise declaration-owned and closed-world. For every
+ordinary or specialized source function, each function-typed parameter receives the sorted union
+of exact named-function and function-expression targets from all statically resolved callsites.
+A missing or dynamic incoming value makes that parameter unknown; a callsite-local re-analysis may
+not overwrite the declaration owner's union. Xglobal resolves the pointer-free analyzer targets
+only after all nested and forward function bodies have been discovered, then publishes one exact
+callable target range and structural signature for each indirect call. Invoking such a callable is
+a non-consuming `READ`: both an owner value and a borrowed non-owner parameter are admissible, and
+only explicit move/drop or a `MOVE` argument may consume the owner.
+
 Exact scalar parsing has one typed failure product. `i64.parse` and
 `f64.parse` may produce only `NumberParseError.InvalidSyntax` or
 `NumberParseError.OutOfRange`, and lowering must place a real `XI_ERR_CHECK`
@@ -557,7 +567,7 @@ anchor-sha256: src/frontend/analyzer/xa_effect_db.h 84f5bc739246058c8acc993e5393
 anchor-sha256: src/frontend/analyzer/xa_effect_db.c f140995f7455dd4a56a06af3febb5d55bab50bc647fd88edc578fe8325e4e5b3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
-anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 260a455c593959d6243a80353bc03aea97ff9599193efcf1fc996f3cc4fb6cbc
+anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 32b14f48ee791040ec7004d999a5a215d965b008f1ca307faee38f16ef813ec2
 anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c 212d6b4960b0e4dad44ff7fc3995b448654e374edbf2eb47310b7e5d28d9e9c2
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c 5a969904e2c31ce2f271910aed406c29d4a152e6d109def6d8b9e73353df3074
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 37ded58432af0c583c64271fd3600dcecfabd6f552e7513e0d8db164e57d96f0
@@ -570,7 +580,7 @@ anchor-sha256: src/ir/xi.h 22fbf5b0fc93393ddcad579469ce3469c96de93b96425dadc9faf
 anchor-sha256: src/ir/xi_lower.c 6c15a96731eab84f3c54a40f16b2b7a3a65309ed4a3b4ba60ab5c3515fb29f26
 anchor-sha256: src/app/cli/xcmd_verify.c 4d806bacb7a94efeba2d3d05e1ef657596fb7cbac2f315aff0d40f0e4de49629
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
-anchor-sha256: tests/unit/analyzer/test_analyzer.c 116d6018c6a07c69a97d9609d4d6b9d2070df2782c51e82bb82d3f28a142c329
+anchor-sha256: tests/unit/analyzer/test_analyzer.c bdcbccf28fe47d46535313f09ca0d41cca3782c993915bacc6752e51b1f893e1
 anchor-sha256: tests/unit/analyzer/test_effect_db.c f6fd62d692987325db74de9a31808b9a0e5d0573bd458c25a154a676257dfa1e
 anchor-sha256: tests/unit/ir/test_xi_lower.c 236acaee44a1f4887dd0f63a9db4efed1a17f93b45c1b16b3936a3395951b462
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 22e5a3e52b264bb0cb005a8c9ce4946b0d6551ba52700c6be630545c07693706

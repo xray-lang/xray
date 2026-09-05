@@ -301,7 +301,7 @@ def validate(schema: dict[str, Any]) -> None:
         "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
         "callable_shape": "one canonical SignatureId with visible effect and capability upper bounds; every callable TypeId is affine with explicit copy and its signature has no receiver",
         "callable_pack": "one closed FunctionId plus zero operands for a structurally exact captureless signature, or one consumed affine explicit-copy aggregate owner used as a READ hidden receiver; implementation effects and capabilities must be subsets of the visible upper bounds and target result borrows may not name the hidden receiver",
-        "callable_dispatch": "indirect direct/invoke borrow the callable owner and use its SignatureId as the sole visible contract; target identity and optional capture representation remain executor-private",
+        "callable_dispatch": "indirect direct/invoke borrow an affine callable value (owned or non-owner) without consuming it and use its SignatureId as the sole visible contract; target identity and optional capture representation remain executor-private",
         "existential_shape": "ordered-(InterfaceId,InterfaceUseKind); READ is trivial-copy snapshot, REF/MOVE/OWNED_STORAGE are affine and copy-forbidden, CONSTRAINT_BOUND is non-runtime",
         "nominal_kind": "aggregate/variant rows carry NONE/CLASS/STRUCT/ENUM; conformance implementor kind must match",
         "recursive_value_shape": "reject",

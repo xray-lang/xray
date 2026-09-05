@@ -3467,6 +3467,56 @@ TEST(analyzer_callable_target_set_flows_through_builtin_copy) {
     setup_pool();
 }
 
+TEST(analyzer_callable_target_set_flows_into_ordinary_function_parameter) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "fn named(value: i64) -> i64 { return value * 2 }\n"
+        "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
+        "  return body(value)\n"
+        "}\n"
+        "fn run() {\n"
+        "  apply(21, named)\n"
+        "  apply(5, fn(value: i64) -> i64 { return value + 1 })\n"
+        "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "callable_target_set_ordinary_parameter.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+    ASSERT(program->as.program.count == 3);
+
+    XaSymbol *named = analyzer_function_symbol(a, "named");
+    ASSERT(named != NULL && named->id != 0);
+    AstNode *apply = program->as.program.statements[1];
+    ASSERT(apply != NULL && apply->type == AST_FUNCTION_DECL);
+    AstNode *body = apply->as.function_decl.body;
+    ASSERT(body != NULL && body->type == AST_BLOCK && body->as.block.count == 1);
+    AstNode *return_stmt = body->as.block.statements[0];
+    ASSERT(return_stmt != NULL && return_stmt->type == AST_RETURN_STMT);
+    ASSERT(return_stmt->as.return_stmt.value_count == 1);
+    AstNode *invoke = return_stmt->as.return_stmt.values[0];
+    ASSERT(invoke != NULL && invoke->type == AST_CALL_EXPR);
+
+    XaCallableTargetSetFact fact;
+    ASSERT(xa_analyzer_get_callable_target_set(a, invoke, &fact));
+    ASSERT(fact.complete);
+    ASSERT(fact.target_count == 2);
+    ASSERT(fact.structural_signature_key != 0);
+    bool saw_named = false;
+    bool saw_function_expr = false;
+    for (uint32_t i = 0; i < fact.target_count; i++) {
+        ASSERT(fact.targets[i].function_node_id != 0);
+        ASSERT(fact.targets[i].structural_signature_key == fact.structural_signature_key);
+        saw_named = saw_named || fact.targets[i].symbol_id == named->id;
+        saw_function_expr = saw_function_expr || fact.targets[i].symbol_id != named->id;
+    }
+    ASSERT(saw_named);
+    ASSERT(saw_function_expr);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_callable_target_set_does_not_guess_user_copy_by_name) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -7998,6 +8048,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
     RUN_TEST(analyzer_callable_target_set_has_no_small_fixed_limit);
     RUN_TEST(analyzer_callable_target_set_flows_through_builtin_copy);
+    RUN_TEST(analyzer_callable_target_set_flows_into_ordinary_function_parameter);
     RUN_TEST(analyzer_callable_target_set_does_not_guess_user_copy_by_name);
     RUN_TEST(analyzer_callable_signature_identity_includes_typed_throw_effect);
     RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);

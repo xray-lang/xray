@@ -232,12 +232,12 @@ typedef struct FunctionReturnTargetEntry {
     bool unknown;
 } FunctionReturnTargetEntry;
 
-typedef struct SpecializedParamTargetEntry {
+typedef struct FunctionParamTargetEntry {
     uint32_t function_id;
     uint32_t param_id;
     FunctionValueTarget target;
     bool unknown;
-} SpecializedParamTargetEntry;
+} FunctionParamTargetEntry;
 
 typedef struct FunctionExprCaptureEntry {
     AstNode *function_expr;
@@ -311,9 +311,9 @@ struct ErrorSetCtx {
     FunctionReturnTargetEntry *function_return_targets;
     int function_return_target_count;
     int function_return_target_capacity;
-    SpecializedParamTargetEntry *specialized_param_targets;
-    int specialized_param_target_count;
-    int specialized_param_target_capacity;
+    FunctionParamTargetEntry *function_param_targets;
+    int function_param_target_count;
+    int function_param_target_capacity;
     FunctionExprCaptureEntry *function_expr_captures;
     int function_expr_capture_count;
     int function_expr_capture_capacity;
@@ -879,6 +879,17 @@ static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym
     if (!ctx || !ctx->analyzer || !ctx->analyzer->callable_target_arena ||
         target->target_count == UINT32_MAX)
         return false;
+    uint64_t identity_hash = function_value_target_identity_hash(sym, function_expr);
+    if (target->target_slot_capacity != 0) {
+        uint32_t existing_slot = (uint32_t) identity_hash & (target->target_slot_capacity - 1);
+        while (target->target_slots[existing_slot].symbol ||
+               target->target_slots[existing_slot].function_expr) {
+            if (target->target_slots[existing_slot].symbol == sym &&
+                target->target_slots[existing_slot].function_expr == function_expr)
+                return true;
+            existing_slot = (existing_slot + 1) & (target->target_slot_capacity - 1);
+        }
+    }
     if (target->target_slot_capacity == 0 ||
         target->target_count >= target->target_slot_capacity - target->target_slot_capacity / 4) {
         uint32_t new_slot_capacity =
@@ -889,13 +900,9 @@ static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym
             return false;
         }
     }
-    uint32_t identity_slot = (uint32_t) function_value_target_identity_hash(sym, function_expr) &
-                             (target->target_slot_capacity - 1);
+    uint32_t identity_slot = (uint32_t) identity_hash & (target->target_slot_capacity - 1);
     while (target->target_slots[identity_slot].symbol ||
            target->target_slots[identity_slot].function_expr) {
-        if (target->target_slots[identity_slot].symbol == sym &&
-            target->target_slots[identity_slot].function_expr == function_expr)
-            return true;
         identity_slot = (identity_slot + 1) & (target->target_slot_capacity - 1);
     }
     if (target->target_count == target->target_capacity) {
@@ -1248,43 +1255,47 @@ static void store_function_return_target(ErrorSetCtx *ctx, XaSymbol *sym) {
     entry->target = target;
 }
 
-static bool is_mono_specialized_function_symbol(XaSymbol *sym) {
-    if (!sym || sym->kind != XA_SYM_FUNCTION || !sym->name || !strchr(sym->name, '$'))
+/* A canonical executable is a closed source graph, so every statically selected
+ * source body participates in the same incoming-callable dataflow.  Restricting
+ * this to `$`-named generic specializations left ordinary higher-order functions
+ * and methods with an empty target set even when every caller was known. */
+static bool symbol_has_source_function_body(XaSymbol *sym) {
+    if (!sym || (sym->kind != XA_SYM_FUNCTION && sym->kind != XA_SYM_METHOD))
         return false;
     AstNode *node = sym->links.function_decl_node;
-    return node && node->type == AST_FUNCTION_DECL && node->as.function_decl.type_param_count == 0;
+    return node && (node->type == AST_FUNCTION_DECL || node->type == AST_METHOD_DECL);
 }
 
-static SpecializedParamTargetEntry *
-lookup_specialized_param_target_entry(ErrorSetCtx *ctx, XaSymbol *func_sym, XaSymbol *param_sym) {
+static FunctionParamTargetEntry *
+lookup_function_param_target_entry(ErrorSetCtx *ctx, XaSymbol *func_sym, XaSymbol *param_sym) {
     if (!ctx || !func_sym || !param_sym || func_sym->id == 0 || param_sym->id == 0)
         return NULL;
-    for (int i = 0; i < ctx->specialized_param_target_count; i++) {
-        SpecializedParamTargetEntry *entry = &ctx->specialized_param_targets[i];
+    for (int i = 0; i < ctx->function_param_target_count; i++) {
+        FunctionParamTargetEntry *entry = &ctx->function_param_targets[i];
         if (entry->function_id == func_sym->id && entry->param_id == param_sym->id)
             return entry;
     }
     return NULL;
 }
 
-static SpecializedParamTargetEntry *
-ensure_specialized_param_target_entry(ErrorSetCtx *ctx, XaSymbol *func_sym, XaSymbol *param_sym) {
-    SpecializedParamTargetEntry *entry =
-        lookup_specialized_param_target_entry(ctx, func_sym, param_sym);
+static FunctionParamTargetEntry *
+ensure_function_param_target_entry(ErrorSetCtx *ctx, XaSymbol *func_sym, XaSymbol *param_sym) {
+    FunctionParamTargetEntry *entry =
+        lookup_function_param_target_entry(ctx, func_sym, param_sym);
     if (entry)
         return entry;
     if (!ctx || !func_sym || !param_sym || func_sym->id == 0 || param_sym->id == 0)
         return NULL;
-    if (ctx->specialized_param_target_count >= ctx->specialized_param_target_capacity) {
-        int new_cap = ctx->specialized_param_target_capacity == 0
+    if (ctx->function_param_target_count >= ctx->function_param_target_capacity) {
+        int new_cap = ctx->function_param_target_capacity == 0
                           ? 32
-                          : ctx->specialized_param_target_capacity * 2;
-        XR_REALLOC_OR_ABORT(ctx->specialized_param_targets,
-                            (size_t) new_cap * sizeof(SpecializedParamTargetEntry),
-                            "specialized param target grow");
-        ctx->specialized_param_target_capacity = new_cap;
+                          : ctx->function_param_target_capacity * 2;
+        XR_REALLOC_OR_ABORT(ctx->function_param_targets,
+                            (size_t) new_cap * sizeof(FunctionParamTargetEntry),
+                            "function param target grow");
+        ctx->function_param_target_capacity = new_cap;
     }
-    entry = &ctx->specialized_param_targets[ctx->specialized_param_target_count++];
+    entry = &ctx->function_param_targets[ctx->function_param_target_count++];
     memset(entry, 0, sizeof(*entry));
     entry->function_id = func_sym->id;
     entry->param_id = param_sym->id;
@@ -1293,14 +1304,14 @@ ensure_specialized_param_target_entry(ErrorSetCtx *ctx, XaSymbol *func_sym, XaSy
     return entry;
 }
 
-static void record_specialized_param_target(ErrorSetCtx *ctx, XaSymbol *func_sym,
-                                            XaSymbol *param_sym, FunctionValueTarget target,
-                                            bool unknown) {
-    if (!ctx || !is_mono_specialized_function_symbol(func_sym) || !param_sym ||
+static void record_function_param_target(ErrorSetCtx *ctx, XaSymbol *func_sym,
+                                         XaSymbol *param_sym, FunctionValueTarget target,
+                                         bool unknown) {
+    if (!ctx || !symbol_has_source_function_body(func_sym) || !param_sym ||
         !symbol_has_function_type(param_sym))
         return;
-    SpecializedParamTargetEntry *entry =
-        ensure_specialized_param_target_entry(ctx, func_sym, param_sym);
+    FunctionParamTargetEntry *entry =
+        ensure_function_param_target_entry(ctx, func_sym, param_sym);
     if (!entry)
         return;
 
@@ -1319,17 +1330,18 @@ static void record_specialized_param_target(ErrorSetCtx *ctx, XaSymbol *func_sym
         ctx->changed = true;
         return;
     }
-    FunctionValueTarget merged = function_value_target_merge(entry->target, target, ctx);
-    if (!function_value_target_is_exact(merged)) {
-        entry->unknown = true;
-        entry->target = function_value_target_none();
-        ctx->changed = true;
-        return;
+    uint32_t previous_count = entry->target.target_count;
+    for (uint32_t i = 0; i < target.target_count; ++i) {
+        if (!function_value_target_add(&entry->target, target.target_symbols[i],
+                                       target.target_function_exprs[i], ctx)) {
+            entry->unknown = true;
+            entry->target = function_value_target_none();
+            ctx->changed = true;
+            return;
+        }
     }
-    if (!function_value_target_equal(entry->target, merged)) {
-        entry->target = merged;
+    if (entry->target.target_count != previous_count)
         ctx->changed = true;
-    }
 }
 
 static XaSymbol *lookup_symbol_by_id(ErrorSetCtx *ctx, uint32_t symbol_id) {
@@ -2083,12 +2095,11 @@ static void clear_function_value_param_aliases(ErrorSetCtx *ctx, AstNode *fn_nod
     }
 }
 
-static void apply_specialized_function_param_targets(ErrorSetCtx *ctx, AstNode *fn_node,
-                                                     XaSymbol *func_sym) {
-    if (!ctx || !fn_node || !is_mono_specialized_function_symbol(func_sym))
+static void apply_function_param_targets(ErrorSetCtx *ctx, AstNode *fn_node, XaSymbol *func_sym) {
+    if (!ctx || !fn_node || !symbol_has_source_function_body(func_sym))
         return;
-    for (int i = 0; i < ctx->specialized_param_target_count; i++) {
-        SpecializedParamTargetEntry *entry = &ctx->specialized_param_targets[i];
+    for (int i = 0; i < ctx->function_param_target_count; i++) {
+        FunctionParamTargetEntry *entry = &ctx->function_param_targets[i];
         if (entry->function_id != func_sym->id)
             continue;
         XaSymbol *param_sym = lookup_symbol_by_id(ctx, entry->param_id);
@@ -2101,9 +2112,9 @@ static void apply_specialized_function_param_targets(ErrorSetCtx *ctx, AstNode *
     }
 }
 
-static void record_specialized_function_call_targets(ErrorSetCtx *ctx, XaSymbol *callee_sym,
-                                                     const CallExprNode *call) {
-    if (!ctx || !call || !is_mono_specialized_function_symbol(callee_sym))
+static void record_function_call_param_targets(ErrorSetCtx *ctx, XaSymbol *callee_sym,
+                                               const CallExprNode *call) {
+    if (!ctx || !call || !symbol_has_source_function_body(callee_sym))
         return;
     AstNode *fn_node = callee_sym->links.function_decl_node;
     if (!fn_node)
@@ -2118,10 +2129,10 @@ static void record_specialized_function_call_targets(ErrorSetCtx *ctx, XaSymbol 
             continue;
         FunctionValueTarget arg_target = resolve_function_value_expr_target(ctx, arg, 0);
         if (function_value_target_is_exact(arg_target)) {
-            record_specialized_param_target(ctx, callee_sym, param_sym, arg_target, false);
+            record_function_param_target(ctx, callee_sym, param_sym, arg_target, false);
         } else if (expr_has_function_type(ctx, arg)) {
-            record_specialized_param_target(ctx, callee_sym, param_sym,
-                                            function_value_target_none(), true);
+            record_function_param_target(ctx, callee_sym, param_sym,
+                                         function_value_target_none(), true);
         }
     }
 }
@@ -2186,9 +2197,16 @@ static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *call
     ctx->current_return_target_unknown = false;
     CoroBoundaryState saved_coro_boundary;
     enter_callee_body_coro_boundary(ctx, &saved_coro_boundary);
+    /* This is a callsite-local effect expansion over a shared declaration AST.
+     * Publishing nested call facts here would make the last caller overwrite
+     * the declaration owner's closed-world target union.  The declaration is
+     * published once, below, with its canonical incoming parameter facts. */
+    bool saved_publish_call_facts = ctx->publish_call_error_effect_facts;
+    ctx->publish_call_error_effect_facts = false;
     ctx->callsite_inline_depth++;
     es_walk_block(ctx, body);
     ctx->callsite_inline_depth--;
+    ctx->publish_call_error_effect_facts = saved_publish_call_facts;
     leave_callee_body_coro_boundary(ctx, &saved_coro_boundary);
 
     restore_function_value_alias_state(ctx, saved_alias_state);
@@ -4268,7 +4286,7 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
                         es_walk_function_expr_body(ctx, function_expr);
                         continue;
                     }
-                    record_specialized_function_call_targets(ctx, callee_sym, &node->as.call_expr);
+                    record_function_call_param_targets(ctx, callee_sym, &node->as.call_expr);
                     if (es_walk_callsite_function_decl_body(ctx, callee_sym, &node->as.call_expr))
                         continue;
                     if (callee_sym &&
@@ -5107,7 +5125,7 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     ctx->task_spawn_alias_count = 0;
     ctx->linked_scope_depth = 0;
     clear_function_value_param_aliases(ctx, func_node);
-    apply_specialized_function_param_targets(ctx, func_node, func_sym);
+    apply_function_param_targets(ctx, func_node, func_sym);
     es_walk_block(ctx, body);
     if (function_has_error_diagnostic(ctx, func_node, func_sym))
         xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_INVALID_PROGRAM);
@@ -5498,7 +5516,7 @@ static void publish_function_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *
     ctx->collect_function_value_binding_targets = true;
     ctx->function_value_binding_scope = fn_scope;
     clear_function_value_param_aliases(ctx, func_node);
-    apply_specialized_function_param_targets(ctx, func_node, func_sym);
+    apply_function_param_targets(ctx, func_node, func_sym);
     es_walk_block(ctx, body);
     ctx->collect_function_value_binding_targets = false;
     ctx->function_value_binding_scope = NULL;
@@ -5558,14 +5576,14 @@ static void publish_program_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *p
     ctx->analyzer->current_scope = saved_scope;
 }
 
-/* Materialize the effect argument of a monomorphized HOF parameter after all
+/* Materialize the effect argument of a closed-world HOF parameter after all
  * concrete callees have their final bit. A merged/unknown target is MAY_THROW;
  * the lowering therefore skips ERR_CHECK only for a closed all-NO target set. */
-static void publish_specialized_param_throw_effects(ErrorSetCtx *ctx) {
+static void publish_function_param_throw_effects(ErrorSetCtx *ctx) {
     if (!ctx)
         return;
-    for (int i = 0; i < ctx->specialized_param_target_count; i++) {
-        SpecializedParamTargetEntry *entry = &ctx->specialized_param_targets[i];
+    for (int i = 0; i < ctx->function_param_target_count; i++) {
+        FunctionParamTargetEntry *entry = &ctx->function_param_targets[i];
         XaSymbol *func_sym = lookup_symbol_by_id(ctx, entry->function_id);
         XaSymbol *param_sym = lookup_symbol_by_id(ctx, entry->param_id);
         if (!func_sym || !param_sym || !symbol_has_function_type(param_sym))
@@ -5666,10 +5684,17 @@ static void report_no_throw_value_constraint(ErrorSetCtx *ctx, AstNode *site, co
         return;
     const char *argument_name = no_throw_argument_name(ctx, value);
     char message[512];
+#if defined(_WIN32)
+    _snprintf_s(message, sizeof(message), _TRUNCATE,
+                "nothrow callable constraint '%s' rejects value '%s': it may throw or cannot be "
+                "proven non-throwing",
+                slot_name ? slot_name : "callback", argument_name);
+#else
     snprintf(message, sizeof(message),
              "nothrow callable constraint '%s' rejects value '%s': it may throw or cannot be "
              "proven non-throwing",
              slot_name ? slot_name : "callback", argument_name);
+#endif
     XrLocation location = {.file = ctx->analyzer->current_file,
                            .line = (uint32_t) value->line,
                            .column = (uint32_t) value->column};
@@ -5864,7 +5889,7 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     }
 
     publish_function_return_callable_throw_effects(&ctx, funcs, func_count);
-    publish_specialized_param_throw_effects(&ctx);
+    publish_function_param_throw_effects(&ctx);
     ctx.publish_call_error_effect_facts = true;
     publish_program_call_error_effect_facts(&ctx, ast);
     for (int i = 0; i < func_count; i++)
@@ -5884,6 +5909,6 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     xr_free(function_exprs.items);
     xr_free(funcs);
     xr_free(ctx.function_return_targets);
-    xr_free(ctx.specialized_param_targets);
+    xr_free(ctx.function_param_targets);
     clear_function_expr_captures(&ctx);
 }

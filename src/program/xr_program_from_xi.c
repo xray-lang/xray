@@ -3549,6 +3549,95 @@ static const XiFunc *resolved_imported_callable_target(const XrXiBuildContext *c
     return ref->resolved_func;
 }
 
+static const XrType *imported_callable_refined_type(const XrXiBuildContext *context,
+                                                    const XiFunc *function,
+                                                    const XiValue *imported);
+
+static bool local_callable_publication_store_matches(const XiFunc *root, const XiValue *store,
+                                                     uint32_t slot, const XiFunc *target) {
+    if (!root || !root->module || root->module->init != root || !store || !target ||
+        store->op != XI_SET_SHARED || store->aux_int < 0 ||
+        (uint32_t) store->aux_int != slot || store->nargs != 1u || !store->args ||
+        !store->args[0] || target->parent_func != root)
+        return false;
+    const XiValue *closure = logical_value_identity(store->args[0]);
+    return closure && closure->op == XI_CLOSURE_NEW && closure->nargs == 0u &&
+           resolved_callable_target(root, closure) == target;
+}
+
+/* A top-level source function is immutable canonical code, not mutable module
+ * state.  Xi still routes its value through a shared slot.  Reconstruct the
+ * callable pack only after the module slot table, the unique initializer
+ * publication, the Xi child body, and Xglobal's body/signature identities all
+ * agree on the same target. */
+static const XiFunc *resolved_local_callable_target(const XrXiBuildContext *context,
+                                                    const XiFunc *function, const XiValue *value,
+                                                    uint64_t *signature_key) {
+    if (signature_key)
+        *signature_key = 0u;
+    if (!context || !function || !value || value->op != XI_GET_SHARED || value->aux_int < 0 ||
+        imported_callable_ref(context, function, value))
+        return NULL;
+    uint32_t module_index = UINT32_MAX;
+    if (!find_xi_function(context, function, &module_index, NULL) ||
+        module_index >= context->source->module_count)
+        return NULL;
+    const XiFunc *root = context->source->module_roots[module_index];
+    const XiModule *module = root ? root->module : NULL;
+    uint32_t slot = (uint32_t) value->aux_int;
+    if (!module || module->init != root || slot >= module->nslots || !module->slot_funcs)
+        return NULL;
+    const XiFunc *target = module->slot_funcs[slot];
+    uint32_t target_module_index = UINT32_MAX;
+    if (!target || target->xg_body_func_id == XG_NO_ID ||
+        !find_xi_function(context, target, &target_module_index, NULL) ||
+        target_module_index != module_index || !exact_function_body_contract(context, target,
+                                                                              module_index))
+        return NULL;
+
+    uint32_t publications = 0u;
+    for (uint32_t block_index = 0u; block_index < root->nblocks; ++block_index) {
+        const XiBlock *block = root->blocks[block_index];
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *candidate = block->values[value_index];
+            if (!candidate || candidate->op != XI_SET_SHARED || candidate->aux_int < 0 ||
+                (uint32_t) candidate->aux_int != slot)
+                continue;
+            if (!local_callable_publication_store_matches(root, candidate, slot, target))
+                return NULL;
+            publications++;
+        }
+    }
+    if (publications != 1u)
+        return NULL;
+    if (signature_key) {
+        uint64_t exact_signature_key = 0u;
+        if (!callable_signature_key_for_target(context, target, &exact_signature_key))
+            return NULL;
+        *signature_key = exact_signature_key;
+    }
+    return target;
+}
+
+static const XiFunc *resolved_shared_callable_target(const XrXiBuildContext *context,
+                                                     const XiFunc *function, const XiValue *value,
+                                                     uint64_t *signature_key,
+                                                     const XrType **visible_type) {
+    if (visible_type)
+        *visible_type = NULL;
+    const XiFunc *target =
+        resolved_imported_callable_target(context, function, value, signature_key);
+    if (target) {
+        if (visible_type)
+            *visible_type = imported_callable_refined_type(context, function, value);
+        return visible_type && !*visible_type ? NULL : target;
+    }
+    target = resolved_local_callable_target(context, function, value, signature_key);
+    if (target && visible_type)
+        *visible_type = value->type;
+    return target;
+}
+
 static bool imported_callable_checktype_is_only_exact_direct_callee(const XrXiBuildContext *context,
                                                                     const XiFunc *function,
                                                                     const XiValue *check,
@@ -3677,13 +3766,14 @@ static const XrType *imported_callable_refined_type(const XrXiBuildContext *cont
     return found;
 }
 
-static bool imported_callable_value_is_exact(const XrXiBuildContext *context,
-                                             const XiFunc *function, const XiValue *value) {
+static bool shared_callable_value_is_exact(const XrXiBuildContext *context,
+                                           const XiFunc *function, const XiValue *value) {
     uint64_t signature_key = 0u;
+    const XrType *visible_type = NULL;
     return value && value->op == XI_GET_SHARED &&
-           imported_callable_refined_type(context, function, value) != NULL &&
-           resolved_imported_callable_target(context, function, value, &signature_key) != NULL &&
-           signature_key != 0u;
+           resolved_shared_callable_target(context, function, value, &signature_key,
+                                           &visible_type) != NULL &&
+           visible_type && signature_key != 0u;
 }
 
 static XrProgramBuildStatus validate_imported_callable_bindings(const XrXiBuildContext *context,
@@ -3748,13 +3838,19 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                     if (!row)
                         return fail(
                             diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                            "Xi indirect call v%u has an unresolved callable target set", call->id);
+                            "Xi indirect call %s:v%u module=%u block=%u has an unresolved "
+                            "callable target set",
+                            function->name ? function->name : "<anonymous>", call->id,
+                            module_index, block_index);
                     if (row->kind != XG_CALL_CLOSURE ||
                         (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
                         return fail(
                             diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "Xi indirect call v%u has inconsistent callable effect evidence",
-                            call->id);
+                            "Xi indirect call %s:v%u module=%u block=%u has inconsistent "
+                            "callable effect evidence (kind=%u flags=0x%x)",
+                            function->name ? function->name : "<anonymous>", call->id,
+                            module_index, block_index, (unsigned) row->kind,
+                            (unsigned) row->flags);
 
                     const XgCallableTargetSummary *targets = NULL;
                     uint32_t target_count = 0u;
@@ -3916,7 +4012,7 @@ static bool callable_signature_key_for_value(const XrXiBuildContext *context,
     }
     if (value->op == XI_GET_SHARED) {
         const XiFunc *target =
-            resolved_imported_callable_target(context, function, value, signature_key);
+            resolved_shared_callable_target(context, function, value, signature_key, NULL);
         return target != NULL;
     }
     if ((xi_value_forwards_identity(value) || value->op == XI_RETAIN ||
@@ -3958,10 +4054,10 @@ static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *func
     }
     if (value && value->op == XI_GET_SHARED) {
         uint64_t signature_key = 0u;
-        const XrType *refined_type = imported_callable_refined_type(context, function, value);
-        if (refined_type &&
-            resolved_imported_callable_target(context, function, value, &signature_key))
-            return map_callable_signature_contract(context, refined_type, signature_key, type_id,
+        const XrType *visible_type = NULL;
+        if (resolved_shared_callable_target(context, function, value, &signature_key,
+                                            &visible_type))
+            return map_callable_signature_contract(context, visible_type, signature_key, type_id,
                                                    NULL);
     }
     value = logical_value_identity(value);
@@ -4011,7 +4107,7 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
         return false;
     return value->op == XI_CLOSURE_NEW ||
            (value->op == XI_GET_SHARED &&
-            resolved_imported_callable_target(context, function, value, NULL)) ||
+            resolved_shared_callable_target(context, function, value, NULL, NULL)) ||
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
            value->xg_existential_kind == XI_EXISTENTIAL_PROJECT || value->op == XI_SUM_INJECT ||
            xi_copy_is_value_clone(value) || value->op == XI_SOURCE_MOVE ||
@@ -4112,7 +4208,7 @@ static bool value_has_canonical_materialization(const XrXiBuildContext *context,
     if (!value)
         return false;
     if (xr_program_xi_value_is_materialized(value->op) ||
-        imported_callable_value_is_exact(context, function, value) ||
+        shared_callable_value_is_exact(context, function, value) ||
         static_typed_catch_contract_is_exact(context, value) ||
         resolved_empty_class_allocation(context, function, value) ||
         resolved_empty_struct_literal(context, function, value) ||
@@ -4475,25 +4571,25 @@ static XrProgramBuildStatus translate_callable_pack(XrXiBuildContext *context,
 }
 
 static XrProgramBuildStatus
-translate_imported_callable_pack(XrXiBuildContext *context, XrXiFunctionStorage *function,
-                                 const XiValue *value, XrCoreIrInstructionInput *instruction,
-                                 char *diagnostic, size_t diagnostic_size) {
+translate_shared_callable_pack(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                               const XiValue *value, XrCoreIrInstructionInput *instruction,
+                               char *diagnostic, size_t diagnostic_size) {
     uint64_t signature_key = 0u;
-    const XiFunc *target =
-        resolved_imported_callable_target(context, function->xi, value, &signature_key);
+    const XrType *visible_type = NULL;
+    const XiFunc *target = resolved_shared_callable_target(
+        context, function->xi, value, &signature_key, &visible_type);
     const XrXiFunctionStorage *target_storage = find_xi_function(context, target, NULL, NULL);
-    const XrType *refined_type = imported_callable_refined_type(context, function->xi, value);
     uint16_t callable_type_id = XR_CORE_TYPE_VOID;
-    if (!target || !target_storage || !refined_type || target->ncaptures != 0u ||
-        !map_callable_signature_contract(context, refined_type, signature_key, &callable_type_id,
+    if (!target || !target_storage || !visible_type || target->ncaptures != 0u ||
+        !map_callable_signature_contract(context, visible_type, signature_key, &callable_type_id,
                                          NULL))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                    "Xi imported callable v%u has no exact target or signature", value->id);
+                    "Xi shared callable v%u has no exact target or signature", value->id);
     const XrXiTypeStorage *callable = find_dynamic_type_by_id(context, callable_type_id);
     if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
         !callable->callable_signature)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi imported callable v%u has an inconsistent callable type", value->id);
+                    "Xi shared callable v%u has an inconsistent callable type", value->id);
     instruction->operation_id = XR_CORE_OP_CORE_CALLABLE_PACK;
     instruction->result = value_key(function, value);
     instruction->result_type_id = callable_type_id;
@@ -4761,8 +4857,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         return XR_PROGRAM_BUILD_OK;
     }
     if (value->op == XI_GET_SHARED)
-        return translate_imported_callable_pack(context, function, value, instruction, diagnostic,
-                                                diagnostic_size);
+        return translate_shared_callable_pack(context, function, value, instruction, diagnostic,
+                                              diagnostic_size);
     uint16_t target_enum_type = XR_CORE_TYPE_VOID;
     if (value->op == XI_CONST && value->nargs == 0u && value->aux == NULL &&
         value->aux_int > 0 && value->aux_int <= UINT16_MAX &&
@@ -5344,7 +5440,7 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         return true;
     if (resolved_module_namespace_carrier(context, function, value))
         return value_is_only_elided_operand(context, function, value);
-    if (imported_callable_value_is_exact(context, function, value))
+    if (shared_callable_value_is_exact(context, function, value))
         return false;
     if (resolved_class_carrier(context, function, value, XG_NO_ID, NULL))
         return value_is_only_elided_operand(context, function, value);
@@ -6827,9 +6923,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         continue;
                     uint32_t value_effects = 0u;
                     uint32_t value_capabilities = 0u;
-                    const XrCoreOperationSpec *imported_callable =
+                    const XrCoreOperationSpec *shared_callable =
                         value->op == XI_GET_SHARED &&
-                                resolved_imported_callable_target(context, function, value, NULL)
+                                resolved_shared_callable_target(context, function, value, NULL,
+                                                                NULL)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALLABLE_PACK)
                             : NULL;
                     const XrCoreOperationSpec *empty_class_allocation =
@@ -6860,10 +6957,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = constant != NULL;
                         value_effects = constant ? constant->effect_mask : 0u;
                         value_capabilities = constant ? constant->capability_mask : 0u;
-                    } else if (imported_callable) {
+                    } else if (shared_callable) {
                         has_contract = true;
-                        value_effects = imported_callable->effect_mask;
-                        value_capabilities = imported_callable->capability_mask;
+                        value_effects = shared_callable->effect_mask;
+                        value_capabilities = shared_callable->capability_mask;
                     } else if (empty_class_allocation) {
                         has_contract = true;
                         value_effects = empty_class_allocation->effect_mask;
@@ -7126,17 +7223,25 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
             storage->parameter_modes[0] = XR_PARAM_READ;
         }
         for (uint16_t parameter = 0; parameter < xi->nparams; ++parameter) {
+            bool parameter_type_mapped =
+                xi->params && xi->params[parameter] && xi->params[parameter]->type &&
+                        xi->params[parameter]->type->kind == XR_KIND_FUNCTION
+                    ? map_logical_value_type(
+                          context, xi, xi->params[parameter],
+                          &storage->parameter_types[parameter + parameter_offset])
+                    : xi->params && xi->params[parameter] &&
+                          map_type_for_mode(
+                              context, xi->params[parameter]->type,
+                              (XrParamMode) xi->params[parameter]->param_mode,
+                              &storage->parameter_types[parameter + parameter_offset], NULL, 0u);
             if (!xi->params || !xi->params[parameter] || xi->params[parameter]->op != XI_PARAM ||
                 xi->params[parameter]->aux_int != parameter ||
                 (xi->params[parameter]->type &&
                  xi->params[parameter]->type->kind == XR_KIND_INTERFACE &&
                  !interface_parameter_contract_is_exact(
-                     context, xi, xi->params[parameter],
-                     (XrParamMode) xi->params[parameter]->param_mode)) ||
-                !map_type_for_mode(context, xi->params[parameter]->type,
-                                   (XrParamMode) xi->params[parameter]->param_mode,
-                                   &storage->parameter_types[parameter + parameter_offset], NULL,
-                                   0u) ||
+                      context, xi, xi->params[parameter],
+                      (XrParamMode) xi->params[parameter]->param_mode)) ||
+                !parameter_type_mapped ||
                 storage->parameter_types[parameter + parameter_offset] == XR_CORE_TYPE_VOID)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi function %u parameter %u is not a CoreSpec value", function_index,

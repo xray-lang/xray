@@ -23,7 +23,10 @@ CoreIR writer, reference evaluator, TargetPlan, legacy Proto VM, and AOT. The ru
 links a build-produced XrProgram byte array against this archive and verifies the resulting symbol
 closure.
 
-The executor covers all forty-six current CoreSpec operations. Provider-backed output uses a
+The executor covers all forty-seven current CoreSpec operations. Indirect calls borrow an affine
+callable without consuming it, whether the current SSA value owns the callable or is a non-owner
+`READ` function parameter; the callable SignatureId remains the only visible dispatch contract.
+Provider-backed output uses a
 dedicated lease-pinned byte-sink trampoline and is checked byte-for-byte against the reference
 evaluator under both VM decode policies. Wave 1 source activates scalar,
 control, block arguments, and sealed calls; Wave 2 adds logical aggregate construction/projection
@@ -39,7 +42,7 @@ anchor-sha256: xisa/core/registry.json 59afc2fc87be973eb1bea089503b8a5998be2faa9
 anchor-sha256: src/vm/xr_program_vm.h 6fb1fe3ecd7b24ab92dbed9acda97a0855d7582d027eea7720b94a300d7a6f60
 anchor-sha256: src/vm/xr_program_vm.c 48956c4f6d4c1c9fe69e3f81c6085dc4c549f6083794565a53a5e8cf381efccc
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 93c2ba321b41de6c941abed771161a9224ba426a1daa715657b897a70a36b6da
+anchor-sha256: src/program/xr_program_verify.c f479cf10caf047a7bbdda74f3b09cd3d8c88f4aa88f79d92c337ebbd920084d1
 anchor-sha256: src/execution/xr_execution.h a22e903123436fa80fbd3baa1976230206631f1239dd7d4191bbb9dc0b12d780
 anchor-sha256: src/execution/xr_execution.c e681cfb31faffd6870abbd87086368c85b5e12e85c477bef37031191c6760e4a
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51

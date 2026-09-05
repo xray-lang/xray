@@ -1643,7 +1643,11 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                     entry->arguments[index].ownership != expected_ownership) {
                     xr_program_set_diagnostic(
                         diagnostic, diagnostic_size,
-                        "entry block value/place contract does not match function signature");
+                        "function %u entry parameter %u contract mismatch: type %u/%u category "
+                        "%u/%u ownership %u/%u",
+                        function_index, index, entry->arguments[index].type_id,
+                        function->parameter_types[index], entry->arguments[index].category,
+                        expected, entry->arguments[index].ownership, expected_ownership);
                     return XR_PROGRAM_BUILD_INVALID_INPUT;
                 }
             }

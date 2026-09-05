@@ -18,6 +18,11 @@ ordered operation identities, non-null operation entries, and required thread/re
 behavior before the instance becomes ACTIVE. In particular, a provider compiled for a different
 target call ABI is rejected even when it implements the same stable operation names.
 
+Callable dispatch is program-owned rather than provider-owned. An indirect call performs a
+non-consuming `READ` of its affine callable operand, so an owned pack and a borrowed non-owner
+function parameter are both valid; target identity and capture layout remain private to each
+executor and never enter the execution binding.
+
 Provider invocation is available only through ABI-matched typed lease adapters. Scalar i64 calls
 and byte-output writes occupy distinct trampoline kinds; an operation cannot enter through the
 wrong union member. Each adapter resolves the dense program requirement and operation index under
@@ -57,7 +62,7 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 93c2ba321b41de6c941abed771161a9224ba426a1daa715657b897a70a36b6da
+anchor-sha256: src/program/xr_program_verify.c f479cf10caf047a7bbdda74f3b09cd3d8c88f4aa88f79d92c337ebbd920084d1
 anchor-sha256: src/program/xr_validated_program_internal.h cebe31c0778018ef445958d4c828d9fb0ed7c29ce9177910aa219fdd45d48285
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c a690849da40d585746ad8e96498707be7a6fd5c9414587b21e5a3ae2413ad0b6

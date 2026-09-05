@@ -42,6 +42,7 @@ typedef struct SourceBuildFixture {
 } SourceBuildFixture;
 
 static const char *cross_module_coroutine_aot_output_path;
+static const char *function_parameter_aot_output_path;
 
 static bool write_source_file(const char *path, const char *source) {
     FILE *file = fopen(path, "wb");
@@ -463,6 +464,106 @@ TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_priva
     assert_cross_module_coroutine_program(entry_source, library_source);
 }
 
+TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors) {
+    static const char source[] =
+        "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
+        "  return body(value)\n"
+        "}\n"
+        "fn twice(value: i64) -> i64 { return value * 2 }\n"
+        "fn answer() -> i64 {\n"
+        "  const named = apply(21, twice)\n"
+        "  const closure = apply(5, fn(value: i64) -> i64 { return value + 1 })\n"
+        "  return named + closure\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint =
+        xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (!product.program) {
+        xr_program_source_product_free(&product);
+        xr_target_profile_free(profile);
+        source_build_fixture_free(&fixture);
+        return;
+    }
+    uint32_t entry = xr_validated_program_entry_function(product.program);
+
+    XrReferenceProfile reference_profile = {.pointer_width = 64u};
+    XrReferenceOutcome reference = xr_reference_evaluate(
+        product.program, entry, NULL, 0u, &reference_profile, NULL);
+    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(reference.value.as.i64, 48);
+
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = product.program,
+        .profile = profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance,
+                                                &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic),
+                  XR_VM_CODE_OK);
+    XrVmOutcome vm_result = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
+    ASSERT_EQ_INT(vm_result.kind, XR_VM_OUTCOME_RETURN);
+    ASSERT_EQ_INT(vm_result.value.kind, XR_VM_VALUE_I64);
+    ASSERT_EQ_INT(vm_result.value.as.i64, reference.value.as.i64);
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(product.program, profile, &options, &backend_ir,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, ".function_id)"));
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    if (function_parameter_aot_output_path) {
+        FILE *output = fopen(function_parameter_aot_output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+    xr_vm_code_free(vm_code);
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_rejects_non_authoritative_entry_identity) {
     static const char source[] = "fn answer() -> i64 { return 42 }\n";
     SourceBuildFixture fixture;
@@ -542,14 +643,17 @@ TEST(source_owner_reports_structured_analysis_failure) {
 }
 
 TEST_MAIN_BEGIN()
-if (argc == 2)
+if (argc >= 2)
     cross_module_coroutine_aot_output_path = argv[1];
-else if (argc != 1)
+if (argc >= 3)
+    function_parameter_aot_output_path = argv[2];
+if (argc > 3)
     return 2;
 RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
 RUN_TEST(source_owner_two_module_graph_is_deterministic);
 RUN_TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors);
 RUN_TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors);
+RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);
 RUN_TEST(source_owner_rejects_module_budget_before_analysis);

@@ -2175,8 +2175,11 @@ static bool callable_arguments_match(const XrValidatedProgram *program,
                                      const XrValidatedInstruction *instruction,
                                      const XrValidatedSignature *signature) {
     if (!signature || instruction->operand_count < signature->parameter_count + 1u ||
-        !operand_category_is(caller, instruction, 0u, XR_CORE_IR_VALUE) ||
-        !operand_ownership_is(caller, instruction, 0u, XR_CORE_IR_OWNER))
+        !operand_category_is(caller, instruction, 0u, XR_CORE_IR_VALUE))
+        return false;
+    uint32_t callable_value = instruction->operands[0];
+    if (!call_operand_ownership_is(program, caller, instruction, 0u, XR_PARAM_READ,
+                                   caller->value_types[callable_value]))
         return false;
     for (uint32_t argument = 0; argument < signature->parameter_count; ++argument) {
         uint32_t operand = argument + 1u;

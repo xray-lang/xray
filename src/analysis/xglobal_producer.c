@@ -122,6 +122,9 @@ typedef struct XgProducer {
     struct XgPendingBody *bodies;
     uint32_t nbodies;
     uint32_t body_cap;
+    struct XgPendingCallableTargetSet *callable_target_sets;
+    uint32_t ncallable_target_sets;
+    uint32_t callable_target_set_cap;
     XgFuncId next_func_id;
     XaAnalyzer *analyzer;
     bool failed;
@@ -150,6 +153,13 @@ typedef struct XgPendingBody {
     XgLocalName *captured_name_locals;
     uint32_t captured_name_local_count;
 } XgPendingBody;
+
+typedef struct XgPendingCallableTargetSet {
+    XgCallsiteId callsite_id;
+    XaCallableTarget *targets;
+    uint32_t target_count;
+    uint64_t structural_signature_key;
+} XgPendingCallableTargetSet;
 
 static const XgPendingBody *producer_find_child_function_body(const XgProducer *producer,
                                                               XgFuncId parent_func_id,
@@ -259,52 +269,118 @@ typedef struct XgBodyCollect {
     const XrTypeRef *return_type;
 } XgBodyCollect;
 
-static bool producer_prepare_callable_target_set(const XgBodyCollect *bc, const AstNode *call,
-                                                 XgFuncId **out_target_func_ids,
-                                                 uint32_t *target_count, uint64_t *signature_key) {
+static bool producer_reserve_callable_target_sets(XgProducer *producer, uint32_t needed) {
+    if (!producer)
+        return false;
+    if (producer->callable_target_set_cap >= needed)
+        return true;
+    uint32_t new_cap = producer->callable_target_set_cap < 8 ? 8
+                                                             : producer->callable_target_set_cap;
+    while (new_cap < needed) {
+        if (new_cap > UINT32_MAX / 2)
+            return false;
+        new_cap *= 2;
+    }
+    XgPendingCallableTargetSet *rows = (XgPendingCallableTargetSet *) xr_realloc(
+        producer->callable_target_sets, (size_t) new_cap * sizeof(*rows));
+    if (!rows)
+        return false;
+    producer->callable_target_sets = rows;
+    producer->callable_target_set_cap = new_cap;
+    return true;
+}
+
+/* Callable facts can point forward to a lambda nested in a body that has not
+ * been enumerated yet.  Capture the pointer-free analyzer identity here and
+ * resolve it only after the body-discovery walk has reached its fixed point. */
+static bool producer_queue_callable_target_set(const XgBodyCollect *bc, const AstNode *call,
+                                               XgCallsiteId callsite_id) {
     XaCallableTargetSetFact fact;
-    if (target_count)
-        *target_count = 0;
-    if (signature_key)
-        *signature_key = 0;
-    if (out_target_func_ids)
-        *out_target_func_ids = NULL;
-    if (!bc || !bc->producer || !bc->producer->analyzer || !call || !out_target_func_ids ||
-        !target_count || !signature_key ||
+    if (!bc || !bc->producer || !bc->producer->analyzer || !call || callsite_id == XG_NO_ID ||
         !xa_analyzer_get_callable_target_set(bc->producer->analyzer, call, &fact) ||
         !fact.complete || fact.target_count == 0 || fact.structural_signature_key == 0 ||
         !fact.targets)
+        return true;
+    XgProducer *producer = bc->producer;
+    if (!producer_reserve_callable_target_sets(producer, producer->ncallable_target_sets + 1))
         return false;
-    XgFuncId *target_func_ids =
-        (XgFuncId *) xr_malloc(sizeof(*target_func_ids) * (size_t) fact.target_count);
-    if (!target_func_ids) {
-        bc->producer->failed = true;
+    XaCallableTarget *targets =
+        (XaCallableTarget *) xr_malloc(sizeof(*targets) * (size_t) fact.target_count);
+    if (!targets)
         return false;
-    }
-    for (uint32_t i = 0; i < fact.target_count; i++) {
-        const XgPendingBody *pending =
-            producer_find_callable_target_body(bc->producer, &fact.targets[i]);
-        if (!pending || fact.targets[i].structural_signature_key != fact.structural_signature_key) {
+    memcpy(targets, fact.targets, sizeof(*targets) * (size_t) fact.target_count);
+    XgPendingCallableTargetSet *row =
+        &producer->callable_target_sets[producer->ncallable_target_sets++];
+    *row = (XgPendingCallableTargetSet) {
+        .callsite_id = callsite_id,
+        .targets = targets,
+        .target_count = fact.target_count,
+        .structural_signature_key = fact.structural_signature_key,
+    };
+    return true;
+}
+
+static bool producer_emit_callable_target_sets(XgProducer *producer) {
+    if (!producer || !producer->evidence)
+        return false;
+    for (uint32_t set_index = 0; set_index < producer->ncallable_target_sets; set_index++) {
+        const XgPendingCallableTargetSet *set = &producer->callable_target_sets[set_index];
+        if (set->callsite_id == XG_NO_ID || set->callsite_id > producer->evidence->ncallsites ||
+            !set->targets || set->target_count == 0 || set->structural_signature_key == 0)
+            return false;
+        XgCallsiteSummary *callsite = &producer->evidence->callsites[set->callsite_id - 1];
+        if (callsite->callsite_id != set->callsite_id || callsite->kind != XG_CALL_CLOSURE ||
+            callsite->callable_target_start != 0 || callsite->callable_target_count != 0 ||
+            callsite->callable_signature_key != 0)
+            return false;
+
+        XgFuncId *target_func_ids =
+            (XgFuncId *) xr_malloc(sizeof(*target_func_ids) * (size_t) set->target_count);
+        if (!target_func_ids)
+            return false;
+        uint32_t target_count = 0;
+        for (uint32_t i = 0; i < set->target_count; i++) {
+            const XaCallableTarget *target = &set->targets[i];
+            const XgPendingBody *pending =
+                producer_find_callable_target_body(producer, target);
+            if (!pending ||
+                target->structural_signature_key != set->structural_signature_key) {
+                xr_free(target_func_ids);
+                return false;
+            }
+            uint32_t slot = target_count;
+            while (slot > 0 && target_func_ids[slot - 1] > pending->func_id) {
+                target_func_ids[slot] = target_func_ids[slot - 1];
+                slot--;
+            }
+            if ((slot > 0 && target_func_ids[slot - 1] == pending->func_id) ||
+                (slot < target_count && target_func_ids[slot] == pending->func_id))
+                continue;
+            target_func_ids[slot] = pending->func_id;
+            target_count++;
+        }
+        if (target_count == 0) {
             xr_free(target_func_ids);
             return false;
         }
-        uint32_t slot = *target_count;
-        while (slot > 0 && target_func_ids[slot - 1] > pending->func_id) {
-            target_func_ids[slot] = target_func_ids[slot - 1];
-            slot--;
+
+        callsite->callable_target_start = producer->evidence->ncallable_targets + 1;
+        callsite->callable_target_count = target_count;
+        callsite->callable_signature_key = set->structural_signature_key;
+        for (uint32_t i = 0; i < target_count; i++) {
+            XgCallableTargetSummary target = {
+                .target_id = producer->evidence->ncallable_targets + 1,
+                .callsite_id = callsite->callsite_id,
+                .target_func_id = target_func_ids[i],
+                .structural_signature_key = set->structural_signature_key,
+            };
+            if (!xg_global_evidence_add_callable_target(producer->evidence, &target)) {
+                xr_free(target_func_ids);
+                return false;
+            }
         }
-        if ((slot > 0 && target_func_ids[slot - 1] == pending->func_id) ||
-            (slot < *target_count && target_func_ids[slot] == pending->func_id))
-            continue;
-        target_func_ids[slot] = pending->func_id;
-        (*target_count)++;
-    }
-    if (*target_count == 0) {
         xr_free(target_func_ids);
-        return false;
     }
-    *out_target_func_ids = target_func_ids;
-    *signature_key = fact.structural_signature_key;
     return true;
 }
 
@@ -2329,6 +2405,12 @@ static void producer_free_bodies(XgProducer *p) {
     p->bodies = NULL;
     p->nbodies = 0;
     p->body_cap = 0;
+    for (uint32_t i = 0; i < p->ncallable_target_sets; i++)
+        xr_free(p->callable_target_sets[i].targets);
+    xr_free(p->callable_target_sets);
+    p->callable_target_sets = NULL;
+    p->ncallable_target_sets = 0;
+    p->callable_target_set_cap = 0;
 }
 
 static bool producer_register_class(XgProducer *p, XgModuleId module_id, const char *name,
@@ -9194,9 +9276,6 @@ static bool body_add_interface_call_argument_uses(XgBodyCollect *bc, const AstNo
 
 static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgCallsiteSummary row;
-    XgFuncId *callable_target_func_ids = NULL;
-    uint32_t callable_target_count = 0;
-    uint64_t callable_signature_key = 0;
     const AstNode *callee;
     XgDeclId generic_origin_decl_id = XG_NO_ID;
     XgFuncId generic_origin_func_id = XG_NO_ID;
@@ -9503,12 +9582,6 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
          *
          * closed-world authority is the analyzer-published canonical set. */
         row.static_target_func_id = XG_NO_ID;
-        if (producer_prepare_callable_target_set(bc, call, &callable_target_func_ids,
-                                                 &callable_target_count, &callable_signature_key)) {
-            row.callable_target_start = bc->evidence->ncallable_targets + 1;
-            row.callable_target_count = callable_target_count;
-            row.callable_signature_key = callable_signature_key;
-        }
     }
     XaCallErrorEffectFact call_effect;
     if (bc->producer->analyzer &&
@@ -9525,18 +9598,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     if (bc->callsite_count == 0)
         bc->callsite_start = row.callsite_id;
     if (xg_global_evidence_add_callsite(bc->evidence, &row)) {
-        for (uint32_t i = 0; i < callable_target_count; i++) {
-            XgCallableTargetSummary target = {
-                .target_id = bc->evidence->ncallable_targets + 1,
-                .callsite_id = row.callsite_id,
-                .target_func_id = callable_target_func_ids[i],
-                .structural_signature_key = callable_signature_key,
-            };
-            if (!xg_global_evidence_add_callable_target(bc->evidence, &target)) {
-                bc->producer->failed = true;
-                break;
-            }
-        }
+        if (row.kind == XG_CALL_CLOSURE &&
+            !producer_queue_callable_target_set(bc, call, row.callsite_id))
+            bc->producer->failed = true;
         bc->callsite_count++;
         if (!body_add_interface_call_argument_uses(bc, call))
             bc->producer->failed = true;
@@ -9549,7 +9613,6 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     } else {
         bc->producer->failed = true;
     }
-    xr_free(callable_target_func_ids);
 }
 
 static XaSymbolLinks *producer_enum_links(const XgProducer *p, const EnumDeclNode *enumeration) {
@@ -11214,6 +11277,8 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
         if (producer->failed)
             return false;
     }
+    if (!producer_emit_callable_target_sets(producer))
+        return false;
     uint32_t *closed_effects =
         producer->evidence->ncallable_targets
             ? xr_calloc(producer->evidence->ncallable_targets, sizeof(*closed_effects))

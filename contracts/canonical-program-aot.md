@@ -32,15 +32,17 @@ provider version, target triple, codegen options, sysroot, runtime objects, and 
 fingerprints; every partition is checked exactly and mismatches fail closed.
 
 The pure-AOT walking-skeleton executable contains no VM, compiler, program-loader, TargetPlan, or
-AOT-toolchain symbol and executes without program bytes. All forty-six current CoreSpec operations
+AOT-toolchain symbol and executes without program bytes. All forty-seven current CoreSpec operations
 have private BackendIR/C lowering; Wave 2 aggregate and variant rows become portable C11 structs and
-tagged unions without a VM carrier or shared local layout. The operation matrix separately records
+tagged unions without a VM carrier or shared local layout. A source-built higher-order function
+fixture proves that a callable borrowed through an ordinary function parameter has the same
+reference, VM, and native generated-C result, and that repeated C emission is byte-identical. The operation matrix separately records
 which rows have a production source owner. Checked overflow, wrapping overflow, and division by zero
 also compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
 anchor-sha256: CMakeLists.txt 98c0a12f8f1d3c2cce6bb8e91c631c50f8dd0139b7f690e76fdacfad0b02fc2f
-anchor-sha256: tests/unit/CMakeLists.txt 74b9008619ec41085de6d73e25861e471a972310636831a4f6383a07106371ed
+anchor-sha256: tests/unit/CMakeLists.txt 536f5c1dca05a4e2baa6b0747b9972126c06611c26cdeb86a45ac40e2ad27961
 anchor-sha256: xisa/core/registry.json 59afc2fc87be973eb1bea089503b8a5998be2faa9a893d3fbe51ebe97c118bab
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 2dbaca5bc741b55f208a14a94b39bc4588566d1ed04b7a5b36100d9c901cd94c
