@@ -868,7 +868,7 @@
       "decoder_verifier_evaluator": "bounded decode, exact state/safepoint/successor/live-value closure, and explicit resumable reference execution",
       "vm_implementation": "one-shot execution rejects coroutine programs; an explicit session retains the validated code and exact generation lease across suspend/resume",
       "aot_lowering": "generated native frame and step function are exposed only through an exact-ExecutionId descriptor that owns initialize/step/drop lifecycle",
-      "source_producer": "the exact analyzer symbol fact is serialized through Xglobal and joined into Xi; full Xi-to-XrProgram coroutine CFG production remains open beyond this yield slice",
+      "source_producer": "an exact module-initializer Coro.yield fact is serialized through Xglobal, joined to the current Xi coroutine plan, and projected into canonical Program state, safepoint, branch, and yield records; cross-function suspension, multiple states, and other suspension kinds remain open",
       "old_owner_deletion": "legacy coroutine/task/generator/concurrency owners remain frozen and are not claimed deleted by this yield-only slice",
       "status": "COROUTINE_YIELD_CANONICAL_ONLY",
       "evidence": [
@@ -876,8 +876,13 @@
         "src/analysis/xglobal_summary.c",
         "src/ir/xi_lower_expr.c",
         "src/ir/xi_verify.c",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
         "xisa/program/xi-source-projection.json",
         "tests/unit/analysis/test_xglobal_summary.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c"

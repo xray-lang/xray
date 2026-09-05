@@ -768,7 +768,9 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 // These use special opcodes (OP_CORO_CTRL etc.), not module XRS_EXPORT.
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
-    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false, false, true},
+    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false, false, true,
+     {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ,
+     XA_BUILTIN_RETURN_UNKNOWN},
     {"stats", "(): CoroStats", "Get coroutine statistics", true, true, false, false, false},
     {"list", "(limit?: i64, state?: CoroState): Array<CoroInfo>", "List coroutines", true, true,
      false, false, false},

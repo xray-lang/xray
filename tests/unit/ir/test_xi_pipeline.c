@@ -6,6 +6,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_emit.h"
@@ -74,6 +75,7 @@ _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id dri
 static XrVMRuntime *g_iso = NULL;
 static const char *g_source_aot_output_path = NULL;
 static const char *g_pointer_aot_output_path = NULL;
+static const char *g_yield_aot_output_path = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
@@ -1862,6 +1864,162 @@ static bool xi_canonical_program_test_fixture_build(XiCanonicalProgramTestFixtur
 fail:
     xi_canonical_program_test_fixture_cleanup(fixture);
     return false;
+}
+
+TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-cooperative-yield", "Coro.yield()\n"));
+    XiFunc *entry = fixture.pipeline.ir;
+    PIPELINE_TEST_REQUIRE(entry != NULL && entry->coro_plan != NULL &&
+                          entry->coro_plan->is_coroutine && entry->coro_plan->nstates == 1u);
+    XiCoroSuspendPoint *point = &entry->coro_plan->points[0];
+    XiValue *yield = point->op;
+    PIPELINE_TEST_REQUIRE(yield != NULL && yield->op == XI_YIELD &&
+                          point->kind == XI_CORO_SUSP_YIELD && point->state_id == 1u &&
+                          point->suspend_block == yield->block && point->resume_block != NULL);
+    const XgSuspendPointSummary *evidence = xg_global_evidence_find_suspend_point(
+        &fixture.evidence, (XgSuspendPointUseId) yield->xg_suspend_point_use_id);
+    PIPELINE_TEST_REQUIRE(evidence != NULL && evidence->owner_func_id == entry->xg_body_func_id &&
+                          evidence->source_node_id == yield->xg_suspend_source_node_id &&
+                          evidence->body_ordinal == yield->xg_suspend_body_ordinal &&
+                          evidence->kind == XG_SUSPEND_POINT_COOPERATIVE_YIELD &&
+                          evidence->may_suspend == 1u && evidence->contract_complete == 1u);
+
+    XrCoreIrKey semantic_profile = xr_core_ir_key(
+        "cooperative-yield-profile", strlen("cooperative-yield-profile"));
+    const XiFunc *module_roots[] = {entry};
+    XrProgramFromXiInput input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = entry,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &artifact, diagnostic,
+                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrProgramArtifact repeated = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &repeated, diagnostic,
+                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(repeated.size == artifact.size &&
+                          memcmp(repeated.bytes, artifact.bytes, artifact.size) == 0);
+    xr_program_artifact_free(&repeated);
+
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated != NULL);
+    uint32_t entry_function = xr_validated_program_entry_function(validated);
+    PIPELINE_TEST_REQUIRE(entry_function < validated->function_count);
+    const XrValidatedFunction *function = &validated->functions[entry_function];
+    PIPELINE_TEST_REQUIRE(function->coroutine_state_count == 2u &&
+                          function->coroutine_safepoint_count == 1u &&
+                          function->effect_mask == XR_CORE_EFFECT_SUSPEND &&
+                          function->capability_mask ==
+                              XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
+                          validated_program_has_operation(validated,
+                                                          XR_CORE_OP_CORE_COROUTINE_YIELD));
+
+    XrExecutionBindingInput execution_input = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = validated,
+        .profile = fixture.profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
+                                                       &execution_diagnostic) == XR_EXECUTION_OK);
+
+    XrReferenceExecution *reference = NULL;
+    PIPELINE_TEST_REQUIRE(
+        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference));
+    XrReferenceOutcome reference_yield = xr_reference_execution_step(reference);
+    PIPELINE_TEST_REQUIRE(reference_yield.kind == XR_REFERENCE_OUTCOME_SUSPENDED &&
+                          reference_yield.safepoint_id == 0u &&
+                          reference_yield.state_id == 1u);
+    XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
+    PIPELINE_TEST_REQUIRE(reference_return.kind == XR_REFERENCE_OUTCOME_RETURN &&
+                          reference_return.value.kind == XR_REFERENCE_VALUE_VOID &&
+                          reference_return.state_id == 1u);
+    xr_reference_execution_free(reference);
+
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
+                          XR_VM_CODE_OK);
+    XrVmExecution *vm_execution = NULL;
+    PIPELINE_TEST_REQUIRE(
+        xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
+    XrVmOutcome vm_yield = xr_vm_execution_step(vm_execution);
+    PIPELINE_TEST_REQUIRE(vm_yield.kind == XR_VM_OUTCOME_SUSPENDED &&
+                          vm_yield.safepoint_id == reference_yield.safepoint_id &&
+                          vm_yield.state_id == reference_yield.state_id);
+    XrVmOutcome vm_return = xr_vm_execution_step(vm_execution);
+    PIPELINE_TEST_REQUIRE(vm_return.kind == XR_VM_OUTCOME_RETURN &&
+                          vm_return.value.kind == XR_VM_VALUE_VOID &&
+                          vm_return.state_id == reference_return.state_id);
+    xr_vm_execution_free(vm_execution);
+    xr_vm_code_free(vm_code);
+
+    XrBackendIR *backend_ir = NULL;
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendOptions backend_options = xr_backend_default_options();
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
+                                              &backend_ir,
+                                              &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC generated_again = {0};
+    XrBackendStatus emit_status =
+        xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic);
+    if (emit_status != XR_BACKEND_OK)
+        fprintf(stderr,
+                "cooperative yield AOT emission failed: status=%u operation=%u function=%u "
+                "block=%u instruction=%u\n",
+                (unsigned) backend_diagnostic.status, backend_diagnostic.operation_id,
+                backend_diagnostic.function_id, backend_diagnostic.block_id,
+                backend_diagnostic.instruction_id);
+    PIPELINE_TEST_REQUIRE(emit_status == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated_again,
+                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u &&
+                          generated_again.size == generated.size &&
+                          memcmp(generated_again.bytes, generated.bytes, generated.size) == 0 &&
+                          strstr(generated.bytes, "xr_aot_entry_coroutine_step") != NULL &&
+                          strstr(generated.bytes, "xr_aot_entry_coroutine_descriptor") != NULL &&
+                          strstr(generated.bytes, "XrProto") == NULL &&
+                          strstr(generated.bytes, "TargetPlan") == NULL);
+    if (g_yield_aot_output_path) {
+        FILE *generated_file = fopen(g_yield_aot_output_path, "wb");
+        PIPELINE_TEST_REQUIRE(generated_file != NULL);
+        PIPELINE_TEST_REQUIRE(fwrite(generated.bytes, 1u, generated.size, generated_file) ==
+                              generated.size);
+        PIPELINE_TEST_REQUIRE(fclose(generated_file) == 0);
+    }
+    xr_generated_c_free(&generated_again);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    uint8_t saved_complete = yield->xg_suspend_contract_complete;
+    yield->xg_suspend_contract_complete = 0u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_INVALID_INPUT, "logical plan/evidence closure", NULL));
+    yield->xg_suspend_contract_complete = saved_complete;
+
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
 }
 
 TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
@@ -4519,10 +4677,12 @@ TEST(e2e_print_group_without_write_is_refused) {
 }
 
 int main(int argc, char **argv) {
-    if (argc == 5 && strcmp(argv[1], "--source-aot-c") == 0 &&
-        strcmp(argv[3], "--pointer-aot-c") == 0) {
+    if (argc == 7 && strcmp(argv[1], "--source-aot-c") == 0 &&
+        strcmp(argv[3], "--pointer-aot-c") == 0 &&
+        strcmp(argv[5], "--yield-aot-c") == 0) {
         g_source_aot_output_path = argv[2];
         g_pointer_aot_output_path = argv[4];
+        g_yield_aot_output_path = argv[6];
     } else if (argc != 1) {
         return 2;
     }
@@ -4659,6 +4819,7 @@ int main(int argc, char **argv) {
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
+    run_e2e_program_cooperative_yield_closes_source_reference_vm_and_aot();
     run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
     run_e2e_program_target_os_member_equality_is_executable();
     run_e2e_program_target_query_closes_interface_slot_contract();

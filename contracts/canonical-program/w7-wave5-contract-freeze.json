@@ -268,6 +268,7 @@
               "path": "src/frontend/analyzer/xanalyzer_suspend.c",
               "tokens": [
                 "sus_call_is_coro_yield",
+                "sus_scan_module_initializer",
                 "XA_SUSPEND_POINT_COOPERATIVE_YIELD",
                 "xa_analyzer_set_suspend_point"
               ]
@@ -276,6 +277,7 @@
               "path": "tests/unit/analysis/test_xglobal_summary.c",
               "tokens": [
                 "global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract",
+                "global_evidence_owns_top_level_cooperative_yield_on_module_initializer",
                 "global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow"
               ]
             }
@@ -351,6 +353,14 @@
               ]
             },
             {
+              "path": "src/program/xr_program_from_xi.c",
+              "tokens": [
+                "prepare_coroutine_shape",
+                "translate_coroutine_yield_terminator",
+                "exact_cooperative_yield_contract"
+              ]
+            },
+            {
               "path": "tests/unit/program/xr_program_coroutine_fixture.h",
               "tokens": [
                 "XrCoreIrCoroutineStateInput states[]",
@@ -391,6 +401,7 @@
               "tokens": [
                 "xr_vm_execution_create",
                 "case XR_CORE_OP_CORE_COROUTINE_YIELD:",
+                "case XR_CORE_OP_CORE_BRANCH:",
                 "A one-shot call cannot own a resumable session."
               ]
             },
@@ -430,6 +441,14 @@
                 "descriptor->execution_id",
                 "execution_id",
                 "xr_fingerprint_equal"
+              ]
+            },
+            {
+              "path": "tests/unit/ir/test_xi_pipeline.c",
+              "tokens": [
+                "e2e_program_cooperative_yield_closes_source_reference_vm_and_aot",
+                "g_yield_aot_output_path",
+                "xr_aot_entry_coroutine_descriptor"
               ]
             }
           ]

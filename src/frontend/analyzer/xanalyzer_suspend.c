@@ -711,6 +711,31 @@ static void sus_scan_function(XaSuspendPass *pass, XaSuspendRow *row) {
     xa_ast_walk(body, sus_scan_node_pre, sus_scan_node_post, &scan);
 }
 
+/* The module initializer is an executable source body even though it has no
+ * declaration symbol in the analyzer. Scan it with a private row so node-local
+ * suspension facts (notably the exact Coro.yield fact consumed by Xglobal)
+ * have the same owner-independent source authority as facts inside declared
+ * functions. The row is intentionally not published as a function effect;
+ * Xglobal owns the module-initializer body identity and composes its effects. */
+static void sus_scan_module_initializer(XaSuspendPass *pass, AstNode *program) {
+    if (!pass || !program || program->type != AST_PROGRAM)
+        return;
+    XaSuspendRow row;
+    memset(&row, 0, sizeof(row));
+    row.node = program;
+    row.synthetic_symbol.name = "<module-init>";
+    row.synthetic_symbol.kind = XA_SYM_FUNCTION;
+    row.symbol = &row.synthetic_symbol;
+    row.uses_synthetic_symbol = true;
+    row.direct_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    row.result_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    row.spawn_direct_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    row.spawn_result_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    XaSuspendScan scan = {.pass = pass, .row = &row};
+    xa_ast_walk(program, sus_scan_node_pre, sus_scan_node_post, &scan);
+    xr_free(row.edges);
+}
+
 /* Combine the direct conclusion with the transitive edges once. */
 static void sus_combine_row(XaSuspendPass *pass, XaSuspendRow *row, XaSuspendState *out_state,
                             XaSuspendCause *out_cause, XaUnknownReason *out_incomplete_reason) {
@@ -1086,6 +1111,7 @@ void xa_verify_no_suspend(XaAnalyzer *analyzer, AstNode *ast) {
     sus_collect_functions(&pass, ast);
     for (int i = 0; i < pass.row_count; i++)
         sus_scan_function(&pass, &pass.rows[i]);
+    sus_scan_module_initializer(&pass, ast);
     if (pass.resource_failed) {
         XrLocation location = {.file = analyzer->current_file,
                                .line = (uint32_t) ast->line,

@@ -1107,6 +1107,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
            operation_id == XR_CORE_OP_CORE_ADD_I64 ||
+           operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_RETURN;
 }
@@ -1234,6 +1235,19 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->values[instruction->result_id] =
                     (XrReferenceValue) {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = value};
                 execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_BRANCH: {
+                const XrValidatedBlock *target =
+                    &function->blocks[instruction->successors[0]];
+                for (uint32_t argument = 0u; argument < instruction->operand_count; ++argument) {
+                    uint32_t target_value = target->argument_ids[argument];
+                    execution->values[target_value] =
+                        execution->values[instruction->operands[argument]];
+                    execution->initialized[target_value] = true;
+                }
+                execution->block_id = instruction->successors[0];
+                execution->instruction_id = 0u;
                 break;
             }
             case XR_CORE_OP_CORE_COROUTINE_YIELD: {

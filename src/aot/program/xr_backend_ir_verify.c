@@ -232,8 +232,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
               function->coroutine_states[0].continuation_block != function->entry_block ||
               function->coroutine_states[1].continuation_block >= function->block_count ||
               function->coroutine_safepoints[0].resume_state_id != 1u ||
-              function->coroutine_safepoints[0].live_value_count == 0u ||
-              !function->coroutine_safepoints[0].live_value_ids)) ||
+              (function->coroutine_safepoints[0].live_value_count != 0u &&
+               !function->coroutine_safepoints[0].live_value_ids))) ||
             (!coroutine && (function->coroutine_states || function->coroutine_safepoints))) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                       function_id, 0u, 0u);

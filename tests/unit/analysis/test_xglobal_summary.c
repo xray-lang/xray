@@ -821,6 +821,53 @@ TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract) 
     teardown_parser_session();
 }
 
+TEST(global_evidence_owns_top_level_cooperative_yield_on_module_initializer) {
+    setup_parser_session();
+    XgGlobalEvidence evidence = {0};
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
+        "Coro.yield()\n", &evidence, &analyzer, &ast));
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_UINT(ast->type, AST_PROGRAM);
+    ASSERT_EQ_UINT(ast->as.program.count, 1);
+    AstNode *statement = ast->as.program.statements[0];
+    AstNode *call = statement && statement->type == AST_EXPR_STMT
+                        ? statement->as.expr_stmt
+                        : NULL;
+    ASSERT_NOT_NULL(call);
+
+    XaSuspendPointFact fact = {0};
+    ASSERT_TRUE(xa_analyzer_get_suspend_point(analyzer, call, &fact));
+    ASSERT_EQ_UINT(fact.kind, XA_SUSPEND_POINT_COOPERATIVE_YIELD);
+    ASSERT_EQ_UINT(fact.may_suspend, 1);
+    ASSERT_EQ_UINT(fact.complete, 1);
+    ASSERT_EQ_UINT(evidence.nsuspend_points, 1);
+
+    const XgSuspendPointSummary *point = &evidence.suspend_points[0];
+    const XgBodySummary *module_initializer = NULL;
+    for (uint32_t body_index = 0u; body_index < evidence.nbodies; ++body_index) {
+        if (evidence.bodies[body_index].kind == XG_BODY_MODULE_INIT) {
+            ASSERT_NULL(module_initializer);
+            module_initializer = &evidence.bodies[body_index];
+        }
+    }
+    ASSERT_NOT_NULL(module_initializer);
+    ASSERT_EQ_UINT(point->owner_func_id, module_initializer->func_id);
+    ASSERT_EQ_UINT(point->kind, XG_SUSPEND_POINT_COOPERATIVE_YIELD);
+    ASSERT_EQ_UINT(point->may_suspend, 1);
+    ASSERT_EQ_UINT(point->contract_complete, 1);
+    ASSERT_EQ_UINT(module_initializer->effect_bits & XG_BODY_MAY_SUSPEND,
+                   XG_BODY_MAY_SUSPEND);
+    ASSERT_EQ_UINT(module_initializer->capability_bits & XG_CAP_COROUTINE,
+                   XG_CAP_COROUTINE);
+
+    xg_global_evidence_free(&evidence);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow) {
     setup_parser_session();
     const char *source = "fn run() -> i64 {\n"
@@ -15033,6 +15080,7 @@ RUN_TEST(global_evidence_rejects_ambiguous_target_query_identity);
 RUN_TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow);
 RUN_TEST(global_evidence_closes_target_query_contract_over_interface_witnesses);
 RUN_TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract);
+RUN_TEST(global_evidence_owns_top_level_cooperative_yield_on_module_initializer);
 RUN_TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow);
 RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_decl_kind_capabilities_are_disjoint);

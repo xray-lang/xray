@@ -1571,7 +1571,9 @@ static bool emit_coroutine_entry_adapter(CBuffer *buffer, const XrBackendIR *ir)
     const XrBackendFunction *entry = &ir->functions[ir->entry_function];
     if (entry->coroutine_safepoint_count == 0u)
         return true;
-    if (entry->parameter_count != 0u || entry->result_type_id != XR_CORE_TYPE_I64 ||
+    if (entry->parameter_count != 0u ||
+        (entry->result_type_id != XR_CORE_TYPE_VOID &&
+         entry->result_type_id != XR_CORE_TYPE_I64) ||
         entry->error_type_id != XR_CORE_TYPE_VOID || entry->panic_type_id != XR_CORE_TYPE_VOID)
         return false;
     bool checked = false;
@@ -1631,7 +1633,7 @@ static bool emit_coroutine_entry_adapter(CBuffer *buffer, const XrBackendIR *ir)
                        "    XrAotOutcome native = xr_aot_fn_%u_step(&frame->context, "
                        "&frame->function);\n"
                        "    if (native.kind == UINT32_C(0)) {\n"
-                       "        XrBackendNativeOutcome result = {UINT32_C(0), native.i64, "
+                       "        XrBackendNativeOutcome result = {UINT32_C(0), %s, "
                        "frame->function.state, 0};\n"
                        "        return result;\n"
                        "    }\n"
@@ -1647,7 +1649,8 @@ static bool emit_coroutine_entry_adapter(CBuffer *buffer, const XrBackendIR *ir)
                        "    }\n"
                        "    return invalid;\n"
                        "}\n\n",
-                       ir->entry_function))
+                       ir->entry_function,
+                       entry->result_type_id == XR_CORE_TYPE_I64 ? "native.i64" : "0"))
         return false;
     if (!append_text(buffer, "const XrBackendNativeDescriptor "
                              "xr_aot_entry_coroutine_descriptor = {\n"
