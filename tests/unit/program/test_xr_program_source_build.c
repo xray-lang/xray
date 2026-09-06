@@ -49,6 +49,7 @@ static const char *function_parameter_aot_output_path;
 static const char *clock_provider_aot_output_path;
 static const char *pipe_provider_aot_output_path;
 static const char *pipe_close_failure_aot_output_path;
+static const char *pipe_uncaught_error_aot_output_path;
 
 typedef struct ClockProviderProbe {
     uint32_t calls;
@@ -1358,6 +1359,209 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     source_build_fixture_free(&fixture);
 }
 
+static void assert_uncaught_reference_error(XrValidatedProgram *program, XrInstance *instance,
+                                            uint32_t entry, uint16_t error_type_id,
+                                            PipeProviderProbe *probe) {
+    XrExecutionLease lease = {0};
+    ASSERT_TRUE(xr_execution_instance_acquire(instance, &lease));
+    XrReferenceProviderBinding binding = {
+        .context = &lease,
+        .call_bool_i64_unary = reference_pipe_close_provider_call,
+    };
+    XrReferenceOutcome outcome =
+        xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &binding);
+    ASSERT_EQ_INT(outcome.kind, XR_REFERENCE_OUTCOME_ERROR);
+    XrReferenceAggregateView error = {0};
+    ASSERT_TRUE(xr_reference_value_aggregate_view(&outcome.error_value, &error));
+    ASSERT_EQ_UINT(error.type_id, error_type_id);
+    ASSERT_EQ_UINT(error.variant_ordinal, 0u);
+    ASSERT_EQ_UINT(error.field_count, 1u);
+    ASSERT_EQ_INT(error.fields[0].kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(error.fields[0].as.i64, -2);
+    ASSERT_EQ_UINT(probe->close_calls, 2u);
+    xr_reference_outcome_dispose(&outcome);
+    ASSERT_TRUE(xr_execution_lease_release(&lease));
+}
+
+static void assert_uncaught_vm_error(XrInstance *instance, uint32_t entry,
+                                     uint16_t error_type_id, PipeProviderProbe *probe) {
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &code, &diagnostic), XR_VM_CODE_OK);
+    XrVmOutcome outcome = xr_vm_code_execute(code, instance, entry, NULL, 0u);
+    ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_ERROR);
+    XrVmAggregateView error = {0};
+    ASSERT_TRUE(xr_vm_value_aggregate_view(&outcome.error_value, &error));
+    ASSERT_EQ_UINT(error.type_id, error_type_id);
+    ASSERT_EQ_UINT(error.variant_ordinal, 0u);
+    ASSERT_EQ_UINT(error.field_count, 1u);
+    ASSERT_EQ_INT(error.fields[0].kind, XR_VM_VALUE_I64);
+    ASSERT_EQ_INT(error.fields[0].as.i64, -2);
+    ASSERT_EQ_UINT(probe->close_calls, 4u);
+    xr_vm_outcome_dispose(&outcome);
+    xr_vm_code_free(code);
+}
+
+static void write_uncaught_error_aot(XrValidatedProgram *program,
+                                     const XrTargetProfile *profile, uint32_t entry,
+                                     uint16_t error_type_id, const char *output_path) {
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic diagnostic;
+    XrBackendIR *ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(ir, &diagnostic));
+    XrGeneratedC generated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_NULL(strstr(generated.bytes, "int main(void)"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "out_error"));
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_TRUE(fprintf(
+            output,
+            "\nstatic uint32_t xr_probe_calls;\n"
+            "static int xr_probe_close(void *context, uint32_t requirement, uint32_t operation, "
+            "int64_t argument, uint8_t *result) {\n"
+            "    static const int64_t expected[2] = {INT64_C(2147483646), "
+            "INT64_C(2147483647)};\n"
+            "    (void)context;\n"
+            "    if (requirement != 0 || operation != 0 || !result || xr_probe_calls >= 2 || "
+            "argument != expected[xr_probe_calls]) return 1;\n"
+            "    *result = 0;\n"
+            "    ++xr_probe_calls;\n"
+            "    return 0;\n"
+            "}\n"
+            "int main(void) {\n"
+            "    XrAotContext context = {0};\n"
+            "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
+            "    XrAotType%u error = {0};\n"
+            "    XrAotOutcome outcome = xr_aot_fn_%u(&context, &error);\n"
+            "    if (outcome.kind != 2 || error.tag != 0 || "
+            "error.payload.case_0.f0 != -INT64_C(2) || xr_probe_calls != 2) return 255;\n"
+            "    return 220;\n"
+            "}\n",
+            error_type_id, entry) > 0);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+}
+
+TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
+    static const char source[] =
+        "import sys\n"
+        "enum CleanupFailure { Negative { code: i64 } }\n"
+        "fn fail(value: i64) -> i64 {\n"
+        "  if (value < 0) { throw CleanupFailure.Negative { code: value } }\n"
+        "  return value\n"
+        "}\n"
+        "fn doomed() -> i64 {\n"
+        "  var live = sys.Pipe(2147483646, 2147483647)\n"
+        "  defer {\n"
+        "    live.closeRead()\n"
+        "    live.closeWrite()\n"
+        "  }\n"
+        "  return fail(-2)\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    fixture.input.entry.function_name = "doomed";
+    XrTargetProfile *profile = NULL;
+    char profile_error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
+        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint =
+        xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct first = {0};
+    XrProgramSourceProduct second = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &first, &diagnostic);
+    assert_source_build_ok(&fixture.input, &second, &diagnostic);
+    if (!first.program || !second.program) {
+        xr_program_source_product_free(&second);
+        xr_program_source_product_free(&first);
+        xr_target_profile_free(profile);
+        source_build_fixture_free(&fixture);
+        return;
+    }
+    assert_products_equal(&first, &second);
+    ASSERT_EQ_UINT(program_operation_count(first.program,
+                                           XR_CORE_OP_CORE_CALL_SEALED_INVOKE),
+                   1u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_ERROR_PUBLISH),
+                   2u);
+    uint32_t entry = xr_validated_program_entry_function(first.program);
+    ASSERT_LT(entry, first.program->function_count);
+    const XrValidatedFunction *entry_function = &first.program->functions[entry];
+    ASSERT_TRUE(entry_function->error_type_id != XR_CORE_TYPE_VOID);
+    const XrValidatedType *error_type =
+        xr_validated_program_type(first.program, entry_function->error_type_id);
+    ASSERT_NOT_NULL(error_type);
+    ASSERT_EQ_INT(error_type->kind, XR_CORE_IR_TYPE_VARIANT);
+    ASSERT_EQ_UINT(error_type->variant_count, 1u);
+    ASSERT_EQ_UINT(error_type->variants[0].payload_count, 1u);
+    ASSERT_EQ_UINT(error_type->variants[0].payload_types[0], XR_CORE_TYPE_I64);
+
+    XrProgramProviderRequirementView requirement = {0};
+    ASSERT_TRUE(xr_validated_program_provider_requirement(first.program, 0u, &requirement));
+    PipeProviderProbe probe = {
+        .read_handle = 2147483646,
+        .write_handle = 2147483647,
+        .close_results = {false, false},
+    };
+    XrProviderOperationBinding operation = {
+        .operation_id = requirement.operation_ids[0],
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
+        .context = &probe,
+    };
+    operation.entry.bool_i64_unary = pipe_close_provider_probe;
+    XrProviderBinding provider = {
+        .contract_id = requirement.contract_id,
+        .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
+        .operations = &operation,
+        .operation_count = 1u,
+    };
+    const XrTargetProviderContract *contract =
+        find_profile_provider(profile, requirement.contract_id);
+    ASSERT_NOT_NULL(contract);
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
+                      contract, &provider.contract_fingerprint),
+                  XR_RUNTIME_ABI_OK);
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = first.program,
+        .profile = profile,
+        .providers = &provider,
+        .provider_count = 1u,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+
+    assert_uncaught_reference_error(first.program, instance, entry,
+                                    entry_function->error_type_id, &probe);
+    assert_uncaught_vm_error(instance, entry, entry_function->error_type_id, &probe);
+    write_uncaught_error_aot(first.program, profile, entry, entry_function->error_type_id,
+                             pipe_uncaught_error_aot_output_path);
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+    xr_program_source_product_free(&second);
+    xr_program_source_product_free(&first);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_keeps_defer_panic_surface_fail_closed) {
     static const char source[] =
         "import sys\n"
@@ -1513,7 +1717,9 @@ if (argc >= 5)
     pipe_provider_aot_output_path = argv[4];
 if (argc >= 6)
     pipe_close_failure_aot_output_path = argv[5];
-if (argc > 6)
+if (argc >= 7)
+    pipe_uncaught_error_aot_output_path = argv[6];
+if (argc > 7)
     return 2;
 RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
 RUN_TEST(source_owner_two_module_graph_is_deterministic);
@@ -1523,6 +1729,7 @@ RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_ex
 RUN_TEST(source_owner_clock_provider_is_exact_across_private_executors);
 RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
 RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
+RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);
 RUN_TEST(source_owner_keeps_defer_panic_surface_fail_closed);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);

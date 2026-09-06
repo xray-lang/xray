@@ -110,6 +110,8 @@ typedef enum XrReferenceTrap {
 
 typedef struct XrReferenceOutcome {
     XrReferenceOutcomeKind kind;
+    bool owns_dynamic_values;
+    uint8_t reserved8[3];
     XrReferenceValue value;
     XrReferenceValue error_value;
     XrReferenceValue panic_value;
@@ -118,6 +120,14 @@ typedef struct XrReferenceOutcome {
     uint32_t state_id;
     uint32_t safepoint_id;
 } XrReferenceOutcome;
+
+typedef struct XrReferenceAggregateView {
+    uint16_t type_id;
+    uint16_t reserved16;
+    uint32_t variant_ordinal;
+    const XrReferenceValue *fields;
+    uint32_t field_count;
+} XrReferenceAggregateView;
 
 typedef struct XrReferenceExecution XrReferenceExecution;
 
@@ -129,6 +139,11 @@ XR_FUNC XrReferenceOutcome xr_reference_evaluate_bound(
     const XrValidatedProgram *program, uint32_t function_id, const XrReferenceValue *arguments,
     uint32_t argument_count, const XrReferenceProfile *profile, const XrReferenceBudget *budget,
     const XrReferenceProviderBinding *providers);
+/* Aggregate values returned by the one-shot evaluator are detached from its
+ * private arena. Views borrow that storage until the outcome is disposed. */
+XR_FUNC bool xr_reference_value_aggregate_view(const XrReferenceValue *value,
+                                                XrReferenceAggregateView *view_out);
+XR_FUNC void xr_reference_outcome_dispose(XrReferenceOutcome *outcome);
 XR_FUNC bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
                                            const XrReferenceValue *arguments,
                                            uint32_t argument_count, const XrReferenceBudget *budget,

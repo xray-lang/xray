@@ -93,6 +93,8 @@ typedef enum XrVmTrap {
 
 typedef struct XrVmOutcome {
     XrVmOutcomeKind kind;
+    bool owns_dynamic_values;
+    uint8_t reserved8[3];
     XrVmValue value;
     XrVmValue error_value;
     XrVmValue panic_value;
@@ -102,6 +104,14 @@ typedef struct XrVmOutcome {
     uint32_t safepoint_id;
     XrFingerprint logical_trace;
 } XrVmOutcome;
+
+typedef struct XrVmAggregateView {
+    uint16_t type_id;
+    uint16_t reserved16;
+    uint32_t variant_ordinal;
+    const XrVmValue *fields;
+    uint32_t field_count;
+} XrVmAggregateView;
 
 typedef enum XrVmCodeStatus {
     XR_VM_CODE_OK = 0,
@@ -136,6 +146,11 @@ XR_FUNC XrVmDecodePolicy xr_vm_code_decode_policy(const XrVmCode *code);
 XR_FUNC XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance,
                                        uint32_t function_id, const XrVmValue *arguments,
                                        uint32_t argument_count);
+/* Aggregate values returned by one-shot execution own an executor-private
+ * detached tree. Views borrow that tree until the outcome is disposed. */
+XR_FUNC bool xr_vm_value_aggregate_view(const XrVmValue *value,
+                                        XrVmAggregateView *view_out);
+XR_FUNC void xr_vm_outcome_dispose(XrVmOutcome *outcome);
 XR_FUNC bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance,
                                     uint32_t function_id, const XrVmValue *arguments,
                                     uint32_t argument_count, XrVmExecution **execution_out);

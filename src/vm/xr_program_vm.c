@@ -462,6 +462,89 @@ static bool clone_vm_value(XrVmContext *context, XrVmValue source, uint16_t type
     return true;
 }
 
+static void dispose_detached_vm_value(XrVmValue *value) {
+    if (!value || value->kind != XR_VM_VALUE_AGGREGATE || !value->as.aggregate)
+        return;
+    XrVmAggregateValue *aggregate = (XrVmAggregateValue *) (void *) value->as.aggregate;
+    for (uint32_t field = 0u; field < aggregate->field_count; ++field)
+        dispose_detached_vm_value(&aggregate->fields[field]);
+    xr_free(aggregate->fields);
+    xr_free(aggregate);
+    *value = void_value();
+}
+
+static bool detach_vm_value(XrVmValue source, XrVmValue *output) {
+    if (!output)
+        return false;
+    *output = void_value();
+    if (source.kind == XR_VM_VALUE_EXISTENTIAL || source.kind == XR_VM_VALUE_CALLABLE)
+        return false;
+    if (source.kind != XR_VM_VALUE_AGGREGATE) {
+        *output = source;
+        return true;
+    }
+    const XrVmAggregateValue *source_aggregate = source.as.aggregate;
+    if (!source_aggregate ||
+        (source_aggregate->field_count != 0u && !source_aggregate->fields))
+        return false;
+#if SIZE_MAX < UINT64_MAX
+    if ((size_t) source_aggregate->field_count > SIZE_MAX / sizeof(*source_aggregate->fields))
+        return false;
+#endif
+    XrVmAggregateValue *aggregate = xr_calloc(1u, sizeof(*aggregate));
+    if (!aggregate)
+        return false;
+    if (source_aggregate->field_count != 0u) {
+        aggregate->fields = xr_calloc(source_aggregate->field_count, sizeof(*aggregate->fields));
+        if (!aggregate->fields) {
+            xr_free(aggregate);
+            return false;
+        }
+    }
+    aggregate->type_id = source_aggregate->type_id;
+    aggregate->variant_ordinal = source_aggregate->variant_ordinal;
+    aggregate->field_count = source_aggregate->field_count;
+    XrVmValue detached = {
+        .kind = XR_VM_VALUE_AGGREGATE,
+        .as.aggregate = aggregate,
+    };
+    for (uint32_t field = 0u; field < aggregate->field_count; ++field) {
+        if (!detach_vm_value(source_aggregate->fields[field], &aggregate->fields[field])) {
+            dispose_detached_vm_value(&detached);
+            return false;
+        }
+    }
+    *output = detached;
+    return true;
+}
+
+bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out) {
+    if (view_out)
+        memset(view_out, 0, sizeof(*view_out));
+    if (!value || !view_out || value->kind != XR_VM_VALUE_AGGREGATE ||
+        !value->as.aggregate)
+        return false;
+    const XrVmAggregateValue *aggregate = value->as.aggregate;
+    *view_out = (XrVmAggregateView) {
+        .type_id = aggregate->type_id,
+        .variant_ordinal = aggregate->variant_ordinal,
+        .fields = aggregate->fields,
+        .field_count = aggregate->field_count,
+    };
+    return true;
+}
+
+void xr_vm_outcome_dispose(XrVmOutcome *outcome) {
+    if (!outcome)
+        return;
+    if (outcome->owns_dynamic_values) {
+        dispose_detached_vm_value(&outcome->value);
+        dispose_detached_vm_value(&outcome->error_value);
+        dispose_detached_vm_value(&outcome->panic_value);
+    }
+    memset(outcome, 0, sizeof(*outcome));
+}
+
 static void free_aggregates(XrVmContext *context) {
     for (uint32_t index = 0; index < context->aggregate_count; ++index) {
         xr_free(context->aggregates[index]->fields);
@@ -1903,13 +1986,32 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     XrVmOutcome outcome =
         execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
-    if (outcome.kind == XR_VM_OUTCOME_RETURN && (outcome.value.kind == XR_VM_VALUE_AGGREGATE ||
-                                                 outcome.value.kind == XR_VM_VALUE_EXISTENTIAL ||
-                                                 outcome.value.kind == XR_VM_VALUE_CALLABLE))
+    if (outcome.kind == XR_VM_OUTCOME_RETURN &&
+        outcome.value.kind == XR_VM_VALUE_AGGREGATE) {
+        XrVmValue detached = void_value();
+        if (detach_vm_value(outcome.value, &detached)) {
+            outcome.value = detached;
+            outcome.owns_dynamic_values = true;
+        } else {
+            outcome = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, &context);
+        }
+    }
+    if (outcome.kind == XR_VM_OUTCOME_RETURN &&
+        (outcome.value.kind == XR_VM_VALUE_EXISTENTIAL ||
+         outcome.value.kind == XR_VM_VALUE_CALLABLE))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_ERROR &&
-        (outcome.error_value.kind == XR_VM_VALUE_AGGREGATE ||
-         outcome.error_value.kind == XR_VM_VALUE_EXISTENTIAL ||
+        outcome.error_value.kind == XR_VM_VALUE_AGGREGATE) {
+        XrVmValue detached = void_value();
+        if (detach_vm_value(outcome.error_value, &detached)) {
+            outcome.error_value = detached;
+            outcome.owns_dynamic_values = true;
+        } else {
+            outcome = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, &context);
+        }
+    }
+    if (outcome.kind == XR_VM_OUTCOME_ERROR &&
+        (outcome.error_value.kind == XR_VM_VALUE_EXISTENTIAL ||
          outcome.error_value.kind == XR_VM_VALUE_CALLABLE))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_PANIC && outcome.panic_value.kind != XR_VM_VALUE_PANIC_INFO)

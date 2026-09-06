@@ -46,5 +46,7 @@ arithmetic without C signed overflow, explicit traps/errors, logical aggregate/v
 block arguments, branches, calls and the pointer-width profile query. Aggregate update produces a
 fresh logical value, and variant projection publishes the named tag-mismatch trap before reading a
 payload. Explicit owner copy recursively clones logical aggregate carriers under the same bounded
-value-cell budget used for ordinary construction. The evaluator does not include or call compiler
-planners, VM handlers, AOT lowering or generated-C helpers.
+value-cell budget used for ordinary construction. Before a one-shot call releases its arena, an
+aggregate return or uncaught typed error is recursively detached into evaluator-owned logical
+storage; callers use the typed aggregate view and explicitly dispose the outcome. The evaluator
+does not include or call compiler planners, VM handlers, AOT lowering or generated-C helpers.

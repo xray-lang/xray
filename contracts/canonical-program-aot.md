@@ -45,13 +45,15 @@ tagged unions without a VM carrier or shared local layout. A source-built higher
 fixture proves that a callable borrowed through an ordinary function parameter has the same
 reference, VM, and native generated-C result, and that repeated C emission is byte-identical. The
 Pipe source fixture also executes guarded division-by-zero right-hand sides through generated C to
-prove source short-circuit parity. The operation matrix separately records
+prove source short-circuit parity. A second Pipe fixture enters a fallible function directly and
+proves that reference execution, VM execution, and strict native generated C preserve the same
+typed error tag and payload after running both deferred endpoint closes. The operation matrix separately records
 which rows have a production source owner. Checked overflow, wrapping overflow, and division by zero
 also compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
 anchor-sha256: CMakeLists.txt 2a14f3d1a43bfc8b6f7050c4317b3b7254a70593550a3a47d9c30c9970da899a
-anchor-sha256: tests/unit/CMakeLists.txt 8fcd65c0244dda6cf78fe42e7e3bf3a03b1db2c29ac42057c804316a63a314ba
+anchor-sha256: tests/unit/CMakeLists.txt 5115b66c276316ffaaaca6ec69f0d1d5952ea54db3b7669f13fd9354349d477c
 anchor-sha256: xisa/core/registry.json 23734012021115d05680360187e4568fa51d7c316b779489e9220b8e072ba28e
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 068aeb1826fe6e4608ce86372f71b2d33dbbbb5e5ca5f7f9b06a069a579f8842

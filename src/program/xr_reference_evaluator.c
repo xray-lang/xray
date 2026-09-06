@@ -391,6 +391,94 @@ static bool clone_reference_value(EvalContext *context, XrReferenceValue source,
     return true;
 }
 
+static void dispose_detached_reference_value(XrReferenceValue *value) {
+    if (!value || value->kind != XR_REFERENCE_VALUE_AGGREGATE || !value->as.aggregate)
+        return;
+    XrReferenceAggregateValue *aggregate =
+        (XrReferenceAggregateValue *) (void *) value->as.aggregate;
+    for (uint32_t field = 0u; field < aggregate->field_count; ++field)
+        dispose_detached_reference_value(&aggregate->fields[field]);
+    xr_free(aggregate->fields);
+    xr_free(aggregate);
+    *value = void_value();
+}
+
+static bool detach_reference_value(XrReferenceValue source, XrReferenceValue *output) {
+    if (!output)
+        return false;
+    *output = void_value();
+    if (source.kind == XR_REFERENCE_VALUE_EXISTENTIAL ||
+        source.kind == XR_REFERENCE_VALUE_CALLABLE)
+        return false;
+    if (source.kind != XR_REFERENCE_VALUE_AGGREGATE) {
+        *output = source;
+        return true;
+    }
+    const XrReferenceAggregateValue *source_aggregate = source.as.aggregate;
+    if (!source_aggregate ||
+        (source_aggregate->field_count != 0u && !source_aggregate->fields))
+        return false;
+#if SIZE_MAX < UINT64_MAX
+    if ((size_t) source_aggregate->field_count > SIZE_MAX / sizeof(*source_aggregate->fields))
+        return false;
+#endif
+    XrReferenceAggregateValue *aggregate = xr_calloc(1u, sizeof(*aggregate));
+    if (!aggregate)
+        return false;
+    if (source_aggregate->field_count != 0u) {
+        aggregate->fields =
+            xr_calloc(source_aggregate->field_count, sizeof(*aggregate->fields));
+        if (!aggregate->fields) {
+            xr_free(aggregate);
+            return false;
+        }
+    }
+    aggregate->type_id = source_aggregate->type_id;
+    aggregate->variant_ordinal = source_aggregate->variant_ordinal;
+    aggregate->field_count = source_aggregate->field_count;
+    XrReferenceValue detached = {
+        .kind = XR_REFERENCE_VALUE_AGGREGATE,
+        .as.aggregate = aggregate,
+    };
+    for (uint32_t field = 0u; field < aggregate->field_count; ++field) {
+        if (!detach_reference_value(source_aggregate->fields[field],
+                                    &aggregate->fields[field])) {
+            dispose_detached_reference_value(&detached);
+            return false;
+        }
+    }
+    *output = detached;
+    return true;
+}
+
+bool xr_reference_value_aggregate_view(const XrReferenceValue *value,
+                                       XrReferenceAggregateView *view_out) {
+    if (view_out)
+        memset(view_out, 0, sizeof(*view_out));
+    if (!value || !view_out || value->kind != XR_REFERENCE_VALUE_AGGREGATE ||
+        !value->as.aggregate)
+        return false;
+    const XrReferenceAggregateValue *aggregate = value->as.aggregate;
+    *view_out = (XrReferenceAggregateView) {
+        .type_id = aggregate->type_id,
+        .variant_ordinal = aggregate->variant_ordinal,
+        .fields = aggregate->fields,
+        .field_count = aggregate->field_count,
+    };
+    return true;
+}
+
+void xr_reference_outcome_dispose(XrReferenceOutcome *outcome) {
+    if (!outcome)
+        return;
+    if (outcome->owns_dynamic_values) {
+        dispose_detached_reference_value(&outcome->value);
+        dispose_detached_reference_value(&outcome->error_value);
+        dispose_detached_reference_value(&outcome->panic_value);
+    }
+    memset(outcome, 0, sizeof(*outcome));
+}
+
 static void free_aggregates(EvalContext *context) {
     for (uint32_t index = 0; index < context->aggregate_count; ++index) {
         xr_free(context->aggregates[index]->fields);
@@ -1577,13 +1665,31 @@ XrReferenceOutcome xr_reference_evaluate_bound(
         evaluate_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
     if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
-        (result.value.kind == XR_REFERENCE_VALUE_AGGREGATE ||
-         result.value.kind == XR_REFERENCE_VALUE_EXISTENTIAL ||
+        result.value.kind == XR_REFERENCE_VALUE_AGGREGATE) {
+        XrReferenceValue detached = void_value();
+        if (detach_reference_value(result.value, &detached)) {
+            result.value = detached;
+            result.owns_dynamic_values = true;
+        } else {
+            result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, &context);
+        }
+    }
+    if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
+        (result.value.kind == XR_REFERENCE_VALUE_EXISTENTIAL ||
          result.value.kind == XR_REFERENCE_VALUE_CALLABLE))
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     if (result.kind == XR_REFERENCE_OUTCOME_ERROR &&
-        (result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE ||
-         result.error_value.kind == XR_REFERENCE_VALUE_EXISTENTIAL ||
+        result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE) {
+        XrReferenceValue detached = void_value();
+        if (detach_reference_value(result.error_value, &detached)) {
+            result.error_value = detached;
+            result.owns_dynamic_values = true;
+        } else {
+            result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, &context);
+        }
+    }
+    if (result.kind == XR_REFERENCE_OUTCOME_ERROR &&
+        (result.error_value.kind == XR_REFERENCE_VALUE_EXISTENTIAL ||
          result.error_value.kind == XR_REFERENCE_VALUE_CALLABLE))
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     if (result.kind == XR_REFERENCE_OUTCOME_PANIC &&

@@ -41,7 +41,10 @@ sides to verify the same result and short-circuit behavior in the reference eval
 source-path VM. A dedicated logical-operation fixture covers both VM decode policies. Wave 1 source activates scalar,
 control, block arguments, and sealed calls; Wave 2 adds logical aggregate construction/projection
 and variant construction/test/projection. Aggregate and variant values use VM-private typed arena
-cells and never expose a shared physical layout. Aggregate update and the walking-skeleton
+cells and never expose a shared physical layout. A one-shot aggregate return or uncaught typed
+error is recursively detached into executor-owned logical storage before that arena is released;
+the caller may inspect it only through the typed aggregate view and must dispose the outcome.
+Aggregate update and the walking-skeleton
 trap/error/profile rows remain source-gated by the operation matrix even though their typed handlers
 exist. Native LP64 and explicit foreign ILP32 profiles, resource limits, and generation invalidation
 remain covered. Full-language operation families, public embedding ABI, adaptive quickening, and any
@@ -49,8 +52,8 @@ persistent private-code cache remain inactive for later tasks.
 
 anchor-sha256: CMakeLists.txt 2a14f3d1a43bfc8b6f7050c4317b3b7254a70593550a3a47d9c30c9970da899a
 anchor-sha256: xisa/core/registry.json 23734012021115d05680360187e4568fa51d7c316b779489e9220b8e072ba28e
-anchor-sha256: src/vm/xr_program_vm.h 6fb1fe3ecd7b24ab92dbed9acda97a0855d7582d027eea7720b94a300d7a6f60
-anchor-sha256: src/vm/xr_program_vm.c 462a55d388ad283043b847f8809cfd90e84bddc509b4f644e6d80ef34a02c6ae
+anchor-sha256: src/vm/xr_program_vm.h 76bc53a625384448931283a37449d326cc25848bb4737d7fda15e212463e9da5
+anchor-sha256: src/vm/xr_program_vm.c 2ae9bbeb769918979316a37b34be50cd4e5ee43607f666f5dd4b8615219d17bc
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
 anchor-sha256: src/program/xr_program_verify.c 8e2281255e36efeeb401d3321fbeae7cf576b084257104b1d42de1cec1aa3005
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
