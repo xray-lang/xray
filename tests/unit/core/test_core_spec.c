@@ -86,7 +86,7 @@ static void test_operation_metadata(void) {
     const XrCoreOperationSpec *variant =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_PROJECT);
     const XrCoreOperationSpec *provider =
-        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY);
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL);
     const XrCoreOperationSpec *yield =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_YIELD);
     const XrCoreOperationSpec *coroutine_call =
@@ -155,8 +155,8 @@ static void test_operation_metadata(void) {
     CHECK(variant->effect_mask == UINT32_C(1));
 
     CHECK(provider != NULL);
-    CHECK(provider->operand_arity == 1u);
-    CHECK(provider->result_type == XR_CORE_TYPE_I64);
+    CHECK(provider->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
+    CHECK(provider->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
     CHECK(provider->effect_mask ==
           (XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_PROVIDER_CALL));
     CHECK(provider->capability_mask == XR_CORE_CAPABILITY_PROVIDER_BINDING);

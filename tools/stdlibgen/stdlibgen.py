@@ -662,6 +662,9 @@ def return_type_requires_ownership_contract(return_type: str) -> bool:
     if _NON_RC_RETURN_RE.fullmatch(value):
         return False
     bare = value[:-1].strip() if value.endswith("?") else value
+    if bare.startswith("(") and bare.endswith(")"):
+        fields = split_top_level_csv(bare[1:-1])
+        return not fields or any(return_type_requires_ownership_contract(field) for field in fields)
     return not (bare.startswith("Ptr<") or bare.startswith("MutPtr<") or bare.startswith("Slice<"))
 
 
@@ -1370,17 +1373,23 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} has malformed or "
                     "cross-family provider identity"
                 )
+            provider_scalar_shape = (
+                signature_return == "i64"
+                and len(signature_params) in {0, 1}
+                and all(
+                    function_parameter_type(
+                        fragment, f"{current_module}.{current_name} provider parameter"
+                    ) == "i64"
+                    for fragment in signature_params
+                )
+            )
+            provider_optional_pair_shape = (
+                signature_return == "(i64, i64)?" and len(signature_params) == 0
+            )
             if provider_contract and (
                 visibility != "internal"
                 or effect != "nothrow"
-                or signature_return != "i64"
-                or any(
-                    function_parameter_type(
-                        fragment, f"{current_module}.{current_name} provider parameter"
-                    ) != "i64"
-                    for fragment in signature_params
-                )
-                or len(signature_params) not in {0, 1}
+                or not (provider_scalar_shape or provider_optional_pair_shape)
                 or argc_raw != str(len(signature_params))
                 or not aot_direct
                 or aot_kind != "method"
@@ -1395,7 +1404,7 @@ def parse_def_metadata(
             ):
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} provider operation "
-                    "must be an unconditional internal nothrow nullary/unary i64 native leaf"
+                    "must use an admitted logical provider-call shape"
                 )
 
             entries.append(

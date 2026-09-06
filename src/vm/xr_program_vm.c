@@ -996,35 +996,74 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.kind = XR_VM_VALUE_TARGET_ENDIAN;
                     produced.as.value.as.target_enum = context->code->endianness;
                     break;
-                case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY: {
-                    int64_t provider_result = 0;
-                    XrExecutionProviderCallResult call =
-                        xr_execution_lease_provider_call_i64_unary(
-                        context->lease, instruction.immediate.provider_operation.requirement_index,
-                        instruction.immediate.provider_operation.operation_index,
-                        values[instruction.operands[0]].as.value.as.i64, &provider_result);
-                    if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
-                        result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
-                        goto done;
-                    }
-                    produced.as.value.kind = XR_VM_VALUE_I64;
-                    produced.as.value.as.i64 = provider_result;
-                    break;
-                }
-                case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY: {
-                    int64_t provider_result = 0;
-                    XrExecutionProviderCallResult call =
-                        xr_execution_lease_provider_call_i64_nullary(
+                case XR_CORE_OP_CORE_PROVIDER_CALL: {
+                    uint16_t operand_type = instruction.operand_count == 1u
+                                                ? function->value_types[instruction.operands[0]]
+                                                : XR_CORE_TYPE_VOID;
+                    XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
+                        context->code->program, instruction.result_type_id,
+                        instruction.operand_count == 1u ? &operand_type : NULL,
+                        instruction.operand_count);
+                    XrExecutionProviderCallResult call = XR_EXECUTION_PROVIDER_CALL_FAILED;
+                    if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY ||
+                        call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY) {
+                        int64_t provider_result = 0;
+                        call = call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY
+                                   ? xr_execution_lease_provider_call_i64_unary(
+                                         context->lease,
+                                         instruction.immediate.provider_operation.requirement_index,
+                                         instruction.immediate.provider_operation.operation_index,
+                                         values[instruction.operands[0]].as.value.as.i64,
+                                         &provider_result)
+                                   : xr_execution_lease_provider_call_i64_nullary(
+                                         context->lease,
+                                         instruction.immediate.provider_operation.requirement_index,
+                                         instruction.immediate.provider_operation.operation_index,
+                                         &provider_result);
+                        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
+                            produced.as.value.kind = XR_VM_VALUE_I64;
+                            produced.as.value.as.i64 = provider_result;
+                        }
+                    } else if (call_kind == XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY) {
+                        uint16_t pair_type_id = XR_CORE_TYPE_VOID;
+                        (void) xr_validated_program_type_is_optional_i64_pair(
+                            context->code->program, instruction.result_type_id, &pair_type_id);
+                        XrVmAggregateValue *pair =
+                            allocate_aggregate(context, pair_type_id, UINT32_MAX, 2u);
+                        XrVmAggregateValue *optional =
+                            allocate_aggregate(context, instruction.result_type_id, 1u, 1u);
+                        if (!pair || !optional) {
+                            result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                            goto done;
+                        }
+                        bool present = false;
+                        int64_t first = 0;
+                        int64_t second = 0;
+                        call = xr_execution_lease_provider_call_optional_i64_pair_nullary(
                             context->lease,
                             instruction.immediate.provider_operation.requirement_index,
-                            instruction.immediate.provider_operation.operation_index,
-                            &provider_result);
+                            instruction.immediate.provider_operation.operation_index, &present,
+                            &first, &second);
+                        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
+                            if (present) {
+                                pair->fields[0] =
+                                    (XrVmValue) {.kind = XR_VM_VALUE_I64, .as.i64 = first};
+                                pair->fields[1] =
+                                    (XrVmValue) {.kind = XR_VM_VALUE_I64, .as.i64 = second};
+                                optional->fields[0] = (XrVmValue) {.kind = XR_VM_VALUE_AGGREGATE,
+                                                                   .as.aggregate = pair};
+                            } else {
+                                optional->variant_ordinal = 0u;
+                                optional->field_count = 0u;
+                            }
+                            produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
+                            produced.as.value.as.aggregate = optional;
+                        }
+                    }
                     if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
                         result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
                         goto done;
                     }
-                    produced.as.value.kind = XR_VM_VALUE_I64;
-                    produced.as.value.as.i64 = provider_result;
                     break;
                 }
                 case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {

@@ -2,7 +2,7 @@
   "schema": "xray-execution-binding-coverage/1",
   "profile_schema_version": 5,
   "boundary_abi_schema_version": 3,
-  "execution_binding_schema_version": 3,
+  "execution_binding_schema_version": 4,
   "execution_identity": {
     "inputs": [
       "ProgramId",

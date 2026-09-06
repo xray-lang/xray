@@ -641,7 +641,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 break;
             }
             xr_parser_advance(parser);
-            fnames[field_count] = strndup(parser->previous.start, parser->previous.length);
+            fnames[field_count] = xr_strndup(parser->previous.start, parser->previous.length);
 
             bool is_optional = xr_parser_match(parser, TK_QUESTION);
             if (is_optional)

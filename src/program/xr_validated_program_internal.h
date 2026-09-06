@@ -66,6 +66,18 @@ typedef struct XrValidatedProviderRequirement {
     uint32_t operation_count;
 } XrValidatedProviderRequirement;
 
+/* The public CoreSpec has one typed provider-call operation.  These are
+ * execution-private
+ * logical call shapes selected from the validated operand
+ * and result types; they are not
+ * serialized opcodes or provider C ABIs. */
+typedef enum XrProviderLogicalCallKind {
+    XR_PROVIDER_LOGICAL_CALL_INVALID = 0,
+    XR_PROVIDER_LOGICAL_CALL_I64_UNARY,
+    XR_PROVIDER_LOGICAL_CALL_I64_NULLARY,
+    XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY,
+} XrProviderLogicalCallKind;
+
 typedef struct XrValidatedRoot {
     XrCoreIrRootKind kind;
     uint32_t parameter_ordinal;
@@ -225,6 +237,46 @@ xr_validated_program_copy_contract(const XrValidatedProgram *program, uint16_t t
         return XR_CORE_IR_COPY_FORBIDDEN;
     const XrValidatedType *type = xr_validated_program_type(program, type_id);
     return type ? type->copy_contract : XR_CORE_IR_COPY_TRIVIAL;
+}
+
+static inline bool xr_validated_program_type_is_optional_i64_pair(const XrValidatedProgram *program,
+                                                                  uint16_t type_id,
+                                                                  uint16_t *pair_type_id_out) {
+    const XrValidatedType *optional = xr_validated_program_type(program, type_id);
+    if (!optional || optional->kind != XR_CORE_IR_TYPE_VARIANT ||
+        optional->nominal_kind != XR_CORE_IR_NOMINAL_NONE ||
+        optional->ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
+        optional->copy_contract != XR_CORE_IR_COPY_TRIVIAL || optional->variant_count != 2u ||
+        optional->variants[0].payload_count != 0u || optional->variants[1].payload_count != 1u ||
+        !optional->variants[1].payload_types)
+        return false;
+    uint16_t pair_type_id = optional->variants[1].payload_types[0];
+    const XrValidatedType *pair = xr_validated_program_type(program, pair_type_id);
+    if (!pair || pair->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+        pair->nominal_kind != XR_CORE_IR_NOMINAL_NONE ||
+        pair->ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
+        pair->copy_contract != XR_CORE_IR_COPY_TRIVIAL || pair->field_count != 2u ||
+        !pair->field_types || pair->field_types[0] != XR_CORE_TYPE_I64 ||
+        pair->field_types[1] != XR_CORE_TYPE_I64)
+        return false;
+    if (pair_type_id_out)
+        *pair_type_id_out = pair_type_id;
+    return true;
+}
+
+static inline XrProviderLogicalCallKind
+xr_validated_program_provider_call_kind(const XrValidatedProgram *program, uint16_t result_type_id,
+                                        const uint16_t *operand_types, uint32_t operand_count) {
+    if (result_type_id == XR_CORE_TYPE_I64) {
+        if (operand_count == 0u)
+            return XR_PROVIDER_LOGICAL_CALL_I64_NULLARY;
+        if (operand_count == 1u && operand_types && operand_types[0] == XR_CORE_TYPE_I64)
+            return XR_PROVIDER_LOGICAL_CALL_I64_UNARY;
+    }
+    if (operand_count == 0u &&
+        xr_validated_program_type_is_optional_i64_pair(program, result_type_id, NULL))
+        return XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY;
+    return XR_PROVIDER_LOGICAL_CALL_INVALID;
 }
 
 #endif /* XR_VALIDATED_PROGRAM_INTERNAL_H */

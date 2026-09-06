@@ -1896,14 +1896,20 @@
     },
     {
       "id": "provider-call-valid",
-      "operation": "core.provider.call.i64.unary",
+      "operation": "core.provider.call",
       "kind": "contract",
       "actual": {
-        "operand_type": "i64",
+        "operand_types": [
+          "i64"
+        ],
         "result_type": "i64",
-        "operand_category": "value",
+        "operand_categories": [
+          "value"
+        ],
         "result_category": "value",
-        "operand_ownership": "non-owner",
+        "operand_ownerships": [
+          "non-owner"
+        ],
         "result_ownership": "non-owner",
         "provider_requirement": true
       },
@@ -1913,14 +1919,20 @@
     },
     {
       "id": "provider-call-missing-requirement",
-      "operation": "core.provider.call.i64.unary",
+      "operation": "core.provider.call",
       "kind": "contract",
       "actual": {
-        "operand_type": "i64",
+        "operand_types": [
+          "i64"
+        ],
         "result_type": "i64",
-        "operand_category": "value",
+        "operand_categories": [
+          "value"
+        ],
         "result_category": "value",
-        "operand_ownership": "non-owner",
+        "operand_ownerships": [
+          "non-owner"
+        ],
         "result_ownership": "non-owner",
         "provider_requirement": false
       },
@@ -1929,8 +1941,8 @@
       }
     },
     {
-      "id": "provider-call-i64-nullary-valid",
-      "operation": "core.provider.call.i64.nullary",
+      "id": "provider-call-nullary-i64-valid",
+      "operation": "core.provider.call",
       "kind": "contract",
       "actual": {
         "operand_count": 0,
@@ -1944,18 +1956,18 @@
       }
     },
     {
-      "id": "provider-call-i64-nullary-rejects-operand",
-      "operation": "core.provider.call.i64.nullary",
+      "id": "provider-call-optional-i64-pair-nullary-valid",
+      "operation": "core.provider.call",
       "kind": "contract",
       "actual": {
-        "operand_count": 1,
-        "result_type": "i64",
+        "operand_count": 0,
+        "result_type": "optional-i64-pair",
         "result_category": "value",
         "result_ownership": "non-owner",
         "provider_requirement": true
       },
       "expect": {
-        "valid": false
+        "valid": true
       }
     },
     {

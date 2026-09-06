@@ -309,7 +309,14 @@ typedef struct XrAotHostedClockBindings {
     uint32_t utc_offset_operation;
 } XrAotHostedClockBindings;
 
+typedef struct XrAotHostedPipeBindings {
+    bool open;
+    uint32_t requirement;
+    uint32_t operation;
+} XrAotHostedPipeBindings;
+
 static XrAotHostedClockBindings hosted_clock_bindings(const XrBackendIR *ir);
+static XrAotHostedPipeBindings hosted_pipe_bindings(const XrBackendIR *ir);
 
 static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone_main) {
     bool checked = false;
@@ -318,43 +325,47 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     bool output = false;
     scan_helpers(ir, &checked, &wrapping, &arena, &output);
     XrAotHostedClockBindings clock = hosted_clock_bindings(ir);
+    XrAotHostedPipeBindings pipe = hosted_pipe_bindings(ir);
     bool host_clock = standalone_main &&
                       (clock.realtime || clock.monotonic || clock.process_cpu ||
                        clock.utc_offset);
-    if ((host_clock &&
-         !append_text(buffer,
-                      "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)\n"
-                      "#define _POSIX_C_SOURCE 200809L\n"
-                      "#endif\n")) ||
+    bool host_pipe = standalone_main && pipe.open;
+    if (((host_clock || host_pipe) &&
+         !append_text(buffer, "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)\n"
+                              "#define _POSIX_C_SOURCE 200809L\n"
+                              "#endif\n")) ||
         !append_text(buffer, "#include <stdint.h>\n"
                              "#include <limits.h>\n"
                              "#include <stddef.h>\n") ||
         (arena && !append_text(buffer, "#include <stdlib.h>\n")) ||
-        (host_clock &&
-         !append_text(buffer,
-                      "#include <time.h>\n"
-                      "#if defined(_WIN32)\n"
-                      "#ifndef WIN32_LEAN_AND_MEAN\n"
-                      "#define WIN32_LEAN_AND_MEAN\n"
-                      "#endif\n"
-                      "#include <windows.h>\n"
-                      "#endif\n")) ||
+        ((host_clock || host_pipe) && !append_text(buffer, "#include <time.h>\n"
+                                                           "#if defined(_WIN32)\n"
+                                                           "#ifndef WIN32_LEAN_AND_MEAN\n"
+                                                           "#define WIN32_LEAN_AND_MEAN\n"
+                                                           "#endif\n"
+                                                           "#include <windows.h>\n"
+                                                           "#else\n"
+                                                           "#include <fcntl.h>\n"
+                                                           "#include <unistd.h>\n"
+                                                           "#endif\n")) ||
         (output && standalone_main &&
-         !append_text(buffer,
-                      "#include <stdio.h>\n"
-                      "#if defined(_WIN32)\n"
-                      "#include <fcntl.h>\n"
-                      "#include <io.h>\n"
-                      "#endif\n")) ||
+         !append_text(buffer, "#include <stdio.h>\n"
+                              "#if defined(_WIN32)\n"
+                              "#include <fcntl.h>\n"
+                              "#include <io.h>\n"
+                              "#endif\n")) ||
         !append_text(buffer, "\n"))
         return false;
-    if (!append_text(buffer,
-                     "typedef int (*XrAotProviderCallI64Unary)(void *context, uint32_t requirement, "
-                     "uint32_t operation, int64_t argument, int64_t *result);\n"
-                     "typedef int (*XrAotProviderCallI64Nullary)(void *context, uint32_t "
-                     "requirement, uint32_t operation, int64_t *result);\n"
-                     "typedef int (*XrAotProviderOutputWrite)(void *context, uint32_t "
-                     "requirement, uint32_t operation, const uint8_t *bytes, size_t size);\n\n"))
+    if (!append_text(
+            buffer, "typedef int (*XrAotProviderCallI64Unary)(void *context, uint32_t requirement, "
+                    "uint32_t operation, int64_t argument, int64_t *result);\n"
+                    "typedef int (*XrAotProviderCallI64Nullary)(void *context, uint32_t "
+                    "requirement, uint32_t operation, int64_t *result);\n"
+                    "typedef int (*XrAotProviderCallOptionalI64PairNullary)(void *context, "
+                    "uint32_t requirement, uint32_t operation, uint8_t *present, "
+                    "int64_t *first, int64_t *second);\n"
+                    "typedef int (*XrAotProviderOutputWrite)(void *context, uint32_t "
+                    "requirement, uint32_t operation, const uint8_t *bytes, size_t size);\n\n"))
         return false;
     if (arena) {
         if (!append_text(buffer,
@@ -368,6 +379,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                          "    void *provider_context;\n"
                          "    XrAotProviderCallI64Unary provider_call_i64_unary;\n"
                          "    XrAotProviderCallI64Nullary provider_call_i64_nullary;\n"
+                         "    XrAotProviderCallOptionalI64PairNullary "
+                         "provider_call_optional_i64_pair_nullary;\n"
                          "    XrAotProviderOutputWrite provider_output_write;\n"
                          "} XrAotContext;\n\n"
                          "static inline void *xr_aot_alloc(XrAotContext *context, size_t size) "
@@ -396,6 +409,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                                     "    void *provider_context;\n"
                                     "    XrAotProviderCallI64Unary provider_call_i64_unary;\n"
                                     "    XrAotProviderCallI64Nullary provider_call_i64_nullary;\n"
+                                    "    XrAotProviderCallOptionalI64PairNullary "
+                                    "provider_call_optional_i64_pair_nullary;\n"
                                     "    XrAotProviderOutputWrite provider_output_write;\n"
                                     "} XrAotContext;\n\n")) {
         return false;
@@ -458,6 +473,51 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                      "return 1;\n"
                      "    return 0;\n"
                      "}\n\n"))
+        return false;
+    if (host_pipe &&
+        (!append_text(buffer,
+                      "static int xr_aot_host_pipe_open(void *context, uint32_t requirement, "
+                      "uint32_t operation, uint8_t *present, int64_t *first, int64_t *second) {\n"
+                      "    (void)context;\n") ||
+         !append_format(buffer,
+                        "    if (requirement != UINT32_C(%u) || operation != UINT32_C(%u) || "
+                        "!present || !first || !second) return 1;\n",
+                        pipe.requirement, pipe.operation) ||
+         !append_text(
+             buffer, "    *present = UINT8_C(0);\n"
+                     "    *first = INT64_C(0);\n"
+                     "    *second = INT64_C(0);\n"
+                     "#if defined(_WIN32)\n"
+                     "    SECURITY_ATTRIBUTES attributes = {sizeof(attributes), NULL, FALSE};\n"
+                     "    HANDLE read_handle = NULL;\n"
+                     "    HANDLE write_handle = NULL;\n"
+                     "    if (!CreatePipe(&read_handle, &write_handle, &attributes, 0)) return 0;\n"
+                     "    if (!SetHandleInformation(read_handle, HANDLE_FLAG_INHERIT, 0) || "
+                     "!SetHandleInformation(write_handle, HANDLE_FLAG_INHERIT, 0)) {\n"
+                     "        CloseHandle(read_handle);\n"
+                     "        CloseHandle(write_handle);\n"
+                     "        return 0;\n"
+                     "    }\n"
+                     "    *first = (int64_t)(intptr_t)read_handle;\n"
+                     "    *second = (int64_t)(intptr_t)write_handle;\n"
+                     "#else\n"
+                     "    int handles[2];\n"
+                     "    if (pipe(handles) != 0) return 0;\n"
+                     "    int read_flags = fcntl(handles[0], F_GETFD);\n"
+                     "    int write_flags = fcntl(handles[1], F_GETFD);\n"
+                     "    if (read_flags < 0 || write_flags < 0 || "
+                     "fcntl(handles[0], F_SETFD, read_flags | FD_CLOEXEC) != 0 || "
+                     "fcntl(handles[1], F_SETFD, write_flags | FD_CLOEXEC) != 0) {\n"
+                     "        close(handles[0]);\n"
+                     "        close(handles[1]);\n"
+                     "        return 0;\n"
+                     "    }\n"
+                     "    *first = (int64_t)handles[0];\n"
+                     "    *second = (int64_t)handles[1];\n"
+                     "#endif\n"
+                     "    *present = UINT8_C(1);\n"
+                     "    return 0;\n"
+                     "}\n\n")))
         return false;
     if (host_clock && clock.realtime &&
         !append_text(buffer,
@@ -693,6 +753,15 @@ static XrAotHostedClockBindings hosted_clock_bindings(const XrBackendIR *ir) {
         program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
         XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
         &bindings.utc_offset_requirement, &bindings.utc_offset_operation);
+    return bindings;
+}
+
+static XrAotHostedPipeBindings hosted_pipe_bindings(const XrBackendIR *ir) {
+    XrAotHostedPipeBindings bindings = {0};
+    const XrValidatedProgram *program = ir ? ir->program : NULL;
+    bindings.open = find_program_provider_operation(program, XR_PROVIDER_IO_CONTRACT_KEY,
+                                                    XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
+                                                    &bindings.requirement, &bindings.operation);
     return bindings;
 }
 
@@ -1660,24 +1729,59 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
             return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
                                  ir->endianness);
-        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:
-            return append_format(
-                buffer,
-                "        if (!xr_ctx->provider_call_i64_unary || "
-                "xr_ctx->provider_call_i64_unary(xr_ctx->provider_context, UINT32_C(%u), "
-                "UINT32_C(%u), v%u, &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
-                instruction->immediate.provider_operation.requirement_index,
-                instruction->immediate.provider_operation.operation_index,
-                instruction->operands[0], instruction->result_id);
-        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:
-            return append_format(
-                buffer,
-                "        if (!xr_ctx->provider_call_i64_nullary || "
-                "xr_ctx->provider_call_i64_nullary(xr_ctx->provider_context, UINT32_C(%u), "
-                "UINT32_C(%u), &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
-                instruction->immediate.provider_operation.requirement_index,
-                instruction->immediate.provider_operation.operation_index,
-                instruction->result_id);
+        case XR_CORE_OP_CORE_PROVIDER_CALL: {
+            uint16_t operand_type = instruction->operand_count == 1u
+                                        ? function->value_types[instruction->operands[0]]
+                                        : XR_CORE_TYPE_VOID;
+            XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
+                ir->program, instruction->result_type_id,
+                instruction->operand_count == 1u ? &operand_type : NULL,
+                instruction->operand_count);
+            if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY)
+                return append_format(
+                    buffer,
+                    "        if (!xr_ctx->provider_call_i64_unary || "
+                    "xr_ctx->provider_call_i64_unary(xr_ctx->provider_context, UINT32_C(%u), "
+                    "UINT32_C(%u), v%u, &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
+                    instruction->immediate.provider_operation.requirement_index,
+                    instruction->immediate.provider_operation.operation_index,
+                    instruction->operands[0], instruction->result_id);
+            if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY)
+                return append_format(
+                    buffer,
+                    "        if (!xr_ctx->provider_call_i64_nullary || "
+                    "xr_ctx->provider_call_i64_nullary(xr_ctx->provider_context, UINT32_C(%u), "
+                    "UINT32_C(%u), &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
+                    instruction->immediate.provider_operation.requirement_index,
+                    instruction->immediate.provider_operation.operation_index,
+                    instruction->result_id);
+            if (call_kind == XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY) {
+                uint16_t pair_type_id = XR_CORE_TYPE_VOID;
+                if (!xr_validated_program_type_is_optional_i64_pair(
+                        ir->program, instruction->result_type_id, &pair_type_id))
+                    return false;
+                return append_format(
+                    buffer,
+                    "        {\n"
+                    "            uint8_t xr_present = UINT8_C(0);\n"
+                    "            int64_t xr_first = INT64_C(0);\n"
+                    "            int64_t xr_second = INT64_C(0);\n"
+                    "            if (!xr_ctx->provider_call_optional_i64_pair_nullary || "
+                    "xr_ctx->provider_call_optional_i64_pair_nullary(xr_ctx->provider_context, "
+                    "UINT32_C(%u), UINT32_C(%u), &xr_present, &xr_first, &xr_second) != 0) "
+                    "return xr_aot_make(1, 0, 7);\n"
+                    "            if (xr_present) v%u = (XrAotType%u){.tag = UINT32_C(1), "
+                    ".payload.case_1.f0 = (XrAotType%u){.f0 = xr_first, .f1 = xr_second}};\n"
+                    "            else v%u = (XrAotType%u){.tag = UINT32_C(0), "
+                    ".payload.case_0.empty = UINT8_C(0)};\n"
+                    "        }\n",
+                    instruction->immediate.provider_operation.requirement_index,
+                    instruction->immediate.provider_operation.operation_index,
+                    instruction->result_id, instruction->result_type_id, pair_type_id,
+                    instruction->result_id, instruction->result_type_id);
+            }
+            return false;
+        }
         case XR_CORE_OP_CORE_OUTPUT_GROUP_I64:
             return append_format(
                 buffer,
@@ -2063,6 +2167,7 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     bool output = false;
     scan_helpers(ir, &checked, &wrapping, &arena, &output);
     XrAotHostedClockBindings clock = hosted_clock_bindings(ir);
+    XrAotHostedPipeBindings pipe = hosted_pipe_bindings(ir);
     if (entry->parameter_count != 0u)
         return false;
     if (!append_text(buffer, "int main(void) {\n    XrAotContext xr_ctx = {0};\n"))
@@ -2079,6 +2184,9 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     if (clock.utc_offset &&
         !append_text(buffer,
                      "    xr_ctx.provider_call_i64_unary = xr_aot_host_clock_unary;\n"))
+        return false;
+    if (pipe.open && !append_text(buffer, "    xr_ctx.provider_call_optional_i64_pair_nullary = "
+                                          "xr_aot_host_pipe_open;\n"))
         return false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
         char storage[32];

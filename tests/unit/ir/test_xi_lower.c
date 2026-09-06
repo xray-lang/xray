@@ -4128,18 +4128,60 @@ TEST(force_unwrap) {
                              "var y = x!\n"
                              "print(y)\n");
     assert(f != NULL);
-    /* Force unwrap generates ISNULL + branch */
-    int found_isnull = 0;
+    XiValue *some = NULL;
+    XiValue *none_test = NULL;
+    XiValue *some_payload = NULL;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (blk->values[i]->op == XI_ISNULL)
-                found_isnull = 1;
+            XiValue *value = blk->values[i];
+            assert(value->op != XI_ISNULL &&
+                   "closed Optional<T> must not fall back to a backend null test");
+            if (value->op == XI_SUM_INJECT && value->aux_int == 1)
+                some = value;
+            else if (value->op == XI_VARIANT_TEST && value->aux_int == 0)
+                none_test = value;
+            else if (value->op == XI_VARIANT_PROJECT &&
+                     xi_variant_projection_variant(value) == 1 &&
+                     xi_variant_projection_field(value) == 0)
+                some_payload = value;
         }
     }
-    assert(found_isnull && "should have ISNULL for force unwrap");
+    assert(some && some->nargs == 1 && some->args[0]);
+    assert(none_test && none_test->nargs == 1 && none_test->args[0]);
+    assert(some_payload && some_payload->nargs == 1 &&
+           some_payload->args[0] == none_test->args[0]);
     assert(f->nblocks >= 3 && "force unwrap should create throw/ok branches");
     xi_func_free(f);
+}
+
+TEST(flow_proven_force_unwrap_keeps_optional_projection) {
+    XiFunc *root = lower_source("fn unwrapAfterGuard(x: i64?) -> i64 {\n"
+                                "  if (x == null) { return 0 }\n"
+                                "  return x!\n"
+                                "}\n");
+    assert(root != NULL);
+    XiFunc *function = func_tree_find_func_name(root, "unwrapAfterGuard");
+    assert(function != NULL);
+    int none_tests = 0;
+    XiValue *some_payload = NULL;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        XiBlock *block = function->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            assert(value->op != XI_ISNULL);
+            if (value->op == XI_VARIANT_TEST && value->aux_int == 0)
+                none_tests++;
+            else if (value->op == XI_VARIANT_PROJECT &&
+                     xi_variant_projection_variant(value) == 1 &&
+                     xi_variant_projection_field(value) == 0)
+                some_payload = value;
+        }
+    }
+    assert(none_tests == 1 && "flow proof must avoid a duplicate runtime tag test");
+    assert(some_payload && some_payload->nargs == 1 && some_payload->args[0] &&
+           some_payload->args[0]->op == XI_PARAM);
+    xi_func_free(root);
 }
 
 TEST(destructure_decl) {
@@ -4298,6 +4340,8 @@ int main(void) {
 
     setup();
 
+    run_force_unwrap();
+    run_flow_proven_force_unwrap_keeps_optional_projection();
     run_simple_arithmetic();
     run_source_spans_reach_xi_values();
     run_target_pointer_bits_lowers_from_exact_typed_xglobal_join();
@@ -4403,7 +4447,6 @@ int main(void) {
     run_checked_union_as_preserves_narrowed_type();
     run_enum_ordinal_lowering_rejects_forged_analyzer_witness();
     run_implicit_numeric_boundaries_carry_lossless_widen_evidence();
-    run_force_unwrap();
     run_destructure_decl();
     run_multi_assign();
     run_enum_access();

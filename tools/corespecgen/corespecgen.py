@@ -78,7 +78,7 @@ ARITHMETIC_KINDS = {
 }
 SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
 GENERIC_TYPES = {
-    "A", "C", "Capture?", "E", "V", "T", "T...", "R?", "P...",
+    "A", "C", "Capture?", "E", "V", "T", "T...", "R", "R?", "P...",
     "TargetEnum",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
     "suspend-edge-values...",
@@ -334,7 +334,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-test",
-            "provider-call-i64-unary", "provider-call-i64-nullary", "output-group-i64",
+            "provider-call", "output-group-i64",
             "coroutine-yield", "coroutine-call",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
@@ -495,17 +495,24 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
 def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     actual = case.get("actual")
     require(isinstance(actual, dict), f"KAT {case['id']} actual contract must be an object")
-    if validator == "provider-call-i64-unary":
-        return (actual.get("operand_type") == "i64"
-                and actual.get("result_type") == "i64"
-                and actual.get("operand_category") == "value"
-                and actual.get("result_category") == "value"
-                and actual.get("operand_ownership") == "non-owner"
-                and actual.get("result_ownership") == "non-owner"
-                and actual.get("provider_requirement") is True)
-    if validator == "provider-call-i64-nullary":
-        return (actual.get("operand_count") == 0
-                and actual.get("result_type") == "i64"
+    if validator == "provider-call":
+        operand_count = actual.get("operand_count")
+        operand_types = actual.get("operand_types")
+        operand_categories = actual.get("operand_categories")
+        operand_ownerships = actual.get("operand_ownerships")
+        if operand_count is None and isinstance(operand_types, list):
+            operand_count = len(operand_types)
+        structural_shape = (
+            operand_count == 1
+            and operand_types == ["i64"]
+            and operand_categories == ["value"]
+            and operand_ownerships == ["non-owner"]
+            and actual.get("result_type") == "i64"
+        ) or (
+            operand_count == 0
+            and actual.get("result_type") in {"i64", "optional-i64-pair"}
+        )
+        return (structural_shape
                 and actual.get("result_category") == "value"
                 and actual.get("result_ownership") == "non-owner"
                 and actual.get("provider_requirement") is True)

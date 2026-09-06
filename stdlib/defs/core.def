@@ -633,7 +633,7 @@ module sys {
   }
 
   fn __pipeOpen {
-    signature: "(): Array<i64>?"
+    signature: "(): (i64, i64)?"
     doc: "Create an anonymous pipe and return read/write endpoint tokens"
     vm: "sys_pipe_open"
     aot: "xrt_sys_pipe_open"
@@ -643,7 +643,9 @@ module sys {
     link_object: false
     layer: "system"
     visibility: "internal"
-    return_ownership: "fresh"
+    effect: "nothrow"
+    provider_contract: "xray.runtime.provider.v1/io"
+    provider_operation: "xray.runtime.provider-operation.v1/io/pipe-open"
   }
 
   fn __pipeRead {

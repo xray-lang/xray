@@ -18,6 +18,7 @@
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
 #include "../program/xr_program_output_fixture.h"
+#include "../program/xr_program_pipe_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,10 +34,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY == 136,
-               "unary provider call stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY == 139,
-               "nullary provider call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,
@@ -941,8 +939,7 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
          .immediate.key = constant.key};
     }
     instructions[instruction_count++] = (XrCoreIrInstructionInput) {
-         .operation_id = nullary ? XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY
-                                 : XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
+         .operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
          .result = result,
          .result_type_id = XR_CORE_TYPE_I64,
          .operands = nullary ? NULL : call_operands,
@@ -1025,6 +1022,19 @@ static XrValidatedProgram *build_output_program(int64_t value) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
     REQUIRE(xr_program_output_fixture_write(value, &artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
+static XrValidatedProgram *build_pipe_program(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_pipe_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
             XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *program = NULL;
     XrProgramDiagnostic verify_diagnostic;
@@ -1538,8 +1548,7 @@ static void test_provider_call_lowering_and_mutation(void) {
         XrValidatedProgram *program = build_provider_call_program(profile, nullary);
         XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
         XrBackendInstruction *provider_call = NULL;
-        uint16_t expected_operation = nullary ? XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY
-                                              : XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY;
+        uint16_t expected_operation = XR_CORE_OP_CORE_PROVIDER_CALL;
         for (uint32_t function = 0u; function < ir->function_count; ++function) {
             for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
                 XrBackendBlock *row = &ir->functions[function].blocks[block];
@@ -1640,6 +1649,29 @@ static void test_provider_output_lowering_and_mutation(void) {
     xr_validated_program_free(program);
 }
 
+static void test_pipe_provider_lowering(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_pipe(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrValidatedProgram *program = build_pipe_program();
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC embedded = {0};
+    XrGeneratedC standalone = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &embedded, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(embedded.bytes, "provider_call_optional_i64_pair_nullary") != NULL);
+    REQUIRE(strstr(embedded.bytes, "xr_aot_host_pipe_open") == NULL);
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &standalone, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(standalone.bytes, "xr_aot_host_pipe_open") != NULL);
+    REQUIRE(strstr(standalone.bytes,
+                   "provider_call_optional_i64_pair_nullary = xr_aot_host_pipe_open") != NULL);
+    xr_generated_c_free(&standalone);
+    xr_generated_c_free(&embedded);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void write_generated_fixture(const char *path, const XrValidatedProgram *program,
                                     const XrTargetProfile *profile, bool standalone_main) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
@@ -1729,6 +1761,7 @@ int main(int argc, char **argv) {
                                native_abi_mode || endianness_mode;
     bool provider_call_mode = argc == 3 && strcmp(argv[2], "provider-call") == 0;
     bool provider_output_mode = argc == 3 && strcmp(argv[2], "provider-output") == 0;
+    bool provider_pipe_mode = argc == 3 && strcmp(argv[2], "provider-pipe") == 0;
     XrValidatedProgram *program = NULL;
     if (seal_mode)
         program = build_full_program();
@@ -1764,7 +1797,7 @@ int main(int argc, char **argv) {
         program = build_target_query_program(XR_CORE_OP_CORE_TARGET_ENDIANNESS,
                                              XR_CORE_TYPE_TARGET_ENDIAN,
                                              XR_CORE_CAPABILITY_PROFILE_ENDIANNESS);
-    else if (provider_call_mode || provider_output_mode) {
+    else if (provider_call_mode || provider_output_mode || provider_pipe_mode) {
         /* The exact profile owns the provider contract used to build this Program. */
     }
     else if (invoke_object_mode || panic_object_mode) {
@@ -1791,6 +1824,9 @@ int main(int argc, char **argv) {
             : provider_output_mode
                   ? xr_test_target_profile_build_with_output(
                         false, XR_TARGET_RUNTIME_PROFILE_HOSTED)
+            : provider_pipe_mode
+                  ? xr_test_target_profile_build_with_pipe(
+                        false, XR_TARGET_RUNTIME_PROFILE_HOSTED)
             : xr_test_target_profile_build(
                   foreign_target_mode, foreign_target_mode ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
                                                            : XR_TARGET_RUNTIME_PROFILE_HOSTED);
@@ -1799,6 +1835,8 @@ int main(int argc, char **argv) {
         program = build_provider_call_program(profile, false);
     if (provider_output_mode)
         program = build_output_program(42);
+    if (provider_pipe_mode)
+        program = build_pipe_program();
     if (seal_mode) {
         seal_native_file(argv[2], program, profile);
     } else if (argc >= 2) {
@@ -1824,6 +1862,7 @@ int main(int argc, char **argv) {
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();
         test_provider_output_lowering_and_mutation();
+        test_pipe_provider_lowering();
         puts("canonical XrProgram AOT tests passed");
         retire_instance(&instance);
     }

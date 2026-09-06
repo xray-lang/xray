@@ -1176,35 +1176,35 @@ static void extract_symbols_lexer(XrLspDocument *doc, SymbolTable *table) {
 
         // fn <name>
         if (prev.type == TK_FN && token.type == TK_NAME) {
-            char *name = strndup(token.start, token.length);
+            char *name = xr_strndup(token.start, token.length);
             symbol_table_add(table, name, LSP_SYMBOL_FUNCTION, token.line - 1, 0, token.line - 1,
                              (int) strlen(name));
             xr_free(name);
         }
         // class <name>
         else if (prev.type == TK_CLASS && token.type == TK_NAME) {
-            char *name = strndup(token.start, token.length);
+            char *name = xr_strndup(token.start, token.length);
             symbol_table_add(table, name, LSP_SYMBOL_CLASS, token.line - 1, 0, token.line - 1,
                              (int) strlen(name));
             xr_free(name);
         }
         // interface <name>
         else if (prev.type == TK_INTERFACE && token.type == TK_NAME) {
-            char *name = strndup(token.start, token.length);
+            char *name = xr_strndup(token.start, token.length);
             symbol_table_add(table, name, LSP_SYMBOL_INTERFACE, token.line - 1, 0, token.line - 1,
                              (int) strlen(name));
             xr_free(name);
         }
         // enum <name>
         else if (prev.type == TK_ENUM && token.type == TK_NAME) {
-            char *name = strndup(token.start, token.length);
+            char *name = xr_strndup(token.start, token.length);
             symbol_table_add(table, name, LSP_SYMBOL_ENUM, token.line - 1, 0, token.line - 1,
                              (int) strlen(name));
             xr_free(name);
         }
         // var <name> or const <name>
         else if ((prev.type == TK_VAR || prev.type == TK_CONST) && token.type == TK_NAME) {
-            char *name = strndup(token.start, token.length);
+            char *name = xr_strndup(token.start, token.length);
             int kind = (prev.type == TK_CONST) ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             symbol_table_add(table, name, kind, token.line - 1, 0, token.line - 1,
                              (int) strlen(name));

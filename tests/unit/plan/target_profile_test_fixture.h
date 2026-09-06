@@ -31,5 +31,7 @@ XrTargetProfile *xr_test_target_profile_build_with_nullary_clock(
     bool ilp32, uint8_t runtime_profile, uint8_t scalar_value_kind);
 XrTargetProfile *xr_test_target_profile_build_with_output(bool ilp32,
                                                           uint8_t runtime_profile);
+XrTargetProfile *xr_test_target_profile_build_with_pipe(bool ilp32,
+                                                        uint8_t runtime_profile);
 
 #endif  // TARGET_PROFILE_TEST_FIXTURE_H

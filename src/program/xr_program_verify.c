@@ -3173,27 +3173,28 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
                                 XR_CORE_TYPE_TARGET_ENDIAN, true);
-        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:
-            if (!expect_shape(context, instruction, location, 1, 0,
-                              XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION, XR_CORE_TYPE_I64, true) ||
-                !operand_type_is(function, instruction, 0, XR_CORE_TYPE_I64) ||
-                !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE) ||
-                !operand_ownership_is(function, instruction, 0, XR_CORE_IR_NON_OWNER) ||
+        case XR_CORE_OP_CORE_PROVIDER_CALL: {
+            uint16_t operand_type = instruction->operand_count == 1u
+                                        ? function->value_types[instruction->operands[0]]
+                                        : XR_CORE_TYPE_VOID;
+            XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
+                context->program, instruction->result_type_id,
+                instruction->operand_count == 1u ? &operand_type : NULL,
+                instruction->operand_count);
+            if (instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
                 instruction->result_category != XR_CORE_IR_VALUE ||
-                instruction->result_ownership != XR_CORE_IR_NON_OWNER) {
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER ||
+                call_kind == XR_PROVIDER_LOGICAL_CALL_INVALID ||
+                (instruction->operand_count == 1u &&
+                 (!operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE) ||
+                  !operand_ownership_is(function, instruction, 0, XR_CORE_IR_NON_OWNER)))) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
             return true;
-        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:
-            if (!expect_shape(context, instruction, location, 0, 0,
-                              XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION, XR_CORE_TYPE_I64, true) ||
-                instruction->result_category != XR_CORE_IR_VALUE ||
-                instruction->result_ownership != XR_CORE_IR_NON_OWNER) {
-                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
-                return false;
-            }
-            return true;
+        }
         case XR_CORE_OP_CORE_OUTPUT_GROUP_I64:
             if (!expect_shape(context, instruction, location, 1, 0,
                               XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION, XR_CORE_TYPE_VOID,
@@ -3411,8 +3412,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             const XrValidatedType *type = xr_validated_program_type(
                 context->program, function->value_types[instruction->operands[0]]);
             if (!type || type->kind != XR_CORE_IR_TYPE_VARIANT ||
-                instruction->immediate.variant_ordinal >= type->variant_count)
+                instruction->immediate.variant_ordinal >= type->variant_count) {
                 goto aggregate_type_reject;
+            }
             return true;
         }
         case XR_CORE_OP_CORE_VARIANT_PROJECT: {
@@ -3898,7 +3900,7 @@ static bool verify_provider_requirements_are_exact(VerifyContext *context) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, no_location());
         return false;
     }
-    bool *used = xr_calloc((size_t) operation_count, sizeof(bool));
+    uint8_t *used = xr_calloc((size_t) operation_count, sizeof(uint8_t));
     if (!used) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, no_location());
         return false;
@@ -3910,8 +3912,7 @@ static bool verify_provider_requirements_are_exact(VerifyContext *context) {
             for (uint32_t instruction = 0; instruction < block_row->instruction_count;
                  ++instruction) {
                 const XrValidatedInstruction *op = &block_row->instructions[instruction];
-                if (op->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY &&
-                    op->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY &&
+                if (op->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL &&
                     op->operation_id != XR_CORE_OP_CORE_OUTPUT_GROUP_I64)
                     continue;
                 size_t flat = op->immediate.provider_operation.operation_index;
@@ -3920,13 +3921,34 @@ static bool verify_provider_requirements_are_exact(VerifyContext *context) {
                      ++requirement) {
                     flat += context->program->provider_requirements[requirement].operation_count;
                 }
-                used[flat] = true;
+                uint8_t use_kind = UINT8_MAX;
+                if (op->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
+                    uint16_t operand_type = op->operand_count == 1u
+                                                ? function_row->value_types[op->operands[0]]
+                                                : XR_CORE_TYPE_VOID;
+                    use_kind = (uint8_t) xr_validated_program_provider_call_kind(
+                        context->program, op->result_type_id,
+                        op->operand_count == 1u ? &operand_type : NULL, op->operand_count);
+                }
+                if (used[flat] != 0u && used[flat] != use_kind) {
+                    XrProgramSemanticLocation location = {
+                        .section_id = XR_PROGRAM_SECTION_FUNCTIONS,
+                        .function_id = function,
+                        .block_id = block,
+                        .instruction_id = instruction,
+                        .value_id = op->result_id,
+                    };
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_PROVIDER_REQUIREMENT, location);
+                    xr_free(used);
+                    return false;
+                }
+                used[flat] = use_kind;
             }
         }
     }
     bool exact = true;
     for (size_t operation = 0; operation < (size_t) operation_count; ++operation) {
-        if (!used[operation]) {
+        if (used[operation] == 0u) {
             exact = false;
             break;
         }

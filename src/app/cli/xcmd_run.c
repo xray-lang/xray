@@ -19,6 +19,7 @@
 #include "../../api/xisolate_profile.h"
 #include "../../base/xplatform.h"
 #include "../../execution/xr_execution.h"
+#include "../../os/os_pipe.h"
 #include "../../os/os_time.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 #include "../../plan/target/xr_target_profile.h"
@@ -126,6 +127,23 @@ static XrProviderCallStatus clock_utc_offset_at(void *context, int64_t argument,
     return XR_PROVIDER_CALL_OK;
 }
 
+static XrProviderCallStatus pipe_open(void *context, bool *present_out, int64_t *first_out,
+                                      int64_t *second_out) {
+    (void) context;
+    if (!present_out || !first_out || !second_out)
+        return XR_PROVIDER_CALL_FAILED;
+    *present_out = false;
+    *first_out = 0;
+    *second_out = 0;
+    XrPipe pipe = {XR_PIPE_INVALID, XR_PIPE_INVALID};
+    if (xr_pipe_create(&pipe, NULL) != 0)
+        return XR_PROVIDER_CALL_OK;
+    *present_out = true;
+    *first_out = (int64_t) pipe.read;
+    *second_out = (int64_t) pipe.write;
+    return XR_PROVIDER_CALL_OK;
+}
+
 typedef struct XrRunProviderBindings {
     XrProviderBinding providers[XR_RUNTIME_ABI_MAX_PROVIDERS];
     XrProviderOperationBinding
@@ -144,6 +162,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
         return false;
     XrStableId output_contract = {{0}};
     XrStableId output_operation = {{0}};
+    XrStableId pipe_open_operation = {{0}};
     XrStableId clock_contract = {{0}};
     XrStableId clock_realtime = {{0}};
     XrStableId clock_monotonic = {{0}};
@@ -151,6 +170,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
     XrStableId clock_utc_offset = {{0}};
     if (!builtin_provider_id(XR_PROVIDER_IO_CONTRACT_KEY, &output_contract) ||
         !builtin_provider_id(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY, &output_operation) ||
+        !builtin_provider_id(XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY, &pipe_open_operation) ||
         !builtin_provider_id(XR_PROVIDER_CLOCK_CONTRACT_KEY, &clock_contract) ||
         !builtin_provider_id(XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY, &clock_realtime) ||
         !builtin_provider_id(XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY, &clock_monotonic) ||
@@ -203,6 +223,11 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
                 operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE;
                 operation->entry.output_write = stdout_output_write;
                 operation->context = stdout;
+            } else if (stable_id_equal(requirement.contract_id, output_contract) &&
+                       stable_id_equal(required_operation, pipe_open_operation) &&
+                       contract->provider_kind == XR_TARGET_PROVIDER_IO) {
+                operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
+                operation->entry.optional_i64_pair_nullary = pipe_open;
             } else if (stable_id_equal(requirement.contract_id, clock_contract) &&
                        contract->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
                 if (stable_id_equal(required_operation, clock_utc_offset)) {

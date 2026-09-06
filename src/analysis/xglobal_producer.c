@@ -11371,11 +11371,47 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
     for (uint32_t i = 0u; i < producer->evidence->ncallsites; ++i) {
         XgCallsiteSummary *callsite = &producer->evidence->callsites[i];
         uint32_t effect_union = 0u;
-        if (callsite->kind != XG_CALL_INTERFACE)
+        const XgMethodSummary *method = NULL;
+        for (uint32_t method_index = 0u;
+             callsite->kind == XG_CALL_METHOD && method_index < producer->evidence->nmethods;
+             ++method_index) {
+            const XgMethodSummary *candidate = &producer->evidence->methods[method_index];
+            if (candidate->method_id != callsite->method_id)
+                continue;
+            if (method)
+                goto fail;
+            method = candidate;
+        }
+        bool exact_constructor =
+            method && (method->flags & XG_METHOD_CONSTRUCTOR) != 0u &&
+            (method->flags & (XG_METHOD_STATIC | XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE)) ==
+                0u;
+        if (callsite->kind != XG_CALL_INTERFACE && !exact_constructor)
             continue;
-        if (!xg_callsite_effects_compose_closed_world_calls(producer->evidence, callsite,
-                                                            &effect_union))
+        if (exact_constructor) {
+            const XgBodySummary *body = NULL;
+            for (uint32_t body_index = 0u; body_index < producer->evidence->nbodies; ++body_index) {
+                const XgBodySummary *candidate = &producer->evidence->bodies[body_index];
+                if (candidate->kind != XG_BODY_METHOD ||
+                    candidate->owner_method_id != method->method_id)
+                    continue;
+                if (body)
+                    goto fail;
+                body = candidate;
+            }
+            /* This is an evidence refinement, not an assumption. Constructors
+             * whose
+             * complete source call graph cannot be closed keep the
+             * analyzer's
+             * conservative fact and remain unavailable to exact
+             * consumers. */
+            if (!body || !xg_body_effects_compose_closed_world_calls(producer->evidence, body,
+                                                                     &effect_union))
+                continue;
+        } else if (!xg_callsite_effects_compose_closed_world_calls(producer->evidence, callsite,
+                                                                   &effect_union)) {
             goto fail;
+        }
         callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC);
         if ((effect_union & XG_BODY_MAY_ERROR) != 0u)
             callsite->flags |= XG_CALL_MAY_ERROR;

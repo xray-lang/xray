@@ -20,6 +20,7 @@
     "xray.runtime.provider-operation.v1/io/output-write"
 #define XR_PROVIDER_IO_ASSERTION_REPORT_OPERATION_KEY                                           \
     "xray.runtime.provider-operation.v1/io/assertion-report"
+#define XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY "xray.runtime.provider-operation.v1/io/pipe-open"
 
 #define XR_PROVIDER_CLOCK_CONTRACT_KEY "xray.runtime.provider.v1/clock"
 #define XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY                                          \

@@ -154,16 +154,10 @@
       "law": "perform one exact typed read-modify-write operation under an explicit supported memory order"
     },
     {
-      "family": "provider-unary-i64",
+      "family": "provider-call",
       "stable_id": 136,
-      "id": "core.provider.call.i64.unary",
-      "law": "invoke one stable unary i64 provider operation required by the program and admitted by the exact profile and instance binding"
-    },
-    {
-      "family": "provider-nullary-i64",
-      "stable_id": 139,
-      "id": "core.provider.call.i64.nullary",
-      "law": "invoke one stable nullary i64 provider operation required by the program and admitted by the exact profile and instance binding"
+      "id": "core.provider.call",
+      "law": "invoke one stable typed provider operation required by the program and admitted by the exact profile and instance binding; the logical operand and result shape is carried by XrProgram types"
     },
     {
       "family": "target-profile-query",
@@ -673,8 +667,7 @@
             {
               "path": "xisa/core/registry.json",
               "tokens": [
-                "\"spelling\": \"core.provider.call.i64.unary\"",
-                "\"spelling\": \"core.provider.call.i64.nullary\"",
+                "\"spelling\": \"core.provider.call\"",
                 "\"profile_dependency\": \"provider_contract\""
               ]
             }
@@ -704,8 +697,7 @@
             {
               "path": "src/program/xr_program_verify.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:",
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:",
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
                 "verify_provider_requirements_are_exact"
               ]
             }
@@ -717,8 +709,7 @@
             {
               "path": "src/program/xr_reference_evaluator.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:",
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:",
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
                 "XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED"
               ]
             }
@@ -730,8 +721,7 @@
             {
               "path": "src/vm/xr_program_vm.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:",
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:",
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
                 "xr_execution_lease_provider_call_i64_unary",
                 "xr_execution_lease_provider_call_i64_nullary"
               ]
@@ -744,8 +734,7 @@
             {
               "path": "src/aot/program/xr_backend_ir_emit_c.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:",
-                "case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:",
+                "case XR_CORE_OP_CORE_PROVIDER_CALL:",
                 "XrAotProviderCallI64Unary",
                 "XrAotProviderCallI64Nullary"
               ]

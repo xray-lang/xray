@@ -73,8 +73,7 @@ static XrValidatedProgram *build_validated_provider_program(
     }
     uint32_t provider_instruction = instruction_count;
     instructions[instruction_count++] = (XrCoreIrInstructionInput) {
-        .operation_id = nullary ? XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY
-                                : XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
+        .operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
         .result = provider_value,
         .result_type_id = XR_CORE_TYPE_I64,
         .operands = nullary ? NULL : provider_operand,
@@ -445,9 +444,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-                        "7ebe8cffb7bd22654371bd1e1bd2f18dd1c73120a75fd2cdc034c6d095392cfd");
+                        "cc863df87f7cf967b934124c561340159e7d5b763a3ca1cde946c7e11f4f7948");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "18484d7edb5d093e7a7a171481310bad0b8b78516da1fd694e2f7d54463eea34");
+                        "9cb2bcfc47299c47dd08be24e48bf1be17eeb56bcffe8ca18d7f819ee56208c6");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));

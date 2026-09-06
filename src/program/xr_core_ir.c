@@ -468,7 +468,8 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIrBlock *output) {
+static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIrBlock *output,
+                                       char *diagnostic, size_t diagnostic_size) {
     memset(output, 0, sizeof(*output));
     output->key = input->key;
     output->argument_count = input->argument_count;
@@ -478,6 +479,8 @@ static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIr
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     if (input->instruction_count != 0) {
         if (!input->instructions) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "CoreIR block has an instruction count without storage");
             free_block(output);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
@@ -487,6 +490,8 @@ static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIr
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
     } else if (input->instructions) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR block has instruction storage with a zero count");
         free_block(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -494,6 +499,9 @@ static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIr
         XrProgramBuildStatus status =
             copy_instruction(&input->instructions[index], &output->instructions[index]);
         if (status != XR_PROGRAM_BUILD_OK) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "CoreIR instruction %u copy failed: %s", index,
+                                      xr_program_build_status_name(status));
             free_block(output);
             return status;
         }
@@ -502,7 +510,8 @@ static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIr
 }
 
 static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
-                                          XrCoreIrFunction *output) {
+                                          XrCoreIrFunction *output, char *diagnostic,
+                                          size_t diagnostic_size) {
     memset(output, 0, sizeof(*output));
     output->key = input->key;
     output->parameter_count = input->parameter_count;
@@ -536,6 +545,8 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
                 input->parameter_modes ? input->parameter_modes[parameter] : XR_PARAM_READ;
         }
     } else if (input->parameter_modes) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR function has parameter modes with a zero count");
         free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -562,6 +573,8 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     }
     if (input->value_root_set_count != 0u) {
         if (!input->value_root_sets) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "CoreIR function has value-root count without storage");
             free_function(output);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
@@ -583,6 +596,8 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
             }
         }
     } else if (input->value_root_sets) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR function has value-root storage with a zero count");
         free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -593,6 +608,8 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     }
     if (input->coroutine_safepoint_count != 0u) {
         if (!input->coroutine_safepoints) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "CoreIR function has safepoint count without storage");
             free_function(output);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
@@ -615,10 +632,14 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
             }
         }
     } else if (input->coroutine_safepoints) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR function has safepoint storage with a zero count");
         free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     if (input->block_count == 0 || !input->blocks) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR function has no encoded blocks");
         free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -628,8 +649,13 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     for (uint32_t index = 0; index < input->block_count; ++index) {
-        XrProgramBuildStatus status = copy_block(&input->blocks[index], &output->blocks[index]);
+        XrProgramBuildStatus status =
+            copy_block(&input->blocks[index], &output->blocks[index], diagnostic, diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK) {
+            if (!diagnostic || diagnostic_size == 0u || !diagnostic[0])
+                xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                          "CoreIR block %u copy failed: %s", index,
+                                          xr_program_build_status_name(status));
             free_function(output);
             return status;
         }
@@ -638,7 +664,8 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus copy_module(const XrCoreIrModuleInput *input, XrCoreIrModule *output) {
+static XrProgramBuildStatus copy_module(const XrCoreIrModuleInput *input, XrCoreIrModule *output,
+                                        char *diagnostic, size_t diagnostic_size) {
     memset(output, 0, sizeof(*output));
     output->key = input->key;
     output->constant_count = input->constant_count;
@@ -647,19 +674,29 @@ static XrProgramBuildStatus copy_module(const XrCoreIrModuleInput *input, XrCore
                     sizeof(XrCoreIrConstantInput)))
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     if (input->function_count != 0) {
-        if (!input->functions)
+        if (!input->functions) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "CoreIR module has a function count without storage");
             return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
         output->functions = xr_calloc(input->function_count, sizeof(XrCoreIrFunction));
         if (!output->functions)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     } else if (input->functions) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR module has function storage with a zero count");
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     for (uint32_t index = 0; index < input->function_count; ++index) {
-        XrProgramBuildStatus status =
-            copy_function(&input->functions[index], &output->functions[index]);
-        if (status != XR_PROGRAM_BUILD_OK)
+        XrProgramBuildStatus status = copy_function(
+            &input->functions[index], &output->functions[index], diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK) {
+            if (!diagnostic || diagnostic_size == 0u || !diagnostic[0])
+                xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                          "CoreIR function %u copy failed: %s", index,
+                                          xr_program_build_status_name(status));
             return status;
+        }
     }
     qsort(output->functions, output->function_count, sizeof(XrCoreIrFunction), function_compare);
     return XR_PROGRAM_BUILD_OK;
@@ -1780,8 +1817,7 @@ static bool provider_operation_flat_index(const XrCoreIrProgram *program,
 }
 
 static bool operation_is_provider_backed(uint16_t operation_id) {
-    return operation_id == XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY ||
-           operation_id == XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY ||
+    return operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
            operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP_I64;
 }
 
@@ -1892,6 +1928,9 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
     }
     XrProgramBuildStatus provider_status = copy_provider_requirements(input, program);
     if (provider_status != XR_PROGRAM_BUILD_OK) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR provider requirements are malformed: %s",
+                                  xr_program_build_status_name(provider_status));
         xr_core_ir_program_free(program);
         return provider_status;
     }
@@ -1904,6 +1943,9 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
     }
     for (uint32_t index = 0; index < input->type_count; ++index) {
         if (input->types[index].local_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "CoreIR type %u uses reserved local id %u", index,
+                                      input->types[index].local_id);
             xr_core_ir_program_free(program);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
@@ -1915,6 +1957,8 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         }
         XrProgramBuildStatus status = copy_type(&input->types[index], &program->types[index]);
         if (status != XR_PROGRAM_BUILD_OK) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size, "CoreIR type %u copy failed: %s",
+                                      index, xr_program_build_status_name(status));
             xr_core_ir_program_free(program);
             return status;
         }
@@ -1931,6 +1975,9 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
             XrProgramBuildStatus status =
                 copy_interface(&input->interfaces[index], &program->interfaces[index]);
             if (status != XR_PROGRAM_BUILD_OK) {
+                xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                          "CoreIR interface %u copy failed: %s", index,
+                                          xr_program_build_status_name(status));
                 xr_core_ir_program_free(program);
                 return status;
             }
@@ -1948,6 +1995,9 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
             XrProgramBuildStatus status =
                 copy_conformance(&input->conformances[index], &program->conformances[index]);
             if (status != XR_PROGRAM_BUILD_OK) {
+                xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                          "CoreIR conformance %u copy failed: %s", index,
+                                          xr_program_build_status_name(status));
                 xr_core_ir_program_free(program);
                 return status;
             }
@@ -1961,8 +2011,13 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     for (uint32_t index = 0; index < input->module_count; ++index) {
-        XrProgramBuildStatus status = copy_module(&input->modules[index], &program->modules[index]);
+        XrProgramBuildStatus status = copy_module(&input->modules[index], &program->modules[index],
+                                                  diagnostic, diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK) {
+            if (!diagnostic || diagnostic_size == 0u || !diagnostic[0])
+                xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                          "CoreIR module %u copy failed: %s", index,
+                                          xr_program_build_status_name(status));
             xr_core_ir_program_free(program);
             return status;
         }

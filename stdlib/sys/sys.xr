@@ -187,14 +187,10 @@ export fn onSignal(signal: Signal, handler: fn()) -> bool {
 export class Pipe {
     _readHandle: i64
     _writeHandle: i64
-    _readOpen: bool
-    _writeOpen: bool
 
     constructor(readHandle: i64, writeHandle: i64) {
         this._readHandle = readHandle
         this._writeHandle = writeHandle
-        this._readOpen = readHandle >= 0
-        this._writeOpen = writeHandle >= 0
     }
 
     readEnd() -> i64 { return this._readHandle }
@@ -202,26 +198,26 @@ export class Pipe {
     writeEnd() -> i64 { return this._writeHandle }
 
     read(maxBytes: i64 = 8192) -> Array<u8>? {
-        if (!this._readOpen || maxBytes < 0) { return null }
+        if (this._readHandle < 0 || maxBytes < 0) { return null }
         return __pipeRead(this._readHandle, maxBytes)
     }
 
     write(data: Array<u8>) -> i64 {
-        if (!this._writeOpen) { return -1 }
+        if (this._writeHandle < 0) { return -1 }
         return __pipeWrite(this._writeHandle, data)
     }
 
     ref closeRead() -> bool {
-        if (!this._readOpen) { return true }
+        if (this._readHandle < 0) { return true }
         var ok = __pipeClose(this._readHandle)
-        this._readOpen = false
+        this._readHandle = -1
         return ok
     }
 
     ref closeWrite() -> bool {
-        if (!this._writeOpen) { return true }
+        if (this._writeHandle < 0) { return true }
         var ok = __pipeClose(this._writeHandle)
-        this._writeOpen = false
+        this._writeHandle = -1
         return ok
     }
 
@@ -233,8 +229,8 @@ export class Pipe {
 
     static open() -> Pipe? {
         var ends = __pipeOpen()
-        if (ends == null || len(ends!) < 2) { return null }
-        return Pipe(ends![0], ends![1])
+        if (ends == null) { return null }
+        return Pipe(ends!.0, ends!.1)
     }
 }
 

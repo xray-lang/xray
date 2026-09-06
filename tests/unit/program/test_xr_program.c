@@ -102,7 +102,7 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
          .operand_count = 2,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
          .immediate.u32 = 0},
-        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
+        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
          .result = value_provider_a,
          .result_type_id = XR_CORE_TYPE_I64,
          .operands = provider_a_operands,
@@ -110,7 +110,7 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
          .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
          .immediate.provider_operation = {.contract_id = contract_a,
                                           .operation_id = operation_a}},
-        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
+        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
          .result = value_provider_b,
          .result_type_id = XR_CORE_TYPE_I64,
          .operands = provider_b_operands,
@@ -118,7 +118,7 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
          .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
          .immediate.provider_operation = {.contract_id = contract_a,
                                           .operation_id = operation_b}},
-        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY,
+        {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
          .result = value_provider_c,
          .result_type_id = XR_CORE_TYPE_I64,
          .operands = provider_c_operands,
@@ -262,7 +262,7 @@ static void test_determinism_roundtrip_and_identity(void) {
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
     CHECK(first.size == 383u);
-    CHECK(strcmp(id_hex, "5219a4156f29887d11d94d6f02089a1c536c40f2d493f70668103ba5756091d8") == 0);
+    CHECK(strcmp(id_hex, "7241da1570b32e88bf04ec9ed0952c66e11f05ae8f2c85e9d323d08d02291d61") == 0);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
 
     xr_program_artifact_free(&reencoded);

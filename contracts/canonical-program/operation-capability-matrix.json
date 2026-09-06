@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 46 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; provider-backed operations use exact dense provider requirement and operation references; source publication remains fail closed until its owning slice activates it."
+    "note": "All 47 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references; source publication remains fail closed until its owning slice activates it."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 46 registered operations execute in the independent typed VM and match the reference evaluator. Provider operations use only ABI-matched lease-pinned typed adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 47 registered operations execute in the independent typed VM and match the reference evaluator. Provider operations use only Program-typed, ABI-matched, lease-pinned private adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 46 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes ABI-matched typed provider callbacks; hosted standalone output binds directly to a binary stdout sink, and freestanding standalone output without an embedder fails closed. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 47 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes Program-typed provider callbacks; hosted standalone output and pipe-open bind backend-private host adapters, while unsupported freestanding providers fail closed. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -524,35 +524,12 @@
       ]
     },
     {
-      "id": "core.provider.call.i64.unary",
-      "core_spec_contract": "invoke one exact unary i64 provider operation admitted by the bound profile and generation-scoped instance or publish provider-call-failed",
-      "program_encoding": "one i64 operand and one i64 result plus dense ProviderRequirementIndex and OperationIndex; no provider key, address, context, or generation is serialized",
-      "decoder_verifier_evaluator": "bounded exact requirement/operation reference, declared effect/capability checks, complete import use, and independent callback evaluation",
-      "vm_implementation": "invoke only the execution lease typed i64 adapter while its in-flight ticket pin keeps the instance binding alive",
-      "aot_lowering": "FOUNDATION ONLY: emit a portable typed provider callback through the private execution context and normalize refusal to trap 7; the arbitrary-callback native harness does not prove exact-generation AOT closure",
-      "source_producer": "IN_PROGRESS: a versioned NativePackagePlan row must bind an existing extern C declaration to canonical contract and operation keys before hashing; analyzer, Xglobal, and Xi must publish the verified identity",
-      "old_owner_deletion": "IN_PROGRESS: direct native-call ownership remains excluded from the canonical provider path until source publication and cutover are complete",
-      "status": "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE",
-      "evidence": [
-        "xisa/core/registry.json",
-        "xisa/program/schema.json",
-        "src/program/xr_program_verify.c",
-        "src/program/xr_reference_evaluator.c",
-        "src/execution/xr_execution.c",
-        "src/vm/xr_program_vm.c",
-        "src/aot/program/xr_backend_ir_emit_c.c",
-        "tests/unit/execution/test_xr_execution.c",
-        "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot.c"
-      ]
-    },
-    {
-      "id": "core.provider.call.i64.nullary",
-      "core_spec_contract": "invoke one exact nullary i64 provider operation admitted by the bound profile and generation-scoped instance or publish provider-call-failed",
-      "program_encoding": "zero operands and one i64 result plus dense ProviderRequirementIndex and OperationIndex; no provider key, address, context, or generation is serialized",
-      "decoder_verifier_evaluator": "bounded exact requirement/operation reference, declared effect/capability checks, exact nullary shape, and independent callback evaluation",
-      "vm_implementation": "invoke only the execution lease typed nullary i64 adapter while its in-flight ticket pin keeps the instance binding alive",
-      "aot_lowering": "FOUNDATION ONLY: emit a portable typed nullary provider callback through the private execution context and normalize refusal to trap 7; the arbitrary-callback native harness does not prove exact-generation AOT closure",
+      "id": "core.provider.call",
+      "core_spec_contract": "invoke one exact typed provider operation admitted by the bound profile and generation-scoped instance or publish provider-call-failed",
+      "program_encoding": "logical operands and result types plus dense ProviderRequirementIndex and OperationIndex; no provider key, ABI address, context, trampoline kind, or generation is serialized",
+      "decoder_verifier_evaluator": "bounded exact requirement/operation reference, declared effect/capability checks, one structurally admitted logical call shape per required operation, and independent callback evaluation",
+      "vm_implementation": "select an execution-private typed trampoline from validated XrProgram types and the exact target ABI while the in-flight ticket pin keeps the instance binding alive",
+      "aot_lowering": "emit a portable typed provider callback selected from validated XrProgram types; standalone hosted operations bind backend-private host adapters and refusal normalizes to trap 7",
       "source_producer": "IN_PROGRESS: a versioned NativePackagePlan row must bind an existing extern C declaration to canonical contract and operation keys before hashing; analyzer, Xglobal, and Xi must publish the verified identity",
       "old_owner_deletion": "IN_PROGRESS: direct native-call ownership remains excluded from the canonical provider path until source publication and cutover are complete",
       "status": "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE",

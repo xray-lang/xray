@@ -131,8 +131,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
-        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_UNARY:
-        case XR_CORE_OP_CORE_PROVIDER_CALL_I64_NULLARY:
+        case XR_CORE_OP_CORE_PROVIDER_CALL:
         case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {
             uint32_t requirement = instruction->immediate.provider_operation.requirement_index;
             uint32_t operation = instruction->immediate.provider_operation.operation_index;

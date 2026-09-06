@@ -1213,7 +1213,8 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
         if (call->op == XI_CALL) {
             if (row->kind != XG_CALL_DIRECT_FUNC && row->kind != XG_CALL_NATIVE &&
                 row->kind != XG_CALL_EXTERN && row->kind != XG_CALL_CLOSURE &&
-                row->kind != XG_CALL_CLASS_ALLOC)
+                row->kind != XG_CALL_CLASS_ALLOC &&
+                !(row->kind == XG_CALL_METHOD && xi_value_is_constructor_call(call)))
                 continue;
         } else {
             /* Namespace members lower through XI_CALL_METHOD even when the
@@ -1247,7 +1248,8 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
             }
         }
         if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT ||
-            match->kind == XG_CALL_NATIVE || match->kind == XG_CALL_EXTERN)
+            match->kind == XG_CALL_NATIVE || match->kind == XG_CALL_EXTERN ||
+            (match->kind == XG_CALL_METHOD && xi_value_is_constructor_call(call)))
             call->xg_method_id = match->method_id;
         if (match->kind == XG_CALL_INTERFACE) {
             uint32_t dispatch_slot = UINT32_MAX;

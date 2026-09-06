@@ -670,6 +670,58 @@ static XiValue *xi_lower_pack_existential(XiLower *l, AstNode *node, XiValue *va
     return pack;
 }
 
+static bool xi_lower_optional_payload_matches(const XrType *optional, const XrType *payload) {
+    if (!optional || !optional->is_nullable || !payload)
+        return false;
+    XrType expected = *optional;
+    expected.is_nullable = false;
+    return xr_type_equals(&expected, (XrType *) payload);
+}
+
+/* Nullable source boundaries are a closed semantic sum, not a backend tagged-
+ * value convention.
+ * Publish the injection in Xi before canonical Program
+ * construction so VM execution and AOT
+ * lowering consume the same
+ * None | Some(T) operation. */
+static XiValue *xi_lower_inject_optional(XiLower *l, AstNode *node, XiValue *value,
+                                         XrType *target_type) {
+    if (!l || !l->func || !l->cur_block || !node || !value || !value->type || !target_type ||
+        !target_type->is_nullable || value->type->is_nullable)
+        return value;
+
+    bool none = XR_TYPE_IS_NULL(value->type);
+    if (!none) {
+        if (!xi_lower_optional_payload_matches(target_type, value->type))
+            return value;
+    }
+
+    /* A freshly lowered null literal has no identity or payload to preserve.
+     * Retype that
+     * exact definition in place so the Xi graph never contains a
+     * dead, unrepresentable
+     * bare-Null value beside its None injection. */
+    if (none && node->type == AST_LITERAL_NULL && value->op == XI_CONST && value->nargs == 0u &&
+        value->aux == NULL && value->block == l->cur_block) {
+        value->op = XI_SUM_INJECT;
+        value->type = target_type;
+        value->aux_int = 0;
+        return value;
+    }
+
+    XiValue *inject =
+        xi_value_new(l->func, l->cur_block, XI_SUM_INJECT, target_type, none ? 0u : 1u);
+    if (!inject) {
+        l->had_error = true;
+        return value;
+    }
+    if (!none)
+        inject->args[0] = value;
+    inject->aux_int = none ? 0 : 1;
+    inject->line = (uint32_t) node->line;
+    return inject;
+}
+
 XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, AstNode *node, XiValue *val,
                                              struct XrType *target_type) {
     if (!l || !l->func || !node || !val || !target_type || XR_TYPE_IS_UNKNOWN(target_type))
@@ -681,6 +733,8 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, AstNode *node, XiValue 
     if (val->type && !XR_TYPE_IS_UNKNOWN(val->type) && xr_type_assignable(target_type, val->type)) {
         if (target_type->kind == XR_KIND_INTERFACE)
             return xi_lower_pack_existential(l, node, val, target_type);
+        if (target_type->is_nullable)
+            return xi_lower_inject_optional(l, node, val, target_type);
         return xi_lower_apply_primitive_type_view(l, node, val, target_type);
     }
 
@@ -1267,6 +1321,37 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
             }
             if (parts.count == 1)
                 return parts.items[0];
+        }
+    }
+
+    /* A source null test over T? asks only which arm of Optional<T> is
+     * present.  Lower it
+     * directly to the closed-sum tag test; a bare Null
+     * value is never materialized in Xi or
+     * left for a backend to reinterpret. */
+    if (node->type == AST_BINARY_EQ || node->type == AST_BINARY_NE) {
+        AstNode *left_node = node->as.binary.left;
+        AstNode *right_node = node->as.binary.right;
+        AstNode *subject_node = NULL;
+        if (left_node && left_node->type == AST_LITERAL_NULL)
+            subject_node = right_node;
+        else if (right_node && right_node->type == AST_LITERAL_NULL)
+            subject_node = left_node;
+        if (subject_node) {
+            XrType *subject_type = xa_analyzer_get_node_type(l->analyzer, subject_node);
+            if (subject_type && subject_type->is_nullable) {
+                XiValue *subject = xi_lower_expr(l, subject_node);
+                if (!subject)
+                    return NULL;
+                XiValue *test =
+                    xi_value_new(l->func, l->cur_block, XI_VARIANT_TEST, l->type_bool, 1u);
+                if (!test)
+                    return NULL;
+                test->args[0] = subject;
+                test->aux_int = node->type == AST_BINARY_EQ ? 0 : 1;
+                test->line = (uint32_t) node->line;
+                return test;
+            }
         }
     }
 
@@ -11502,10 +11587,15 @@ static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrTyp
     if (!val)
         return NULL;
 
-    XiValue *chk = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+    bool closed_optional = xi_lower_optional_payload_matches(val->type, result_type);
+
+    XiValue *chk = xi_value_new(l->func, l->cur_block,
+                                closed_optional ? XI_VARIANT_TEST : XI_ISNULL, l->type_bool, 1);
     if (!chk)
         return val;
     chk->args[0] = val;
+    if (closed_optional)
+        chk->aux_int = 0;
 
     XiBlock *ok_blk = xi_block_new(l->func);
     XiBlock *throw_blk = xi_block_new(l->func);
@@ -11528,9 +11618,12 @@ static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrTyp
         l->cur_block->kind = XI_BLOCK_UNREACHABLE;
         l->cur_block->control = thr;
         l->cur_block = ok_blk;
-        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+        XiValue *copy = xi_value_new(
+            l->func, l->cur_block, closed_optional ? XI_VARIANT_PROJECT : XI_COPY, result_type, 1);
         if (copy)
             copy->args[0] = val;
+        if (copy && closed_optional)
+            copy->aux_int = xi_variant_pack_projection(1u, 0u);
         return copy ? copy : val;
     }
 
@@ -11586,9 +11679,12 @@ static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrTyp
 
     /* Ok path */
     l->cur_block = ok_blk;
-    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    XiValue *copy = xi_value_new(l->func, l->cur_block,
+                                 closed_optional ? XI_VARIANT_PROJECT : XI_COPY, result_type, 1);
     if (copy)
         copy->args[0] = val;
+    if (copy && closed_optional)
+        copy->aux_int = xi_variant_pack_projection(1u, 0u);
     return copy ? copy : val;
 }
 
@@ -11602,10 +11698,15 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
                                operand_type->is_nullable || operand_type->kind == XR_KIND_NULL ||
                                xr_type_intrinsically_includes_null(operand_type);
     if (!operand_may_be_null) {
-        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
-        if (copy)
-            copy->args[0] = val;
-        return copy ? copy : val;
+        bool flow_proven_optional = xi_lower_optional_payload_matches(val->type, result_type);
+        XiValue *narrowed =
+            xi_value_new(l->func, l->cur_block, flow_proven_optional ? XI_VARIANT_PROJECT : XI_COPY,
+                         result_type, 1);
+        if (narrowed)
+            narrowed->args[0] = val;
+        if (narrowed && flow_proven_optional)
+            narrowed->aux_int = xi_variant_pack_projection(1u, 0u);
+        return narrowed ? narrowed : val;
     }
     return lower_null_guard_or_throw(l, val, result_type, "E0413: Attempted to unwrap a null value",
                                      node->line);

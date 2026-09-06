@@ -25,7 +25,7 @@ EXPECTED_COVERAGE = {
     "schema": "xray-execution-binding-coverage/1",
     "profile_schema_version": 5,
     "boundary_abi_schema_version": 3,
-    "execution_binding_schema_version": 3,
+    "execution_binding_schema_version": 4,
     "execution_identity": {
         "inputs": ["ProgramId", "TargetProfileId", "BoundaryAbiId", "RuntimeKernelId"],
         "compile_time_owner": "xr_execution_id_compute",
@@ -140,7 +140,7 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     for token in ("XrExecutionId", "XrInstance", "XrExecutionLease", "contract_fingerprint",
                   "XR_INSTANCE_ACTIVE", "XR_INSTANCE_DRAINING", "XR_INSTANCE_RETIRED"):
         require(token in execution_header, f"missing execution contract token {token}")
-    require("#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(3)" in execution_header,
+    require("#define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(4)" in execution_header,
             "execution header schema version is not synchronized with coverage")
     require("xr_execution_id_compute" in execution_identity_header and
             "xray-execution-id-v1" in execution_identity_source,

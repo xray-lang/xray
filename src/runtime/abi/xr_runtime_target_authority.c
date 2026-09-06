@@ -639,6 +639,14 @@ static bool make_hosted_providers(
                        XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE),
         usize_slot,
     };
+    XrTargetProviderCallSlotAbi pipe_open_parameters[] = {
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED, 0),
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED, 0),
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED, 0),
+    };
     memset(providers, 0, XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT * sizeof(providers[0]));
     providers[0] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -688,17 +696,22 @@ static bool make_hosted_providers(
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
-        .operation_count = 1,
+        .operation_count = 2,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
         .provider_kind = XR_TARGET_PROVIDER_IO,
     };
     if (!canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[3].contract_id) ||
-        !make_operation(&providers[3].operations[0],
-                        XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
+        !make_operation(&providers[3].operations[0], XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
                         make_call_abi(status_result, output_parameters, 3, target_endian),
+                        XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+                        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS) ||
+        !make_operation(&providers[3].operations[1], XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
+                        make_call_abi(status_result, pipe_open_parameters, 3, target_endian),
                         XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
                         XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS))
         return false;
+    qsort(providers[3].operations, providers[3].operation_count, sizeof(providers[3].operations[0]),
+          compare_stable_id_first);
 
     providers[2] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
