@@ -1966,9 +1966,13 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
         return class_data;
     }
 
-    if (value->op != XI_GET_SHARED || value->aux_int < 0)
-        return NULL;
     const XiImportRef *ref = xi_value_import_ref(caller, value);
+    if (value->op == XI_IMPORT_REF) {
+        if (!ref)
+            return NULL;
+    } else if (value->op != XI_GET_SHARED || value->aux_int < 0) {
+        return NULL;
+    }
     uint32_t module_index = UINT32_MAX;
     const XiModule *module = NULL;
     const XiClassData *class_data = NULL;
@@ -2249,7 +2253,7 @@ static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildC
                                                                 const XiFunc *caller,
                                                                 const XiValue *call) {
     if (!context || !context->source || !context->source->global_evidence || !caller || !call ||
-        call->op != XI_CALL || call->nargs <= 1u || !call->args ||
+        (call->op != XI_CALL && call->op != XI_CALL_METHOD) || call->nargs <= 1u || !call->args ||
         !xi_value_is_constructor_call(call))
         return NULL;
 

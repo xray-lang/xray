@@ -6955,11 +6955,34 @@ bool xa_type_has_movable_root(XrType *type) {
     }
 }
 
+static XaSymbol *xa_module_member_export_symbol(XaInferContext *ctx, AstNode *node) {
+    node = xa_whole_binding_value(node);
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *member = &node->as.member_access;
+    AstNode *module_expr = xa_whole_binding_value(member->object);
+    if (!member->name || !module_expr || module_expr->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *module_symbol = xa_resolve_variable_symbol(ctx, module_expr);
+    if (!module_symbol || module_symbol->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *module_links = xa_analyzer_get_links(ctx->analyzer, module_symbol);
+    const char *module_name = module_links && module_links->module_name
+                                  ? module_links->module_name
+                                  : module_expr->as.variable.name;
+    XrHashMap *exports =
+        module_name ? resolve_graph_export_symbols(ctx->analyzer, module_name) : NULL;
+    return exports ? (XaSymbol *) xr_hashmap_get(exports, member->name) : NULL;
+}
+
 static bool xa_call_is_fresh_constructor(XaInferContext *ctx, AstNode *value) {
     if (!ctx || !value || value->type != AST_CALL_EXPR || !value->as.call_expr.callee)
         return false;
     AstNode *callee = xa_whole_binding_value(value->as.call_expr.callee);
     if (callee && callee->type == AST_MEMBER_ACCESS) {
+        XaSymbol *exported = xa_module_member_export_symbol(ctx, callee);
+        if (exported && exported->kind == XA_SYM_CLASS)
+            return true;
         MemberAccessNode *member = &callee->as.member_access;
         AstNode *object = xa_whole_binding_value(member->object);
         if (member->name && object && object->type == AST_VARIABLE && object->as.variable.name &&
@@ -7258,18 +7281,7 @@ static XaSymbol *xa_function_value_source_symbol(XaInferContext *ctx, AstNode *s
                                         : NULL;
     if (source->type != AST_MEMBER_ACCESS)
         return NULL;
-    MemberAccessNode *ma = &source->as.member_access;
-    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
-        !ma->object->as.variable.name)
-        return NULL;
-    XaSymbol *mod_sym = xa_scope_lookup(ctx->analyzer->current_scope, ma->object->as.variable.name);
-    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
-        return NULL;
-    XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
-    const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
-                                                                 : ma->object->as.variable.name;
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
-    XaSymbol *member_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, ma->name) : NULL;
+    XaSymbol *member_sym = xa_module_member_export_symbol(ctx, source);
     return member_sym && member_sym->kind == XA_SYM_FUNCTION ? member_sym : NULL;
 }
 

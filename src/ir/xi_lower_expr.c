@@ -5804,6 +5804,33 @@ static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *ca
     return links ? links->module_name : NULL;
 }
 
+static XiValue *lower_module_export_class_constructor(XiLower *l, AstNode *node,
+                                                      CallExprNode *call, bool *matched) {
+    if (matched)
+        *matched = false;
+    if (!l || !l->analyzer || !node || !call || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    const XaSelection *selection = xa_analyzer_get_selection(l->analyzer, call->callee);
+    XaSymbol *class_symbol =
+        selection && selection->kind == XA_SEL_MODULE_EXPORT ? selection->target_symbol : NULL;
+    if (!class_symbol || class_symbol->kind != XA_SYM_CLASS)
+        return NULL;
+    if (matched)
+        *matched = true;
+    XaSymbolLinks *class_links =
+        xa_analyzer_get_links(l->analyzer, class_symbol);
+    XrType *result_type = xi_lower_node_type(l, node);
+    const char *module_name = lower_call_namespace_module_name(l, call);
+    const char *class_name = call->callee->as.member_access.name;
+    if (!class_links || !class_links->class_info || !result_type ||
+        result_type->kind != XR_KIND_INSTANCE ||
+        result_type->instance.class_ref != class_links->class_info || !module_name || !class_name)
+        return NULL;
+    return lower_construct(l, node, result_type, module_name, class_name, call->arguments,
+                           call->arg_accesses, call->arg_count, class_symbol);
+}
+
 static const char *lower_call_builtin_type_namespace(CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return NULL;
@@ -7657,6 +7684,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * which rely on OP_INVOKE dispatch rather than GETPROP + CALL. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
+        bool matched_module_constructor = false;
+        XiValue *module_constructor =
+            lower_module_export_class_constructor(l, node, call, &matched_module_constructor);
+        if (matched_module_constructor || l->had_error)
+            return module_constructor;
         uint8_t json_codec_kind = lower_json_static_codec_kind(ma);
         XiSequenceEvidenceIds sequence_ids;
         lower_take_sequence_call_evidence(l, node, call, ma, &sequence_ids);

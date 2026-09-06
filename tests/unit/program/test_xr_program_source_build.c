@@ -48,6 +48,7 @@ static const char *cross_module_coroutine_aot_output_path;
 static const char *function_parameter_aot_output_path;
 static const char *clock_provider_aot_output_path;
 static const char *pipe_provider_aot_output_path;
+static const char *pipe_close_failure_aot_output_path;
 
 typedef struct ClockProviderProbe {
     uint32_t calls;
@@ -61,6 +62,7 @@ typedef struct PipeProviderProbe {
     bool present;
     int64_t read_handle;
     int64_t write_handle;
+    bool close_results[2];
 } PipeProviderProbe;
 
 static bool stable_id_equal(XrStableId left, XrStableId right) {
@@ -105,8 +107,8 @@ static XrProviderCallStatus pipe_close_provider_probe(void *context, int64_t han
                                                        : probe->write_handle;
     if (handle != expected)
         return XR_PROVIDER_CALL_FAILED;
+    *result_out = probe->close_results[probe->close_calls & 1u];
     ++probe->close_calls;
-    *result_out = true;
     return XR_PROVIDER_CALL_OK;
 }
 
@@ -1052,6 +1054,7 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         .present = true,
         .read_handle = 17,
         .write_handle = 29,
+        .close_results = {true, true},
     };
     XrProviderOperationBinding operations[2] = {0};
     for (uint32_t operation_index = 0u; operation_index < requirement.operation_count;
@@ -1158,6 +1161,169 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+    xr_program_source_product_free(&second);
+    xr_program_source_product_free(&first);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
+    static const char source[] =
+        "import sys\n"
+        "fn answer() -> i64 {\n"
+        "  var live = sys.Pipe(2147483646, 2147483647)\n"
+        "  var readClosed = live.closeRead()\n"
+        "  var closedReadHandle = live.readEnd()\n"
+        "  var writeClosed = live.closeWrite()\n"
+        "  var closedWriteHandle = live.writeEnd()\n"
+        "  var closed = (move live).close()\n"
+        "  if (readClosed || writeClosed || !closed) { return 0 }\n"
+        "  if (closedReadHandle != -1 || closedWriteHandle != -1) { return 0 }\n"
+        "  return 1\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = NULL;
+    char profile_error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
+        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint =
+        xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct first = {0};
+    XrProgramSourceProduct second = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &first, &diagnostic);
+    assert_source_build_ok(&fixture.input, &second, &diagnostic);
+    if (!first.program || !second.program) {
+        xr_program_source_product_free(&second);
+        xr_program_source_product_free(&first);
+        xr_target_profile_free(profile);
+        source_build_fixture_free(&fixture);
+        return;
+    }
+    assert_products_equal(&first, &second);
+    ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
+
+    XrProgramProviderRequirementView requirement = {0};
+    ASSERT_TRUE(xr_validated_program_provider_requirement(first.program, 0u, &requirement));
+    ASSERT_EQ_UINT(requirement.operation_count, 1u);
+    XrStableId expected_contract = {{0}};
+    XrStableId expected_close = {{0}};
+    XrFingerprint key_digest;
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_contract,
+                                      &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
+                                      &expected_close, &key_digest));
+    ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_contract));
+    ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0], expected_close));
+
+    const XrTargetProviderContract *contract =
+        find_profile_provider(profile, requirement.contract_id);
+    ASSERT_NOT_NULL(contract);
+    const XrTargetProviderOperationContract *close_contract =
+        find_profile_provider_operation(contract, expected_close);
+    ASSERT_NOT_NULL(close_contract);
+    ASSERT_EQ_UINT(close_contract->failure_flags, 0u);
+    ASSERT_EQ_UINT(close_contract->lifetime_flags,
+                   XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED);
+
+    PipeProviderProbe probe = {
+        .read_handle = 2147483646,
+        .write_handle = 2147483647,
+        .close_results = {false, false},
+    };
+    XrProviderOperationBinding operation = {
+        .operation_id = requirement.operation_ids[0],
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
+        .context = &probe,
+    };
+    operation.entry.bool_i64_unary = pipe_close_provider_probe;
+    XrProviderBinding provider = {
+        .contract_id = requirement.contract_id,
+        .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
+        .operations = &operation,
+        .operation_count = 1u,
+    };
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
+                      contract, &provider.contract_fingerprint),
+                  XR_RUNTIME_ABI_OK);
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = first.program,
+        .profile = profile,
+        .providers = &provider,
+        .provider_count = 1u,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+    uint32_t entry = xr_validated_program_entry_function(first.program);
+
+    XrExecutionLease lease = {0};
+    ASSERT_TRUE(xr_execution_instance_acquire(instance, &lease));
+    XrReferenceProviderBinding reference_binding = {
+        .context = &lease,
+        .call_bool_i64_unary = reference_pipe_close_provider_call,
+    };
+    XrReferenceOutcome reference = xr_reference_evaluate_bound(
+        first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(reference.value.as.i64, 1);
+    ASSERT_EQ_UINT(probe.close_calls, 2u);
+    ASSERT_TRUE(xr_execution_lease_release(&lease));
+
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic),
+                  XR_VM_CODE_OK);
+    XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
+    ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_RETURN);
+    ASSERT_EQ_INT(vm.value.kind, XR_VM_VALUE_I64);
+    ASSERT_EQ_INT(vm.value.as.i64, reference.value.as.i64);
+    ASSERT_EQ_UINT(probe.close_calls, 4u);
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(first.program, profile, &options, &backend_ir,
+                                      &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_close"));
+    ASSERT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_open"));
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    if (pipe_close_failure_aot_output_path) {
+        FILE *output = fopen(pipe_close_failure_aot_output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+    xr_vm_code_free(vm_code);
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
     xr_target_profile_free(profile);
@@ -1279,7 +1445,9 @@ if (argc >= 4)
     clock_provider_aot_output_path = argv[3];
 if (argc >= 5)
     pipe_provider_aot_output_path = argv[4];
-if (argc > 5)
+if (argc >= 6)
+    pipe_close_failure_aot_output_path = argv[5];
+if (argc > 6)
     return 2;
 RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
 RUN_TEST(source_owner_two_module_graph_is_deterministic);
@@ -1288,6 +1456,7 @@ RUN_TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_p
 RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors);
 RUN_TEST(source_owner_clock_provider_is_exact_across_private_executors);
 RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
+RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);
