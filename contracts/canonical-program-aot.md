@@ -29,10 +29,10 @@ profile, while retaining no live provider instance or lease in the compiler. Emb
 typed callbacks from its host; hosted standalone AOT binds the generated entry directly to its
 closed native helper set, while freestanding standalone emission without an embedder fails closed.
 A strict native fixture built from real-source `time.now()` proves that one callback refusal becomes
-trap 7 and follows the explicit Program continuation through both deferred Pipe closes. The same
-validated edge contract covers direct, sealed-direct, indirect-direct, indirect-invoke,
-witness-direct, witness-invoke, and sealed-invoke calls; generated C does not infer an unwind policy or catch a
-different trap.
+trap 7 and follows explicit Program continuations through two deferred Pipe closes in the callee and
+then two deferred Pipe closes in the caller. The same validated edge contract covers direct,
+sealed-direct, indirect-direct, indirect-invoke, witness-direct, witness-invoke, and sealed-invoke
+calls; generated C does not infer an unwind policy or catch a different trap.
 
 `XrNativeArtifact` owns actual native bytes. `NativeArtifactId` hashes `ExecutionId`, `BackendId`,
 `ToolchainId`, `OptimizationPolicyId`, and those bytes. Toolchain identity is reconstructible from
@@ -75,4 +75,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f3
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c 63608f680e3f8a475ab8780843c03d03ec5357d032753f041209bae7aa387b36
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 02d0307b7c894795cbe2fd4da58f8561a1b0511fc4256bb50695342eea774719
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 703c0492e6463f5cb293da9a317e225dda42f835ea2ad3165baaa64008d41841

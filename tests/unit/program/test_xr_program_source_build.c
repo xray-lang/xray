@@ -72,7 +72,7 @@ typedef struct ProviderTrapCleanupProbe {
     uint32_t events;
     uint32_t clock_calls;
     uint32_t close_calls;
-    int64_t close_handles[2];
+    int64_t close_handles[4];
 } ProviderTrapCleanupProbe;
 
 static bool stable_id_equal(XrStableId left, XrStableId right) {
@@ -150,7 +150,7 @@ static XrProviderCallStatus clock_provider_probe(void *context, int64_t *result_
 
 static XrProviderCallStatus provider_trap_clock_probe(void *context, int64_t *result_out) {
     ProviderTrapCleanupProbe *probe = context;
-    if (!probe || !result_out || probe->events % 3u != 0u)
+    if (!probe || !result_out || probe->events % 5u != 0u)
         return XR_PROVIDER_CALL_FAILED;
     ++probe->events;
     ++probe->clock_calls;
@@ -162,8 +162,8 @@ static XrProviderCallStatus provider_trap_close_probe(void *context, int64_t han
     ProviderTrapCleanupProbe *probe = context;
     if (!probe || !result_out)
         return XR_PROVIDER_CALL_FAILED;
-    uint32_t phase = probe->events % 3u;
-    if (phase < 1u || phase > 2u || handle != probe->close_handles[phase - 1u])
+    uint32_t phase = probe->events % 5u;
+    if (phase < 1u || phase > 4u || handle != probe->close_handles[phase - 1u])
         return XR_PROVIDER_CALL_FAILED;
     *result_out = true;
     ++probe->events;
@@ -963,12 +963,17 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     source_build_fixture_free(&fixture);
 }
 
-TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
+TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     static const char source[] =
         "import sys\n"
         "import time\n"
         "enum ClockFailure { Negative }\n"
         "fn rejectedFallible() -> i64 {\n"
+        "  var inner = sys.Pipe(2147483642, 2147483643)\n"
+        "  defer {\n"
+        "    inner.closeRead()\n"
+        "    inner.closeWrite()\n"
+        "  }\n"
         "  var value = time.now()\n"
         "  if (value < 0) { throw ClockFailure.Negative }\n"
         "  return value\n"
@@ -1037,7 +1042,7 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
     ASSERT_EQ_UINT(program_operation_successor_count(
                        first.program, XR_CORE_OP_CORE_CALL_SEALED_INVOKE, 3u),
                    1u);
-    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_TRAP), 1u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_TRAP), 2u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 2u);
 
     XrStableId expected_clock_contract = {{0}};
@@ -1055,7 +1060,8 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
                                       &expected_close_operation, &key_digest));
 
     ProviderTrapCleanupProbe probe = {
-        .close_handles = {INT64_C(2147483646), INT64_C(2147483647)},
+        .close_handles = {INT64_C(2147483642), INT64_C(2147483643),
+                          INT64_C(2147483646), INT64_C(2147483647)},
     };
     XrProviderOperationBinding operations[2] = {0};
     XrProviderBinding providers[2] = {0};
@@ -1123,9 +1129,9 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
         first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_TRAP);
     ASSERT_EQ_INT(reference.trap, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
-    ASSERT_EQ_UINT(probe.events, 3u);
+    ASSERT_EQ_UINT(probe.events, 5u);
     ASSERT_EQ_UINT(probe.clock_calls, 1u);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
+    ASSERT_EQ_UINT(probe.close_calls, 4u);
     xr_reference_outcome_dispose(&reference);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
@@ -1135,9 +1141,9 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
     ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_TRAP);
     ASSERT_EQ_INT(vm.trap, XR_VM_TRAP_PROVIDER_CALL_FAILED);
-    ASSERT_EQ_UINT(probe.events, 6u);
+    ASSERT_EQ_UINT(probe.events, 10u);
     ASSERT_EQ_UINT(probe.clock_calls, 2u);
-    ASSERT_EQ_UINT(probe.close_calls, 4u);
+    ASSERT_EQ_UINT(probe.close_calls, 8u);
     xr_vm_outcome_dispose(&vm);
 
     XrBackendOptions options = xr_backend_default_options();
@@ -1179,9 +1185,9 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
             "    (void)context;\n"
             "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
             "!result) return 3;\n"
-            "    static const int64_t handles[] = {INT64_C(2147483646), "
-            "INT64_C(2147483647)};\n"
-            "    if (xr_probe_events < UINT32_C(1) || xr_probe_events > UINT32_C(2) || "
+            "    static const int64_t handles[] = {INT64_C(2147483642), "
+            "INT64_C(2147483643), INT64_C(2147483646), INT64_C(2147483647)};\n"
+            "    if (xr_probe_events < UINT32_C(1) || xr_probe_events > UINT32_C(4) || "
             "handle != handles[xr_probe_events - UINT32_C(1)]) return 4;\n"
             "    *result = UINT8_C(1);\n"
             "    ++xr_probe_events;\n"
@@ -1193,7 +1199,7 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
             "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
             "    XrAotOutcome outcome = xr_aot_fn_%u(&context);\n"
             "    int exit_code = outcome.kind == 1 && outcome.trap == 7 && "
-            "xr_probe_events == 3 ? 207 : 255;\n"
+            "xr_probe_events == 5 ? 207 : 255;\n"
             "    xr_aot_context_destroy(&context);\n"
             "    return exit_code;\n"
             "}\n",
@@ -2038,7 +2044,7 @@ RUN_TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_ex
 RUN_TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors);
 RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors);
 RUN_TEST(source_owner_clock_provider_is_exact_across_private_executors);
-RUN_TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup);
+RUN_TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup);
 RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
 RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
 RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);

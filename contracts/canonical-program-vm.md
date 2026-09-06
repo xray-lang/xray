@@ -40,7 +40,9 @@ generation. A real-source `time.now()` refusal fixture proves that the independe
 VM executors each issue exactly one provider event and publish the same provider-call-failed trap.
 Explicit Program trap continuations carry every live owner into the same static Pipe cleanup when
 provider failure crosses direct, sealed-direct, indirect-direct, indirect-invoke, witness-direct,
-witness-invoke, or sealed-invoke calls. The executor transfers only trap 7 through the verified edge; it does not
+witness-invoke, or sealed-invoke calls. A two-frame source fixture gives the callee and caller
+distinct owned Pipes and proves LIFO composition: the inner two closes precede the outer two closes
+before the final trap. The executor transfers only trap 7 through each verified edge; it does not
 synthesize an unwind policy or catch other traps. The Pipe
 slice uses natural `!`, `&&`, and `||` syntax and guarded division-by-zero right-hand
 sides to verify the same result and short-circuit behavior in the reference evaluator and the
@@ -70,4 +72,4 @@ anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390
 anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json 6ff5a35cbb08102a139e7c2ba6f8b8695154e54b78fed65ab05be501b0c7a79f
 anchor-sha256: tests/unit/vm/test_xr_program_vm.c 99dab9f9a3a365ff9cfb6ee29336699fbcdeea5c86ca393b726d4d271ea7f3ae
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 02d0307b7c894795cbe2fd4da58f8561a1b0511fc4256bb50695342eea774719
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 703c0492e6463f5cb293da9a317e225dda42f835ea2ad3165baaa64008d41841
