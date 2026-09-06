@@ -2430,7 +2430,8 @@ static bool operation_consumes_operand(const VerifyContext *context,
                                        uint32_t operand_index) {
     if ((instruction->operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
          instruction->operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
-         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL) &&
+         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+         instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE) &&
         operand_index == 0u)
         return true;
     if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE && operand_index == 1u)
@@ -2478,6 +2479,26 @@ static const XrValidatedInstruction *affine_borrow_definition(
     const XrValidatedInstruction *instruction =
         &function->blocks[block_id].instructions[instruction_id];
     return instruction->result_id == value_id ? instruction : NULL;
+}
+
+/* Places are verifier-confined aliases, so consuming their owning local must
+ * also invalidate
+ * every field place derived from it.  No runtime tag or
+ * executor-private pointer is allowed to
+ * recover this relationship. */
+static uint32_t scoped_place_root(const XrValidatedFunction *function, uint32_t value_id,
+                                  uint32_t block_id) {
+    for (uint32_t depth = 0u; depth < function->value_count; ++depth) {
+        if (value_id >= function->value_count || function->value_blocks[value_id] != block_id ||
+            function->value_categories[value_id] != XR_CORE_IR_PLACE)
+            return XR_PROGRAM_LOCATION_NONE;
+        const XrValidatedInstruction *definition = affine_borrow_definition(function, value_id);
+        if (!definition || definition->operation_id != XR_CORE_OP_CORE_PLACE_PROJECT ||
+            definition->operand_count != 1u)
+            return value_id;
+        value_id = definition->operands[0];
+    }
+    return XR_PROGRAM_LOCATION_NONE;
 }
 
 static uint32_t scoped_affine_borrow_owner(const XrValidatedProgram *program,
@@ -2605,8 +2626,10 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
     *local_effects |= spec->effect_mask;
     *local_capabilities |= spec->capability_mask;
     XrCoreIrValueCategory expected_result_category =
-        instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ? XR_CORE_IR_PLACE
-                                                                 : XR_CORE_IR_VALUE;
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+                instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT
+            ? XR_CORE_IR_PLACE
+            : XR_CORE_IR_VALUE;
     if (instruction->result_category != expected_result_category) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
@@ -2622,28 +2645,31 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         instruction->operation_id == XR_CORE_OP_CORE_VARIANT_PROJECT ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT ||
-        instruction->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK;
+        instruction->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE;
     if (instruction->result_ownership == XR_CORE_IR_OWNER && !ownership_result_operation) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
     }
-    bool category_polymorphic = instruction->operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
-                                instruction->operation_id == XR_CORE_OP_CORE_BRANCH ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
-                                instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
-                                instruction->operation_id ==
-                                    XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
-                                instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
-                                instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
-                                instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
-                                instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
-                                instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT;
+    bool category_polymorphic =
+        instruction->operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
+        instruction->operation_id == XR_CORE_OP_CORE_BRANCH ||
+        instruction->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
+        instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+        instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
+        instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
+        instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT;
     for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
         location.value_id = instruction->operands[operand];
         if (!value_is_available(function, block_id, instruction_id,
@@ -2652,6 +2678,12 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             return false;
         }
         if (consumed[instruction->operands[operand]]) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+            return false;
+        }
+        uint32_t place_root = scoped_place_root(function, instruction->operands[operand], block_id);
+        if (place_root != XR_PROGRAM_LOCATION_NONE &&
+            place_root != instruction->operands[operand] && consumed[place_root]) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
             return false;
         }
@@ -3381,10 +3413,10 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 instruction->result_category != XR_CORE_IR_PLACE ||
                 !operand_type_is(function, instruction, 0, instruction->result_type_id) ||
                 !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE) ||
-                !operand_ownership_is(function, instruction, 0, XR_CORE_IR_NON_OWNER) ||
-                xr_validated_program_type_ownership(context->program,
-                                                    instruction->result_type_id) !=
-                    XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL) {
+                !operand_ownership_is(
+                    function, instruction, 0,
+                    ownership_for_type(context->program, instruction->result_type_id)) ||
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
@@ -3417,6 +3449,49 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             return true;
+        case XR_CORE_OP_CORE_PLACE_PROJECT: {
+            if (instruction->operand_count != 1u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_category != XR_CORE_IR_PLACE ||
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER ||
+                !operand_category_is(function, instruction, 0u, XR_CORE_IR_PLACE)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            uint16_t aggregate_type_id = function->value_types[instruction->operands[0]];
+            const XrValidatedType *type =
+                xr_validated_program_type(context->program, aggregate_type_id);
+            if (!type || type->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                instruction->immediate.field_ordinal >= type->field_count ||
+                instruction->result_type_id !=
+                    type->field_types[instruction->immediate.field_ordinal]) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_PLACE_TAKE: {
+            const XrValidatedInstruction *place_definition =
+                instruction->operand_count == 1u
+                    ? affine_borrow_definition(function, instruction->operands[0])
+                    : NULL;
+            if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                              instruction->result_type_id, true) ||
+                !operand_type_is(function, instruction, 0, instruction->result_type_id) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_PLACE) ||
+                instruction->result_ownership != XR_CORE_IR_OWNER ||
+                xr_validated_program_type_ownership(context->program,
+                                                    instruction->result_type_id) !=
+                    XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                !place_definition ||
+                place_definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL ||
+                function->value_blocks[instruction->operands[0]] != block_id) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
             const XrValidatedType *type =
                 xr_validated_program_type(context->program, instruction->result_type_id);

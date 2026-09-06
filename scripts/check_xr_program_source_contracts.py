@@ -350,6 +350,12 @@ def validate(root: Path) -> None:
     require(("xi.throw-after-explicit-cleanup-cfg",
              "core.panic.publish") in structural_rows,
             "typed panic publication source projection is absent")
+    require(("resolved-nominal-ref-field-access",
+             "core.place.project") in structural_rows,
+            "nominal REF field place projection is absent")
+    require(("affine-xi.place.load-writeback",
+             "core.place.take") in structural_rows,
+            "affine REF writeback take projection is absent")
     require(not any(row.get("xi_operation") == "xi.agg.set" for row in value_mappings
                     if isinstance(row, dict)),
             "mutating aggregate storage regained a CoreSpec projection")
@@ -383,11 +389,13 @@ def validate(root: Path) -> None:
         "core.owner.move",
         "core.owner.drop",
         "core.place.local",
+        "core.place.project",
         "core.place.load",
         "core.place.store",
+        "core.place.take",
     ], "Wave 3 operation atom order or set drifted")
     stable_ids = [row.get("stable_id") for row in atoms if isinstance(row, dict)]
-    require(stable_ids == [37, 48, 49, 50, 96, 97, 98, 104, 105, 106] and
+    require(stable_ids == [37, 48, 49, 50, 96, 97, 98, 104, 107, 105, 106, 108] and
             len(stable_ids) == len(set(stable_ids)),
             "Wave 3 stable operation IDs drifted")
     non_operations = wave_three.get("explicit_non_operations")
@@ -395,7 +403,7 @@ def validate(root: Path) -> None:
         "borrow_begin_end",
         "cleanup_enter_leave",
         "error_check_pending_slot",
-        "generic_place_field_or_index",
+        "generic_place_index",
         "retain_release",
         "out_parameter",
     }, "Wave 3 explicit non-operation set drifted")
@@ -461,6 +469,11 @@ def validate(root: Path) -> None:
     canonical_coroutine_call = {"core.coroutine.call.sealed"}
     wave_five_provider = {"core.provider.call"}
     canonical_source_output = {"core.output.group.i64"}
+    canonical_boolean = {
+        "core.logical.not",
+        "core.logical.and",
+        "core.logical.or",
+    }
     wave_three_slice_two = {
         "core.owner.move",
         "core.owner.drop",
@@ -471,6 +484,7 @@ def validate(root: Path) -> None:
     wave_three_slice_three = {
         "core.owner.copy",
     }
+    wave_three_aggregate_place = {"core.place.project", "core.place.take"}
     wave_three_slice_four = {"core.error.publish"}
     wave_three_slice_five = {"core.call.sealed_invoke", "core.panic.publish"}
     wave_four_executor = {
@@ -489,6 +503,8 @@ def validate(root: Path) -> None:
         **{operation: "COMPLETE_W7_WAVE2" for operation in wave_two_complete},
         **{operation: "COMPLETE_W7_WAVE3_SLICE2" for operation in wave_three_slice_two},
         **{operation: "COMPLETE_W7_WAVE3_SLICE3" for operation in wave_three_slice_three},
+        **{operation: "COMPLETE_W7_WAVE3_AGGREGATE_PLACE"
+           for operation in wave_three_aggregate_place},
         **{operation: "COMPLETE_W7_WAVE3_SLICE4" for operation in wave_three_slice_four},
         **{operation: "COMPLETE_W7_WAVE3_SLICE5" for operation in wave_three_slice_five},
         **{operation: "COMPLETE_W7_WAVE4" for operation in wave_four_executor},
@@ -503,6 +519,7 @@ def validate(root: Path) -> None:
            for operation in wave_five_provider},
         **{operation: "COMPLETE_CANONICAL_SOURCE_RUN_OUTPUT_SLICE"
            for operation in canonical_source_output},
+        **{operation: "COMPLETE_W7_WAVE5_BOOLEAN" for operation in canonical_boolean},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,

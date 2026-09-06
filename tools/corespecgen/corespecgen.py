@@ -329,7 +329,8 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "aggregate-construct", "aggregate-project", "aggregate-update",
             "block-arguments", "branch", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
-            "place-local", "place-store", "return", "scalar-oracle", "sealed-call",
+            "place-local", "place-project", "place-store", "place-take", "return",
+            "scalar-oracle", "sealed-call",
             "sealed-invoke", "indirect-call", "indirect-invoke", "witness-call",
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
@@ -730,6 +731,21 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("place_category") == "place"
                 and actual.get("value_category") == "value"
                 and actual.get("result_type") == "void")
+    if validator == "place-project":
+        fields = actual.get("field_types")
+        ordinal = actual.get("field_ordinal")
+        return (actual.get("operand_type") == actual.get("aggregate_type")
+                and actual.get("operand_category") == "place"
+                and actual.get("result_category") == "place"
+                and isinstance(fields, list) and isinstance(ordinal, int)
+                and 0 <= ordinal < len(fields) and actual.get("result_type") == fields[ordinal])
+    if validator == "place-take":
+        return (actual.get("operand_type") == actual.get("result_type")
+                and actual.get("operand_category") == "place"
+                and actual.get("result_category") == "value"
+                and actual.get("place_origin") == "owning-local"
+                and actual.get("type_ownership") == "affine"
+                and actual.get("result_ownership") == "owner")
     if validator == "coroutine-yield":
         return (actual.get("result_type") == "void"
                 and actual.get("successor_count") == 1

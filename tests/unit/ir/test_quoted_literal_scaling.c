@@ -128,7 +128,7 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
      * plans to exact source and reads it. A real compile is inside a file scope
      * at this point; this harness has to say so too. */
     analyzer->current_file = "quoted_literal_scaling.xr";
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL, NULL) : NULL;
     if (func)
         count_xi_values(func, payload_length, result);
 

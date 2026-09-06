@@ -94,6 +94,13 @@
       "status": "COMPLETE_W7_WAVE3_SLICE2"
     },
     {
+      "stable_id": 107,
+      "id": "core.place.project",
+      "law": "derive one field place from an exact live aggregate place without extending or escaping its loan",
+      "source": "declaration-identified field load or store through a REF receiver",
+      "status": "COMPLETE_W7_WAVE3_AGGREGATE_PLACE"
+    },
+    {
       "stable_id": 105,
       "id": "core.place.load",
       "law": "read a value through one verified live place without transferring the place",
@@ -106,13 +113,20 @@
       "law": "write one exact pointee-typed value through one verified exclusive live place",
       "source": "typed call-bound place write",
       "status": "COMPLETE_W7_WAVE3_SLICE2"
+    },
+    {
+      "stable_id": 108,
+      "id": "core.place.take",
+      "law": "consume one owning local affine place and restore exactly one value owner while invalidating that local and every derived field place",
+      "source": "affine writeback after a canonical REF call",
+      "status": "COMPLETE_W7_WAVE3_AGGREGATE_PLACE"
     }
   ],
   "explicit_non_operations": {
     "borrow_begin_end": "loan lifetime is structural signature and call-edge data",
     "cleanup_enter_leave": "cleanup is explicit CFG plus owner.drop",
     "error_check_pending_slot": "fallible calls use core.call.sealed_invoke continuations",
-    "generic_place_field_or_index": "value fields use aggregate.update; alias-visible and container projections require typed domain operations",
+    "generic_place_index": "container projections require their own bounds, storage, and effect-bearing typed domain operations",
     "retain_release": "physical RC is executor-private realization, not canonical semantics",
     "out_parameter": "REF is the sole mutable place mode"
   },
@@ -120,7 +134,8 @@
     "xi.source.move": "core.owner.move",
     "xi.owner.forward": "core.owner.move",
     "xi.local.addr": "core.place.local",
-    "xi.place.load": "core.place.load",
+    "xi.load.field/xi.store.field[exact nominal REF]": "core.place.project followed by core.place.load/store",
+    "xi.place.load": "core.place.load for non-owner contents; core.place.take for affine owner writeback",
     "xi.place.store": "core.place.store",
     "xi.throw": "core.panic.publish after explicit cleanup CFG; implicit handler-state Xi is rejected",
     "xi.call.builtin[copy]": "core.owner.copy for an explicit source copy; unrelated builtins have no projection",

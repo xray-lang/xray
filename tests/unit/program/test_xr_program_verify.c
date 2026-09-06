@@ -1476,6 +1476,152 @@ static void test_owner_and_local_place_operations(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_aggregate_place_projection(void) {
+    enum { AGGREGATE_TYPE = 62 };
+    uint16_t fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput type = {
+        .key = key("place-project:type"),
+        .local_id = AGGREGATE_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+        .field_types = fields,
+        .field_count = 1u,
+    };
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("place-project:constant:40"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 40},
+        {.key = key("place-project:constant:42"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
+    };
+    XrCoreIrKey v40 = key("place-project:value:40");
+    XrCoreIrKey aggregate = key("place-project:value:aggregate");
+    XrCoreIrKey aggregate_place = key("place-project:value:aggregate-place");
+    XrCoreIrKey field_place = key("place-project:value:field-place");
+    XrCoreIrKey v42 = key("place-project:value:42");
+    XrCoreIrKey loaded = key("place-project:value:loaded");
+    XrCoreIrKey taken = key("place-project:value:taken");
+    XrCoreIrKey construct_operands[] = {v40};
+    XrCoreIrKey aggregate_operand[] = {aggregate};
+    XrCoreIrKey aggregate_place_operand[] = {aggregate_place};
+    XrCoreIrKey store_operands[] = {field_place, v42};
+    XrCoreIrKey field_place_operand[] = {field_place};
+    XrCoreIrKey take_operand[] = {aggregate_place};
+    XrCoreIrKey drop_operand[] = {taken};
+    XrCoreIrKey return_operand[] = {loaded};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = construct_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+         .result = aggregate_place,
+         .result_type_id = AGGREGATE_TYPE,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = aggregate_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_PROJECT,
+         .result = field_place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = aggregate_place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v42,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = store_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+         .result = loaded,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = field_place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_TAKE,
+         .result = taken,
+         .result_type_id = AGGREGATE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = take_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = drop_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = return_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput block = {
+        .key = key("place-project:block"),
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("place-project:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block.key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("place-project:module"),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    instructions[3].immediate.field_ordinal = 1u;
+    CHECK(write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&artifact);
+    instructions[3].immediate.field_ordinal = 0u;
+
+    XrCoreIrInstructionInput temporary = instructions[6];
+    instructions[6] = instructions[7];
+    instructions[7] = temporary;
+    CHECK(write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+}
+
 typedef enum AffineCopyFixtureKind {
     AFFINE_COPY_VALID = 0,
     AFFINE_COPY_MISSING_DROP,
@@ -3581,6 +3727,7 @@ int main(void) {
     test_control_and_profile();
     test_direct_call();
     test_owner_and_local_place_operations();
+    test_aggregate_place_projection();
     test_affine_owner_domain();
     test_optional_owner_contract();
     test_parameter_modes_and_value_categories();

@@ -902,11 +902,16 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         "  var live = move ready\n"
         "  var readHandle = live.readEnd()\n"
         "  var writeHandle = live.writeEnd()\n"
+        "  var readClosed = live.closeRead()\n"
+        "  var closedReadHandle = live.readEnd()\n"
+        "  var writeClosed = live.closeWrite()\n"
+        "  var closedWriteHandle = live.writeEnd()\n"
         "  var closed = (move live).close()\n"
         "  if (guardedAnd(false, 0)) { return 0 }\n"
         "  if (!guardedOr(true, 0)) { return 0 }\n"
         "  var handlesValid = readHandle >= 0 && writeHandle >= 0\n"
-        "  if (!handlesValid || !closed) { return 0 }\n"
+        "  if (!handlesValid || closedReadHandle != -1 || closedWriteHandle != -1) { return 0 }\n"
+        "  if (!readClosed || !writeClosed || !closed) { return 0 }\n"
         "  return 1\n"
         "}\n";
     SourceBuildFixture fixture;
@@ -933,11 +938,14 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 7u);
+    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 9u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
 
     uint32_t aggregate_constructs = 0u;
     uint32_t aggregate_projects = 0u;
+    uint32_t place_projects = 0u;
+    uint32_t place_loads = 0u;
+    uint32_t place_stores = 0u;
     uint32_t variant_projects = 0u;
     uint32_t sealed_calls = 0u;
     uint32_t logical_nots = 0u;
@@ -956,6 +964,12 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
                 aggregate_projects +=
                     block->instructions[instruction_index].operation_id ==
                     XR_CORE_OP_CORE_AGGREGATE_PROJECT;
+                place_projects += block->instructions[instruction_index].operation_id ==
+                                  XR_CORE_OP_CORE_PLACE_PROJECT;
+                place_loads += block->instructions[instruction_index].operation_id ==
+                               XR_CORE_OP_CORE_PLACE_LOAD;
+                place_stores += block->instructions[instruction_index].operation_id ==
+                                XR_CORE_OP_CORE_PLACE_STORE;
                 variant_projects += block->instructions[instruction_index].operation_id ==
                                     XR_CORE_OP_CORE_VARIANT_PROJECT;
                 sealed_calls += block->instructions[instruction_index].operation_id ==
@@ -971,8 +985,11 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     }
     ASSERT_EQ_UINT(aggregate_constructs, 1u);
     ASSERT_EQ_UINT(aggregate_projects, 8u);
+    ASSERT_EQ_UINT(place_projects, 6u);
+    ASSERT_EQ_UINT(place_loads, 4u);
+    ASSERT_EQ_UINT(place_stores, 2u);
     ASSERT_EQ_UINT(variant_projects, 3u);
-    ASSERT_EQ_UINT(sealed_calls, 6u);
+    ASSERT_EQ_UINT(sealed_calls, 10u);
     ASSERT_TRUE(logical_nots != 0u);
     ASSERT_TRUE(logical_ands != 0u);
     ASSERT_TRUE(logical_ors != 0u);

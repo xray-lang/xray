@@ -5529,6 +5529,17 @@ static bool lower_method_receiver_contract(XiLower *l, const XaSelection *select
                         (owner_links->class_info && owner_links->class_info->struct_layout)))
         value_receiver = true;
     *out_mode = selection->target_symbol->receiver_mode;
+    if (*out_mode == XR_PARAM_REF && l->canonical_class_place_receivers && l->global_evidence &&
+        l->canonical_reachable_bodies && l->func && l->func->xg_body_func_id != XG_NO_ID) {
+        for (uint32_t body = 0u;
+             body < l->global_evidence->nbodies && body < l->canonical_reachable_body_count;
+             ++body) {
+            if (l->global_evidence->bodies[body].func_id == l->func->xg_body_func_id) {
+                value_receiver = l->canonical_reachable_bodies[body] != 0u;
+                break;
+            }
+        }
+    }
     *out_uses_place = value_receiver;
     return true;
 }

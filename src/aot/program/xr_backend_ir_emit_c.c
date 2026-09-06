@@ -1906,6 +1906,13 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_PLACE_STORE:
             return append_format(buffer, "        *v%u = v%u;\n", instruction->operands[0],
                                  instruction->operands[1]);
+        case XR_CORE_OP_CORE_PLACE_PROJECT:
+            return append_format(buffer, "        v%u = &v%u->f%u;\n", instruction->result_id,
+                                 instruction->operands[0], instruction->immediate.field_ordinal);
+        case XR_CORE_OP_CORE_PLACE_TAKE:
+            return append_format(buffer, "        v%u = *v%u;\n        v%u = NULL;\n",
+                                 instruction->result_id, instruction->operands[0],
+                                 instruction->operands[0]);
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
             char storage[32];
             const char *name = type_c_name(instruction->result_type_id, storage);

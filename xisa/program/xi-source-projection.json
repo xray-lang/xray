@@ -370,6 +370,14 @@
       "core_operation": "core.conditional_branch"
     },
     {
+      "source": "resolved-nominal-ref-field-access",
+      "core_operation": "core.place.project"
+    },
+    {
+      "source": "affine-xi.place.load-writeback",
+      "core_operation": "core.place.take"
+    },
+    {
       "source": "function-return",
       "core_operation": "core.return"
     },

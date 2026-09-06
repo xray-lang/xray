@@ -48,6 +48,7 @@ typedef struct XrReferenceAggregateValue {
 
 typedef struct EvalPlace {
     XrReferenceValue value;
+    XrReferenceValue *alias;
     bool initialized;
 } EvalPlace;
 
@@ -122,6 +123,14 @@ static size_t format_i64_line(int64_t value, uint8_t output[22]) {
 static XrReferenceValue void_value(void) {
     XrReferenceValue value = {.kind = XR_REFERENCE_VALUE_VOID};
     return value;
+}
+
+static XrReferenceValue *eval_place_value(EvalPlace *place) {
+    return place ? (place->alias ? place->alias : &place->value) : NULL;
+}
+
+static const XrReferenceValue *eval_place_value_const(const EvalPlace *place) {
+    return place ? (place->alias ? place->alias : &place->value) : NULL;
 }
 
 static bool reference_value_matches_type(const XrValidatedProgram *program, XrReferenceValue value,
@@ -316,7 +325,7 @@ static bool witness_receiver_argument(const XrReferenceExistentialValue *carrier
         if (!carrier->payload.as.place || !carrier->payload.as.place->initialized)
             return false;
         argument->category = XR_CORE_IR_VALUE;
-        argument->as.value = carrier->payload.as.place->value;
+        argument->as.value = *eval_place_value_const(carrier->payload.as.place);
         return true;
     }
     *argument = carrier->payload;
@@ -451,7 +460,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
             (!arguments[index].as.place || !arguments[index].as.place->initialized))
             return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
         XrReferenceValue value = expected == XR_CORE_IR_PLACE && arguments[index].as.place
-                                     ? arguments[index].as.place->value
+                                     ? *eval_place_value_const(arguments[index].as.place)
                                      : arguments[index].as.value;
         if (!reference_value_matches_type(context->program, value,
                                           function->parameter_types[index]))
@@ -1033,11 +1042,29 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.place = &places[instruction->result_id];
                     break;
                 case XR_CORE_OP_CORE_PLACE_LOAD:
-                    produced.as.value = values[instruction->operands[0]].as.place->value;
+                    produced.as.value =
+                        *eval_place_value(values[instruction->operands[0]].as.place);
                     break;
                 case XR_CORE_OP_CORE_PLACE_STORE:
-                    values[instruction->operands[0]].as.place->value =
+                    *eval_place_value(values[instruction->operands[0]].as.place) =
                         values[instruction->operands[1]].as.value;
+                    break;
+                case XR_CORE_OP_CORE_PLACE_PROJECT: {
+                    XrReferenceValue *source =
+                        eval_place_value(values[instruction->operands[0]].as.place);
+                    XrReferenceAggregateValue *aggregate =
+                        (XrReferenceAggregateValue *) (void *) source->as.aggregate;
+                    places[instruction->result_id].alias =
+                        &aggregate->fields[instruction->immediate.field_ordinal];
+                    places[instruction->result_id].initialized = true;
+                    produced.category = XR_CORE_IR_PLACE;
+                    produced.as.place = &places[instruction->result_id];
+                    break;
+                }
+                case XR_CORE_OP_CORE_PLACE_TAKE:
+                    produced.as.value =
+                        *eval_place_value(values[instruction->operands[0]].as.place);
+                    values[instruction->operands[0]].as.place->initialized = false;
                     break;
                 case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
                     XrReferenceAggregateValue *aggregate =
@@ -1155,7 +1182,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     if (existential && existential->interface_use_kind ==
                                            XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) {
                         produced.category = XR_CORE_IR_VALUE;
-                        produced.as.value = carrier->owned_storage.value;
+                        produced.as.value = *eval_place_value_const(&carrier->owned_storage);
                     } else {
                         produced = carrier->payload;
                     }

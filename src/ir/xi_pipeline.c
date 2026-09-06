@@ -1590,7 +1590,13 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (program_closure)
         program_input_ptr = &program_input;
 
-    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode, program_input_ptr);
+    XiLowerProgramReachability reachability = {
+        .bodies = cfg->canonical_reachable_bodies,
+        .body_count = cfg->canonical_reachable_body_count,
+        .canonical_class_place_receivers = cfg->mode == XI_PIPE_XR_PROGRAM_INPUT,
+    };
+    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode, program_input_ptr,
+                                  cfg->canonical_reachable_bodies ? &reachability : NULL);
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
     if (ir && ir->module) {

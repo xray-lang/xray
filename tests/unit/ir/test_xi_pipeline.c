@@ -4905,6 +4905,21 @@ int main(int argc, char **argv) {
      * every later source compilation in this process. */
     run_e2e_scalar_authority_requires_and_uses_session_profile();
 
+    /* Generated-C build dependencies need only the four canonical Program
+     * fixtures.  Keep that deterministic producer route independent from the
+     * legacy bytecode E2E suite: an unrelated emitter capability must neither
+     * block nor silently change a canonical native artifact. */
+    if (g_source_aot_output_path) {
+        run_e2e_program_cooperative_yield_closes_source_reference_vm_and_aot();
+        run_e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot();
+        run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
+        run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
+        teardown();
+        printf("\n=== %d/%d Xi Pipeline fixture generators passed ===\n", tests_passed,
+               tests_passed + tests_failed);
+        return tests_failed > 0 ? 1 : 0;
+    }
+
     /* Constants & arithmetic */
     run_e2e_simple_const();
     run_e2e_arithmetic();

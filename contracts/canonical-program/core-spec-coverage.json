@@ -1,9 +1,9 @@
 {
   "schema": "xray-core-spec-coverage/1",
-  "semantic_sha256": "e3d8b52307d60cbcdf7590903edd47c7ecfacee952b5d93d5c41d841d704d4e5",
+  "semantic_sha256": "25deec748b13b6a2387a6fba44142ba42ea5fd29754ac250f49d95f37313c0bb",
   "epoch": 1,
-  "operation_count": 50,
-  "normative_kat_count": 134,
+  "operation_count": 52,
+  "normative_kat_count": 139,
   "operations": [
     {
       "stable_id": 1,
@@ -1358,6 +1358,66 @@
     {
       "stable_id": 106,
       "spelling": "core.place.store",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 107,
+      "spelling": "core.place.project",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 108,
+      "spelling": "core.place.take",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

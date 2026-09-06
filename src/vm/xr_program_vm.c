@@ -140,6 +140,7 @@ typedef struct XrVmAggregateValue {
 
 typedef struct XrVmPlace {
     XrVmValue value;
+    XrVmValue *alias;
     bool initialized;
 } XrVmPlace;
 
@@ -196,6 +197,14 @@ static XrVmOutcome vm_trap(XrVmTrap trap, const XrVmContext *context) {
 static XrVmValue void_value(void) {
     XrVmValue value = {.kind = XR_VM_VALUE_VOID};
     return value;
+}
+
+static XrVmValue *vm_place_value(XrVmPlace *place) {
+    return place ? (place->alias ? place->alias : &place->value) : NULL;
+}
+
+static const XrVmValue *vm_place_value_const(const XrVmPlace *place) {
+    return place ? (place->alias ? place->alias : &place->value) : NULL;
 }
 
 static bool value_matches_type(const XrValidatedProgram *program, XrVmValue value,
@@ -388,7 +397,7 @@ static bool witness_receiver_argument(const XrVmExistentialValue *carrier,
         if (!carrier->payload.as.place || !carrier->payload.as.place->initialized)
             return false;
         argument->category = XR_CORE_IR_VALUE;
-        argument->as.value = carrier->payload.as.place->value;
+        argument->as.value = *vm_place_value_const(carrier->payload.as.place);
         return true;
     }
     *argument = carrier->payload;
@@ -591,8 +600,9 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
             (expected == XR_CORE_IR_PLACE &&
              (!arguments[index].as.place || !arguments[index].as.place->initialized)))
             return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
-        XrVmValue value = expected == XR_CORE_IR_PLACE ? arguments[index].as.place->value
-                                                       : arguments[index].as.value;
+        XrVmValue value = expected == XR_CORE_IR_PLACE
+                              ? *vm_place_value_const(arguments[index].as.place)
+                              : arguments[index].as.value;
         if (!value_matches_type(context->code->program, value, function->parameter_types[index]))
             return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
     }
@@ -1145,11 +1155,26 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.place = &places[instruction.result_id];
                     break;
                 case XR_CORE_OP_CORE_PLACE_LOAD:
-                    produced.as.value = values[instruction.operands[0]].as.place->value;
+                    produced.as.value = *vm_place_value(values[instruction.operands[0]].as.place);
                     break;
                 case XR_CORE_OP_CORE_PLACE_STORE:
-                    values[instruction.operands[0]].as.place->value =
+                    *vm_place_value(values[instruction.operands[0]].as.place) =
                         values[instruction.operands[1]].as.value;
+                    break;
+                case XR_CORE_OP_CORE_PLACE_PROJECT: {
+                    XrVmValue *source = vm_place_value(values[instruction.operands[0]].as.place);
+                    XrVmAggregateValue *aggregate =
+                        (XrVmAggregateValue *) (void *) source->as.aggregate;
+                    places[instruction.result_id].alias =
+                        &aggregate->fields[instruction.immediate.field_ordinal];
+                    places[instruction.result_id].initialized = true;
+                    produced.category = XR_CORE_IR_PLACE;
+                    produced.as.place = &places[instruction.result_id];
+                    break;
+                }
+                case XR_CORE_OP_CORE_PLACE_TAKE:
+                    produced.as.value = *vm_place_value(values[instruction.operands[0]].as.place);
+                    values[instruction.operands[0]].as.place->initialized = false;
                     break;
                 case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
                     XrVmAggregateValue *aggregate = allocate_aggregate(
@@ -1266,7 +1291,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     if (existential && existential->interface_use_kind ==
                                            XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) {
                         produced.category = XR_CORE_IR_VALUE;
-                        produced.as.value = carrier->owned_storage.value;
+                        produced.as.value = *vm_place_value_const(&carrier->owned_storage);
                     } else {
                         produced = carrier->payload;
                     }

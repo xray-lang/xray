@@ -945,6 +945,9 @@ XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent) {
     child->xg_module_id = parent->xg_module_id;
     child->typed_program = parent->typed_program;
     child->program_semantics = parent->program_semantics;
+    child->canonical_reachable_bodies = parent->canonical_reachable_bodies;
+    child->canonical_reachable_body_count = parent->canonical_reachable_body_count;
+    child->canonical_class_place_receivers = parent->canonical_class_place_receivers;
 }
 
 static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module_id) {
@@ -2955,7 +2958,8 @@ static bool xi_lower_seed_repl_slot(XiLower *l, const XrReplSymbol *symbol, int 
 }
 
 XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
-                                 bool repl_mode, const XiProgramSemanticInput *program_semantics) {
+                                 bool repl_mode, const XiProgramSemanticInput *program_semantics,
+                                 const XiLowerProgramReachability *reachability) {
     XR_CHECK(program != NULL, "xi_lower_program: typed program is NULL");
     XR_CHECK(xa_typed_program_is_verified(program),
              "xi_lower_program: typed program is unverified");
@@ -2978,6 +2982,11 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     l.repl_mode = repl_mode;
     l.global_evidence = global_evidence;
     l.xg_module_id = module_id;
+    if (reachability) {
+        l.canonical_reachable_bodies = reachability->bodies;
+        l.canonical_reachable_body_count = reachability->body_count;
+        l.canonical_class_place_receivers = reachability->canonical_class_place_receivers;
+    }
 
     l.func = xi_func_new("<main>", l.type_unit);
     if (!l.func) {

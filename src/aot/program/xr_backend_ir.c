@@ -77,6 +77,8 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_PLACE_LOCAL:
         case XR_CORE_OP_CORE_PLACE_LOAD:
         case XR_CORE_OP_CORE_PLACE_STORE:
+        case XR_CORE_OP_CORE_PLACE_PROJECT:
+        case XR_CORE_OP_CORE_PLACE_TAKE:
             return true;
         default:
             return false;

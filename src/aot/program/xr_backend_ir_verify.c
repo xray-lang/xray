@@ -132,6 +132,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_PLACE_LOCAL:
         case XR_CORE_OP_CORE_PLACE_LOAD:
         case XR_CORE_OP_CORE_PLACE_STORE:
+        case XR_CORE_OP_CORE_PLACE_TAKE:
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
@@ -156,6 +157,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32;
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
+        case XR_CORE_OP_CORE_PLACE_PROJECT:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD;
         case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
         case XR_CORE_OP_CORE_VARIANT_TEST:

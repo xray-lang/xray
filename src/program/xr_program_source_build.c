@@ -44,6 +44,9 @@ typedef struct XrProgramSourceBuildContext {
     const XiFunc **module_roots;
     uint32_t module_count;
     uint32_t entry_topological_index;
+    const AstNode *entry_syntax;
+    uint8_t *reachable_bodies;
+    uint32_t reachable_body_count;
 } XrProgramSourceBuildContext;
 
 static void clear_diagnostic(XrProgramSourceDiagnostic *diagnostic) {
@@ -114,6 +117,7 @@ static void build_context_free(XrProgramSourceBuildContext *context) {
     xr_free(context->modules);
     xr_free(context->pipelines);
     xr_free(context->ast_roots);
+    xr_free(context->reachable_bodies);
     xg_global_evidence_free(&context->evidence);
     if (context->analyzer) {
         xa_analyzer_set_graph(context->analyzer, NULL);
@@ -209,8 +213,10 @@ static XrProgramSourceBuildStatus validate_entry_identity(
                       XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
                       context->entry_topological_index, 0u, 0u,
                       "entry module has no exact source program");
-    if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER)
+    if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER) {
+        context->entry_syntax = spec->ast;
         return XR_PROGRAM_SOURCE_BUILD_OK;
+    }
     uint32_t matches = 0u;
     uint32_t source_line = 0u;
     for (int index = 0; index < spec->ast->as.program.count; ++index) {
@@ -220,6 +226,7 @@ static XrProgramSourceBuildStatus validate_entry_identity(
             continue;
         matches++;
         source_line = node->line > 0 ? (uint32_t) node->line : 0u;
+        context->entry_syntax = node;
     }
     if (matches != 1u)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
@@ -227,6 +234,76 @@ static XrProgramSourceBuildStatus validate_entry_identity(
                       context->entry_topological_index, source_line, matches,
                       "entry function '%s' has %u exact source declarations",
                       entry->function_name, matches);
+    return XR_PROGRAM_SOURCE_BUILD_OK;
+}
+
+static const XgBodySummary *entry_body_summary(const XrProgramSourceBuildContext *context) {
+    if (!context || !context->entry_syntax || !context->input || !context->evidence.bodies ||
+        context->evidence.nbodies == 0u)
+        return NULL;
+    const XrProgramSourceEntryIdentity *entry = &context->input->entry;
+    XgModuleId module_id = (XgModuleId) (context->entry_topological_index + 1u);
+    const XgBodySummary *match = NULL;
+    if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER) {
+        for (uint32_t body = 0u; body < context->evidence.nbodies; ++body) {
+            const XgBodySummary *candidate = &context->evidence.bodies[body];
+            if (candidate->module_id != module_id || candidate->kind != XG_BODY_MODULE_INIT)
+                continue;
+            if (match)
+                return NULL;
+            match = candidate;
+        }
+        return match;
+    }
+
+    uint32_t name_id = xg_name_id(entry->function_name);
+    uint32_t source_span_id =
+        context->entry_syntax->line > 0 ? (uint32_t) context->entry_syntax->line : 0u;
+    const XgDeclSummary *declaration = NULL;
+    for (uint32_t decl = 0u; decl < context->evidence.ndecls; ++decl) {
+        const XgDeclSummary *candidate = &context->evidence.decls[decl];
+        if (candidate->module_id != module_id || candidate->kind != XG_DECL_FUNC ||
+            candidate->name_id != name_id || candidate->source_span_id != source_span_id)
+            continue;
+        if (declaration)
+            return NULL;
+        declaration = candidate;
+    }
+    if (!declaration)
+        return NULL;
+    for (uint32_t body = 0u; body < context->evidence.nbodies; ++body) {
+        const XgBodySummary *candidate = &context->evidence.bodies[body];
+        if (candidate->module_id != module_id || candidate->kind != XG_BODY_FUNCTION ||
+            candidate->owner_decl_id != declaration->decl_id || candidate->name_id != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static XrProgramSourceBuildStatus
+prepare_entry_reachability(XrProgramSourceBuildContext *context,
+                           XrProgramSourceDiagnostic *diagnostic) {
+    const XgBodySummary *entry = entry_body_summary(context);
+    if (!entry || entry->func_id == XG_NO_ID)
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
+                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE,
+                      context ? context->entry_topological_index : UINT32_MAX, 0u, 0u,
+                      "entry function has no unique global-evidence body");
+    context->reachable_body_count = context->evidence.nbodies;
+    context->reachable_bodies = xr_calloc(context->reachable_body_count, sizeof(uint8_t));
+    if (!context->reachable_bodies)
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, context->entry_topological_index, 0u,
+                      0u, "entry reachability allocation failed");
+    if (!xg_body_reachability_mark_closed_world_calls(&context->evidence, entry->func_id,
+                                                      context->reachable_bodies,
+                                                      context->reachable_body_count))
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
+                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, context->entry_topological_index, 0u,
+                      entry->func_id, "entry call graph is not closed in global evidence");
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
@@ -319,7 +396,7 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
                       XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
                       "global evidence construction failed");
-    return XR_PROGRAM_SOURCE_BUILD_OK;
+    return prepare_entry_reachability(context, diagnostic);
 }
 
 static XrProgramSourceBuildStatus compile_xi_modules(XrProgramSourceBuildContext *context,
@@ -330,6 +407,8 @@ static XrProgramSourceBuildStatus compile_xi_modules(XrProgramSourceBuildContext
     config.graph_modules = context->modules;
     config.graph_module_count = (int) context->module_count;
     config.global_evidence = &context->evidence;
+    config.canonical_reachable_bodies = context->reachable_bodies;
+    config.canonical_reachable_body_count = context->reachable_body_count;
     XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         int spec_index = context->graph->topo_order[topo];

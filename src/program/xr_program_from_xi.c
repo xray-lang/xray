@@ -340,6 +340,11 @@ static XrCoreIrKey existential_owner_copy_key(const XrXiFunctionStorage *functio
     return key_from_key_and_u32(UINT8_C(0x59), value_key(function, pack), 0u);
 }
 
+static XrCoreIrKey aggregate_field_place_key(const XrXiFunctionStorage *function,
+                                             const XiValue *access) {
+    return key_from_key_and_u32(UINT8_C(0x5a), value_key(function, access), 0u);
+}
+
 static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
     if (!type || !type_id || type->is_nullable)
         return false;
@@ -2430,19 +2435,24 @@ static const XiClassData *resolved_canonical_class_construction(const XrXiBuildC
     return class_data;
 }
 
-/* XI_LOAD_FIELD is also used for module namespaces and enum members.  Admit it
- * as an aggregate projection only when the lowered field id, exact receiver
- * nominal identity, Xglobal declaration row, and detached Xi layout all name
- * the same declared instance field.  The field spelling is corroboration, not
+/* Field operations share Xi opcodes with namespace and enum access.  Admit a
+ * canonical aggregate
+ * access only when the lowered field id, exact receiver
+ * nominal identity, Xglobal declaration
+ * row, and detached Xi layout all name
+ * the same declared instance field.  The field spelling is
+ * corroboration, not
  * lookup authority. */
-static bool resolved_aggregate_field_projection(const XrXiBuildContext *context,
-                                                const XiValue *access,
-                                                uint32_t *field_ordinal_out) {
+static bool resolved_aggregate_field_access(const XrXiBuildContext *context, const XiValue *access,
+                                            XiOp expected_operation, uint32_t *field_ordinal_out) {
     if (field_ordinal_out)
         *field_ordinal_out = UINT32_MAX;
+    uint16_t expected_arguments = expected_operation == XI_STORE_FIELD ? 2u : 1u;
     if (!context || !context->source || !context->source->global_evidence || !access ||
-        access->op != XI_LOAD_FIELD || access->nargs != 1u || !access->args ||
-        !access->args[0] || access->xg_class_field_id == XG_NO_ID || !access->type)
+        (expected_operation != XI_LOAD_FIELD && expected_operation != XI_STORE_FIELD) ||
+        access->op != expected_operation || access->nargs != expected_arguments || !access->args ||
+        !access->args[0] || (expected_operation == XI_STORE_FIELD && !access->args[1]) ||
+        access->xg_class_field_id == XG_NO_ID)
         return false;
 
     const XiValue *receiver = logical_value_identity(access->args[0]);
@@ -2474,20 +2484,42 @@ static bool resolved_aggregate_field_projection(const XrXiBuildContext *context,
         field = candidate;
     }
     if (!field || field->owner_class_id != class_row->class_id ||
-        field->module_id != class_row->module_id ||
-        (field->flags & XG_CLASS_FIELD_STATIC) != 0u ||
+        field->module_id != class_row->module_id || (field->flags & XG_CLASS_FIELD_STATIC) != 0u ||
         field->instance_slot >= schema->instance_field_count ||
         field->decl_ordinal != field->instance_slot ||
         field->source_node_id != schema->instance_field_source_node_ids[field->instance_slot] ||
         field->name_id != xg_name_id(schema->instance_field_names[field->instance_slot]) ||
         !access->aux ||
-        strcmp((const char *) access->aux,
-               schema->instance_field_names[field->instance_slot]) != 0 ||
-        !xr_type_equals(access->type, schema->instance_field_types[field->instance_slot]))
+        strcmp((const char *) access->aux, schema->instance_field_names[field->instance_slot]) !=
+            0 ||
+        !xr_type_equals(expected_operation == XI_STORE_FIELD ? access->args[1]->type : access->type,
+                        schema->instance_field_types[field->instance_slot]))
         return false;
     if (field_ordinal_out)
         *field_ordinal_out = field->instance_slot;
     return true;
+}
+
+static bool resolved_aggregate_field_projection(const XrXiBuildContext *context,
+                                                const XiValue *access,
+                                                uint32_t *field_ordinal_out) {
+    return resolved_aggregate_field_access(context, access, XI_LOAD_FIELD, field_ordinal_out);
+}
+
+static bool logical_value_is_place(const XiFunc *function, const XiValue *value) {
+    value = logical_value_identity(value);
+    bool ref_receiver = function && function->has_receiver &&
+                        function->receiver_mode == XR_PARAM_REF && function->nparams != 0u &&
+                        function->params && logical_value_identity(function->params[0]) == value;
+    return value && (ref_receiver || (value->op == XI_PARAM && value->param_mode == XR_PARAM_REF) ||
+                     value->op == XI_LOCAL_ADDR);
+}
+
+static bool resolved_aggregate_field_store(const XrXiBuildContext *context, const XiFunc *function,
+                                           const XiValue *access, uint32_t *field_ordinal_out) {
+    if (!resolved_aggregate_field_access(context, access, XI_STORE_FIELD, field_ordinal_out))
+        return false;
+    return logical_value_is_place(function, access->args[0]);
 }
 /* A const binding changes access through an instance but not the instance's
  * nominal runtime identity.  Method target resolution therefore compares the
@@ -4691,7 +4723,7 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
            value->xg_existential_kind == XI_EXISTENTIAL_PROJECT || value->op == XI_SUM_INJECT ||
            xi_copy_is_value_clone(value) || value->op == XI_SOURCE_MOVE ||
-           value->op == XI_OWNER_FORWARD || value->op == XI_CALL ||
+           value->op == XI_PLACE_LOAD || value->op == XI_OWNER_FORWARD || value->op == XI_CALL ||
            ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
             resolved_sealed_callee(context, function, value)) ||
            resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
@@ -4699,12 +4731,8 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
             strcmp((const char *) value->aux, "copy") == 0);
 }
 
-static XrCoreIrValueCategory logical_value_category(const XiValue *value) {
-    value = logical_value_identity(value);
-    return value && ((value->op == XI_PARAM && value->param_mode == XR_PARAM_REF) ||
-                     value->op == XI_LOCAL_ADDR)
-               ? XR_CORE_IR_PLACE
-               : XR_CORE_IR_VALUE;
+static XrCoreIrValueCategory logical_value_category(const XiFunc *function, const XiValue *value) {
+    return logical_value_is_place(function, value) ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
 }
 
 static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
@@ -4740,7 +4768,7 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
     if (type_id == XR_CORE_TYPE_VOID)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi live-in v%u has no active CoreSpec value type", source->id);
-    XrCoreIrValueCategory category = logical_value_category(source);
+    XrCoreIrValueCategory category = logical_value_category(function ? function->xi : NULL, source);
     XrCoreIrOwnershipDisposition ownership =
         implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
                 implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_ERROR
@@ -4796,7 +4824,8 @@ static bool value_has_canonical_materialization(const XrXiBuildContext *context,
         resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
         resolved_empty_struct_literal(context, function, value) ||
         resolved_unit_enum_literal(context, function, value, NULL) ||
-        resolved_aggregate_field_projection(context, value, NULL))
+        resolved_aggregate_field_projection(context, value, NULL) ||
+        resolved_aggregate_field_store(context, function, value, NULL))
         return true;
     XrProgramXiSemanticProjection projection;
     return xr_program_xi_semantic_projection(value->op, value->xg_existential_kind, &projection);
@@ -5445,6 +5474,68 @@ translate_existential_owner_copy(XrXiBuildContext *context, XrXiFunctionStorage 
     return status;
 }
 
+static XrProgramBuildStatus
+translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                                 const XiValue *value, const XrXiBlockStorage *block,
+                                 XrCoreIrInstructionInput instructions[2], char *diagnostic,
+                                 size_t diagnostic_size) {
+    uint32_t field_ordinal = UINT32_MAX;
+    bool load = resolved_aggregate_field_projection(context, value, &field_ordinal);
+    bool store =
+        !load && resolved_aggregate_field_store(context, function->xi, value, &field_ordinal);
+    if ((!load && !store) ||
+        logical_value_category(function->xi, value->args[0]) != XR_CORE_IR_PLACE)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi field access v%u is not an exact aggregate place access", value->id);
+
+    uint16_t aggregate_type_id = XR_CORE_TYPE_VOID;
+    uint16_t field_type_id = XR_CORE_TYPE_VOID;
+    const XrType *field_type = load ? value->type : value->args[1]->type;
+    if (!map_type(context, value->args[0]->type, &aggregate_type_id) ||
+        !map_type(context, field_type, &field_type_id) || field_type_id == XR_CORE_TYPE_VOID)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi field access v%u has no exact logical aggregate field type", value->id);
+    const XrXiTypeStorage *aggregate = find_dynamic_type_by_id(context, aggregate_type_id);
+    if (!aggregate || aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
+        field_ordinal >= aggregate->input.field_count ||
+        aggregate->input.field_types[field_ordinal] != field_type_id)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi field access v%u has an invalid declaration ordinal or type", value->id);
+
+    memset(instructions, 0, 2u * sizeof(*instructions));
+    XrCoreIrInstructionInput *project = &instructions[0];
+    project->operation_id = XR_CORE_OP_CORE_PLACE_PROJECT;
+    project->result = aggregate_field_place_key(function, value);
+    project->result_type_id = field_type_id;
+    project->result_category = XR_CORE_IR_PLACE;
+    project->immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD;
+    project->immediate.field_ordinal = field_ordinal;
+    XrProgramBuildStatus status = set_operands(context, project, function, block, value->args, 1u,
+                                               diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+
+    XrCoreIrInstructionInput *access = &instructions[1];
+    access->operation_id = load ? XR_CORE_OP_CORE_PLACE_LOAD : XR_CORE_OP_CORE_PLACE_STORE;
+    access->result_type_id = load ? field_type_id : XR_CORE_TYPE_VOID;
+    access->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+    if (load)
+        access->result = value_key(function, value);
+    uint32_t operand_count = load ? 1u : 2u;
+    XrCoreIrKey *operands = xr_calloc(operand_count, sizeof(*operands));
+    if (!operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    operands[0] = project->result;
+    if (store && !value_operand_key(context, function, block, value->args[1], &operands[1])) {
+        xr_free(operands);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi field store v%u replacement has no canonical value", value->id);
+    }
+    access->operands = operands;
+    access->operand_count = operand_count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModuleStorage *module,
                                             XrXiFunctionStorage *function, const XiValue *value,
                                             const XrXiBlockStorage *block,
@@ -5888,12 +5979,15 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             if (value->nargs != 1u || result_type == XR_CORE_TYPE_VOID ||
                 !map_type(context, value->args[0]->type, &place_type) ||
                 place_type != result_type ||
-                logical_value_category(value->args[0]) != XR_CORE_IR_PLACE)
+                logical_value_category(function->xi, value->args[0]) != XR_CORE_IR_PLACE)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi place load v%u has no exact pointee type", value->id);
-            instruction->operation_id = projection.core_operation_id;
+            bool affine = logical_ownership_for_type(context, result_type) == XR_CORE_IR_OWNER;
+            instruction->operation_id =
+                affine ? XR_CORE_OP_CORE_PLACE_TAKE : projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = result_type;
+            instruction->result_ownership = affine ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
             return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
                                 diagnostic_size);
@@ -5904,7 +5998,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             if (value->nargs != 2u || result_type != XR_CORE_TYPE_VOID ||
                 !map_type(context, value->args[0]->type, &place_type) ||
                 !map_type(context, value->args[1]->type, &value_type) || place_type != value_type ||
-                logical_value_category(value->args[0]) != XR_CORE_IR_PLACE)
+                logical_value_category(function->xi, value->args[0]) != XR_CORE_IR_PLACE)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi place store v%u has no exact pointee/value contract", value->id);
             instruction->operation_id = projection.core_operation_id;
@@ -6164,7 +6258,7 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
                 : XR_CORE_IR_NON_OWNER;
         if (available->phi || (source_type_mapped && source_type != available->type_id) ||
             (!source_type_mapped && !erased_error_catch) ||
-            available->category != logical_value_category(value) ||
+            available->category != logical_value_category(function->xi, value) ||
             available->ownership != expected_ownership)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi live-in v%u has a conflicting existing block argument", value->id);
@@ -7341,7 +7435,8 @@ static bool input_operation_consumes_operand(const XrXiBuildContext *context,
                                              uint32_t operand_index) {
     if ((instruction->operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
          instruction->operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
-         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL) &&
+         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+         instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE) &&
         operand_index == 0u)
         return true;
     if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE && operand_index == 1u)
@@ -7641,6 +7736,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         resolved_aggregate_field_projection(context, value, NULL)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_PROJECT)
                             : NULL;
+                    const XrCoreOperationSpec *aggregate_field_store =
+                        resolved_aggregate_field_store(context, function, value, NULL)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PLACE_STORE)
+                            : NULL;
                     const XrStdlibDefEntry *provider_entry =
                         resolved_provider_native_call(context, function, value);
                     const XrCoreOperationSpec *provider_operation =
@@ -7682,6 +7781,15 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = true;
                         value_effects = aggregate_field_projection->effect_mask;
                         value_capabilities = aggregate_field_projection->capability_mask;
+                    } else if (aggregate_field_store) {
+                        const XrCoreOperationSpec *place_projection =
+                            xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PLACE_PROJECT);
+                        has_contract = place_projection != NULL;
+                        value_effects = aggregate_field_store->effect_mask |
+                                        (place_projection ? place_projection->effect_mask : 0u);
+                        value_capabilities =
+                            aggregate_field_store->capability_mask |
+                            (place_projection ? place_projection->capability_mask : 0u);
                     } else if (provider_operation) {
                         has_contract = true;
                         value_effects = provider_operation->effect_mask;
@@ -8099,6 +8207,35 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 continue;
             if (suspend_point && value == suspend_point->op)
                 continue;
+            bool aggregate_place_access =
+                resolved_aggregate_field_store(context, xi, value, NULL) ||
+                (resolved_aggregate_field_projection(context, value, NULL) && value->args &&
+                 logical_value_category(xi, value->args[0]) == XR_CORE_IR_PLACE);
+            if (aggregate_place_access) {
+                if (instruction_index > instruction_capacity ||
+                    instruction_capacity - instruction_index < 2u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                XrCoreIrInstructionInput *instructions =
+                    &block_storage->instructions[instruction_index];
+                status =
+                    translate_aggregate_place_access(context, storage, value, block_storage,
+                                                     instructions, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                for (uint32_t emitted_instruction = 0u; emitted_instruction < 2u;
+                     ++emitted_instruction) {
+                    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
+                        instructions[emitted_instruction].operation_id);
+                    if (!operation)
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "translated Xi field access v%u has no CoreSpec operation",
+                                    value->id);
+                    storage->local_effect_mask |= operation->effect_mask;
+                    storage->local_capability_mask |= operation->capability_mask;
+                }
+                instruction_index += 2u;
+                continue;
+            }
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u) {
                 XrCoreIrInstructionInput *capture =
                     &block_storage->instructions[instruction_index++];

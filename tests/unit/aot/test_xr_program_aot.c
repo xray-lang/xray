@@ -34,6 +34,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PLACE_TAKE == 108, "place take stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
@@ -316,6 +317,7 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey mutator_block_key = fixture_key("aot:block:mutator");
     XrCoreIrKey v40 = fixture_key("aot:value:40");
     XrCoreIrKey v2 = fixture_key("aot:value:2");
+    XrCoreIrKey v2_store = fixture_key("aot:value:2-store");
     XrCoreIrKey vtrue = fixture_key("aot:value:true");
     XrCoreIrKey vadd = fixture_key("aot:value:add");
     XrCoreIrKey vsub = fixture_key("aot:value:sub");
@@ -335,6 +337,9 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey projected_40 = fixture_key("aot:value:projected-40");
     XrCoreIrKey projected_true = fixture_key("aot:value:projected-true");
     XrCoreIrKey updated_aggregate = fixture_key("aot:value:updated-aggregate");
+    XrCoreIrKey aggregate_place = fixture_key("aot:value:aggregate-place");
+    XrCoreIrKey field_place = fixture_key("aot:value:field-place");
+    XrCoreIrKey projected_place_2 = fixture_key("aot:value:projected-place-2");
     XrCoreIrKey variant_value = fixture_key("aot:value:variant");
     XrCoreIrKey variant_is_one = fixture_key("aot:value:variant-is-one");
     XrCoreIrKey projected_aggregate = fixture_key("aot:value:projected-aggregate");
@@ -349,9 +354,13 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey aggregate_operand[] = {aggregate_value};
     XrCoreIrKey update_operands[] = {aggregate_value, v2};
     XrCoreIrKey variant_operands[] = {updated_aggregate, projected_true};
+    XrCoreIrKey updated_aggregate_operand[] = {updated_aggregate};
+    XrCoreIrKey aggregate_place_operand[] = {aggregate_place};
+    XrCoreIrKey field_store_operands[] = {field_place, v2_store};
+    XrCoreIrKey field_place_operand[] = {field_place};
     XrCoreIrKey variant_operand[] = {variant_value};
     XrCoreIrKey projected_aggregate_operand[] = {projected_aggregate};
-    XrCoreIrKey pair40_2[] = {projected_40, projected_2};
+    XrCoreIrKey pair40_2[] = {projected_40, projected_place_2};
     XrCoreIrKey pair_add_2[] = {vadd, v2};
     XrCoreIrKey pair_sub_2[] = {vsub, v2};
     XrCoreIrKey pair_div_add[] = {vdiv, vadd};
@@ -399,6 +408,37 @@ static XrValidatedProgram *build_full_program(void) {
          .operand_count = 2u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
          .immediate.variant_ordinal = 1u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+         .result = aggregate_place,
+         .result_type_id = AGGREGATE_TYPE,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = updated_aggregate_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_PROJECT,
+         .result = field_place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = aggregate_place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v2_store,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = field_store_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+         .result = projected_place_2,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = field_place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_VARIANT_TEST,
          .result = variant_is_one,
          .result_type_id = XR_CORE_TYPE_BOOL,
@@ -1391,7 +1431,7 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program,
                                  xr_backend_ir_execution_id(portable)));
     REQUIRE(!xr_fingerprint_equal(xr_backend_ir_optimization_policy_id(none),
                                   xr_backend_ir_optimization_policy_id(portable)));
-    REQUIRE(xr_backend_ir_instruction_count(none) == 45u);
+    REQUIRE(xr_backend_ir_instruction_count(none) == 50u);
 
     XrGeneratedC generated_none = {0};
     XrGeneratedC generated_portable = {0};

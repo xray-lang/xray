@@ -1985,6 +1985,96 @@
       }
     },
     {
+      "id": "place-project-valid",
+      "operation": "core.place.project",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Pipe",
+        "aggregate_type": "Pipe",
+        "operand_category": "place",
+        "field_types": [
+          "i64",
+          "i64"
+        ],
+        "field_ordinal": 1,
+        "result_type": "i64",
+        "result_category": "place"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-project-ordinal-mismatch",
+      "operation": "core.place.project",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Pipe",
+        "aggregate_type": "Pipe",
+        "operand_category": "place",
+        "field_types": [
+          "i64",
+          "i64"
+        ],
+        "field_ordinal": 2,
+        "result_type": "i64",
+        "result_category": "place"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-take-valid",
+      "operation": "core.place.take",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Pipe",
+        "result_type": "Pipe",
+        "operand_category": "place",
+        "result_category": "value",
+        "place_origin": "owning-local",
+        "type_ownership": "affine",
+        "result_ownership": "owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-take-trivial-type-rejected",
+      "operation": "core.place.take",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "i64",
+        "result_type": "i64",
+        "operand_category": "place",
+        "result_category": "value",
+        "type_ownership": "trivial",
+        "result_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-take-borrowed-place-rejected",
+      "operation": "core.place.take",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Pipe",
+        "result_type": "Pipe",
+        "operand_category": "place",
+        "result_category": "value",
+        "place_origin": "borrowed-parameter",
+        "type_ownership": "affine",
+        "result_ownership": "owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "coroutine-yield-valid",
       "operation": "core.coroutine.yield",
       "kind": "contract",

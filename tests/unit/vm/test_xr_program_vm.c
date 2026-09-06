@@ -828,6 +828,17 @@ static XrValidatedProgram *build_call_program(void) {
 }
 
 static XrValidatedProgram *build_local_ref_program(void) {
+    enum { AGGREGATE_TYPE = 62 };
+    uint16_t aggregate_fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput type = {
+        .key = fixture_key("local-ref:type"),
+        .local_id = AGGREGATE_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+        .field_types = aggregate_fields,
+        .field_count = 1u,
+    };
     XrCoreIrConstantInput constants[] = {
         {.key = fixture_key("local-ref:40"),
          .type_id = XR_CORE_TYPE_I64,
@@ -849,9 +860,12 @@ static XrValidatedProgram *build_local_ref_program(void) {
     XrCoreIrKey ref_arg = fixture_key("local-ref:arg");
     XrCoreIrKey v40 = fixture_key("local-ref:v40");
     XrCoreIrKey moved = fixture_key("local-ref:moved");
+    XrCoreIrKey aggregate = fixture_key("local-ref:aggregate");
     XrCoreIrKey place = fixture_key("local-ref:place");
+    XrCoreIrKey field_place = fixture_key("local-ref:field-place");
     XrCoreIrKey v42 = fixture_key("local-ref:v42");
     XrCoreIrKey loaded = fixture_key("local-ref:loaded");
+    XrCoreIrKey taken = fixture_key("local-ref:taken");
     XrCoreIrKey dropped = fixture_key("local-ref:dropped");
     XrCoreIrValueInput helper_argument = {
         .key = ref_arg, .type_id = XR_CORE_TYPE_I64, .category = XR_CORE_IR_PLACE};
@@ -878,8 +892,12 @@ static XrValidatedProgram *build_local_ref_program(void) {
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
     };
     XrCoreIrKey move_operand[] = {v40};
-    XrCoreIrKey local_operand[] = {moved};
-    XrCoreIrKey place_operand[] = {place};
+    XrCoreIrKey construct_operand[] = {moved};
+    XrCoreIrKey local_operand[] = {aggregate};
+    XrCoreIrKey aggregate_place_operand[] = {place};
+    XrCoreIrKey place_operand[] = {field_place};
+    XrCoreIrKey take_operand[] = {place};
+    XrCoreIrKey taken_operand[] = {taken};
     XrCoreIrKey drop_operand[] = {dropped};
     XrCoreIrKey return_operand[] = {loaded};
     XrCoreIrInstructionInput entry_instructions[] = {
@@ -894,13 +912,28 @@ static XrValidatedProgram *build_local_ref_program(void) {
          .operands = move_operand,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = construct_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
          .result = place,
-         .result_type_id = XR_CORE_TYPE_I64,
+         .result_type_id = AGGREGATE_TYPE,
          .result_category = XR_CORE_IR_PLACE,
          .operands = local_operand,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_PROJECT,
+         .result = field_place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = aggregate_place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
         {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = place_operand,
@@ -921,6 +954,18 @@ static XrValidatedProgram *build_local_ref_program(void) {
         {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = drop_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_TAKE,
+         .result = taken,
+         .result_type_id = AGGREGATE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = take_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = taken_operand,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
@@ -960,8 +1005,9 @@ static XrValidatedProgram *build_local_ref_program(void) {
          .block_count = 1u,
          .flags = XR_PROGRAM_FUNCTION_ENTRY},
     };
-    return validate_fixture(constants, sizeof(constants) / sizeof(constants[0]), functions,
-                            sizeof(functions) / sizeof(functions[0]));
+    return validate_typed_fixture(&type, 1u, constants,
+                                  sizeof(constants) / sizeof(constants[0]), functions,
+                                  sizeof(functions) / sizeof(functions[0]));
 }
 
 static XrValidatedProgram *build_trap_program(void) {
