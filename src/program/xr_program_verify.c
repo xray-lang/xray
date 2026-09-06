@@ -2849,6 +2849,32 @@ static uint32_t owner_occurrences_on_successor_edge(const VerifyContext *context
         start = 1u;
         if (successor_index != 0u)
             start += function->blocks[terminator->successors[0]].argument_count;
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
+        if (successor_index != 0u)
+            start = function->blocks[terminator->successors[0]].argument_count;
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+        uint32_t callee_id = terminator->immediate.coroutine_call.function_id;
+        if (callee_id >= context->program->function_count)
+            return 0u;
+        const XrValidatedFunction *callee = &context->program->functions[callee_id];
+        const XrValidatedBlock *target = &function->blocks[terminator->successors[successor_index]];
+        uint32_t implicit_result =
+            successor_index == 0u && callee->result_type_id != XR_CORE_TYPE_VOID ? 1u : 0u;
+        if (target->argument_count < implicit_result)
+            return 0u;
+        start = callee->parameter_count;
+        if (successor_index != 0u) {
+            const XrValidatedBlock *normal = &function->blocks[terminator->successors[0]];
+            uint32_t normal_implicit = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+            if (normal->argument_count < normal_implicit)
+                return 0u;
+            start += normal->argument_count - normal_implicit;
+        }
+        uint32_t count = target->argument_count - implicit_result;
+        uint32_t occurrences = 0u;
+        for (uint32_t index = 0u; index < count; ++index)
+            occurrences += terminator->operands[start + index] == value_id;
+        return occurrences;
     } else if (terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
                terminator->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
                terminator->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
@@ -2997,20 +3023,53 @@ static bool verify_optional_panic_continuation(VerifyContext *context,
 
 static bool verify_cancel_continuation(VerifyContext *context, const XrValidatedFunction *function,
                                        const XrValidatedInstruction *instruction,
-                                       uint32_t successor_index, uint32_t operand_start,
+                                       uint32_t successor_index, uint32_t live_operand_start,
+                                       uint32_t live_count, uint32_t cancel_operand_start,
+                                       const XrValidatedCoroutineSafepoint *safepoint,
                                        XrProgramSemanticLocation location) {
     if (successor_index >= instruction->successor_count ||
-        instruction->successors[successor_index] >= function->block_count) {
+        instruction->successors[successor_index] >= function->block_count || !safepoint ||
+        safepoint->live_value_count != live_count ||
+        cancel_operand_start != live_operand_start + live_count ||
+        cancel_operand_start > instruction->operand_count) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
         return false;
     }
     const XrValidatedBlock *target = &function->blocks[instruction->successors[successor_index]];
-    if (target->argument_count != 0u || target->instruction_count == 0u ||
-        instruction->operand_count != operand_start ||
+    uint32_t cancel_count = instruction->operand_count - cancel_operand_start;
+    if (target->argument_count != cancel_count || target->instruction_count == 0u ||
         target->instructions[target->instruction_count - 1u].operation_id !=
-            XR_CORE_OP_CORE_CANCEL_PUBLISH) {
+            XR_CORE_OP_CORE_CANCEL_PUBLISH ||
+        !verify_successor_arguments(context, function, instruction, successor_index,
+                                    cancel_operand_start, location)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
         return false;
+    }
+    for (uint32_t live = 0u; live < live_count; ++live) {
+        uint32_t value = instruction->operands[live_operand_start + live];
+        uint32_t cancel_occurrences = 0u;
+        for (uint32_t cancel = 0u; cancel < cancel_count; ++cancel)
+            cancel_occurrences += instruction->operands[cancel_operand_start + cancel] == value;
+        if (value >= function->value_count || safepoint->live_value_ids[live] != value ||
+            function->value_categories[value] != XR_CORE_IR_VALUE ||
+            function->value_root_sets[value].root_count != 0u ||
+            cancel_occurrences !=
+                (function->value_ownerships[value] == XR_CORE_IR_OWNER ? 1u : 0u)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+            return false;
+        }
+    }
+    for (uint32_t cancel = 0u; cancel < cancel_count; ++cancel) {
+        uint32_t value = instruction->operands[cancel_operand_start + cancel];
+        uint32_t live_occurrences = 0u;
+        for (uint32_t live = 0u; live < live_count; ++live)
+            live_occurrences += safepoint->live_value_ids[live] == value;
+        if (value >= function->value_count || live_occurrences != 1u ||
+            function->value_categories[value] != XR_CORE_IR_VALUE ||
+            function->value_ownerships[value] != XR_CORE_IR_OWNER) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+            return false;
+        }
     }
     return true;
 }
@@ -3334,12 +3393,13 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 safepoint->resume_state_id >= function->coroutine_state_count ||
                 function->coroutine_states[safepoint->resume_state_id].continuation_block !=
                     instruction->successors[0] ||
-                instruction->operand_count != safepoint->live_value_count ||
-                instruction->operand_count !=
+                instruction->operand_count < safepoint->live_value_count ||
+                safepoint->live_value_count !=
                     function->blocks[instruction->successors[0]].argument_count ||
                 !verify_successor_arguments(context, function, instruction, 0u, 0u, location) ||
-                !verify_cancel_continuation(context, function, instruction, 1u,
-                                            safepoint->live_value_count, location)) {
+                !verify_cancel_continuation(context, function, instruction, 1u, 0u,
+                                            safepoint->live_value_count,
+                                            safepoint->live_value_count, safepoint, location)) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                 return false;
             }
@@ -3357,10 +3417,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                         resume_uses += resume_op->operands[operand] == resume_value;
                 }
                 if (instruction->operands[live] != value ||
-                    function->value_types[value] != XR_CORE_TYPE_I64 ||
-                    function->value_categories[value] != XR_CORE_IR_VALUE ||
-                    function->value_ownerships[value] != XR_CORE_IR_NON_OWNER ||
-                    function->value_root_sets[value].root_count != 0u || resume_uses == 0u) {
+                    function->value_categories[value] != XR_CORE_IR_VALUE || resume_uses == 0u) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                     return false;
                 }
@@ -3416,12 +3473,13 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 safepoint->resume_state_id >= function->coroutine_state_count ||
                 function->coroutine_states[safepoint->resume_state_id].continuation_block !=
                     block_id ||
-                instruction->operand_count !=
+                instruction->operand_count <
                     callee->parameter_count + safepoint->live_value_count ||
                 normal->argument_count != implicit_result + safepoint->live_value_count ||
                 !verify_cancel_continuation(context, function, instruction, 1u,
+                                            callee->parameter_count, safepoint->live_value_count,
                                             callee->parameter_count + safepoint->live_value_count,
-                                            location) ||
+                                            safepoint, location) ||
                 (implicit_result != 0u &&
                  (callee->result_type_id < XR_CORE_TYPE_BOOL ||
                   callee->result_type_id > XR_CORE_TYPE_TARGET_ENDIAN ||
@@ -3454,10 +3512,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 uint32_t target = implicit_result + live;
                 if (instruction->operands[operand] != value ||
                     function->value_categories[value] != XR_CORE_IR_VALUE ||
-                    function->value_ownerships[value] != XR_CORE_IR_NON_OWNER ||
                     normal->argument_types[target] != function->value_types[value] ||
                     normal->argument_categories[target] != XR_CORE_IR_VALUE ||
-                    normal->argument_ownerships[target] != XR_CORE_IR_NON_OWNER) {
+                    normal->argument_ownerships[target] != function->value_ownerships[value]) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                     return false;
                 }
@@ -4315,6 +4372,24 @@ static bool edge_argument_source(const XrValidatedProgram *program,
         operand = argument_index;
     } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
         operand = argument_index;
+        if (successor_index != 0u)
+            operand += function->blocks[terminator->successors[0]].argument_count;
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+        uint32_t callee_id = terminator->immediate.coroutine_call.function_id;
+        if (callee_id >= program->function_count)
+            return false;
+        const XrValidatedFunction *callee = &program->functions[callee_id];
+        uint32_t implicit_result =
+            successor_index == 0u && callee->result_type_id != XR_CORE_TYPE_VOID ? 1u : 0u;
+        if (argument_index < implicit_result)
+            return false;
+        operand = callee->parameter_count + argument_index - implicit_result;
+        if (successor_index != 0u) {
+            const XrValidatedBlock *normal = &function->blocks[terminator->successors[0]];
+            if (normal->argument_count < implicit_result)
+                return false;
+            operand += normal->argument_count - implicit_result;
+        }
     } else if (terminator->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH) {
         operand = 1u + argument_index;
         if (successor_index != 0u)

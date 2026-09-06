@@ -124,6 +124,8 @@ static uint32_t outcome_value_kind(uint16_t type_id) {
             return 2u;
         case XR_CORE_TYPE_U32:
             return 3u;
+        case XR_CORE_TYPE_PANIC_INFO:
+            return 7u;
         case XR_CORE_TYPE_ERROR:
             return 4u;
         case XR_CORE_TYPE_U16:
@@ -236,6 +238,8 @@ static const char *outcome_field(uint16_t type_id) {
         case XR_CORE_TYPE_I64:
             return "i64";
         case XR_CORE_TYPE_U32:
+            return "u32";
+        case XR_CORE_TYPE_PANIC_INFO:
             return "u32";
         case XR_CORE_TYPE_U16:
         case XR_CORE_TYPE_TARGET_OS:
@@ -811,7 +815,7 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
     for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
         char storage[32];
         const char *type = type_c_name(function->parameter_types[parameter], storage);
-        if (!type || function->parameter_modes[parameter] != XR_PARAM_READ ||
+        if (!type || function->parameter_modes[parameter] == XR_PARAM_REF ||
             !append_format(buffer, "    %s parameter_%u;\n", type, parameter))
             return false;
     }
@@ -1779,9 +1783,9 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             uint32_t safepoint_id = instruction->immediate.u32;
             const XrBackendCoroutineSafepoint *safepoint =
                 &function->coroutine_safepoints[safepoint_id];
-            if (instruction->operand_count != safepoint->live_value_count)
+            if (instruction->operand_count < safepoint->live_value_count)
                 return false;
-            for (uint32_t live = 0; live < instruction->operand_count; ++live) {
+            for (uint32_t live = 0; live < safepoint->live_value_count; ++live) {
                 if (!append_format(buffer, "        frame->live_%u_%u = v%u;\n", safepoint_id, live,
                                    instruction->operands[live]))
                     return false;
@@ -2163,8 +2167,22 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
                                safepoint_id, safepoint_id))
                 return false;
         }
-        if (!append_format(buffer, "                goto xr_f%u_b%u;\n", function_id,
-                           suspension->successors[1]))
+        const XrBackendBlock *cancel = &function->blocks[suspension->successors[1]];
+        uint32_t live_operand_start =
+            suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED
+                ? ir->functions[suspension->immediate.coroutine_call.function_id].parameter_count
+                : 0u;
+        uint32_t cancel_operand_start = live_operand_start + point->live_value_count;
+        if (cancel_operand_start > suspension->operand_count ||
+            cancel->argument_count != suspension->operand_count - cancel_operand_start)
+            return false;
+        for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+            if (!append_format(buffer, "                v%u = frame->live_%u_%u;\n",
+                               point->live_value_ids[live], safepoint_id, live))
+                return false;
+        }
+        if (!emit_parallel_edge(buffer, function, suspension, 1u, cancel_operand_start,
+                                function_id))
             return false;
     }
     return append_text(buffer, "            default: return xr_aot_make(4, 0, 0);\n"

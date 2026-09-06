@@ -117,6 +117,49 @@ static uint32_t invoke_typed_successor_count(const XrBackendIR *ir,
     return 0u;
 }
 
+static bool cancel_continuation_matches(const XrBackendFunction *function,
+                                        const XrBackendInstruction *instruction,
+                                        const XrBackendCoroutineSafepoint *point,
+                                        uint32_t live_operand_start) {
+    if (!function || !instruction || instruction->successor_count != 2u ||
+        instruction->successors[1] >= function->block_count || !point ||
+        live_operand_start > instruction->operand_count ||
+        point->live_value_count > instruction->operand_count - live_operand_start)
+        return false;
+    uint32_t cancel_operand_start = live_operand_start + point->live_value_count;
+    uint32_t cancel_count = instruction->operand_count - cancel_operand_start;
+    const XrBackendBlock *cancel = &function->blocks[instruction->successors[1]];
+    if (cancel->argument_count != cancel_count || cancel->instruction_count == 0u ||
+        cancel->instructions[cancel->instruction_count - 1u].operation_id !=
+            XR_CORE_OP_CORE_CANCEL_PUBLISH)
+        return false;
+    for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+        uint32_t source = instruction->operands[live_operand_start + live];
+        uint32_t cancel_occurrences = 0u;
+        for (uint32_t index = 0u; index < cancel_count; ++index)
+            cancel_occurrences += instruction->operands[cancel_operand_start + index] == source;
+        if (source >= function->value_count || point->live_value_ids[live] != source ||
+            cancel_occurrences !=
+                (function->value_ownerships[source] == XR_CORE_IR_OWNER ? 1u : 0u))
+            return false;
+    }
+    for (uint32_t index = 0u; index < cancel_count; ++index) {
+        uint32_t source = instruction->operands[cancel_operand_start + index];
+        uint32_t target = cancel->argument_ids[index];
+        uint32_t live_occurrences = 0u;
+        for (uint32_t live = 0u; live < point->live_value_count; ++live)
+            live_occurrences += point->live_value_ids[live] == source;
+        if (source >= function->value_count || target >= function->value_count ||
+            live_occurrences != 1u || function->value_categories[source] != XR_CORE_IR_VALUE ||
+            function->value_ownerships[source] != XR_CORE_IR_OWNER ||
+            cancel->argument_types[index] != function->value_types[source] ||
+            cancel->argument_categories[index] != function->value_categories[source] ||
+            cancel->argument_ownerships[index] != function->value_ownerships[source])
+            return false;
+    }
+    return true;
+}
+
 static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFunction *function,
                                     const XrBackendInstruction *instruction) {
     if (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
@@ -360,9 +403,7 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
             }
             for (uint32_t live = 0; live < point->live_value_count; ++live) {
                 if (point->live_value_ids[live] >= function->value_count ||
-                    function->value_categories[point->live_value_ids[live]] != XR_CORE_IR_VALUE ||
-                    function->value_ownerships[point->live_value_ids[live]] !=
-                        XR_CORE_IR_NON_OWNER) {
+                    function->value_categories[point->live_value_ids[live]] != XR_CORE_IR_VALUE) {
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                               function_id, 0u, 0u);
                     return false;
@@ -458,15 +499,12 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     ++suspension_count;
                     const XrBackendCoroutineSafepoint *point =
                         &function->coroutine_safepoints[instruction->immediate.u32];
-                    const XrBackendBlock *cancel = &function->blocks[instruction->successors[1]];
                     if (instruction->successors[0] !=
                             function->coroutine_states[point->resume_state_id].continuation_block ||
-                        instruction->operand_count != point->live_value_count ||
+                        instruction->operand_count < point->live_value_count ||
                         !array_u32_equal(instruction->operands, point->live_value_ids,
                                          point->live_value_count) ||
-                        cancel->argument_count != 0u || cancel->instruction_count == 0u ||
-                        cancel->instructions[cancel->instruction_count - 1u].operation_id !=
-                            XR_CORE_OP_CORE_CANCEL_PUBLISH) {
+                        !cancel_continuation_matches(function, instruction, point, 0u)) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
                                                   instruction_id);
@@ -481,7 +519,6 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     const XrBackendCoroutineSafepoint *point =
                         &function->coroutine_safepoints[safepoint_id];
                     const XrBackendBlock *normal = &function->blocks[instruction->successors[0]];
-                    const XrBackendBlock *cancel = &function->blocks[instruction->successors[1]];
                     uint32_t implicit_result =
                         callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
                     if (callee_id == function_id || callee->coroutine_state_count != 2u ||
@@ -490,12 +527,11 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                         callee->panic_type_id != XR_CORE_TYPE_VOID ||
                         function->coroutine_states[point->resume_state_id].continuation_block !=
                             block_id ||
-                        instruction->operand_count !=
+                        instruction->operand_count <
                             callee->parameter_count + point->live_value_count ||
                         normal->argument_count != implicit_result + point->live_value_count ||
-                        cancel->argument_count != 0u || cancel->instruction_count == 0u ||
-                        cancel->instructions[cancel->instruction_count - 1u].operation_id !=
-                            XR_CORE_OP_CORE_CANCEL_PUBLISH) {
+                        !cancel_continuation_matches(function, instruction, point,
+                                                     callee->parameter_count)) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
                                                   instruction_id);
@@ -530,7 +566,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                         if (instruction->operands[operand] != value ||
                             normal->argument_types[target] != function->value_types[value] ||
                             normal->argument_categories[target] != XR_CORE_IR_VALUE ||
-                            normal->argument_ownerships[target] != XR_CORE_IR_NON_OWNER) {
+                            normal->argument_ownerships[target] !=
+                                function->value_ownerships[value]) {
                             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                       instruction->operation_id, function_id,
                                                       block_id, instruction_id);

@@ -66,6 +66,7 @@ typedef struct XrXiBlockStorage {
     bool reachable;
     bool trap_cleanup;
     bool panic_cleanup;
+    bool cancel_cleanup;
     XrXiBlockArgumentStorage *argument_storage;
     uint32_t argument_count;
     uint32_t argument_capacity;
@@ -89,6 +90,20 @@ typedef struct XrXiPanicEdge {
     const XiBlock *handler;
 } XrXiPanicEdge;
 
+typedef struct XrXiCancelEdge {
+    const XiFunc *function;
+    const XiCoroSuspendPoint *point;
+    const XiValue *registration;
+    const XiBlock *handler;
+} XrXiCancelEdge;
+
+typedef struct XrXiCancelBlockStorage {
+    XrCoreIrValueInput *arguments;
+    uint32_t argument_count;
+    XrCoreIrInstructionInput *instructions;
+    uint32_t instruction_count;
+} XrXiCancelBlockStorage;
+
 typedef struct XrXiFunctionStorage {
     const XiFunc *xi;
     XrCoreIrKey key;
@@ -97,7 +112,7 @@ typedef struct XrXiFunctionStorage {
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
     XrCoreIrBlockInput *blocks;
-    XrCoreIrInstructionInput *cancel_instructions;
+    XrXiCancelBlockStorage *cancel_blocks;
     XrXiBlockStorage *block_storage;
     XrCoreIrCoroutineStateInput *coroutine_states;
     XrCoreIrCoroutineSafepointInput *coroutine_safepoints;
@@ -169,6 +184,9 @@ typedef struct XrXiBuildContext {
     XrXiPanicEdge *panic_edges;
     uint32_t panic_edge_count;
     uint32_t panic_edge_capacity;
+    XrXiCancelEdge *cancel_edges;
+    uint32_t cancel_edge_count;
+    uint32_t cancel_edge_capacity;
 } XrXiBuildContext;
 
 typedef struct XrXiCallableTargetSet {
@@ -192,8 +210,18 @@ static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context, con
                                             const XiBlock *block);
 static bool canonical_block_is_panic_cleanup(const XrXiBuildContext *context,
                                              const XiFunc *function, const XiBlock *block);
+static bool canonical_block_is_cancel_cleanup(const XrXiBuildContext *context,
+                                              const XiFunc *function, const XiBlock *block);
 static const XrXiPanicEdge *find_panic_edge(const XrXiBuildContext *context, const XiFunc *function,
                                             const XiValue *point);
+static const XrXiCancelEdge *find_cancel_edge(const XrXiBuildContext *context,
+                                              const XiFunc *function,
+                                              const XiCoroSuspendPoint *point);
+static XrProgramBuildStatus append_cancel_edge(XrXiBuildContext *context, const XiFunc *function,
+                                               const XiCoroSuspendPoint *point,
+                                               const XiValue *registration);
+static bool coroutine_function_has_proven_suspend(const XiFunc *function, const XiFunc **stack,
+                                                  uint32_t depth);
 static bool exact_condition_assertion(const XiValue *value);
 static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *function,
                                    const XiValue *value, uint16_t *type_id);
@@ -360,6 +388,11 @@ static XrCoreIrKey block_key(const XrXiFunctionStorage *function, const XiBlock 
 
 static XrCoreIrKey cancel_block_key(const XrXiFunctionStorage *function, uint32_t safepoint_id) {
     return key_from_key_and_u32(UINT8_C(0x4b), function->key, safepoint_id);
+}
+
+static XrCoreIrKey cancel_argument_key(const XrXiFunctionStorage *function, uint32_t safepoint_id,
+                                       uint32_t argument) {
+    return key_from_key_and_u32(UINT8_C(0x59), cancel_block_key(function, safepoint_id), argument);
 }
 
 static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value) {
@@ -1583,7 +1616,8 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
             }
             if (value->op == XI_CATCH &&
                 (canonical_block_is_trap_cleanup(context, function, block) ||
-                 canonical_block_is_panic_cleanup(context, function, block)))
+                 canonical_block_is_panic_cleanup(context, function, block) ||
+                 canonical_block_is_cancel_cleanup(context, function, block)))
                 continue;
             if (value->op == XI_CATCH)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -1591,7 +1625,8 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                             function->name ? function->name : "<anonymous>");
             if (value->op == XI_THROW) {
                 if (canonical_block_is_trap_cleanup(context, function, block) ||
-                    canonical_block_is_panic_cleanup(context, function, block))
+                    canonical_block_is_panic_cleanup(context, function, block) ||
+                    canonical_block_is_cancel_cleanup(context, function, block))
                     continue;
                 uint16_t payload_type = XR_CORE_TYPE_VOID;
                 if (value->nargs != 1u || !value->args || !value->args[0] ||
@@ -3884,6 +3919,17 @@ static const XrXiPanicEdge *find_panic_edge(const XrXiBuildContext *context, con
     return NULL;
 }
 
+static const XrXiCancelEdge *find_cancel_edge(const XrXiBuildContext *context,
+                                              const XiFunc *function,
+                                              const XiCoroSuspendPoint *point) {
+    for (uint32_t index = 0u; context && index < context->cancel_edge_count; ++index) {
+        const XrXiCancelEdge *edge = &context->cancel_edges[index];
+        if (edge->function == function && edge->point == point)
+            return edge;
+    }
+    return NULL;
+}
+
 static XrXiBlockArgumentStorage *find_block_argument(XrXiBlockStorage *block,
                                                      const XiValue *source) {
     for (uint32_t index = 0; block && index < block->argument_count; ++index) {
@@ -5163,7 +5209,18 @@ static void free_context(XrXiBuildContext *context) {
                 xr_free(block->argument_storage);
             }
             xr_free(function->block_storage);
-            xr_free(function->cancel_instructions);
+            for (uint32_t safepoint = 0u;
+                 function->cancel_blocks &&
+                 safepoint < module->functions[function_index].coroutine_safepoint_count;
+                 ++safepoint) {
+                XrXiCancelBlockStorage *cancel = &function->cancel_blocks[safepoint];
+                for (uint32_t instruction = 0u; instruction < cancel->instruction_count;
+                     ++instruction)
+                    free_instruction_input(&cancel->instructions[instruction]);
+                xr_free(cancel->instructions);
+                xr_free(cancel->arguments);
+            }
+            xr_free(function->cancel_blocks);
             xr_free(function->blocks);
             xr_free(function->parameter_types);
             xr_free(function->parameter_modes);
@@ -5220,6 +5277,7 @@ static void free_context(XrXiBuildContext *context) {
     xr_free(context->provider_operation_capacities);
     xr_free(context->trap_edges);
     xr_free(context->panic_edges);
+    xr_free(context->cancel_edges);
 }
 
 static XrProgramBuildStatus set_operands(const XrXiBuildContext *context,
@@ -6611,7 +6669,8 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         exact_cleanup_boundary_marker(value))
         return true;
     if (value && value->op == XI_CATCH && block_storage &&
-        (block_storage->trap_cleanup || block_storage->panic_cleanup))
+        (block_storage->trap_cleanup || block_storage->panic_cleanup ||
+         block_storage->cancel_cleanup))
         return true;
     if (static_function_publication_is_exact(function, value))
         return true;
@@ -7103,6 +7162,20 @@ static XrProgramBuildStatus mark_reachable_blocks(const XrXiBuildContext *contex
                     changed = true;
                 }
             }
+            for (uint32_t edge_index = 0u; edge_index < context->cancel_edge_count; ++edge_index) {
+                const XrXiCancelEdge *edge = &context->cancel_edges[edge_index];
+                if (edge->function != function->xi || !edge->point || !edge->point->op ||
+                    edge->point->op->block != source->xi)
+                    continue;
+                XrXiBlockStorage *successor = find_block_storage(function, edge->handler);
+                if (!successor)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi cancel continuation is absent");
+                if (!successor->reachable) {
+                    successor->reachable = true;
+                    changed = true;
+                }
+            }
         }
         if (!changed)
             return XR_PROGRAM_BUILD_OK;
@@ -7511,6 +7584,69 @@ static XrProgramBuildStatus prepare_panic_continuations(XrXiBuildContext *contex
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus prepare_cancel_continuations(XrXiBuildContext *context,
+                                                         char *diagnostic, size_t diagnostic_size) {
+    for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0u; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *storage = &module->function_storage[function_index];
+            const XiFunc *function = storage->xi;
+            const XiCoroPlan *plan = function ? function->coro_plan : NULL;
+            if (!plan || !plan->is_coroutine || !plan->analysis_complete || !plan->points ||
+                !plan->actions_materialized || !plan->cfg_rewritten ||
+                !xi_coro_plan_is_current(function, plan))
+                continue;
+            const XiFunc *suspend_stack[64] = {0};
+            if (!coroutine_function_has_proven_suspend(function, suspend_stack, 0u))
+                continue;
+            for (uint32_t point_index = 0u; point_index < plan->nstates; ++point_index) {
+                const XiCoroSuspendPoint *point = &plan->points[point_index];
+                if (point->active_handler_count == 0u)
+                    continue;
+                if (point->active_handler_count != 1u || !point->active_handlers ||
+                    !point->active_handlers[0])
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi suspension v%u has nested cancellation cleanup",
+                                point->op ? point->op->id : UINT32_MAX);
+                const XiValue *registration = point->active_handlers[0];
+                bool contains = false;
+                XrProgramBuildStatus status = static_try_contains_value(
+                    function, registration, point->op, &contains, diagnostic, diagnostic_size);
+                const XiBlock *handler = (const XiBlock *) registration->aux;
+                XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                if (!contains || !handler_storage || handler_storage->reachable ||
+                    handler_storage->trap_cleanup || handler_storage->panic_cleanup ||
+                    handler_storage->cancel_cleanup ||
+                    !exact_static_cleanup_handler(function, registration))
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi suspension v%u has no exact private cancel cleanup",
+                                point->op ? point->op->id : UINT32_MAX);
+                status = append_cancel_edge(context, function, point, registration);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                handler_storage->cancel_cleanup = true;
+            }
+        }
+    }
+    for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0u; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *storage = &module->function_storage[function_index];
+            for (uint32_t block_index = 0u; block_index < storage->xi->nblocks; ++block_index)
+                storage->block_storage[block_index].reachable = false;
+            XrProgramBuildStatus status =
+                mark_reachable_blocks(context, storage, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus initialize_canonical_reachability(XrXiBuildContext *context,
                                                               char *diagnostic,
                                                               size_t diagnostic_size) {
@@ -7772,6 +7908,35 @@ static XrProgramBuildStatus prepare_panic_arguments(XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus prepare_cancel_arguments(XrXiBuildContext *context,
+                                                     XrXiFunctionStorage *function,
+                                                     char *diagnostic, size_t diagnostic_size) {
+    for (uint32_t edge_index = 0u; edge_index < context->cancel_edge_count; ++edge_index) {
+        const XrXiCancelEdge *edge = &context->cancel_edges[edge_index];
+        if (edge->function != function->xi)
+            continue;
+        XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+        if (!handler || !edge->point)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cancel continuation endpoint is absent");
+        for (uint32_t drop = 0u; drop < edge->point->ndrops; ++drop) {
+            uint16_t type_id = XR_CORE_TYPE_VOID;
+            const XiValue *owner = edge->point->drops[drop];
+            if (!map_logical_value_type(context, function->xi, owner, &type_id) ||
+                type_id == XR_CORE_TYPE_VOID)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi cancellation owner v%u has no canonical type",
+                            owner ? owner->id : UINT32_MAX);
+            XrProgramBuildStatus status =
+                add_block_argument(context, function, handler, owner, NULL, type_id,
+                                   XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                                                   XrXiFunctionStorage *function, char *diagnostic,
                                                   size_t diagnostic_size) {
@@ -7787,6 +7952,10 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         prepare_panic_arguments(context, function, diagnostic, diagnostic_size);
     if (panic_argument_status != XR_PROGRAM_BUILD_OK)
         return panic_argument_status;
+    XrProgramBuildStatus cancel_argument_status =
+        prepare_cancel_arguments(context, function, diagnostic, diagnostic_size);
+    if (cancel_argument_status != XR_PROGRAM_BUILD_OK)
+        return cancel_argument_status;
     XrXiBlockStorage *entry = find_block_storage(function, function->xi->entry);
     if (!entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -7819,7 +7988,7 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         }
         for (uint32_t value_index = 0; value_index < block->xi->nvalues; ++value_index) {
             const XiValue *value = block->xi->values[value_index];
-            if (value && value->op == XI_THROW && block->trap_cleanup)
+            if (value && value->op == XI_THROW && (block->trap_cleanup || block->cancel_cleanup))
                 continue;
             if (value && (value->op == XI_ERR_RETURN || value->op == XI_THROW)) {
                 if (value->nargs != 1u || !value->args || !value->args[0])
@@ -7918,6 +8087,42 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                     edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi panic continuation requires a phi payload");
+                XrProgramBuildStatus status =
+                    require_value_available(context, function, source, edge_argument->source,
+                                            &changed, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+        }
+        for (uint32_t edge_index = 0u; edge_index < context->cancel_edge_count; ++edge_index) {
+            const XrXiCancelEdge *edge = &context->cancel_edges[edge_index];
+            if (edge->function != function->xi)
+                continue;
+            XrXiBlockStorage *source = find_block_storage(
+                function, edge->point && edge->point->op ? edge->point->op->block : NULL);
+            XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+            if (!source || !handler || !edge->point)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi cancel continuation endpoint is absent");
+            if (handler->argument_count != edge->point->ndrops)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi cancel continuation has %u arguments for %u owners",
+                            handler->argument_count, edge->point->ndrops);
+            for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+                XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+                const XiValue *logical_argument =
+                    exact_logical_value_identity(context, function->xi, edge_argument->source);
+                uint32_t drop_matches = 0u;
+                for (uint32_t drop = 0u; drop < edge->point->ndrops; ++drop)
+                    drop_matches +=
+                        exact_logical_value_identity(context, function->xi,
+                                                     edge->point->drops[drop]) == logical_argument;
+                if (!logical_argument || drop_matches != 1u || edge_argument->phi ||
+                    edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+                    edge_argument->category != XR_CORE_IR_VALUE ||
+                    edge_argument->ownership != XR_CORE_IR_OWNER)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi cancel continuation requires an exact owner payload");
                 XrProgramBuildStatus status =
                     require_value_available(context, function, source, edge_argument->source,
                                             &changed, diagnostic, diagnostic_size);
@@ -8205,6 +8410,21 @@ static const XiCoroSuspendPoint *coroutine_point_for_block(const XrXiFunctionSto
     return found;
 }
 
+static const XiCoroSuspendPoint *coroutine_point_for_safepoint(const XrXiFunctionStorage *function,
+                                                               uint32_t safepoint_id) {
+    const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
+    const XiCoroSuspendPoint *found = NULL;
+    for (uint32_t point = 0u; plan && plan->points && point < plan->nstates; ++point) {
+        const XiCoroSuspendPoint *candidate = &plan->points[point];
+        if (candidate->state_id == 0u || candidate->state_id - 1u != safepoint_id)
+            continue;
+        if (found)
+            return NULL;
+        found = candidate;
+    }
+    return found;
+}
+
 static bool coroutine_function_has_proven_suspend(const XiFunc *function, const XiFunc **stack,
                                                   uint32_t depth) {
     const XiCoroPlan *plan = function ? function->coro_plan : NULL;
@@ -8251,6 +8471,17 @@ static bool canonical_block_is_panic_cleanup(const XrXiBuildContext *context,
     for (uint32_t index = 0u; index < function->nblocks; ++index)
         if (storage->block_storage[index].xi == block)
             return storage->block_storage[index].panic_cleanup;
+    return false;
+}
+
+static bool canonical_block_is_cancel_cleanup(const XrXiBuildContext *context,
+                                              const XiFunc *function, const XiBlock *block) {
+    const XrXiFunctionStorage *storage = find_xi_function(context, function, NULL, NULL);
+    if (!storage || !storage->block_storage || !block)
+        return false;
+    for (uint32_t index = 0u; index < function->nblocks; ++index)
+        if (storage->block_storage[index].xi == block)
+            return storage->block_storage[index].cancel_cleanup;
     return false;
 }
 
@@ -8317,7 +8548,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         resume->target_block != point->resume_block || !cancel || !cancel->terminal ||
         cancel->source_state_id != point->state_id ||
         cancel->target_state_id != XI_CORO_STATE_TERMINAL || cancel->target_block != NULL ||
-        cancel->drops != point->drops || cancel->ndrops != point->ndrops || point->ndrops != 0u ||
+        cancel->drops != point->drops || cancel->ndrops != point->ndrops ||
         (point->capability_mask & XI_CORO_CAP_CANCEL_CLEANUP) == 0u)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %s suspension lacks exact logical plan closure",
@@ -8360,7 +8591,8 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
 
     function->coroutine_states = xr_calloc(2u, sizeof(*function->coroutine_states));
     function->coroutine_safepoints = xr_calloc(1u, sizeof(*function->coroutine_safepoints));
-    if (!function->coroutine_states || !function->coroutine_safepoints)
+    function->cancel_blocks = xr_calloc(1u, sizeof(*function->cancel_blocks));
+    if (!function->coroutine_states || !function->coroutine_safepoints || !function->cancel_blocks)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     function->coroutine_states[0].state_id = XI_CORO_STATE_ENTRY;
     function->coroutine_states[0].continuation_block = block_key(function, xi->entry);
@@ -8393,12 +8625,216 @@ static bool coroutine_live_set_matches(const XrXiBuildContext *context,
             matches += exact_logical_value_identity(context, function->xi, point->live[live]) ==
                        logical_incoming;
         if (!logical_incoming || matches != 1u ||
-            successor->argument_storage[argument].type_id != XR_CORE_TYPE_I64 ||
             successor->argument_storage[argument].category != XR_CORE_IR_VALUE ||
-            successor->argument_storage[argument].ownership != XR_CORE_IR_NON_OWNER)
+            successor->argument_storage[argument].ownership !=
+                logical_ownership_for_type(context, successor->argument_storage[argument].type_id))
             return false;
     }
     return true;
+}
+
+static bool coroutine_cancel_drop_set_matches(const XrXiBuildContext *context,
+                                              const XrXiFunctionStorage *function,
+                                              const XrXiBlockStorage *resume,
+                                              uint32_t resume_argument_start, uint32_t live_count,
+                                              const XiCoroSuspendPoint *point) {
+    if (!context || !function || !resume || !point ||
+        resume_argument_start > resume->argument_count ||
+        live_count != resume->argument_count - resume_argument_start || point->ndrops > live_count)
+        return false;
+    uint32_t owner_count = 0u;
+    for (uint32_t live = 0u; live < live_count; ++live) {
+        const XrXiBlockArgumentStorage *argument =
+            &resume->argument_storage[resume_argument_start + live];
+        const XiValue *logical =
+            exact_logical_value_identity(context, function->xi, argument->source);
+        uint32_t drop_matches = 0u;
+        for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
+            drop_matches +=
+                exact_logical_value_identity(context, function->xi, point->drops[drop]) == logical;
+        bool owner = argument->ownership == XR_CORE_IR_OWNER;
+        if (!logical || argument->category != XR_CORE_IR_VALUE ||
+            argument->ownership != logical_ownership_for_type(context, argument->type_id) ||
+            drop_matches != (owner ? 1u : 0u))
+            return false;
+        owner_count += owner ? 1u : 0u;
+    }
+    return owner_count == point->ndrops;
+}
+
+static XrProgramBuildStatus
+prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *function,
+                     const XrXiBlockStorage *resume, uint32_t resume_argument_start,
+                     uint32_t live_count, const XiCoroSuspendPoint *point, uint32_t safepoint_id) {
+    if (!function || !function->cancel_blocks ||
+        !coroutine_cancel_drop_set_matches(context, function, resume, resume_argument_start,
+                                           live_count, point))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrXiCancelBlockStorage *cancel = &function->cancel_blocks[safepoint_id];
+    if (cancel->arguments || cancel->instructions)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    cancel->argument_count = point->ndrops;
+    cancel->arguments = point->ndrops ? xr_calloc(point->ndrops, sizeof(*cancel->arguments)) : NULL;
+    if (point->ndrops && !cancel->arguments)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
+        const XiValue *logical_drop =
+            exact_logical_value_identity(context, function->xi, point->drops[drop]);
+        const XrXiBlockArgumentStorage *source = NULL;
+        for (uint32_t live = 0u; live < live_count; ++live) {
+            const XrXiBlockArgumentStorage *candidate =
+                &resume->argument_storage[resume_argument_start + live];
+            if (exact_logical_value_identity(context, function->xi, candidate->source) ==
+                logical_drop) {
+                source = candidate;
+                break;
+            }
+        }
+        if (!source || source->category != XR_CORE_IR_VALUE ||
+            source->ownership != XR_CORE_IR_OWNER)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        cancel->arguments[drop] = (XrCoreIrValueInput) {
+            .key = cancel_argument_key(function, safepoint_id, drop),
+            .type_id = source->type_id,
+            .category = XR_CORE_IR_VALUE,
+            .ownership = XR_CORE_IR_OWNER,
+        };
+    }
+    cancel->instruction_count = (point->ndrops != 0u ? 1u : 0u) + point->ndrops + 1u;
+    cancel->instructions = xr_calloc(cancel->instruction_count, sizeof(*cancel->instructions));
+    if (!cancel->instructions)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t instruction = 0u;
+    if (point->ndrops != 0u) {
+        XrCoreIrKey *operands = xr_calloc(point->ndrops, sizeof(*operands));
+        if (!operands)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
+            operands[drop] = cancel->arguments[drop].key;
+        cancel->instructions[instruction++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .operands = operands,
+            .operand_count = point->ndrops,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+    }
+    for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
+        XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+        if (!operand)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *operand = cancel->arguments[drop].key;
+        cancel->instructions[instruction++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .operands = operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+    }
+    cancel->instructions[instruction] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus append_cancel_edge(XrXiBuildContext *context, const XiFunc *function,
+                                               const XiCoroSuspendPoint *point,
+                                               const XiValue *registration) {
+    if (context->cancel_edge_count == context->cancel_edge_capacity) {
+        uint32_t capacity = context->cancel_edge_capacity ? context->cancel_edge_capacity * 2u : 4u;
+        if (capacity < context->cancel_edge_capacity)
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        XrXiCancelEdge *edges =
+            xr_realloc(context->cancel_edges, (size_t) capacity * sizeof(*edges));
+        if (!edges)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        context->cancel_edges = edges;
+        context->cancel_edge_capacity = capacity;
+    }
+    context->cancel_edges[context->cancel_edge_count++] = (XrXiCancelEdge) {
+        .function = function,
+        .point = point,
+        .registration = registration,
+        .handler = (const XiBlock *) registration->aux,
+    };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus append_cancel_drop_operands(const XrXiBuildContext *context,
+                                                        XrCoreIrInstructionInput *instruction,
+                                                        const XrXiFunctionStorage *function,
+                                                        const XrXiBlockStorage *source,
+                                                        const XiCoroSuspendPoint *point,
+                                                        char *diagnostic, size_t diagnostic_size) {
+    if (!context || !instruction || !function || !source || !point ||
+        point->ndrops > UINT32_MAX - instruction->operand_count)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t count = instruction->operand_count + point->ndrops;
+    XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
+    if (count && !operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (instruction->operand_count != 0u)
+        memcpy(operands, instruction->operands,
+               (size_t) instruction->operand_count * sizeof(*operands));
+    for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
+        if (!value_operand_key(context, function, source, point->drops[drop],
+                               &operands[instruction->operand_count + drop])) {
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cancel owner %u is unavailable at suspension",
+                        point->drops[drop] ? point->drops[drop]->id : UINT32_MAX);
+        }
+    }
+    xr_free((void *) instruction->operands);
+    instruction->operands = operands;
+    instruction->operand_count = count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus
+append_cancel_handler_operands(const XrXiBuildContext *context,
+                               XrCoreIrInstructionInput *instruction,
+                               const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
+                               const XrXiBlockStorage *handler, const XiCoroSuspendPoint *point,
+                               char *diagnostic, size_t diagnostic_size) {
+    if (!context || !instruction || !function || !source || !handler || !point ||
+        handler->argument_count != point->ndrops ||
+        handler->argument_count > UINT32_MAX - instruction->operand_count)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi cancel handler has no exact owner payload");
+    uint32_t count = instruction->operand_count + handler->argument_count;
+    XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
+    if (count && !operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (instruction->operand_count != 0u)
+        memcpy(operands, instruction->operands,
+               (size_t) instruction->operand_count * sizeof(*operands));
+    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+        const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+        const XiValue *logical_argument =
+            exact_logical_value_identity(context, function->xi, edge_argument->source);
+        uint32_t drop_matches = 0u;
+        for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
+            drop_matches += exact_logical_value_identity(context, function->xi,
+                                                         point->drops[drop]) == logical_argument;
+        if (!logical_argument || drop_matches != 1u || edge_argument->phi ||
+            edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+            edge_argument->category != XR_CORE_IR_VALUE ||
+            edge_argument->ownership != XR_CORE_IR_OWNER ||
+            !value_operand_key(context, function, source, edge_argument->source,
+                               &operands[instruction->operand_count + argument])) {
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cancel handler owner is unavailable at suspension");
+        }
+    }
+    xr_free((void *) instruction->operands);
+    instruction->operands = operands;
+    instruction->operand_count = count;
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus
@@ -8407,11 +8843,15 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
                                      XrCoreIrInstructionInput *instruction, char *diagnostic,
                                      size_t diagnostic_size) {
     XrXiBlockStorage *resume = point ? find_block_storage(function, point->resume_block) : NULL;
+    const XrXiCancelEdge *cancel_edge = find_cancel_edge(context, function->xi, point);
+    XrXiBlockStorage *cancel_handler =
+        cancel_edge ? find_block_storage(function, cancel_edge->handler) : NULL;
     uint32_t safepoint_id = point && point->state_id != 0u ? point->state_id - 1u : UINT32_MAX;
     if (!context || !function || !block || !instruction || !point || !resume ||
         safepoint_id >= 1u || !function->coroutine_safepoints ||
         !exact_cooperative_yield_contract(context, function, point->op) ||
-        !coroutine_live_set_matches(context, function, block, resume, point))
+        !coroutine_live_set_matches(context, function, block, resume, point) ||
+        (cancel_edge && !cancel_handler))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi cooperative yield in b%u has no exact canonical resume/live set",
                     block && block->xi ? block->xi->id : UINT32_MAX);
@@ -8424,7 +8864,8 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
     if (!successors)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     successors[0] = block_key(function, point->resume_block);
-    successors[1] = cancel_block_key(function, safepoint_id);
+    successors[1] = cancel_edge ? block_key(function, cancel_edge->handler)
+                                : cancel_block_key(function, safepoint_id);
     instruction->successors = successors;
     instruction->successor_count = 2u;
     XrProgramBuildStatus status = set_edge_operands(context, instruction, function, block, resume,
@@ -8432,17 +8873,26 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
 
-    XrCoreIrKey *live_values = instruction->operand_count
-                                   ? xr_calloc(instruction->operand_count, sizeof(*live_values))
-                                   : NULL;
-    if (instruction->operand_count && !live_values)
+    uint32_t live_count = instruction->operand_count;
+    XrCoreIrKey *live_values = live_count ? xr_calloc(live_count, sizeof(*live_values)) : NULL;
+    if (live_count && !live_values)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    if (instruction->operand_count)
-        memcpy(live_values, instruction->operands,
-               (size_t) instruction->operand_count * sizeof(*live_values));
+    if (live_count)
+        memcpy(live_values, instruction->operands, (size_t) live_count * sizeof(*live_values));
     function->coroutine_safepoints[safepoint_id].live_values = live_values;
-    function->coroutine_safepoints[safepoint_id].live_value_count = instruction->operand_count;
-    return XR_PROGRAM_BUILD_OK;
+    function->coroutine_safepoints[safepoint_id].live_value_count = live_count;
+    if (cancel_edge) {
+        if (!coroutine_cancel_drop_set_matches(context, function, resume, 0u, live_count, point))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cooperative yield has no exact cancellation owner set");
+        return append_cancel_handler_operands(context, instruction, function, block, cancel_handler,
+                                              point, diagnostic, diagnostic_size);
+    }
+    status = prepare_cancel_block(context, function, resume, 0u, live_count, point, safepoint_id);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    return append_cancel_drop_operands(context, instruction, function, block, point, diagnostic,
+                                       diagnostic_size);
 }
 
 static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
@@ -8468,7 +8918,8 @@ static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
         if (!logical || matches != 1u ||
             resume->argument_storage[argument].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
             resume->argument_storage[argument].category != XR_CORE_IR_VALUE ||
-            resume->argument_storage[argument].ownership != XR_CORE_IR_NON_OWNER)
+            resume->argument_storage[argument].ownership !=
+                logical_ownership_for_type(context, resume->argument_storage[argument].type_id))
             return false;
     }
     return true;
@@ -8479,6 +8930,9 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     XrXiBlockStorage *block, const XiCoroSuspendPoint *point, XrCoreIrInstructionInput *instruction,
     char *diagnostic, size_t diagnostic_size) {
     XrXiBlockStorage *resume = point ? find_block_storage(function, point->resume_block) : NULL;
+    const XrXiCancelEdge *cancel_edge = find_cancel_edge(context, function->xi, point);
+    XrXiBlockStorage *cancel_handler =
+        cancel_edge ? find_block_storage(function, cancel_edge->handler) : NULL;
     uint32_t safepoint_id = point && point->state_id != 0u ? point->state_id - 1u : UINT32_MAX;
     XrCoreIrInstructionInput call = {0};
     XrProgramBuildStatus status = point ? translate_value(context, module, function, point->op,
@@ -8489,7 +8943,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     uint32_t implicit_result = call.result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
     const XrXiFunctionStorage *callee =
         point ? find_xi_function(context, point->resolved_callee, NULL, NULL) : NULL;
-    if (!resume || !callee || safepoint_id >= 1u ||
+    if (!resume || !callee || safepoint_id >= 1u || (cancel_edge && !cancel_handler) ||
         call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
         !xr_core_ir_key_equal(call.immediate.key, callee->key) || call.successor_count != 0u ||
         !coroutine_call_live_set_matches(context, function, resume, point, implicit_result)) {
@@ -8533,7 +8987,8 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         memcpy(live_values, operands + call.operand_count,
                (size_t) live_count * sizeof(*live_values));
     successors[0] = block_key(function, point->resume_block);
-    successors[1] = cancel_block_key(function, safepoint_id);
+    successors[1] = cancel_edge ? block_key(function, cancel_edge->handler)
+                                : cancel_block_key(function, safepoint_id);
     instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
     instruction->result_type_id = XR_CORE_TYPE_VOID;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
@@ -8545,7 +9000,20 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     instruction->successor_count = 2u;
     function->coroutine_safepoints[safepoint_id].live_values = live_values;
     function->coroutine_safepoints[safepoint_id].live_value_count = live_count;
-    return XR_PROGRAM_BUILD_OK;
+    if (cancel_edge) {
+        if (!coroutine_cancel_drop_set_matches(context, function, resume, implicit_result,
+                                               live_count, point))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi coroutine call has no exact cancellation owner set");
+        return append_cancel_handler_operands(context, instruction, function, block, cancel_handler,
+                                              point, diagnostic, diagnostic_size);
+    }
+    status = prepare_cancel_block(context, function, resume, implicit_result, live_count, point,
+                                  safepoint_id);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    return append_cancel_drop_operands(context, instruction, function, block, point, diagnostic,
+                                       diagnostic_size);
 }
 
 static const XrCoreIrFunctionInput *input_function_by_key(const XrXiBuildContext *context,
@@ -8827,6 +9295,8 @@ static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildCont
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BRANCH);
     if (canonical_block_is_trap_cleanup(context, function, block))
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_TRAP);
+    if (canonical_block_is_cancel_cleanup(context, function, block))
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CANCEL_PUBLISH);
     if (block->kind == XI_BLOCK_UNREACHABLE)
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PANIC_PUBLISH);
     if (block->kind == XI_BLOCK_RETURN && block->control && block->control->op == XI_ERR_RETURN)
@@ -9293,9 +9763,17 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
     status = prepare_coroutine_shape(context, storage, output, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
-    if (output->coroutine_safepoint_count > UINT32_MAX - xi->nblocks)
+    uint32_t synthetic_cancel_count = 0u;
+    for (uint32_t safepoint = 0u; safepoint < output->coroutine_safepoint_count; ++safepoint) {
+        const XiCoroSuspendPoint *point = coroutine_point_for_safepoint(storage, safepoint);
+        if (!point)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi function %u has no exact safepoint owner", function_index);
+        synthetic_cancel_count += find_cancel_edge(context, xi, point) == NULL;
+    }
+    if (synthetic_cancel_count > UINT32_MAX - xi->nblocks)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-    uint32_t block_capacity = xi->nblocks + output->coroutine_safepoint_count;
+    uint32_t block_capacity = xi->nblocks + synthetic_cancel_count;
     storage->blocks = xr_calloc(block_capacity, sizeof(*storage->blocks));
     if (!storage->blocks)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -9307,7 +9785,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             !block_is_elided_class_construction_error_continuation(context, xi,
                                                                    xi->blocks[block_index]))
             ++output->block_count;
-    output->block_count += output->coroutine_safepoint_count;
+    output->block_count += synthetic_cancel_count;
     if (output->block_count == 0u || !find_block_storage(storage, xi->entry)->reachable ||
         block_is_elided_class_construction_error_continuation(context, xi, xi->entry))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -9538,6 +10016,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 terminator->operation_id = XR_CORE_OP_CORE_TRAP;
                 terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
                 terminator->immediate.u32 = 7u;
+            } else if (block_storage->cancel_cleanup) {
+                terminator->operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH;
             } else {
                 const XiValue *throw_value = NULL;
                 for (uint32_t value_index = 0u; value_index < xi_block->nvalues; ++value_index) {
@@ -9666,26 +10146,33 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         storage->local_capability_mask |= terminal_operation->capability_mask;
     }
     if (output->coroutine_safepoint_count != 0u) {
-        storage->cancel_instructions =
-            xr_calloc(output->coroutine_safepoint_count, sizeof(*storage->cancel_instructions));
-        if (!storage->cancel_instructions)
-            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         for (uint32_t safepoint = 0u; safepoint < output->coroutine_safepoint_count; ++safepoint) {
-            XrCoreIrBlockInput *cancel_block = &storage->blocks[output_block_index++];
-            XrCoreIrInstructionInput *publish = &storage->cancel_instructions[safepoint];
-            cancel_block->key = cancel_block_key(storage, safepoint);
-            cancel_block->instructions = publish;
-            cancel_block->instruction_count = 1u;
-            publish->operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH;
-            publish->result_type_id = XR_CORE_TYPE_VOID;
-            publish->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-            const XrCoreOperationSpec *operation =
-                xr_core_spec_operation_by_id(publish->operation_id);
-            if (!operation)
+            const XiCoroSuspendPoint *point = coroutine_point_for_safepoint(storage, safepoint);
+            if (!point)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "canonical cancel publication has no CoreSpec operation");
-            storage->local_effect_mask |= operation->effect_mask;
-            storage->local_capability_mask |= operation->capability_mask;
+                            "Xi function %u has no exact safepoint owner", function_index);
+            if (find_cancel_edge(context, xi, point))
+                continue;
+            XrCoreIrBlockInput *cancel_block = &storage->blocks[output_block_index++];
+            XrXiCancelBlockStorage *cancel = &storage->cancel_blocks[safepoint];
+            if (!cancel->instructions || cancel->instruction_count == 0u)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi function %u has no exact cancellation cleanup", function_index);
+            cancel_block->key = cancel_block_key(storage, safepoint);
+            cancel_block->arguments = cancel->arguments;
+            cancel_block->argument_count = cancel->argument_count;
+            cancel_block->instructions = cancel->instructions;
+            cancel_block->instruction_count = cancel->instruction_count;
+            for (uint32_t instruction = 0u; instruction < cancel->instruction_count;
+                 ++instruction) {
+                const XrCoreOperationSpec *operation =
+                    xr_core_spec_operation_by_id(cancel->instructions[instruction].operation_id);
+                if (!operation)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "canonical cancellation cleanup has no CoreSpec operation");
+                storage->local_effect_mask |= operation->effect_mask;
+                storage->local_capability_mask |= operation->capability_mask;
+            }
         }
     }
     if (output_block_index != output->block_count)
@@ -10258,6 +10745,10 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
         prepare_panic_continuations(context, diagnostic, diagnostic_size);
     if (panic_status != XR_PROGRAM_BUILD_OK)
         return panic_status;
+    XrProgramBuildStatus cancel_status =
+        prepare_cancel_continuations(context, diagnostic, diagnostic_size);
+    if (cancel_status != XR_PROGRAM_BUILD_OK)
+        return cancel_status;
 
     XrProgramBuildStatus imported_callable_status =
         validate_imported_callable_bindings(context, diagnostic, diagnostic_size);

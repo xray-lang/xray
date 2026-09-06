@@ -3729,6 +3729,35 @@ static void test_coroutine_state_and_exact_liveness(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_coroutine_cancel_cleanup_requires_exact_owner_transfer(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_coroutine_owner_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_coroutine_owner_fixture_write_mutated(
+              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_MISSING_CANCEL_ARGUMENT, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_coroutine_owner_fixture_write_mutated(
+              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_CANCEL_OWNER_NOT_DROPPED, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_coroutine_owner_fixture_write_mutated(
+              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_EXTRA_CANCEL_ARGUMENT, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_condition_assert_panic_cleanup_cfg(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -3979,6 +4008,7 @@ int main(void) {
     test_existential_owned_read_reborrow();
     test_callable_pack_and_indirect_calls();
     test_coroutine_state_and_exact_liveness();
+    test_coroutine_cancel_cleanup_requires_exact_owner_transfer();
     test_provider_output_semantics();
     test_provider_trap_continuation_semantics();
     if (failures != 0) {

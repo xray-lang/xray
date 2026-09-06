@@ -87,6 +87,8 @@ struct XrReferenceExecution {
     uint32_t instruction_id;
     uint32_t state_id;
     uint32_t cancel_block_id;
+    uint32_t suspension_block_id;
+    uint32_t suspension_instruction_id;
     uint64_t steps;
     struct XrReferenceExecution *child;
     bool owns_lease;
@@ -1409,6 +1411,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+           operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
            operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_RETURN;
 }
 
@@ -1439,6 +1442,8 @@ static bool reference_child_execution_create(XrReferenceExecution *parent,
     child->function_id = function_id;
     child->block_id = function->entry_block;
     child->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
+    child->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
+    child->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
     child->values =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->values));
     child->initialized =
@@ -1511,6 +1516,8 @@ bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
     execution->function_id = function_id;
     execution->block_id = function->entry_block;
     execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
+    execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
+    execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
     for (uint32_t argument = 0; argument < argument_count; ++argument) {
         uint32_t value_id = function->blocks[function->entry_block].argument_ids[argument];
         if (function->parameter_modes[argument] == XR_PARAM_REF ||
@@ -1531,11 +1538,67 @@ reject:
     return false;
 }
 
+static bool reference_materialize_suspension_edge(XrReferenceExecution *execution, bool cancel) {
+    if (!execution || execution->suspension_block_id == XR_PROGRAM_LOCATION_NONE ||
+        execution->suspension_instruction_id == XR_PROGRAM_LOCATION_NONE)
+        return false;
+    const XrValidatedFunction *function = &execution->program->functions[execution->function_id];
+    if (execution->suspension_block_id >= function->block_count)
+        return false;
+    const XrValidatedBlock *source = &function->blocks[execution->suspension_block_id];
+    if (execution->suspension_instruction_id >= source->instruction_count)
+        return false;
+    const XrValidatedInstruction *instruction =
+        &source->instructions[execution->suspension_instruction_id];
+    uint32_t successor_index = cancel ? 1u : 0u;
+    if (instruction->successor_count != 2u ||
+        instruction->successors[successor_index] >= function->block_count)
+        return false;
+    const XrValidatedBlock *target = &function->blocks[instruction->successors[successor_index]];
+    uint32_t operand_start = 0u;
+    if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
+        if (cancel)
+            operand_start = function->blocks[instruction->successors[0]].argument_count;
+    } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED && cancel) {
+        uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
+        if (callee_id >= execution->program->function_count)
+            return false;
+        const XrValidatedFunction *callee = &execution->program->functions[callee_id];
+        const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
+        uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+        if (normal->argument_count < implicit_result)
+            return false;
+        operand_start = callee->parameter_count + normal->argument_count - implicit_result;
+    } else {
+        return false;
+    }
+    if (operand_start > instruction->operand_count ||
+        target->argument_count > instruction->operand_count - operand_start)
+        return false;
+    for (uint32_t argument = 0u; argument < target->argument_count; ++argument) {
+        uint32_t source_value = instruction->operands[operand_start + argument];
+        uint32_t target_value = target->argument_ids[argument];
+        if (!execution->initialized[source_value])
+            return false;
+        execution->values[target_value] = execution->values[source_value];
+        execution->initialized[target_value] = true;
+    }
+    return true;
+}
+
 XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) {
     if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
         return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    if (execution->suspended && !execution->child &&
+        !reference_materialize_suspension_edge(execution, false)) {
+        execution->finished = true;
+        reference_execution_release_lease(execution);
+        return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    }
     execution->suspended = false;
     execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
+    execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
+    execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
     const XrValidatedFunction *function = &execution->program->functions[execution->function_id];
     for (;;) {
         const XrValidatedBlock *block = &function->blocks[execution->block_id];
@@ -1607,12 +1670,8 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
             case XR_CORE_OP_CORE_COROUTINE_YIELD: {
                 const XrValidatedCoroutineSafepoint *safepoint =
                     &function->coroutine_safepoints[instruction->immediate.u32];
-                const XrValidatedBlock *resume = &function->blocks[instruction->successors[0]];
-                for (uint32_t live = 0; live < instruction->operand_count; ++live) {
-                    uint32_t target = resume->argument_ids[live];
-                    execution->values[target] = execution->values[instruction->operands[live]];
-                    execution->initialized[target] = true;
-                }
+                execution->suspension_block_id = execution->block_id;
+                execution->suspension_instruction_id = execution->instruction_id - 1u;
                 execution->state_id = safepoint->resume_state_id;
                 execution->block_id = instruction->successors[0];
                 execution->instruction_id = 0u;
@@ -1651,6 +1710,8 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 }
                 execution->steps += child_delta;
                 if (child.kind == XR_REFERENCE_OUTCOME_SUSPENDED) {
+                    execution->suspension_block_id = execution->block_id;
+                    execution->suspension_instruction_id = execution->instruction_id - 1u;
                     --execution->instruction_id;
                     execution->state_id = safepoint->resume_state_id;
                     execution->suspended = true;
@@ -1688,6 +1749,8 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->instruction_id = 0u;
                 break;
             }
+            case XR_CORE_OP_CORE_OWNER_DROP:
+                break;
             case XR_CORE_OP_CORE_CANCEL_PUBLISH:
                 execution->finished = true;
                 reference_execution_release_lease(execution);
@@ -1739,8 +1802,17 @@ XrReferenceOutcome xr_reference_execution_cancel(XrReferenceExecution *execution
         xr_reference_execution_free(execution->child);
         execution->child = NULL;
     }
+    if (!reference_materialize_suspension_edge(execution, true)) {
+        execution->finished = true;
+        reference_execution_release_lease(execution);
+        return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    }
     execution->block_id = execution->cancel_block_id;
     execution->instruction_id = 0u;
+    execution->suspended = false;
+    execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
+    execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
+    execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
     return xr_reference_execution_step(execution);
 }
 

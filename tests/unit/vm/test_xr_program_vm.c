@@ -123,6 +123,19 @@ static XrValidatedProgram *build_coroutine_program(void) {
     return program;
 }
 
+static XrValidatedProgram *build_owner_coroutine_program(void) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_coroutine_owner_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
 static XrValidatedProgram *build_affine_copy_program(void) {
     enum {
         AFFINE_TYPE = 63
@@ -2361,24 +2374,108 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
         REQUIRE(xr_vm_code_build(cancel_instance, &options, &cancel_code, &code_diagnostic) ==
                 XR_VM_CODE_OK);
         XrVmExecution *cancel_execution = NULL;
-        REQUIRE(xr_vm_execution_create(cancel_code, cancel_instance, 0u, NULL, 0u,
-                                       &cancel_execution));
-        REQUIRE(xr_vm_execution_cancel(cancel_execution).kind ==
-                XR_VM_OUTCOME_INVALID_INVOCATION);
+        REQUIRE(
+            xr_vm_execution_create(cancel_code, cancel_instance, 0u, NULL, 0u, &cancel_execution));
+        REQUIRE(xr_vm_execution_cancel(cancel_execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
         XrVmOutcome cancel_yield = xr_vm_execution_step(cancel_execution);
         REQUIRE(cancel_yield.kind == XR_VM_OUTCOME_SUSPENDED);
         XrVmOutcome cancelled = xr_vm_execution_cancel(cancel_execution);
         REQUIRE(cancelled.kind == XR_VM_OUTCOME_CANCELLED);
         REQUIRE(cancelled.state_id == cancel_yield.state_id);
         REQUIRE(cancelled.steps == cancel_yield.steps + 1u);
-        REQUIRE(xr_vm_execution_step(cancel_execution).kind ==
-                XR_VM_OUTCOME_INVALID_INVOCATION);
+        REQUIRE(xr_vm_execution_step(cancel_execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
         REQUIRE(xr_execution_instance_lease_count(cancel_instance) == 0u);
         xr_vm_execution_free(cancel_execution);
         xr_vm_code_free(cancel_code);
         retire_and_free(&cancel_instance);
     }
     REQUIRE(memcmp(traces[0].bytes, traces[1].bytes, sizeof(traces[0].bytes)) == 0);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_coroutine_cancel_drops_exact_live_owner(void) {
+    XrValidatedProgram *program = build_owner_coroutine_program();
+    REQUIRE(xr_validated_program_function_count(program) == 2u);
+    uint32_t owner_function = 1u - xr_validated_program_entry_function(program);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+
+    XrReferenceValue reference_argument = {
+        .kind = XR_REFERENCE_VALUE_PANIC_INFO,
+        .as.panic_info = 91u,
+    };
+    XrInstance *reference_instance = create_instance(program, profile, &bindings, 401u);
+    XrReferenceExecution *reference = NULL;
+    REQUIRE(xr_reference_execution_create(reference_instance, owner_function, &reference_argument,
+                                          1u, NULL, &reference));
+    XrReferenceOutcome reference_yield = xr_reference_execution_step(reference);
+    REQUIRE(reference_yield.kind == XR_REFERENCE_OUTCOME_SUSPENDED);
+    REQUIRE(reference_yield.steps == 2u);
+    XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
+    REQUIRE(reference_return.kind == XR_REFERENCE_OUTCOME_RETURN);
+    REQUIRE(reference_return.value.kind == XR_REFERENCE_VALUE_PANIC_INFO);
+    REQUIRE(reference_return.value.as.panic_info == 91u);
+    REQUIRE(reference_return.steps == 4u);
+    xr_reference_execution_free(reference);
+    retire_and_free(&reference_instance);
+
+    reference_instance = create_instance(program, profile, &bindings, 402u);
+    reference = NULL;
+    REQUIRE(xr_reference_execution_create(reference_instance, owner_function, &reference_argument,
+                                          1u, NULL, &reference));
+    reference_yield = xr_reference_execution_step(reference);
+    REQUIRE(reference_yield.kind == XR_REFERENCE_OUTCOME_SUSPENDED);
+    XrReferenceOutcome reference_cancelled = xr_reference_execution_cancel(reference);
+    REQUIRE(reference_cancelled.kind == XR_REFERENCE_OUTCOME_CANCELLED);
+    REQUIRE(reference_cancelled.steps == 5u);
+    xr_reference_execution_free(reference);
+    retire_and_free(&reference_instance);
+
+    const XrVmDecodePolicy policies[] = {
+        XR_VM_DECODE_BASELINE_VIEW,
+        XR_VM_DECODE_FIXED_ROWS,
+    };
+    for (uint32_t policy_index = 0u; policy_index < 2u; ++policy_index) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[policy_index];
+        XrVmValue argument = {
+            .kind = XR_VM_VALUE_PANIC_INFO,
+            .as.panic_info = 91u,
+        };
+        XrVmCodeDiagnostic code_diagnostic;
+
+        XrInstance *instance = create_instance(program, profile, &bindings, 501u + policy_index);
+        XrVmCode *code = NULL;
+        REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+        XrVmExecution *execution = NULL;
+        REQUIRE(xr_vm_execution_create(code, instance, owner_function, &argument, 1u, &execution));
+        XrVmOutcome yielded = xr_vm_execution_step(execution);
+        REQUIRE(yielded.kind == XR_VM_OUTCOME_SUSPENDED && yielded.steps == 2u);
+        XrVmOutcome returned = xr_vm_execution_step(execution);
+        REQUIRE(returned.kind == XR_VM_OUTCOME_RETURN && returned.steps == 4u);
+        REQUIRE(returned.value.kind == XR_VM_VALUE_PANIC_INFO);
+        REQUIRE(returned.value.as.panic_info == 91u);
+        xr_vm_execution_free(execution);
+        xr_vm_code_free(code);
+        retire_and_free(&instance);
+
+        instance = create_instance(program, profile, &bindings, 601u + policy_index);
+        code = NULL;
+        REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+        execution = NULL;
+        REQUIRE(xr_vm_execution_create(code, instance, owner_function, &argument, 1u, &execution));
+        yielded = xr_vm_execution_step(execution);
+        REQUIRE(yielded.kind == XR_VM_OUTCOME_SUSPENDED && yielded.steps == 2u);
+        XrVmOutcome cancelled = xr_vm_execution_cancel(execution);
+        REQUIRE(cancelled.kind == XR_VM_OUTCOME_CANCELLED && cancelled.steps == 5u);
+        xr_vm_execution_free(execution);
+        xr_vm_code_free(code);
+        retire_and_free(&instance);
+    }
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
 }
@@ -2399,6 +2496,7 @@ int main(void) {
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();
     test_coroutine_suspend_resume_generation_lease();
+    test_coroutine_cancel_drops_exact_live_owner();
     puts("task-299 typed XrProgram VM tests passed");
     return 0;
 }

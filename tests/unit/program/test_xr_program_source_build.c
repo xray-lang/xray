@@ -566,8 +566,8 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     xr_reference_execution_free(reference);
 
     XrReferenceExecution *reference_cancel = NULL;
-    ASSERT_TRUE(xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL,
-                                              &reference_cancel));
+    ASSERT_TRUE(
+        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference_cancel));
     ASSERT_EQ_INT(xr_reference_execution_step(reference_cancel).kind,
                   XR_REFERENCE_OUTCOME_SUSPENDED);
     ASSERT_EQ_INT(xr_reference_execution_cancel(reference_cancel).kind,
@@ -1944,6 +1944,38 @@ TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors) {
     source_build_fixture_free(&fixture);
 }
 
+TEST(source_owner_keeps_place_backed_defer_cancel_fail_closed) {
+    static const char source[] = "import sys\n"
+                                 "fn answer() -> i64 {\n"
+                                 "  var live = sys.Pipe(2147483646, 2147483647)\n"
+                                 "  defer { (move live).close() }\n"
+                                 "  Coro.yield()\n"
+                                 "  return 42\n"
+                                 "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = NULL;
+    char profile_error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&fixture.input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE);
+    ASSERT_EQ_INT(diagnostic.writer_status, XR_PROGRAM_BUILD_INVALID_INPUT);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "cancel continuation"));
+    ASSERT_NULL(product.program);
+    ASSERT_NULL(product.artifact.bytes);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed) {
     static const char source[] = "import time\n"
                                  "fn answer() -> i64 { time.sleep(1); return 0 }\n";
@@ -2074,6 +2106,7 @@ RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
 RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
 RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);
 RUN_TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors);
+RUN_TEST(source_owner_keeps_place_backed_defer_cancel_fail_closed);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);

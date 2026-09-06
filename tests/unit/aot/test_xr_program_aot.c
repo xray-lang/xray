@@ -1165,6 +1165,19 @@ static XrValidatedProgram *build_coroutine_program(void) {
     return program;
 }
 
+static XrValidatedProgram *build_owner_coroutine_program(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_coroutine_owner_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
 static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile *profile,
                                    const TestBindings *bindings, uint64_t generation) {
     XrExecutionBindingInput input = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -1214,7 +1227,12 @@ static XrBackendIR *build_ir(const XrValidatedProgram *program, const XrTargetPr
     options.optimization_policy = optimization_policy;
     XrBackendDiagnostic diagnostic;
     XrBackendIR *ir = NULL;
-    REQUIRE(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK);
+    XrBackendStatus status = xr_backend_ir_build(program, profile, &options, &ir, &diagnostic);
+    if (status != XR_BACKEND_OK)
+        fprintf(stderr, "backend build failed: %s op=%u f=%u b=%u i=%u\n",
+                xr_backend_status_name(status), diagnostic.operation_id, diagnostic.function_id,
+                diagnostic.block_id, diagnostic.instruction_id);
+    REQUIRE(status == XR_BACKEND_OK);
     REQUIRE(ir != NULL);
     REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
     REQUIRE(xr_backend_ir_translation_validate(ir, &diagnostic));
@@ -1241,6 +1259,31 @@ static void test_coroutine_private_state_machine_lowering(void) {
     REQUIRE(strstr(generated.bytes, "xr_aot_entry_coroutine_descriptor") != NULL);
     REQUIRE(strstr(generated.bytes, "XrBackendNativeExecutionId execution_id") != NULL);
     REQUIRE(strstr(generated.bytes, "while (result.kind == UINT32_C(5))") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_coroutine_owner_cancel_cleanup_lowering(void) {
+    XrValidatedProgram *program = build_owner_coroutine_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    XrBackendStatus status = xr_backend_ir_emit_c(ir, true, &generated, &diagnostic);
+    if (status != XR_BACKEND_OK)
+        fprintf(stderr, "owner coroutine emit failed: %s op=%u f=%u b=%u i=%u\n",
+                xr_backend_status_name(status), diagnostic.operation_id, diagnostic.function_id,
+                diagnostic.block_id, diagnostic.instruction_id);
+    REQUIRE(status == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "frame->live_0_0 = v") != NULL);
+    REQUIRE(strstr(generated.bytes, " = frame->live_0_0;") != NULL);
+    REQUIRE(strstr(generated.bytes, "edge_0 = v") != NULL);
+    REQUIRE(strstr(generated.bytes, "(void)v") != NULL);
+    REQUIRE(strstr(generated.bytes, "return xr_aot_make(6, 0, 0)") != NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
     xr_target_profile_free(profile);
@@ -2260,6 +2303,7 @@ int main(int argc, char **argv) {
         test_callable_pack_and_indirect_call_lowering();
         test_callable_invoke_trap_continuation_lowering_and_mutation();
         test_coroutine_private_state_machine_lowering();
+        test_coroutine_owner_cancel_cleanup_lowering();
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();
         test_provider_trap_continuation_lowering_and_mutation();
