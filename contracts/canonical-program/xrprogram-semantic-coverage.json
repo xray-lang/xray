@@ -1,7 +1,7 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "25deec748b13b6a2387a6fba44142ba42ea5fd29754ac250f49d95f37313c0bb",
+  "core_spec_semantic_sha256": "38b5b12325f705040987354e3bf7dc1d01dad4694f91299f4521ceff34ed7d79",
   "program_schema_sha256": "69d3bab77f18329d62a379f61e43d40f3151f43237a817bf37f0ec190c43066e",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",

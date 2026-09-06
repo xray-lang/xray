@@ -783,6 +783,54 @@
       }
     },
     {
+      "id": "sealed-call-trap-continuation-valid",
+      "operation": "core.call.sealed_direct",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [],
+        "parameter_types": [],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "callee_sealed": true,
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          7
+        ],
+        "trap_edge_values": [
+          7
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "sealed-call-trap-continuation-rejects-lost-owner",
+      "operation": "core.call.sealed_direct",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [],
+        "parameter_types": [],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "callee_sealed": true,
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          7
+        ],
+        "trap_edge_values": []
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "sealed-call-argument-mismatch",
       "operation": "core.call.sealed_direct",
       "kind": "contract",
@@ -1014,6 +1062,18 @@
       },
       "expect": {
         "trap": "explicit-trap"
+      }
+    },
+    {
+      "id": "provider-call-failed-trap",
+      "operation": "core.trap",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "trap": "provider-call-failed"
+      },
+      "expect": {
+        "trap": "provider-call-failed"
       }
     },
     {
@@ -2265,6 +2325,56 @@
         "scalar_non_owner_boundary": true,
         "live_values": [],
         "edge_values": []
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "provider-call-trap-continuation-valid",
+      "operation": "core.provider.call",
+      "kind": "contract",
+      "actual": {
+        "provider_operand_count": 0,
+        "provider_operand_types": [],
+        "provider_operand_categories": [],
+        "provider_operand_ownerships": [],
+        "result_type": "i64",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "provider_requirement": true,
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          7
+        ],
+        "trap_edge_values": [
+          7
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "provider-call-rejects-incomplete-trap-edge",
+      "operation": "core.provider.call",
+      "kind": "contract",
+      "actual": {
+        "provider_operand_count": 0,
+        "provider_operand_types": [],
+        "provider_operand_categories": [],
+        "provider_operand_ownerships": [],
+        "result_type": "i64",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "provider_requirement": true,
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          7
+        ],
+        "trap_edge_values": []
       },
       "expect": {
         "valid": false

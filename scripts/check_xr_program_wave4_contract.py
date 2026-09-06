@@ -43,11 +43,11 @@ def validate(root: Path) -> None:
         "borrow_origin_set": "COMPLETE",
         "borrow_root_tables": "COMPLETE",
         "program_tables": "COMPLETE",
-        "existential_operations": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-        "witness_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-        "callable_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-        "source_integration": "PENDING",
-        "wave_closure": "PENDING",
+        "existential_operations": "COMPLETE",
+        "witness_dispatch": "COMPLETE",
+        "callable_dispatch": "COMPLETE",
+        "source_integration": "COMPLETE",
+        "wave_closure": "COMPLETE",
     }, "Wave 4 implementation state drifted")
 
     phase = data.get("phase_erasure")
@@ -154,8 +154,8 @@ def validate(root: Path) -> None:
         "compatibility",
     }, "Wave 4 existential-operation contract drifted")
     require(existential.get("source_status") ==
-            "pending class, struct, enum, import and dynamic-target producer integration",
-            "Wave 4 existential source work was completed without source evidence")
+            "complete for class, struct and enum existential formation plus exact nominal test/project flows",
+            "Wave 4 existential source evidence drifted")
     require(existential.get("compatibility") ==
             "no old reader, erased-object fallback, selector lookup, backend semantic inference or dual operation spelling",
             "Wave 4 existential operations regained a legacy path")
@@ -174,8 +174,8 @@ def validate(root: Path) -> None:
         "compatibility",
     }, "Wave 4 witness-operation contract drifted")
     require(witness.get("source_status") ==
-            "pending class, struct, enum, import and dynamic-target producer integration",
-            "Wave 4 witness source work was completed without source evidence")
+            "complete for class, struct and enum declaration-ordered witness direct/invoke flows",
+            "Wave 4 witness source evidence drifted")
     require(witness.get("compatibility") ==
             "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling",
             "Wave 4 witness operations regained a legacy path")
@@ -194,8 +194,8 @@ def validate(root: Path) -> None:
         "compatibility",
     }, "Wave 4 callable-operation contract drifted")
     require(callable_contract.get("source_status") ==
-            "pending function-value, closure, import and resolved dynamic-target producer integration",
-            "Wave 4 callable source work was completed without source evidence")
+            "complete for function values, closures, imported callable unions and resolved finite target sets",
+            "Wave 4 callable source evidence drifted")
     require(callable_contract.get("compatibility") ==
             "no erased argument vector, universal closure ABI, name/selector lookup, backend semantic inference, old reader or dual operation spelling",
             "Wave 4 callable operations regained a legacy path")

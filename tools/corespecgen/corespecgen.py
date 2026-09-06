@@ -76,16 +76,16 @@ ARITHMETIC_KINDS = {
     "signed-integer-division",
     "signed-integer-compare",
 }
-SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
+SUCCESSOR_KEYS = {"normal", "error", "panic", "trap", "cancel", "suspend"}
 GENERIC_TYPES = {
     "A", "C", "Capture?", "E", "V", "T", "T...", "R", "R?", "P...",
     "TargetEnum",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
-    "suspend-edge-values...",
+    "trap-edge-values...", "suspend-edge-values...",
 }
 VARIADIC_TYPES = {
     "T...", "P...", "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
-    "suspend-edge-values...",
+    "trap-edge-values...", "suspend-edge-values...",
 }
 IMPLEMENTATION_KEYS = {
     "aot_handler",
@@ -481,9 +481,10 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         equal = arguments[0] == arguments[1]
         return {"value": equal if predicate == "eq" else not equal}
     if spelling == "core.trap":
-        require(not arguments and immediates.get("trap") == "explicit-trap",
-                f"KAT {case['id']} explicit trap is malformed")
-        return {"trap": "explicit-trap"}
+        trap = immediates.get("trap")
+        require(not arguments and trap in {"explicit-trap", "provider-call-failed"},
+                f"KAT {case['id']} named trap is malformed")
+        return {"trap": trap}
     target_fields = {
         "core.target.pointer_width": ("pointer_width", {32, 64}),
         "core.target.operating_system": ("operating_system", set(range(1, 6))),
@@ -507,10 +508,12 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     actual = case.get("actual")
     require(isinstance(actual, dict), f"KAT {case['id']} actual contract must be an object")
     if validator == "provider-call":
-        operand_count = actual.get("operand_count")
-        operand_types = actual.get("operand_types")
-        operand_categories = actual.get("operand_categories")
-        operand_ownerships = actual.get("operand_ownerships")
+        operand_count = actual.get("provider_operand_count", actual.get("operand_count"))
+        operand_types = actual.get("provider_operand_types", actual.get("operand_types"))
+        operand_categories = actual.get("provider_operand_categories",
+                                        actual.get("operand_categories"))
+        operand_ownerships = actual.get("provider_operand_ownerships",
+                                        actual.get("operand_ownerships"))
         if operand_count is None and isinstance(operand_types, list):
             operand_count = len(operand_types)
         structural_shape = (
@@ -523,10 +526,22 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
             operand_count == 0
             and actual.get("result_type") in {"i64", "optional-i64-pair"}
         )
+        has_trap_edge = actual.get("successor_count", 0) != 0
+        live_values = actual.get("live_values")
+        edge_values = actual.get("trap_edge_values")
+        trap_edge_valid = (
+            actual.get("successor_count", 0) == 1
+            and actual.get("trap") == "provider-call-failed"
+            and isinstance(live_values, list)
+            and live_values == edge_values
+        )
         return (structural_shape
+                and operand_categories in (None, [], ["value"])
+                and operand_ownerships in (None, [], ["non-owner"])
                 and actual.get("result_category") == "value"
                 and actual.get("result_ownership") == "non-owner"
-                and actual.get("provider_requirement") is True)
+                and actual.get("provider_requirement") is True
+                and (not has_trap_edge or trap_edge_valid))
     if validator == "output-group-i64":
         return (actual.get("operand_type") == "i64"
                 and actual.get("result_type") == "void"
@@ -550,11 +565,19 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (isinstance(values, list)
                 and ((result == "void" and values == []) or values == [result]))
     if validator == "sealed-call":
+        has_trap_edge = actual.get("successor_count", 0) != 0
+        trap_edge_valid = (
+            actual.get("successor_count", 0) == 1
+            and actual.get("trap") == "provider-call-failed"
+            and isinstance(actual.get("live_values"), list)
+            and actual.get("live_values") == actual.get("trap_edge_values")
+        )
         return (actual.get("callee_sealed") is True
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
                 and actual.get("callee_error_type") == "void"
-                and actual.get("callee_panic_type") == "void")
+                and actual.get("callee_panic_type") == "void"
+                and (not has_trap_edge or trap_edge_valid))
     if validator == "sealed-invoke":
         error_type = actual.get("callee_error_type")
         panic_type = actual.get("callee_panic_type")
@@ -929,7 +952,7 @@ def coverage_status_name(status: str) -> str:
 def generate_source(registry: dict[str, Any]) -> str:
     type_ids = {row["name"]: row["stable_id"] for row in registry["types"]}
     successor_bits = {name: 1 << index for index, name in enumerate(
-        ("normal", "error", "panic", "cancel", "suspend"))}
+        ("normal", "error", "panic", "trap", "cancel", "suspend"))}
     lines = [
         "/* AUTO-GENERATED by corespecgen - DO NOT EDIT */",
         "/* Source: xisa/core/registry.json */",

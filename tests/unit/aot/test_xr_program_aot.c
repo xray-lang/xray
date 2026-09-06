@@ -19,6 +19,7 @@
 #include "../program/xr_program_coroutine_fixture.h"
 #include "../program/xr_program_output_fixture.h"
 #include "../program/xr_program_pipe_fixture.h"
+#include "../program/xr_program_trap_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1649,6 +1650,70 @@ static void test_provider_call_lowering_and_mutation(void) {
     }
 }
 
+static void test_provider_trap_continuation_lowering_and_mutation(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_nullary_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    REQUIRE(profile != NULL);
+    const XrTargetProviderContract *contract = NULL;
+    for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
+        const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
+        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+            REQUIRE(contract == NULL);
+            contract = candidate;
+        }
+    }
+    REQUIRE(contract != NULL && contract->operation_count == 1u);
+    XrProgramArtifact artifact = {0};
+    char build_diagnostic[256] = {0};
+    REQUIRE(xr_program_trap_fixture_write_with_ids(
+                contract->contract_id, contract->operations[0].stable_id, &artifact,
+                build_diagnostic, sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendInstruction *provider_call = NULL;
+    for (uint32_t function = 0u; function < ir->function_count; ++function) {
+        for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
+            XrBackendBlock *row = &ir->functions[function].blocks[block];
+            for (uint32_t instruction = 0u; instruction < row->instruction_count;
+                 ++instruction) {
+                if (row->instructions[instruction].operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
+                    REQUIRE(provider_call == NULL);
+                    provider_call = &row->instructions[instruction];
+                }
+            }
+        }
+    }
+    REQUIRE(provider_call != NULL);
+    REQUIRE(provider_call->successor_count == 1u);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "provider_call_i64_nullary") != NULL);
+    REQUIRE(strstr(generated.bytes, "goto xr_f0_b1") != NULL);
+    REQUIRE(strstr(generated.bytes, "return xr_aot_make(1, 0, 7)") != NULL);
+
+    uint32_t *saved_successors = provider_call->successors;
+    uint32_t duplicate_successors[] = {saved_successors[0], saved_successors[0]};
+    provider_call->successors = duplicate_successors;
+    provider_call->successor_count = 2u;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    provider_call->successors = saved_successors;
+    provider_call->successor_count = 1u;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_validated_program_free(program);
+    xr_target_profile_free(profile);
+}
+
 static void test_provider_output_lowering_and_mutation(void) {
     XrTargetProfile *profile = xr_test_target_profile_build_with_output(
         false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
@@ -1925,6 +1990,7 @@ int main(int argc, char **argv) {
         test_coroutine_private_state_machine_lowering();
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();
+        test_provider_trap_continuation_lowering_and_mutation();
         test_provider_output_lowering_and_mutation();
         test_pipe_provider_lowering();
         puts("canonical XrProgram AOT tests passed");

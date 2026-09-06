@@ -141,16 +141,20 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
             uint32_t requirement = instruction->immediate.provider_operation.requirement_index;
             uint32_t operation = instruction->immediate.provider_operation.operation_index;
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION &&
+                   (instruction->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL ||
+                    instruction->successor_count <= 1u) &&
                    requirement < ir->program->provider_requirement_count &&
                    operation < ir->program->provider_requirements[requirement].operation_count;
         }
         case XR_CORE_OP_CORE_TRAP:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
-                   instruction->immediate.u32 == 4u;
+                   (instruction->immediate.u32 == 4u || instruction->immediate.u32 == 7u);
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_CALLABLE_PACK:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
+                   (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+                    instruction->successor_count <= 1u) &&
                    instruction->immediate.function_id < ir->function_count;
         case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
         case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
@@ -320,6 +324,29 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                                               instruction->operation_id, function_id, block_id,
                                               instruction_id);
                     return false;
+                }
+                if ((instruction->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
+                     instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT) &&
+                    instruction->successor_count == 1u) {
+                    const XrBackendBlock *target =
+                        &function->blocks[instruction->successors[0]];
+                    if (target->argument_count > instruction->operand_count ||
+                        target->instruction_count == 0u) {
+                        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                  instruction->operation_id, function_id, block_id,
+                                                  instruction_id);
+                        return false;
+                    }
+                    const XrBackendInstruction *trap =
+                        &target->instructions[target->instruction_count - 1u];
+                    if (trap->operation_id != XR_CORE_OP_CORE_TRAP ||
+                        trap->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 ||
+                        trap->immediate.u32 != 7u) {
+                        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                  instruction->operation_id, function_id, block_id,
+                                                  instruction_id);
+                        return false;
+                    }
                 }
                 if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
                     ++suspension_count;

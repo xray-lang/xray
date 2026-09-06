@@ -817,7 +817,11 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                             target_argument = 1u;
                         }
                     }
-                    for (; source_argument < instruction->operand_count;
+                    uint32_t call_operand_count = instruction->operand_count;
+                    if (instruction->successor_count == 1u)
+                        call_operand_count -=
+                            function->blocks[instruction->successors[0]].argument_count;
+                    for (; source_argument < call_operand_count;
                          ++source_argument, ++target_argument)
                         scratch[target_argument] = values[instruction->operands[source_argument]];
                     const XrValidatedFunction *callee =
@@ -825,6 +829,19 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     XrReferenceOutcome nested = evaluate_function(
                         context, target_function, scratch, callee->parameter_count, depth + 1u);
                     if (nested.kind != XR_REFERENCE_OUTCOME_RETURN) {
+                        if (nested.kind == XR_REFERENCE_OUTCOME_TRAP &&
+                            nested.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED &&
+                            instruction->successor_count == 1u) {
+                            const XrValidatedBlock *target =
+                                &function->blocks[instruction->successors[0]];
+                            for (uint32_t index = 0u; index < target->argument_count; ++index)
+                                scratch[index] =
+                                    values[instruction->operands[call_operand_count + index]];
+                            incoming_count = target->argument_count;
+                            block_id = instruction->successors[0];
+                            transferred = true;
+                            break;
+                        }
                         result = nested;
                         goto done;
                     }
@@ -930,7 +947,10 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     break;
                 }
                 case XR_CORE_OP_CORE_TRAP:
-                    result = trap_outcome(context, XR_REFERENCE_TRAP_EXPLICIT);
+                    result = trap_outcome(
+                        context, instruction->immediate.u32 == 7u
+                                     ? XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED
+                                     : XR_REFERENCE_TRAP_EXPLICIT);
                     goto done;
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = outcome(XR_REFERENCE_OUTCOME_ERROR, context);
@@ -986,13 +1006,18 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value.as.target_enum = context->profile.endianness;
                     break;
                 case XR_CORE_OP_CORE_PROVIDER_CALL: {
-                    uint16_t operand_type = instruction->operand_count == 1u
+                    bool has_trap_edge = instruction->successor_count != 0u;
+                    const XrValidatedBlock *trap_target =
+                        has_trap_edge ? &function->blocks[instruction->successors[0]] : NULL;
+                    uint32_t provider_operand_count =
+                        instruction->operand_count - (trap_target ? trap_target->argument_count : 0u);
+                    uint16_t operand_type = provider_operand_count == 1u
                                                 ? function->value_types[instruction->operands[0]]
                                                 : XR_CORE_TYPE_VOID;
                     XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
                         context->program, instruction->result_type_id,
-                        instruction->operand_count == 1u ? &operand_type : NULL,
-                        instruction->operand_count);
+                        provider_operand_count == 1u ? &operand_type : NULL,
+                        provider_operand_count);
                     bool call_ok = false;
                     if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY ||
                         call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY) {
@@ -1072,8 +1097,17 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         }
                     }
                     if (!call_ok) {
-                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
-                        goto done;
+                        if (!has_trap_edge) {
+                            result =
+                                trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+                            goto done;
+                        }
+                        for (uint32_t index = 0u; index < trap_target->argument_count; ++index)
+                            scratch[index] =
+                                values[instruction->operands[provider_operand_count + index]];
+                        incoming_count = trap_target->argument_count;
+                        block_id = instruction->successors[0];
+                        transferred = true;
                     }
                     break;
                 }
@@ -1280,7 +1314,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
                     goto done;
             }
-            if (has_result) {
+            if (has_result && !transferred) {
                 values[instruction->result_id] = produced;
                 initialized[instruction->result_id] = true;
             }

@@ -16,6 +16,7 @@
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
 #include "../program/xr_program_output_fixture.h"
+#include "../program/xr_program_trap_fixture.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -1299,6 +1300,18 @@ static XrProviderCallStatus provider_nullary(void *context, int64_t *result_out)
     return XR_PROVIDER_CALL_OK;
 }
 
+typedef struct ProviderRefusalProbe {
+    uint32_t calls;
+} ProviderRefusalProbe;
+
+static XrProviderCallStatus provider_refuse_nullary(void *context, int64_t *result_out) {
+    ProviderRefusalProbe *probe = context;
+    if (!probe || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    ++probe->calls;
+    return XR_PROVIDER_CALL_FAILED;
+}
+
 static XrProviderCallStatus provider_pipe(void *context, bool *present_out,
                                           int64_t *first_out, int64_t *second_out) {
     if (!context || !present_out || !first_out || !second_out)
@@ -1591,6 +1604,65 @@ static void test_provider_call_differential(void) {
         xr_target_profile_free(profile);
         xr_validated_program_free(program);
     }
+}
+
+static void test_provider_trap_continuation_differential(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_nullary_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    REQUIRE(profile != NULL);
+    const XrTargetProviderContract *contract = scalar_clock_contract(profile);
+    REQUIRE(contract != NULL && contract->operation_count == 1u);
+    XrProgramArtifact artifact = {0};
+    char build_diagnostic[256] = {0};
+    REQUIRE(xr_program_trap_fixture_write_with_ids(
+                contract->contract_id, contract->operations[0].stable_id, &artifact,
+                build_diagnostic, sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+
+    TestProviderBindings bindings;
+    build_scalar_clock_binding(profile, true, &bindings);
+    ProviderRefusalProbe probe = {0};
+    bindings.operations[0][0].entry.i64_nullary = provider_refuse_nullary;
+    bindings.operations[0][0].context = &probe;
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+
+    XrVmCodeOptions baseline_options = xr_vm_code_default_options();
+    XrVmCodeOptions fixed_options = baseline_options;
+    fixed_options.decode_policy = XR_VM_DECODE_FIXED_ROWS;
+    XrVmCode *baseline = NULL;
+    XrVmCode *fixed = NULL;
+    XrVmCodeDiagnostic diagnostic;
+    REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) ==
+            XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) == XR_VM_CODE_OK);
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(instance, &lease));
+    XrReferenceProviderBinding reference_binding = {
+        .context = &lease,
+        .call_i64_nullary = reference_provider_call_nullary,
+    };
+    uint32_t entry = xr_validated_program_entry_function(program);
+    XrReferenceOutcome reference = xr_reference_evaluate_bound(
+        program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
+    XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
+    compare_outcomes(reference, baseline_result);
+    compare_outcomes(reference, fixed_result);
+    REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_TRAP);
+    REQUIRE(reference.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+    REQUIRE(probe.calls == 3u);
+    REQUIRE(xr_execution_lease_release(&lease));
+
+    xr_vm_code_free(fixed);
+    xr_vm_code_free(baseline);
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
 }
 
 static void test_pipe_provider_call_differential(void) {
@@ -2239,6 +2311,7 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
 int main(void) {
     test_operation_semantics();
     test_provider_call_differential();
+    test_provider_trap_continuation_differential();
     test_pipe_provider_call_differential();
     test_provider_output_differential();
     test_sealed_invoke_and_cleanup_cfg();

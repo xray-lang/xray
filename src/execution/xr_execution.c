@@ -237,12 +237,19 @@ static XrProviderTrampolineKind program_operation_trampoline_kind(const XrValida
                     continue;
                 XrProviderTrampolineKind candidate = XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE;
                 if (op->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
-                    uint16_t operand_type = op->operand_count == 1u
+                    uint32_t provider_operand_count = op->operand_count;
+                    if (op->successor_count == 1u) {
+                        const XrValidatedBlock *target =
+                            &function_row->blocks[op->successors[0]];
+                        provider_operand_count -= target->argument_count;
+                    }
+                    uint16_t operand_type = provider_operand_count == 1u
                                                 ? function_row->value_types[op->operands[0]]
                                                 : XR_CORE_TYPE_VOID;
                     switch (xr_validated_program_provider_call_kind(
-                        program, op->result_type_id, op->operand_count == 1u ? &operand_type : NULL,
-                        op->operand_count)) {
+                        program, op->result_type_id,
+                        provider_operand_count == 1u ? &operand_type : NULL,
+                        provider_operand_count)) {
                         case XR_PROVIDER_LOGICAL_CALL_I64_UNARY:
                             candidate = XR_PROVIDER_TRAMPOLINE_I64_UNARY;
                             break;

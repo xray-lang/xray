@@ -63,6 +63,7 @@ enum {
 typedef struct XrXiBlockStorage {
     const XiBlock *xi;
     bool reachable;
+    bool trap_cleanup;
     XrXiBlockArgumentStorage *argument_storage;
     uint32_t argument_count;
     uint32_t argument_capacity;
@@ -71,6 +72,13 @@ typedef struct XrXiBlockStorage {
     uint32_t instruction_count;
     uint8_t static_branch_outcome;
 } XrXiBlockStorage;
+
+typedef struct XrXiTrapEdge {
+    const XiFunc *function;
+    const XiValue *call;
+    const XiValue *registration;
+    const XiBlock *handler;
+} XrXiTrapEdge;
 
 typedef struct XrXiFunctionStorage {
     const XiFunc *xi;
@@ -145,6 +153,9 @@ typedef struct XrXiBuildContext {
     uint32_t *provider_operation_capacities;
     uint32_t provider_requirement_count;
     uint32_t provider_requirement_capacity;
+    XrXiTrapEdge *trap_edges;
+    uint32_t trap_edge_count;
+    uint32_t trap_edge_capacity;
 } XrXiBuildContext;
 
 typedef struct XrXiCallableTargetSet {
@@ -164,6 +175,8 @@ typedef struct XrXiCallableContract {
 
 static bool canonical_block_is_reachable(const XrXiBuildContext *context, const XiFunc *function,
                                          const XiBlock *block);
+static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context,
+                                            const XiFunc *function, const XiBlock *block);
 
 static XrProgramBuildStatus fail(char *diagnostic, size_t diagnostic_size,
                                  XrProgramBuildStatus status, const char *format, ...) {
@@ -1543,11 +1556,16 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                             "Xi function %s still uses implicit panic-handler state",
                             function->name ? function->name : "<anonymous>");
             }
+            if (value->op == XI_CATCH &&
+                canonical_block_is_trap_cleanup(context, function, block))
+                continue;
             if (value->op == XI_CATCH)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi function %s still uses implicit panic-handler state",
                             function->name ? function->name : "<anonymous>");
             if (value->op == XI_THROW) {
+                if (canonical_block_is_trap_cleanup(context, function, block))
+                    continue;
                 uint16_t payload_type = XR_CORE_TYPE_VOID;
                 if (value->nargs != 1u || !value->args || !value->args[0] ||
                     !map_type(context, value->args[0]->type, &payload_type) ||
@@ -3717,6 +3735,16 @@ static XrXiBlockStorage *find_block_storage(const XrXiFunctionStorage *function,
     return NULL;
 }
 
+static const XrXiTrapEdge *find_trap_edge(const XrXiBuildContext *context,
+                                         const XiFunc *function, const XiValue *call) {
+    for (uint32_t index = 0u; context && index < context->trap_edge_count; ++index) {
+        const XrXiTrapEdge *edge = &context->trap_edges[index];
+        if (edge->function == function && edge->call == call)
+            return edge;
+    }
+    return NULL;
+}
+
 static XrXiBlockArgumentStorage *find_block_argument(XrXiBlockStorage *block,
                                                      const XiValue *source) {
     for (uint32_t index = 0; block && index < block->argument_count; ++index) {
@@ -5045,6 +5073,7 @@ static void free_context(XrXiBuildContext *context) {
         xr_free((void *) context->provider_requirements[requirement].operation_ids);
     xr_free(context->provider_requirements);
     xr_free(context->provider_operation_capacities);
+    xr_free(context->trap_edges);
 }
 
 static XrProgramBuildStatus set_operands(const XrXiBuildContext *context,
@@ -5074,6 +5103,50 @@ static XrProgramBuildStatus set_operands(const XrXiBuildContext *context,
     }
     instruction->operands = operands;
     instruction->operand_count = value_count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus set_trap_edge_operands(
+    const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
+    const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
+    XiValue *const *provider_arguments, uint32_t provider_argument_count,
+    const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
+    if (!handler || provider_argument_count > UINT32_MAX - handler->argument_count)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t count = provider_argument_count + handler->argument_count;
+    XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
+    if (count && !operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t cursor = 0u;
+    for (uint32_t argument = 0u; argument < provider_argument_count; ++argument) {
+        if (!value_operand_key(context, function, source, provider_arguments[argument],
+                               &operands[cursor++])) {
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi trap-capable call argument %u is unavailable", argument);
+        }
+    }
+    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+        const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+        if (edge_argument->phi ||
+            edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+            !value_operand_key(context, function, source, edge_argument->source,
+                               &operands[cursor++])) {
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi trap continuation argument %u is unavailable", argument);
+        }
+    }
+    XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+    if (!successors) {
+        xr_free(operands);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    successors[0] = block_key(function, handler->xi);
+    instruction->operands = operands;
+    instruction->operand_count = count;
+    instruction->successors = successors;
+    instruction->successor_count = 1u;
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -5137,6 +5210,7 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
             provider_entry->provider_operation_key, &contract_id, &operation_id);
         if (requirement_status != XR_PROGRAM_BUILD_OK)
             return requirement_status;
+        const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
         instruction->operation_id = XR_CORE_OP_CORE_PROVIDER_CALL;
         instruction->result = value_key(function, value);
         instruction->result_type_id = result_type;
@@ -5144,8 +5218,12 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
         instruction->immediate.provider_operation.contract_id = contract_id;
         instruction->immediate.provider_operation.operation_id = operation_id;
-        return set_operands(context, instruction, function, block, value->args + 1u,
-                            provider_entry->argc, diagnostic, diagnostic_size);
+        if (!trap_edge)
+            return set_operands(context, instruction, function, block, value->args + 1u,
+                                provider_entry->argc, diagnostic, diagnostic_size);
+        const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
+        return set_trap_edge_operands(context, instruction, function, block, value->args + 1u,
+                                      provider_entry->argc, handler, diagnostic, diagnostic_size);
     }
     if (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE &&
         callsite->kind != XG_CALL_METHOD)
@@ -5191,8 +5269,13 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         if (result_type != XR_CORE_TYPE_VOID)
             instruction->result = value_key(function, value);
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-        return set_operands(context, instruction, function, block, value->args, value->nargs,
-                            diagnostic, diagnostic_size);
+        const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
+        if (!trap_edge)
+            return set_operands(context, instruction, function, block, value->args, value->nargs,
+                                diagnostic, diagnostic_size);
+        const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
+        return set_trap_edge_operands(context, instruction, function, block, value->args,
+                                      value->nargs, handler, diagnostic, diagnostic_size);
     }
     if (!callee_storage)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
@@ -5230,8 +5313,14 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
     instruction->immediate.key = callee_storage->key;
     uint16_t first_operand = callee->has_receiver ? 0u : 1u;
-    return set_operands(context, instruction, function, block, value->args + first_operand,
-                        value->nargs - first_operand, diagnostic, diagnostic_size);
+    const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
+    if (!trap_edge)
+        return set_operands(context, instruction, function, block, value->args + first_operand,
+                            value->nargs - first_operand, diagnostic, diagnostic_size);
+    const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
+    return set_trap_edge_operands(context, instruction, function, block,
+                                  value->args + first_operand, value->nargs - first_operand,
+                                  handler, diagnostic, diagnostic_size);
 }
 
 static XrProgramBuildStatus translate_capture_construct(XrXiBuildContext *context,
@@ -6283,6 +6372,9 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
     if (exact_static_cleanup_try(function, value) || exact_static_cleanup_end(function, value) ||
         exact_cleanup_boundary_marker(value))
         return true;
+    if (value && value->op == XI_CATCH && block_storage &&
+        block_storage->trap_cleanup)
+        return true;
     if (static_function_publication_is_exact(function, value))
         return true;
     if (static_import_publication_is_exact(context, function, value))
@@ -6732,12 +6824,263 @@ static XrProgramBuildStatus mark_reachable_blocks(const XrXiBuildContext *contex
                     changed = true;
                 }
             }
+            for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count;
+                 ++edge_index) {
+                const XrXiTrapEdge *edge = &context->trap_edges[edge_index];
+                if (edge->function != function->xi || !edge->call ||
+                    edge->call->block != source->xi)
+                    continue;
+                XrXiBlockStorage *successor = find_block_storage(function, edge->handler);
+                if (!successor)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi provider trap continuation is absent");
+                if (!successor->reachable) {
+                    successor->reachable = true;
+                    changed = true;
+                }
+            }
         }
         if (!changed)
             return XR_PROGRAM_BUILD_OK;
     }
     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                 "Xi function block reachability did not converge");
+}
+
+static uint32_t xi_function_block_index(const XiFunc *function, const XiBlock *block) {
+    for (uint32_t index = 0u; function && index < function->nblocks; ++index)
+        if (function->blocks[index] == block)
+            return index;
+    return UINT32_MAX;
+}
+
+static XrProgramBuildStatus static_try_contains_value(const XiFunc *function,
+                                                      const XiValue *registration,
+                                                      const XiValue *point, bool *contains,
+                                                      char *diagnostic,
+                                                      size_t diagnostic_size) {
+    if (contains)
+        *contains = false;
+    if (!function || !registration || !registration->block || !point || !point->block ||
+        !contains)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t registration_index = registration->block->nvalues;
+    for (uint32_t index = 0u; index < registration->block->nvalues; ++index) {
+        if (registration->block->values[index] == registration) {
+            registration_index = index;
+            break;
+        }
+    }
+    uint32_t registration_block = xi_function_block_index(function, registration->block);
+    if (registration_index == registration->block->nvalues ||
+        registration_block == UINT32_MAX ||
+        xi_function_block_index(function, point->block) == UINT32_MAX)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi static cleanup region is not owned by its function");
+
+    uint8_t *visited = xr_calloc(function->nblocks, sizeof(*visited));
+    const XiBlock **queue = xr_calloc(function->nblocks, sizeof(*queue));
+    if (!visited || !queue) {
+        xr_free(queue);
+        xr_free(visited);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    visited[registration_block] = 1u;
+    uint32_t head = 0u;
+    uint32_t tail = 0u;
+    bool region_ended = false;
+    for (uint32_t index = registration_index + 1u; index < registration->block->nvalues;
+         ++index) {
+        const XiValue *value = registration->block->values[index];
+        if (value == point) {
+            *contains = true;
+            goto done;
+        }
+        if (value && value->op == XI_END_TRY && value->aux == registration) {
+            region_ended = true;
+            break;
+        }
+    }
+    if (!region_ended) {
+        for (uint32_t successor = 0u; successor < 2u; ++successor) {
+            const XiBlock *target = registration->block->succs[successor];
+            uint32_t target_index = xi_function_block_index(function, target);
+            if (target && target_index != UINT32_MAX && !visited[target_index]) {
+                visited[target_index] = 1u;
+                queue[tail++] = target;
+            }
+        }
+    }
+    while (head < tail && !*contains) {
+        const XiBlock *block = queue[head++];
+        bool ends_region = false;
+        for (uint32_t index = 0u; index < block->nvalues; ++index) {
+            const XiValue *value = block->values[index];
+            if (value == point) {
+                *contains = true;
+                break;
+            }
+            if (value && value->op == XI_END_TRY && value->aux == registration) {
+                ends_region = true;
+                break;
+            }
+        }
+        if (*contains || ends_region)
+            continue;
+        for (uint32_t successor = 0u; successor < 2u; ++successor) {
+            const XiBlock *target = block->succs[successor];
+            uint32_t target_index = xi_function_block_index(function, target);
+            if (target && target_index != UINT32_MAX && !visited[target_index]) {
+                if (tail == function->nblocks) {
+                    xr_free(queue);
+                    xr_free(visited);
+                    return fail(diagnostic, diagnostic_size,
+                                XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi static cleanup reachability queue overflowed");
+                }
+                visited[target_index] = 1u;
+                queue[tail++] = target;
+            }
+        }
+    }
+
+done:
+    xr_free(queue);
+    xr_free(visited);
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool exact_trap_cleanup_handler(const XiFunc *function, const XiValue *registration) {
+    if (!exact_static_cleanup_try(function, registration))
+        return false;
+    const XiBlock *handler = (const XiBlock *) registration->aux;
+    if (!handler || handler->kind != XI_BLOCK_UNREACHABLE || handler->phis)
+        return false;
+    const XiValue *caught = NULL;
+    const XiValue *throw_value = NULL;
+    uint32_t enter_count = 0u;
+    uint32_t leave_count = 0u;
+    for (uint32_t index = 0u; index < handler->nvalues; ++index) {
+        const XiValue *value = handler->values[index];
+        if (!value)
+            continue;
+        if (value->op == XI_CATCH && value->aux == registration && value->nargs == 0u) {
+            if (caught)
+                return false;
+            caught = value;
+        } else if (value->op == XI_THROW) {
+            if (throw_value)
+                return false;
+            throw_value = value;
+        } else if (value->op == XI_CLEANUP_ENTER) {
+            ++enter_count;
+        } else if (value->op == XI_CLEANUP_LEAVE) {
+            ++leave_count;
+        }
+    }
+    return caught && throw_value && throw_value->nargs == 1u && throw_value->args &&
+           throw_value->args[0] == caught && enter_count == 1u && leave_count == 1u;
+}
+
+static XrProgramBuildStatus append_trap_edge(XrXiBuildContext *context, const XiFunc *function,
+                                             const XiValue *call,
+                                             const XiValue *registration) {
+    if (context->trap_edge_count == context->trap_edge_capacity) {
+        uint32_t capacity = context->trap_edge_capacity ? context->trap_edge_capacity * 2u : 4u;
+        if (capacity < context->trap_edge_capacity)
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        XrXiTrapEdge *edges = xr_realloc(context->trap_edges, (size_t) capacity * sizeof(*edges));
+        if (!edges)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        context->trap_edges = edges;
+        context->trap_edge_capacity = capacity;
+    }
+    context->trap_edges[context->trap_edge_count++] = (XrXiTrapEdge) {
+            .function = function,
+            .call = call,
+            .registration = registration,
+            .handler = (const XiBlock *) registration->aux,
+        };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus prepare_trap_continuations(
+    XrXiBuildContext *context, char *diagnostic, size_t diagnostic_size) {
+    for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0u; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *storage = &module->function_storage[function_index];
+            const XiFunc *function = storage->xi;
+            for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+                const XiBlock *block = function->blocks[block_index];
+                if (!storage->block_storage[block_index].reachable)
+                    continue;
+                for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
+                    const XiValue *call = block->values[value_index];
+                    bool provider_call = resolved_provider_native_call(context, function, call);
+                    const XiFunc *sealed_callee =
+                        provider_call ? NULL : resolved_sealed_callee(context, function, call);
+                    if ((!provider_call && !sealed_callee) ||
+                        block_typed_invoke_call(context, function, block) == call ||
+                        resolved_canonical_class_construction(context, function, call, NULL, NULL))
+                        continue;
+                    const XiValue *active = NULL;
+                    for (uint32_t try_block = 0u; try_block < function->nblocks; ++try_block) {
+                        const XiBlock *row = function->blocks[try_block];
+                        for (uint32_t try_index = 0u; try_index < row->nvalues; ++try_index) {
+                            const XiValue *registration = row->values[try_index];
+                            if (!exact_static_cleanup_try(function, registration))
+                                continue;
+                            bool contains = false;
+                            XrProgramBuildStatus status = static_try_contains_value(
+                                function, registration, call, &contains, diagnostic,
+                                diagnostic_size);
+                            if (status != XR_PROGRAM_BUILD_OK)
+                                return status;
+                            if (!contains)
+                                continue;
+                            if (active)
+                                return fail(
+                                    diagnostic, diagnostic_size,
+                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                    "Xi trap-capable call v%u has nested static cleanup regions",
+                                    call->id);
+                            active = registration;
+                        }
+                    }
+                    if (!active)
+                        continue;
+                    const XiBlock *handler = (const XiBlock *) active->aux;
+                    XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
+                    if (!handler_storage || handler_storage->reachable ||
+                        !exact_trap_cleanup_handler(function, active))
+                        return fail(diagnostic, diagnostic_size,
+                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                    "Xi trap-capable call v%u has no exact private cleanup",
+                                    call->id);
+                    XrProgramBuildStatus status = append_trap_edge(context, function, call, active);
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        return status;
+                    handler_storage->trap_cleanup = true;
+                }
+            }
+        }
+    }
+    for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0u; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *storage = &module->function_storage[function_index];
+            for (uint32_t block_index = 0u; block_index < storage->xi->nblocks; ++block_index)
+                storage->block_storage[block_index].reachable = false;
+            XrProgramBuildStatus status =
+                mark_reachable_blocks(context, storage, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus initialize_canonical_reachability(XrXiBuildContext *context,
@@ -6887,6 +7230,8 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         }
         for (uint32_t value_index = 0; value_index < block->xi->nvalues; ++value_index) {
             const XiValue *value = block->xi->values[value_index];
+            if (value && value->op == XI_THROW && block->trap_cleanup)
+                continue;
             if (value && (value->op == XI_ERR_RETURN || value->op == XI_THROW)) {
                 if (value->nargs != 1u || !value->args || !value->args[0])
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -6916,6 +7261,30 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                      ((uint64_t) function->xi->next_value_id + function->xi->nparams + 1u);
     for (uint64_t iteration = 0; iteration <= limit; ++iteration) {
         bool changed = false;
+        for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count;
+             ++edge_index) {
+            const XrXiTrapEdge *edge = &context->trap_edges[edge_index];
+            if (edge->function != function->xi)
+                continue;
+            XrXiBlockStorage *source = find_block_storage(function, edge->call->block);
+            XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+            if (!source || !handler)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi provider trap continuation endpoint is absent");
+            for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+                XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+                if (edge_argument->phi ||
+                    edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
+                    return fail(diagnostic, diagnostic_size,
+                                XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi provider trap continuation requires a phi payload");
+                XrProgramBuildStatus status = require_value_available(
+                    context, function, source, edge_argument->source, &changed, diagnostic,
+                    diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+        }
         XrProgramBuildStatus balance_status = balance_owner_successor_arguments(
             context, function, &changed, diagnostic, diagnostic_size);
         if (balance_status != XR_PROGRAM_BUILD_OK)
@@ -7178,6 +7547,17 @@ static bool coroutine_function_has_proven_suspend(const XiFunc *function,
             !child->indirect_child)
             return true;
     }
+    return false;
+}
+
+static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context,
+                                            const XiFunc *function, const XiBlock *block) {
+    const XrXiFunctionStorage *storage = find_xi_function(context, function, NULL, NULL);
+    if (!storage || !storage->block_storage || !block)
+        return false;
+    for (uint32_t index = 0u; index < function->nblocks; ++index)
+        if (storage->block_storage[index].xi == block)
+            return storage->block_storage[index].trap_cleanup;
     return false;
 }
 
@@ -7752,6 +8132,8 @@ static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildCont
                                                 : XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE);
     if (exact_infallible_class_construction_in_block(context, function, block))
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BRANCH);
+    if (canonical_block_is_trap_cleanup(context, function, block))
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_TRAP);
     if (block->kind == XI_BLOCK_UNREACHABLE)
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PANIC_PUBLISH);
     if (block->kind == XI_BLOCK_RETURN && block->control && block->control->op == XI_ERR_RETURN)
@@ -7826,8 +8208,9 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                     const XrStdlibDefEntry *provider_entry =
                         resolved_provider_native_call(context, function, value);
                     const XrCoreOperationSpec *provider_operation =
-                        provider_entry ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL)
-                                       : NULL;
+                        provider_entry
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL)
+                            : NULL;
                     bool has_contract = false;
                     if (value->xg_existential_kind != XI_EXISTENTIAL_NONE) {
                         has_contract = xr_program_xi_semantic_operation_contract(
@@ -8439,26 +8822,34 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (xi_block->kind == XI_BLOCK_UNREACHABLE) {
-            const XiValue *throw_value = NULL;
-            for (uint32_t value_index = 0u; value_index < xi_block->nvalues; ++value_index) {
-                const XiValue *candidate = xi_block->values[value_index];
-                if (!candidate || candidate->op != XI_THROW)
-                    continue;
-                if (throw_value)
-                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                "Xi panic block b%u has multiple throw terminals", xi_block->id);
-                throw_value = candidate;
+            if (block_storage->trap_cleanup) {
+                terminator->operation_id = XR_CORE_OP_CORE_TRAP;
+                terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+                terminator->immediate.u32 = 7u;
+            } else {
+                const XiValue *throw_value = NULL;
+                for (uint32_t value_index = 0u; value_index < xi_block->nvalues; ++value_index) {
+                    const XiValue *candidate = xi_block->values[value_index];
+                    if (!candidate || candidate->op != XI_THROW)
+                        continue;
+                    if (throw_value)
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "Xi panic block b%u has multiple throw terminals",
+                                    xi_block->id);
+                    throw_value = candidate;
+                }
+                if (!throw_value || throw_value->nargs != 1u || !throw_value->args ||
+                    !throw_value->args[0])
+                    return fail(
+                        diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi unreachable block b%u has no typed panic terminal", xi_block->id);
+                terminator->operation_id = XR_CORE_OP_CORE_PANIC_PUBLISH;
+                XiValue *published[] = {throw_value->args[0]};
+                status = set_operands(context, terminator, storage, block_storage, published, 1u,
+                                      diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
             }
-            if (!throw_value || throw_value->nargs != 1u || !throw_value->args ||
-                !throw_value->args[0])
-                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                            "Xi unreachable block b%u has no typed panic terminal", xi_block->id);
-            terminator->operation_id = XR_CORE_OP_CORE_PANIC_PUBLISH;
-            XiValue *published[] = {throw_value->args[0]};
-            status = set_operands(context, terminator, storage, block_storage, published, 1u,
-                                  diagnostic, diagnostic_size);
-            if (status != XR_PROGRAM_BUILD_OK)
-                return status;
         } else if (xi_block->kind == XI_BLOCK_RETURN && xi_block->control &&
                    xi_block->control->op == XI_ERR_RETURN) {
             if (xi_block->control->nargs != 1u || !xi_block->control->args[0])
@@ -9122,6 +9513,10 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
         initialize_canonical_reachability(context, diagnostic, diagnostic_size);
     if (reachability_status != XR_PROGRAM_BUILD_OK)
         return reachability_status;
+    XrProgramBuildStatus trap_status =
+        prepare_trap_continuations(context, diagnostic, diagnostic_size);
+    if (trap_status != XR_PROGRAM_BUILD_OK)
+        return trap_status;
 
     XrProgramBuildStatus imported_callable_status =
         validate_imported_callable_bindings(context, diagnostic, diagnostic_size);

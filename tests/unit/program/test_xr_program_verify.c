@@ -13,6 +13,7 @@
 #include "xr_program_panic_fixture.h"
 #include "xr_program_coroutine_fixture.h"
 #include "xr_program_output_fixture.h"
+#include "xr_program_trap_fixture.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -3720,6 +3721,65 @@ static void test_provider_output_semantics(void) {
     xr_program_artifact_free(&artifact);
 }
 
+typedef struct ReferenceTrapProbe {
+    uint32_t calls;
+    bool refuse;
+} ReferenceTrapProbe;
+
+static bool reference_trap_clock(void *context, uint32_t requirement_index,
+                                 uint32_t operation_index, int64_t *result_out) {
+    ReferenceTrapProbe *probe = context;
+    if (!probe || requirement_index != 0u || operation_index != 0u || !result_out)
+        return false;
+    ++probe->calls;
+    *result_out = 42;
+    return !probe->refuse;
+}
+
+static void test_provider_trap_continuation_semantics(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_trap_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        ReferenceTrapProbe probe = {0};
+        XrReferenceProviderBinding binding = {
+            .context = &probe,
+            .call_i64_nullary = reference_trap_clock,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        CHECK(probe.calls == 1u);
+
+        probe.refuse = true;
+        result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_TRAP);
+        CHECK(result.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+        CHECK(probe.calls == 2u);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_trap_fixture_write_mutated(
+              XR_PROGRAM_TRAP_FIXTURE_EXTRA_SUCCESSOR, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_trap_fixture_write_mutated(
+              XR_PROGRAM_TRAP_FIXTURE_WRONG_TRAP, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW);
+    xr_program_artifact_free(&artifact);
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -3745,6 +3805,7 @@ int main(void) {
     test_callable_pack_and_indirect_calls();
     test_coroutine_state_and_exact_liveness();
     test_provider_output_semantics();
+    test_provider_trap_continuation_semantics();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

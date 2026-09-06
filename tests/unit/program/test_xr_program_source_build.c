@@ -47,7 +47,7 @@ typedef struct SourceBuildFixture {
 static const char *cross_module_coroutine_aot_output_path;
 static const char *function_parameter_aot_output_path;
 static const char *clock_provider_aot_output_path;
-static const char *clock_provider_refusal_aot_output_path;
+static const char *provider_trap_cleanup_aot_output_path;
 static const char *pipe_provider_aot_output_path;
 static const char *pipe_close_failure_aot_output_path;
 static const char *pipe_uncaught_error_aot_output_path;
@@ -68,6 +68,14 @@ typedef struct PipeProviderProbe {
     bool close_results[2];
 } PipeProviderProbe;
 
+typedef struct ProviderTrapCleanupProbe {
+    uint32_t events;
+    uint32_t clock_calls;
+    uint32_t close_calls;
+    int64_t read_handle;
+    int64_t write_handle;
+} ProviderTrapCleanupProbe;
+
 static bool stable_id_equal(XrStableId left, XrStableId right) {
     return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
 }
@@ -83,6 +91,27 @@ static uint32_t program_operation_count(const XrValidatedProgram *program,
             for (uint32_t instruction_index = 0u;
                  instruction_index < block->instruction_count; ++instruction_index) {
                 count += block->instructions[instruction_index].operation_id == operation_id;
+            }
+        }
+    }
+    return count;
+}
+
+static uint32_t program_operation_successor_count(const XrValidatedProgram *program,
+                                                  uint16_t operation_id,
+                                                  uint32_t successor_count) {
+    uint32_t count = 0u;
+    for (uint32_t function_index = 0u; program && function_index < program->function_count;
+         ++function_index) {
+        const XrValidatedFunction *function = &program->functions[function_index];
+        for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
+            const XrValidatedBlock *block = &function->blocks[block_index];
+            for (uint32_t instruction_index = 0u;
+                 instruction_index < block->instruction_count; ++instruction_index) {
+                const XrValidatedInstruction *instruction =
+                    &block->instructions[instruction_index];
+                count += instruction->operation_id == operation_id &&
+                         instruction->successor_count == successor_count;
             }
         }
     }
@@ -117,6 +146,30 @@ static XrProviderCallStatus clock_provider_probe(void *context, int64_t *result_
     if (probe->reject)
         return XR_PROVIDER_CALL_FAILED;
     *result_out = probe->nanos;
+    return XR_PROVIDER_CALL_OK;
+}
+
+static XrProviderCallStatus provider_trap_clock_probe(void *context, int64_t *result_out) {
+    ProviderTrapCleanupProbe *probe = context;
+    if (!probe || !result_out || probe->events % 3u != 0u)
+        return XR_PROVIDER_CALL_FAILED;
+    ++probe->events;
+    ++probe->clock_calls;
+    return XR_PROVIDER_CALL_FAILED;
+}
+
+static XrProviderCallStatus provider_trap_close_probe(void *context, int64_t handle,
+                                                       bool *result_out) {
+    ProviderTrapCleanupProbe *probe = context;
+    if (!probe || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    uint32_t phase = probe->events % 3u;
+    int64_t expected = phase == 1u ? probe->read_handle : probe->write_handle;
+    if ((phase != 1u && phase != 2u) || handle != expected)
+        return XR_PROVIDER_CALL_FAILED;
+    *result_out = true;
+    ++probe->events;
+    ++probe->close_calls;
     return XR_PROVIDER_CALL_OK;
 }
 
@@ -912,10 +965,16 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     source_build_fixture_free(&fixture);
 }
 
-TEST(source_owner_provider_transport_refusal_is_an_exact_trap) {
+TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
     static const char source[] =
+        "import sys\n"
         "import time\n"
         "fn answer() -> i64 {\n"
+        "  var live = sys.Pipe(2147483646, 2147483647)\n"
+        "  defer {\n"
+        "    live.closeRead()\n"
+        "    live.closeWrite()\n"
+        "  }\n"
         "  return time.now()\n"
         "}\n";
     SourceBuildFixture fixture;
@@ -942,47 +1001,77 @@ TEST(source_owner_provider_transport_refusal_is_an_exact_trap) {
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PROVIDER_CALL), 1u);
-    ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PROVIDER_CALL), 3u);
+    ASSERT_EQ_UINT(program_operation_successor_count(
+                       first.program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT, 1u),
+                   1u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_TRAP), 1u);
+    ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 2u);
 
-    XrProgramProviderRequirementView requirement = {0};
-    ASSERT_TRUE(xr_validated_program_provider_requirement(first.program, 0u, &requirement));
-    ASSERT_EQ_UINT(requirement.operation_count, 1u);
-    XrStableId expected_contract = {{0}};
-    XrStableId expected_operation = {{0}};
+    XrStableId expected_clock_contract = {{0}};
+    XrStableId expected_clock_operation = {{0}};
+    XrStableId expected_io_contract = {{0}};
+    XrStableId expected_close_operation = {{0}};
     XrFingerprint key_digest;
     ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_CLOCK_CONTRACT_KEY,
-                                      &expected_contract, &key_digest));
+                                      &expected_clock_contract, &key_digest));
     ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY,
-                                      &expected_operation, &key_digest));
-    ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_contract));
-    ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0], expected_operation));
-    const XrTargetProviderContract *contract =
-        find_profile_provider(profile, requirement.contract_id);
-    ASSERT_NOT_NULL(contract);
+                                      &expected_clock_operation, &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_io_contract,
+                                      &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
+                                      &expected_close_operation, &key_digest));
 
-    ClockProviderProbe probe = {.reject = true};
-    XrProviderOperationBinding operation = {
-        .operation_id = requirement.operation_ids[0],
-        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_NULLARY,
-        .context = &probe,
+    ProviderTrapCleanupProbe probe = {
+        .read_handle = INT64_C(2147483646),
+        .write_handle = INT64_C(2147483647),
     };
-    operation.entry.i64_nullary = clock_provider_probe;
-    XrProviderBinding provider = {
-        .contract_id = requirement.contract_id,
-        .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
-        .operations = &operation,
-        .operation_count = 1u,
-    };
-    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
-                      contract, &provider.contract_fingerprint),
-                  XR_RUNTIME_ABI_OK);
+    XrProviderOperationBinding operations[2] = {0};
+    XrProviderBinding providers[2] = {0};
+    uint32_t clock_requirement = UINT32_MAX;
+    uint32_t io_requirement = UINT32_MAX;
+    for (uint32_t requirement_index = 0u; requirement_index < 2u; ++requirement_index) {
+        XrProgramProviderRequirementView requirement = {0};
+        ASSERT_TRUE(xr_validated_program_provider_requirement(
+            first.program, requirement_index, &requirement));
+        ASSERT_EQ_UINT(requirement.operation_count, 1u);
+        const XrTargetProviderContract *contract =
+            find_profile_provider(profile, requirement.contract_id);
+        ASSERT_NOT_NULL(contract);
+        operations[requirement_index].operation_id = requirement.operation_ids[0];
+        operations[requirement_index].context = &probe;
+        if (stable_id_equal(requirement.contract_id, expected_clock_contract)) {
+            ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0],
+                                        expected_clock_operation));
+            clock_requirement = requirement_index;
+            operations[requirement_index].trampoline_kind =
+                XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
+            operations[requirement_index].entry.i64_nullary = provider_trap_clock_probe;
+        } else {
+            ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_io_contract));
+            ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0],
+                                        expected_close_operation));
+            io_requirement = requirement_index;
+            operations[requirement_index].trampoline_kind =
+                XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
+            operations[requirement_index].entry.bool_i64_unary = provider_trap_close_probe;
+        }
+        providers[requirement_index].contract_id = requirement.contract_id;
+        providers[requirement_index].behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
+        providers[requirement_index].operations = &operations[requirement_index];
+        providers[requirement_index].operation_count = 1u;
+        ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
+                          contract, &providers[requirement_index].contract_fingerprint),
+                      XR_RUNTIME_ABI_OK);
+    }
+    ASSERT_TRUE(clock_requirement != UINT32_MAX);
+    ASSERT_TRUE(io_requirement != UINT32_MAX);
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = first.program,
         .profile = profile,
-        .providers = &provider,
-        .provider_count = 1u,
+        .providers = providers,
+        .provider_count = 2u,
         .generation = 1u,
     };
     XrExecutionDiagnostic execution_diagnostic;
@@ -997,12 +1086,15 @@ TEST(source_owner_provider_transport_refusal_is_an_exact_trap) {
     XrReferenceProviderBinding reference_binding = {
         .context = &lease,
         .call_i64_nullary = reference_clock_provider_call,
+        .call_bool_i64_unary = reference_pipe_close_provider_call,
     };
     XrReferenceOutcome reference = xr_reference_evaluate_bound(
         first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_TRAP);
     ASSERT_EQ_INT(reference.trap, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
-    ASSERT_EQ_UINT(probe.calls, 1u);
+    ASSERT_EQ_UINT(probe.events, 3u);
+    ASSERT_EQ_UINT(probe.clock_calls, 1u);
+    ASSERT_EQ_UINT(probe.close_calls, 2u);
     xr_reference_outcome_dispose(&reference);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
@@ -1012,7 +1104,9 @@ TEST(source_owner_provider_transport_refusal_is_an_exact_trap) {
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
     ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_TRAP);
     ASSERT_EQ_INT(vm.trap, XR_VM_TRAP_PROVIDER_CALL_FAILED);
-    ASSERT_EQ_UINT(probe.calls, 2u);
+    ASSERT_EQ_UINT(probe.events, 6u);
+    ASSERT_EQ_UINT(probe.clock_calls, 2u);
+    ASSERT_EQ_UINT(probe.close_calls, 4u);
     xr_vm_outcome_dispose(&vm);
 
     XrBackendOptions options = xr_backend_default_options();
@@ -1023,36 +1117,58 @@ TEST(source_owner_provider_transport_refusal_is_an_exact_trap) {
                   XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NULL(strstr(generated.bytes, "int main(void)"));
     ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_i64_nullary"));
-    if (clock_provider_refusal_aot_output_path) {
-        FILE *output = fopen(clock_provider_refusal_aot_output_path, "wb");
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, ".trap == 7"));
+    if (provider_trap_cleanup_aot_output_path) {
+        FILE *output = fopen(provider_trap_cleanup_aot_output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_TRUE(fprintf(
             output,
-            "\nstatic uint32_t xr_probe_calls;\n"
+            "\nstatic uint32_t xr_probe_events;\n"
             "static int xr_probe_refuse(void *context, uint32_t requirement, "
             "uint32_t operation, int64_t *result) {\n"
             "    (void)context;\n"
-            "    if (requirement != 0 || operation != 0 || !result) return 2;\n"
-            "    ++xr_probe_calls;\n"
+            "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
+            "!result || xr_probe_events != UINT32_C(0)) return 2;\n"
+            "    ++xr_probe_events;\n"
             "    return 1;\n"
+            "}\n"
+            "static int xr_probe_close(void *context, uint32_t requirement, "
+            "uint32_t operation, int64_t handle, uint8_t *result) {\n"
+            "    (void)context;\n"
+            "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
+            "!result) return 3;\n"
+            "    if ((xr_probe_events == UINT32_C(1) && handle != INT64_C(2147483646)) || "
+            "(xr_probe_events == UINT32_C(2) && handle != INT64_C(2147483647)) || "
+            "xr_probe_events < UINT32_C(1) || xr_probe_events > UINT32_C(2)) return 4;\n"
+            "    *result = UINT8_C(1);\n"
+            "    ++xr_probe_events;\n"
+            "    return 0;\n"
             "}\n"
             "int main(void) {\n"
             "    XrAotContext context = {0};\n"
             "    context.provider_call_i64_nullary = xr_probe_refuse;\n"
+            "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
             "    XrAotOutcome outcome = xr_aot_fn_%u(&context);\n"
-            "    if (outcome.kind != 1 || outcome.trap != 7 || xr_probe_calls != 1) "
+            "    if (outcome.kind != 1 || outcome.trap != 7 || xr_probe_events != 3) "
             "return 255;\n"
             "    return 207;\n"
             "}\n",
-            entry) > 0);
+            clock_requirement, io_requirement, entry) > 0);
         ASSERT_EQ_INT(fclose(output), 0);
     }
 
+    xr_generated_c_free(&repeated);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(backend_ir);
     xr_vm_code_free(vm_code);
@@ -1874,7 +1990,7 @@ if (argc >= 3)
 if (argc >= 4)
     clock_provider_aot_output_path = argv[3];
 if (argc >= 5)
-    clock_provider_refusal_aot_output_path = argv[4];
+    provider_trap_cleanup_aot_output_path = argv[4];
 if (argc >= 6)
     pipe_provider_aot_output_path = argv[5];
 if (argc >= 7)
@@ -1889,7 +2005,7 @@ RUN_TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_ex
 RUN_TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors);
 RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors);
 RUN_TEST(source_owner_clock_provider_is_exact_across_private_executors);
-RUN_TEST(source_owner_provider_transport_refusal_is_an_exact_trap);
+RUN_TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup);
 RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
 RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
 RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);

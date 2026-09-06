@@ -941,7 +941,11 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                             target_argument = 1u;
                         }
                     }
-                    for (; source_argument < instruction.operand_count;
+                    uint32_t call_operand_count = instruction.operand_count;
+                    if (instruction.successor_count == 1u)
+                        call_operand_count -=
+                            function->blocks[instruction.successors[0]].argument_count;
+                    for (; source_argument < call_operand_count;
                          ++source_argument, ++target_argument)
                         scratch[target_argument] = values[instruction.operands[source_argument]];
                     const XrValidatedFunction *callee =
@@ -949,6 +953,19 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     XrVmOutcome nested = execute_function(context, target_function, scratch,
                                                           callee->parameter_count, depth + 1u);
                     if (nested.kind != XR_VM_OUTCOME_RETURN) {
+                        if (nested.kind == XR_VM_OUTCOME_TRAP &&
+                            nested.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
+                            instruction.successor_count == 1u) {
+                            const XrValidatedBlock *target =
+                                &function->blocks[instruction.successors[0]];
+                            for (uint32_t index = 0u; index < target->argument_count; ++index)
+                                scratch[index] =
+                                    values[instruction.operands[call_operand_count + index]];
+                            incoming_count = target->argument_count;
+                            block_id = instruction.successors[0];
+                            transferred = true;
+                            break;
+                        }
                         result = nested;
                         goto done;
                     }
@@ -1049,7 +1066,10 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     break;
                 }
                 case XR_CORE_OP_CORE_TRAP:
-                    result = vm_trap(XR_VM_TRAP_EXPLICIT, context);
+                    result = vm_trap(instruction.immediate.u32 == 7u
+                                         ? XR_VM_TRAP_PROVIDER_CALL_FAILED
+                                         : XR_VM_TRAP_EXPLICIT,
+                                     context);
                     goto done;
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = vm_outcome(XR_VM_OUTCOME_ERROR, context);
@@ -1105,13 +1125,18 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.as.target_enum = context->code->endianness;
                     break;
                 case XR_CORE_OP_CORE_PROVIDER_CALL: {
-                    uint16_t operand_type = instruction.operand_count == 1u
+                    bool has_trap_edge = instruction.successor_count != 0u;
+                    const XrValidatedBlock *trap_target =
+                        has_trap_edge ? &function->blocks[instruction.successors[0]] : NULL;
+                    uint32_t provider_operand_count =
+                        instruction.operand_count - (trap_target ? trap_target->argument_count : 0u);
+                    uint16_t operand_type = provider_operand_count == 1u
                                                 ? function->value_types[instruction.operands[0]]
                                                 : XR_CORE_TYPE_VOID;
                     XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
                         context->code->program, instruction.result_type_id,
-                        instruction.operand_count == 1u ? &operand_type : NULL,
-                        instruction.operand_count);
+                        provider_operand_count == 1u ? &operand_type : NULL,
+                        provider_operand_count);
                     XrExecutionProviderCallResult call = XR_EXECUTION_PROVIDER_CALL_FAILED;
                     if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY ||
                         call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY) {
@@ -1180,8 +1205,16 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         }
                     }
                     if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
-                        result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
-                        goto done;
+                        if (!has_trap_edge) {
+                            result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
+                            goto done;
+                        }
+                        for (uint32_t index = 0u; index < trap_target->argument_count; ++index)
+                            scratch[index] =
+                                values[instruction.operands[provider_operand_count + index]];
+                        incoming_count = trap_target->argument_count;
+                        block_id = instruction.successors[0];
+                        transferred = true;
                     }
                     break;
                 }
@@ -1383,7 +1416,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 default:
                     goto done;
             }
-            if (has_result) {
+            if (has_result && !transferred) {
                 values[instruction.result_id] = produced;
                 initialized[instruction.result_id] = true;
             }

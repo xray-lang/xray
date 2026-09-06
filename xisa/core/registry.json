@@ -214,6 +214,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -280,6 +281,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -344,6 +346,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -414,6 +417,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -497,6 +501,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -580,6 +585,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -662,6 +668,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -735,6 +742,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -802,6 +810,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -870,6 +879,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -947,6 +957,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1021,6 +1032,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1090,6 +1102,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1158,6 +1171,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1229,6 +1243,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1298,6 +1313,7 @@
         "normal": false,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1354,7 +1370,8 @@
       "epoch": 1,
       "type_rule": {
         "operands": [
-          "P..."
+          "P...",
+          "trap-edge-values..."
         ],
         "result": "R?",
         "immediates": {
@@ -1368,6 +1385,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -1380,7 +1398,8 @@
       "capability_requirements": [],
       "ownership": {
         "operands": [
-          "parameter-mode..."
+          "parameter-mode...",
+          "trap-edge-preserve..."
         ],
         "result": "declared-result-mode"
       },
@@ -1388,7 +1407,7 @@
       "materialization": "call",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "callee-declared trace under the same CoreSpec"
+        "allowed_trace": "callee-declared trace under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
       },
       "kat_validator": "sealed-call",
       "coverage": {
@@ -1445,6 +1464,7 @@
         "normal": true,
         "error": true,
         "panic": true,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1517,6 +1537,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1590,6 +1611,7 @@
         "normal": true,
         "error": true,
         "panic": true,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1665,6 +1687,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1740,6 +1763,7 @@
         "normal": true,
         "error": true,
         "panic": true,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1805,7 +1829,8 @@
         "result": "void",
         "immediates": {
           "trap": [
-            "explicit-trap"
+            "explicit-trap",
+            "provider-call-failed"
           ]
         }
       },
@@ -1814,6 +1839,7 @@
         "normal": false,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1880,6 +1906,7 @@
         "normal": false,
         "error": true,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -1948,6 +1975,7 @@
         "normal": false,
         "error": false,
         "panic": true,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2014,6 +2042,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2081,6 +2110,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2148,6 +2178,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2215,6 +2246,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2282,6 +2314,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2351,6 +2384,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2419,6 +2453,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2488,6 +2523,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2557,6 +2593,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2625,6 +2662,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2694,6 +2732,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2762,6 +2801,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2830,6 +2870,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2898,6 +2939,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -2966,6 +3008,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3032,6 +3075,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3098,6 +3142,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3164,6 +3209,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3230,6 +3276,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3296,6 +3343,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3363,6 +3411,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3432,6 +3481,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3498,6 +3548,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3566,6 +3617,7 @@
         "normal": false,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": true
       },
@@ -3626,11 +3678,13 @@
       "epoch": 1,
       "type_rule": {
         "operands": [
-          "P..."
+          "P...",
+          "trap-edge-values..."
         ],
         "result": "R",
         "immediates": {
-          "provider_operation": "program-provider-requirement-operation-index"
+          "provider_operation": "program-provider-requirement-operation-index",
+          "trap": "optional-provider-call-failed"
         }
       },
       "evaluation_order": "left-to-right",
@@ -3638,6 +3692,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -3654,15 +3709,16 @@
       ],
       "ownership": {
         "operands": [
-          "argument-mode..."
+          "argument-mode...",
+          "trap-edge-preserve..."
         ],
-        "result": "declared-result-mode"
+        "result": "declared-result-mode on normal fallthrough only"
       },
       "profile_dependency": "provider_contract",
-      "materialization": "instance-provider-trampoline",
+      "materialization": "instance-provider-trampoline-with-optional-explicit-trap-continuation",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one exact provider operation event whose admitted trampoline result or normalized failure determines the result"
+        "allowed_trace": "one exact provider operation event; success produces the declared result and continues in the current block, while normalized failure either traps immediately or transfers every declared live value to the sole provider-call-failed trap continuation"
       },
       "kat_validator": "provider-call",
       "coverage": {
@@ -3712,6 +3768,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": false
       },
@@ -3788,6 +3845,7 @@
         "normal": true,
         "error": false,
         "panic": false,
+        "trap": false,
         "cancel": false,
         "suspend": true
       },

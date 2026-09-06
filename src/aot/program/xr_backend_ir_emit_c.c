@@ -950,6 +950,15 @@ static bool emit_parallel_edge(CBuffer *buffer, const XrBackendFunction *functio
     return append_format(buffer, "        goto xr_f%u_b%u;\n    }\n", function_id, target_id);
 }
 
+static bool emit_provider_failure(CBuffer *buffer, const XrBackendFunction *function,
+                                  const XrBackendInstruction *instruction,
+                                  uint32_t provider_operand_count, uint32_t function_id) {
+    if (instruction->successor_count == 1u)
+        return emit_parallel_edge(buffer, function, instruction, 0u, provider_operand_count,
+                                  function_id);
+    return append_text(buffer, "return xr_aot_make(1, 0, 7);\n");
+}
+
 static bool emit_return(CBuffer *buffer, const XrBackendFunction *function,
                         const XrBackendInstruction *instruction) {
     uint32_t kind = outcome_value_kind(function->result_type_id);
@@ -971,13 +980,16 @@ static bool emit_return(CBuffer *buffer, const XrBackendFunction *function,
 }
 
 static bool emit_call(CBuffer *buffer, const XrBackendIR *ir,
-                      const XrBackendInstruction *instruction, uint32_t instruction_id) {
+                      const XrBackendFunction *function,
+                      const XrBackendInstruction *instruction, uint32_t function_id,
+                      uint32_t instruction_id) {
     uint32_t callee_id = instruction->immediate.function_id;
     const XrBackendFunction *callee = &ir->functions[callee_id];
     if (!append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(xr_ctx", instruction_id,
                        callee_id))
         return false;
-    for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
+    uint32_t call_operand_count = callee->parameter_count;
+    for (uint32_t operand = 0; operand < call_operand_count; ++operand) {
         if (!append_format(buffer, ", v%u", instruction->operands[operand]))
             return false;
     }
@@ -986,10 +998,20 @@ static bool emit_call(CBuffer *buffer, const XrBackendIR *ir,
         return false;
     if (!append_text(buffer, ")"))
         return false;
-    if (!append_text(buffer, ";\n") ||
-        !append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n", instruction_id,
-                       instruction_id))
+    if (!append_text(buffer, ";\n"))
         return false;
+    if (instruction->successor_count == 1u) {
+        if (!append_format(buffer, "        if (call_%u.kind == 1 && call_%u.trap == 7) ",
+                           instruction_id, instruction_id) ||
+            !emit_parallel_edge(buffer, function, instruction, 0u, call_operand_count,
+                                function_id) ||
+            !append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n",
+                           instruction_id, instruction_id))
+            return false;
+    } else if (!append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n",
+                              instruction_id, instruction_id)) {
+        return false;
+    }
     if (instruction->result_id != XR_PROGRAM_LOCATION_NONE) {
         if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
             return true;
@@ -1732,7 +1754,7 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return emit_coroutine_call(buffer, ir, function, instruction, function_id,
                                        instruction_id);
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
-            return emit_call(buffer, ir, instruction, instruction_id);
+            return emit_call(buffer, ir, function, instruction, function_id, instruction_id);
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
             return emit_callable_call(buffer, ir, function, instruction, instruction_id);
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
@@ -1746,7 +1768,8 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return emit_witness_invoke(buffer, ir, function, instruction, function_id,
                                        instruction_id);
         case XR_CORE_OP_CORE_TRAP:
-            return append_text(buffer, "        return xr_aot_make(1, 0, 4);\n");
+            return append_format(buffer, "        return xr_aot_make(1, 0, %u);\n",
+                                 instruction->immediate.u32);
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
             return append_format(buffer,
                                  "        *out_error = v%u;\n"
@@ -1773,52 +1796,72 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
                                  ir->endianness);
         case XR_CORE_OP_CORE_PROVIDER_CALL: {
-            uint16_t operand_type = instruction->operand_count == 1u
+            uint32_t provider_operand_count = instruction->operand_count;
+            if (instruction->successor_count == 1u) {
+                const XrBackendBlock *target =
+                    &function->blocks[instruction->successors[0]];
+                provider_operand_count -= target->argument_count;
+            }
+            uint16_t operand_type = provider_operand_count == 1u
                                         ? function->value_types[instruction->operands[0]]
                                         : XR_CORE_TYPE_VOID;
             XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
                 ir->program, instruction->result_type_id,
-                instruction->operand_count == 1u ? &operand_type : NULL,
-                instruction->operand_count);
-            if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY)
-                return append_format(
-                    buffer,
+                provider_operand_count == 1u ? &operand_type : NULL, provider_operand_count);
+            if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY) {
+                if (!append_format(
+                        buffer,
                     "        if (!xr_ctx->provider_call_i64_unary || "
                     "xr_ctx->provider_call_i64_unary(xr_ctx->provider_context, UINT32_C(%u), "
-                    "UINT32_C(%u), v%u, &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
+                        "UINT32_C(%u), v%u, &v%u) != 0) ",
                     instruction->immediate.provider_operation.requirement_index,
                     instruction->immediate.provider_operation.operation_index,
-                    instruction->operands[0], instruction->result_id);
-            if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY)
-                return append_format(
-                    buffer,
+                        instruction->operands[0], instruction->result_id))
+                    return false;
+                return emit_provider_failure(buffer, function, instruction,
+                                             provider_operand_count, function_id);
+            }
+            if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY) {
+                if (!append_format(
+                        buffer,
                     "        if (!xr_ctx->provider_call_i64_nullary || "
                     "xr_ctx->provider_call_i64_nullary(xr_ctx->provider_context, UINT32_C(%u), "
-                    "UINT32_C(%u), &v%u) != 0) return xr_aot_make(1, 0, 7);\n",
+                        "UINT32_C(%u), &v%u) != 0) ",
                     instruction->immediate.provider_operation.requirement_index,
                     instruction->immediate.provider_operation.operation_index,
-                    instruction->result_id);
-            if (call_kind == XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY)
-                return append_format(
-                    buffer,
+                        instruction->result_id))
+                    return false;
+                return emit_provider_failure(buffer, function, instruction,
+                                             provider_operand_count, function_id);
+            }
+            if (call_kind == XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY) {
+                if (!append_format(
+                        buffer,
                     "        {\n"
                     "            uint8_t xr_result = UINT8_C(0);\n"
                     "            if (!xr_ctx->provider_call_bool_i64_unary || "
                     "xr_ctx->provider_call_bool_i64_unary(xr_ctx->provider_context, "
                     "UINT32_C(%u), UINT32_C(%u), v%u, &xr_result) != 0) "
-                    "return xr_aot_make(1, 0, 7);\n"
-                    "            v%u = xr_result != UINT8_C(0);\n"
-                    "        }\n",
+                        "",
                     instruction->immediate.provider_operation.requirement_index,
                     instruction->immediate.provider_operation.operation_index,
-                    instruction->operands[0], instruction->result_id);
+                        instruction->operands[0]))
+                    return false;
+                if (!emit_provider_failure(buffer, function, instruction,
+                                           provider_operand_count, function_id))
+                    return false;
+                return append_format(buffer,
+                                     "            v%u = xr_result != UINT8_C(0);\n"
+                                     "        }\n",
+                                     instruction->result_id);
+            }
             if (call_kind == XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY) {
                 uint16_t pair_type_id = XR_CORE_TYPE_VOID;
                 if (!xr_validated_program_type_is_optional_i64_pair(
                         ir->program, instruction->result_type_id, &pair_type_id))
                     return false;
-                return append_format(
-                    buffer,
+                if (!append_format(
+                        buffer,
                     "        {\n"
                     "            uint8_t xr_present = UINT8_C(0);\n"
                     "            int64_t xr_first = INT64_C(0);\n"
@@ -1826,14 +1869,20 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                     "            if (!xr_ctx->provider_call_optional_i64_pair_nullary || "
                     "xr_ctx->provider_call_optional_i64_pair_nullary(xr_ctx->provider_context, "
                     "UINT32_C(%u), UINT32_C(%u), &xr_present, &xr_first, &xr_second) != 0) "
-                    "return xr_aot_make(1, 0, 7);\n"
+                        "",
+                        instruction->immediate.provider_operation.requirement_index,
+                        instruction->immediate.provider_operation.operation_index))
+                    return false;
+                if (!emit_provider_failure(buffer, function, instruction,
+                                           provider_operand_count, function_id))
+                    return false;
+                return append_format(
+                    buffer,
                     "            if (xr_present) v%u = (XrAotType%u){.tag = UINT32_C(1), "
                     ".payload.case_1.f0 = (XrAotType%u){.f0 = xr_first, .f1 = xr_second}};\n"
                     "            else v%u = (XrAotType%u){.tag = UINT32_C(0), "
                     ".payload.case_0.empty = UINT8_C(0)};\n"
                     "        }\n",
-                    instruction->immediate.provider_operation.requirement_index,
-                    instruction->immediate.provider_operation.operation_index,
                     instruction->result_id, instruction->result_type_id, pair_type_id,
                     instruction->result_id, instruction->result_type_id);
             }
