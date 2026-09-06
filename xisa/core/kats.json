@@ -1001,6 +1001,68 @@
       }
     },
     {
+      "id": "witness-direct-trap-continuation-valid",
+      "operation": "core.call.witness_direct",
+      "kind": "contract",
+      "actual": {
+        "receiver_interface": "Shape",
+        "slot_interface": "Shape",
+        "slot_ordinal": 0,
+        "slot_count": 2,
+        "argument_types": [
+          "Shape"
+        ],
+        "parameter_types": [
+          "Shape"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          11
+        ],
+        "trap_edge_values": [
+          11
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "witness-direct-rejects-lost-trap-owner",
+      "operation": "core.call.witness_direct",
+      "kind": "contract",
+      "actual": {
+        "receiver_interface": "Shape",
+        "slot_interface": "Shape",
+        "slot_ordinal": 0,
+        "slot_count": 2,
+        "argument_types": [
+          "Shape"
+        ],
+        "parameter_types": [
+          "Shape"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          11
+        ],
+        "trap_edge_values": []
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "witness-invoke-valid",
       "operation": "core.call.witness_invoke",
       "kind": "contract",

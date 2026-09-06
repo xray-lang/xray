@@ -389,12 +389,12 @@
     },
     {
       "id": "core.call.witness_direct",
-      "core_spec_contract": "dispatch one existential receiver through one explicit object-safe interface slot whose signature has no error or panic channel",
-      "program_encoding": "existential receiver plus ordered arguments, canonical interface-slot ordinal immediate and optional typed result; no selector, name, table offset or carrier layout",
-      "decoder_verifier_evaluator": "exact existential InterfaceId, slot range and SignatureId authority; receiver-only nominal substitution, exact structural argument/ownership/borrow-origin matching, implementation effect/capability subset checks, and independent exact ConformanceId slot dispatch",
-      "vm_implementation": "private carrier validates concrete TypeId and ConformanceId, unwraps the typed payload and calls the conformance slot FunctionId",
-      "aot_lowering": "closed ConformanceId switch whose cases validate concrete TypeId, unwrap the exact native receiver type and directly call the typed implementation",
-      "source_producer": "class, struct and enum conformances lower declaration-ordered object-safe slots to exact nominal witness direct calls",
+      "core_spec_contract": "dispatch one existential receiver through one explicit object-safe interface slot whose signature has no error or panic channel; provider-call-failed may transfer to one explicit trap continuation that receives every declared live value",
+      "program_encoding": "existential receiver plus ordered arguments, canonical interface-slot ordinal immediate, optional typed result, and at most one provider-call-failed trap successor with typed edge values; no selector, name, table offset or carrier layout",
+      "decoder_verifier_evaluator": "exact existential InterfaceId, slot range and SignatureId authority; receiver-only nominal substitution, exact structural argument/ownership/borrow-origin matching, closed translated witness-target effect/capability union, independent exact ConformanceId slot dispatch, and whole-owner trap-edge preservation",
+      "vm_implementation": "private carrier validates concrete TypeId and ConformanceId, unwraps the typed payload and calls the conformance slot FunctionId; provider failure either escapes or transfers to the verified trap continuation",
+      "aot_lowering": "closed ConformanceId switch whose cases validate concrete TypeId, unwrap the exact native receiver type and directly call the typed implementation; provider failure branches to the same Program trap continuation",
+      "source_producer": "class, struct and enum conformances lower declaration-ordered object-safe slots to exact nominal witness direct calls, with cleanup-region provider failure materialized as the sole trap continuation",
       "old_owner_deletion": "the canonical source route contains no selector lookup, class-only itable, erased universal call ABI or backend-owned method resolution; the frozen pre-cut product route is physically deleted by Task 302",
       "status": "COMPLETE_W7_WAVE4",
       "evidence": [
@@ -406,7 +406,8 @@
         "src/aot/program/xr_backend_ir_emit_c.c",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
-        "tests/unit/program/xr_program_existential_fixture.h"
+        "tests/unit/program/xr_program_existential_fixture.h",
+        "tests/unit/program/test_xr_program_source_build.c"
       ]
     },
     {

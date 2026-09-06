@@ -2882,63 +2882,83 @@ interface_method_params(const XgGlobalEvidence *evidence, const XgInterfaceMetho
     return parameters;
 }
 
-static bool xg_effect_contract_to_core(uint32_t xg_effects, uint32_t *core_effects) {
-    uint32_t supported = XG_BODY_MAY_ERROR | XG_BODY_MAY_PANIC | XG_BODY_MAY_CALL |
-                         XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY;
-    if (!core_effects || (xg_effects & ~supported) != 0u)
+/* Xglobal and CoreSpec deliberately use different effect vocabularies. A
+ * source-native witness target, for example, carries MAY_CALL_NATIVE and
+ * NATIVE in Xglobal, while its canonical Program body contains provider.call
+ * with PROVIDER_CALL, TRAP, CALL and PROVIDER_BINDING. The Program contract
+ * must therefore be the exact union of the already translated closed witness
+ * targets, just like callable target-set contracts below; mapping the source
+ * bitset directly both loses provider failure and rejects valid native detail.
+ * Xglobal remains the authority for the closed target identities and the
+ * source-visible control channels. */
+static bool interface_method_core_contract(const XrXiBuildContext *context,
+                                           XgInterfaceId interface_id,
+                                           XgInterfaceMethodId method_id,
+                                           bool require_closed_contract,
+                                           uint32_t *effect_mask,
+                                           uint32_t *capability_mask) {
+    const XgGlobalEvidence *evidence =
+        context && context->source ? context->source->global_evidence : NULL;
+    const XgInterfaceMethodSummary *method =
+        evidence ? find_interface_method_by_id(evidence, method_id) : NULL;
+    if (!evidence || !method || !effect_mask || !capability_mask ||
+        !method->contract_complete || method->owner_interface_id != interface_id)
         return false;
-    uint32_t mapped = 0u;
-    if ((xg_effects & XG_BODY_MAY_ERROR) != 0u)
-        mapped |= XR_CORE_EFFECT_ERROR;
-    if ((xg_effects & XG_BODY_MAY_PANIC) != 0u)
-        mapped |= XR_CORE_EFFECT_PANIC;
-    if ((xg_effects & XG_BODY_MAY_CALL) != 0u)
-        mapped |= XR_CORE_EFFECT_CALL;
-    if ((xg_effects & XG_BODY_MAY_TRAP) != 0u)
-        mapped |= XR_CORE_EFFECT_TRAP;
-    if ((xg_effects & XG_BODY_TARGET_QUERY) != 0u)
-        mapped |= XR_CORE_EFFECT_TARGET_QUERY;
-    *core_effects = mapped;
-    return true;
-}
 
-static bool xg_capability_contract_to_core(uint32_t xg_capabilities,
-                                           uint32_t *core_capabilities) {
-    const uint32_t supported = XG_CAP_PROFILE_POINTER_WIDTH |
-                               XG_CAP_PROFILE_OPERATING_SYSTEM |
-                               XG_CAP_PROFILE_ARCHITECTURE |
-                               XG_CAP_PROFILE_NATIVE_ABI |
-                               XG_CAP_PROFILE_ENDIANNESS;
-    if (!core_capabilities || (xg_capabilities & ~supported) != 0u)
+    uint32_t effects = 0u;
+    uint32_t capabilities = 0u;
+    uint32_t target_count = 0u;
+    for (uint32_t index = 0u; index < evidence->ninterface_witnesses; ++index) {
+        const XgInterfaceWitnessSummary *witness = &evidence->interface_witnesses[index];
+        if (witness->interface_id != interface_id ||
+            witness->interface_method_id != method_id)
+            continue;
+        const XiFunc *target = find_xi_function_by_xg_id(context, witness->implementation_func_id);
+        const XrXiFunctionStorage *storage = find_xi_function(context, target, NULL, NULL);
+        if (!witness->complete || !target || !storage ||
+            (require_closed_contract && !storage->closed_contract_ready))
+            return false;
+        effects |= storage->closed_effect_mask;
+        capabilities |= storage->closed_capability_mask;
+        ++target_count;
+    }
+    if (target_count == 0u)
         return false;
-    uint32_t mapped = 0u;
-    if ((xg_capabilities & XG_CAP_PROFILE_POINTER_WIDTH) != 0u)
-        mapped |= XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH;
-    if ((xg_capabilities & XG_CAP_PROFILE_OPERATING_SYSTEM) != 0u)
-        mapped |= XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM;
-    if ((xg_capabilities & XG_CAP_PROFILE_ARCHITECTURE) != 0u)
-        mapped |= XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE;
-    if ((xg_capabilities & XG_CAP_PROFILE_NATIVE_ABI) != 0u)
-        mapped |= XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI;
-    if ((xg_capabilities & XG_CAP_PROFILE_ENDIANNESS) != 0u)
-        mapped |= XR_CORE_CAPABILITY_PROFILE_ENDIANNESS;
-    *core_capabilities = mapped;
+
+    if (require_closed_contract) {
+        bool source_may_error = (method->effect_bits & XG_BODY_MAY_ERROR) != 0u;
+        bool source_may_panic = (method->effect_bits & XG_BODY_MAY_PANIC) != 0u;
+        bool source_may_suspend = (method->effect_bits & XG_BODY_MAY_SUSPEND) != 0u;
+        bool source_target_query = (method->effect_bits & XG_BODY_TARGET_QUERY) != 0u;
+        if (source_may_error != ((effects & XR_CORE_EFFECT_ERROR) != 0u) ||
+            source_may_panic != ((effects & XR_CORE_EFFECT_PANIC) != 0u) ||
+            source_may_suspend != ((effects & XR_CORE_EFFECT_SUSPEND) != 0u) ||
+            source_target_query != ((effects & XR_CORE_EFFECT_TARGET_QUERY) != 0u))
+            return false;
+        if ((effects & XR_CORE_EFFECT_PROVIDER_CALL) != 0u &&
+            ((method->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0u ||
+             (method->capability_bits & XG_CAP_NATIVE) == 0u))
+            return false;
+        if ((capabilities & XR_CORE_CAPABILITY_PROVIDER_BINDING) != 0u &&
+            (method->capability_bits & XG_CAP_NATIVE) == 0u)
+            return false;
+    }
+
+    *effect_mask = effects;
+    *capability_mask = capabilities;
     return true;
 }
 
 static bool witness_call_effect_contract(const XrXiBuildContext *context,
                                          const XiFunc *caller, const XiValue *call,
+                                         bool require_closed_contract,
                                          uint32_t *effect_mask,
                                          uint32_t *capability_mask) {
     const XgCallsiteSummary *callsite = resolved_witness_callsite(context, caller, call);
-    const XgInterfaceMethodSummary *method =
-        callsite ? find_interface_method_by_id(context->source->global_evidence,
-                                               callsite->method_id)
-                 : NULL;
-    return method && method->contract_complete &&
-           method->owner_interface_id == callsite->receiver_static_interface_id &&
-           xg_effect_contract_to_core(method->effect_bits, effect_mask) &&
-           xg_capability_contract_to_core(method->capability_bits, capability_mask);
+    return callsite && interface_method_core_contract(
+                           context, callsite->receiver_static_interface_id,
+                           (XgInterfaceMethodId) callsite->method_id, require_closed_contract,
+                           effect_mask, capability_mask);
 }
 
 static XiInterfaceUseKind interface_use_for_receiver(XrParamMode mode) {
@@ -3183,20 +3203,10 @@ static XrProgramBuildStatus build_interface_slot_signature(
         contract_mismatch = "Xi result ownership disagrees with Xglobal";
         goto invalid;
     }
-    if (!xg_effect_contract_to_core(method->effect_bits, &effect_mask)) {
-        contract_mismatch = "Xglobal effect contract contains an unsupported effect";
-        goto invalid;
-    }
-    if (!xg_capability_contract_to_core(method->capability_bits, &capability_mask)) {
-        contract_mismatch = "Xglobal capability contract contains an unsupported capability";
-        goto invalid;
-    }
-    if ((target_storage->closed_effect_mask & ~effect_mask) != 0u) {
-        contract_mismatch = "Xi closed effects exceed the Xglobal effect contract";
-        goto invalid;
-    }
-    if ((target_storage->closed_capability_mask & ~capability_mask) != 0u) {
-        contract_mismatch = "Xi closed capabilities exceed the Xglobal capability contract";
+    if (!interface_method_core_contract(context, implementor->interface_id,
+                                        method->interface_method_id, true, &effect_mask,
+                                        &capability_mask)) {
+        contract_mismatch = "closed witness targets have no exact Program effect contract";
         goto invalid;
     }
     *signature = (XrCoreIrCallableSignatureInput) {
@@ -5589,8 +5599,13 @@ static XrProgramBuildStatus translate_existential_value(XrXiBuildContext *contex
     instruction->result_ownership = slot->result_ownership;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
     instruction->immediate.u32 = value->xg_interface_dispatch_slot;
-    return set_operands(context, instruction, function, block, value->args, value->nargs,
-                        diagnostic, diagnostic_size);
+    const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
+    if (!trap_edge)
+        return set_operands(context, instruction, function, block, value->args, value->nargs,
+                            diagnostic, diagnostic_size);
+    const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
+    return set_trap_edge_operands(context, instruction, function, block, value->args,
+                                  value->nargs, handler, diagnostic, diagnostic_size);
 }
 
 static XrProgramBuildStatus
@@ -7022,6 +7037,14 @@ static bool exact_indirect_direct_call(XrXiBuildContext *context, const XiFunc *
     return true;
 }
 
+static bool exact_witness_direct_call(const XrXiBuildContext *context, const XiFunc *function,
+                                      const XiValue *call) {
+    return call &&
+           (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
+           call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT &&
+           resolved_witness_callsite(context, function, call) != NULL;
+}
+
 static XrProgramBuildStatus prepare_trap_continuations(
     XrXiBuildContext *context, char *diagnostic, size_t diagnostic_size) {
     for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
@@ -7037,12 +7060,16 @@ static XrProgramBuildStatus prepare_trap_continuations(
                 for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
                     const XiValue *call = block->values[value_index];
                     bool provider_call = resolved_provider_native_call(context, function, call);
-                    const XiFunc *sealed_callee =
-                        provider_call ? NULL : resolved_sealed_callee(context, function, call);
-                    bool indirect_call = provider_call || sealed_callee
+                    bool witness_call =
+                        provider_call ? false : exact_witness_direct_call(context, function, call);
+                    const XiFunc *sealed_callee = provider_call || witness_call
+                                                         ? NULL
+                                                         : resolved_sealed_callee(context, function,
+                                                                                  call);
+                    bool indirect_call = provider_call || witness_call || sealed_callee
                                              ? false
                                              : exact_indirect_direct_call(context, function, call);
-                    if ((!provider_call && !sealed_callee && !indirect_call) ||
+                    if ((!provider_call && !witness_call && !sealed_callee && !indirect_call) ||
                         block_typed_invoke_call(context, function, block) == call ||
                         resolved_canonical_class_construction(context, function, call, NULL, NULL))
                         continue;
@@ -7225,33 +7252,43 @@ static bool trap_call_contract(XrXiBuildContext *context,
     if (!context || !function || !call || !call->args || !contract)
         return false;
     memset(contract, 0, sizeof(*contract));
-    const XiFunc *callee = resolved_sealed_callee(context, function->xi, call);
-    if (callee) {
-        const XrXiFunctionStorage *callee_storage =
-            find_xi_function(context, callee, NULL, NULL);
-        if (!callee_storage)
+    if (exact_witness_direct_call(context, function->xi, call)) {
+        const XrCoreIrCallableSignatureInput *slot = interface_slot_contract(
+            context, call->xg_interface_id, call->xg_interface_dispatch_slot);
+        if (!slot || slot->error_type_id != XR_CORE_TYPE_VOID ||
+            slot->panic_type_id != XR_CORE_TYPE_VOID)
             return false;
-        contract->first_operand = callee->has_receiver ? 0u : 1u;
-        contract->parameter_modes = callee_storage->parameter_modes;
-        contract->parameter_count =
-            callee->nparams +
-            (callee_storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
-    } else if (exact_indirect_direct_call(context, function->xi, call)) {
-        const XiValue *callable = logical_value_identity(call->args[0]);
-        uint16_t callable_type_id = XR_CORE_TYPE_VOID;
-        if (!callable ||
-            !map_callable_call_type(context, function->xi, call, callable->type,
-                                    &callable_type_id, NULL))
-            return false;
-        const XrXiTypeStorage *callable_type =
-            find_dynamic_type_by_id(context, callable_type_id);
-        if (!callable_type || !callable_type->callable_signature)
-            return false;
-        contract->parameter_modes = callable_type->callable_signature->parameter_modes;
-        contract->parameter_count = callable_type->callable_signature->parameter_count;
-        contract->indirect = true;
+        contract->parameter_modes = slot->parameter_modes;
+        contract->parameter_count = slot->parameter_count;
     } else {
-        return false;
+        const XiFunc *callee = resolved_sealed_callee(context, function->xi, call);
+        if (callee) {
+            const XrXiFunctionStorage *callee_storage =
+                find_xi_function(context, callee, NULL, NULL);
+            if (!callee_storage)
+                return false;
+            contract->first_operand = callee->has_receiver ? 0u : 1u;
+            contract->parameter_modes = callee_storage->parameter_modes;
+            contract->parameter_count =
+                callee->nparams +
+                (callee_storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
+        } else if (exact_indirect_direct_call(context, function->xi, call)) {
+            const XiValue *callable = logical_value_identity(call->args[0]);
+            uint16_t callable_type_id = XR_CORE_TYPE_VOID;
+            if (!callable ||
+                !map_callable_call_type(context, function->xi, call, callable->type,
+                                        &callable_type_id, NULL))
+                return false;
+            const XrXiTypeStorage *callable_type =
+                find_dynamic_type_by_id(context, callable_type_id);
+            if (!callable_type || !callable_type->callable_signature)
+                return false;
+            contract->parameter_modes = callable_type->callable_signature->parameter_modes;
+            contract->parameter_count = callable_type->callable_signature->parameter_count;
+            contract->indirect = true;
+        } else {
+            return false;
+        }
     }
     uint32_t prefix = contract->first_operand + (contract->indirect ? 1u : 0u);
     return call->nargs == prefix + contract->parameter_count &&
@@ -8509,7 +8546,7 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         if (witness) {
                             uint32_t witness_effects = 0u;
                             uint32_t witness_capabilities = 0u;
-                            if (!witness_call_effect_contract(context, storage->xi, value,
+                            if (!witness_call_effect_contract(context, storage->xi, value, false,
                                                               &witness_effects,
                                                               &witness_capabilities))
                                 return fail(diagnostic, diagnostic_size,
@@ -9164,7 +9201,7 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                         if (witness) {
                             uint32_t witness_effects = 0u;
                             uint32_t witness_capabilities = 0u;
-                            if (!witness_call_effect_contract(context, function->xi, value,
+                            if (!witness_call_effect_contract(context, function->xi, value, true,
                                                               &witness_effects,
                                                               &witness_capabilities))
                                 return fail(diagnostic, diagnostic_size,

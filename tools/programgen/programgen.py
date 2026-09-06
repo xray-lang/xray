@@ -190,7 +190,11 @@ EXPECTED_SEMANTIC_CORE_OWNERSHIP = {
     "core.existential.pack": ["borrow-or-transfer-concrete-by-interface-use"],
     "core.existential.test": ["borrow-existential"],
     "core.existential.project": ["borrow-or-consume-existential-by-interface-use"],
-    "core.call.witness_direct": ["existential-receiver-mode", "parameter-mode..."],
+    "core.call.witness_direct": [
+        "existential-receiver-mode",
+        "parameter-mode...",
+        "trap-edge-preserve...",
+    ],
     "core.call.witness_invoke": [
         "existential-receiver-mode",
         "parameter-mode...",

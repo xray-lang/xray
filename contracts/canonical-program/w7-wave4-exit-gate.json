@@ -18,7 +18,9 @@
       "kat_validator": "indirect-call",
       "kats": [
         "indirect-call-valid",
-        "indirect-call-rejects-fallible-signature"
+        "indirect-call-rejects-fallible-signature",
+        "indirect-call-trap-continuation-valid",
+        "indirect-call-rejects-lost-trap-owner"
       ]
     },
     {
@@ -38,7 +40,9 @@
       "kat_validator": "witness-call",
       "kats": [
         "witness-direct-valid",
-        "witness-direct-rejects-slot-interface-mismatch"
+        "witness-direct-rejects-slot-interface-mismatch",
+        "witness-direct-trap-continuation-valid",
+        "witness-direct-rejects-lost-trap-owner"
       ]
     },
     {

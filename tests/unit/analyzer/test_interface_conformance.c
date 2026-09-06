@@ -129,6 +129,51 @@ static void test_interface_accepts_pure_implementation(void) {
     ASSERT(total == 0);
 }
 
+static void test_reanalysis_preserves_nominal_interface_identity(void) {
+    const char *src = "interface ReaderAgain {\n"
+                      "    read() -> i64\n"
+                      "}\n"
+                      "class ReaderAgainImpl implements ReaderAgain {\n"
+                      "    read() -> i64 { return 7 }\n"
+                      "}\n"
+                      "fn eraseAgain() -> i64 {\n"
+                      "    var reader: ReaderAgain = ReaderAgainImpl()\n"
+                      "    return reader.read()\n"
+                      "}\n";
+    AstNode *program = xr_parse(g_session, src);
+    ASSERT(program != NULL);
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT(analyzer != NULL);
+
+    xa_analyzer_analyze(analyzer, "iface_reanalysis_test.xr", program);
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    XaSymbol *first_interface = xa_analyzer_lookup(analyzer, "ReaderAgain");
+    XaSymbol *first_implementation = xa_analyzer_lookup(analyzer, "ReaderAgainImpl");
+    ASSERT(first_interface != NULL);
+    ASSERT(first_implementation != NULL);
+    XrClassInfo *interface_identity = first_interface->links.class_info;
+    XrClassInfo *implementation_identity = first_implementation->links.class_info;
+    ASSERT(interface_identity != NULL);
+    ASSERT(implementation_identity != NULL);
+    ASSERT(xr_type_assignable(first_interface->links.type, first_implementation->links.type));
+
+    xa_analyzer_analyze(analyzer, "iface_reanalysis_test.xr", program);
+    xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    XaSymbol *second_interface = xa_analyzer_lookup(analyzer, "ReaderAgain");
+    XaSymbol *second_implementation = xa_analyzer_lookup(analyzer, "ReaderAgainImpl");
+    ASSERT(second_interface == first_interface);
+    ASSERT(second_implementation == first_implementation);
+    ASSERT(second_interface->links.class_info == interface_identity);
+    ASSERT(second_implementation->links.class_info == implementation_identity);
+    ASSERT(xr_type_assignable(second_interface->links.type, second_implementation->links.type));
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 static void test_class_missing_method_reports_error(void) {
     const char *src = "interface Greeter {\n"
                       "    greet() -> string\n"
@@ -373,6 +418,7 @@ int main(void) {
     printf("User-defined interface conformance:\n");
     RUN_TEST(class_implements_all_methods_no_error);
     RUN_TEST(interface_accepts_pure_implementation);
+    RUN_TEST(reanalysis_preserves_nominal_interface_identity);
     RUN_TEST(class_missing_method_reports_error);
     RUN_TEST(class_missing_property_reports_error);
     RUN_TEST(class_property_as_getter_accepted);

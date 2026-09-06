@@ -621,13 +621,21 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     if validator == "witness-call":
         ordinal = actual.get("slot_ordinal")
         count = actual.get("slot_count")
+        has_trap_edge = actual.get("successor_count", 0) != 0
+        trap_edge_valid = (
+            actual.get("successor_count", 0) == 1
+            and actual.get("trap") == "provider-call-failed"
+            and isinstance(actual.get("live_values"), list)
+            and actual.get("live_values") == actual.get("trap_edge_values")
+        )
         return (actual.get("receiver_interface") == actual.get("slot_interface")
                 and isinstance(ordinal, int) and isinstance(count, int)
                 and 0 <= ordinal < count
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
                 and actual.get("callee_error_type") == "void"
-                and actual.get("callee_panic_type") == "void")
+                and actual.get("callee_panic_type") == "void"
+                and (not has_trap_edge or trap_edge_valid))
     if validator == "witness-invoke":
         ordinal = actual.get("slot_ordinal")
         count = actual.get("slot_count")

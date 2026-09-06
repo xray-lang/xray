@@ -3049,14 +3049,35 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     if (xa_reject_builtin_name_redeclaration(ctx, node, "interface", iface->name))
         return;
 
-    XaSymbol *sym = xa_symbol_new(iface->name, XA_SYM_CLASS);
-    sym->location.line = node->line;
+    XaSymbol *sym = iface->symbol_id
+                        ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, iface->symbol_id)
+                        : NULL;
+    if (!sym) {
+        sym = xa_symbol_new(iface->name, XA_SYM_CLASS);
+        if (!sym)
+            return;
+        sym->location.line = node->line;
+        sym->is_exported = node->is_exported;
+        xa_visit_add_symbol_checked(ctx, sym, 0);
+        iface->symbol_id = sym->id;
+    }
     sym->is_exported = node->is_exported;
-    xa_visit_add_symbol_checked(ctx, sym, 0);
-    iface->symbol_id = sym->id;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links)
+        return;
+    /* Source ownership analyzes the same graph again after monomorphization and
+     * canonicalization. Interface identity is nominal, so recreating its
+     * XrClassInfo on that second pass leaves already-collected implementors
+     * pointing at a stale declaration and makes a valid existential conversion
+     * fail. Like class collection above, an already materialized declaration is
+     * complete and must be reused verbatim. */
+    if (links->interface_decl_node == node && links->class_info)
+        return;
 
     XrClassInfo *info = xa_class_info_new(iface->name);
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!info)
+        return;
     links->class_info = info;
     links->owns_class_info = true;
     links->interface_decl_node = node;

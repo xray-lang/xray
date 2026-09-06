@@ -967,23 +967,29 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
     static const char source[] =
         "import sys\n"
         "import time\n"
+        "interface ClockReader { read() -> i64 }\n"
+        "class RejectedClock implements ClockReader {\n"
+        "  read() -> i64 { return time.now() }\n"
+        "}\n"
         "fn rejected() -> i64 { return time.now() }\n"
-        "fn invoke(body: fn() -> i64, indirect: bool) -> i64 {\n"
+        "fn invoke(body: fn() -> i64, reader: ClockReader, mode: i64) -> i64 {\n"
         "  var live = sys.Pipe(2147483646, 2147483647)\n"
         "  defer {\n"
         "    live.closeRead()\n"
         "    live.closeWrite()\n"
         "  }\n"
         "  var result = 0\n"
-        "  if (indirect) {\n"
+        "  if (mode == 1) {\n"
         "    result = body()\n"
+        "  } else if (mode == 2) {\n"
+        "    result = reader.read()\n"
         "  } else {\n"
         "    result = rejected()\n"
         "  }\n"
         "  return result\n"
         "}\n"
         "fn answer() -> i64 {\n"
-        "  return invoke(rejected, true)\n"
+        "  return invoke(rejected, RejectedClock(), 2)\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1015,6 +1021,9 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
                    1u);
     ASSERT_EQ_UINT(program_operation_successor_count(
                        first.program, XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT, 1u),
+                   1u);
+    ASSERT_EQ_UINT(program_operation_successor_count(
+                       first.program, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT, 1u),
                    1u);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_TRAP), 1u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 2u);
@@ -1171,9 +1180,10 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
             "    context.provider_call_i64_nullary = xr_probe_refuse;\n"
             "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
             "    XrAotOutcome outcome = xr_aot_fn_%u(&context);\n"
-            "    if (outcome.kind != 1 || outcome.trap != 7 || xr_probe_events != 3) "
-            "return 255;\n"
-            "    return 207;\n"
+            "    int exit_code = outcome.kind == 1 && outcome.trap == 7 && "
+            "xr_probe_events == 3 ? 207 : 255;\n"
+            "    xr_aot_context_destroy(&context);\n"
+            "    return exit_code;\n"
             "}\n",
             clock_requirement, io_requirement, entry) > 0);
         ASSERT_EQ_INT(fclose(output), 0);

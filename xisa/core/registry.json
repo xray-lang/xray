@@ -1677,7 +1677,8 @@
       "type_rule": {
         "operands": [
           "E",
-          "P..."
+          "P...",
+          "trap-edge-values..."
         ],
         "result": "R?",
         "immediates": {
@@ -1689,7 +1690,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -1703,7 +1704,8 @@
       "ownership": {
         "operands": [
           "existential-receiver-mode",
-          "parameter-mode..."
+          "parameter-mode...",
+          "trap-edge-preserve..."
         ],
         "result": "slot-result-mode"
       },
@@ -1711,7 +1713,7 @@
       "materialization": "executor-private-witness-dispatch",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the exact conformance slot target trace under the same CoreSpec"
+        "allowed_trace": "the exact conformance slot target trace under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
       },
       "kat_validator": "witness-call",
       "coverage": {

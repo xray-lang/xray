@@ -3562,6 +3562,20 @@ static void test_existential_pack_test_project(void) {
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 
+    CHECK(xr_program_existential_fixture_write_mutated(
+              XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_existential_fixture_write_mutated(
+              XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP_LOST_OWNER, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+
     const XrProgramExistentialFixtureMutation rejected[] = {
         XR_EXISTENTIAL_FIXTURE_UNDOMINATED_PROJECT,
         XR_EXISTENTIAL_FIXTURE_FALSE_EDGE_PROJECT,
