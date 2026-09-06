@@ -1729,6 +1729,62 @@
       }
     },
     {
+      "id": "indirect-call-trap-continuation-valid",
+      "operation": "core.call.indirect_direct",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callable_error_type": "void",
+        "callable_panic_type": "void",
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          7
+        ],
+        "trap_edge_values": [
+          7
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "indirect-call-rejects-lost-trap-owner",
+      "operation": "core.call.indirect_direct",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callable_error_type": "void",
+        "callable_panic_type": "void",
+        "successor_count": 1,
+        "trap": "provider-call-failed",
+        "live_values": [
+          7
+        ],
+        "trap_edge_values": []
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "indirect-invoke-valid",
       "operation": "core.call.indirect_invoke",
       "kind": "contract",

@@ -12,6 +12,8 @@ typedef enum XrProgramCallableFixtureMutation {
     XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
     XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
     XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
+    XR_CALLABLE_FIXTURE_DIRECT_TRAP,
+    XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER,
 } XrProgramCallableFixtureMutation;
 
 enum {
@@ -38,6 +40,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
     XrCoreIrKey entry_block_key = xr_callable_fixture_key("callable:entry:block");
     XrCoreIrKey normal_block_key = xr_callable_fixture_key("callable:entry:normal");
     XrCoreIrKey error_block_key = xr_callable_fixture_key("callable:entry:error");
+    XrCoreIrKey trap_block_key = xr_callable_fixture_key("callable:entry:trap");
 
     uint16_t capture_fields[] = {XR_CORE_TYPE_I64};
     XrCoreIrCallableSignatureInput direct_signature = {
@@ -239,8 +242,21 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
     XrCoreIrKey construct_capture[] = {value_42};
     XrCoreIrKey pack_capture[] = {capture};
     XrCoreIrKey copy_direct[] = {direct_callable};
-    XrCoreIrKey direct_call[] = {mutation == XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE ? fallible_callable
-                                                                                 : direct_copy};
+    bool direct_trap = mutation == XR_CALLABLE_FIXTURE_DIRECT_TRAP ||
+                       mutation == XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER;
+    bool lost_trap_owner = mutation == XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER;
+    XrCoreIrKey direct_call[5] = {
+        mutation == XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE ? fallible_callable : direct_copy,
+    };
+    uint32_t direct_call_count = 1u;
+    if (direct_trap) {
+        if (!lost_trap_owner)
+            direct_call[direct_call_count++] = direct_callable;
+        direct_call[direct_call_count++] = direct_copy;
+        direct_call[direct_call_count++] = captureless_callable;
+        direct_call[direct_call_count++] = fallible_callable;
+    }
+    XrCoreIrKey direct_trap_successors[] = {trap_block_key};
     XrCoreIrKey drop_direct_copy[] = {direct_copy};
     XrCoreIrKey drop_direct[] = {direct_callable};
     XrCoreIrKey captureless_call[] = {captureless_callable};
@@ -322,8 +338,10 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
          .result_category = XR_CORE_IR_VALUE,
          .result_ownership = XR_CORE_IR_NON_OWNER,
          .operands = direct_call,
-         .operand_count = 1u,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+         .operand_count = direct_call_count,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+         .successors = direct_trap ? direct_trap_successors : NULL,
+         .successor_count = direct_trap ? 1u : 0u},
         {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = drop_direct_copy,
@@ -434,7 +452,61 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .instructions = error_instructions,
         .instruction_count = 3u,
     };
-    XrCoreIrBlockInput entry_blocks[] = {entry_block, normal_block, error_block};
+
+    XrCoreIrValueInput trap_arguments[4] = {0};
+    XrCoreIrKey trap_argument_keys[] = {
+        xr_callable_fixture_key("callable:value:trap:0"),
+        xr_callable_fixture_key("callable:value:trap:1"),
+        xr_callable_fixture_key("callable:value:trap:2"),
+        xr_callable_fixture_key("callable:value:trap:3"),
+    };
+    XrCoreIrKey trap_drop_operands[4][1] = {{0}};
+    XrCoreIrInstructionInput trap_instructions[6] = {0};
+    uint32_t trap_argument_count = lost_trap_owner ? 3u : 4u;
+    uint16_t trap_types[] = {
+        XR_CALLABLE_FIXTURE_DIRECT_TYPE,
+        XR_CALLABLE_FIXTURE_DIRECT_TYPE,
+        lost_trap_owner ? XR_CALLABLE_FIXTURE_FALLIBLE_TYPE
+                        : XR_CALLABLE_FIXTURE_DIRECT_TYPE,
+        XR_CALLABLE_FIXTURE_FALLIBLE_TYPE,
+    };
+    trap_instructions[0] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = trap_argument_keys,
+        .operand_count = trap_argument_count,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    for (uint32_t argument = 0u; argument < trap_argument_count; ++argument) {
+        trap_arguments[argument] = (XrCoreIrValueInput) {
+            .key = trap_argument_keys[argument],
+            .type_id = trap_types[argument],
+            .category = XR_CORE_IR_VALUE,
+            .ownership = XR_CORE_IR_OWNER,
+        };
+        trap_drop_operands[argument][0] = trap_argument_keys[argument];
+        trap_instructions[argument + 1u] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .operands = trap_drop_operands[argument],
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+    }
+    trap_instructions[trap_argument_count + 1u] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_TRAP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+        .immediate.u32 = 7u,
+    };
+    XrCoreIrBlockInput trap_block = {
+        .key = trap_block_key,
+        .arguments = trap_arguments,
+        .argument_count = trap_argument_count,
+        .instructions = trap_instructions,
+        .instruction_count = trap_argument_count + 2u,
+    };
+    XrCoreIrBlockInput entry_blocks[] = {entry_block, normal_block, error_block, trap_block};
     XrCoreIrFunctionInput entry = {
         .key = entry_key,
         .result_type_id = XR_CORE_TYPE_I64,
@@ -444,7 +516,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_TRAP,
         .entry_block = entry_block_key,
         .blocks = entry_blocks,
-        .block_count = 3u,
+        .block_count = direct_trap ? 4u : 3u,
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
 

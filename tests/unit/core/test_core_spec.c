@@ -79,6 +79,8 @@ static void test_operation_metadata(void) {
     const XrCoreOperationSpec *branch = xr_core_spec_operation_by_spelling("core.branch");
     const XrCoreOperationSpec *call =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_SEALED_DIRECT);
+    const XrCoreOperationSpec *indirect_call =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT);
     const XrCoreOperationSpec *target =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_TARGET_POINTER_WIDTH);
     const XrCoreOperationSpec *aggregate =
@@ -124,6 +126,9 @@ static void test_operation_metadata(void) {
     CHECK(call->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
     CHECK(call->successor_mask == UINT8_C(9));
     CHECK(call->effect_mask == UINT32_C(4));
+
+    CHECK(indirect_call != NULL);
+    CHECK(indirect_call->successor_mask == UINT8_C(9));
 
     CHECK(target != NULL);
     CHECK(target->result_type == XR_CORE_TYPE_U16);

@@ -959,6 +959,21 @@ static bool emit_provider_failure(CBuffer *buffer, const XrBackendFunction *func
     return append_text(buffer, "return xr_aot_make(1, 0, 7);\n");
 }
 
+static bool emit_direct_call_outcome(CBuffer *buffer, const XrBackendFunction *function,
+                                     const XrBackendInstruction *instruction,
+                                     uint32_t call_operand_count, uint32_t function_id,
+                                     uint32_t instruction_id) {
+    if (instruction->successor_count == 1u) {
+        if (!append_format(buffer, "        if (call_%u.kind == 1 && call_%u.trap == 7) ",
+                           instruction_id, instruction_id) ||
+            !emit_parallel_edge(buffer, function, instruction, 0u, call_operand_count,
+                                function_id))
+            return false;
+    }
+    return append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n",
+                         instruction_id, instruction_id);
+}
+
 static bool emit_return(CBuffer *buffer, const XrBackendFunction *function,
                         const XrBackendInstruction *instruction) {
     uint32_t kind = outcome_value_kind(function->result_type_id);
@@ -1000,16 +1015,8 @@ static bool emit_call(CBuffer *buffer, const XrBackendIR *ir,
         return false;
     if (!append_text(buffer, ";\n"))
         return false;
-    if (instruction->successor_count == 1u) {
-        if (!append_format(buffer, "        if (call_%u.kind == 1 && call_%u.trap == 7) ",
-                           instruction_id, instruction_id) ||
-            !emit_parallel_edge(buffer, function, instruction, 0u, call_operand_count,
-                                function_id) ||
-            !append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n",
-                           instruction_id, instruction_id))
-            return false;
-    } else if (!append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n",
-                              instruction_id, instruction_id)) {
+    if (!emit_direct_call_outcome(buffer, function, instruction, call_operand_count, function_id,
+                                  instruction_id)) {
         return false;
     }
     if (instruction->result_id != XR_PROGRAM_LOCATION_NONE) {
@@ -1098,7 +1105,8 @@ static bool emit_witness_call_cases(CBuffer *buffer, const XrBackendIR *ir,
 
 static bool emit_witness_call(CBuffer *buffer, const XrBackendIR *ir,
                               const XrBackendFunction *function,
-                              const XrBackendInstruction *instruction, uint32_t instruction_id) {
+                              const XrBackendInstruction *instruction, uint32_t function_id,
+                              uint32_t instruction_id) {
     uint32_t interface_id = 0u;
     const XrValidatedSignature *signature =
         witness_signature(ir, function, instruction, &interface_id);
@@ -1116,8 +1124,8 @@ static bool emit_witness_call(CBuffer *buffer, const XrBackendIR *ir,
     }
     if (!emit_witness_call_cases(buffer, ir, instruction, signature, interface_id, instruction_id,
                                  result, NULL, NULL) ||
-        !append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n", instruction_id,
-                       instruction_id))
+        !emit_direct_call_outcome(buffer, function, instruction, signature->parameter_count,
+                                  function_id, instruction_id))
         return false;
     if (instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
         signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
@@ -1204,7 +1212,8 @@ static bool emit_callable_call_cases(CBuffer *buffer, const XrBackendIR *ir,
 
 static bool emit_callable_call(CBuffer *buffer, const XrBackendIR *ir,
                                const XrBackendFunction *function,
-                               const XrBackendInstruction *instruction, uint32_t instruction_id) {
+                               const XrBackendInstruction *instruction, uint32_t function_id,
+                               uint32_t instruction_id) {
     const XrValidatedSignature *signature = callable_signature(ir, function, instruction);
     if (!signature || !append_format(buffer,
                                      "        XrAotOutcome call_%u = xr_aot_make(4, 0, 0);\n"
@@ -1220,8 +1229,8 @@ static bool emit_callable_call(CBuffer *buffer, const XrBackendIR *ir,
     }
     if (!emit_callable_call_cases(buffer, ir, function, instruction, signature, instruction_id,
                                   result, NULL, NULL) ||
-        !append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n", instruction_id,
-                       instruction_id))
+        !emit_direct_call_outcome(buffer, function, instruction,
+                                  signature->parameter_count + 1u, function_id, instruction_id))
         return false;
     if (instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
         signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
@@ -1756,14 +1765,16 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
             return emit_call(buffer, ir, function, instruction, function_id, instruction_id);
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
-            return emit_callable_call(buffer, ir, function, instruction, instruction_id);
+            return emit_callable_call(buffer, ir, function, instruction, function_id,
+                                      instruction_id);
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
             return emit_invoke(buffer, ir, function, instruction, function_id, instruction_id);
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
             return emit_callable_invoke(buffer, ir, function, instruction, function_id,
                                         instruction_id);
         case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
-            return emit_witness_call(buffer, ir, function, instruction, instruction_id);
+            return emit_witness_call(buffer, ir, function, instruction, function_id,
+                                     instruction_id);
         case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
             return emit_witness_invoke(buffer, ir, function, instruction, function_id,
                                        instruction_id);

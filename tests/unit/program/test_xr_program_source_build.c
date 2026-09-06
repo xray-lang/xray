@@ -72,8 +72,7 @@ typedef struct ProviderTrapCleanupProbe {
     uint32_t events;
     uint32_t clock_calls;
     uint32_t close_calls;
-    int64_t read_handle;
-    int64_t write_handle;
+    int64_t close_handles[2];
 } ProviderTrapCleanupProbe;
 
 static bool stable_id_equal(XrStableId left, XrStableId right) {
@@ -164,8 +163,7 @@ static XrProviderCallStatus provider_trap_close_probe(void *context, int64_t han
     if (!probe || !result_out)
         return XR_PROVIDER_CALL_FAILED;
     uint32_t phase = probe->events % 3u;
-    int64_t expected = phase == 1u ? probe->read_handle : probe->write_handle;
-    if ((phase != 1u && phase != 2u) || handle != expected)
+    if (phase < 1u || phase > 2u || handle != probe->close_handles[phase - 1u])
         return XR_PROVIDER_CALL_FAILED;
     *result_out = true;
     ++probe->events;
@@ -969,13 +967,23 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
     static const char source[] =
         "import sys\n"
         "import time\n"
-        "fn answer() -> i64 {\n"
+        "fn rejected() -> i64 { return time.now() }\n"
+        "fn invoke(body: fn() -> i64, indirect: bool) -> i64 {\n"
         "  var live = sys.Pipe(2147483646, 2147483647)\n"
         "  defer {\n"
         "    live.closeRead()\n"
         "    live.closeWrite()\n"
         "  }\n"
-        "  return time.now()\n"
+        "  var result = 0\n"
+        "  if (indirect) {\n"
+        "    result = body()\n"
+        "  } else {\n"
+        "    result = rejected()\n"
+        "  }\n"
+        "  return result\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        "  return invoke(rejected, true)\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1005,6 +1013,9 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
     ASSERT_EQ_UINT(program_operation_successor_count(
                        first.program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT, 1u),
                    1u);
+    ASSERT_EQ_UINT(program_operation_successor_count(
+                       first.program, XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT, 1u),
+                   1u);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_TRAP), 1u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 2u);
 
@@ -1023,8 +1034,7 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
                                       &expected_close_operation, &key_digest));
 
     ProviderTrapCleanupProbe probe = {
-        .read_handle = INT64_C(2147483646),
-        .write_handle = INT64_C(2147483647),
+        .close_handles = {INT64_C(2147483646), INT64_C(2147483647)},
     };
     XrProviderOperationBinding operations[2] = {0};
     XrProviderBinding providers[2] = {0};
@@ -1148,9 +1158,10 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
             "    (void)context;\n"
             "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
             "!result) return 3;\n"
-            "    if ((xr_probe_events == UINT32_C(1) && handle != INT64_C(2147483646)) || "
-            "(xr_probe_events == UINT32_C(2) && handle != INT64_C(2147483647)) || "
-            "xr_probe_events < UINT32_C(1) || xr_probe_events > UINT32_C(2)) return 4;\n"
+            "    static const int64_t handles[] = {INT64_C(2147483646), "
+            "INT64_C(2147483647)};\n"
+            "    if (xr_probe_events < UINT32_C(1) || xr_probe_events > UINT32_C(2) || "
+            "handle != handles[xr_probe_events - UINT32_C(1)]) return 4;\n"
             "    *result = UINT8_C(1);\n"
             "    ++xr_probe_events;\n"
             "    return 0;\n"

@@ -6395,7 +6395,7 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
     if (resolved_module_namespace_carrier(context, function, value))
         return value_is_only_elided_operand(context, function, value);
     if (shared_callable_value_is_exact(context, function, value))
-        return false;
+        return value_is_only_elided_operand(context, function, value);
     if (resolved_class_carrier(context, function, value, XG_NO_ID, NULL))
         return value_is_only_elided_operand(context, function, value);
     return (value->op == XI_GET_SHARED || value->op == XI_GET_BUILTIN) &&
@@ -7004,6 +7004,24 @@ static XrProgramBuildStatus append_trap_edge(XrXiBuildContext *context, const Xi
     return XR_PROGRAM_BUILD_OK;
 }
 
+static bool exact_indirect_direct_call(XrXiBuildContext *context, const XiFunc *function,
+                                       const XiValue *call) {
+    if (!call || call->op != XI_CALL || call->nargs == 0u || !call->args ||
+        resolved_sealed_callee(context, function, call))
+        return false;
+    const XgCallsiteSummary *callsite = resolved_callsite(context, function, call);
+    if (!callsite ||
+        (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE) ||
+        (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
+        (callsite->flags & XG_CALL_MAY_ERROR) != 0u)
+        return false;
+    /* Trap-edge discovery runs before canonical callable TypeIds are
+     * materialized.  The closed Xg callsite contract is the phase-correct
+     * admission fact here; translation later validates its exact callable
+     * signature and result type. */
+    return true;
+}
+
 static XrProgramBuildStatus prepare_trap_continuations(
     XrXiBuildContext *context, char *diagnostic, size_t diagnostic_size) {
     for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
@@ -7021,7 +7039,10 @@ static XrProgramBuildStatus prepare_trap_continuations(
                     bool provider_call = resolved_provider_native_call(context, function, call);
                     const XiFunc *sealed_callee =
                         provider_call ? NULL : resolved_sealed_callee(context, function, call);
-                    if ((!provider_call && !sealed_callee) ||
+                    bool indirect_call = provider_call || sealed_callee
+                                             ? false
+                                             : exact_indirect_direct_call(context, function, call);
+                    if ((!provider_call && !sealed_callee && !indirect_call) ||
                         block_typed_invoke_call(context, function, block) == call ||
                         resolved_canonical_class_construction(context, function, call, NULL, NULL))
                         continue;
@@ -7191,6 +7212,116 @@ static XrProgramBuildStatus prepare_coroutine_call_arguments(
     return XR_PROGRAM_BUILD_OK;
 }
 
+typedef struct XrXiTrapCallContract {
+    const XrParamMode *parameter_modes;
+    uint32_t parameter_count;
+    uint32_t first_operand;
+    bool indirect;
+} XrXiTrapCallContract;
+
+static bool trap_call_contract(XrXiBuildContext *context,
+                               const XrXiFunctionStorage *function, const XiValue *call,
+                               XrXiTrapCallContract *contract) {
+    if (!context || !function || !call || !call->args || !contract)
+        return false;
+    memset(contract, 0, sizeof(*contract));
+    const XiFunc *callee = resolved_sealed_callee(context, function->xi, call);
+    if (callee) {
+        const XrXiFunctionStorage *callee_storage =
+            find_xi_function(context, callee, NULL, NULL);
+        if (!callee_storage)
+            return false;
+        contract->first_operand = callee->has_receiver ? 0u : 1u;
+        contract->parameter_modes = callee_storage->parameter_modes;
+        contract->parameter_count =
+            callee->nparams +
+            (callee_storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
+    } else if (exact_indirect_direct_call(context, function->xi, call)) {
+        const XiValue *callable = logical_value_identity(call->args[0]);
+        uint16_t callable_type_id = XR_CORE_TYPE_VOID;
+        if (!callable ||
+            !map_callable_call_type(context, function->xi, call, callable->type,
+                                    &callable_type_id, NULL))
+            return false;
+        const XrXiTypeStorage *callable_type =
+            find_dynamic_type_by_id(context, callable_type_id);
+        if (!callable_type || !callable_type->callable_signature)
+            return false;
+        contract->parameter_modes = callable_type->callable_signature->parameter_modes;
+        contract->parameter_count = callable_type->callable_signature->parameter_count;
+        contract->indirect = true;
+    } else {
+        return false;
+    }
+    uint32_t prefix = contract->first_operand + (contract->indirect ? 1u : 0u);
+    return call->nargs == prefix + contract->parameter_count &&
+           (contract->parameter_count == 0u || contract->parameter_modes);
+}
+
+static bool trap_call_operand_consumes(const XrXiTrapCallContract *contract,
+                                       uint32_t operand) {
+    uint32_t prefix = contract->first_operand + (contract->indirect ? 1u : 0u);
+    return operand >= prefix && operand - prefix < contract->parameter_count &&
+           contract->parameter_modes[operand - prefix] == XR_PARAM_MOVE;
+}
+
+/* A direct call can borrow an affine owner without consuming it.  If the
+ * private backend reports provider-call-failed while that call is active,
+ * the caller still owns the value and the trap cleanup must close it. */
+static XrProgramBuildStatus prepare_trap_borrowed_owner_arguments(
+    XrXiBuildContext *context, XrXiFunctionStorage *function, char *diagnostic,
+    size_t diagnostic_size) {
+    for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count; ++edge_index) {
+        const XrXiTrapEdge *edge = &context->trap_edges[edge_index];
+        const XiValue *call = edge->call;
+        XrXiTrapCallContract contract;
+        if (edge->function != function->xi || !trap_call_contract(context, function, call,
+                                                                  &contract))
+            continue;
+        XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+        if (!handler)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi trap continuation endpoint is absent");
+        for (uint32_t operand = contract.first_operand; operand < call->nargs; ++operand) {
+            const XiValue *owner = logical_value_identity(call->args[operand]);
+            if (trap_call_operand_consumes(&contract, operand) ||
+                !logical_value_produces_owner(context, function->xi, owner, 0u))
+                continue;
+            uint16_t owner_type = XR_CORE_TYPE_VOID;
+            if (!map_logical_value_type(context, function->xi, call->args[operand],
+                                        &owner_type) ||
+                owner_type == XR_CORE_TYPE_VOID)
+                return fail(diagnostic, diagnostic_size,
+                            XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi trap-capable call v%u borrowed owner operand %u has no CoreSpec "
+                            "type",
+                            call->id, operand);
+            XrProgramBuildStatus status = add_block_argument(
+                context, function, handler, call->args[operand], NULL, owner_type,
+                XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool trap_call_consumes_source(XrXiBuildContext *context,
+                                      const XrXiFunctionStorage *function,
+                                      const XiValue *call, const XiValue *source) {
+    XrXiTrapCallContract contract;
+    if (!source || !trap_call_contract(context, function, call, &contract))
+        return false;
+    source = exact_logical_value_identity(context, function->xi, source);
+    for (uint32_t operand = contract.first_operand; operand < call->nargs; ++operand) {
+        const XiValue *argument = exact_logical_value_identity(
+            context, function->xi, call->args[operand]);
+        if (trap_call_operand_consumes(&contract, operand) && argument == source)
+            return true;
+    }
+    return false;
+}
+
 static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                                                   XrXiFunctionStorage *function, char *diagnostic,
                                                   size_t diagnostic_size) {
@@ -7198,6 +7329,10 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         prepare_invoke_arguments(context, function, diagnostic, diagnostic_size);
     if (invoke_status != XR_PROGRAM_BUILD_OK)
         return invoke_status;
+    XrProgramBuildStatus trap_owner_status =
+        prepare_trap_borrowed_owner_arguments(context, function, diagnostic, diagnostic_size);
+    if (trap_owner_status != XR_PROGRAM_BUILD_OK)
+        return trap_owner_status;
     XrXiBlockStorage *entry = find_block_storage(function, function->xi->entry);
     if (!entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -7271,6 +7406,19 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (!source || !handler)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi provider trap continuation endpoint is absent");
+            uint32_t source_argument_count = source->argument_count;
+            for (uint32_t argument = 0u; argument < source_argument_count; ++argument) {
+                XrXiBlockArgumentStorage owner = source->argument_storage[argument];
+                if (owner.ownership != XR_CORE_IR_OWNER ||
+                    owner.implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+                    trap_call_consumes_source(context, function, edge->call, owner.source))
+                    continue;
+                XrProgramBuildStatus status = add_block_argument(
+                    context, function, handler, owner.source, NULL, owner.type_id,
+                    XR_XI_INVOKE_ARGUMENT_NONE, &changed, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
             for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
                 XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
                 if (edge_argument->phi ||

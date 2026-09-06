@@ -3118,10 +3118,10 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT: {
             const XrValidatedSignature *callee =
                 callable_call_signature(context->program, function, instruction);
-            if (!callee || instruction->successor_count != 0u ||
+            if (!callee || instruction->successor_count > 1u ||
                 callee->error_type_id != XR_CORE_TYPE_VOID ||
                 callee->panic_type_id != XR_CORE_TYPE_VOID ||
-                instruction->operand_count != callee->parameter_count + 1u ||
+                instruction->operand_count < callee->parameter_count + 1u ||
                 (callee->result_type_id == XR_CORE_TYPE_VOID) !=
                     (instruction->result_id == XR_PROGRAM_LOCATION_NONE) ||
                 instruction->result_type_id != callee->result_type_id ||
@@ -3136,6 +3136,10 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
                 return false;
             }
+            if (!verify_optional_trap_continuation(
+                    context, function, instruction, block_id, instruction_id,
+                    callee->parameter_count + 1u, false, consumed, location))
+                return false;
             if ((function->effect_mask & callee->effect_mask) != callee->effect_mask) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_EFFECT, location);
                 return false;
@@ -3842,7 +3846,8 @@ static bool edge_argument_source(const XrValidatedProgram *program,
         if (successor_index != 0u)
             operand += function->blocks[terminator->successors[0]].argument_count;
     } else if (terminator->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
-               terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT) {
+               terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+               terminator->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT) {
         const XrValidatedBlock *target =
             &function->blocks[terminator->successors[successor_index]];
         if (target->argument_count > terminator->operand_count)

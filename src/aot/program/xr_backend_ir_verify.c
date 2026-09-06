@@ -135,7 +135,9 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_PLACE_TAKE:
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
-            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                   (instruction->operation_id != XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT ||
+                    instruction->successor_count <= 1u);
         case XR_CORE_OP_CORE_PROVIDER_CALL:
         case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {
             uint32_t requirement = instruction->immediate.provider_operation.requirement_index;
@@ -326,7 +328,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     return false;
                 }
                 if ((instruction->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
-                     instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT) &&
+                     instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+                     instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT) &&
                     instruction->successor_count == 1u) {
                     const XrBackendBlock *target =
                         &function->blocks[instruction->successors[0]];

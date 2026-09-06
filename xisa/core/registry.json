@@ -1527,7 +1527,8 @@
       "type_rule": {
         "operands": [
           "C",
-          "P..."
+          "P...",
+          "trap-edge-values..."
         ],
         "result": "R?",
         "immediates": {}
@@ -1537,7 +1538,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -1551,7 +1552,8 @@
       "ownership": {
         "operands": [
           "borrow-callable",
-          "parameter-mode..."
+          "parameter-mode...",
+          "trap-edge-preserve..."
         ],
         "result": "callable-signature-result-mode"
       },
@@ -1559,7 +1561,7 @@
       "materialization": "executor-private-callable-dispatch",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the packed closed target trace under the callable signature"
+        "allowed_trace": "the packed closed target trace under the callable signature; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
       },
       "kat_validator": "indirect-call",
       "coverage": {

@@ -351,7 +351,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         38u,
         255u,
         11u,
-        1u,
+        9u,
         UINT32_C(4),
         UINT32_C(0),
         "core.call.indirect_direct",

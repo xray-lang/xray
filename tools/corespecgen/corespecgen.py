@@ -592,11 +592,19 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and (not has_error or error_type != "panic-info")
                 and (not has_panic or panic_type == "panic-info"))
     if validator == "indirect-call":
+        has_trap_edge = actual.get("successor_count", 0) != 0
+        trap_edge_valid = (
+            actual.get("successor_count", 0) == 1
+            and actual.get("trap") == "provider-call-failed"
+            and isinstance(actual.get("live_values"), list)
+            and actual.get("live_values") == actual.get("trap_edge_values")
+        )
         return (actual.get("operand_kind") == "callable"
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
                 and actual.get("callable_error_type") == "void"
-                and actual.get("callable_panic_type") == "void")
+                and actual.get("callable_panic_type") == "void"
+                and (not has_trap_edge or trap_edge_valid))
     if validator == "indirect-invoke":
         error_type = actual.get("callable_error_type")
         panic_type = actual.get("callable_panic_type")
