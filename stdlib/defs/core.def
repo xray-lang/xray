@@ -688,6 +688,9 @@ module sys {
     link_object: false
     layer: "system"
     visibility: "internal"
+    effect: "nothrow"
+    provider_contract: "xray.runtime.provider.v1/io"
+    provider_operation: "xray.runtime.provider-operation.v1/io/pipe-close"
   }
 }
 

@@ -39,6 +39,7 @@ typedef enum XrProviderTrampolineKind {
     XR_PROVIDER_TRAMPOLINE_INVALID = 0,
     XR_PROVIDER_TRAMPOLINE_I64_UNARY,
     XR_PROVIDER_TRAMPOLINE_I64_NULLARY,
+    XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
     XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY,
     XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE,
 } XrProviderTrampolineKind;
@@ -49,6 +50,8 @@ typedef enum XrProviderTrampolineKind {
 typedef XrProviderCallStatus (*XrProviderI64UnaryEntry)(void *context, int64_t argument,
                                                        int64_t *result_out);
 typedef XrProviderCallStatus (*XrProviderI64NullaryEntry)(void *context, int64_t *result_out);
+typedef XrProviderCallStatus (*XrProviderBoolI64UnaryEntry)(void *context, int64_t argument,
+                                                           bool *result_out);
 typedef XrProviderCallStatus (*XrProviderOptionalI64PairNullaryEntry)(void *context,
                                                                       bool *present_out,
                                                                       int64_t *first_out,
@@ -62,6 +65,7 @@ typedef struct XrProviderOperationBinding {
     union {
         XrProviderI64UnaryEntry i64_unary;
         XrProviderI64NullaryEntry i64_nullary;
+        XrProviderBoolI64UnaryEntry bool_i64_unary;
         XrProviderOptionalI64PairNullaryEntry optional_i64_pair_nullary;
         XrProviderOutputWriteEntry output_write;
     } entry;
@@ -166,6 +170,9 @@ XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_i64_unary
 XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_i64_nullary(
     const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
     int64_t *result_out);
+XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_bool_i64_unary(
+    const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
+    int64_t argument, bool *result_out);
 XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_optional_i64_pair_nullary(
     const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
     bool *present_out, int64_t *first_out, int64_t *second_out);

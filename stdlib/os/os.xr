@@ -37,7 +37,10 @@ final class _CapturedOutput {
 // A capture limit bounds retained memory, not pipe progress. Once the limit is
 // reached the reader keeps draining so a child cannot deadlock on a full pipe.
 fn _capturePipe(pipe: move Pipe, maxBytes: i64) -> _CapturedOutput? {
-    defer { pipe.close() }
+    defer {
+        pipe.closeRead()
+        pipe.closeWrite()
+    }
     var out = Array<u8>()
     var truncated = false
     while (true) {
@@ -167,14 +170,16 @@ export fn exec(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES
         return null
     }
 
-    var stdoutPipe = sys.Pipe.open()
-    if (stdoutPipe == null) { return null }
+    var stdoutOpened = sys.Pipe.open()
+    if (stdoutOpened == null) { return null }
+    var stdoutPipe = stdoutOpened!
 
-    var stderrPipe = sys.Pipe.open()
-    if (stderrPipe == null) {
-        stdoutPipe!.close()
+    var stderrOpened = sys.Pipe.open()
+    if (stderrOpened == null) {
+        (move stdoutPipe).close()
         return null
     }
+    var stderrPipe = stderrOpened!
 
     var program = "/bin/sh"
     var args: Array<string> = ["-c", command]
@@ -184,25 +189,23 @@ export fn exec(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES
     }
 
     var spawned = sys.Process.spawn(program, args,
-        ProcessOptions(null, null, null, stdoutPipe!.writeEnd(), stderrPipe!.writeEnd()))
+        ProcessOptions(null, null, null, stdoutPipe.writeEnd(), stderrPipe.writeEnd()))
     if (spawned == null) {
-        stdoutPipe!.close()
-        stderrPipe!.close()
+        (move stdoutPipe).close()
+        (move stderrPipe).close()
         return null
     }
 
     // Process.spawn borrows redirection endpoints. The parent must close both
     // write ends before waiting, otherwise EOF can never reach the readers.
-    var stdoutWriteClosed = stdoutPipe!.closeWrite()
-    var stderrWriteClosed = stderrPipe!.closeWrite()
+    var stdoutWriteClosed = stdoutPipe.closeWrite()
+    var stderrWriteClosed = stderrPipe.closeWrite()
     var stdoutCapture: _CapturedOutput? = null
     var stderrCapture: _CapturedOutput? = null
     var exitCode = -1
-    var stdoutReady = stdoutPipe!
-    var stderrReady = stderrPipe!
     scope {
-        var stdoutTask = go _capturePipe(move stdoutReady, maxStdoutBytes)
-        var stderrTask = go _capturePipe(move stderrReady, maxStderrBytes)
+        var stdoutTask = go _capturePipe(move stdoutPipe, maxStdoutBytes)
+        var stderrTask = go _capturePipe(move stderrPipe, maxStderrBytes)
         exitCode = spawned!.wait()
         stdoutCapture = await stdoutTask
         stderrCapture = await stderrTask

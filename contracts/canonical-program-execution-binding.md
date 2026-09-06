@@ -23,13 +23,14 @@ non-consuming `READ` of its affine callable operand, so an owned pack and a borr
 function parameter are both valid; target identity and capture layout remain private to each
 executor and never enter the execution binding.
 
-Provider invocation is available only through ABI-matched typed lease adapters. Scalar i64 calls
-and byte-output writes occupy distinct trampoline kinds; an operation cannot enter through the
-wrong union member. Each adapter resolves the dense program requirement and operation index under
-the instance lock, pins the lease ticket for the duration of the call, and invokes user code
-without holding that lock. A copied lease cannot be released while any nested or concurrent
-provider call is in flight. Program/profile accessors return retained references so a racing
-release cannot invalidate a borrowed pointer.
+Provider invocation is available only through ABI-matched typed lease adapters. Nullary and unary
+i64 calls, unary `bool(i64)` calls, nullary optional-i64-pair calls, and byte-output writes occupy
+distinct trampoline kinds; an operation cannot enter through the wrong union member. Each adapter
+resolves the dense program requirement and operation index under the instance lock, pins the lease
+ticket for the duration of the call, and invokes user code without holding that lock. A copied
+lease cannot be released while any nested or concurrent provider call is in flight.
+Program/profile accessors return retained references so a racing release cannot invalidate a
+borrowed pointer.
 
 The generation protocol is ACTIVE -> DRAINING -> RETIRED. DRAINING rejects new pins; RETIRED
 requires zero pins; a successor is created only from a retired instance at generation + 1. The
@@ -45,31 +46,36 @@ ProgramId, BoundaryAbiId, BoundaryKind, TypeId, and the complete derived layout.
 binds ExecutionId, BoundaryKind, FunctionId, and all argument/result slots. This contract is a
 public-boundary description, not an executor-local representation.
 
-The currently admitted types are copy values, so root tables are empty and cleanup is explicitly
-trivial. Nontrivial ownership transfer, root/cleanup rows, coroutine state, and concrete AOT, FFI,
-hybrid, or reloadable adapters remain inactive. Runtime-kernel policy remains a walking skeleton for
-the active object/string identity, RC/weak/panic/OOM policies, and generation protocol. No executor
-slot, native register, or common local physical plan is stored here.
+The public BoundaryABI remains active only for copy-value boundaries, so its root tables are empty
+and its cleanup is explicitly trivial. Program-internal affine aggregate/variant values, taking
+variant projection, and exact `MOVE` calls are admitted without becoming public boundary carriers.
+The active Pipe lifecycle slice binds a consumed signed-i64 resource token to an exact
+`bool(i64)` provider operation and relies on the enclosing `MOVE` method call to invalidate the
+Pipe owner. It does not grant an implicit destructor, public owned boundary, general root/cleanup
+rows, or arbitrary resource-token inference. Coroutine boundary state and concrete AOT, FFI,
+hybrid, or reloadable adapters remain inactive. Runtime-kernel policy remains a walking skeleton
+for the active object/string identity, RC/weak/panic/OOM policies, and generation protocol. No
+executor slot, native register, or common local physical plan is stored here.
 
 anchor-sha256: src/plan/target/xr_target_profile.h 0673f198b623c2b6e3f1895b2c2fdeed19b7fae5ed78ff36e04936b60e4596cb
 anchor-sha256: src/plan/target/xr_target_profile.c a132e3f382f6293969649e57445e2543aaf0c133584d5345374680d653f8f9e1
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 4092adc2ff88ab03eccf6e9795b4c32efd7173a8acf96c94dba7932cc5e34ab7
 anchor-sha256: src/plan/target/xr_target_verify.c a7aade83086711c19cdfc03b0130fd186c5a5a71bd549273476260ae21304433
-anchor-sha256: src/execution/xr_execution.h 8a0e3e39406f6e500e989dfa2755235045cc60aca80721c968e5593b7313b27a
-anchor-sha256: src/execution/xr_execution.c 1e633f037c802e395858d593139fccec7ee2b5c4d660ba7105a9d94f38ecd0a6
+anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
+anchor-sha256: src/execution/xr_execution.c 45fbee17c9a8595c66dfa0f0fdf08c3b3f11cb54df58ee0dff8442c3b65b2705
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 8ea0d45fd8ddefa21b0fbe4f070952baf11a1434db5d8889e429c7a551fc5889
-anchor-sha256: src/program/xr_validated_program_internal.h 645339da6077b8dc297981e58b3bb93850210debc5dd31d72b4069c37c7b4dc9
+anchor-sha256: src/program/xr_program_verify.c bc6c8bf14d1b3319dac89a1d5ef2ade065067e79d666d7cb45bedc7267f0e7cb
+anchor-sha256: src/program/xr_validated_program_internal.h 5732d42e183594f3103b9a092d37dd17e4d4cd6d2bbeebaa0657b64f8f706a07
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
-anchor-sha256: src/runtime/abi/xr_runtime_contract.c a690849da40d585746ad8e96498707be7a6fd5c9414587b21e5a3ae2413ad0b6
+anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
 anchor-sha256: tests/unit/plan/test_target_profile.c ebcd1c0fef635f5e4997fd41523f47349b5c6ccaf868eaa491789993abaab8ac
 anchor-sha256: tests/unit/execution/test_xr_execution.c 16b1e41d724dc803489b2910f0e0c574f17de432cc4e4e0880e71e91805f86a0
 anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 177583c0f785168d4693a33d035ce52c04c6bfd37eeb4de7dacf0843aeffb601
-anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 950a30305d929637d52c8b5c10672ed1f03fc33c8c22b1c2c6e5c703fe96f72f
+anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 1bf549df5f42fabbbe537b578709e032b72b8d0b4848627186945a12b2ee215f
 anchor-sha256: scripts/check_xr_execution_contracts.py f478d5f8032c7a17c79a49bb79e87a49687ebf13b6037533fa6a35fe16310e5b
 anchor-sha256: contracts/canonical-program/execution-binding-coverage.json efee9456407f35a994f73bed05dd3116790be6f3667d400691cb08648a729227

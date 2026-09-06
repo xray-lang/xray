@@ -23,6 +23,7 @@ typedef struct XrBoundOperation {
     union {
         XrProviderI64UnaryEntry i64_unary;
         XrProviderI64NullaryEntry i64_nullary;
+        XrProviderBoolI64UnaryEntry bool_i64_unary;
         XrProviderOptionalI64PairNullaryEntry optional_i64_pair_nullary;
         XrProviderOutputWriteEntry output_write;
     } entry;
@@ -160,6 +161,12 @@ static bool provider_operation_uses_i64_unary_trampoline(
            operation->failure_flags == 0u;
 }
 
+static bool provider_slot_is_consumed_i64(const XrTargetProviderCallSlotAbi *slot) {
+    return slot && slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER &&
+           slot->width == 8u && slot->alignment == 8u &&
+           slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED && slot->flags == 0u;
+}
+
 static bool provider_operation_uses_i64_nullary_trampoline(
     const XrTargetProviderOperationContract *operation) {
     const XrTargetProviderCallAbiContract *abi = operation ? &operation->call_abi : NULL;
@@ -167,6 +174,21 @@ static bool provider_operation_uses_i64_nullary_trampoline(
            abi->calling_convention == XR_TARGET_PROVIDER_CALLING_CONVENTION_C &&
            abi->variadic == 0u && abi->parameter_count == 0u &&
            provider_slot_is_scalar_i64(&abi->result) && operation->lifetime_flags == 0u &&
+           operation->failure_flags == 0u;
+}
+
+static bool provider_operation_uses_bool_i64_unary_trampoline(
+    const XrTargetProviderOperationContract *operation) {
+    const XrTargetProviderCallAbiContract *abi = operation ? &operation->call_abi : NULL;
+    return abi && abi->schema_version == XR_RUNTIME_ABI_SCHEMA_VERSION &&
+           abi->calling_convention == XR_TARGET_PROVIDER_CALLING_CONVENTION_C &&
+           abi->variadic == 0u && abi->parameter_count == 1u &&
+           provider_slot_is_consumed_i64(&abi->parameters[0]) &&
+           abi->result.value_kind == XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER &&
+           abi->result.width == 1u && abi->result.alignment == 1u &&
+           abi->result.ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE &&
+           abi->result.flags == 0u && operation->effect_flags == XR_TARGET_PROVIDER_EFFECT_IO &&
+           operation->lifetime_flags == XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED &&
            operation->failure_flags == 0u;
 }
 
@@ -226,6 +248,9 @@ static XrProviderTrampolineKind program_operation_trampoline_kind(const XrValida
                             break;
                         case XR_PROVIDER_LOGICAL_CALL_I64_NULLARY:
                             candidate = XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
+                            break;
+                        case XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY:
+                            candidate = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
                             break;
                         case XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY:
                             candidate = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
@@ -331,6 +356,8 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
                 expected_trampoline = XR_PROVIDER_TRAMPOLINE_I64_UNARY;
             else if (provider_operation_uses_i64_nullary_trampoline(expected_operation))
                 expected_trampoline = XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
+            else if (provider_operation_uses_bool_i64_unary_trampoline(expected_operation))
+                expected_trampoline = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
             else if (provider_operation_uses_optional_i64_pair_nullary_trampoline(
                          expected_operation))
                 expected_trampoline = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
@@ -349,6 +376,8 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
                      ? actual_operation->entry.i64_unary == NULL
                  : expected_trampoline == XR_PROVIDER_TRAMPOLINE_I64_NULLARY
                      ? actual_operation->entry.i64_nullary == NULL
+                 : expected_trampoline == XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY
+                     ? actual_operation->entry.bool_i64_unary == NULL
                  : expected_trampoline == XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY
                      ? actual_operation->entry.optional_i64_pair_nullary == NULL
                      : actual_operation->entry.output_write == NULL))
@@ -406,6 +435,10 @@ static bool copy_bindings(XrInstance *instance, const XrProviderBinding *binding
                      XR_PROVIDER_TRAMPOLINE_I64_NULLARY)
                 destination->operations[operation].entry.i64_nullary =
                     source->operations[operation].entry.i64_nullary;
+            else if (source->operations[operation].trampoline_kind ==
+                     XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY)
+                destination->operations[operation].entry.bool_i64_unary =
+                    source->operations[operation].entry.bool_i64_unary;
             else if (source->operations[operation].trampoline_kind ==
                      XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY)
                 destination->operations[operation].entry.optional_i64_pair_nullary =
@@ -690,6 +723,64 @@ XrExecutionProviderCallResult xr_execution_lease_provider_call_i64_nullary(
     ticket = find_lease_ticket_locked(instance, lease_ticket);
     XR_CHECK(ticket && ticket->in_flight_calls != 0u,
              "nullary provider call lost its execution lease pin");
+    --ticket->in_flight_calls;
+    lease_unlock(instance);
+    if (status != XR_PROVIDER_CALL_OK)
+        return XR_EXECUTION_PROVIDER_CALL_FAILED;
+    *result_out = provider_result;
+    return XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+XrExecutionProviderCallResult xr_execution_lease_provider_call_bool_i64_unary(
+    const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
+    int64_t argument, bool *result_out) {
+    if (result_out)
+        *result_out = false;
+    if (!lease || !lease->instance || lease->ticket == 0u)
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE;
+    if (!result_out)
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE;
+    XrInstance *instance = lease->instance;
+    const uint64_t lease_ticket = lease->ticket;
+    lease_lock(instance);
+    XrExecutionLeaseTicket *ticket = find_lease_ticket_locked(instance, lease_ticket);
+    if (!ticket) {
+        lease_unlock(instance);
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE;
+    }
+    XrProgramProviderRequirementView requirement = {0};
+    if (requirement_index >= instance->provider_count ||
+        !xr_validated_program_provider_requirement(instance->program, requirement_index,
+                                                   &requirement) ||
+        operation_index >= requirement.operation_count) {
+        lease_unlock(instance);
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE;
+    }
+    XrBoundProvider *provider = &instance->providers[requirement_index];
+    if (operation_index >= provider->operation_count ||
+        !stable_id_equal(provider->contract_id, requirement.contract_id) ||
+        !stable_id_equal(provider->operations[operation_index].operation_id,
+                         requirement.operation_ids[operation_index]) ||
+        provider->operations[operation_index].trampoline_kind !=
+            XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY ||
+        !provider->operations[operation_index].entry.bool_i64_unary ||
+        ticket->in_flight_calls == UINT32_MAX) {
+        lease_unlock(instance);
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE;
+    }
+    XrProviderBoolI64UnaryEntry entry =
+        provider->operations[operation_index].entry.bool_i64_unary;
+    void *entry_context = provider->operations[operation_index].context;
+    ++ticket->in_flight_calls;
+    lease_unlock(instance);
+
+    bool provider_result = false;
+    XrProviderCallStatus status = entry(entry_context, argument, &provider_result);
+
+    lease_lock(instance);
+    ticket = find_lease_ticket_locked(instance, lease_ticket);
+    XR_CHECK(ticket && ticket->in_flight_calls != 0u,
+             "bool unary provider call lost its execution lease pin");
     --ticket->in_flight_calls;
     lease_unlock(instance);
     if (status != XR_PROVIDER_CALL_OK)

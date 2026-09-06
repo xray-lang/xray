@@ -21,10 +21,13 @@ compile the real generated translation unit.
 
 Provider-backed operations lower an exact program requirement/operation index to a matching typed
 callback slot in the private runtime `XrAotContext` and normalize refusal to the canonical trap.
-`core.output.group.i64` formats the exact signed decimal line and performs one output-write call.
-Embedded AOT receives that typed callback from its host; hosted standalone AOT binds the generated
-entry directly to a binary stdout sink, while freestanding standalone emission without an embedder
-fails closed. The compiler neither receives nor captures a live provider instance or lease.
+The admitted logical shapes are nullary/unary i64, `bool(i64)`, nullary optional-i64-pair, and the
+dedicated byte sink; no erased provider-call ABI exists. `core.output.group.i64` formats the exact
+signed decimal line and performs one output-write call. The Pipe source slice emits target-native
+anonymous-pipe open and endpoint-close helpers only for the exact stable operations named by its
+profile, while retaining no live provider instance or lease in the compiler. Embedded AOT receives
+typed callbacks from its host; hosted standalone AOT binds the generated entry directly to its
+closed native helper set, while freestanding standalone emission without an embedder fails closed.
 
 `XrNativeArtifact` owns actual native bytes. `NativeArtifactId` hashes `ExecutionId`, `BackendId`,
 `ToolchainId`, `OptimizationPolicyId`, and those bytes. Toolchain identity is reconstructible from
@@ -51,7 +54,7 @@ anchor-sha256: src/aot/program/xr_backend_ir.h 1d9dca590e0a7ace9034939925bfe69fc
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
 anchor-sha256: src/aot/program/xr_backend_ir.c 1e943062d9dbdf3e69c9adb7c28986a438113275498896856ea189c52b2adf06
 anchor-sha256: src/aot/program/xr_backend_ir_verify.c 380d1663522db4b0e13d97254b0e16e2a9ac13110720f708c4c06df14fea1f0b
-anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 1488195f619afe4a3b8ffc80dd3bd587f155bd60964baa0dd904f6645ec76196
+anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 0c5765ff7a822b951adb407e736de687207014be0c05df7cf7b212757d25b845
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf

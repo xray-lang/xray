@@ -1024,6 +1024,17 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                             produced.as.value.kind = XR_VM_VALUE_I64;
                             produced.as.value.as.i64 = provider_result;
                         }
+                    } else if (call_kind == XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY) {
+                        bool provider_result = false;
+                        call = xr_execution_lease_provider_call_bool_i64_unary(
+                            context->lease,
+                            instruction.immediate.provider_operation.requirement_index,
+                            instruction.immediate.provider_operation.operation_index,
+                            values[instruction.operands[0]].as.value.as.i64, &provider_result);
+                        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
+                            produced.as.value.kind = XR_VM_VALUE_BOOL;
+                            produced.as.value.as.boolean = provider_result;
+                        }
                     } else if (call_kind == XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY) {
                         uint16_t pair_type_id = XR_CORE_TYPE_VOID;
                         (void) xr_validated_program_type_is_optional_i64_pair(

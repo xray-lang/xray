@@ -65,6 +65,10 @@ typedef bool (*XrReferenceProviderCallI64Unary)(void *context, uint32_t requirem
                                                 int64_t *result_out);
 typedef bool (*XrReferenceProviderCallI64Nullary)(void *context, uint32_t requirement_index,
                                                   uint32_t operation_index, int64_t *result_out);
+typedef bool (*XrReferenceProviderCallBoolI64Unary)(void *context,
+                                                    uint32_t requirement_index,
+                                                    uint32_t operation_index,
+                                                    int64_t argument, bool *result_out);
 typedef bool (*XrReferenceProviderCallOptionalI64PairNullary)(void *context,
                                                               uint32_t requirement_index,
                                                               uint32_t operation_index,
@@ -78,6 +82,7 @@ typedef struct XrReferenceProviderBinding {
     void *context;
     XrReferenceProviderCallI64Unary call_i64_unary;
     XrReferenceProviderCallI64Nullary call_i64_nullary;
+    XrReferenceProviderCallBoolI64Unary call_bool_i64_unary;
     XrReferenceProviderCallOptionalI64PairNullary call_optional_i64_pair_nullary;
     XrReferenceProviderOutputWrite output_write;
 } XrReferenceProviderBinding;

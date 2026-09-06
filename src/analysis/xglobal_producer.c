@@ -2536,6 +2536,35 @@ static XgClassId producer_lookup_class_from_tref(const XgProducer *p, const XrTy
     return producer_lookup_class(p, xr_tref_head_name(t));
 }
 
+static XgClassId producer_lookup_class_from_analyzer_type(const XgProducer *producer,
+                                                          const XrType *type) {
+    const XrClassInfo *info = NULL;
+    const XgDeclSummary *decl = NULL;
+    XgClassNameRow *class_row = NULL;
+    const XgClassSummary *class_summary = NULL;
+    if (!producer || !producer->evidence || !type ||
+        (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
+        return XG_NO_ID;
+    info = type->instance.class_ref;
+    if (!info || info->xg_class_id == XG_NO_ID || info->xg_decl_id == XG_NO_ID ||
+        info->xg_nominal_key == 0)
+        return XG_NO_ID;
+    decl = producer_decl_by_id(producer, info->xg_decl_id);
+    class_row = producer_lookup_class_row_by_id(producer, info->xg_class_id);
+    class_summary = class_row && class_row->summary_index < producer->evidence->nclasses
+                        ? &producer->evidence->classes[class_row->summary_index]
+                        : NULL;
+    if (!decl || !class_summary || decl->nominal_key != info->xg_nominal_key ||
+        producer_nominal_key(producer, decl) != info->xg_nominal_key ||
+        (decl->kind != XG_DECL_CLASS && decl->kind != XG_DECL_STRUCT &&
+         decl->kind != XG_DECL_UNION) ||
+        class_summary->class_id != info->xg_class_id ||
+        class_summary->decl_id != info->xg_decl_id || class_summary->module_id != decl->module_id ||
+        class_summary->decl_kind != decl->kind)
+        return XG_NO_ID;
+    return class_summary->class_id;
+}
+
 static XgMethodSummary *producer_find_class_method(XgGlobalEvidence *ev, const XgClassSummary *cls,
                                                    uint32_t name_id, uint32_t signature_key) {
     if (!ev || !cls || cls->method_start == 0)
@@ -9509,6 +9538,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                                                  bc->producer, receiver_interface, method_name_id);
         } else {
             XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
+            if (receiver_class == XG_NO_ID && bc->producer->analyzer)
+                receiver_class = producer_lookup_class_from_analyzer_type(
+                    bc->producer, analyzer_receiver_type);
             /* A function-typed field called directly (obj.field(args)) is an
              * indirect closure call, not a method dispatch: the field holds a
              * function value, so lowering emits XI_CALL. Recording it as a
@@ -9525,21 +9557,20 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             bool static_receiver =
                 analyzer_receiver_type && analyzer_receiver_type->kind == XR_KIND_CLASS;
             XgMethodSummary *method = NULL;
-            /* Static dispatch must join the analyzer-selected declaration to
-             * the stable Xglobal method row. Instance dispatch retains its
-             * existing hierarchy lookup until that broader domain publishes
-             * exact selections for every generic receiver. */
-            if (bc->producer->analyzer && static_receiver && analyzer_target_symbol) {
+            /* Analyzer-backed dispatch joins the selected declaration to the
+             * exact nominal receiver. Name lookup is retained only for the
+             * analyzer-free evidence producer. */
+            if (bc->producer->analyzer && analyzer_target_symbol) {
                 method = producer_find_method_for_symbol_in_hierarchy(
                     bc->producer, receiver_class, analyzer_target_symbol);
-            } else if (!static_receiver) {
+            } else if (!bc->producer->analyzer && !static_receiver) {
                 method = producer_find_method_by_name_in_hierarchy(
                     bc->producer, receiver_class, method_name_id, false);
             }
             if (field_result && field_result->kind == XR_KIND_FUNCTION) {
                 row.kind = XG_CALL_CLOSURE;
             } else if (receiver_class != XG_NO_ID) {
-                if (bc->producer->analyzer && static_receiver && !method) {
+                if (bc->producer->analyzer && !method) {
                     bc->producer->failed = true;
                     return;
                 }

@@ -630,6 +630,9 @@ static bool make_hosted_providers(
     XrTargetProviderCallSlotAbi signed_i64 =
         make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
                        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi consumed_i64 =
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED, 0);
     XrTargetProviderCallSlotAbi output_parameters[] = {
         make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
                        pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
@@ -696,7 +699,7 @@ static bool make_hosted_providers(
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
-        .operation_count = 2,
+        .operation_count = 3,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
         .provider_kind = XR_TARGET_PROVIDER_IO,
     };
@@ -708,7 +711,12 @@ static bool make_hosted_providers(
         !make_operation(&providers[3].operations[1], XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
                         make_call_abi(status_result, pipe_open_parameters, 3, target_endian),
                         XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
-                        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS))
+                        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS) ||
+        !make_operation(&providers[3].operations[2], XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
+                        make_call_abi(status_result, &consumed_i64, 1, target_endian),
+                        XR_TARGET_PROVIDER_EFFECT_IO,
+                        XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED,
+                        0))
         return false;
     qsort(providers[3].operations, providers[3].operation_count, sizeof(providers[3].operations[0]),
           compare_stable_id_first);

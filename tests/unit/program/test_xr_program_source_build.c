@@ -56,7 +56,8 @@ typedef struct ClockProviderProbe {
 } ClockProviderProbe;
 
 typedef struct PipeProviderProbe {
-    uint32_t calls;
+    uint32_t open_calls;
+    uint32_t close_calls;
     bool present;
     int64_t read_handle;
     int64_t write_handle;
@@ -95,6 +96,20 @@ static XrProviderCallStatus clock_provider_probe(void *context, int64_t *result_
     return XR_PROVIDER_CALL_OK;
 }
 
+static XrProviderCallStatus pipe_close_provider_probe(void *context, int64_t handle,
+                                                       bool *result_out) {
+    PipeProviderProbe *probe = context;
+    if (!probe || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    int64_t expected = (probe->close_calls & 1u) == 0u ? probe->read_handle
+                                                       : probe->write_handle;
+    if (handle != expected)
+        return XR_PROVIDER_CALL_FAILED;
+    ++probe->close_calls;
+    *result_out = true;
+    return XR_PROVIDER_CALL_OK;
+}
+
 static XrProviderCallStatus clock_provider_unary_probe(void *context, int64_t argument,
                                                        int64_t *result_out) {
     ClockProviderProbe *probe = context;
@@ -110,7 +125,7 @@ static XrProviderCallStatus pipe_provider_probe(void *context, bool *present_out
     PipeProviderProbe *probe = context;
     if (!probe || !present_out || !first_out || !second_out)
         return XR_PROVIDER_CALL_FAILED;
-    ++probe->calls;
+    ++probe->open_calls;
     *present_out = probe->present;
     *first_out = probe->read_handle;
     *second_out = probe->write_handle;
@@ -140,6 +155,15 @@ static bool reference_pipe_provider_call(void *context, uint32_t requirement_ind
     const XrExecutionLease *lease = context;
     return xr_execution_lease_provider_call_optional_i64_pair_nullary(
                lease, requirement_index, operation_index, present_out, first_out, second_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static bool reference_pipe_close_provider_call(void *context, uint32_t requirement_index,
+                                                uint32_t operation_index, int64_t handle,
+                                                bool *result_out) {
+    const XrExecutionLease *lease = context;
+    return xr_execution_lease_provider_call_bool_i64_unary(
+               lease, requirement_index, operation_index, handle, result_out) ==
            XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
@@ -866,9 +890,17 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     static const char source[] =
         "import sys\n"
         "fn answer() -> i64 {\n"
-        "  const pipe = sys.Pipe.open()\n"
-        "  if (pipe == null) { return 0 }\n"
-        "  return 1\n"
+        "  var opened = sys.Pipe.open()\n"
+        "  if (opened == null) { return 0 }\n"
+        "  var ready = opened!\n"
+        "  var live = move ready\n"
+        "  var readHandle = live.readEnd()\n"
+        "  var writeHandle = live.writeEnd()\n"
+        "  var closed = (move live).close()\n"
+        "  if (readHandle < 0) { return 0 }\n"
+        "  if (writeHandle < 0) { return 0 }\n"
+        "  if (closed) { return 1 }\n"
+        "  return 0\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -894,63 +926,117 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 2u);
+    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 5u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
 
     uint32_t aggregate_constructs = 0u;
+    uint32_t aggregate_projects = 0u;
+    uint32_t variant_projects = 0u;
+    uint32_t sealed_calls = 0u;
     for (uint32_t function_index = 0u; function_index < first.program->function_count;
          ++function_index) {
         const XrValidatedFunction *function = &first.program->functions[function_index];
         for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
             const XrValidatedBlock *block = &function->blocks[block_index];
             for (uint32_t instruction_index = 0u;
-                 instruction_index < block->instruction_count; ++instruction_index)
+                 instruction_index < block->instruction_count; ++instruction_index) {
                 aggregate_constructs +=
                     block->instructions[instruction_index].operation_id ==
                     XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT;
+                aggregate_projects +=
+                    block->instructions[instruction_index].operation_id ==
+                    XR_CORE_OP_CORE_AGGREGATE_PROJECT;
+                variant_projects += block->instructions[instruction_index].operation_id ==
+                                    XR_CORE_OP_CORE_VARIANT_PROJECT;
+                sealed_calls += block->instructions[instruction_index].operation_id ==
+                                XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
+            }
         }
     }
     ASSERT_EQ_UINT(aggregate_constructs, 1u);
+    ASSERT_EQ_UINT(aggregate_projects, 8u);
+    ASSERT_EQ_UINT(variant_projects, 3u);
+    ASSERT_EQ_UINT(sealed_calls, 4u);
 
     XrProgramProviderRequirementView requirement = {0};
     ASSERT_TRUE(xr_validated_program_provider_requirement(first.program, 0u, &requirement));
-    ASSERT_EQ_UINT(requirement.operation_count, 1u);
+    ASSERT_EQ_UINT(requirement.operation_count, 2u);
     XrStableId expected_contract = {{0}};
-    XrStableId expected_operation = {{0}};
+    XrStableId expected_open = {{0}};
+    XrStableId expected_close = {{0}};
     XrFingerprint key_digest;
     ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_contract,
                                       &key_digest));
     ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
-                                      &expected_operation, &key_digest));
+                                      &expected_open, &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
+                                      &expected_close, &key_digest));
     ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_contract));
-    ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0], expected_operation));
+
+    uint32_t open_index = UINT32_MAX;
+    uint32_t close_index = UINT32_MAX;
+    for (uint32_t operation_index = 0u; operation_index < requirement.operation_count;
+         ++operation_index) {
+        if (stable_id_equal(requirement.operation_ids[operation_index], expected_open))
+            open_index = operation_index;
+        else if (stable_id_equal(requirement.operation_ids[operation_index], expected_close))
+            close_index = operation_index;
+    }
+    ASSERT_TRUE(open_index != UINT32_MAX);
+    ASSERT_TRUE(close_index != UINT32_MAX);
 
     const XrTargetProviderContract *contract =
         find_profile_provider(profile, requirement.contract_id);
-    const XrTargetProviderOperationContract *contract_operation =
-        find_profile_provider_operation(contract, requirement.operation_ids[0]);
     ASSERT_NOT_NULL(contract);
-    ASSERT_NOT_NULL(contract_operation);
-    ASSERT_EQ_UINT(contract_operation->call_abi.parameter_count, 3u);
-    ASSERT_EQ_INT(contract_operation->call_abi.result.value_kind,
+    const XrTargetProviderOperationContract *open_contract =
+        find_profile_provider_operation(contract, expected_open);
+    const XrTargetProviderOperationContract *close_contract =
+        find_profile_provider_operation(contract, expected_close);
+    ASSERT_NOT_NULL(open_contract);
+    ASSERT_NOT_NULL(close_contract);
+    ASSERT_EQ_UINT(open_contract->call_abi.parameter_count, 3u);
+    ASSERT_EQ_INT(open_contract->call_abi.result.value_kind,
                   XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER);
+    ASSERT_EQ_UINT(close_contract->call_abi.parameter_count, 1u);
+    ASSERT_EQ_INT(close_contract->call_abi.parameters[0].value_kind,
+                  XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    ASSERT_EQ_INT(close_contract->call_abi.parameters[0].ownership,
+                  XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED);
+    ASSERT_EQ_INT(close_contract->call_abi.result.value_kind,
+                  XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER);
+    ASSERT_EQ_UINT(close_contract->call_abi.result.width, 1u);
+    ASSERT_EQ_INT(close_contract->call_abi.result.ownership,
+                  XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE);
+    ASSERT_EQ_UINT(close_contract->effect_flags, XR_TARGET_PROVIDER_EFFECT_IO);
+    ASSERT_EQ_UINT(close_contract->lifetime_flags,
+                   XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED);
+    ASSERT_EQ_UINT(close_contract->failure_flags, 0u);
 
     PipeProviderProbe probe = {
         .present = true,
         .read_handle = 17,
         .write_handle = 29,
     };
-    XrProviderOperationBinding operation = {
-        .operation_id = requirement.operation_ids[0],
-        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY,
-        .entry.optional_i64_pair_nullary = pipe_provider_probe,
-        .context = &probe,
-    };
+    XrProviderOperationBinding operations[2] = {0};
+    for (uint32_t operation_index = 0u; operation_index < requirement.operation_count;
+         ++operation_index) {
+        operations[operation_index].operation_id = requirement.operation_ids[operation_index];
+        operations[operation_index].context = &probe;
+        if (operation_index == open_index) {
+            operations[operation_index].trampoline_kind =
+                XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
+            operations[operation_index].entry.optional_i64_pair_nullary = pipe_provider_probe;
+        } else {
+            ASSERT_EQ_UINT(operation_index, close_index);
+            operations[operation_index].trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
+            operations[operation_index].entry.bool_i64_unary = pipe_close_provider_probe;
+        }
+    }
     XrProviderBinding provider = {
         .contract_id = requirement.contract_id,
         .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
-        .operations = &operation,
-        .operation_count = 1u,
+        .operations = operations,
+        .operation_count = 2u,
     };
     ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
                       contract, &provider.contract_fingerprint),
@@ -974,6 +1060,7 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_TRUE(xr_execution_instance_acquire(instance, &lease));
     XrReferenceProviderBinding reference_binding = {
         .context = &lease,
+        .call_bool_i64_unary = reference_pipe_close_provider_call,
         .call_optional_i64_pair_nullary = reference_pipe_provider_call,
     };
     XrReferenceOutcome reference = xr_reference_evaluate_bound(
@@ -981,7 +1068,8 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
     ASSERT_EQ_INT(reference.value.as.i64, 1);
-    ASSERT_EQ_UINT(probe.calls, 1u);
+    ASSERT_EQ_UINT(probe.open_calls, 1u);
+    ASSERT_EQ_UINT(probe.close_calls, 2u);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
     XrVmCode *vm_code = NULL;
@@ -991,7 +1079,8 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_RETURN);
     ASSERT_EQ_INT(vm.value.kind, XR_VM_VALUE_I64);
     ASSERT_EQ_INT(vm.value.as.i64, reference.value.as.i64);
-    ASSERT_EQ_UINT(probe.calls, 2u);
+    ASSERT_EQ_UINT(probe.open_calls, 2u);
+    ASSERT_EQ_UINT(probe.close_calls, 4u);
 
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic backend_diagnostic;
@@ -1009,6 +1098,7 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_open"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_close"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
     if (pipe_provider_aot_output_path) {
         FILE *output = fopen(pipe_provider_aot_output_path, "wb");

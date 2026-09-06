@@ -1373,7 +1373,7 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} has malformed or "
                     "cross-family provider identity"
                 )
-            provider_scalar_shape = (
+            provider_i64_shape = (
                 signature_return == "i64"
                 and len(signature_params) in {0, 1}
                 and all(
@@ -1386,10 +1386,22 @@ def parse_def_metadata(
             provider_optional_pair_shape = (
                 signature_return == "(i64, i64)?" and len(signature_params) == 0
             )
+            provider_bool_i64_shape = (
+                signature_return == "bool"
+                and len(signature_params) == 1
+                and function_parameter_type(
+                    signature_params[0],
+                    f"{current_module}.{current_name} provider parameter",
+                ) == "i64"
+            )
             if provider_contract and (
                 visibility != "internal"
                 or effect != "nothrow"
-                or not (provider_scalar_shape or provider_optional_pair_shape)
+                or not (
+                    provider_i64_shape
+                    or provider_bool_i64_shape
+                    or provider_optional_pair_shape
+                )
                 or argc_raw != str(len(signature_params))
                 or not aot_direct
                 or aot_kind != "method"

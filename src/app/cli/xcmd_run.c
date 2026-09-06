@@ -144,6 +144,14 @@ static XrProviderCallStatus pipe_open(void *context, bool *present_out, int64_t 
     return XR_PROVIDER_CALL_OK;
 }
 
+static XrProviderCallStatus pipe_close(void *context, int64_t argument, bool *result_out) {
+    (void) context;
+    if (!result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    *result_out = xr_pipe_close((XrPipeHandle) argument) == 0;
+    return XR_PROVIDER_CALL_OK;
+}
+
 typedef struct XrRunProviderBindings {
     XrProviderBinding providers[XR_RUNTIME_ABI_MAX_PROVIDERS];
     XrProviderOperationBinding
@@ -163,6 +171,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
     XrStableId output_contract = {{0}};
     XrStableId output_operation = {{0}};
     XrStableId pipe_open_operation = {{0}};
+    XrStableId pipe_close_operation = {{0}};
     XrStableId clock_contract = {{0}};
     XrStableId clock_realtime = {{0}};
     XrStableId clock_monotonic = {{0}};
@@ -171,6 +180,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
     if (!builtin_provider_id(XR_PROVIDER_IO_CONTRACT_KEY, &output_contract) ||
         !builtin_provider_id(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY, &output_operation) ||
         !builtin_provider_id(XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY, &pipe_open_operation) ||
+        !builtin_provider_id(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY, &pipe_close_operation) ||
         !builtin_provider_id(XR_PROVIDER_CLOCK_CONTRACT_KEY, &clock_contract) ||
         !builtin_provider_id(XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY, &clock_realtime) ||
         !builtin_provider_id(XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY, &clock_monotonic) ||
@@ -228,6 +238,11 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
                        contract->provider_kind == XR_TARGET_PROVIDER_IO) {
                 operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
                 operation->entry.optional_i64_pair_nullary = pipe_open;
+            } else if (stable_id_equal(requirement.contract_id, output_contract) &&
+                       stable_id_equal(required_operation, pipe_close_operation) &&
+                       contract->provider_kind == XR_TARGET_PROVIDER_IO) {
+                operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
+                operation->entry.bool_i64_unary = pipe_close;
             } else if (stable_id_equal(requirement.contract_id, clock_contract) &&
                        contract->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
                 if (stable_id_equal(required_operation, clock_utc_offset)) {

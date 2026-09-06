@@ -479,6 +479,8 @@ static bool nominal_contract(const XrXiBuildContext *context, const XrType *type
 
 static const XgClassSummary *find_xg_class_by_id(const XgGlobalEvidence *evidence,
                                                  XgClassId class_id);
+static bool nominal_instance_identity_equal(const XrXiBuildContext *context,
+                                            const XrType *left, const XrType *right);
 
 static const XgDeclSummary *find_xg_decl_by_id(const XgGlobalEvidence *evidence, XgDeclId decl_id) {
     const XgDeclSummary *found = NULL;
@@ -2013,23 +2015,10 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
     return class_data;
 }
 
-static const XiFunc *resolved_static_method_callee(const XrXiBuildContext *context,
-                                                   const XiFunc *caller,
-                                                   const XiValue *call) {
-    if (!context || !caller || !call ||
-        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
-        call->nargs == 0u || !call->args)
-        return NULL;
-    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
-    if (!row || row->kind != XG_CALL_METHOD || row->receiver_static_class_id == XG_NO_ID ||
-        row->method_id == XG_NO_ID || call->xg_method_id != row->method_id ||
-        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
-        row->arg_count == UINT16_MAX || call->nargs != (uint16_t) (row->arg_count + 1u))
-        return NULL;
-
-    uint32_t module_index = UINT32_MAX;
-    const XiClassData *class_data = resolved_class_carrier(
-        context, caller, call->args[0], row->receiver_static_class_id, &module_index);
+static const XiFunc *resolved_class_method_body_callee(
+    const XrXiBuildContext *context, const XgCallsiteSummary *row,
+    const XiClassData *class_data, uint32_t module_index, const XrType *receiver_type,
+    bool expect_static) {
     const XgGlobalEvidence *evidence = context->source->global_evidence;
     const XgClassSummary *class_row =
         class_data ? find_xg_class_by_id(evidence, row->receiver_static_class_id) : NULL;
@@ -2042,8 +2031,10 @@ static const XiFunc *resolved_static_method_callee(const XrXiBuildContext *conte
             return NULL;
         method = candidate;
     }
-    if (!class_row || !method || method->owner_class_id != class_row->class_id ||
-        (method->flags & XG_METHOD_STATIC) == 0u ||
+    if (!class_row || !method || class_data->xg_class_id != class_row->class_id ||
+        class_row->module_id != (XgModuleId) (module_index + 1u) ||
+        method->owner_class_id != class_row->class_id ||
+        ((method->flags & XG_METHOD_STATIC) != 0u) != expect_static ||
         (method->flags & (XG_METHOD_CONSTRUCTOR | XG_METHOD_NATIVE |
                           XG_METHOD_GENERIC_TEMPLATE | XG_METHOD_OVERRIDDEN)) != 0u)
         return NULL;
@@ -2077,11 +2068,80 @@ static const XiFunc *resolved_static_method_callee(const XrXiBuildContext *conte
         const XiClassMethod *xi_method = &class_data->methods[index];
         if (child >= root->nchildren || root->children[child] != callee)
             continue;
-        if (!xi_method->is_static || xi_method->is_constructor || xi_method->is_static_constructor)
+        if (xi_method->is_static != expect_static || xi_method->is_constructor ||
+            xi_method->is_static_constructor || !xi_method->name ||
+            xg_name_id(xi_method->name) != method->name_id)
             return NULL;
         ++matches;
     }
-    return callee && matches == 1u ? callee : NULL;
+    uint32_t expected_parameters = row->arg_count + (expect_static ? 0u : 1u);
+    if (!callee || matches != 1u || callee->has_receiver != !expect_static ||
+        callee->nparams != expected_parameters || (expected_parameters != 0u && !callee->params))
+        return NULL;
+    if (!expect_static &&
+        (!receiver_type || receiver_type->kind != XR_KIND_INSTANCE || receiver_type->is_nullable ||
+         !callee->params[0] || !callee->params[0]->type ||
+         !nominal_instance_identity_equal(context, callee->params[0]->type, receiver_type) ||
+         !xr_param_mode_is_valid(callee->receiver_mode)))
+        return NULL;
+    return callee;
+}
+
+static const XiFunc *resolved_static_method_callee(const XrXiBuildContext *context,
+                                                   const XiFunc *caller,
+                                                   const XiValue *call) {
+    if (!context || !caller || !call ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs == 0u || !call->args)
+        return NULL;
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    if (!row || row->kind != XG_CALL_METHOD || row->receiver_static_class_id == XG_NO_ID ||
+        row->method_id == XG_NO_ID || call->xg_method_id != row->method_id ||
+        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
+        row->arg_count == UINT16_MAX || call->nargs != (uint16_t) (row->arg_count + 1u))
+        return NULL;
+
+    uint32_t module_index = UINT32_MAX;
+    const XiClassData *class_data = resolved_class_carrier(
+        context, caller, call->args[0], row->receiver_static_class_id, &module_index);
+    return class_data ? resolved_class_method_body_callee(context, row, class_data, module_index,
+                                                          NULL, true)
+                      : NULL;
+}
+
+static const XiFunc *resolved_instance_method_callee(const XrXiBuildContext *context,
+                                                     const XiFunc *caller,
+                                                     const XiValue *call) {
+    if (!context || !caller || !call ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs == 0u || !call->args)
+        return NULL;
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    const XiValue *receiver = logical_value_identity(call->args[0]);
+    if (!row || row->kind != XG_CALL_METHOD || row->receiver_static_class_id == XG_NO_ID ||
+        row->method_id == XG_NO_ID || call->xg_method_id != row->method_id ||
+        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
+        row->arg_count == UINT16_MAX || call->nargs != (uint16_t) (row->arg_count + 1u) ||
+        !receiver || !receiver->type || receiver->type->kind != XR_KIND_INSTANCE ||
+        receiver->type->is_nullable || !nominal_contract(context, receiver->type, NULL, NULL, NULL))
+        return NULL;
+
+    const XiModule *owner_module = NULL;
+    const XiClassData *class_data = find_aggregate_schema(context, receiver->type, &owner_module);
+    uint32_t module_index = UINT32_MAX;
+    for (uint32_t index = 0u; owner_module && index < context->source->module_count; ++index) {
+        const XiFunc *root = context->source->module_roots[index];
+        if (!root || root->module != owner_module)
+            continue;
+        if (module_index != UINT32_MAX)
+            return NULL;
+        module_index = index;
+    }
+    if (!class_data || class_data->xg_class_id != row->receiver_static_class_id ||
+        module_index == UINT32_MAX)
+        return NULL;
+    return resolved_class_method_body_callee(context, row, class_data, module_index,
+                                             receiver->type, false);
 }
 
 /* A qualified source call such as `time.now()` is represented in Xi as a
@@ -2115,6 +2175,8 @@ static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, con
         return NULL;
     if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) {
         const XiFunc *callee = resolved_static_method_callee(context, caller, call);
+        if (!callee)
+            callee = resolved_instance_method_callee(context, caller, call);
         return callee ? callee : resolved_module_function_callee(context, caller, call);
     }
     if (call->op != XI_CALL)
@@ -2366,6 +2428,91 @@ static const XiClassData *resolved_canonical_class_construction(const XrXiBuildC
     if (field_count_out)
         *field_count_out = class_data->instance_field_count;
     return class_data;
+}
+
+/* XI_LOAD_FIELD is also used for module namespaces and enum members.  Admit it
+ * as an aggregate projection only when the lowered field id, exact receiver
+ * nominal identity, Xglobal declaration row, and detached Xi layout all name
+ * the same declared instance field.  The field spelling is corroboration, not
+ * lookup authority. */
+static bool resolved_aggregate_field_projection(const XrXiBuildContext *context,
+                                                const XiValue *access,
+                                                uint32_t *field_ordinal_out) {
+    if (field_ordinal_out)
+        *field_ordinal_out = UINT32_MAX;
+    if (!context || !context->source || !context->source->global_evidence || !access ||
+        access->op != XI_LOAD_FIELD || access->nargs != 1u || !access->args ||
+        !access->args[0] || access->xg_class_field_id == XG_NO_ID || !access->type)
+        return false;
+
+    const XiValue *receiver = logical_value_identity(access->args[0]);
+    if (!receiver || !receiver->type || receiver->type->kind != XR_KIND_INSTANCE ||
+        receiver->type->is_nullable)
+        return false;
+    const XiClassData *schema = find_aggregate_schema(context, receiver->type, NULL);
+    const XrClassInfo *receiver_info = nominal_info_for_type(receiver->type);
+    const XgClassSummary *class_row =
+        schema ? find_xg_class_by_id(context->source->global_evidence, schema->xg_class_id) : NULL;
+    if (!schema || !receiver_info || !class_row ||
+        schema->xg_class_id != receiver_info->xg_class_id ||
+        class_row->decl_id != receiver_info->xg_decl_id ||
+        class_row->parent_class_id != XG_NO_ID ||
+        class_row->field_count != schema->instance_field_count ||
+        (schema->instance_field_count != 0u &&
+         (!schema->instance_field_names || !schema->instance_field_types ||
+          !schema->instance_field_source_node_ids)))
+        return false;
+
+    const XgClassFieldSummary *field = NULL;
+    const XgGlobalEvidence *evidence = context->source->global_evidence;
+    for (uint32_t index = 0u; index < evidence->nclass_fields; ++index) {
+        const XgClassFieldSummary *candidate = &evidence->class_fields[index];
+        if (candidate->field_id != access->xg_class_field_id)
+            continue;
+        if (field)
+            return false;
+        field = candidate;
+    }
+    if (!field || field->owner_class_id != class_row->class_id ||
+        field->module_id != class_row->module_id ||
+        (field->flags & XG_CLASS_FIELD_STATIC) != 0u ||
+        field->instance_slot >= schema->instance_field_count ||
+        field->decl_ordinal != field->instance_slot ||
+        field->source_node_id != schema->instance_field_source_node_ids[field->instance_slot] ||
+        field->name_id != xg_name_id(schema->instance_field_names[field->instance_slot]) ||
+        !access->aux ||
+        strcmp((const char *) access->aux,
+               schema->instance_field_names[field->instance_slot]) != 0 ||
+        !xr_type_equals(access->type, schema->instance_field_types[field->instance_slot]))
+        return false;
+    if (field_ordinal_out)
+        *field_ordinal_out = field->instance_slot;
+    return true;
+}
+/* A const binding changes access through an instance but not the instance's
+ * nominal runtime identity.  Method target resolution therefore compares the
+ * declaration contract and concrete type arguments directly, while receiver
+ * mutability remains enforced by the analyzer-owned receiver mode. */
+static bool nominal_instance_identity_equal(const XrXiBuildContext *context,
+                                            const XrType *left, const XrType *right) {
+    const XrClassInfo *left_info = nominal_info_for_type(left);
+    const XrClassInfo *right_info = nominal_info_for_type(right);
+    if (!left || !right || left->kind != XR_KIND_INSTANCE || right->kind != XR_KIND_INSTANCE ||
+        left->is_nullable || right->is_nullable || !left_info || !right_info ||
+        !nominal_contract(context, left, NULL, NULL, NULL) ||
+        !nominal_contract(context, right, NULL, NULL, NULL) ||
+        left_info->xg_class_id == XG_NO_ID ||
+        left_info->xg_class_id != right_info->xg_class_id ||
+        left_info->xg_decl_id != right_info->xg_decl_id ||
+        left_info->xg_nominal_key != right_info->xg_nominal_key ||
+        left->instance.type_arg_count != right->instance.type_arg_count)
+        return false;
+    for (int index = 0; index < left->instance.type_arg_count; ++index) {
+        if (!left->instance.type_args || !right->instance.type_args ||
+            !xr_type_equals(left->instance.type_args[index], right->instance.type_args[index]))
+            return false;
+    }
+    return true;
 }
 
 /* An empty struct literal may retain the generic constructor-shaped Xi form
@@ -4535,6 +4682,9 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
     if (!map_logical_value_type(context, function, value, &type_id) ||
         logical_ownership_for_type(context, type_id) != XR_CORE_IR_OWNER)
         return false;
+    if (value->op == XI_VARIANT_PROJECT)
+        return value->nargs == 1u && value->args && value->args[0] &&
+               logical_value_produces_owner(context, function, value->args[0], depth + 1u);
     return value->op == XI_CLOSURE_NEW ||
            (value->op == XI_GET_SHARED &&
             resolved_shared_callable_target(context, function, value, NULL, NULL)) ||
@@ -4542,6 +4692,9 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
            value->xg_existential_kind == XI_EXISTENTIAL_PROJECT || value->op == XI_SUM_INJECT ||
            xi_copy_is_value_clone(value) || value->op == XI_SOURCE_MOVE ||
            value->op == XI_OWNER_FORWARD || value->op == XI_CALL ||
+           ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
+            resolved_sealed_callee(context, function, value)) ||
+           resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
            (value->op == XI_CALL_BUILTIN && value->aux && value->aux_kind == XI_AUX_KIND_NONE &&
             strcmp((const char *) value->aux, "copy") == 0);
 }
@@ -4642,7 +4795,8 @@ static bool value_has_canonical_materialization(const XrXiBuildContext *context,
         static_typed_catch_contract_is_exact(context, value) ||
         resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
         resolved_empty_struct_literal(context, function, value) ||
-        resolved_unit_enum_literal(context, function, value, NULL))
+        resolved_unit_enum_literal(context, function, value, NULL) ||
+        resolved_aggregate_field_projection(context, value, NULL))
         return true;
     XrProgramXiSemanticProjection projection;
     return xr_program_xi_semantic_projection(value->op, value->xg_existential_kind, &projection);
@@ -4862,6 +5016,7 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         if (!map_type(context, value->type, &result_type) ||
             value->nargs != (uint16_t) (provider_entry->argc + 1u) ||
             !((result_type == XR_CORE_TYPE_I64 && provider_entry->argc <= 1u) ||
+              (result_type == XR_CORE_TYPE_BOOL && provider_entry->argc == 1u) ||
               (provider_entry->argc == 0u &&
                logical_type_is_optional_i64_pair(context, result_type))))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -4907,7 +5062,7 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         find_xi_function(context, callee, &callee_module_index, &callee_function_index);
     if (!callee && callsite->kind == XG_CALL_METHOD)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi static method call v%u has no exact class/method/body join", value->id);
+                    "Xi method call v%u has no exact class/method/body join", value->id);
     if (!callee) {
         if ((callsite->flags & XG_CALL_MAY_ERROR) != 0u)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -4974,8 +5129,9 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         instruction->result = value_key(function, value);
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
     instruction->immediate.key = callee_storage->key;
-    return set_operands(context, instruction, function, block, value->args + 1u, value->nargs - 1u,
-                        diagnostic, diagnostic_size);
+    uint16_t first_operand = callee->has_receiver ? 0u : 1u;
+    return set_operands(context, instruction, function, block, value->args + first_operand,
+                        value->nargs - first_operand, diagnostic, diagnostic_size);
 }
 
 static XrProgramBuildStatus translate_capture_construct(XrXiBuildContext *context,
@@ -5380,6 +5536,27 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
         return XR_PROGRAM_BUILD_OK;
     }
+    uint32_t aggregate_field_ordinal = UINT32_MAX;
+    if (resolved_aggregate_field_projection(context, value, &aggregate_field_ordinal)) {
+        uint16_t aggregate_type_id = XR_CORE_TYPE_VOID;
+        if (!map_type(context, value->args[0]->type, &aggregate_type_id))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi field load v%u has no exact logical aggregate source", value->id);
+        const XrXiTypeStorage *aggregate = find_dynamic_type_by_id(context, aggregate_type_id);
+        if (!aggregate || aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
+            aggregate_field_ordinal >= aggregate->input.field_count ||
+            aggregate->input.field_types[aggregate_field_ordinal] != result_type)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi field load v%u has an invalid declaration ordinal or type", value->id);
+        instruction->operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = XR_CORE_IR_NON_OWNER;
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD;
+        instruction->immediate.field_ordinal = aggregate_field_ordinal;
+        return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
+                            diagnostic_size);
+    }
     XrProgramXiProjection projection;
     if (!xr_program_xi_projection(value->op, result_type, &projection))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -5587,14 +5764,17 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             if (!type || type->input.kind != XR_CORE_IR_TYPE_VARIANT ||
                 variant >= type->input.variant_count ||
                 field >= type->input.variants[variant].payload_count ||
-                type->input.variants[variant].payload_types[field] != result_type ||
-                logical_ownership_for_type(context, result_type) == XR_CORE_IR_OWNER)
+                type->input.variants[variant].payload_types[field] != result_type)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi variant projection v%u has an invalid declaration ordinal",
                             value->id);
             instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = result_type;
+            instruction->result_ownership =
+                logical_value_produces_owner(context, function->xi, value, 0u)
+                    ? XR_CORE_IR_OWNER
+                    : XR_CORE_IR_NON_OWNER;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT_FIELD;
             instruction->immediate.variant_field.variant_ordinal = variant;
             instruction->immediate.variant_field.field_ordinal = field;
@@ -6189,7 +6369,7 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
                                                    diagnostic, diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK)
             return status;
-        uint16_t first_operand = indirect || witness ? 0u : 1u;
+        uint16_t first_operand = indirect || witness || (callee && callee->has_receiver) ? 0u : 1u;
         for (uint16_t operand = first_operand; operand < call->nargs; ++operand) {
             status = require_value_available(context, function, predecessor, call->args[operand],
                                              NULL, diagnostic, diagnostic_size);
@@ -6664,8 +6844,9 @@ static XrProgramBuildStatus set_invoke_operands(const XrXiBuildContext *context,
                                                 const XrXiFunctionStorage *function,
                                                 const XrXiBlockStorage *predecessor,
                                                 const XiValue *call, const XrXiBlockStorage *normal,
-                                                const XrXiBlockStorage *error, bool indirect,
-                                                char *diagnostic, size_t diagnostic_size) {
+                                                const XrXiBlockStorage *error,
+                                                uint32_t first_operand, char *diagnostic,
+                                                size_t diagnostic_size) {
     uint32_t normal_implicit = call->type && call->type->kind != XR_KIND_UNIT ? 1u : 0u;
     if (normal->argument_count < normal_implicit || error->argument_count == 0u ||
         (normal_implicit != 0u &&
@@ -6673,7 +6854,6 @@ static XrProgramBuildStatus set_invoke_operands(const XrXiBuildContext *context,
         error->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_ERROR)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi invoke continuations lack ordered implicit result/error arguments");
-    uint32_t first_operand = indirect ? 0u : 1u;
     uint32_t parameter_count = call->nargs - first_operand;
     uint32_t count =
         parameter_count + normal->argument_count - normal_implicit + error->argument_count - 1u;
@@ -7144,6 +7324,9 @@ static bool input_operation_consumes_operand(const XrXiBuildContext *context,
                                 &operand_type) &&
                logical_ownership_for_type(context, operand_type) == XR_CORE_IR_OWNER;
     }
+    if (instruction->operation_id == XR_CORE_OP_CORE_VARIANT_PROJECT &&
+        instruction->result_ownership == XR_CORE_IR_OWNER)
+        return operand_index == 0u;
     if ((instruction->operation_id == XR_CORE_OP_CORE_RETURN ||
          instruction->operation_id == XR_CORE_OP_CORE_ERROR_PUBLISH ||
          instruction->operation_id == XR_CORE_OP_CORE_PANIC_PUBLISH ||
@@ -7290,7 +7473,11 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
             xr_free(drops);
             xr_free(owners);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi block b%u has an unbalanced affine owner", block->xi->id);
+                        "Xi function %s block b%u has an unbalanced affine owner "
+                        "(owner=%u uses=%u successors=%u transferred=%u absent=%u)",
+                        function->xi && function->xi->name ? function->xi->name : "<anonymous>",
+                        block->xi->id, owner, consuming_uses, successor_count,
+                        transferred ? 1u : 0u, absent ? 1u : 0u);
         }
         if (consuming_uses == 0u && !transferred)
             drops[owner] = true, ++drop_count;
@@ -7422,6 +7609,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         resolved_unit_enum_literal(context, function, value, NULL)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_CONSTRUCT)
                             : NULL;
+                    const XrCoreOperationSpec *aggregate_field_projection =
+                        resolved_aggregate_field_projection(context, value, NULL)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_PROJECT)
+                            : NULL;
                     const XrStdlibDefEntry *provider_entry =
                         resolved_provider_native_call(context, function, value);
                     const XrCoreOperationSpec *provider_operation =
@@ -7459,6 +7650,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = true;
                         value_effects = unit_enum_literal->effect_mask;
                         value_capabilities = unit_enum_literal->capability_mask;
+                    } else if (aggregate_field_projection) {
+                        has_contract = true;
+                        value_effects = aggregate_field_projection->effect_mask;
+                        value_capabilities = aggregate_field_projection->capability_mask;
                     } else if (provider_operation) {
                         has_contract = true;
                         value_effects = provider_operation->effect_mask;
@@ -7594,8 +7789,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         if (sealed_method)
                             return fail(diagnostic, diagnostic_size,
                                         XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                                        "Xi function contract has an unresolved static method "
-                                        "target");
+                                        "Xi function %s call v%u has an unresolved method target",
+                                        storage->xi && storage->xi->name ? storage->xi->name
+                                                                         : "<anonymous>",
+                                        value->id);
                         XrXiCallableTargetSet target_set = {0};
                         if (!resolved_callable_call_targets(context, storage->xi, value,
                                                             &target_set))
@@ -7738,35 +7935,37 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
             storage->parameter_modes[0] = XR_PARAM_READ;
         }
         for (uint16_t parameter = 0; parameter < xi->nparams; ++parameter) {
+            const XiValue *parameter_value = xi->params ? xi->params[parameter] : NULL;
+            XrParamMode parameter_mode =
+                xi->has_receiver && parameter == 0u
+                    ? (XrParamMode) xi->receiver_mode
+                    : parameter_value ? (XrParamMode) parameter_value->param_mode : XR_PARAM_READ;
             bool parameter_type_mapped =
-                xi->params && xi->params[parameter] && xi->params[parameter]->type &&
-                        xi->params[parameter]->type->kind == XR_KIND_FUNCTION
+                parameter_value && parameter_value->type &&
+                        parameter_value->type->kind == XR_KIND_FUNCTION
                     ? map_logical_value_type(
-                          context, xi, xi->params[parameter],
+                          context, xi, parameter_value,
                           &storage->parameter_types[parameter + parameter_offset])
-                    : xi->params && xi->params[parameter] &&
+                    : parameter_value &&
                           map_type_for_mode(
-                              context, xi->params[parameter]->type,
-                              (XrParamMode) xi->params[parameter]->param_mode,
+                              context, parameter_value->type, parameter_mode,
                               &storage->parameter_types[parameter + parameter_offset], NULL, 0u);
-            if (!xi->params || !xi->params[parameter] || xi->params[parameter]->op != XI_PARAM ||
-                xi->params[parameter]->aux_int != parameter ||
-                (xi->params[parameter]->type &&
-                 xi->params[parameter]->type->kind == XR_KIND_INTERFACE &&
+            if (!parameter_value || parameter_value->op != XI_PARAM ||
+                parameter_value->aux_int != parameter ||
+                (parameter_value->type &&
+                 parameter_value->type->kind == XR_KIND_INTERFACE &&
                  !interface_parameter_contract_is_exact(
-                      context, xi, xi->params[parameter],
-                      (XrParamMode) xi->params[parameter]->param_mode)) ||
+                      context, xi, parameter_value, parameter_mode)) ||
                 !parameter_type_mapped ||
                 storage->parameter_types[parameter + parameter_offset] == XR_CORE_TYPE_VOID)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi function %u parameter %u is not a CoreSpec value", function_index,
                             parameter);
-            if (!xr_param_mode_is_valid((XrParamMode) xi->params[parameter]->param_mode))
+            if (!xr_param_mode_is_valid(parameter_mode))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi function %u parameter %u has an invalid mode", function_index,
                             parameter);
-            storage->parameter_modes[parameter + parameter_offset] =
-                (XrParamMode) xi->params[parameter]->param_mode;
+            storage->parameter_modes[parameter + parameter_offset] = parameter_mode;
         }
         output->parameter_types = storage->parameter_types;
         output->parameter_modes = storage->parameter_modes;
@@ -7968,9 +8167,10 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             successors[1] = block_key(storage, error->xi);
             terminator->successors = successors;
             terminator->successor_count = 2u;
+            uint32_t first_operand =
+                indirect || witness || (callee && callee->has_receiver) ? 0u : 1u;
             status = set_invoke_operands(context, terminator, storage, block_storage, invoke_call,
-                                         normal, error, indirect || witness, diagnostic,
-                                         diagnostic_size);
+                                         normal, error, first_operand, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (exact_infallible_class_construction_in_block(context, xi, xi_block)) {
@@ -8211,8 +8411,11 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                         if (sealed_method)
                             return fail(diagnostic, diagnostic_size,
                                         XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                                        "Xi effect closure has an unresolved static method "
-                                        "target");
+                                        "Xi function %s call v%u has an unresolved method effect "
+                                        "target",
+                                        function->xi && function->xi->name ? function->xi->name
+                                                                           : "<anonymous>",
+                                        value->id);
                         XrXiCallableTargetSet target_set = {0};
                         if (!resolved_callable_call_targets(context, function->xi, value,
                                                             &target_set))

@@ -311,8 +311,11 @@ typedef struct XrAotHostedClockBindings {
 
 typedef struct XrAotHostedPipeBindings {
     bool open;
-    uint32_t requirement;
-    uint32_t operation;
+    bool close;
+    uint32_t open_requirement;
+    uint32_t open_operation;
+    uint32_t close_requirement;
+    uint32_t close_operation;
 } XrAotHostedPipeBindings;
 
 static XrAotHostedClockBindings hosted_clock_bindings(const XrBackendIR *ir);
@@ -329,7 +332,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     bool host_clock = standalone_main &&
                       (clock.realtime || clock.monotonic || clock.process_cpu ||
                        clock.utc_offset);
-    bool host_pipe = standalone_main && pipe.open;
+    bool host_pipe = standalone_main && (pipe.open || pipe.close);
     if (((host_clock || host_pipe) &&
          !append_text(buffer, "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)\n"
                               "#define _POSIX_C_SOURCE 200809L\n"
@@ -361,6 +364,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                     "uint32_t operation, int64_t argument, int64_t *result);\n"
                     "typedef int (*XrAotProviderCallI64Nullary)(void *context, uint32_t "
                     "requirement, uint32_t operation, int64_t *result);\n"
+                    "typedef int (*XrAotProviderCallBoolI64Unary)(void *context, uint32_t "
+                    "requirement, uint32_t operation, int64_t argument, uint8_t *result);\n"
                     "typedef int (*XrAotProviderCallOptionalI64PairNullary)(void *context, "
                     "uint32_t requirement, uint32_t operation, uint8_t *present, "
                     "int64_t *first, int64_t *second);\n"
@@ -379,6 +384,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                          "    void *provider_context;\n"
                          "    XrAotProviderCallI64Unary provider_call_i64_unary;\n"
                          "    XrAotProviderCallI64Nullary provider_call_i64_nullary;\n"
+                         "    XrAotProviderCallBoolI64Unary provider_call_bool_i64_unary;\n"
                          "    XrAotProviderCallOptionalI64PairNullary "
                          "provider_call_optional_i64_pair_nullary;\n"
                          "    XrAotProviderOutputWrite provider_output_write;\n"
@@ -409,6 +415,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                                     "    void *provider_context;\n"
                                     "    XrAotProviderCallI64Unary provider_call_i64_unary;\n"
                                     "    XrAotProviderCallI64Nullary provider_call_i64_nullary;\n"
+                                    "    XrAotProviderCallBoolI64Unary "
+                                    "provider_call_bool_i64_unary;\n"
                                     "    XrAotProviderCallOptionalI64PairNullary "
                                     "provider_call_optional_i64_pair_nullary;\n"
                                     "    XrAotProviderOutputWrite provider_output_write;\n"
@@ -474,7 +482,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                      "    return 0;\n"
                      "}\n\n"))
         return false;
-    if (host_pipe &&
+    if (host_pipe && pipe.open &&
         (!append_text(buffer,
                       "static int xr_aot_host_pipe_open(void *context, uint32_t requirement, "
                       "uint32_t operation, uint8_t *present, int64_t *first, int64_t *second) {\n"
@@ -482,7 +490,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
          !append_format(buffer,
                         "    if (requirement != UINT32_C(%u) || operation != UINT32_C(%u) || "
                         "!present || !first || !second) return 1;\n",
-                        pipe.requirement, pipe.operation) ||
+                        pipe.open_requirement, pipe.open_operation) ||
          !append_text(
              buffer, "    *present = UINT8_C(0);\n"
                      "    *first = INT64_C(0);\n"
@@ -518,6 +526,26 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                      "    *present = UINT8_C(1);\n"
                      "    return 0;\n"
                      "}\n\n")))
+        return false;
+    if (host_pipe && pipe.close &&
+        (!append_text(buffer,
+                      "static int xr_aot_host_pipe_close(void *context, uint32_t requirement, "
+                      "uint32_t operation, int64_t argument, uint8_t *result) {\n"
+                      "    (void)context;\n") ||
+         !append_format(buffer,
+                        "    if (requirement != UINT32_C(%u) || operation != UINT32_C(%u) || "
+                        "!result) return 1;\n",
+                        pipe.close_requirement, pipe.close_operation) ||
+         !append_text(buffer,
+                      "#if defined(_WIN32)\n"
+                      "    *result = CloseHandle((HANDLE)(intptr_t)argument) ? UINT8_C(1) : "
+                      "UINT8_C(0);\n"
+                      "#else\n"
+                      "    *result = argument >= INT_MIN && argument <= INT_MAX && "
+                      "close((int)argument) == 0 ? UINT8_C(1) : UINT8_C(0);\n"
+                      "#endif\n"
+                      "    return 0;\n"
+                      "}\n\n")))
         return false;
     if (host_clock && clock.realtime &&
         !append_text(buffer,
@@ -761,7 +789,12 @@ static XrAotHostedPipeBindings hosted_pipe_bindings(const XrBackendIR *ir) {
     const XrValidatedProgram *program = ir ? ir->program : NULL;
     bindings.open = find_program_provider_operation(program, XR_PROVIDER_IO_CONTRACT_KEY,
                                                     XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
-                                                    &bindings.requirement, &bindings.operation);
+                                                    &bindings.open_requirement,
+                                                    &bindings.open_operation);
+    bindings.close = find_program_provider_operation(program, XR_PROVIDER_IO_CONTRACT_KEY,
+                                                     XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
+                                                     &bindings.close_requirement,
+                                                     &bindings.close_operation);
     return bindings;
 }
 
@@ -1755,6 +1788,20 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                     instruction->immediate.provider_operation.requirement_index,
                     instruction->immediate.provider_operation.operation_index,
                     instruction->result_id);
+            if (call_kind == XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY)
+                return append_format(
+                    buffer,
+                    "        {\n"
+                    "            uint8_t xr_result = UINT8_C(0);\n"
+                    "            if (!xr_ctx->provider_call_bool_i64_unary || "
+                    "xr_ctx->provider_call_bool_i64_unary(xr_ctx->provider_context, "
+                    "UINT32_C(%u), UINT32_C(%u), v%u, &xr_result) != 0) "
+                    "return xr_aot_make(1, 0, 7);\n"
+                    "            v%u = xr_result != UINT8_C(0);\n"
+                    "        }\n",
+                    instruction->immediate.provider_operation.requirement_index,
+                    instruction->immediate.provider_operation.operation_index,
+                    instruction->operands[0], instruction->result_id);
             if (call_kind == XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY) {
                 uint16_t pair_type_id = XR_CORE_TYPE_VOID;
                 if (!xr_validated_program_type_is_optional_i64_pair(
@@ -2187,6 +2234,10 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
         return false;
     if (pipe.open && !append_text(buffer, "    xr_ctx.provider_call_optional_i64_pair_nullary = "
                                           "xr_aot_host_pipe_open;\n"))
+        return false;
+    if (pipe.close &&
+        !append_text(buffer,
+                     "    xr_ctx.provider_call_bool_i64_unary = xr_aot_host_pipe_close;\n"))
         return false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
         char storage[32];

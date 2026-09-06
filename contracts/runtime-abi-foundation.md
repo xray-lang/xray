@@ -171,7 +171,9 @@ calling convention, target endian, pointer width/alignment, a non-variadic
 result slot, and at most eight parameter slots. Every slot records its value
 kind, width, alignment, ownership direction, nullability, and pointee
 constness. Version one accepts void results, fixed signed/unsigned integers,
-IEEE binary32/binary64, data addresses, and code addresses. Unsupported
+IEEE binary32/binary64, data addresses, and code addresses. A fixed integer
+parameter may be marked consumed when it is the exact resource token; results
+and floating-point parameters cannot claim consumed ownership. Unsupported
 aggregate or variadic provider calls fail closed until a later schema owns
 their exact classification. Unused slots and all reserved fields are zero.
 The builder validates the complete schema before publishing a derived digest;
@@ -214,14 +216,14 @@ anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h 09adf0b12a0e6a0299ecb01a8
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c 1d755ca9d0bf8d830273dbaad86c2390ed74c35464913aba6127e0a1c9b4e423
 anchor-sha256: src/runtime/abi/xr_target_runtime_profile.h 4201e94c19f0cf8c17bd85a1590b217621544c2a2a4745e49fe7098f94f3e954
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
-anchor-sha256: src/runtime/abi/xr_runtime_contract.c a690849da40d585746ad8e96498707be7a6fd5c9414587b21e5a3ae2413ad0b6
+anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa
 anchor-sha256: src/runtime/abi/xr_runtime_object_header.h fd04f1ca2c71e3b3b9682bf1a7b1e6ff6fe1af4bacea8f49e3f5b4087d6ee51e
 anchor-sha256: src/runtime/abi/xr_runtime_object_header.c 3eeab39ab55c6f42199d4ccd3303628ebd973298a6879b9d78c88ec52422f6cb
 anchor-sha256: contracts/target-machine/runtime-string-object-contract.toml d3304d0e964364eac065c67b3eb373e3267bb42eab9c1003d558a2e27d9adee6
 anchor-sha256: src/runtime/abi/xr_runtime_string_object.h 5d2d1d2122df09423bd80465487e57db0bca4b92c739560006ec3cc8445b0c81
 anchor-sha256: src/runtime/abi/xr_runtime_string_object.c 5b5b658ea9afe0abede35c8ac4779d09e79f5fe1a1dfefba01a7dd6ec6730f54
 anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c 76e3c93da9b9acc28d14fd83bc9d31504e54082ebf9349c517f3fac897487e46
-anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 950a30305d929637d52c8b5c10672ed1f03fc33c8c22b1c2c6e5c703fe96f72f
+anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 1bf549df5f42fabbbe537b578709e032b72b8d0b4848627186945a12b2ee215f
 anchor-sha256: tests/unit/runtime/test_runtime_object_header.c 05f3c1bd1e157e010cdddac4fb827294c49ca08599f7b8d52f2490cc0efaea95
 anchor-sha256: tests/unit/runtime/test_runtime_string_object.c 99d46076417b73f92632ec138e1bf9c57664d7d9bbd5564a3e7458cd34ecd632
 anchor-sha256: tests/unit/CMakeLists.txt b5293a218d8d08328a6f3a10c1cc626b2385e8e1758002b4c4cad559dbe3d7fe

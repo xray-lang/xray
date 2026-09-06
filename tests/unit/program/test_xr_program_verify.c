@@ -1947,6 +1947,10 @@ typedef enum OptionalOwnerFixtureMode {
     OPTIONAL_OWNER_WRONG_COPY_CONTRACT,
     OPTIONAL_OWNER_NONOWNER_PAYLOAD,
     OPTIONAL_OWNER_AFFINE_PROJECT,
+    OPTIONAL_OWNER_AFFINE_PROJECT_USE_AFTER_DROP,
+    OPTIONAL_OWNER_AFFINE_PROJECT_ESCAPE,
+    OPTIONAL_OWNER_AFFINE_PROJECT_TAKE,
+    OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW,
 } OptionalOwnerFixtureMode;
 
 static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMode mode,
@@ -1954,6 +1958,7 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
     enum {
         CLASS_TYPE = 310,
         OPTIONAL_TYPE = 311,
+        WRAPPER_TYPE = 312,
     };
     uint16_t class_fields[] = {XR_CORE_TYPE_I64};
     uint16_t some_payload[] = {CLASS_TYPE};
@@ -1983,6 +1988,13 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
                                      : XR_CORE_IR_COPY_EXPLICIT),
          .variants = variants,
          .variant_count = 2u},
+        {.key = key("optional-owner:wrapper"),
+         .local_id = WRAPPER_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = some_payload,
+         .field_count = 1u},
     };
     XrCoreIrConstantInput constant = {
         .key = key("optional-owner:42"),
@@ -1994,17 +2006,24 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
     XrCoreIrKey parameter = key("optional-owner:parameter");
     XrCoreIrKey optional = key("optional-owner:some");
     XrCoreIrKey projected = key("optional-owner:projected");
+    XrCoreIrKey escaped = key("optional-owner:escaped");
     XrCoreIrKey answer = key("optional-owner:answer");
+    bool take_project = mode == OPTIONAL_OWNER_AFFINE_PROJECT_TAKE ||
+                        mode == OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW;
+    bool borrowed_optional_source =
+        mode == OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW;
     XrCoreIrValueInput block_argument = {
         .key = parameter,
-        .type_id = CLASS_TYPE,
-        .ownership = mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD ? XR_CORE_IR_NON_OWNER
-                                                             : XR_CORE_IR_OWNER,
+        .type_id = borrowed_optional_source ? OPTIONAL_TYPE : CLASS_TYPE,
+        .ownership = mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD || borrowed_optional_source
+                         ? XR_CORE_IR_NON_OWNER
+                         : XR_CORE_IR_OWNER,
     };
     XrCoreIrKey parameter_operand[] = {parameter};
     XrCoreIrKey optional_operand[] = {optional};
+    XrCoreIrKey projected_operand[] = {projected};
     XrCoreIrKey answer_operand[] = {answer};
-    XrCoreIrInstructionInput instructions[6] = {0};
+    XrCoreIrInstructionInput instructions[8] = {0};
     uint32_t count = 0u;
     instructions[count++] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
@@ -2013,41 +2032,83 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
         .operand_count = 1u,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
-    instructions[count++] = (XrCoreIrInstructionInput) {
-        .operation_id = XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
-        .result = optional,
-        .result_type_id = OPTIONAL_TYPE,
-        .result_ownership = XR_CORE_IR_OWNER,
-        .operands = parameter_operand,
-        .operand_count = 1u,
-        .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
-        .immediate.variant_ordinal = 1u,
-    };
-    if (mode == OPTIONAL_OWNER_AFFINE_PROJECT) {
+    if (!borrowed_optional_source) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+            .result = optional,
+            .result_type_id = OPTIONAL_TYPE,
+            .result_ownership = XR_CORE_IR_OWNER,
+            .operands = parameter_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+            .immediate.variant_ordinal = 1u,
+        };
+    }
+    bool affine_project = mode == OPTIONAL_OWNER_AFFINE_PROJECT ||
+                          mode == OPTIONAL_OWNER_AFFINE_PROJECT_USE_AFTER_DROP ||
+                          mode == OPTIONAL_OWNER_AFFINE_PROJECT_ESCAPE || take_project;
+    if (affine_project) {
+        XrCoreIrKey *source_operand =
+            borrowed_optional_source ? parameter_operand : optional_operand;
         instructions[count++] = (XrCoreIrInstructionInput) {
             .operation_id = XR_CORE_OP_CORE_VARIANT_PROJECT,
             .result = projected,
             .result_type_id = CLASS_TYPE,
-            .operands = optional_operand,
+            .result_ownership = take_project ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER,
+            .operands = source_operand,
             .operand_count = 1u,
             .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT_FIELD,
             .immediate.variant_field = {.variant_ordinal = 1u, .field_ordinal = 0u},
         };
     }
+    if (mode == OPTIONAL_OWNER_AFFINE_PROJECT) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+            .result = answer,
+            .result_type_id = XR_CORE_TYPE_I64,
+            .operands = projected_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+            .immediate.field_ordinal = 0u,
+        };
+    } else if (mode == OPTIONAL_OWNER_AFFINE_PROJECT_ESCAPE) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+            .result = escaped,
+            .result_type_id = WRAPPER_TYPE,
+            .result_ownership = XR_CORE_IR_OWNER,
+            .operands = projected_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+    }
+    XrCoreIrKey *dropped_operand = take_project ? projected_operand : optional_operand;
     instructions[count++] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
         .result_type_id = XR_CORE_TYPE_VOID,
-        .operands = optional_operand,
+        .operands = dropped_operand,
         .operand_count = 1u,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
-    instructions[count++] = (XrCoreIrInstructionInput) {
-        .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
-        .result = answer,
-        .result_type_id = XR_CORE_TYPE_I64,
-        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
-        .immediate.key = constant.key,
-    };
+    if (mode == OPTIONAL_OWNER_AFFINE_PROJECT_USE_AFTER_DROP) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+            .result = answer,
+            .result_type_id = XR_CORE_TYPE_I64,
+            .operands = projected_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+            .immediate.field_ordinal = 0u,
+        };
+    } else if (mode != OPTIONAL_OWNER_AFFINE_PROJECT) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+            .result = answer,
+            .result_type_id = XR_CORE_TYPE_I64,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+            .immediate.key = constant.key,
+        };
+    }
     instructions[count++] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_RETURN,
         .result_type_id = XR_CORE_TYPE_VOID,
@@ -2062,15 +2123,17 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
         .instructions = instructions,
         .instruction_count = count,
     };
-    XrParamMode parameter_mode = mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD ? XR_PARAM_READ
-                                                                         : XR_PARAM_MOVE;
-    uint16_t parameter_type = CLASS_TYPE;
+    XrParamMode parameter_mode =
+        mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD || borrowed_optional_source ? XR_PARAM_READ
+                                                                            : XR_PARAM_MOVE;
+    uint16_t parameter_type = borrowed_optional_source ? OPTIONAL_TYPE : CLASS_TYPE;
     XrCoreIrFunctionInput function = {
         .key = key("optional-owner:function"),
         .parameter_types = &parameter_type,
         .parameter_modes = &parameter_mode,
         .parameter_count = 1u,
         .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = 1u,
         .entry_block = block_key,
         .blocks = &block,
         .block_count = 1u,
@@ -2083,7 +2146,7 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
         .functions = &function,
         .function_count = 1u,
     };
-    return write_typed_modules(types, 2u, &module, 1u, artifact);
+    return write_typed_modules(types, 3u, &module, 1u, artifact);
 }
 
 static void test_optional_owner_contract(void) {
@@ -2105,6 +2168,28 @@ static void test_optional_owner_contract(void) {
 
     CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT, &artifact) ==
           XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_USE_AFTER_DROP, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_ESCAPE, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_TAKE, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW,
+                                        &artifact) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
     xr_program_artifact_free(&artifact);
 }

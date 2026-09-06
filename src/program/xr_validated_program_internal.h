@@ -75,6 +75,7 @@ typedef enum XrProviderLogicalCallKind {
     XR_PROVIDER_LOGICAL_CALL_INVALID = 0,
     XR_PROVIDER_LOGICAL_CALL_I64_UNARY,
     XR_PROVIDER_LOGICAL_CALL_I64_NULLARY,
+    XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY,
     XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY,
 } XrProviderLogicalCallKind;
 
@@ -273,6 +274,9 @@ xr_validated_program_provider_call_kind(const XrValidatedProgram *program, uint1
         if (operand_count == 1u && operand_types && operand_types[0] == XR_CORE_TYPE_I64)
             return XR_PROVIDER_LOGICAL_CALL_I64_UNARY;
     }
+    if (result_type_id == XR_CORE_TYPE_BOOL && operand_count == 1u && operand_types &&
+        operand_types[0] == XR_CORE_TYPE_I64)
+        return XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY;
     if (operand_count == 0u &&
         xr_validated_program_type_is_optional_i64_pair(program, result_type_id, NULL))
         return XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY;

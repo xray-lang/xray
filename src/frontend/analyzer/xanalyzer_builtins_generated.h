@@ -300,7 +300,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__pipeOpen", "(): (i64, i64)?", "Create an anonymous pipe and return read/write endpoint tokens", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pipeRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read one chunk from a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_SYS_FUNCTION_COUNT 16
 

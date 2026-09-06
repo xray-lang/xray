@@ -221,10 +221,13 @@ export class Pipe {
         return ok
     }
 
-    ref close() -> bool {
-        var r = this.closeRead()
-        var w = this.closeWrite()
-        return r && w
+    move close() -> bool {
+        var r = true
+        if (this._readHandle >= 0) { r = __pipeClose(this._readHandle) }
+        var w = true
+        if (this._writeHandle >= 0) { w = __pipeClose(this._writeHandle) }
+        if (r) { return w }
+        return false
     }
 
     static open() -> Pipe? {

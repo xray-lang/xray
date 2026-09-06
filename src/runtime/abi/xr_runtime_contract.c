@@ -1073,10 +1073,16 @@ static XrRuntimeAbiStatus verify_provider_call_slot(const XrTargetProviderCallAb
         case XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT:
             if (!scalar_width_valid(slot->width) || !is_power_of_two_u64(slot->alignment) ||
                 slot->alignment > slot->width ||
-                slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE || slot->flags != 0 ||
+                (slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE &&
+                 (is_result ||
+                  slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED ||
+                  slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT)) ||
+                slot->flags != 0 ||
                 (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT && slot->width != 4 &&
                  slot->width != 8))
                 return XR_RUNTIME_ABI_INVALID_SHAPE;
+            if (slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED)
+                *derived_lifetime_flags |= XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED;
             return XR_RUNTIME_ABI_OK;
         case XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS:
         case XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS:

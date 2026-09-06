@@ -793,6 +793,15 @@ static void test_provider_call_abi_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_INVALID_SHAPE,
           "parameter ownership direction is fail closed");
     mutated = abi;
+    mutated.parameters[0] = make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
+                                           XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED, 0);
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_OK,
+          "fixed integer resource tokens may be consumed by a provider call");
+    mutated.parameters[0].value_kind = XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "floating-point parameters cannot claim resource-token ownership");
+    mutated = abi;
     mutated.calling_convention = XR_TARGET_PROVIDER_CALLING_CONVENTION_INVALID;
     CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
               XR_RUNTIME_ABI_INVALID_SHAPE,
