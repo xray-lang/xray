@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop, local place load/store, nominal field-place projection, and affine place take are complete Wave 3 slices; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; canonical bool not/and/or preserve source-owned short-circuit policy; existential pack/test/project, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; provider.call now has real-source clock and pipe publication plus exact success/refusal executor evidence, but remains IN_PROGRESS until the complete provider-backed source surface, trap continuations, and old-owner deletion close; trap and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop, local place load/store, nominal field-place projection, and affine place take are complete Wave 3 slices; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; canonical bool not/and/or preserve source-owned short-circuit policy; existential pack/test/project and explicit owned-to-READ reborrow, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices; source integration is complete for pack and reborrow but the other rows remain IN_PROGRESS until their source domains and old-owner deletion close; provider.call now has real-source clock and pipe publication plus exact success/refusal executor evidence, but remains IN_PROGRESS until the complete provider-backed source surface, trap continuations, and old-owner deletion close; trap and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 52 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references. Source publication is active only for registry-backed, structurally admitted clock and pipe routes; other provider-backed source shapes remain fail closed."
+    "note": "All 53 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; explicit reborrow proves a same-interface scoped READ view is paired with one live MOVE/OWNED_STORAGE owner across every SSA edge; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references. Source publication is active only for registry-backed, structurally admitted clock and pipe routes; other provider-backed source shapes remain fail closed."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 52 registered operations execute in the independent typed VM and match the reference evaluator. Provider operations use only Program-typed, ABI-matched, lease-pinned private adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 53 registered operations execute in the independent typed VM and match the reference evaluator. Provider operations use only Program-typed, ABI-matched, lease-pinned private adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, including the nonowning READ reborrow view, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 52 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes Program-typed provider callbacks; real-source clock fixtures prove exact success and one-event refusal-to-trap normalization, while hosted standalone output and pipe-open bind backend-private host adapters and unsupported freestanding providers fail closed. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 53 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes Program-typed provider callbacks; real-source clock fixtures prove exact success and one-event refusal-to-trap normalization, while hosted standalone output and pipe-open bind backend-private host adapters and unsupported freestanding providers fail closed. Existential and callable carriers, including the nonowning READ reborrow copy, remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -744,6 +744,29 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
+      ]
+    },
+    {
+      "id": "core.existential.reborrow_read",
+      "core_spec_contract": "form one scoped nonowning READ existential view over the same payload and conformance as a live MOVE or OWNED_STORAGE existential of the exact same InterfaceId, without consuming or cloning the owner",
+      "program_encoding": "one owned existential operand and one READ existential result; owner/view pairing is explicit in SSA dataflow and no hidden root, lifetime token or backend carrier field is encoded",
+      "decoder_verifier_evaluator": "exact interface and use-kind checks plus path-complete owner/view pairing across block arguments; every cycle requires an explicit reborrow anchor, the owner must remain live through each view use, and view escape or use after owner drop is rejected",
+      "vm_implementation": "copy one executor-private existential carrier as a nonowner READ view sharing the source payload and conformance",
+      "aot_lowering": "copy one backend-private C carrier as a nonowner READ view; generated C carries no public existential ABI or auxiliary owner table",
+      "source_producer": "passing a stored owning existential to an exact same-interface READ formal emits one explicit Xi reborrow and one canonical operation backed by the exact Xglobal object-use fact",
+      "old_owner_deletion": "no implicit backend cast, ambient root, side table, compatibility conversion or relaxed call-signature admission exists; Task 302 deletes the remaining old product route",
+      "status": "COMPLETE_W7_WAVE5_REBORROW",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/xi-source-projection.json",
+        "src/ir/xi_lower_expr.c",
+        "src/ir/xi_verify.c",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_reborrow_fixture.h"
       ]
     },
     {

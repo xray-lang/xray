@@ -33,6 +33,7 @@ build's correctness without a full build's ~195 links.
 USAGE                                          measured, warm tree, 18 cores
     scripts/t.py t0      after an edit         ~23s  (build + 255 tests)
     scripts/t.py t0 -R <re>  one test          ~3s   (builds only that test)
+    scripts/t.py canonical  canonical Program edit preflight; exact inventory
     scripts/t.py t1      before a commit       ~1min
     scripts/t.py t2      before a push         ~4min
     scripts/t.py t3      periodic / release    everything, ~8min
@@ -84,6 +85,7 @@ def _bootstrap() -> None:
 
 _bootstrap()
 from xraytest import platform, proc, workspace  # noqa: E402
+import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 # This script narrates around children that write straight to fd 1 (ctest, the
 # build). Block-buffered output would land after theirs and scramble the
@@ -201,17 +203,18 @@ def ctest_names(build_dir: Path, args: Sequence[str]) -> List[str]:
     return names
 
 
-def build_selected(build_dir: Path, selected: Sequence[str], jobs: int) -> bool:
+def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
+                   include_xray: bool = True) -> bool:
     """Build exactly what this run needs.
 
     Every tier needs current binaries; running a tier against a stale one is
     worse than not running it at all. Building everything fixes that but links
     ~195 executables on every iteration, so resolve the selected test names to
-    build targets and build only those, plus `xray`, which the script-driven
-    tests invoke. A selected test with no target of the same name is a
-    script/gate test and needs nothing beyond `xray`.
+    build targets and build only those. Broad tiers also build `xray`, which
+    their script-driven tests invoke. A named profile may opt out when its exact
+    inventory contains no product-CLI test.
     """
-    targets: List[str] = ["xray"]
+    targets: List[str] = ["xray"] if include_xray else []
     known = proc.run(["ninja", "-C", str(build_dir), "-t", "targets", "all"])
     if known.ok:
         available = {match.group(1)
@@ -315,7 +318,8 @@ def main(argv: List[str]) -> int:
 
     if tier == "auto":
         tier = choose_tier_from_diff()
-    if tier not in TIERS:
+    canonical_preflight = tier == "canonical"
+    if tier not in TIERS and not canonical_preflight:
         print(f"Unknown tier '{tier}'")
         return usage(1)
 
@@ -354,6 +358,10 @@ def main(argv: List[str]) -> int:
     if not 0 <= shard_index < shards:
         print(f"{RED}Error{NC}: XR_SHARD_INDEX must be in [0,{shards})")
         return 1
+    if shards > 1 and canonical_preflight:
+        print(f"{RED}Error{NC}: XR_SHARDS is not accepted by the canonical "
+              "preflight; its inventory is exact.")
+        return 1
     if shards > 1 and tier == "t3":
         print(f"{RED}Error{NC}: XR_SHARDS is not allowed for t3 — a release "
               "tier runs every case.")
@@ -365,11 +373,19 @@ def main(argv: List[str]) -> int:
               "(Ninja + Release in build/)")
         return 1
 
-    print(f"{BOLD}tier {tier}{NC}  build={build_dir}  jobs={jobs}")
+    kind = "profile" if canonical_preflight else "tier"
+    print(f"{BOLD}{kind} {tier}{NC}  build={build_dir}  jobs={jobs}")
     print("=" * 72)
     started = time.time()
 
-    include, exclude, not_covered = TIERS[tier]
+    if canonical_preflight:
+        include = canonical_profile.ctest_regex()
+        exclude = ""
+        not_covered = ("known-red terminal readiness/residue gates, broad language/runtime "
+                       "suites, full backend differential, full ASan/LSan, QEMU and release "
+                       "qualification")
+    else:
+        include, exclude, not_covered = TIERS[tier]
     ctest_args = ["--output-on-failure", "-j", str(jobs)]
     if include:
         ctest_args += ["-R", include]
@@ -380,8 +396,22 @@ def main(argv: List[str]) -> int:
     total = len(ctest_names(build_dir, []))
     print(f"{BLUE}==>{NC} ctest: {len(selected)}/{total} tests")
 
+    if canonical_preflight:
+        selected_set = set(selected)
+        expected_set = set(canonical_profile.CTEST_NAMES)
+        missing = sorted(expected_set - selected_set)
+        unexpected = sorted(selected_set - expected_set)
+        if missing or unexpected:
+            print(f"{RED}canonical preflight inventory mismatch{NC}")
+            for name in missing:
+                print(f"    missing: {name}")
+            for name in unexpected:
+                print(f"    unexpected: {name}")
+            return 1
+
     if not platform.env_flag("XR_NO_BUILD"):
-        if not build_selected(build_dir, selected, jobs):
+        if not build_selected(build_dir, selected, jobs,
+                              include_xray=not canonical_preflight):
             return 1
 
     env = dict(os.environ)
@@ -422,7 +452,7 @@ def main(argv: List[str]) -> int:
     elapsed = int(time.time() - started)
     print("=" * 72)
     verdict = f"{GREEN}PASS{NC}" if code == 0 else f"{RED}FAIL{NC}"
-    print(f"tier {BOLD}{tier}{NC}  {verdict}  {elapsed // 60}m{elapsed % 60:02d}s")
+    print(f"{kind} {BOLD}{tier}{NC}  {verdict}  {elapsed // 60}m{elapsed % 60:02d}s")
 
     # A tier that stayed quiet about its own limits is how a green check turns
     # into false confidence. Say what was not covered, every time.

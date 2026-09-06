@@ -545,17 +545,24 @@ add_custom_command(
     VERBATIM
 )
 
-add_custom_target(gen-xi-lowering
+set(XRAY_XI_LOWERING_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xi-lowering.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_XI_LOWERING_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-check
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
             ${CMAKE_SOURCE_DIR}
             ${XRAY_XI_LOWERING_VALIDATION_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_XI_LOWERING_CHECK_STAMP}
     DEPENDS ${XRAY_XI_LOWERING_VALIDATION_STAMP}
             ${XRAY_GEN_XI_LOWERING_DEPS}
     COMMENT "xisagen: verifying checked-in Xi lowering projections"
     VERBATIM
 )
+add_custom_target(gen-xi-lowering DEPENDS ${XRAY_XI_LOWERING_CHECK_STAMP})
 
 add_custom_target(gen-aot-metadata DEPENDS
     ${XRAY_GEN_AOT_METADATA_DEPS}
@@ -579,10 +586,16 @@ add_custom_target(gen-native-type-defs DEPENDS
 # Checked-in projections make reviews explicit; this build edge only verifies
 # that the registry, KAT oracle, C metadata, readable table, and coverage
 # inventory are an exact deterministic set.
-add_custom_target(gen-core-spec
+set(XRAY_CORE_SPEC_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/core-spec.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_CORE_SPEC_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${CORESPECGEN}
             --root ${CMAKE_SOURCE_DIR}
             --check
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_CORE_SPEC_CHECK_STAMP}
     DEPENDS ${CORESPECGEN}
             ${CMAKE_SOURCE_DIR}/xisa/core/schema.json
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
@@ -594,13 +607,20 @@ add_custom_target(gen-core-spec
     COMMENT "corespecgen: verifying canonical CoreSpec projections"
     VERBATIM
 )
+add_custom_target(gen-core-spec DEPENDS ${XRAY_CORE_SPEC_CHECK_STAMP})
 
 # Compiler-facing TargetOs/TargetArch/TargetAbi/TargetEndian declarations and
 # the lightweight runtime ABI values are two projections of one registry.
 # This read-only edge rejects either stale projection before compilation.
-add_custom_target(gen-target-query-registry
+set(XRAY_TARGET_QUERY_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/target-query.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_TARGET_QUERY_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${TARGETQUERYGEN}
             --root ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_TARGET_QUERY_CHECK_STAMP}
     DEPENDS ${TARGETQUERYGEN}
             ${CMAKE_SOURCE_DIR}/xisa/target/query-enums.json
             ${CMAKE_SOURCE_DIR}/src/shared/xr_target_query_values_gen.h
@@ -608,13 +628,20 @@ add_custom_target(gen-target-query-registry
     COMMENT "targetquerygen: verifying target enum value and compiler projections"
     VERBATIM
 )
+add_custom_target(gen-target-query-registry DEPENDS ${XRAY_TARGET_QUERY_CHECK_STAMP})
 
 # XrProgram v1 has one checked-in wire schema and generated C constants. The
 # build verifies projections and never rewrites the source tree.
-add_custom_target(gen-xr-program-schema
+set(XRAY_PROGRAM_SCHEMA_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-schema.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_PROGRAM_SCHEMA_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${PROGRAMGEN}
             --root ${CMAKE_SOURCE_DIR}
             --check
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_SCHEMA_CHECK_STAMP}
     DEPENDS ${PROGRAMGEN}
             ${CMAKE_SOURCE_DIR}/xisa/program/schema.json
             ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
@@ -628,12 +655,19 @@ add_custom_target(gen-xr-program-schema
     COMMENT "programgen: verifying canonical XrProgram schema projections"
     VERBATIM
 )
+add_custom_target(gen-xr-program-schema DEPENDS ${XRAY_PROGRAM_SCHEMA_CHECK_STAMP})
 
 # Task 297 keeps semantic admission and the independent evaluator closed over
 # the canonical CoreSpec/XrProgram contracts. This gate is read-only.
-add_custom_target(check-xr-program-semantics
+set(XRAY_PROGRAM_SEMANTICS_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-semantics.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_PROGRAM_SEMANTICS_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${PROGRAMSEMCHECK}
             --root ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_SEMANTICS_CHECK_STAMP}
     DEPENDS ${PROGRAMSEMCHECK}
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
             ${CMAKE_SOURCE_DIR}/xisa/program/schema.json
@@ -647,10 +681,18 @@ add_custom_target(check-xr-program-semantics
     COMMENT "Checking XrProgram semantic admission and evaluator coverage"
     VERBATIM
 )
+add_custom_target(check-xr-program-semantics
+    DEPENDS ${XRAY_PROGRAM_SEMANTICS_CHECK_STAMP})
 
-add_custom_target(check-xr-execution-contracts
+set(XRAY_EXECUTION_CONTRACT_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-execution-contracts.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_EXECUTION_CONTRACT_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${EXECUTIONCONTRACTCHECK}
             --root ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_EXECUTION_CONTRACT_CHECK_STAMP}
     DEPENDS ${EXECUTIONCONTRACTCHECK}
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/execution-binding-coverage.json
             ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.h
@@ -664,10 +706,18 @@ add_custom_target(check-xr-execution-contracts
     COMMENT "Checking exact target-profile and execution-binding contracts"
     VERBATIM
 )
+add_custom_target(check-xr-execution-contracts
+    DEPENDS ${XRAY_EXECUTION_CONTRACT_CHECK_STAMP})
 
-add_custom_target(check-xr-program-vm-contracts
+set(XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-vm-contracts.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
             --root ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP}
     DEPENDS ${PROGRAMVMCONTRACTCHECK}
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
             ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.h
@@ -678,10 +728,18 @@ add_custom_target(check-xr-program-vm-contracts
     COMMENT "Checking typed XrProgram VM coverage and runtime isolation"
     VERBATIM
 )
+add_custom_target(check-xr-program-vm-contracts
+    DEPENDS ${XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP})
 
-add_custom_target(check-xr-program-aot-contracts
+set(XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-aot-contracts.check.stamp")
+add_custom_command(
+    OUTPUT ${XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
     COMMAND ${XRAY_PYTHON} ${PROGRAMAOTCONTRACTCHECK}
             --root ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP}
     DEPENDS ${PROGRAMAOTCONTRACTCHECK}
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.h
@@ -696,6 +754,8 @@ add_custom_target(check-xr-program-aot-contracts
     COMMENT "Checking XrProgram AOT lowering and native artifact contracts"
     VERBATIM
 )
+add_custom_target(check-xr-program-aot-contracts
+    DEPENDS ${XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP})
 
 add_custom_target(check-xr-program-source-contracts
     COMMAND ${XRAY_PYTHON} ${PROGRAMSOURCECONTRACTCHECK}
