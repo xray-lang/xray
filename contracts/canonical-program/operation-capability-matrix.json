@@ -978,6 +978,31 @@
       ]
     },
     {
+      "id": "core.assert.condition",
+      "core_spec_contract": "observe one canonical bool and publish the frozen condition-false PanicInfo code when it is false",
+      "program_encoding": "bool operand, condition-false immediate, void result, and either direct panic publication or one explicit panic cleanup successor",
+      "decoder_verifier_evaluator": "exact condition and PanicInfo types, total live-owner transfer to one cleanup edge, and independent true/false evaluation",
+      "vm_implementation": "typed bool branch that either falls through or transfers the owned PanicInfo payload and live owners to private cleanup execution",
+      "aot_lowering": "portable C11 conditional branch with the same typed panic payload and explicit cleanup edge",
+      "source_producer": "exact Xi condition assertion under static defer cleanup, including cross-function panic propagation through sealed direct calls",
+      "old_owner_deletion": "no implicit handler state, executor-local unwind stack, compatibility assertion opcode, or resource-specific cleanup path is admitted",
+      "status": "COMPLETE_CANONICAL_ASSERTION_PANIC_CLEANUP",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/CMakeLists.txt"
+      ]
+    },
+    {
       "id": "core.coroutine.yield",
       "core_spec_contract": "suspend once at an exact function-local safepoint and resume only at its declared logical state while preserving the named live values",
       "program_encoding": "coroutine state and safepoint tables plus a suspend-successor terminator whose operands are exactly the live-across values",

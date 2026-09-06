@@ -42,6 +42,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
+        case XR_CORE_OP_CORE_ASSERT_CONDITION:
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
@@ -554,9 +555,8 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
 }
 
 XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
-                                    const XrTargetProfile *profile,
-                                    const XrBackendOptions *options, XrBackendIR **ir_out,
-                                    XrBackendDiagnostic *diagnostic_out) {
+                                    const XrTargetProfile *profile, const XrBackendOptions *options,
+                                    XrBackendIR **ir_out, XrBackendDiagnostic *diagnostic_out) {
     if (ir_out)
         *ir_out = NULL;
     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OK, 0u, 0u, 0u, 0u);
@@ -585,8 +585,7 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
     ir->options = *options;
     ir->function_count = program->function_count;
     ir->entry_function = program->entry_function;
-    ir->pointer_width =
-        machine ? (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8)) : 0u;
+    ir->pointer_width = machine ? (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8)) : 0u;
     ir->operating_system = machine ? machine->operating_system : 0u;
     ir->architecture = machine ? machine->architecture : 0u;
     ir->native_abi = machine ? machine->native_abi : 0u;

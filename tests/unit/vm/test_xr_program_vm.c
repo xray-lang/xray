@@ -15,6 +15,7 @@
 #include "../program/xr_program_reborrow_fixture.h"
 #include "../program/xr_program_callable_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
+#include "../program/xr_program_assert_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
 #include "../program/xr_program_output_fixture.h"
 #include "../program/xr_program_trap_fixture.h"
@@ -31,6 +32,7 @@ _Static_assert(XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE == 39, "indirect invoke stab
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_ASSERT_CONDITION == 109, "condition assert stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
@@ -40,8 +42,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ == 90,
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,
-               "coroutine call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -686,7 +687,7 @@ static XrValidatedProgram *build_control_program(void) {
 }
 
 static XrValidatedProgram *build_target_query_program(uint16_t operation_id, uint16_t result_type,
-                                                       uint32_t capability) {
+                                                      uint32_t capability) {
     XrCoreIrKey value = fixture_key("vm-target-query:value");
     XrCoreIrKey returned[] = {value};
     XrCoreIrInstructionInput instructions[] = {
@@ -832,7 +833,9 @@ static XrValidatedProgram *build_call_program(void) {
 }
 
 static XrValidatedProgram *build_local_ref_program(void) {
-    enum { AGGREGATE_TYPE = 62 };
+    enum {
+        AGGREGATE_TYPE = 62
+    };
     uint16_t aggregate_fields[] = {XR_CORE_TYPE_I64};
     XrCoreIrTypeInput type = {
         .key = fixture_key("local-ref:type"),
@@ -1009,9 +1012,8 @@ static XrValidatedProgram *build_local_ref_program(void) {
          .block_count = 1u,
          .flags = XR_PROGRAM_FUNCTION_ENTRY},
     };
-    return validate_typed_fixture(&type, 1u, constants,
-                                  sizeof(constants) / sizeof(constants[0]), functions,
-                                  sizeof(functions) / sizeof(functions[0]));
+    return validate_typed_fixture(&type, 1u, constants, sizeof(constants) / sizeof(constants[0]),
+                                  functions, sizeof(functions) / sizeof(functions[0]));
 }
 
 static XrValidatedProgram *build_trap_program(void) {
@@ -1111,32 +1113,31 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
     XrCoreIrInstructionInput instructions[3] = {0};
     uint32_t instruction_count = 0u;
     if (!nullary) {
-        instructions[instruction_count++] = (XrCoreIrInstructionInput) {
-         .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
-         .result = input_value,
-         .result_type_id = XR_CORE_TYPE_I64,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
-         .immediate.key = constant.key};
+        instructions[instruction_count++] =
+            (XrCoreIrInstructionInput) {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+                                        .result = input_value,
+                                        .result_type_id = XR_CORE_TYPE_I64,
+                                        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+                                        .immediate.key = constant.key};
     }
     instructions[instruction_count++] = (XrCoreIrInstructionInput) {
-         .operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
-         .result = result_value,
-         .result_type_id = XR_CORE_TYPE_I64,
-         .operands = nullary ? NULL : call_operand,
-         .operand_count = nullary ? 0u : 1u,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
-         .immediate.provider_operation = {.contract_id = contract->contract_id,
-                                          .operation_id = contract->operations[0].stable_id}};
-    instructions[instruction_count++] = (XrCoreIrInstructionInput) {
-         .operation_id = XR_CORE_OP_CORE_RETURN,
-         .result_type_id = XR_CORE_TYPE_VOID,
-         .operands = return_operand,
-         .operand_count = 1u,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE};
+        .operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
+        .result = result_value,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .operands = nullary ? NULL : call_operand,
+        .operand_count = nullary ? 0u : 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
+        .immediate.provider_operation = {.contract_id = contract->contract_id,
+                                         .operation_id = contract->operations[0].stable_id}};
+    instructions[instruction_count++] =
+        (XrCoreIrInstructionInput) {.operation_id = XR_CORE_OP_CORE_RETURN,
+                                    .result_type_id = XR_CORE_TYPE_VOID,
+                                    .operands = return_operand,
+                                    .operand_count = 1u,
+                                    .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE};
     XrCoreIrKey block_key = fixture_key("provider:block:entry");
-    XrCoreIrBlockInput block = {.key = block_key,
-                                .instructions = instructions,
-                                .instruction_count = instruction_count};
+    XrCoreIrBlockInput block = {
+        .key = block_key, .instructions = instructions, .instruction_count = instruction_count};
     XrCoreIrFunctionInput function = {
         .key = fixture_key("provider:function:entry"),
         .result_type_id = XR_CORE_TYPE_I64,
@@ -1315,8 +1316,8 @@ static XrProviderCallStatus provider_refuse_nullary(void *context, int64_t *resu
     return XR_PROVIDER_CALL_FAILED;
 }
 
-static XrProviderCallStatus provider_pipe(void *context, bool *present_out,
-                                          int64_t *first_out, int64_t *second_out) {
+static XrProviderCallStatus provider_pipe(void *context, bool *present_out, int64_t *first_out,
+                                          int64_t *second_out) {
     if (!context || !present_out || !first_out || !second_out)
         return XR_PROVIDER_CALL_FAILED;
     *present_out = *(const bool *) context;
@@ -1325,8 +1326,8 @@ static XrProviderCallStatus provider_pipe(void *context, bool *present_out,
     return XR_PROVIDER_CALL_OK;
 }
 
-static void build_scalar_clock_binding(const XrTargetProfile *profile,
-                                       bool nullary, TestProviderBindings *bindings) {
+static void build_scalar_clock_binding(const XrTargetProfile *profile, bool nullary,
+                                       TestProviderBindings *bindings) {
     memset(bindings, 0, sizeof(*bindings));
     const XrTargetProviderContract *contract = scalar_clock_contract(profile);
     REQUIRE(contract && contract->operation_count != 0u);
@@ -1360,8 +1361,7 @@ static void build_pipe_binding(const XrTargetProfile *profile, bool *present,
     bindings->providers[0].operations = bindings->operations[0];
     bindings->providers[0].operation_count = 1u;
     bindings->operations[0][0].operation_id = contract->operations[0].stable_id;
-    bindings->operations[0][0].trampoline_kind =
-        XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
+    bindings->operations[0][0].trampoline_kind = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
     bindings->operations[0][0].entry.optional_i64_pair_nullary = provider_pipe;
     bindings->operations[0][0].context = present;
 }
@@ -1472,8 +1472,8 @@ static XrVmOutcome execute_differential(XrValidatedProgram *program, XrInstance 
     XrReferenceProfile profile = {.pointer_width = pointer_width,
                                   .operating_system = machine->operating_system,
                                   .architecture = machine->architecture,
-                                   .native_abi = machine->native_abi,
-                                   .endianness = machine->data_layout.endian};
+                                  .native_abi = machine->native_abi,
+                                  .endianness = machine->data_layout.endian};
     REQUIRE(xr_execution_lease_release(&lease));
     xr_target_profile_free(target_profile);
     XrReferenceOutcome reference =
@@ -1539,35 +1539,34 @@ static bool reference_provider_call(void *context, uint32_t requirement_index,
                                     uint32_t operation_index, int64_t argument,
                                     int64_t *result_out) {
     return xr_execution_lease_provider_call_i64_unary(context, requirement_index, operation_index,
-                                                      argument, result_out) ==
-           XR_EXECUTION_PROVIDER_CALL_OK;
+                                                      argument,
+                                                      result_out) == XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
 static bool reference_provider_call_nullary(void *context, uint32_t requirement_index,
                                             uint32_t operation_index, int64_t *result_out) {
-    return xr_execution_lease_provider_call_i64_nullary(
-               context, requirement_index, operation_index, result_out) ==
+    return xr_execution_lease_provider_call_i64_nullary(context, requirement_index, operation_index,
+                                                        result_out) ==
            XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
-static bool reference_provider_call_optional_i64_pair(
-    void *context, uint32_t requirement_index, uint32_t operation_index,
-    bool *present_out, int64_t *first_out, int64_t *second_out) {
+static bool reference_provider_call_optional_i64_pair(void *context, uint32_t requirement_index,
+                                                      uint32_t operation_index, bool *present_out,
+                                                      int64_t *first_out, int64_t *second_out) {
     return xr_execution_lease_provider_call_optional_i64_pair_nullary(
-               context, requirement_index, operation_index, present_out, first_out,
-               second_out) == XR_EXECUTION_PROVIDER_CALL_OK;
+               context, requirement_index, operation_index, present_out, first_out, second_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
 static void test_provider_call_differential(void) {
     for (uint32_t shape = 0u; shape < 2u; ++shape) {
         bool nullary = shape != 0u;
-        XrTargetProfile *profile = nullary
-            ? xr_test_target_profile_build_with_nullary_clock(
-                  false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
-                  XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER)
-            : xr_test_target_profile_build_with_scalar_clock(
-                  false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
-                  XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+        XrTargetProfile *profile = nullary ? xr_test_target_profile_build_with_nullary_clock(
+                                                 false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+                                                 XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER)
+                                           : xr_test_target_profile_build_with_scalar_clock(
+                                                 false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+                                                 XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
         REQUIRE(profile != NULL);
         XrValidatedProgram *program = build_provider_call_program(profile, nullary);
         TestProviderBindings bindings;
@@ -1581,8 +1580,7 @@ static void test_provider_call_differential(void) {
         XrVmCodeDiagnostic diagnostic;
         REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) ==
                 XR_VM_CODE_OK);
-        REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) ==
-                XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) == XR_VM_CODE_OK);
         XrExecutionLease lease = {0};
         REQUIRE(xr_execution_instance_acquire(instance, &lease));
         XrReferenceProviderBinding reference_binding = {
@@ -1591,8 +1589,8 @@ static void test_provider_call_differential(void) {
             .call_i64_nullary = reference_provider_call_nullary,
         };
         uint32_t entry = xr_validated_program_entry_function(program);
-        XrReferenceOutcome reference = xr_reference_evaluate_bound(
-            program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+        XrReferenceOutcome reference =
+            xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
         XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
         XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
         compare_outcomes(reference, baseline_result);
@@ -1611,8 +1609,7 @@ static void test_provider_call_differential(void) {
 
 static void test_provider_trap_continuation_differential(void) {
     XrTargetProfile *profile = xr_test_target_profile_build_with_nullary_clock(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED, XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
     REQUIRE(profile != NULL);
     const XrTargetProviderContract *contract = scalar_clock_contract(profile);
     REQUIRE(contract != NULL && contract->operation_count == 1u);
@@ -1640,8 +1637,7 @@ static void test_provider_trap_continuation_differential(void) {
     XrVmCode *baseline = NULL;
     XrVmCode *fixed = NULL;
     XrVmCodeDiagnostic diagnostic;
-    REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) ==
-            XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) == XR_VM_CODE_OK);
     REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) == XR_VM_CODE_OK);
     XrExecutionLease lease = {0};
     REQUIRE(xr_execution_instance_acquire(instance, &lease));
@@ -1650,8 +1646,8 @@ static void test_provider_trap_continuation_differential(void) {
         .call_i64_nullary = reference_provider_call_nullary,
     };
     uint32_t entry = xr_validated_program_entry_function(program);
-    XrReferenceOutcome reference = xr_reference_evaluate_bound(
-        program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
     XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
     XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
     compare_outcomes(reference, baseline_result);
@@ -1671,8 +1667,8 @@ static void test_provider_trap_continuation_differential(void) {
 static void test_pipe_provider_call_differential(void) {
     for (uint32_t present_value = 0u; present_value < 2u; ++present_value) {
         bool present = present_value != 0u;
-        XrTargetProfile *profile = xr_test_target_profile_build_with_pipe(
-            false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        XrTargetProfile *profile =
+            xr_test_target_profile_build_with_pipe(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
         REQUIRE(profile != NULL);
         XrValidatedProgram *program = build_pipe_provider_program(profile);
         TestProviderBindings bindings;
@@ -1689,8 +1685,8 @@ static void test_pipe_provider_call_differential(void) {
             .call_optional_i64_pair_nullary = reference_provider_call_optional_i64_pair,
         };
         uint32_t entry = xr_validated_program_entry_function(program);
-        XrReferenceOutcome reference = xr_reference_evaluate_bound(
-            program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+        XrReferenceOutcome reference =
+            xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
         XrVmOutcome vm = xr_vm_code_execute(code, instance, entry, NULL, 0u);
         compare_outcomes(reference, vm);
         REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
@@ -1711,8 +1707,7 @@ typedef struct OutputCapture {
     bool fail;
 } OutputCapture;
 
-static XrProviderCallStatus capture_output_write(void *opaque, const uint8_t *bytes,
-                                                 size_t size) {
+static XrProviderCallStatus capture_output_write(void *opaque, const uint8_t *bytes, size_t size) {
     OutputCapture *capture = opaque;
     if (!capture || (!bytes && size != 0u) || size > sizeof(capture->bytes) - capture->size)
         return XR_PROVIDER_CALL_FAILED;
@@ -1755,11 +1750,9 @@ static void build_output_binding(const XrTargetProfile *profile, OutputCapture *
 }
 
 static bool reference_output_write(void *context, uint32_t requirement_index,
-                                   uint32_t operation_index, const uint8_t *bytes,
-                                   size_t size) {
-    return xr_execution_lease_provider_output_write(
-               context, requirement_index, operation_index, bytes, size) ==
-           XR_EXECUTION_PROVIDER_CALL_OK;
+                                   uint32_t operation_index, const uint8_t *bytes, size_t size) {
+    return xr_execution_lease_provider_output_write(context, requirement_index, operation_index,
+                                                    bytes, size) == XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
 static void test_provider_output_differential(void) {
@@ -1778,15 +1771,14 @@ static void test_provider_output_differential(void) {
         char build_diagnostic[256] = {0};
         REQUIRE(xr_program_output_fixture_write(cases[case_index].value, &artifact,
                                                 build_diagnostic,
-                                                sizeof(build_diagnostic)) ==
-                XR_PROGRAM_BUILD_OK);
+                                                sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
         XrValidatedProgram *program = NULL;
         XrProgramDiagnostic verify_diagnostic;
         REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
                                     &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
         xr_program_artifact_free(&artifact);
-        XrTargetProfile *profile = xr_test_target_profile_build_with_output(
-            false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        XrTargetProfile *profile =
+            xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
         REQUIRE(profile != NULL);
         OutputCapture capture = {0};
         TestProviderBindings bindings;
@@ -1809,8 +1801,8 @@ static void test_provider_output_differential(void) {
             .output_write = reference_output_write,
         };
         uint32_t entry = xr_validated_program_entry_function(program);
-        XrReferenceOutcome reference = xr_reference_evaluate_bound(
-            program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+        XrReferenceOutcome reference =
+            xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
         XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
         XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
         compare_outcomes(reference, baseline_result);
@@ -1822,12 +1814,12 @@ static void test_provider_output_differential(void) {
         REQUIRE(capture.calls == 3u);
         REQUIRE(capture.size == line_size * 3u);
         for (size_t copy = 0u; copy < 3u; ++copy)
-            REQUIRE(memcmp(capture.bytes + copy * line_size, cases[case_index].line,
-                           line_size) == 0);
+            REQUIRE(memcmp(capture.bytes + copy * line_size, cases[case_index].line, line_size) ==
+                    0);
 
         capture = (OutputCapture) {.fail = true};
-        reference = xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL,
-                                                &reference_binding);
+        reference =
+            xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
         baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
         fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
         compare_outcomes(reference, baseline_result);
@@ -1946,6 +1938,33 @@ static void test_typed_panic_invoke_and_cleanup_cfg(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_condition_assert_panic_cleanup_cfg(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_assert_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    XrReferenceValue reference_arguments[] = {
+        {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = true},
+        {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = 9},
+    };
+    XrVmValue vm_arguments[] = {
+        {.kind = XR_VM_VALUE_BOOL, .as.boolean = true},
+        {.kind = XR_VM_VALUE_I64, .as.i64 = 9},
+    };
+    run_program(program, false, reference_arguments, vm_arguments, 2u, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_I64, 42u);
+    reference_arguments[0].as.boolean = false;
+    vm_arguments[0].as.boolean = false;
+    run_program(program, false, reference_arguments, vm_arguments, 2u, XR_VM_OUTCOME_PANIC,
+                XR_VM_VALUE_VOID, XR_ASSERTION_FAILURE_CONDITION_FALSE);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_operation_semantics(void) {
     XrValidatedProgram *aggregate = build_aggregate_variant_program(false);
     run_program(aggregate, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 2u);
@@ -1983,40 +2002,40 @@ static void test_operation_semantics(void) {
     run_program(control, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U16, 64u);
     run_program(control, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U16, 32u);
 
-    XrValidatedProgram *operating_system = build_target_query_program(
-        XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM, XR_CORE_TYPE_TARGET_OS,
-        XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM);
-    run_program(operating_system, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_OS, XR_TARGET_OS_WINDOWS);
-    run_program(operating_system, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_OS, XR_TARGET_OS_WASI);
-    XrValidatedProgram *architecture = build_target_query_program(
-        XR_CORE_OP_CORE_TARGET_ARCHITECTURE, XR_CORE_TYPE_TARGET_ARCH,
-        XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE);
-    run_program(architecture, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_ARCH, XR_TARGET_ARCH_X86_64);
-    run_program(architecture, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_ARCH, XR_TARGET_ARCH_WASM32);
-    XrValidatedProgram *native_abi = build_target_query_program(
-        XR_CORE_OP_CORE_TARGET_NATIVE_ABI, XR_CORE_TYPE_TARGET_ABI,
-        XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI);
-    run_program(native_abi, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_ABI, XR_TARGET_ABI_WIN64_X86_64);
-    run_program(native_abi, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_ABI, XR_TARGET_ABI_WASM);
-    XrValidatedProgram *endianness = build_target_query_program(
-        XR_CORE_OP_CORE_TARGET_ENDIANNESS, XR_CORE_TYPE_TARGET_ENDIAN,
-        XR_CORE_CAPABILITY_PROFILE_ENDIANNESS);
-    run_program(endianness, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_ENDIAN, XR_TARGET_ENDIAN_LITTLE);
-    run_program(endianness, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_TARGET_ENDIAN, XR_TARGET_ENDIAN_LITTLE);
+    XrValidatedProgram *operating_system =
+        build_target_query_program(XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM, XR_CORE_TYPE_TARGET_OS,
+                                   XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM);
+    run_program(operating_system, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_OS,
+                XR_TARGET_OS_WINDOWS);
+    run_program(operating_system, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_OS,
+                XR_TARGET_OS_WASI);
+    XrValidatedProgram *architecture =
+        build_target_query_program(XR_CORE_OP_CORE_TARGET_ARCHITECTURE, XR_CORE_TYPE_TARGET_ARCH,
+                                   XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE);
+    run_program(architecture, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_ARCH,
+                XR_TARGET_ARCH_X86_64);
+    run_program(architecture, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_ARCH,
+                XR_TARGET_ARCH_WASM32);
+    XrValidatedProgram *native_abi =
+        build_target_query_program(XR_CORE_OP_CORE_TARGET_NATIVE_ABI, XR_CORE_TYPE_TARGET_ABI,
+                                   XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI);
+    run_program(native_abi, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_ABI,
+                XR_TARGET_ABI_WIN64_X86_64);
+    run_program(native_abi, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_ABI,
+                XR_TARGET_ABI_WASM);
+    XrValidatedProgram *endianness =
+        build_target_query_program(XR_CORE_OP_CORE_TARGET_ENDIANNESS, XR_CORE_TYPE_TARGET_ENDIAN,
+                                   XR_CORE_CAPABILITY_PROFILE_ENDIANNESS);
+    run_program(endianness, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_ENDIAN,
+                XR_TARGET_ENDIAN_LITTLE);
+    run_program(endianness, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_TARGET_ENDIAN,
+                XR_TARGET_ENDIAN_LITTLE);
 
     XrValidatedProgram *target_enum_equality = build_target_enum_equality_program();
-    run_program(target_enum_equality, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_BOOL, 0u);
-    run_program(target_enum_equality, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN,
-                XR_VM_VALUE_BOOL, 1u);
+    run_program(target_enum_equality, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_BOOL,
+                0u);
+    run_program(target_enum_equality, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_BOOL,
+                1u);
 
     XrValidatedProgram *call = build_call_program();
     run_program(call, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
@@ -2219,11 +2238,9 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
     REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) == XR_EXECUTION_OK);
     REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) == XR_EXECUTION_OK);
     XrInstance *successor = NULL;
-    REQUIRE(xr_execution_instance_create_successor(instance,
-                                                   bindings.count ? bindings.providers : NULL,
-                                                   bindings.count,
-                                                   &successor,
-                                                   &execution_diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_create_successor(
+                instance, bindings.count ? bindings.providers : NULL, bindings.count, &successor,
+                &execution_diagnostic) == XR_EXECUTION_OK);
     REQUIRE(!xr_vm_code_matches_instance(code, successor));
     result = xr_vm_code_execute(code, successor, entry, NULL, 0);
     REQUIRE(result.kind == XR_VM_OUTCOME_STALE_CODE);
@@ -2265,8 +2282,8 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
     REQUIRE(xr_execution_instance_retire(reference_instance, &execution_diagnostic) ==
             XR_EXECUTION_OK);
     XrReferenceExecution *stale_reference = NULL;
-    REQUIRE(!xr_reference_execution_create(reference_instance, 0u, NULL, 0u, NULL,
-                                            &stale_reference));
+    REQUIRE(
+        !xr_reference_execution_create(reference_instance, 0u, NULL, 0u, NULL, &stale_reference));
     xr_reference_execution_free(reference);
     XrInstance *reference_successor = NULL;
     REQUIRE(xr_execution_instance_create_successor(reference_instance, NULL, 0u,
@@ -2282,8 +2299,7 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
         XR_VM_DECODE_FIXED_ROWS,
     };
     for (uint32_t policy_index = 0u; policy_index < 2u; ++policy_index) {
-        XrInstance *instance =
-            create_instance(program, profile, &bindings, 201u + policy_index);
+        XrInstance *instance = create_instance(program, profile, &bindings, 201u + policy_index);
         XrVmCodeOptions options = xr_vm_code_default_options();
         options.decode_policy = policies[policy_index];
         XrVmCode *code = NULL;
@@ -2333,6 +2349,7 @@ int main(void) {
     test_provider_output_differential();
     test_sealed_invoke_and_cleanup_cfg();
     test_typed_panic_invoke_and_cleanup_cfg();
+    test_condition_assert_panic_cleanup_cfg();
     test_existential_pack_test_project();
     test_existential_owned_read_reborrow();
     test_callable_pack_and_indirect_calls();

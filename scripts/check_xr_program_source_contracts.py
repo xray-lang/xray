@@ -488,6 +488,7 @@ def validate(root: Path) -> None:
     wave_three_aggregate_place = {"core.place.project", "core.place.take"}
     wave_three_slice_four = {"core.error.publish"}
     wave_three_slice_five = {"core.call.sealed_invoke", "core.panic.publish"}
+    canonical_assertion = {"core.assert.condition"}
     wave_four_executor = {
         "core.call.indirect_direct",
         "core.call.indirect_invoke",
@@ -508,6 +509,8 @@ def validate(root: Path) -> None:
            for operation in wave_three_aggregate_place},
         **{operation: "COMPLETE_W7_WAVE3_SLICE4" for operation in wave_three_slice_four},
         **{operation: "COMPLETE_W7_WAVE3_SLICE5" for operation in wave_three_slice_five},
+        **{operation: "COMPLETE_CANONICAL_ASSERTION_PANIC_CLEANUP"
+           for operation in canonical_assertion},
         **{operation: "COMPLETE_W7_WAVE4" for operation in wave_four_executor},
         **{operation: "COMPLETE_W7_WAVE5_POINTER" for operation in wave_five_pointer},
         **{operation: "COMPLETE_W7_WAVE5_TARGET_PROFILE"

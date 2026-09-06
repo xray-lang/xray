@@ -484,8 +484,7 @@ static bool detach_vm_value(XrVmValue source, XrVmValue *output) {
         return true;
     }
     const XrVmAggregateValue *source_aggregate = source.as.aggregate;
-    if (!source_aggregate ||
-        (source_aggregate->field_count != 0u && !source_aggregate->fields))
+    if (!source_aggregate || (source_aggregate->field_count != 0u && !source_aggregate->fields))
         return false;
 #if SIZE_MAX < UINT64_MAX
     if ((size_t) source_aggregate->field_count > SIZE_MAX / sizeof(*source_aggregate->fields))
@@ -521,8 +520,7 @@ static bool detach_vm_value(XrVmValue source, XrVmValue *output) {
 bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out) {
     if (view_out)
         memset(view_out, 0, sizeof(*view_out));
-    if (!value || !view_out || value->kind != XR_VM_VALUE_AGGREGATE ||
-        !value->as.aggregate)
+    if (!value || !view_out || value->kind != XR_VM_VALUE_AGGREGATE || !value->as.aggregate)
         return false;
     const XrVmAggregateValue *aggregate = value->as.aggregate;
     *view_out = (XrVmAggregateView) {
@@ -766,8 +764,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 }
                 case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
                     produced.as.value.kind =
-                        instruction.result_type_id == XR_CORE_TYPE_TARGET_OS
-                            ? XR_VM_VALUE_TARGET_OS
+                        instruction.result_type_id == XR_CORE_TYPE_TARGET_OS ? XR_VM_VALUE_TARGET_OS
                         : instruction.result_type_id == XR_CORE_TYPE_TARGET_ARCH
                             ? XR_VM_VALUE_TARGET_ARCH
                         : instruction.result_type_id == XR_CORE_TYPE_TARGET_ABI
@@ -829,7 +826,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.kind = XR_VM_VALUE_BOOL;
                     produced.as.value.as.boolean =
                         instruction.operation_id == XR_CORE_OP_CORE_LOGICAL_AND ? left && right
-                                                                               : left || right;
+                                                                                : left || right;
                     break;
                 }
                 case XR_CORE_OP_CORE_COMPARE_I64: {
@@ -866,9 +863,8 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     uint16_t left = values[instruction.operands[0]].as.value.as.target_enum;
                     uint16_t right = values[instruction.operands[1]].as.value.as.target_enum;
                     produced.as.value.kind = XR_VM_VALUE_BOOL;
-                    produced.as.value.as.boolean = instruction.immediate.u32 == 0u
-                                                        ? left == right
-                                                        : left != right;
+                    produced.as.value.as.boolean =
+                        instruction.immediate.u32 == 0u ? left == right : left != right;
                     break;
                 }
                 case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
@@ -897,6 +893,30 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     transferred = true;
                     break;
                 }
+                case XR_CORE_OP_CORE_ASSERT_CONDITION:
+                    if (!values[instruction.operands[0]].as.value.as.boolean) {
+                        XrVmValue panic = {
+                            .kind = XR_VM_VALUE_PANIC_INFO,
+                            .as.panic_info = instruction.immediate.u32,
+                        };
+                        if (instruction.successor_count == 0u) {
+                            result = vm_outcome(XR_VM_OUTCOME_PANIC, context);
+                            result.panic_value = panic;
+                            goto done;
+                        }
+                        const XrValidatedBlock *target =
+                            &function->blocks[instruction.successors[0]];
+                        scratch[0] = (XrVmRuntimeValue) {
+                            .category = XR_CORE_IR_VALUE,
+                            .as.value = panic,
+                        };
+                        for (uint32_t index = 1u; index < target->argument_count; ++index)
+                            scratch[index] = values[instruction.operands[index]];
+                        incoming_count = target->argument_count;
+                        block_id = instruction.successors[0];
+                        transferred = true;
+                    }
+                    break;
                 case XR_CORE_OP_CORE_RETURN:
                     result = vm_outcome(XR_VM_OUTCOME_RETURN, context);
                     result.value = instruction.operand_count == 0u
@@ -1055,12 +1075,9 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                             .as.value = nested.panic_value,
                         };
                         implicit = 1u;
-                    } else if ((instruction.operation_id ==
-                                    XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
-                                instruction.operation_id ==
-                                    XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
-                                instruction.operation_id ==
-                                    XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE) &&
+                    } else if ((instruction.operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
+                                instruction.operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+                                instruction.operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE) &&
                                nested.kind == XR_VM_OUTCOME_TRAP &&
                                nested.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
                                instruction.successor_count == typed_successors + 1u) {
@@ -1088,10 +1105,10 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     break;
                 }
                 case XR_CORE_OP_CORE_TRAP:
-                    result = vm_trap(instruction.immediate.u32 == 7u
-                                         ? XR_VM_TRAP_PROVIDER_CALL_FAILED
-                                         : XR_VM_TRAP_EXPLICIT,
-                                     context);
+                    result =
+                        vm_trap(instruction.immediate.u32 == 7u ? XR_VM_TRAP_PROVIDER_CALL_FAILED
+                                                                : XR_VM_TRAP_EXPLICIT,
+                                context);
                     goto done;
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = vm_outcome(XR_VM_OUTCOME_ERROR, context);
@@ -1151,7 +1168,8 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     const XrValidatedBlock *trap_target =
                         has_trap_edge ? &function->blocks[instruction.successors[0]] : NULL;
                     uint32_t provider_operand_count =
-                        instruction.operand_count - (trap_target ? trap_target->argument_count : 0u);
+                        instruction.operand_count -
+                        (trap_target ? trap_target->argument_count : 0u);
                     uint16_t operand_type = provider_operand_count == 1u
                                                 ? function->value_types[instruction.operands[0]]
                                                 : XR_CORE_TYPE_VOID;
@@ -1242,14 +1260,11 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 }
                 case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {
                     uint8_t bytes[22];
-                    size_t size = format_i64_line(
-                        values[instruction.operands[0]].as.value.as.i64, bytes);
-                    XrExecutionProviderCallResult call =
-                        xr_execution_lease_provider_output_write(
-                            context->lease,
-                            instruction.immediate.provider_operation.requirement_index,
-                            instruction.immediate.provider_operation.operation_index, bytes,
-                            size);
+                    size_t size =
+                        format_i64_line(values[instruction.operands[0]].as.value.as.i64, bytes);
+                    XrExecutionProviderCallResult call = xr_execution_lease_provider_output_write(
+                        context->lease, instruction.immediate.provider_operation.requirement_index,
+                        instruction.immediate.provider_operation.operation_index, bytes, size);
                     if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
                         result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
                         goto done;
@@ -1686,8 +1701,7 @@ XrVmDecodePolicy xr_vm_code_decode_policy(const XrVmCode *code) {
 static bool vm_coroutine_operation_supported(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
-           operation_id == XR_CORE_OP_CORE_ADD_I64 ||
-           operation_id == XR_CORE_OP_CORE_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_RETURN;
@@ -1698,8 +1712,7 @@ static void vm_execution_release_lease(XrVmExecution *execution) {
         (void) xr_execution_lease_release(&execution->lease);
 }
 
-static bool vm_child_execution_create(XrVmExecution *parent,
-                                      const XrVmInstructionView *instruction,
+static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructionView *instruction,
                                       XrVmExecution **child_out) {
     if (child_out)
         *child_out = NULL;
@@ -1708,8 +1721,7 @@ static bool vm_child_execution_create(XrVmExecution *parent,
             parent->context.code->program->function_count)
         return false;
     uint32_t function_id = instruction->immediate.coroutine_call.function_id;
-    const XrValidatedFunction *function =
-        &parent->context.code->program->functions[function_id];
+    const XrValidatedFunction *function = &parent->context.code->program->functions[function_id];
     if (instruction->operand_count < function->parameter_count ||
         function->value_count > parent->context.code->options.max_value_cells)
         return false;
@@ -1724,8 +1736,8 @@ static bool vm_child_execution_create(XrVmExecution *parent,
     child->block_id = function->entry_block;
     child->values =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->values));
-    child->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
-                                   sizeof(*child->initialized));
+    child->initialized =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->initialized));
     if (!child->code || !child->values || !child->initialized) {
         xr_vm_execution_free(child);
         return false;
@@ -1741,8 +1753,7 @@ static bool vm_child_execution_create(XrVmExecution *parent,
         uint32_t target = function->blocks[function->entry_block].argument_ids[parameter];
         if (!parent->initialized[source] || function->parameter_modes[parameter] != XR_PARAM_READ ||
             parent->values[source].category != XR_CORE_IR_VALUE ||
-            !value_matches_type(parent->context.code->program,
-                                parent->values[source].as.value,
+            !value_matches_type(parent->context.code->program, parent->values[source].as.value,
                                 function->parameter_types[parameter])) {
             xr_vm_execution_free(child);
             return false;
@@ -1895,8 +1906,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 break;
             }
             case XR_CORE_OP_CORE_BRANCH: {
-                const XrValidatedBlock *target =
-                    &function->blocks[instruction.successors[0]];
+                const XrValidatedBlock *target = &function->blocks[instruction.successors[0]];
                 for (uint32_t argument = 0u; argument < instruction.operand_count; ++argument) {
                     uint32_t target_value = target->argument_ids[argument];
                     execution->values[target_value] =
@@ -1952,8 +1962,8 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 if (child.kind == XR_VM_OUTCOME_SUSPENDED) {
                     --execution->instruction_id;
                     execution->state_id = safepoint->resume_state_id;
-                    XrVmOutcome suspended = vm_execution_outcome(execution,
-                                                                  XR_VM_OUTCOME_SUSPENDED);
+                    XrVmOutcome suspended =
+                        vm_execution_outcome(execution, XR_VM_OUTCOME_SUSPENDED);
                     suspended.safepoint_id = safepoint_id;
                     return suspended;
                 }
@@ -2061,8 +2071,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     XrVmOutcome outcome =
         execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
-    if (outcome.kind == XR_VM_OUTCOME_RETURN &&
-        outcome.value.kind == XR_VM_VALUE_AGGREGATE) {
+    if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE) {
         XrVmValue detached = void_value();
         if (detach_vm_value(outcome.value, &detached)) {
             outcome.value = detached;
@@ -2071,12 +2080,10 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
             outcome = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, &context);
         }
     }
-    if (outcome.kind == XR_VM_OUTCOME_RETURN &&
-        (outcome.value.kind == XR_VM_VALUE_EXISTENTIAL ||
-         outcome.value.kind == XR_VM_VALUE_CALLABLE))
+    if (outcome.kind == XR_VM_OUTCOME_RETURN && (outcome.value.kind == XR_VM_VALUE_EXISTENTIAL ||
+                                                 outcome.value.kind == XR_VM_VALUE_CALLABLE))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
-    if (outcome.kind == XR_VM_OUTCOME_ERROR &&
-        outcome.error_value.kind == XR_VM_VALUE_AGGREGATE) {
+    if (outcome.kind == XR_VM_OUTCOME_ERROR && outcome.error_value.kind == XR_VM_VALUE_AGGREGATE) {
         XrVmValue detached = void_value();
         if (detach_vm_value(outcome.error_value, &detached)) {
             outcome.error_value = detached;

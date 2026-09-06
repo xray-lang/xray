@@ -52,6 +52,7 @@ enum {
     XR_XI_INVOKE_ARGUMENT_NONE = 0,
     XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT = 1,
     XR_XI_INVOKE_ARGUMENT_ERROR = 2,
+    XR_XI_INVOKE_ARGUMENT_PANIC = 3,
 };
 
 enum {
@@ -64,6 +65,7 @@ typedef struct XrXiBlockStorage {
     const XiBlock *xi;
     bool reachable;
     bool trap_cleanup;
+    bool panic_cleanup;
     XrXiBlockArgumentStorage *argument_storage;
     uint32_t argument_count;
     uint32_t argument_capacity;
@@ -79,6 +81,13 @@ typedef struct XrXiTrapEdge {
     const XiValue *registration;
     const XiBlock *handler;
 } XrXiTrapEdge;
+
+typedef struct XrXiPanicEdge {
+    const XiFunc *function;
+    const XiValue *point;
+    const XiValue *registration;
+    const XiBlock *handler;
+} XrXiPanicEdge;
 
 typedef struct XrXiFunctionStorage {
     const XiFunc *xi;
@@ -156,6 +165,9 @@ typedef struct XrXiBuildContext {
     XrXiTrapEdge *trap_edges;
     uint32_t trap_edge_count;
     uint32_t trap_edge_capacity;
+    XrXiPanicEdge *panic_edges;
+    uint32_t panic_edge_count;
+    uint32_t panic_edge_capacity;
 } XrXiBuildContext;
 
 typedef struct XrXiCallableTargetSet {
@@ -175,8 +187,15 @@ typedef struct XrXiCallableContract {
 
 static bool canonical_block_is_reachable(const XrXiBuildContext *context, const XiFunc *function,
                                          const XiBlock *block);
-static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context,
-                                            const XiFunc *function, const XiBlock *block);
+static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context, const XiFunc *function,
+                                            const XiBlock *block);
+static bool canonical_block_is_panic_cleanup(const XrXiBuildContext *context,
+                                             const XiFunc *function, const XiBlock *block);
+static const XrXiPanicEdge *find_panic_edge(const XrXiBuildContext *context, const XiFunc *function,
+                                            const XiValue *point);
+static bool exact_condition_assertion(const XiValue *value);
+static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *function,
+                                   const XiValue *value, uint16_t *type_id);
 
 static XrProgramBuildStatus fail(char *diagnostic, size_t diagnostic_size,
                                  XrProgramBuildStatus status, const char *format, ...) {
@@ -198,9 +217,11 @@ static bool stable_id_equal(XrStableId left, XrStableId right) {
     return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
 }
 
-static XrProgramBuildStatus require_provider_operation(
-    XrXiBuildContext *context, const char *contract_key, const char *operation_key,
-    XrStableId *contract_id_out, XrStableId *operation_id_out) {
+static XrProgramBuildStatus require_provider_operation(XrXiBuildContext *context,
+                                                       const char *contract_key,
+                                                       const char *operation_key,
+                                                       XrStableId *contract_id_out,
+                                                       XrStableId *operation_id_out) {
     XrStableId contract_id = {{0}};
     XrStableId operation_id = {{0}};
     if (!context || !contract_key || !contract_key[0] || !operation_key || !operation_key[0] ||
@@ -227,8 +248,7 @@ static XrProgramBuildStatus require_provider_operation(
                 capacity = XR_PROGRAM_LIMIT_PROVIDER_CONTRACTS;
             XrCoreIrProviderRequirementInput *requirements =
                 xr_calloc(capacity, sizeof(*requirements));
-            uint32_t *operation_capacities =
-                xr_calloc(capacity, sizeof(*operation_capacities));
+            uint32_t *operation_capacities = xr_calloc(capacity, sizeof(*operation_capacities));
             if (!requirements || !operation_capacities) {
                 xr_free(requirements);
                 xr_free(operation_capacities);
@@ -269,8 +289,8 @@ static XrProgramBuildStatus require_provider_operation(
         if (capacity < operation_capacity ||
             capacity > XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT)
             capacity = XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT;
-        XrStableId *operations = xr_realloc(
-            (void *) requirement->operation_ids, (size_t) capacity * sizeof(*operations));
+        XrStableId *operations = xr_realloc((void *) requirement->operation_ids,
+                                            (size_t) capacity * sizeof(*operations));
         if (!operations)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         requirement->operation_ids = operations;
@@ -497,8 +517,8 @@ static bool nominal_contract(const XrXiBuildContext *context, const XrType *type
 
 static const XgClassSummary *find_xg_class_by_id(const XgGlobalEvidence *evidence,
                                                  XgClassId class_id);
-static bool nominal_instance_identity_equal(const XrXiBuildContext *context,
-                                            const XrType *left, const XrType *right);
+static bool nominal_instance_identity_equal(const XrXiBuildContext *context, const XrType *left,
+                                            const XrType *right);
 
 static const XgDeclSummary *find_xg_decl_by_id(const XgGlobalEvidence *evidence, XgDeclId decl_id) {
     const XgDeclSummary *found = NULL;
@@ -1481,13 +1501,13 @@ static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *ty
 
 static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, const XiFunc *caller,
                                             const XiValue *call);
-static const XrStdlibDefEntry *resolved_provider_native_call(
-    const XrXiBuildContext *context, const XiFunc *caller, const XiValue *call);
+static const XrStdlibDefEntry *resolved_provider_native_call(const XrXiBuildContext *context,
+                                                             const XiFunc *caller,
+                                                             const XiValue *call);
 
 static bool exact_static_cleanup_try(const XiFunc *function, const XiValue *value) {
-    if (!function || !value || value->op != XI_TRY ||
-        value->aux_int != XI_TRY_AUX_STATIC_CLEANUP || value->nargs != 0u || !value->aux ||
-        !value->block || value->block->func != function ||
+    if (!function || !value || value->op != XI_TRY || value->aux_int != XI_TRY_AUX_STATIC_CLEANUP ||
+        value->nargs != 0u || !value->aux || !value->block || value->block->func != function ||
         (value->flags & XI_FLAG_SIDE_EFFECT) == 0u)
         return false;
     const XiBlock *handler = (const XiBlock *) value->aux;
@@ -1532,6 +1552,7 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
     stack[depth] = function;
     bool found = false;
     bool has_static_cleanup = false;
+    bool has_unrouted_panic = false;
     for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
         const XiBlock *block = function->blocks[block_index];
         if (!canonical_block_is_reachable(context, function, block))
@@ -1542,8 +1563,7 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                 continue;
             if (value->op == XI_TRY) {
                 if (!exact_static_cleanup_try(function, value))
-                    return fail(diagnostic, diagnostic_size,
-                                XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi function %s still uses implicit panic-handler state",
                                 function->name ? function->name : "<anonymous>");
                 has_static_cleanup = true;
@@ -1557,14 +1577,16 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                             function->name ? function->name : "<anonymous>");
             }
             if (value->op == XI_CATCH &&
-                canonical_block_is_trap_cleanup(context, function, block))
+                (canonical_block_is_trap_cleanup(context, function, block) ||
+                 canonical_block_is_panic_cleanup(context, function, block)))
                 continue;
             if (value->op == XI_CATCH)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi function %s still uses implicit panic-handler state",
                             function->name ? function->name : "<anonymous>");
             if (value->op == XI_THROW) {
-                if (canonical_block_is_trap_cleanup(context, function, block))
+                if (canonical_block_is_trap_cleanup(context, function, block) ||
+                    canonical_block_is_panic_cleanup(context, function, block))
                     continue;
                 uint16_t payload_type = XR_CORE_TYPE_VOID;
                 if (value->nargs != 1u || !value->args || !value->args[0] ||
@@ -1573,6 +1595,21 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi throw v%u does not publish typed PanicInfo", value->id);
                 found = true;
+                has_unrouted_panic |= !canonical_block_is_panic_cleanup(context, function, block);
+            }
+            if (value->op == XI_ASSERTION) {
+                const XrAssertionPlan *plan = xi_assertion_plan(value);
+                uint16_t condition_type = XR_CORE_TYPE_VOID;
+                if (!plan || !xr_assertion_plan_validate(plan) ||
+                    plan->kind != XR_ASSERTION_KIND_CONDITION || plan->arity != 1u ||
+                    plan->message_operand != XR_ASSERTION_OPERAND_NONE || value->nargs != 1u ||
+                    !value->args || !value->args[0] ||
+                    !map_logical_value_type(context, function, value->args[0], &condition_type) ||
+                    condition_type != XR_CORE_TYPE_BOOL)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi assertion v%u is not an exact condition assertion", value->id);
+                found = true;
+                has_unrouted_panic |= find_panic_edge(context, function, value) == NULL;
             }
             if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
                 value->op == XI_CALL_METHOD_DIRECT) {
@@ -1586,12 +1623,14 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
                 found = found || callee_panic;
+                has_unrouted_panic |=
+                    callee_panic && find_panic_edge(context, function, value) == NULL;
             }
         }
     }
-    if (found && has_static_cleanup)
+    if (found && has_static_cleanup && has_unrouted_panic)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi function %s needs explicit panic cleanup continuations",
+                    "Xi function %s lacks an explicit panic continuation for static cleanup",
                     function->name ? function->name : "<anonymous>");
     *has_panic = found;
     return XR_PROGRAM_BUILD_OK;
@@ -1632,8 +1671,8 @@ static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
                 continue;
             publishes_error |= block && block->control && block->control->op == XI_ERR_RETURN;
             for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index)
-                publishes_error |= block->values[value_index] &&
-                                   block->values[value_index]->op == XI_ERR_RETURN;
+                publishes_error |=
+                    block->values[value_index] && block->values[value_index]->op == XI_ERR_RETURN;
         }
         if (!publishes_error)
             return XR_PROGRAM_BUILD_OK;
@@ -1851,18 +1890,20 @@ static const XgCallsiteSummary *resolved_callsite(const XrXiBuildContext *contex
 }
 
 /* The generated stdlib definition is the sole source-side authority that maps
- * a grounded native import to a logical provider contract. Xglobal still has
- * to prove the exact native callsite identity; module/member spelling alone
+ * a grounded native
+ * import to a logical provider contract. Xglobal still has
+ * to prove the exact native callsite
+ * identity; module/member spelling alone
  * never grants provider authority. */
-static const XrStdlibDefEntry *resolved_provider_native_call(
-    const XrXiBuildContext *context, const XiFunc *caller, const XiValue *call) {
-    if (!context || !caller || !call || call->op != XI_CALL || call->nargs == 0u ||
-        !call->args || call->nargs - 1u > UINT16_MAX)
+static const XrStdlibDefEntry *resolved_provider_native_call(const XrXiBuildContext *context,
+                                                             const XiFunc *caller,
+                                                             const XiValue *call) {
+    if (!context || !caller || !call || call->op != XI_CALL || call->nargs == 0u || !call->args ||
+        call->nargs - 1u > UINT16_MAX)
         return NULL;
     const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
     const XiImportRef *reference = xi_value_import_ref(caller, call->args[0]);
-    if (!row || row->kind != XG_CALL_NATIVE ||
-        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
+    if (!row || row->kind != XG_CALL_NATIVE || (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
         (row->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) != 0u ||
         !xi_import_ref_is_grounded_native(reference) || !reference->member_name ||
         row->arg_count != (uint16_t) (call->nargs - 1u) ||
@@ -1872,19 +1913,16 @@ static const XrStdlibDefEntry *resolved_provider_native_call(
         reference->module_path, reference->member_name, row->arg_count);
     if (!entry || !entry->provider_contract_key || !entry->provider_contract_key[0] ||
         !entry->provider_operation_key || !entry->provider_operation_key[0] ||
-        entry->runtime_capabilities != 0u || entry->return_ownership[0] != '\0' ||
-        entry->argc > 1u)
+        entry->runtime_capabilities != 0u || entry->return_ownership[0] != '\0' || entry->argc > 1u)
         return NULL;
     return entry;
 }
 
 static bool provider_import_reference_is_exact(const XrXiBuildContext *context,
-                                               const XiFunc *function,
-                                               const XiValue *value) {
-    const XiImportRef *reference =
-        value && value->op == XI_IMPORT_REF && value->nargs == 0u
-            ? (const XiImportRef *) value->aux
-            : NULL;
+                                               const XiFunc *function, const XiValue *value) {
+    const XiImportRef *reference = value && value->op == XI_IMPORT_REF && value->nargs == 0u
+                                       ? (const XiImportRef *) value->aux
+                                       : NULL;
     if (!xi_import_ref_is_grounded_native(reference))
         return false;
     bool found = false;
@@ -1966,16 +2004,15 @@ static const XgClassSummary *find_xg_class_by_id(const XgGlobalEvidence *evidenc
     return found;
 }
 
-static bool resolved_module_namespace_carrier(const XrXiBuildContext *context,
-                                              const XiFunc *caller,
+static bool resolved_module_namespace_carrier(const XrXiBuildContext *context, const XiFunc *caller,
                                               const XiValue *value) {
     value = logical_value_identity(value);
     const XiImportRef *ref = xi_value_import_ref(caller, value);
     if (!context || !context->source || !value || value->op != XI_GET_SHARED || !ref ||
         ref->member_name || !ref->resolution_attempted || ref->resolved_mod_index < 0 ||
         (uint32_t) ref->resolved_mod_index >= context->source->module_count ||
-        ref->resolved_shared_slot >= 0 || ref->resolved_export_slot >= 0 ||
-        ref->resolved_func || !ref->resolved_module)
+        ref->resolved_shared_slot >= 0 || ref->resolved_export_slot >= 0 || ref->resolved_func ||
+        !ref->resolved_module)
         return false;
     const XiFunc *root = context->source->module_roots[ref->resolved_mod_index];
     return root && root->module == ref->resolved_module && ref->resolved_module->init == root;
@@ -1992,10 +2029,8 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
         return NULL;
 
     if (value->op == XI_LOAD_FIELD) {
-        const XiValue *namespace_value =
-            value->nargs == 1u && value->args ? value->args[0] : NULL;
-        const XiImportRef *namespace_ref =
-            xi_value_import_ref(caller, namespace_value);
+        const XiValue *namespace_value = value->nargs == 1u && value->args ? value->args[0] : NULL;
+        const XiImportRef *namespace_ref = xi_value_import_ref(caller, namespace_value);
         if (!resolved_module_namespace_carrier(context, caller, namespace_value) ||
             !namespace_ref || !value->type || value->type->kind != XR_KIND_CLASS ||
             !value->type->instance.class_ref ||
@@ -2058,8 +2093,8 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
         uint32_t slot = (uint32_t) ref->resolved_shared_slot;
         uint32_t export_slot = (uint32_t) ref->resolved_export_slot;
         if (!module || module != ref->resolved_module || module->init != root ||
-            slot >= module->nslots || export_slot >= module->nexports ||
-            !module->slot_classes || !module->exports)
+            slot >= module->nslots || export_slot >= module->nexports || !module->slot_classes ||
+            !module->exports)
             return NULL;
         class_data = module->slot_classes[slot];
         const XiModuleExport *export_row = &module->exports[export_slot];
@@ -2078,8 +2113,7 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
         class_data = module->slot_classes[slot];
     }
     const XgClassSummary *class_row =
-        class_data ? find_xg_class_by_id(context->source->global_evidence,
-                                         class_data->xg_class_id)
+        class_data ? find_xg_class_by_id(context->source->global_evidence, class_data->xg_class_id)
                    : NULL;
     if (!class_row || class_row->class_id == XG_NO_ID ||
         class_row->module_id != (XgModuleId) (module_index + 1u) ||
@@ -2094,10 +2128,10 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
     return class_data;
 }
 
-static const XiFunc *resolved_class_method_body_callee(
-    const XrXiBuildContext *context, const XgCallsiteSummary *row,
-    const XiClassData *class_data, uint32_t module_index, const XrType *receiver_type,
-    bool expect_static) {
+static const XiFunc *
+resolved_class_method_body_callee(const XrXiBuildContext *context, const XgCallsiteSummary *row,
+                                  const XiClassData *class_data, uint32_t module_index,
+                                  const XrType *receiver_type, bool expect_static) {
     const XgGlobalEvidence *evidence = context->source->global_evidence;
     const XgClassSummary *class_row =
         class_data ? find_xg_class_by_id(evidence, row->receiver_static_class_id) : NULL;
@@ -2114,15 +2148,14 @@ static const XiFunc *resolved_class_method_body_callee(
         class_row->module_id != (XgModuleId) (module_index + 1u) ||
         method->owner_class_id != class_row->class_id ||
         ((method->flags & XG_METHOD_STATIC) != 0u) != expect_static ||
-        (method->flags & (XG_METHOD_CONSTRUCTOR | XG_METHOD_NATIVE |
-                          XG_METHOD_GENERIC_TEMPLATE | XG_METHOD_OVERRIDDEN)) != 0u)
+        (method->flags & (XG_METHOD_CONSTRUCTOR | XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE |
+                          XG_METHOD_OVERRIDDEN)) != 0u)
         return NULL;
 
     const XgBodySummary *body = NULL;
     for (uint32_t index = 0u; index < evidence->nbodies; ++index) {
         const XgBodySummary *candidate = &evidence->bodies[index];
-        if (candidate->kind != XG_BODY_METHOD ||
-            candidate->owner_method_id != method->method_id)
+        if (candidate->kind != XG_BODY_METHOD || candidate->owner_method_id != method->method_id)
             continue;
         if (body)
             return NULL;
@@ -2130,8 +2163,7 @@ static const XiFunc *resolved_class_method_body_callee(
     }
     if (!body || body->func_id == XG_NO_ID || body->module_id != class_row->module_id ||
         body->module_id != (XgModuleId) (module_index + 1u) ||
-        body->owner_decl_id != class_row->decl_id ||
-        body->owner_class_id != class_row->class_id ||
+        body->owner_decl_id != class_row->decl_id || body->owner_class_id != class_row->class_id ||
         body->source_node_id != method->source_node_id || body->name_id != method->name_id ||
         body->signature_key == 0u || body->signature_key != method->signature_key ||
         (body->flags & XG_BODY_GENERIC_TEMPLATE) != 0u)
@@ -2141,7 +2173,7 @@ static const XiFunc *resolved_class_method_body_callee(
     const XiFunc *root = context->source->module_roots[module_index];
     uint32_t matches = 0u;
     for (uint16_t index = 0u; class_data && class_data->methods && class_data->child_idx && root &&
-                               index < class_data->nmethod;
+                              index < class_data->nmethod;
          ++index) {
         uint16_t child = class_data->child_idx[index];
         const XiClassMethod *xi_method = &class_data->methods[index];
@@ -2167,17 +2199,16 @@ static const XiFunc *resolved_class_method_body_callee(
 }
 
 static const XiFunc *resolved_static_method_callee(const XrXiBuildContext *context,
-                                                   const XiFunc *caller,
-                                                   const XiValue *call) {
+                                                   const XiFunc *caller, const XiValue *call) {
     if (!context || !caller || !call ||
-        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
-        call->nargs == 0u || !call->args)
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs == 0u ||
+        !call->args)
         return NULL;
     const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
     if (!row || row->kind != XG_CALL_METHOD || row->receiver_static_class_id == XG_NO_ID ||
         row->method_id == XG_NO_ID || call->xg_method_id != row->method_id ||
-        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
-        row->arg_count == UINT16_MAX || call->nargs != (uint16_t) (row->arg_count + 1u))
+        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u || row->arg_count == UINT16_MAX ||
+        call->nargs != (uint16_t) (row->arg_count + 1u))
         return NULL;
 
     uint32_t module_index = UINT32_MAX;
@@ -2189,20 +2220,19 @@ static const XiFunc *resolved_static_method_callee(const XrXiBuildContext *conte
 }
 
 static const XiFunc *resolved_instance_method_callee(const XrXiBuildContext *context,
-                                                     const XiFunc *caller,
-                                                     const XiValue *call) {
+                                                     const XiFunc *caller, const XiValue *call) {
     if (!context || !caller || !call ||
-        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
-        call->nargs == 0u || !call->args)
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs == 0u ||
+        !call->args)
         return NULL;
     const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
     const XiValue *receiver = logical_value_identity(call->args[0]);
     if (!row || row->kind != XG_CALL_METHOD || row->receiver_static_class_id == XG_NO_ID ||
         row->method_id == XG_NO_ID || call->xg_method_id != row->method_id ||
-        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
-        row->arg_count == UINT16_MAX || call->nargs != (uint16_t) (row->arg_count + 1u) ||
-        !receiver || !receiver->type || receiver->type->kind != XR_KIND_INSTANCE ||
-        receiver->type->is_nullable || !nominal_contract(context, receiver->type, NULL, NULL, NULL))
+        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u || row->arg_count == UINT16_MAX ||
+        call->nargs != (uint16_t) (row->arg_count + 1u) || !receiver || !receiver->type ||
+        receiver->type->kind != XR_KIND_INSTANCE || receiver->type->is_nullable ||
+        !nominal_contract(context, receiver->type, NULL, NULL, NULL))
         return NULL;
 
     const XiModule *owner_module = NULL;
@@ -2219,26 +2249,28 @@ static const XiFunc *resolved_instance_method_callee(const XrXiBuildContext *con
     if (!class_data || class_data->xg_class_id != row->receiver_static_class_id ||
         module_index == UINT32_MAX)
         return NULL;
-    return resolved_class_method_body_callee(context, row, class_data, module_index,
-                                             receiver->type, false);
+    return resolved_class_method_body_callee(context, row, class_data, module_index, receiver->type,
+                                             false);
 }
 
 /* A qualified source call such as `time.now()` is represented in Xi as a
- * method-shaped call on a phase-only module namespace carrier.  Xglobal owns
- * the actual declaration target, so admit the call only when the namespace
- * import, export table, callsite target and Xi body all join exactly. */
+ * method-shaped call on a
+ * phase-only module namespace carrier.  Xglobal owns
+ * the actual declaration target, so admit the
+ * call only when the namespace
+ * import, export table, callsite target and Xi body all join
+ * exactly. */
 static const XiFunc *resolved_module_function_callee(const XrXiBuildContext *context,
-                                                     const XiFunc *caller,
-                                                     const XiValue *call) {
+                                                     const XiFunc *caller, const XiValue *call) {
     if (!context || !caller || !call ||
-        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
-        call->nargs == 0u || !call->args)
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs == 0u ||
+        !call->args)
         return NULL;
     const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
     const XiValue *namespace_value = call->args[0];
     if (!row || row->kind != XG_CALL_DIRECT_FUNC || row->static_target_func_id == XG_NO_ID ||
-        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
-        row->arg_count == UINT16_MAX || call->nargs != (uint16_t) (row->arg_count + 1u) ||
+        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u || row->arg_count == UINT16_MAX ||
+        call->nargs != (uint16_t) (row->arg_count + 1u) ||
         !resolved_module_namespace_carrier(context, caller, namespace_value))
         return NULL;
     const XiFunc *callee = find_xi_function_by_xg_id(context, row->static_target_func_id);
@@ -2539,8 +2571,7 @@ static bool resolved_aggregate_field_access(const XrXiBuildContext *context, con
         schema ? find_xg_class_by_id(context->source->global_evidence, schema->xg_class_id) : NULL;
     if (!schema || !receiver_info || !class_row ||
         schema->xg_class_id != receiver_info->xg_class_id ||
-        class_row->decl_id != receiver_info->xg_decl_id ||
-        class_row->parent_class_id != XG_NO_ID ||
+        class_row->decl_id != receiver_info->xg_decl_id || class_row->parent_class_id != XG_NO_ID ||
         class_row->field_count != schema->instance_field_count ||
         (schema->instance_field_count != 0u &&
          (!schema->instance_field_names || !schema->instance_field_types ||
@@ -2596,18 +2627,20 @@ static bool resolved_aggregate_field_store(const XrXiBuildContext *context, cons
     return logical_value_is_place(function, access->args[0]);
 }
 /* A const binding changes access through an instance but not the instance's
- * nominal runtime identity.  Method target resolution therefore compares the
- * declaration contract and concrete type arguments directly, while receiver
- * mutability remains enforced by the analyzer-owned receiver mode. */
-static bool nominal_instance_identity_equal(const XrXiBuildContext *context,
-                                            const XrType *left, const XrType *right) {
+ * nominal runtime
+ * identity.  Method target resolution therefore compares the
+ * declaration contract and concrete
+ * type arguments directly, while receiver
+ * mutability remains enforced by the analyzer-owned
+ * receiver mode. */
+static bool nominal_instance_identity_equal(const XrXiBuildContext *context, const XrType *left,
+                                            const XrType *right) {
     const XrClassInfo *left_info = nominal_info_for_type(left);
     const XrClassInfo *right_info = nominal_info_for_type(right);
     if (!left || !right || left->kind != XR_KIND_INSTANCE || right->kind != XR_KIND_INSTANCE ||
         left->is_nullable || right->is_nullable || !left_info || !right_info ||
         !nominal_contract(context, left, NULL, NULL, NULL) ||
-        !nominal_contract(context, right, NULL, NULL, NULL) ||
-        left_info->xg_class_id == XG_NO_ID ||
+        !nominal_contract(context, right, NULL, NULL, NULL) || left_info->xg_class_id == XG_NO_ID ||
         left_info->xg_class_id != right_info->xg_class_id ||
         left_info->xg_decl_id != right_info->xg_decl_id ||
         left_info->xg_nominal_key != right_info->xg_nominal_key ||
@@ -2622,10 +2655,10 @@ static bool nominal_instance_identity_equal(const XrXiBuildContext *context,
 }
 
 /* An empty struct literal may retain the generic constructor-shaped Xi form
- * when no runtime aggregate layout was needed.  Its constructor marker is
- * authoritative only after the shared slot, Xi class id, Xglobal declaration,
- * result nominal key agree.  Structs cannot declare constructors, so the
- * lowering marker identifies syntax rather than a dispatchable method. */
+ * when no runtime
+ * aggregate layout was needed.  Its constructor marker is authoritative only after the shared slot,
+ * Xi class id, Xglobal declaration, result nominal key agree.  Structs cannot declare constructors,
+ * so the lowering marker identifies syntax rather than a dispatchable method. */
 static const XiClassData *resolved_empty_struct_literal(const XrXiBuildContext *context,
                                                         const XiFunc *caller, const XiValue *call) {
     if (!context || !caller || !call || call->op != XI_CALL_METHOD || call->nargs != 1u ||
@@ -2883,26 +2916,31 @@ interface_method_params(const XgGlobalEvidence *evidence, const XgInterfaceMetho
 }
 
 /* Xglobal and CoreSpec deliberately use different effect vocabularies. A
- * source-native witness target, for example, carries MAY_CALL_NATIVE and
- * NATIVE in Xglobal, while its canonical Program body contains provider.call
- * with PROVIDER_CALL, TRAP, CALL and PROVIDER_BINDING. The Program contract
+ * source-native witness
+ * target, for example, carries MAY_CALL_NATIVE and
+ * NATIVE in Xglobal, while its canonical
+ * Program body contains provider.call
+ * with PROVIDER_CALL, TRAP, CALL and PROVIDER_BINDING. The
+ * Program contract
  * must therefore be the exact union of the already translated closed witness
+ *
  * targets, just like callable target-set contracts below; mapping the source
- * bitset directly both loses provider failure and rejects valid native detail.
- * Xglobal remains the authority for the closed target identities and the
+ * bitset directly
+ * both loses provider failure and rejects valid native detail.
+ * Xglobal remains the authority for
+ * the closed target identities and the
  * source-visible control channels. */
 static bool interface_method_core_contract(const XrXiBuildContext *context,
                                            XgInterfaceId interface_id,
                                            XgInterfaceMethodId method_id,
-                                           bool require_closed_contract,
-                                           uint32_t *effect_mask,
+                                           bool require_closed_contract, uint32_t *effect_mask,
                                            uint32_t *capability_mask) {
     const XgGlobalEvidence *evidence =
         context && context->source ? context->source->global_evidence : NULL;
     const XgInterfaceMethodSummary *method =
         evidence ? find_interface_method_by_id(evidence, method_id) : NULL;
-    if (!evidence || !method || !effect_mask || !capability_mask ||
-        !method->contract_complete || method->owner_interface_id != interface_id)
+    if (!evidence || !method || !effect_mask || !capability_mask || !method->contract_complete ||
+        method->owner_interface_id != interface_id)
         return false;
 
     uint32_t effects = 0u;
@@ -2910,8 +2948,7 @@ static bool interface_method_core_contract(const XrXiBuildContext *context,
     uint32_t target_count = 0u;
     for (uint32_t index = 0u; index < evidence->ninterface_witnesses; ++index) {
         const XgInterfaceWitnessSummary *witness = &evidence->interface_witnesses[index];
-        if (witness->interface_id != interface_id ||
-            witness->interface_method_id != method_id)
+        if (witness->interface_id != interface_id || witness->interface_method_id != method_id)
             continue;
         const XiFunc *target = find_xi_function_by_xg_id(context, witness->implementation_func_id);
         const XrXiFunctionStorage *storage = find_xi_function(context, target, NULL, NULL);
@@ -2949,16 +2986,14 @@ static bool interface_method_core_contract(const XrXiBuildContext *context,
     return true;
 }
 
-static bool witness_call_effect_contract(const XrXiBuildContext *context,
-                                         const XiFunc *caller, const XiValue *call,
-                                         bool require_closed_contract,
-                                         uint32_t *effect_mask,
-                                         uint32_t *capability_mask) {
+static bool witness_call_effect_contract(const XrXiBuildContext *context, const XiFunc *caller,
+                                         const XiValue *call, bool require_closed_contract,
+                                         uint32_t *effect_mask, uint32_t *capability_mask) {
     const XgCallsiteSummary *callsite = resolved_witness_callsite(context, caller, call);
-    return callsite && interface_method_core_contract(
-                           context, callsite->receiver_static_interface_id,
-                           (XgInterfaceMethodId) callsite->method_id, require_closed_contract,
-                           effect_mask, capability_mask);
+    return callsite &&
+           interface_method_core_contract(context, callsite->receiver_static_interface_id,
+                                          (XgInterfaceMethodId) callsite->method_id,
+                                          require_closed_contract, effect_mask, capability_mask);
 }
 
 static XiInterfaceUseKind interface_use_for_receiver(XrParamMode mode) {
@@ -3824,11 +3859,21 @@ static XrXiBlockStorage *find_block_storage(const XrXiFunctionStorage *function,
     return NULL;
 }
 
-static const XrXiTrapEdge *find_trap_edge(const XrXiBuildContext *context,
-                                         const XiFunc *function, const XiValue *call) {
+static const XrXiTrapEdge *find_trap_edge(const XrXiBuildContext *context, const XiFunc *function,
+                                          const XiValue *call) {
     for (uint32_t index = 0u; context && index < context->trap_edge_count; ++index) {
         const XrXiTrapEdge *edge = &context->trap_edges[index];
         if (edge->function == function && edge->call == call)
+            return edge;
+    }
+    return NULL;
+}
+
+static const XrXiPanicEdge *find_panic_edge(const XrXiBuildContext *context, const XiFunc *function,
+                                            const XiValue *point) {
+    for (uint32_t index = 0u; context && index < context->panic_edge_count; ++index) {
+        const XrXiPanicEdge *edge = &context->panic_edges[index];
+        if (edge->function == function && edge->point == point)
             return edge;
     }
     return NULL;
@@ -4336,9 +4381,8 @@ static const XrType *imported_callable_refined_type(const XrXiBuildContext *cont
 static bool local_callable_publication_store_matches(const XiFunc *root, const XiValue *store,
                                                      uint32_t slot, const XiFunc *target) {
     if (!root || !root->module || root->module->init != root || !store || !target ||
-        store->op != XI_SET_SHARED || store->aux_int < 0 ||
-        (uint32_t) store->aux_int != slot || store->nargs != 1u || !store->args ||
-        !store->args[0] || target->parent_func != root)
+        store->op != XI_SET_SHARED || store->aux_int < 0 || (uint32_t) store->aux_int != slot ||
+        store->nargs != 1u || !store->args || !store->args[0] || target->parent_func != root)
         return false;
     const XiValue *closure = logical_value_identity(store->args[0]);
     return closure && closure->op == XI_CLOSURE_NEW && closure->nargs == 0u &&
@@ -4346,9 +4390,12 @@ static bool local_callable_publication_store_matches(const XiFunc *root, const X
 }
 
 /* A top-level source function is immutable canonical code, not mutable module
- * state.  Xi still routes its value through a shared slot.  Reconstruct the
- * callable pack only after the module slot table, the unique initializer
- * publication, the Xi child body, and Xglobal's body/signature identities all
+ * state.  Xi still
+ * routes its value through a shared slot.  Reconstruct the
+ * callable pack only after the module
+ * slot table, the unique initializer
+ * publication, the Xi child body, and Xglobal's
+ * body/signature identities all
  * agree on the same target. */
 static const XiFunc *resolved_local_callable_target(const XrXiBuildContext *context,
                                                     const XiFunc *function, const XiValue *value,
@@ -4371,8 +4418,8 @@ static const XiFunc *resolved_local_callable_target(const XrXiBuildContext *cont
     uint32_t target_module_index = UINT32_MAX;
     if (!target || target->xg_body_func_id == XG_NO_ID ||
         !find_xi_function(context, target, &target_module_index, NULL) ||
-        target_module_index != module_index || !exact_function_body_contract(context, target,
-                                                                              module_index))
+        target_module_index != module_index ||
+        !exact_function_body_contract(context, target, module_index))
         return NULL;
 
     uint32_t publications = 0u;
@@ -4561,8 +4608,8 @@ static const XrType *imported_callable_refined_type(const XrXiBuildContext *cont
     return found;
 }
 
-static bool shared_callable_value_is_exact(const XrXiBuildContext *context,
-                                           const XiFunc *function, const XiValue *value) {
+static bool shared_callable_value_is_exact(const XrXiBuildContext *context, const XiFunc *function,
+                                           const XiValue *value) {
     uint64_t signature_key = 0u;
     const XrType *visible_type = NULL;
     return value && value->op == XI_GET_SHARED &&
@@ -4633,21 +4680,20 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
 
                     const XgCallsiteSummary *row = resolved_callsite(context, function, call);
                     if (!row)
-                        return fail(
-                            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                            "Xi indirect call %s:v%u module=%u block=%u has an unresolved "
-                            "callable target set",
-                            function->name ? function->name : "<anonymous>", call->id,
-                            module_index, block_index);
+                        return fail(diagnostic, diagnostic_size,
+                                    XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                    "Xi indirect call %s:v%u module=%u block=%u has an unresolved "
+                                    "callable target set",
+                                    function->name ? function->name : "<anonymous>", call->id,
+                                    module_index, block_index);
                     if (row->kind != XG_CALL_CLOSURE ||
                         (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
-                        return fail(
-                            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "Xi indirect call %s:v%u module=%u block=%u has inconsistent "
-                            "callable effect evidence (kind=%u flags=0x%x)",
-                            function->name ? function->name : "<anonymous>", call->id,
-                            module_index, block_index, (unsigned) row->kind,
-                            (unsigned) row->flags);
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "Xi indirect call %s:v%u module=%u block=%u has inconsistent "
+                                    "callable effect evidence (kind=%u flags=0x%x)",
+                                    function->name ? function->name : "<anonymous>", call->id,
+                                    module_index, block_index, (unsigned) row->kind,
+                                    (unsigned) row->flags);
 
                     const XgCallableTargetSummary *targets = NULL;
                     uint32_t target_count = 0u;
@@ -4946,8 +4992,11 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
             source_type_id != XR_CORE_TYPE_VOID;
     bool erased_error_catch =
         source->op == XI_ERR_CATCH && source->type && source->type->kind == XR_KIND_UNKNOWN;
-    if (type_id != XR_CORE_TYPE_VOID && ((source_type_mapped && source_type_id != type_id) ||
-                                         (!source_type_mapped && !erased_error_catch)))
+    bool erased_panic_catch =
+        implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC && source->op == XI_CATCH;
+    if (type_id != XR_CORE_TYPE_VOID && !erased_panic_catch &&
+        ((source_type_mapped && source_type_id != type_id) ||
+         (!source_type_mapped && !erased_error_catch)))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi block argument v%u type conflicts with its canonical continuation",
                     source->id);
@@ -4959,7 +5008,8 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
     XrCoreIrValueCategory category = logical_value_category(function ? function->xi : NULL, source);
     XrCoreIrOwnershipDisposition ownership =
         implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
-                implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_ERROR
+                implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_ERROR ||
+                implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC
             ? logical_ownership_for_type(context, type_id)
         : logical_value_produces_owner(context, function->xi, source, 0u)
             ? logical_ownership_for_type(context, type_id)
@@ -5163,6 +5213,7 @@ static void free_context(XrXiBuildContext *context) {
     xr_free(context->provider_requirements);
     xr_free(context->provider_operation_capacities);
     xr_free(context->trap_edges);
+    xr_free(context->panic_edges);
 }
 
 static XrProgramBuildStatus set_operands(const XrXiBuildContext *context,
@@ -5195,11 +5246,11 @@ static XrProgramBuildStatus set_operands(const XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus set_trap_edge_operands(
-    const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
-    const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
-    XiValue *const *provider_arguments, uint32_t provider_argument_count,
-    const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
+static XrProgramBuildStatus
+set_trap_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
+                       const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
+                       XiValue *const *provider_arguments, uint32_t provider_argument_count,
+                       const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
     if (!handler || provider_argument_count > UINT32_MAX - handler->argument_count)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
     uint32_t count = provider_argument_count + handler->argument_count;
@@ -5224,6 +5275,49 @@ static XrProgramBuildStatus set_trap_edge_operands(
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi trap continuation argument %u is unavailable", argument);
+        }
+    }
+    XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+    if (!successors) {
+        xr_free(operands);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    successors[0] = block_key(function, handler->xi);
+    instruction->operands = operands;
+    instruction->operand_count = count;
+    instruction->successors = successors;
+    instruction->successor_count = 1u;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus
+set_panic_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
+                        const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
+                        const XiValue *condition, const XrXiBlockStorage *handler, char *diagnostic,
+                        size_t diagnostic_size) {
+    if (!handler || handler->argument_count == 0u ||
+        handler->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_PANIC)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi panic continuation lacks its implicit PanicInfo payload");
+    uint32_t count = handler->argument_count;
+    XrCoreIrKey *operands = xr_calloc(count, sizeof(*operands));
+    if (!operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (!value_operand_key(context, function, source, condition, &operands[0])) {
+        xr_free(operands);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi assertion condition is unavailable");
+    }
+    uint32_t cursor = 1u;
+    for (uint32_t argument = 1u; argument < handler->argument_count; ++argument) {
+        const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+        if (edge_argument->phi ||
+            edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+            !value_operand_key(context, function, source, edge_argument->source,
+                               &operands[cursor++])) {
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi panic continuation argument %u is unavailable", argument);
         }
     }
     XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
@@ -5289,14 +5383,13 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
                                         &argument_type) ||
                 argument_type != XR_CORE_TYPE_I64)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                            "Xi provider call v%u argument %u is not i64", value->id,
-                            argument);
+                            "Xi provider call v%u argument %u is not i64", value->id, argument);
         }
         XrStableId contract_id = {{0}};
         XrStableId operation_id = {{0}};
         XrProgramBuildStatus requirement_status = require_provider_operation(
-            context, provider_entry->provider_contract_key,
-            provider_entry->provider_operation_key, &contract_id, &operation_id);
+            context, provider_entry->provider_contract_key, provider_entry->provider_operation_key,
+            &contract_id, &operation_id);
         if (requirement_status != XR_PROGRAM_BUILD_OK)
             return requirement_status;
         const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
@@ -5382,9 +5475,6 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         map_function_panic_type(context, callee, &panic_type, diagnostic, diagnostic_size);
     if (panic_status != XR_PROGRAM_BUILD_OK)
         return panic_status;
-    if (panic_type != XR_CORE_TYPE_VOID)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "panic-capable Xi call v%u lacks an explicit panic continuation", value->id);
 
     const XrCoreIrFunctionInput *callee_contract =
         &context->storage[callee_module_index].functions[callee_function_index];
@@ -5486,8 +5576,8 @@ translate_shared_callable_pack(XrXiBuildContext *context, XrXiFunctionStorage *f
                                char *diagnostic, size_t diagnostic_size) {
     uint64_t signature_key = 0u;
     const XrType *visible_type = NULL;
-    const XiFunc *target = resolved_shared_callable_target(
-        context, function->xi, value, &signature_key, &visible_type);
+    const XiFunc *target = resolved_shared_callable_target(context, function->xi, value,
+                                                           &signature_key, &visible_type);
     const XrXiFunctionStorage *target_storage = find_xi_function(context, target, NULL, NULL);
     uint16_t callable_type_id = XR_CORE_TYPE_VOID;
     if (!target || !target_storage || !visible_type || target->ncaptures != 0u ||
@@ -5717,8 +5807,8 @@ static XrProgramBuildStatus translate_existential_value(XrXiBuildContext *contex
         return set_operands(context, instruction, function, block, value->args, value->nargs,
                             diagnostic, diagnostic_size);
     const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
-    return set_trap_edge_operands(context, instruction, function, block, value->args,
-                                  value->nargs, handler, diagnostic, diagnostic_size);
+    return set_trap_edge_operands(context, instruction, function, block, value->args, value->nargs,
+                                  handler, diagnostic, diagnostic_size);
 }
 
 static XrProgramBuildStatus
@@ -5842,6 +5932,25 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                     function->xi && function->xi->name ? function->xi->name : "<anonymous>",
                     block && block->xi ? block->xi->id : UINT32_MAX, value->op, value->id,
                     value->type ? (unsigned) value->type->kind : UINT32_MAX);
+    if (value->op == XI_ASSERTION) {
+        uint16_t condition_type = XR_CORE_TYPE_VOID;
+        if (!exact_condition_assertion(value) || result_type != XR_CORE_TYPE_VOID ||
+            !map_logical_value_type(context, function->xi, value->args[0], &condition_type) ||
+            condition_type != XR_CORE_TYPE_BOOL)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi assertion v%u is not an exact condition assertion", value->id);
+        instruction->operation_id = XR_CORE_OP_CORE_ASSERT_CONDITION;
+        instruction->result_type_id = XR_CORE_TYPE_VOID;
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+        instruction->immediate.u32 = XR_ASSERTION_FAILURE_CONDITION_FALSE;
+        const XrXiPanicEdge *edge = find_panic_edge(context, function->xi, value);
+        if (!edge)
+            return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        const XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+        return set_panic_edge_operands(context, instruction, function, block, value->args[0],
+                                       handler, diagnostic, diagnostic_size);
+    }
     if (value_is_static_typed_catch_test(value)) {
         if (!static_typed_catch_contract_is_exact(context, value))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -5874,9 +5983,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         return translate_shared_callable_pack(context, function, value, instruction, diagnostic,
                                               diagnostic_size);
     uint16_t target_enum_type = XR_CORE_TYPE_VOID;
-    if (value->op == XI_CONST && value->nargs == 0u && value->aux == NULL &&
-        value->aux_int > 0 && value->aux_int <= UINT16_MAX &&
-        map_type(context, value->type, &target_enum_type) &&
+    if (value->op == XI_CONST && value->nargs == 0u && value->aux == NULL && value->aux_int > 0 &&
+        value->aux_int <= UINT16_MAX && map_type(context, value->type, &target_enum_type) &&
         xr_target_query_enum_value_valid(target_enum_type, (uint16_t) value->aux_int)) {
         instruction->operation_id = XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM;
         instruction->result = value_key(function, value);
@@ -5983,10 +6091,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                 if (!map_logical_value_type(context, function->xi, value->args[operand],
                                             &operand_type) ||
                     operand_type != XR_CORE_TYPE_BOOL)
-                    return fail(diagnostic, diagnostic_size,
-                                XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                "Xi logical v%u operand %u is not exact bool", value->id,
-                                operand);
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi logical v%u operand %u is not exact bool", value->id, operand);
             }
             instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
@@ -6000,21 +6106,19 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             uint16_t right_type = XR_CORE_TYPE_VOID;
             if (value->nargs != 2u || result_type != XR_CORE_TYPE_BOOL ||
                 !map_type(context, value->args[0]->type, &left_type) ||
-                !map_type(context, value->args[1]->type, &right_type) ||
-                left_type != right_type)
+                !map_type(context, value->args[1]->type, &right_type) || left_type != right_type)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi comparison v%u operands do not have one exact logical type",
                             value->id);
-            bool target_enum_compare = left_type >= XR_CORE_TYPE_TARGET_OS &&
-                                       left_type <= XR_CORE_TYPE_TARGET_ENDIAN;
+            bool target_enum_compare =
+                left_type >= XR_CORE_TYPE_TARGET_OS && left_type <= XR_CORE_TYPE_TARGET_ENDIAN;
             if ((!target_enum_compare && left_type != XR_CORE_TYPE_I64) ||
                 (target_enum_compare && projection.immediate_u32 > 1u))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi comparison v%u is outside the active exact comparison domain",
                             value->id);
-            instruction->operation_id = target_enum_compare
-                                            ? XR_CORE_OP_CORE_COMPARE_TARGET_ENUM
-                                            : projection.core_operation_id;
+            instruction->operation_id = target_enum_compare ? XR_CORE_OP_CORE_COMPARE_TARGET_ENUM
+                                                            : projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = XR_CORE_TYPE_BOOL;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
@@ -6335,7 +6439,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                     break;
             }
             if (expected_query == XG_TARGET_QUERY_NONE || value->nargs != 0u ||
-                result_type != expected_type || projection.core_operation_id != expected_operation ||
+                result_type != expected_type ||
+                projection.core_operation_id != expected_operation ||
                 value->xg_target_query_use_id == XG_NO_ID ||
                 value->xg_target_namespace_id != XG_TARGET_NAMESPACE_TARGET ||
                 value->xg_target_query_kind != expected_query ||
@@ -6346,8 +6451,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                 query->source_node_id != value->xg_target_source_node_id ||
                 query->body_ordinal != value->xg_target_body_ordinal ||
                 query->namespace_id != XG_TARGET_NAMESPACE_TARGET ||
-                query->query_kind != expected_query ||
-                query->result_native_type != XR_NATIVE_U16 || query->contract_complete != 1u ||
+                query->query_kind != expected_query || query->result_native_type != XR_NATIVE_U16 ||
+                query->contract_complete != 1u ||
                 query->result_type_key != xg_target_query_result_type_key(expected_query))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi target query v%u lacks its exact Xglobal contract", value->id);
@@ -6375,8 +6480,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             XrStableId contract_id = {{0}};
             XrStableId operation_id = {{0}};
             XrProgramBuildStatus requirement_status = require_provider_operation(
-                context, XR_PROVIDER_IO_CONTRACT_KEY,
-                XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY, &contract_id, &operation_id);
+                context, XR_PROVIDER_IO_CONTRACT_KEY, XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
+                &contract_id, &operation_id);
             if (requirement_status != XR_PROGRAM_BUILD_OK)
                 return requirement_status;
             instruction->operation_id = projection.core_operation_id;
@@ -6384,8 +6489,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
             instruction->immediate.provider_operation.contract_id = contract_id;
             instruction->immediate.provider_operation.operation_id = operation_id;
-            return set_operands(context, instruction, function, block, value->args, 1u,
-                                diagnostic, diagnostic_size);
+            return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
         }
         default:
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -6395,16 +6500,19 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
 }
 
 /* Top-level function declarations are already represented by immutable
- * canonical function rows and exact call-target keys. Their Xi shared-slot
- * publication is compiler scaffolding, not runtime state. Erase it only when
- * the initializer store, closure target, and module slot table all name the
+ * canonical function rows
+ * and exact call-target keys. Their Xi shared-slot
+ * publication is compiler scaffolding, not
+ * runtime state. Erase it only when
+ * the initializer store, closure target, and module slot table
+ * all name the
  * same source function and the closure has no other use. */
 static bool static_function_publication_store_is_exact(const XiFunc *function,
                                                        const XiValue *store) {
     const XiModule *module = function ? function->module : NULL;
     if (!module || module->init != function || !store || store->op != XI_SET_SHARED ||
-        store->aux_int < 0 || (uint64_t) store->aux_int >= module->nslots ||
-        store->nargs != 1u || !store->args || !store->args[0] || !module->slot_funcs)
+        store->aux_int < 0 || (uint64_t) store->aux_int >= module->nslots || store->nargs != 1u ||
+        !store->args || !store->args[0] || !module->slot_funcs)
         return false;
     const XiValue *closure = logical_value_identity(store->args[0]);
     const XiFunc *target = closure ? resolved_callable_target(function, closure) : NULL;
@@ -6421,18 +6529,16 @@ static bool resolved_import_reference_is_exact(const XrXiBuildContext *context,
         !reference->resolved_module || !context || !context->source ||
         (uint32_t) reference->resolved_mod_index >= context->source->module_count)
         return false;
-    const XiFunc *target_root =
-        context->source->module_roots[reference->resolved_mod_index];
+    const XiFunc *target_root = context->source->module_roots[reference->resolved_mod_index];
     return target_root && target_root->module == reference->resolved_module;
 }
 
 static bool static_import_publication_store_is_exact(const XrXiBuildContext *context,
-                                                     const XiFunc *function,
-                                                     const XiValue *store) {
+                                                     const XiFunc *function, const XiValue *store) {
     const XiModule *module = function ? function->module : NULL;
     if (!module || module->init != function || !store || store->op != XI_SET_SHARED ||
-        store->aux_int < 0 || (uint64_t) store->aux_int >= module->nslots ||
-        store->nargs != 1u || !store->args || !store->args[0] ||
+        store->aux_int < 0 || (uint64_t) store->aux_int >= module->nslots || store->nargs != 1u ||
+        !store->args || !store->args[0] ||
         !resolved_import_reference_is_exact(context, store->args[0]))
         return false;
     const XiValue *import = logical_value_identity(store->args[0]);
@@ -6455,8 +6561,7 @@ static bool static_function_publication_source_is_exact(const XiFunc *function,
             for (uint16_t argument = 0u; user && argument < user->nargs; ++argument) {
                 if (!user->args || logical_value_identity(user->args[argument]) != value)
                     continue;
-                if (argument != 0u ||
-                    !static_function_publication_store_is_exact(function, user))
+                if (argument != 0u || !static_function_publication_store_is_exact(function, user))
                     return false;
                 found = true;
             }
@@ -6492,16 +6597,15 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
     if (value_is_invoke_scaffold(context, function, value))
         return true;
     /* A defer's error-exit work is already ordinary Xi CFG.  Its TRY/END_TRY
-     * pair exists only for the separate panic-unwind route, and the cleanup
-     * boundary markers carry no value or executor-visible effect.  Elide
-     * these markers only when their compiler-generated structure is exact;
-     * panic-capable functions with a static cleanup remain rejected while
-     * signatures are prepared until that route has explicit continuations. */
+     * pair only
+     * identifies the compiler-generated static cleanup region; the
+     * canonical panic path is
+     * represented by an explicit Program edge. */
     if (exact_static_cleanup_try(function, value) || exact_static_cleanup_end(function, value) ||
         exact_cleanup_boundary_marker(value))
         return true;
     if (value && value->op == XI_CATCH && block_storage &&
-        block_storage->trap_cleanup)
+        (block_storage->trap_cleanup || block_storage->panic_cleanup))
         return true;
     if (static_function_publication_is_exact(function, value))
         return true;
@@ -6561,7 +6665,8 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
             value->op == XI_ERR_CATCH && value->type && value->type->kind == XR_KIND_UNKNOWN;
         XrCoreIrOwnershipDisposition expected_ownership =
             available->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
-                    available->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_ERROR
+                    available->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_ERROR ||
+                    available->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC
                 ? logical_ownership_for_type(context, available->type_id)
             : logical_value_produces_owner(context, function->xi, value, 0u)
                 ? logical_ownership_for_type(context, available->type_id)
@@ -6603,16 +6708,15 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
             return status;
     }
     const XiFunc *sealed_callee =
-        value->op == XI_CALL || value->op == XI_CALL_METHOD ||
-                value->op == XI_CALL_METHOD_DIRECT
+        value->op == XI_CALL || value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT
             ? resolved_sealed_callee(context, function->xi, value)
             : NULL;
     bool erased_first_operand =
         value->op == XI_VARIANT_CONSTRUCT ||
         resolved_provider_native_call(context, function->xi, value) ||
         (sealed_callee && !sealed_callee->has_receiver) ||
-        (value->op == XI_CALL && resolved_canonical_class_construction(
-                                     context, function->xi, value, NULL, NULL)) ||
+        (value->op == XI_CALL &&
+         resolved_canonical_class_construction(context, function->xi, value, NULL, NULL)) ||
         resolved_empty_struct_literal(context, function->xi, value) ||
         resolved_unit_enum_literal(context, function->xi, value, NULL);
     uint16_t begin = erased_first_operand ? 1u : 0u;
@@ -6965,8 +7069,7 @@ static XrProgramBuildStatus mark_reachable_blocks(const XrXiBuildContext *contex
                     changed = true;
                 }
             }
-            for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count;
-                 ++edge_index) {
+            for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count; ++edge_index) {
                 const XrXiTrapEdge *edge = &context->trap_edges[edge_index];
                 if (edge->function != function->xi || !edge->call ||
                     edge->call->block != source->xi)
@@ -6975,6 +7078,20 @@ static XrProgramBuildStatus mark_reachable_blocks(const XrXiBuildContext *contex
                 if (!successor)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                 "Xi provider trap continuation is absent");
+                if (!successor->reachable) {
+                    successor->reachable = true;
+                    changed = true;
+                }
+            }
+            for (uint32_t edge_index = 0u; edge_index < context->panic_edge_count; ++edge_index) {
+                const XrXiPanicEdge *edge = &context->panic_edges[edge_index];
+                if (edge->function != function->xi || !edge->point ||
+                    edge->point->block != source->xi)
+                    continue;
+                XrXiBlockStorage *successor = find_block_storage(function, edge->handler);
+                if (!successor)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi panic continuation is absent");
                 if (!successor->reachable) {
                     successor->reachable = true;
                     changed = true;
@@ -6998,12 +7115,10 @@ static uint32_t xi_function_block_index(const XiFunc *function, const XiBlock *b
 static XrProgramBuildStatus static_try_contains_value(const XiFunc *function,
                                                       const XiValue *registration,
                                                       const XiValue *point, bool *contains,
-                                                      char *diagnostic,
-                                                      size_t diagnostic_size) {
+                                                      char *diagnostic, size_t diagnostic_size) {
     if (contains)
         *contains = false;
-    if (!function || !registration || !registration->block || !point || !point->block ||
-        !contains)
+    if (!function || !registration || !registration->block || !point || !point->block || !contains)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     uint32_t registration_index = registration->block->nvalues;
     for (uint32_t index = 0u; index < registration->block->nvalues; ++index) {
@@ -7013,8 +7128,7 @@ static XrProgramBuildStatus static_try_contains_value(const XiFunc *function,
         }
     }
     uint32_t registration_block = xi_function_block_index(function, registration->block);
-    if (registration_index == registration->block->nvalues ||
-        registration_block == UINT32_MAX ||
+    if (registration_index == registration->block->nvalues || registration_block == UINT32_MAX ||
         xi_function_block_index(function, point->block) == UINT32_MAX)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi static cleanup region is not owned by its function");
@@ -7030,8 +7144,7 @@ static XrProgramBuildStatus static_try_contains_value(const XiFunc *function,
     uint32_t head = 0u;
     uint32_t tail = 0u;
     bool region_ended = false;
-    for (uint32_t index = registration_index + 1u; index < registration->block->nvalues;
-         ++index) {
+    for (uint32_t index = registration_index + 1u; index < registration->block->nvalues; ++index) {
         const XiValue *value = registration->block->values[index];
         if (value == point) {
             *contains = true;
@@ -7075,8 +7188,7 @@ static XrProgramBuildStatus static_try_contains_value(const XiFunc *function,
                 if (tail == function->nblocks) {
                     xr_free(queue);
                     xr_free(visited);
-                    return fail(diagnostic, diagnostic_size,
-                                XR_PROGRAM_BUILD_INVALID_INPUT,
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                 "Xi static cleanup reachability queue overflowed");
                 }
                 visited[target_index] = 1u;
@@ -7091,7 +7203,7 @@ done:
     return XR_PROGRAM_BUILD_OK;
 }
 
-static bool exact_trap_cleanup_handler(const XiFunc *function, const XiValue *registration) {
+static bool exact_static_cleanup_handler(const XiFunc *function, const XiValue *registration) {
     if (!exact_static_cleanup_try(function, registration))
         return false;
     const XiBlock *handler = (const XiBlock *) registration->aux;
@@ -7124,8 +7236,7 @@ static bool exact_trap_cleanup_handler(const XiFunc *function, const XiValue *re
 }
 
 static XrProgramBuildStatus append_trap_edge(XrXiBuildContext *context, const XiFunc *function,
-                                             const XiValue *call,
-                                             const XiValue *registration) {
+                                             const XiValue *call, const XiValue *registration) {
     if (context->trap_edge_count == context->trap_edge_capacity) {
         uint32_t capacity = context->trap_edge_capacity ? context->trap_edge_capacity * 2u : 4u;
         if (capacity < context->trap_edge_capacity)
@@ -7137,12 +7248,41 @@ static XrProgramBuildStatus append_trap_edge(XrXiBuildContext *context, const Xi
         context->trap_edge_capacity = capacity;
     }
     context->trap_edges[context->trap_edge_count++] = (XrXiTrapEdge) {
-            .function = function,
-            .call = call,
-            .registration = registration,
-            .handler = (const XiBlock *) registration->aux,
-        };
+        .function = function,
+        .call = call,
+        .registration = registration,
+        .handler = (const XiBlock *) registration->aux,
+    };
     return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus append_panic_edge(XrXiBuildContext *context, const XiFunc *function,
+                                              const XiValue *point, const XiValue *registration) {
+    if (context->panic_edge_count == context->panic_edge_capacity) {
+        uint32_t capacity = context->panic_edge_capacity ? context->panic_edge_capacity * 2u : 4u;
+        if (capacity < context->panic_edge_capacity)
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        XrXiPanicEdge *edges = xr_realloc(context->panic_edges, (size_t) capacity * sizeof(*edges));
+        if (!edges)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        context->panic_edges = edges;
+        context->panic_edge_capacity = capacity;
+    }
+    context->panic_edges[context->panic_edge_count++] = (XrXiPanicEdge) {
+        .function = function,
+        .point = point,
+        .registration = registration,
+        .handler = (const XiBlock *) registration->aux,
+    };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool exact_condition_assertion(const XiValue *value) {
+    const XrAssertionPlan *plan = xi_assertion_plan(value);
+    return value && value->op == XI_ASSERTION && value->nargs == 1u && value->args &&
+           value->args[0] && plan && xr_assertion_plan_validate(plan) &&
+           plan->kind == XR_ASSERTION_KIND_CONDITION && plan->arity == 1u &&
+           plan->message_operand == XR_ASSERTION_OPERAND_NONE;
 }
 
 static bool exact_indirect_direct_call(XrXiBuildContext *context, const XiFunc *function,
@@ -7151,14 +7291,15 @@ static bool exact_indirect_direct_call(XrXiBuildContext *context, const XiFunc *
         resolved_sealed_callee(context, function, call))
         return false;
     const XgCallsiteSummary *callsite = resolved_callsite(context, function, call);
-    if (!callsite ||
-        (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE) ||
+    if (!callsite || (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE) ||
         (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
         (callsite->flags & XG_CALL_MAY_ERROR) != 0u)
         return false;
     /* Trap-edge discovery runs before canonical callable TypeIds are
-     * materialized.  The closed Xg callsite contract is the phase-correct
-     * admission fact here; translation later validates its exact callable
+     * materialized.  The
+     * closed Xg callsite contract is the phase-correct
+     * admission fact here; translation
+     * later validates its exact callable
      * signature and result type. */
     return true;
 }
@@ -7179,8 +7320,7 @@ static bool exact_indirect_invoke_call(XrXiBuildContext *context, const XiFunc *
 
 static bool exact_witness_direct_call(const XrXiBuildContext *context, const XiFunc *function,
                                       const XiValue *call) {
-    return call &&
-           (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
+    return call && (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
            call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT &&
            resolved_witness_callsite(context, function, call) != NULL;
 }
@@ -7194,8 +7334,8 @@ static bool exact_witness_invoke_call(const XrXiBuildContext *context, const XiF
            resolved_witness_callsite(context, function, call) != NULL;
 }
 
-static XrProgramBuildStatus prepare_trap_continuations(
-    XrXiBuildContext *context, char *diagnostic, size_t diagnostic_size) {
+static XrProgramBuildStatus prepare_trap_continuations(XrXiBuildContext *context, char *diagnostic,
+                                                       size_t diagnostic_size) {
     for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
         XrXiModuleStorage *module = &context->storage[module_index];
         for (uint32_t function_index = 0u; function_index < module->function_count;
@@ -7211,14 +7351,14 @@ static XrProgramBuildStatus prepare_trap_continuations(
                     bool provider_call = resolved_provider_native_call(context, function, call);
                     bool witness_invoke =
                         provider_call ? false : exact_witness_invoke_call(context, function, call);
-                    bool witness_call =
-                        provider_call
-                            ? false
-                            : (witness_invoke || exact_witness_direct_call(context, function, call));
-                    const XiFunc *sealed_callee = provider_call || witness_call
-                                                         ? NULL
-                                                         : resolved_sealed_callee(context, function,
-                                                                                  call);
+                    bool witness_call = provider_call
+                                            ? false
+                                            : (witness_invoke ||
+                                               exact_witness_direct_call(context, function, call));
+                    const XiFunc *sealed_callee =
+                        provider_call || witness_call
+                            ? NULL
+                            : resolved_sealed_callee(context, function, call);
                     bool sealed_invoke =
                         sealed_callee && typed_invoke_check_block_for_call(context, function, call);
                     bool indirect_invoke =
@@ -7227,8 +7367,8 @@ static XrProgramBuildStatus prepare_trap_continuations(
                             : exact_indirect_invoke_call(context, function, call);
                     bool indirect_call = provider_call || witness_call || sealed_callee
                                              ? false
-                                             : (indirect_invoke ||
-                                                exact_indirect_direct_call(context, function, call));
+                                             : (indirect_invoke || exact_indirect_direct_call(
+                                                                       context, function, call));
                     if ((!provider_call && !witness_call && !sealed_callee && !indirect_call) ||
                         (typed_invoke_check_block_for_call(context, function, call) &&
                          !witness_invoke && !sealed_invoke && !indirect_invoke) ||
@@ -7242,9 +7382,9 @@ static XrProgramBuildStatus prepare_trap_continuations(
                             if (!exact_static_cleanup_try(function, registration))
                                 continue;
                             bool contains = false;
-                            XrProgramBuildStatus status = static_try_contains_value(
-                                function, registration, call, &contains, diagnostic,
-                                diagnostic_size);
+                            XrProgramBuildStatus status =
+                                static_try_contains_value(function, registration, call, &contains,
+                                                          diagnostic, diagnostic_size);
                             if (status != XR_PROGRAM_BUILD_OK)
                                 return status;
                             if (!contains)
@@ -7263,15 +7403,88 @@ static XrProgramBuildStatus prepare_trap_continuations(
                     const XiBlock *handler = (const XiBlock *) active->aux;
                     XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
                     if (!handler_storage || handler_storage->reachable ||
-                        !exact_trap_cleanup_handler(function, active))
-                        return fail(diagnostic, diagnostic_size,
-                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                    "Xi trap-capable call v%u has no exact private cleanup",
-                                    call->id);
+                        !exact_static_cleanup_handler(function, active))
+                        return fail(
+                            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi trap-capable call v%u has no exact private cleanup", call->id);
                     XrProgramBuildStatus status = append_trap_edge(context, function, call, active);
                     if (status != XR_PROGRAM_BUILD_OK)
                         return status;
                     handler_storage->trap_cleanup = true;
+                }
+            }
+        }
+    }
+    for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0u; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *storage = &module->function_storage[function_index];
+            for (uint32_t block_index = 0u; block_index < storage->xi->nblocks; ++block_index)
+                storage->block_storage[block_index].reachable = false;
+            XrProgramBuildStatus status =
+                mark_reachable_blocks(context, storage, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus prepare_panic_continuations(XrXiBuildContext *context, char *diagnostic,
+                                                        size_t diagnostic_size) {
+    for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0u; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *storage = &module->function_storage[function_index];
+            const XiFunc *function = storage->xi;
+            for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+                const XiBlock *block = function->blocks[block_index];
+                if (!storage->block_storage[block_index].reachable)
+                    continue;
+                for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
+                    const XiValue *point = block->values[value_index];
+                    if (!exact_condition_assertion(point))
+                        continue;
+                    const XiValue *active = NULL;
+                    for (uint32_t try_block = 0u; try_block < function->nblocks; ++try_block) {
+                        const XiBlock *row = function->blocks[try_block];
+                        for (uint32_t try_index = 0u; try_index < row->nvalues; ++try_index) {
+                            const XiValue *registration = row->values[try_index];
+                            if (!exact_static_cleanup_try(function, registration))
+                                continue;
+                            bool contains = false;
+                            XrProgramBuildStatus status =
+                                static_try_contains_value(function, registration, point, &contains,
+                                                          diagnostic, diagnostic_size);
+                            if (status != XR_PROGRAM_BUILD_OK)
+                                return status;
+                            if (!contains)
+                                continue;
+                            if (active)
+                                return fail(diagnostic, diagnostic_size,
+                                            XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                            "Xi assertion v%u has nested static cleanup regions",
+                                            point->id);
+                            active = registration;
+                        }
+                    }
+                    if (!active)
+                        continue;
+                    const XiBlock *handler = (const XiBlock *) active->aux;
+                    XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
+                    if (!handler_storage || handler_storage->reachable ||
+                        handler_storage->trap_cleanup ||
+                        !exact_static_cleanup_handler(function, active))
+                        return fail(diagnostic, diagnostic_size,
+                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                    "Xi assertion v%u has no exact panic cleanup", point->id);
+                    XrProgramBuildStatus status =
+                        append_panic_edge(context, function, point, active);
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        return status;
+                    handler_storage->panic_cleanup = true;
                 }
             }
         }
@@ -7363,16 +7576,16 @@ static XrProgramBuildStatus refine_static_typed_catch_reachability(XrXiBuildCont
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus prepare_coroutine_call_arguments(
-    XrXiBuildContext *context, XrXiFunctionStorage *function, char *diagnostic,
-    size_t diagnostic_size) {
+static XrProgramBuildStatus prepare_coroutine_call_arguments(XrXiBuildContext *context,
+                                                             XrXiFunctionStorage *function,
+                                                             char *diagnostic,
+                                                             size_t diagnostic_size) {
     const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
     for (uint32_t point_index = 0u; plan && point_index < plan->nstates; ++point_index) {
         const XiCoroSuspendPoint *point = &plan->points[point_index];
         if (point->kind != XI_CORO_SUSP_CALL)
             continue;
-        if (point->op &&
-            typed_invoke_check_block_for_call(context, function->xi, point->op))
+        if (point->op && typed_invoke_check_block_for_call(context, function->xi, point->op))
             continue;
         XrXiBlockStorage *resume = find_block_storage(function, point->resume_block);
         uint16_t result_type = XR_CORE_TYPE_VOID;
@@ -7410,9 +7623,8 @@ typedef struct XrXiTrapCallContract {
     bool indirect;
 } XrXiTrapCallContract;
 
-static bool trap_call_contract(XrXiBuildContext *context,
-                               const XrXiFunctionStorage *function, const XiValue *call,
-                               XrXiTrapCallContract *contract) {
+static bool trap_call_contract(XrXiBuildContext *context, const XrXiFunctionStorage *function,
+                               const XiValue *call, XrXiTrapCallContract *contract) {
     if (!context || !function || !call || !call->args || !contract)
         return false;
     memset(contract, 0, sizeof(*contract));
@@ -7435,15 +7647,13 @@ static bool trap_call_contract(XrXiBuildContext *context,
             contract->first_operand = callee->has_receiver ? 0u : 1u;
             contract->parameter_modes = callee_storage->parameter_modes;
             contract->parameter_count =
-                callee->nparams +
-                (callee_storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
+                callee->nparams + (callee_storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
         } else if (exact_indirect_invoke_call(context, function->xi, call) ||
                    exact_indirect_direct_call(context, function->xi, call)) {
             const XiValue *callable = logical_value_identity(call->args[0]);
             uint16_t callable_type_id = XR_CORE_TYPE_VOID;
-            if (!callable ||
-                !map_callable_call_type(context, function->xi, call, callable->type,
-                                        &callable_type_id, NULL))
+            if (!callable || !map_callable_call_type(context, function->xi, call, callable->type,
+                                                     &callable_type_id, NULL))
                 return false;
             const XrXiTypeStorage *callable_type =
                 find_dynamic_type_by_id(context, callable_type_id);
@@ -7461,25 +7671,27 @@ static bool trap_call_contract(XrXiBuildContext *context,
            (contract->parameter_count == 0u || contract->parameter_modes);
 }
 
-static bool trap_call_operand_consumes(const XrXiTrapCallContract *contract,
-                                       uint32_t operand) {
+static bool trap_call_operand_consumes(const XrXiTrapCallContract *contract, uint32_t operand) {
     uint32_t prefix = contract->first_operand + (contract->indirect ? 1u : 0u);
     return operand >= prefix && operand - prefix < contract->parameter_count &&
            contract->parameter_modes[operand - prefix] == XR_PARAM_MOVE;
 }
 
 /* A direct call can borrow an affine owner without consuming it.  If the
- * private backend reports provider-call-failed while that call is active,
- * the caller still owns the value and the trap cleanup must close it. */
-static XrProgramBuildStatus prepare_trap_borrowed_owner_arguments(
-    XrXiBuildContext *context, XrXiFunctionStorage *function, char *diagnostic,
-    size_t diagnostic_size) {
+ * private backend reports
+ * provider-call-failed while that call is active,
+ * the caller still owns the value and the trap
+ * cleanup must close it. */
+static XrProgramBuildStatus prepare_trap_borrowed_owner_arguments(XrXiBuildContext *context,
+                                                                  XrXiFunctionStorage *function,
+                                                                  char *diagnostic,
+                                                                  size_t diagnostic_size) {
     for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count; ++edge_index) {
         const XrXiTrapEdge *edge = &context->trap_edges[edge_index];
         const XiValue *call = edge->call;
         XrXiTrapCallContract contract;
-        if (edge->function != function->xi || !trap_call_contract(context, function, call,
-                                                                  &contract))
+        if (edge->function != function->xi ||
+            !trap_call_contract(context, function, call, &contract))
             continue;
         XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
         if (!handler)
@@ -7491,11 +7703,9 @@ static XrProgramBuildStatus prepare_trap_borrowed_owner_arguments(
                 !logical_value_produces_owner(context, function->xi, owner, 0u))
                 continue;
             uint16_t owner_type = XR_CORE_TYPE_VOID;
-            if (!map_logical_value_type(context, function->xi, call->args[operand],
-                                        &owner_type) ||
+            if (!map_logical_value_type(context, function->xi, call->args[operand], &owner_type) ||
                 owner_type == XR_CORE_TYPE_VOID)
-                return fail(diagnostic, diagnostic_size,
-                            XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi trap-capable call v%u borrowed owner operand %u has no CoreSpec "
                             "type",
                             call->id, operand);
@@ -7510,19 +7720,50 @@ static XrProgramBuildStatus prepare_trap_borrowed_owner_arguments(
 }
 
 static bool trap_call_consumes_source(XrXiBuildContext *context,
-                                      const XrXiFunctionStorage *function,
-                                      const XiValue *call, const XiValue *source) {
+                                      const XrXiFunctionStorage *function, const XiValue *call,
+                                      const XiValue *source) {
     XrXiTrapCallContract contract;
     if (!source || !trap_call_contract(context, function, call, &contract))
         return false;
     source = exact_logical_value_identity(context, function->xi, source);
     for (uint32_t operand = contract.first_operand; operand < call->nargs; ++operand) {
-        const XiValue *argument = exact_logical_value_identity(
-            context, function->xi, call->args[operand]);
+        const XiValue *argument =
+            exact_logical_value_identity(context, function->xi, call->args[operand]);
         if (trap_call_operand_consumes(&contract, operand) && argument == source)
             return true;
     }
     return false;
+}
+
+static XrProgramBuildStatus prepare_panic_arguments(XrXiBuildContext *context,
+                                                    XrXiFunctionStorage *function, char *diagnostic,
+                                                    size_t diagnostic_size) {
+    for (uint32_t edge_index = 0u; edge_index < context->panic_edge_count; ++edge_index) {
+        const XrXiPanicEdge *edge = &context->panic_edges[edge_index];
+        if (edge->function != function->xi)
+            continue;
+        XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+        const XiValue *caught = NULL;
+        for (uint32_t value_index = 0u; edge->handler && value_index < edge->handler->nvalues;
+             ++value_index) {
+            const XiValue *value = edge->handler->values[value_index];
+            if (value && value->op == XI_CATCH && value->aux == edge->registration) {
+                if (caught)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi panic cleanup has multiple typed payloads");
+                caught = value;
+            }
+        }
+        if (!handler || !caught)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi panic cleanup payload is absent");
+        XrProgramBuildStatus status =
+            add_block_argument(context, function, handler, caught, NULL, XR_CORE_TYPE_PANIC_INFO,
+                               XR_XI_INVOKE_ARGUMENT_PANIC, NULL, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
@@ -7536,6 +7777,10 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         prepare_trap_borrowed_owner_arguments(context, function, diagnostic, diagnostic_size);
     if (trap_owner_status != XR_PROGRAM_BUILD_OK)
         return trap_owner_status;
+    XrProgramBuildStatus panic_argument_status =
+        prepare_panic_arguments(context, function, diagnostic, diagnostic_size);
+    if (panic_argument_status != XR_PROGRAM_BUILD_OK)
+        return panic_argument_status;
     XrXiBlockStorage *entry = find_block_storage(function, function->xi->entry);
     if (!entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -7600,8 +7845,7 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                      ((uint64_t) function->xi->next_value_id + function->xi->nparams + 1u);
     for (uint64_t iteration = 0; iteration <= limit; ++iteration) {
         bool changed = false;
-        for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count;
-             ++edge_index) {
+        for (uint32_t edge_index = 0u; edge_index < context->trap_edge_count; ++edge_index) {
             const XrXiTrapEdge *edge = &context->trap_edges[edge_index];
             if (edge->function != function->xi)
                 continue;
@@ -7630,12 +7874,47 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                 XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
                 if (edge_argument->phi ||
                     edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
-                    return fail(diagnostic, diagnostic_size,
-                                XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi provider trap continuation requires a phi payload");
-                XrProgramBuildStatus status = require_value_available(
-                    context, function, source, edge_argument->source, &changed, diagnostic,
-                    diagnostic_size);
+                XrProgramBuildStatus status =
+                    require_value_available(context, function, source, edge_argument->source,
+                                            &changed, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+        }
+        for (uint32_t edge_index = 0u; edge_index < context->panic_edge_count; ++edge_index) {
+            const XrXiPanicEdge *edge = &context->panic_edges[edge_index];
+            if (edge->function != function->xi)
+                continue;
+            XrXiBlockStorage *source = find_block_storage(function, edge->point->block);
+            XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+            if (!source || !handler)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi panic continuation endpoint is absent");
+            uint32_t source_argument_count = source->argument_count;
+            for (uint32_t argument = 0u; argument < source_argument_count; ++argument) {
+                XrXiBlockArgumentStorage owner = source->argument_storage[argument];
+                if (owner.ownership != XR_CORE_IR_OWNER ||
+                    owner.implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
+                    continue;
+                XrProgramBuildStatus status = add_block_argument(
+                    context, function, handler, owner.source, NULL, owner.type_id,
+                    XR_XI_INVOKE_ARGUMENT_NONE, &changed, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+            for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+                XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+                if (edge_argument->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
+                    continue;
+                if (edge_argument->phi ||
+                    edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi panic continuation requires a phi payload");
+                XrProgramBuildStatus status =
+                    require_value_available(context, function, source, edge_argument->source,
+                                            &changed, diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
             }
@@ -7686,8 +7965,8 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi block-parameter closure did not converge");
     }
-    XrProgramBuildStatus coroutine_argument_status = prepare_coroutine_call_arguments(
-        context, function, diagnostic, diagnostic_size);
+    XrProgramBuildStatus coroutine_argument_status =
+        prepare_coroutine_call_arguments(context, function, diagnostic, diagnostic_size);
     if (coroutine_argument_status != XR_PROGRAM_BUILD_OK)
         return coroutine_argument_status;
     uint32_t expected_entry_arguments =
@@ -7768,14 +8047,12 @@ set_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *ins
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus set_invoke_operands(const XrXiBuildContext *context,
-                                                XrCoreIrInstructionInput *instruction,
-                                                const XrXiFunctionStorage *function,
-                                                const XrXiBlockStorage *predecessor,
-                                                const XiValue *call, const XrXiBlockStorage *normal,
-                                                const XrXiBlockStorage *error,
-                                                uint32_t first_operand, char *diagnostic,
-                                                size_t diagnostic_size) {
+static XrProgramBuildStatus
+set_invoke_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
+                    const XrXiFunctionStorage *function, const XrXiBlockStorage *predecessor,
+                    const XiValue *call, const XrXiBlockStorage *normal,
+                    const XrXiBlockStorage *error, uint32_t first_operand, char *diagnostic,
+                    size_t diagnostic_size) {
     uint32_t normal_implicit = call->type && call->type->kind != XR_KIND_UNIT ? 1u : 0u;
     if (normal->argument_count < normal_implicit || error->argument_count == 0u ||
         (normal_implicit != 0u &&
@@ -7891,13 +8168,12 @@ static bool exact_cooperative_yield_contract(XrXiBuildContext *context,
            result_type == XR_CORE_TYPE_VOID &&
            xr_program_xi_projection(value->op, result_type, &projection) &&
            projection.kind == XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD &&
-           projection.core_operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD &&
-           value->nargs == 0u && value->aux == NULL &&
-           value->aux_int == XI_YIELD_AUX_IMMEDIATE &&
+           projection.core_operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD && value->nargs == 0u &&
+           value->aux == NULL && value->aux_int == XI_YIELD_AUX_IMMEDIATE &&
            (value->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND)) ==
                (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND) &&
-           value->xg_suspend_point_use_id != XG_NO_ID &&
-           value->xg_suspend_source_node_id != 0u && value->xg_suspend_body_ordinal != 0u &&
+           value->xg_suspend_point_use_id != XG_NO_ID && value->xg_suspend_source_node_id != 0u &&
+           value->xg_suspend_body_ordinal != 0u &&
            value->xg_suspend_point_kind == XG_SUSPEND_POINT_COOPERATIVE_YIELD &&
            value->xg_suspend_may_suspend == 1u && value->xg_suspend_contract_complete == 1u &&
            evidence && evidence->use_id == value->xg_suspend_point_use_id &&
@@ -7908,8 +8184,8 @@ static bool exact_cooperative_yield_contract(XrXiBuildContext *context,
            evidence->contract_complete == 1u;
 }
 
-static const XiCoroSuspendPoint *coroutine_point_for_block(
-    const XrXiFunctionStorage *function, const XiBlock *block) {
+static const XiCoroSuspendPoint *coroutine_point_for_block(const XrXiFunctionStorage *function,
+                                                           const XiBlock *block) {
     const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
     const XiCoroSuspendPoint *found = NULL;
     for (uint32_t point = 0u; plan && point < plan->nstates; ++point) {
@@ -7923,8 +8199,8 @@ static const XiCoroSuspendPoint *coroutine_point_for_block(
     return found;
 }
 
-static bool coroutine_function_has_proven_suspend(const XiFunc *function,
-                                                  const XiFunc **stack, uint32_t depth) {
+static bool coroutine_function_has_proven_suspend(const XiFunc *function, const XiFunc **stack,
+                                                  uint32_t depth) {
     const XiCoroPlan *plan = function ? function->coro_plan : NULL;
     if (!plan || plan->nstates == 0u || !plan->points)
         return false;
@@ -7944,15 +8220,14 @@ static bool coroutine_function_has_proven_suspend(const XiFunc *function,
             continue;
         }
         const XiCoroEdge *child = xi_coro_point_find_edge(point, XI_CORO_EDGE_CHILD);
-        if ((point->op->flags & XI_FLAG_MAY_SUSPEND) != 0u || !child ||
-            !child->indirect_child)
+        if ((point->op->flags & XI_FLAG_MAY_SUSPEND) != 0u || !child || !child->indirect_child)
             return true;
     }
     return false;
 }
 
-static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context,
-                                            const XiFunc *function, const XiBlock *block) {
+static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context, const XiFunc *function,
+                                            const XiBlock *block) {
     const XrXiFunctionStorage *storage = find_xi_function(context, function, NULL, NULL);
     if (!storage || !storage->block_storage || !block)
         return false;
@@ -7962,10 +8237,20 @@ static bool canonical_block_is_trap_cleanup(const XrXiBuildContext *context,
     return false;
 }
 
+static bool canonical_block_is_panic_cleanup(const XrXiBuildContext *context,
+                                             const XiFunc *function, const XiBlock *block) {
+    const XrXiFunctionStorage *storage = find_xi_function(context, function, NULL, NULL);
+    if (!storage || !storage->block_storage || !block)
+        return false;
+    for (uint32_t index = 0u; index < function->nblocks; ++index)
+        if (storage->block_storage[index].xi == block)
+            return storage->block_storage[index].panic_cleanup;
+    return false;
+}
+
 static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
                                                     XrXiFunctionStorage *function,
-                                                    XrCoreIrFunctionInput *output,
-                                                    char *diagnostic,
+                                                    XrCoreIrFunctionInput *output, char *diagnostic,
                                                     size_t diagnostic_size) {
     const XiFunc *xi = function ? function->xi : NULL;
     const XiCoroPlan *plan = xi ? xi->coro_plan : NULL;
@@ -7979,37 +8264,41 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         return XR_PROGRAM_BUILD_OK;
 
     /* Xi reserves states for open callable target sets, and propagates those
-     * reservations through direct callers, even when no suspension effect is
-     * proven.  They keep later target planning conservative but are not
-     * semantic suspension points in canonical Program. */
+     * reservations
+     * through direct callers, even when no suspension effect is
+     * proven.  They keep later
+     * target planning conservative but are not
+     * semantic suspension points in canonical
+     * Program. */
     const XiFunc *suspend_stack[64] = {0};
     if (yield_count == 0u && plan->is_coroutine && plan->analysis_complete &&
         plan->actions_materialized && plan->cfg_rewritten && xi_coro_plan_is_current(xi, plan) &&
         !coroutine_function_has_proven_suspend(xi, suspend_stack, 0u))
         return XR_PROGRAM_BUILD_OK;
-    if (!context || !xi || !output || !plan || !plan->is_coroutine ||
-        !plan->analysis_complete || !plan->actions_materialized || !plan->cfg_rewritten ||
-        !xi_coro_plan_is_current(xi, plan) || !plan->points || !plan->dispatch)
+    if (!context || !xi || !output || !plan || !plan->is_coroutine || !plan->analysis_complete ||
+        !plan->actions_materialized || !plan->cfg_rewritten || !xi_coro_plan_is_current(xi, plan) ||
+        !plan->points || !plan->dispatch)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %s has no current exact coroutine plan",
                     xi && xi->name ? xi->name : "<anonymous>");
 
     /* The active CoreSpec coroutine slice deliberately admits one exact
-     * cooperative-yield state. More states and other suspension kinds stay
-     * fail-closed until their Program, reference, VM, and AOT semantics land
+     * cooperative-yield
+     * state. More states and other suspension kinds stay
+     * fail-closed until their Program,
+     * reference, VM, and AOT semantics land
      * together. */
     if (plan->nstates != 1u || plan->ndispatch != 2u ||
-        plan->dispatch[0].state_id != XI_CORO_STATE_ENTRY ||
-        plan->dispatch[0].target != xi->entry)
+        plan->dispatch[0].state_id != XI_CORO_STATE_ENTRY || plan->dispatch[0].target != xi->entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi function %s coroutine shape is outside the active canonical Program slice",
                     xi->name ? xi->name : "<anonymous>");
 
     const XiCoroSuspendPoint *point = &plan->points[0];
     const XiCoroEdge *resume = xi_coro_point_find_edge(point, XI_CORO_EDGE_RESUME);
-    if (point->state_id != 1u || !point->op ||
-        point->op->block != point->suspend_block || !point->suspend_block ||
-        point->suspend_block->nvalues != 1u || point->suspend_block->values[0] != point->op ||
+    if (point->state_id != 1u || !point->op || point->op->block != point->suspend_block ||
+        !point->suspend_block || point->suspend_block->nvalues != 1u ||
+        point->suspend_block->values[0] != point->op ||
         point->suspend_block->kind != XI_BLOCK_PLAIN ||
         point->suspend_block->succs[0] != point->resume_block ||
         point->suspend_block->succs[1] != NULL || !point->resume_block ||
@@ -8017,8 +8306,8 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         point->generation != point->state_id || !point->returns_to_scheduler ||
         plan->dispatch[1].state_id != point->state_id ||
         plan->dispatch[1].target != point->suspend_block || !resume || resume->terminal ||
-        resume->source_state_id != point->state_id ||
-        resume->target_state_id != point->state_id || resume->target_block != point->resume_block)
+        resume->source_state_id != point->state_id || resume->target_state_id != point->state_id ||
+        resume->target_block != point->resume_block)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %s suspension lacks exact logical plan closure",
                     xi->name ? xi->name : "<anonymous>");
@@ -8037,15 +8326,14 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
         const XiCoroPlan *callee_plan = callee ? callee->coro_plan : NULL;
         const XiCoroEdge *child = xi_coro_point_find_edge(point, XI_CORO_EDGE_CHILD);
-        exact_call = callee && callee_storage && point->resolved_callee == callee && child &&
-                     !child->terminal && !child->indirect_child && child->callee == callee &&
-                     callee_plan && callee_plan->is_coroutine && callee_plan->analysis_complete &&
-                     callee_plan->actions_materialized && callee_plan->cfg_rewritten &&
-                     xi_coro_plan_is_current(callee, callee_plan) &&
-                     callee_plan->nstates == 1u && callee_plan->points &&
-                     callee_plan->points[0].kind == XI_CORO_SUSP_YIELD &&
-                     exact_cooperative_yield_contract(context, callee_storage,
-                                                      callee_plan->points[0].op);
+        exact_call =
+            callee && callee_storage && point->resolved_callee == callee && child &&
+            !child->terminal && !child->indirect_child && child->callee == callee && callee_plan &&
+            callee_plan->is_coroutine && callee_plan->analysis_complete &&
+            callee_plan->actions_materialized && callee_plan->cfg_rewritten &&
+            xi_coro_plan_is_current(callee, callee_plan) && callee_plan->nstates == 1u &&
+            callee_plan->points && callee_plan->points[0].kind == XI_CORO_SUSP_YIELD &&
+            exact_cooperative_yield_contract(context, callee_storage, callee_plan->points[0].op);
     }
     if (!exact_yield && !exact_call)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -8060,8 +8348,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
                     xi->name ? xi->name : "<anonymous>");
 
     function->coroutine_states = xr_calloc(2u, sizeof(*function->coroutine_states));
-    function->coroutine_safepoints =
-        xr_calloc(1u, sizeof(*function->coroutine_safepoints));
+    function->coroutine_safepoints = xr_calloc(1u, sizeof(*function->coroutine_safepoints));
     if (!function->coroutine_states || !function->coroutine_safepoints)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     function->coroutine_states[0].state_id = XI_CORO_STATE_ENTRY;
@@ -8103,12 +8390,12 @@ static bool coroutine_live_set_matches(const XrXiBuildContext *context,
     return true;
 }
 
-static XrProgramBuildStatus translate_coroutine_yield_terminator(
-    XrXiBuildContext *context, XrXiFunctionStorage *function,
-    XrXiBlockStorage *block, const XiCoroSuspendPoint *point,
-    XrCoreIrInstructionInput *instruction, char *diagnostic, size_t diagnostic_size) {
-    XrXiBlockStorage *resume =
-        point ? find_block_storage(function, point->resume_block) : NULL;
+static XrProgramBuildStatus
+translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                                     XrXiBlockStorage *block, const XiCoroSuspendPoint *point,
+                                     XrCoreIrInstructionInput *instruction, char *diagnostic,
+                                     size_t diagnostic_size) {
+    XrXiBlockStorage *resume = point ? find_block_storage(function, point->resume_block) : NULL;
     uint32_t safepoint_id = point && point->state_id != 0u ? point->state_id - 1u : UINT32_MAX;
     if (!context || !function || !block || !instruction || !point || !resume ||
         safepoint_id >= 1u || !function->coroutine_safepoints ||
@@ -8133,10 +8420,9 @@ static XrProgramBuildStatus translate_coroutine_yield_terminator(
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
 
-    XrCoreIrKey *live_values =
-        instruction->operand_count
-            ? xr_calloc(instruction->operand_count, sizeof(*live_values))
-            : NULL;
+    XrCoreIrKey *live_values = instruction->operand_count
+                                   ? xr_calloc(instruction->operand_count, sizeof(*live_values))
+                                   : NULL;
     if (instruction->operand_count && !live_values)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     if (instruction->operand_count)
@@ -8147,32 +8433,28 @@ static XrProgramBuildStatus translate_coroutine_yield_terminator(
     return XR_PROGRAM_BUILD_OK;
 }
 
-static bool coroutine_call_live_set_matches(
-    const XrXiBuildContext *context, const XrXiFunctionStorage *function,
-    const XrXiBlockStorage *resume, const XiCoroSuspendPoint *point,
-    uint32_t implicit_result_count) {
+static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
+                                            const XrXiFunctionStorage *function,
+                                            const XrXiBlockStorage *resume,
+                                            const XiCoroSuspendPoint *point,
+                                            uint32_t implicit_result_count) {
     if (!context || !function || !resume || !point ||
-        resume->argument_count < implicit_result_count ||
-        point->nlive != resume->argument_count)
+        resume->argument_count < implicit_result_count || point->nlive != resume->argument_count)
         return false;
     if (implicit_result_count != 0u &&
-        (resume->argument_storage[0].implicit_invoke_kind !=
-             XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
-         exact_logical_value_identity(context, function->xi,
-                                      resume->argument_storage[0].source) !=
+        (resume->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
+         exact_logical_value_identity(context, function->xi, resume->argument_storage[0].source) !=
              exact_logical_value_identity(context, function->xi, point->op)))
         return false;
-    for (uint32_t argument = implicit_result_count; argument < resume->argument_count;
-         ++argument) {
+    for (uint32_t argument = implicit_result_count; argument < resume->argument_count; ++argument) {
         const XiValue *logical = exact_logical_value_identity(
             context, function->xi, resume->argument_storage[argument].source);
         uint32_t matches = 0u;
         for (uint32_t live = 0u; live < point->nlive; ++live)
-            matches += exact_logical_value_identity(context, function->xi, point->live[live]) ==
-                       logical;
+            matches +=
+                exact_logical_value_identity(context, function->xi, point->live[live]) == logical;
         if (!logical || matches != 1u ||
-            resume->argument_storage[argument].implicit_invoke_kind !=
-                XR_XI_INVOKE_ARGUMENT_NONE ||
+            resume->argument_storage[argument].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
             resume->argument_storage[argument].category != XR_CORE_IR_VALUE ||
             resume->argument_storage[argument].ownership != XR_CORE_IR_NON_OWNER)
             return false;
@@ -8181,17 +8463,15 @@ static bool coroutine_call_live_set_matches(
 }
 
 static XrProgramBuildStatus translate_coroutine_call_terminator(
-    XrXiBuildContext *context, XrXiModuleStorage *module,
-    XrXiFunctionStorage *function, XrXiBlockStorage *block,
-    const XiCoroSuspendPoint *point, XrCoreIrInstructionInput *instruction,
+    XrXiBuildContext *context, XrXiModuleStorage *module, XrXiFunctionStorage *function,
+    XrXiBlockStorage *block, const XiCoroSuspendPoint *point, XrCoreIrInstructionInput *instruction,
     char *diagnostic, size_t diagnostic_size) {
     XrXiBlockStorage *resume = point ? find_block_storage(function, point->resume_block) : NULL;
     uint32_t safepoint_id = point && point->state_id != 0u ? point->state_id - 1u : UINT32_MAX;
     XrCoreIrInstructionInput call = {0};
-    XrProgramBuildStatus status =
-        point ? translate_value(context, module, function, point->op, block, &call, diagnostic,
-                                diagnostic_size)
-              : XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrProgramBuildStatus status = point ? translate_value(context, module, function, point->op,
+                                                          block, &call, diagnostic, diagnostic_size)
+                                        : XR_PROGRAM_BUILD_INVALID_INPUT;
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
     uint32_t implicit_result = call.result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
@@ -8199,8 +8479,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         point ? find_xi_function(context, point->resolved_callee, NULL, NULL) : NULL;
     if (!resume || !callee || safepoint_id >= 1u ||
         call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
-        !xr_core_ir_key_equal(call.immediate.key, callee->key) ||
-        call.successor_count != 0u ||
+        !xr_core_ir_key_equal(call.immediate.key, callee->key) || call.successor_count != 0u ||
         !coroutine_call_live_set_matches(context, function, resume, point, implicit_result)) {
         xr_free((void *) call.operands);
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -8581,9 +8860,8 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                     uint32_t value_effects = 0u;
                     uint32_t value_capabilities = 0u;
                     const XrCoreOperationSpec *shared_callable =
-                        value->op == XI_GET_SHARED &&
-                                resolved_shared_callable_target(context, function, value, NULL,
-                                                                NULL)
+                        value->op == XI_GET_SHARED && resolved_shared_callable_target(
+                                                          context, function, value, NULL, NULL)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALLABLE_PACK)
                             : NULL;
                     const XrCoreOperationSpec *class_construction =
@@ -8606,12 +8884,15 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         resolved_aggregate_field_store(context, function, value, NULL)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PLACE_STORE)
                             : NULL;
+                    const XrCoreOperationSpec *condition_assertion =
+                        exact_condition_assertion(value)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ASSERT_CONDITION)
+                            : NULL;
                     const XrStdlibDefEntry *provider_entry =
                         resolved_provider_native_call(context, function, value);
                     const XrCoreOperationSpec *provider_operation =
-                        provider_entry
-                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL)
-                            : NULL;
+                        provider_entry ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL)
+                                       : NULL;
                     bool has_contract = false;
                     if (value->xg_existential_kind != XI_EXISTENTIAL_NONE) {
                         has_contract = xr_program_xi_semantic_operation_contract(
@@ -8657,6 +8938,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         value_capabilities =
                             aggregate_field_store->capability_mask |
                             (place_projection ? place_projection->capability_mask : 0u);
+                    } else if (condition_assertion) {
+                        has_contract = true;
+                        value_effects = condition_assertion->effect_mask;
+                        value_capabilities = condition_assertion->capability_mask;
                     } else if (provider_operation) {
                         has_contract = true;
                         value_effects = provider_operation->effect_mask;
@@ -8747,8 +9032,7 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                              value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE);
                         bool sealed_method =
                             value &&
-                            (value->op == XI_CALL_METHOD ||
-                             value->op == XI_CALL_METHOD_DIRECT) &&
+                            (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (!value || (value->op != XI_CALL && !witness && !sealed_method))
                             continue;
@@ -8941,9 +9225,9 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
         for (uint16_t parameter = 0; parameter < xi->nparams; ++parameter) {
             const XiValue *parameter_value = xi->params ? xi->params[parameter] : NULL;
             XrParamMode parameter_mode =
-                xi->has_receiver && parameter == 0u
-                    ? (XrParamMode) xi->receiver_mode
-                    : parameter_value ? (XrParamMode) parameter_value->param_mode : XR_PARAM_READ;
+                xi->has_receiver && parameter == 0u ? (XrParamMode) xi->receiver_mode
+                : parameter_value                   ? (XrParamMode) parameter_value->param_mode
+                                                    : XR_PARAM_READ;
             bool parameter_type_mapped =
                 parameter_value && parameter_value->type &&
                         parameter_value->type->kind == XR_KIND_FUNCTION
@@ -8951,15 +9235,14 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
                           context, xi, parameter_value,
                           &storage->parameter_types[parameter + parameter_offset])
                     : parameter_value &&
-                          map_type_for_mode(
-                              context, parameter_value->type, parameter_mode,
-                              &storage->parameter_types[parameter + parameter_offset], NULL, 0u);
+                          map_type_for_mode(context, parameter_value->type, parameter_mode,
+                                            &storage->parameter_types[parameter + parameter_offset],
+                                            NULL, 0u);
             if (!parameter_value || parameter_value->op != XI_PARAM ||
                 parameter_value->aux_int != parameter ||
-                (parameter_value->type &&
-                 parameter_value->type->kind == XR_KIND_INTERFACE &&
-                 !interface_parameter_contract_is_exact(
-                      context, xi, parameter_value, parameter_mode)) ||
+                (parameter_value->type && parameter_value->type->kind == XR_KIND_INTERFACE &&
+                 !interface_parameter_contract_is_exact(context, xi, parameter_value,
+                                                        parameter_mode)) ||
                 !parameter_type_mapped ||
                 storage->parameter_types[parameter + parameter_offset] == XR_CORE_TYPE_VOID)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -9022,10 +9305,9 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         block_output->key = block_key(storage, xi_block);
         block_output->arguments = block_storage->arguments;
         block_output->argument_count = block_storage->argument_count;
-        const XiCoroSuspendPoint *suspend_point =
-            output->coroutine_safepoint_count != 0u
-                ? coroutine_point_for_block(storage, xi_block)
-                : NULL;
+        const XiCoroSuspendPoint *suspend_point = output->coroutine_safepoint_count != 0u
+                                                      ? coroutine_point_for_block(storage, xi_block)
+                                                      : NULL;
 
         uint32_t emitted = block_storage->argument_count != 0u ? 1u : 0u;
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
@@ -9158,15 +9440,15 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
         const XiValue *invoke_call = block_typed_invoke_call(context, xi, xi_block);
         if (suspend_point && suspend_point->kind == XI_CORO_SUSP_YIELD) {
-            status = translate_coroutine_yield_terminator(context, storage, block_storage,
-                                                          suspend_point, terminator, diagnostic,
-                                                          diagnostic_size);
+            status =
+                translate_coroutine_yield_terminator(context, storage, block_storage, suspend_point,
+                                                     terminator, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (suspend_point && suspend_point->kind == XI_CORO_SUSP_CALL) {
-            status = translate_coroutine_call_terminator(
-                context, module, storage, block_storage, suspend_point, terminator, diagnostic,
-                diagnostic_size);
+            status = translate_coroutine_call_terminator(context, module, storage, block_storage,
+                                                         suspend_point, terminator, diagnostic,
+                                                         diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (invoke_call) {
@@ -9209,9 +9491,9 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             const XrXiTrapEdge *trap_edge = find_trap_edge(context, xi, invoke_call);
             if (trap_edge) {
                 const XrXiBlockStorage *handler = find_block_storage(storage, trap_edge->handler);
-                status = append_invoke_trap_edge_operands(
-                    context, terminator, storage, block_storage, handler, diagnostic,
-                    diagnostic_size);
+                status =
+                    append_invoke_trap_edge_operands(context, terminator, storage, block_storage,
+                                                     handler, diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
             }
@@ -9251,9 +9533,9 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 }
                 if (!throw_value || throw_value->nargs != 1u || !throw_value->args ||
                     !throw_value->args[0])
-                    return fail(
-                        diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi unreachable block b%u has no typed panic terminal", xi_block->id);
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi unreachable block b%u has no typed panic terminal",
+                                xi_block->id);
                 terminator->operation_id = XR_CORE_OP_CORE_PANIC_PUBLISH;
                 XiValue *published[] = {throw_value->args[0]};
                 status = set_operands(context, terminator, storage, block_storage, published, 1u,
@@ -9406,13 +9688,11 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                     for (uint32_t value_index = 0; value_index < block->nvalues; ++value_index) {
                         const XiValue *value = block->values[value_index];
                         bool witness =
-                            (value->op == XI_CALL_METHOD ||
-                             value->op == XI_CALL_METHOD_DIRECT) &&
+                            (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
                             (value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT ||
                              value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE);
                         bool sealed_method =
-                            (value->op == XI_CALL_METHOD ||
-                             value->op == XI_CALL_METHOD_DIRECT) &&
+                            (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (value->op != XI_CALL && !witness && !sealed_method)
                             continue;
@@ -9422,8 +9702,8 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                             resolved_provider_native_call(context, function->xi, value))
                             continue;
                         const XiFunc *callee = resolved_sealed_callee(context, function->xi, value);
-                        bool invoke = typed_invoke_check_block_for_call(
-                                          context, function->xi, value) != NULL;
+                        bool invoke =
+                            typed_invoke_check_block_for_call(context, function->xi, value) != NULL;
                         if (witness) {
                             uint32_t witness_effects = 0u;
                             uint32_t witness_capabilities = 0u;
@@ -9657,12 +9937,17 @@ static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage,
 }
 
 /* An executable Program owns one entry/build-target closure.  Importing a
- * source module grants access to its exports; it does not re-export every
- * declaration from that module through the executable artifact.  Close the
- * function roots from Xglobal's exact target identities before assigning
+ * source module grants
+ * access to its exports; it does not re-export every
+ * declaration from that module through the
+ * executable artifact.  Close the
+ * function roots from Xglobal's exact target identities before
+ * assigning
  * Program-local FunctionIds.  Unknown dynamic targets are deliberately not
- * guessed here: the existing callable validation rejects them after the
- * closure has been materialized. */
+ * guessed
+ * here: the existing callable validation rejects them after the
+ * closure has been materialized.
+ */
 static bool mark_program_function(XrXiBuildContext *context, const XiFunc *function,
                                   bool *changed) {
     if (!context || !function)
@@ -9725,8 +10010,7 @@ static void mark_program_interface_targets(XrXiBuildContext *context,
     for (uint32_t witness = 0u; witness < evidence->ninterface_witnesses; ++witness) {
         const XgInterfaceWitnessSummary *row = &evidence->interface_witnesses[witness];
         if (row->interface_id == callsite->receiver_static_interface_id &&
-            row->interface_method_id == (XgInterfaceMethodId) callsite->method_id &&
-            row->complete)
+            row->interface_method_id == (XgInterfaceMethodId) callsite->method_id && row->complete)
             (void) mark_program_function_id(context, row->implementation_func_id, changed);
     }
 }
@@ -9791,9 +10075,8 @@ static void mark_program_value_targets(XrXiBuildContext *context, const XiFunc *
         if (slot < function->module->nslots) {
             if (function->module->slot_funcs && function->module->slot_funcs[slot])
                 (void) mark_program_function(context, function->module->slot_funcs[slot], changed);
-            const XiImportRef *reference = function->module->slot_imports
-                                               ? function->module->slot_imports[slot]
-                                               : NULL;
+            const XiImportRef *reference =
+                function->module->slot_imports ? function->module->slot_imports[slot] : NULL;
             if (reference && reference->resolution_attempted && reference->resolved_func)
                 (void) mark_program_function(context, reference->resolved_func, changed);
         }
@@ -9872,7 +10155,8 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
 
     /* Collect the complete compiler graph first so source-local and imported
-     * target identities can close the entry-scoped function set independent
+     * target
+     * identities can close the entry-scoped function set independent
      * of module order. */
     for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
         const XiFunc *root = context->source->module_roots[module_index];
@@ -9897,7 +10181,8 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
         return closure_status;
 
     /* Publish every retained function identity before translating a body.
-     * This makes forward and cross-module calls independent of input order. */
+     * This makes forward
+     * and cross-module calls independent of input order. */
     for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
         XrXiModuleStorage *storage = &context->storage[module_index];
         XrCoreIrModuleInput *output = &context->modules[module_index];
@@ -9908,8 +10193,7 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
             storage->function_count
                 ? xr_calloc(storage->function_count, sizeof(*storage->function_storage))
                 : NULL;
-        if (storage->function_count != 0u &&
-            (!storage->functions || !storage->function_storage))
+        if (storage->function_count != 0u && (!storage->functions || !storage->function_storage))
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         output->functions = storage->functions;
         output->function_count = storage->function_count;
@@ -9928,6 +10212,10 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
         prepare_trap_continuations(context, diagnostic, diagnostic_size);
     if (trap_status != XR_PROGRAM_BUILD_OK)
         return trap_status;
+    XrProgramBuildStatus panic_status =
+        prepare_panic_continuations(context, diagnostic, diagnostic_size);
+    if (panic_status != XR_PROGRAM_BUILD_OK)
+        return panic_status;
 
     XrProgramBuildStatus imported_callable_status =
         validate_imported_callable_bindings(context, diagnostic, diagnostic_size);
@@ -10033,9 +10321,8 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
             .interface_count = context.interface_count,
             .conformances = context.conformance_count ? context.conformances : NULL,
             .conformance_count = context.conformance_count,
-            .provider_requirements = context.provider_requirement_count
-                                         ? context.provider_requirements
-                                         : NULL,
+            .provider_requirements =
+                context.provider_requirement_count ? context.provider_requirements : NULL,
             .provider_requirement_count = context.provider_requirement_count,
             .modules = context.modules,
             .module_count = input->module_count,

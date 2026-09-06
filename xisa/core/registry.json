@@ -1384,7 +1384,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": false,
+        "panic": true,
         "trap": true,
         "cancel": false,
         "suspend": false
@@ -1407,7 +1407,7 @@
       "materialization": "call",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "callee-declared trace under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
+        "allowed_trace": "callee-declared normal or typed-panic outcome under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
       },
       "kat_validator": "sealed-call",
       "coverage": {
@@ -3647,6 +3647,79 @@
         "allowed_trace": "one transfer of the initialized affine value from an owning local place followed by permanent invalidation of that local and every derived field place"
       },
       "kat_validator": "place-take",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 109,
+      "spelling": "core.assert.condition",
+      "class": "assertion",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "bool",
+          "panic-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {
+          "failure_kind": "assertion-failure-kind"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "panic"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-condition",
+          "panic-edge-preserve..."
+        ],
+        "result": "implicit-owned-panic-info on failure only"
+      },
+      "profile_dependency": "none",
+      "materialization": "typed-condition-assertion-with-optional-explicit-panic-continuation",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "true falls through in the current block; false creates the declared panic-info failure and either escapes or transfers it with every declared live value to the sole panic continuation"
+      },
+      "kat_validator": "assert-condition",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

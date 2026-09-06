@@ -12,6 +12,7 @@
 #include "xr_program_callable_fixture.h"
 #include "xr_program_invoke_fixture.h"
 #include "xr_program_panic_fixture.h"
+#include "xr_program_assert_fixture.h"
 #include "xr_program_coroutine_fixture.h"
 #include "xr_program_output_fixture.h"
 #include "xr_program_trap_fixture.h"
@@ -25,6 +26,7 @@ _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable i
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_ASSERT_CONDITION == 109, "condition assert stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ == 90,
                "existential READ reborrow stable id drifted");
@@ -33,16 +35,14 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project s
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138,
-               "coroutine call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ABI == 9, "TargetAbi stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ENDIAN == 10, "TargetEndian stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TYPE_VARIABLE == 11, "type-variable stable type id drifted");
-_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 11u,
-               "runtime builtin row count drifted");
+_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 11u, "runtime builtin row count drifted");
 
 static int failures = 0;
 
@@ -184,10 +184,11 @@ static void test_skip_instruction(const uint8_t *bytes, size_t size, size_t *off
         (void) test_take_uvar(bytes, size, offset);
 }
 
-static XrProgramBuildStatus build_typed_mode_artifact(
-    XrParamMode mode, XrCoreIrValueCategory category, bool branch_to_second_block,
-    uint16_t parameter_type, uint16_t result_type, uint16_t entry_argument_type,
-    uint16_t second_argument_type, XrProgramArtifact *artifact) {
+static XrProgramBuildStatus
+build_typed_mode_artifact(XrParamMode mode, XrCoreIrValueCategory category,
+                          bool branch_to_second_block, uint16_t parameter_type,
+                          uint16_t result_type, uint16_t entry_argument_type,
+                          uint16_t second_argument_type, XrProgramArtifact *artifact) {
     XrCoreIrKey entry_key = key("mode:block:entry");
     XrCoreIrKey second_key = key("mode:block:second");
     XrCoreIrKey entry_argument = key("mode:value:entry");
@@ -404,8 +405,7 @@ static void test_parameter_modes_and_value_categories(void) {
     ModeFixtureOffsets offsets;
     CHECK(mode_fixture_offsets(&ref, &offsets));
     CHECK(offsets.block_count == 2u);
-    expect_mutated_verify(&ref, offsets.mode, XR_PARAM_MOVE,
-                          XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+    expect_mutated_verify(&ref, offsets.mode, XR_PARAM_MOVE, XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
                           XR_PROGRAM_DIAGNOSTIC_TYPE);
     expect_mutated_verify(&ref, offsets.mode, UINT8_C(3), XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
                           XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
@@ -447,8 +447,7 @@ static void test_target_profile_queries_are_exact_logical_scalars(void) {
          XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE, XR_REFERENCE_VALUE_TARGET_ARCH,
          XR_TARGET_ARCH_WASM32},
         {XR_CORE_OP_CORE_TARGET_NATIVE_ABI, XR_CORE_TYPE_TARGET_ABI,
-         XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI, XR_REFERENCE_VALUE_TARGET_ABI,
-         XR_TARGET_ABI_WASM},
+         XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI, XR_REFERENCE_VALUE_TARGET_ABI, XR_TARGET_ABI_WASM},
         {XR_CORE_OP_CORE_TARGET_ENDIANNESS, XR_CORE_TYPE_TARGET_ENDIAN,
          XR_CORE_CAPABILITY_PROFILE_ENDIANNESS, XR_REFERENCE_VALUE_TARGET_ENDIAN,
          XR_TARGET_ENDIAN_LITTLE},
@@ -473,9 +472,8 @@ static void test_target_profile_queries_are_exact_logical_scalars(void) {
              .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         };
         XrCoreIrKey block_key = key("target-query:block");
-        XrCoreIrBlockInput block = {.key = block_key,
-                                    .instructions = instructions,
-                                    .instruction_count = 2u};
+        XrCoreIrBlockInput block = {
+            .key = block_key, .instructions = instructions, .instruction_count = 2u};
         XrCoreIrFunctionInput function = {
             .key = key("target-query:function"),
             .result_type_id = cases[index].result_type,
@@ -490,8 +488,8 @@ static void test_target_profile_queries_are_exact_logical_scalars(void) {
         CHECK(write_one_function(NULL, 0u, &function, &artifact) == XR_PROGRAM_BUILD_OK);
         XrValidatedProgram *program = validate_ok(&artifact);
         if (program) {
-            XrReferenceOutcome result = xr_reference_evaluate(program, 0u, NULL, 0u, &profile,
-                                                               NULL);
+            XrReferenceOutcome result =
+                xr_reference_evaluate(program, 0u, NULL, 0u, &profile, NULL);
             CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
             CHECK(result.value.kind == cases[index].value_kind);
             CHECK(result.value.as.target_enum == cases[index].expected);
@@ -766,7 +764,6 @@ static void test_aggregate_variant_operations(void) {
         xr_validated_program_free(program);
     }
     xr_program_artifact_free(&artifact);
-
 }
 
 static XrProgramBuildStatus build_with_type_graph(const XrCoreIrTypeInput *types,
@@ -1167,8 +1164,7 @@ static void test_control_and_profile(void) {
     size_t u16_kind_offset = 0u;
     CHECK(builtin_kind_offset(&artifact, XR_CORE_TYPE_U16, &u16_kind_offset));
     expect_mutated_verify(&artifact, u16_kind_offset, XR_PROGRAM_TYPE_KIND_U32,
-                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
-                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED, XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
     xr_program_artifact_free(&artifact);
 
     true_instructions[1].result_type_id = XR_CORE_TYPE_U32;
@@ -1481,7 +1477,9 @@ static void test_owner_and_local_place_operations(void) {
 }
 
 static void test_aggregate_place_projection(void) {
-    enum { AGGREGATE_TYPE = 62 };
+    enum {
+        AGGREGATE_TYPE = 62
+    };
     uint16_t fields[] = {XR_CORE_TYPE_I64};
     XrCoreIrTypeInput type = {
         .key = key("place-project:type"),
@@ -1644,9 +1642,8 @@ static XrProgramBuildStatus build_affine_copy_artifact(AffineCopyFixtureKind kin
         .local_id = AFFINE_TYPE,
         .kind = XR_CORE_IR_TYPE_AGGREGATE,
         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
-        .copy_contract = kind == AFFINE_COPY_INVALID_TYPE_CONTRACT
-                             ? XR_CORE_IR_COPY_FORBIDDEN
-                             : XR_CORE_IR_COPY_EXPLICIT,
+        .copy_contract = kind == AFFINE_COPY_INVALID_TYPE_CONTRACT ? XR_CORE_IR_COPY_FORBIDDEN
+                                                                   : XR_CORE_IR_COPY_EXPLICIT,
         .field_types = fields,
         .field_count = 1u,
     };
@@ -2160,14 +2157,13 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
         {.key = key("optional-owner:optional"),
          .local_id = OPTIONAL_TYPE,
          .kind = XR_CORE_IR_TYPE_VARIANT,
-         .ownership = mode == OPTIONAL_OWNER_TRIVIAL_PARENT
-                          ? XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL
-                          : XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
-         .copy_contract = mode == OPTIONAL_OWNER_TRIVIAL_PARENT
-                              ? XR_CORE_IR_COPY_TRIVIAL
-                              : (mode == OPTIONAL_OWNER_WRONG_COPY_CONTRACT
-                                     ? XR_CORE_IR_COPY_FORBIDDEN
-                                     : XR_CORE_IR_COPY_EXPLICIT),
+         .ownership = mode == OPTIONAL_OWNER_TRIVIAL_PARENT ? XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL
+                                                            : XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract =
+             mode == OPTIONAL_OWNER_TRIVIAL_PARENT
+                 ? XR_CORE_IR_COPY_TRIVIAL
+                 : (mode == OPTIONAL_OWNER_WRONG_COPY_CONTRACT ? XR_CORE_IR_COPY_FORBIDDEN
+                                                               : XR_CORE_IR_COPY_EXPLICIT),
          .variants = variants,
          .variant_count = 2u},
         {.key = key("optional-owner:wrapper"),
@@ -2192,8 +2188,7 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
     XrCoreIrKey answer = key("optional-owner:answer");
     bool take_project = mode == OPTIONAL_OWNER_AFFINE_PROJECT_TAKE ||
                         mode == OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW;
-    bool borrowed_optional_source =
-        mode == OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW;
+    bool borrowed_optional_source = mode == OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW;
     XrCoreIrValueInput block_argument = {
         .key = parameter,
         .type_id = borrowed_optional_source ? OPTIONAL_TYPE : CLASS_TYPE,
@@ -2305,9 +2300,9 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
         .instructions = instructions,
         .instruction_count = count,
     };
-    XrParamMode parameter_mode =
-        mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD || borrowed_optional_source ? XR_PARAM_READ
-                                                                            : XR_PARAM_MOVE;
+    XrParamMode parameter_mode = mode == OPTIONAL_OWNER_NONOWNER_PAYLOAD || borrowed_optional_source
+                                     ? XR_PARAM_READ
+                                     : XR_PARAM_MOVE;
     uint16_t parameter_type = borrowed_optional_source ? OPTIONAL_TYPE : CLASS_TYPE;
     XrCoreIrFunctionInput function = {
         .key = key("optional-owner:function"),
@@ -2485,17 +2480,17 @@ static void test_sealed_invoke_and_cleanup_cfg(void) {
     }
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_invoke_fixture_write_mutated(
-              XR_INVOKE_FIXTURE_TRAP_CONTINUATION, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_invoke_fixture_write_mutated(XR_INVOKE_FIXTURE_TRAP_CONTINUATION, &artifact,
+                                                  diagnostic,
+                                                  sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     program = validate_ok(&artifact);
     CHECK(program != NULL);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_invoke_fixture_write_mutated(
-              XR_INVOKE_FIXTURE_TRAP_BAD_TARGET, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_invoke_fixture_write_mutated(XR_INVOKE_FIXTURE_TRAP_BAD_TARGET, &artifact,
+                                                  diagnostic,
+                                                  sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW);
     xr_program_artifact_free(&artifact);
 
@@ -3321,14 +3316,13 @@ static bool find_interface_slot(const XrProgramArtifact *artifact, XrCoreIrKey i
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
         if (cursor > artifact->size || XR_CORE_IR_KEY_SIZE > artifact->size - cursor)
             return false;
-        bool matches = memcmp(&artifact->bytes[cursor], interface_key.bytes,
-                              XR_CORE_IR_KEY_SIZE) == 0;
+        bool matches =
+            memcmp(&artifact->bytes[cursor], interface_key.bytes, XR_CORE_IR_KEY_SIZE) == 0;
         cursor += XR_CORE_IR_KEY_SIZE;
         uint64_t slot_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
         for (uint64_t slot = 0; slot < slot_count; ++slot) {
             size_t current_offset = cursor;
-            uint64_t current_signature =
-                test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            uint64_t current_signature = test_take_uvar(artifact->bytes, artifact->size, &cursor);
             if (matches && slot == 0u) {
                 *slot_offset = current_offset;
                 *signature_id = current_signature;
@@ -3410,8 +3404,7 @@ static bool find_witness_direct_slot_offsets(const XrProgramArtifact *artifact,
                             offsets->ref_slot = immediate_offset;
                     }
                 }
-                uint64_t successor_count =
-                    test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                uint64_t successor_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
                 for (uint64_t successor = 0u; successor < successor_count; ++successor)
                     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
             }
@@ -3438,15 +3431,13 @@ static void test_witness_receiver_capability_and_interface_identity(void) {
         xr_validated_program_free(program);
         artifact.bytes[offsets.ref_slot] = saved;
 
-        expect_mutated_verify(&artifact, offsets.read_slot, 2u,
-                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+        expect_mutated_verify(&artifact, offsets.read_slot, 2u, XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
                               XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE);
     }
     xr_program_artifact_free(&artifact);
 
     XrProgramArtifact interface_artifact = {0};
-    CHECK(build_program_table_artifact(false, false, &interface_artifact) ==
-          XR_PROGRAM_BUILD_OK);
+    CHECK(build_program_table_artifact(false, false, &interface_artifact) == XR_PROGRAM_BUILD_OK);
     size_t interface_a_slot = SIZE_MAX;
     size_t interface_b_slot = SIZE_MAX;
     uint64_t interface_a_signature = UINT64_MAX;
@@ -3460,8 +3451,7 @@ static void test_witness_receiver_capability_and_interface_identity(void) {
     if (interface_a_slot != SIZE_MAX && interface_b_slot != SIZE_MAX &&
         interface_a_signature != interface_b_signature && interface_b_signature < UINT8_C(0x80))
         expect_mutated_verify(&interface_artifact, interface_a_slot,
-                              (uint8_t) interface_b_signature,
-                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                              (uint8_t) interface_b_signature, XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
                               XR_PROGRAM_DIAGNOSTIC_FUNCTION);
     xr_program_artifact_free(&interface_artifact);
 }
@@ -3579,9 +3569,9 @@ static void test_existential_pack_test_project(void) {
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_existential_fixture_write_mutated(
-              XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_existential_fixture_write_mutated(XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP,
+                                                       &artifact, diagnostic,
+                                                       sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     program = validate_ok(&artifact);
     CHECK(program != NULL);
     xr_validated_program_free(program);
@@ -3593,9 +3583,9 @@ static void test_existential_pack_test_project(void) {
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_existential_fixture_write_mutated(
-              XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_existential_fixture_write_mutated(XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP,
+                                                       &artifact, diagnostic,
+                                                       sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     program = validate_ok(&artifact);
     CHECK(program != NULL);
     xr_validated_program_free(program);
@@ -3664,28 +3654,25 @@ static void test_callable_pack_and_indirect_calls(void) {
     xr_program_artifact_free(&artifact);
 
     CHECK(xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_DIRECT_TRAP, &artifact,
-                                                    diagnostic, sizeof(diagnostic)) ==
-          XR_PROGRAM_BUILD_OK);
+                                                    diagnostic,
+                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     program = validate_ok(&artifact);
     CHECK(program != NULL);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 
     CHECK(xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_INVOKE_TRAP, &artifact,
-                                                    diagnostic, sizeof(diagnostic)) ==
-          XR_PROGRAM_BUILD_OK);
+                                                    diagnostic,
+                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     program = validate_ok(&artifact);
     CHECK(program != NULL);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 
     const XrProgramCallableFixtureMutation rejected[] = {
-        XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,
-        XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
-        XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
-        XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
-        XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER,
-        XR_CALLABLE_FIXTURE_INVOKE_TRAP_BAD_TARGET,
+        XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH, XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
+        XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,         XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
+        XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER,  XR_CALLABLE_FIXTURE_INVOKE_TRAP_BAD_TARGET,
         XR_CALLABLE_FIXTURE_INVOKE_TRAP_LOST_OWNER,
     };
     for (size_t index = 0; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
@@ -3722,11 +3709,55 @@ static void test_coroutine_state_and_exact_liveness(void) {
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_coroutine_fixture_write_mutated(
-              XR_PROGRAM_COROUTINE_FIXTURE_UNUSED_LIVE, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_coroutine_fixture_write_mutated(XR_PROGRAM_COROUTINE_FIXTURE_UNUSED_LIVE,
+                                                     &artifact, diagnostic,
+                                                     sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
     xr_program_artifact_free(&artifact);
+}
+
+static void test_condition_assert_panic_cleanup_cfg(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_assert_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        uint32_t entry = xr_validated_program_entry_function(program);
+        XrReferenceValue arguments[] = {
+            {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = true},
+            {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = 9},
+        };
+        XrReferenceOutcome normal =
+            xr_reference_evaluate(program, entry, arguments, 2u, NULL, NULL);
+        CHECK(normal.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(normal.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(normal.value.as.i64 == 42);
+        arguments[0].as.boolean = false;
+        XrReferenceOutcome panic = xr_reference_evaluate(program, entry, arguments, 2u, NULL, NULL);
+        CHECK(panic.kind == XR_REFERENCE_OUTCOME_PANIC);
+        CHECK(panic.panic_value.kind == XR_REFERENCE_VALUE_PANIC_INFO);
+        CHECK(panic.panic_value.as.panic_info == XR_ASSERTION_FAILURE_CONDITION_FALSE);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    const struct {
+        XrProgramAssertFixtureMutation mutation;
+        XrProgramDiagnosticKind diagnostic;
+    } invalid[] = {
+        {XR_ASSERT_FIXTURE_NON_BOOL_CONDITION, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_ASSERT_FIXTURE_WRONG_PANIC_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_ASSERT_FIXTURE_MISSING_OWNER_TRANSFER, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
+    };
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        memset(diagnostic, 0, sizeof(diagnostic));
+        CHECK(xr_program_assert_fixture_write_mutated(invalid[index].mutation, &artifact,
+                                                      diagnostic,
+                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, invalid[index].diagnostic);
+        xr_program_artifact_free(&artifact);
+    }
 }
 
 static void test_existential_owned_read_reborrow(void) {
@@ -3749,9 +3780,9 @@ static void test_existential_owned_read_reborrow(void) {
     xr_program_artifact_free(&artifact);
 
     memset(&artifact, 0, sizeof(artifact));
-    CHECK(xr_program_reborrow_fixture_write_mutated(
-              XR_REBORROW_FIXTURE_VALID_LOOP, &artifact, diagnostic, sizeof(diagnostic)) ==
-          XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_reborrow_fixture_write_mutated(XR_REBORROW_FIXTURE_VALID_LOOP, &artifact,
+                                                    diagnostic,
+                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     program = validate_ok(&artifact);
     CHECK(program != NULL);
     xr_validated_program_free(program);
@@ -3761,18 +3792,18 @@ static void test_existential_owned_read_reborrow(void) {
         XR_REBORROW_FIXTURE_SOURCE_READ,
         XR_REBORROW_FIXTURE_INTERFACE_MISMATCH,
     };
-    for (size_t index = 0u;
-         index < sizeof(operation_rejections) / sizeof(operation_rejections[0]); ++index) {
+    for (size_t index = 0u; index < sizeof(operation_rejections) / sizeof(operation_rejections[0]);
+         ++index) {
         memset(&artifact, 0, sizeof(artifact));
-        CHECK(xr_program_reborrow_fixture_write_mutated(
-                  operation_rejections[index], &artifact, diagnostic, sizeof(diagnostic)) ==
-              XR_PROGRAM_BUILD_OK);
+        CHECK(xr_program_reborrow_fixture_write_mutated(operation_rejections[index], &artifact,
+                                                        diagnostic,
+                                                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
         expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
         xr_program_artifact_free(&artifact);
     }
     memset(&artifact, 0, sizeof(artifact));
-    CHECK(xr_program_reborrow_fixture_write_mutated(
-              XR_REBORROW_FIXTURE_RESULT_OWNER, &artifact, diagnostic, sizeof(diagnostic)) ==
+    CHECK(xr_program_reborrow_fixture_write_mutated(XR_REBORROW_FIXTURE_RESULT_OWNER, &artifact,
+                                                    diagnostic, sizeof(diagnostic)) ==
           XR_PROGRAM_BUILD_INVALID_INPUT);
     xr_program_artifact_free(&artifact);
 
@@ -3781,14 +3812,14 @@ static void test_existential_owned_read_reborrow(void) {
         XR_REBORROW_FIXTURE_RETURN_ESCAPE,
         XR_REBORROW_FIXTURE_USE_AFTER_OWNER_DROP,
     };
-    for (size_t index = 0u;
-         index < sizeof(lifetime_rejections) / sizeof(lifetime_rejections[0]); ++index) {
+    for (size_t index = 0u; index < sizeof(lifetime_rejections) / sizeof(lifetime_rejections[0]);
+         ++index) {
         memset(&artifact, 0, sizeof(artifact));
-        CHECK(xr_program_reborrow_fixture_write_mutated(
-                  lifetime_rejections[index], &artifact, diagnostic, sizeof(diagnostic)) ==
-              XR_PROGRAM_BUILD_OK);
+        CHECK(xr_program_reborrow_fixture_write_mutated(lifetime_rejections[index], &artifact,
+                                                        diagnostic,
+                                                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
         expect_semantic_reject(&artifact, index == 1u ? XR_PROGRAM_DIAGNOSTIC_ROOT
-                                                       : XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+                                                      : XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
         xr_program_artifact_free(&artifact);
     }
 }
@@ -3801,11 +3832,10 @@ typedef struct ReferenceOutputCapture {
 } ReferenceOutputCapture;
 
 static bool capture_reference_output(void *opaque, uint32_t requirement_index,
-                                     uint32_t operation_index, const uint8_t *bytes,
-                                     size_t size) {
+                                     uint32_t operation_index, const uint8_t *bytes, size_t size) {
     ReferenceOutputCapture *capture = opaque;
-    if (!capture || requirement_index != 0u || operation_index != 0u ||
-        (!bytes && size != 0u) || size > sizeof(capture->bytes) - capture->size)
+    if (!capture || requirement_index != 0u || operation_index != 0u || (!bytes && size != 0u) ||
+        size > sizeof(capture->bytes) - capture->size)
         return false;
     ++capture->calls;
     if (capture->fail)
@@ -3828,8 +3858,7 @@ static void test_provider_output_semantics(void) {
             .output_write = capture_reference_output,
         };
         XrReferenceOutcome result = xr_reference_evaluate_bound(
-            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
-            &binding);
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL, &binding);
         CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
         CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
         CHECK(result.value.as.i64 == 0);
@@ -3838,9 +3867,8 @@ static void test_provider_output_semantics(void) {
         CHECK(memcmp(capture.bytes, "-42\n", 4u) == 0);
 
         capture = (ReferenceOutputCapture) {.fail = true};
-        result = xr_reference_evaluate_bound(
-            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
-            &binding);
+        result = xr_reference_evaluate_bound(program, xr_validated_program_entry_function(program),
+                                             NULL, 0u, NULL, NULL, &binding);
         CHECK(result.kind == XR_REFERENCE_OUTCOME_TRAP);
         CHECK(result.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
         CHECK(capture.calls == 1u);
@@ -3848,9 +3876,9 @@ static void test_provider_output_semantics(void) {
     }
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_output_fixture_write_mutated(
-              1, XR_PROGRAM_OUTPUT_FIXTURE_BOOL_OPERAND, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_output_fixture_write_mutated(1, XR_PROGRAM_OUTPUT_FIXTURE_BOOL_OPERAND,
+                                                  &artifact, diagnostic,
+                                                  sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
     xr_program_artifact_free(&artifact);
 }
@@ -3883,17 +3911,15 @@ static void test_provider_trap_continuation_semantics(void) {
             .call_i64_nullary = reference_trap_clock,
         };
         XrReferenceOutcome result = xr_reference_evaluate_bound(
-            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
-            &binding);
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL, &binding);
         CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
         CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
         CHECK(result.value.as.i64 == 42);
         CHECK(probe.calls == 1u);
 
         probe.refuse = true;
-        result = xr_reference_evaluate_bound(
-            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
-            &binding);
+        result = xr_reference_evaluate_bound(program, xr_validated_program_entry_function(program),
+                                             NULL, 0u, NULL, NULL, &binding);
         CHECK(result.kind == XR_REFERENCE_OUTCOME_TRAP);
         CHECK(result.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
         CHECK(probe.calls == 2u);
@@ -3901,15 +3927,15 @@ static void test_provider_trap_continuation_semantics(void) {
     }
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_trap_fixture_write_mutated(
-              XR_PROGRAM_TRAP_FIXTURE_EXTRA_SUCCESSOR, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_trap_fixture_write_mutated(XR_PROGRAM_TRAP_FIXTURE_EXTRA_SUCCESSOR, &artifact,
+                                                diagnostic,
+                                                sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW);
     xr_program_artifact_free(&artifact);
 
-    CHECK(xr_program_trap_fixture_write_mutated(
-              XR_PROGRAM_TRAP_FIXTURE_WRONG_TRAP, &artifact, diagnostic,
-              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_trap_fixture_write_mutated(XR_PROGRAM_TRAP_FIXTURE_WRONG_TRAP, &artifact,
+                                                diagnostic,
+                                                sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW);
     xr_program_artifact_free(&artifact);
 }
@@ -3929,6 +3955,7 @@ int main(void) {
     test_terminal_operations();
     test_sealed_invoke_and_cleanup_cfg();
     test_typed_panic_invoke_and_cleanup_cfg();
+    test_condition_assert_panic_cleanup_cfg();
     test_negative_diagnostics_and_budget();
     test_evaluator_traps_and_budget();
     test_typed_random_and_linear_work();

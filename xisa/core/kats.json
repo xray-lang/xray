@@ -808,6 +808,70 @@
       }
     },
     {
+      "id": "assert-condition-valid",
+      "operation": "core.assert.condition",
+      "kind": "contract",
+      "actual": {
+        "condition_type": "bool",
+        "failure_kind": "condition-false",
+        "successor_count": 0
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "assert-condition-panic-continuation-valid",
+      "operation": "core.assert.condition",
+      "kind": "contract",
+      "actual": {
+        "condition_type": "bool",
+        "failure_kind": "condition-false",
+        "successor_count": 1,
+        "panic_type": "panic-info",
+        "live_values": [
+          7
+        ],
+        "panic_edge_values": [
+          7
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "assert-condition-rejects-non-bool",
+      "operation": "core.assert.condition",
+      "kind": "contract",
+      "actual": {
+        "condition_type": "i64",
+        "failure_kind": "condition-false",
+        "successor_count": 0
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "assert-condition-rejects-incomplete-panic-edge",
+      "operation": "core.assert.condition",
+      "kind": "contract",
+      "actual": {
+        "condition_type": "bool",
+        "failure_kind": "condition-false",
+        "successor_count": 1,
+        "panic_type": "panic-info",
+        "live_values": [
+          7
+        ],
+        "panic_edge_values": []
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "sealed-call-trap-continuation-rejects-lost-owner",
       "operation": "core.call.sealed_direct",
       "kind": "contract",

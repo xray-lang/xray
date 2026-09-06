@@ -108,24 +108,21 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
          .operands = provider_a_operands,
          .operand_count = 1,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
-         .immediate.provider_operation = {.contract_id = contract_a,
-                                          .operation_id = operation_a}},
+         .immediate.provider_operation = {.contract_id = contract_a, .operation_id = operation_a}},
         {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
          .result = value_provider_b,
          .result_type_id = XR_CORE_TYPE_I64,
          .operands = provider_b_operands,
          .operand_count = 1,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
-         .immediate.provider_operation = {.contract_id = contract_a,
-                                          .operation_id = operation_b}},
+         .immediate.provider_operation = {.contract_id = contract_a, .operation_id = operation_b}},
         {.operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
          .result = value_provider_c,
          .result_type_id = XR_CORE_TYPE_I64,
          .operands = provider_c_operands,
          .operand_count = 1,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
-         .immediate.provider_operation = {.contract_id = contract_b,
-                                          .operation_id = operation_a}},
+         .immediate.provider_operation = {.contract_id = contract_b, .operation_id = operation_a}},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = helper_return_operands,
@@ -262,7 +259,7 @@ static void test_determinism_roundtrip_and_identity(void) {
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
     CHECK(first.size == 383u);
-    CHECK(strcmp(id_hex, "4e4293222d1867564524d8691ff647049dc54676de9c5d9c39ca7605a7aaa732") == 0);
+    CHECK(strcmp(id_hex, "c322bb58a2f7533e9f030dd6873fe92f7bee5e0d89e9909e73c7b632dd3864eb") == 0);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
 
     xr_program_artifact_free(&reencoded);
@@ -309,8 +306,8 @@ static void test_hostile_structure_and_budget(void) {
     expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_NONCANONICAL);
 
     memcpy(mutated, artifact.bytes, artifact.size);
-    mutated[valid_view.sections[XR_PROGRAM_SECTION_IMPORTS - 1u].offset + 1u +
-            XR_STABLE_ID_BYTES] = 0u;
+    mutated[valid_view.sections[XR_PROGRAM_SECTION_IMPORTS - 1u].offset + 1u + XR_STABLE_ID_BYTES] =
+        0u;
     expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_NONCANONICAL);
 
     memcpy(mutated, artifact.bytes, artifact.size);

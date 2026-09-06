@@ -330,8 +330,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     XrAotHostedClockBindings clock = hosted_clock_bindings(ir);
     XrAotHostedPipeBindings pipe = hosted_pipe_bindings(ir);
     bool host_clock = standalone_main &&
-                      (clock.realtime || clock.monotonic || clock.process_cpu ||
-                       clock.utc_offset);
+                      (clock.realtime || clock.monotonic || clock.process_cpu || clock.utc_offset);
     bool host_pipe = standalone_main && (pipe.open || pipe.close);
     if (((host_clock || host_pipe) &&
          !append_text(buffer, "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)\n"
@@ -611,34 +610,32 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                      "}\n\n"))
         return false;
     if (host_clock && clock.utc_offset &&
-        !append_text(buffer,
-                     "static inline int xr_aot_host_utc_offset_at(int64_t seconds, "
-                     "int64_t *result) {\n"
-                     "    if (!result) return 1;\n"
-                     "    time_t probe = (time_t)seconds;\n"
-                     "    struct tm local_value;\n"
-                     "    struct tm utc_value;\n"
-                     "#if defined(_WIN32)\n"
-                     "    if (probe < (time_t)86400) probe = (time_t)86400;\n"
-                     "    if (localtime_s(&local_value, &probe) != 0 || "
-                     "gmtime_s(&utc_value, &probe) != 0) return 1;\n"
-                     "#else\n"
-                     "    if (!localtime_r(&probe, &local_value) || "
-                     "!gmtime_r(&probe, &utc_value)) return 1;\n"
-                     "#endif\n"
-                     "    local_value.tm_isdst = 0;\n"
-                     "    utc_value.tm_isdst = 0;\n"
-                     "    *result = (int64_t)(difftime(mktime(&local_value), "
-                     "mktime(&utc_value)) / 60.0);\n"
-                     "    return 0;\n"
-                     "}\n\n"))
+        !append_text(buffer, "static inline int xr_aot_host_utc_offset_at(int64_t seconds, "
+                             "int64_t *result) {\n"
+                             "    if (!result) return 1;\n"
+                             "    time_t probe = (time_t)seconds;\n"
+                             "    struct tm local_value;\n"
+                             "    struct tm utc_value;\n"
+                             "#if defined(_WIN32)\n"
+                             "    if (probe < (time_t)86400) probe = (time_t)86400;\n"
+                             "    if (localtime_s(&local_value, &probe) != 0 || "
+                             "gmtime_s(&utc_value, &probe) != 0) return 1;\n"
+                             "#else\n"
+                             "    if (!localtime_r(&probe, &local_value) || "
+                             "!gmtime_r(&probe, &utc_value)) return 1;\n"
+                             "#endif\n"
+                             "    local_value.tm_isdst = 0;\n"
+                             "    utc_value.tm_isdst = 0;\n"
+                             "    *result = (int64_t)(difftime(mktime(&local_value), "
+                             "mktime(&utc_value)) / 60.0);\n"
+                             "    return 0;\n"
+                             "}\n\n"))
         return false;
     if (host_clock && (clock.realtime || clock.monotonic || clock.process_cpu)) {
-        if (!append_text(buffer,
-                         "static int xr_aot_host_clock_nullary(void *context, "
-                         "uint32_t requirement, uint32_t operation, int64_t *result) {\n"
-                         "    (void)context;\n"
-                         "    if (!result) return 1;\n"))
+        if (!append_text(buffer, "static int xr_aot_host_clock_nullary(void *context, "
+                                 "uint32_t requirement, uint32_t operation, int64_t *result) {\n"
+                                 "    (void)context;\n"
+                                 "    if (!result) return 1;\n"))
             return false;
         if (clock.realtime &&
             !append_format(buffer,
@@ -704,18 +701,18 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     return emit_type_definitions(buffer, ir);
 }
 
-static const XrBackendInstruction *coroutine_suspension_instruction(
-    const XrBackendFunction *function, uint32_t safepoint_id, uint32_t *block_id_out) {
+static const XrBackendInstruction *
+coroutine_suspension_instruction(const XrBackendFunction *function, uint32_t safepoint_id,
+                                 uint32_t *block_id_out) {
     const XrBackendInstruction *found = NULL;
     for (uint32_t block = 0u; function && block < function->block_count; ++block) {
         const XrBackendBlock *row = &function->blocks[block];
         for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
             const XrBackendInstruction *candidate = &row->instructions[instruction];
-            bool matches =
-                (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD &&
-                 candidate->immediate.u32 == safepoint_id) ||
-                (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
-                 candidate->immediate.coroutine_call.safepoint_id == safepoint_id);
+            bool matches = (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD &&
+                            candidate->immediate.u32 == safepoint_id) ||
+                           (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+                            candidate->immediate.coroutine_call.safepoint_id == safepoint_id);
             if (!matches)
                 continue;
             if (found)
@@ -733,10 +730,8 @@ static bool stable_id_equal(XrStableId left, XrStableId right) {
 }
 
 static bool find_program_provider_operation(const XrValidatedProgram *program,
-                                            const char *contract_key,
-                                            const char *operation_key,
-                                            uint32_t *requirement_out,
-                                            uint32_t *operation_out) {
+                                            const char *contract_key, const char *operation_key,
+                                            uint32_t *requirement_out, uint32_t *operation_out) {
     XrFingerprint digest;
     XrStableId contract_id = {{0}};
     XrStableId operation_id = {{0}};
@@ -745,8 +740,7 @@ static bool find_program_provider_operation(const XrValidatedProgram *program,
         !xr_stable_id_from_key(operation_key, &operation_id, &digest))
         return false;
     for (uint32_t requirement = 0u;
-         requirement < xr_validated_program_provider_requirement_count(program);
-         ++requirement) {
+         requirement < xr_validated_program_provider_requirement_count(program); ++requirement) {
         XrProgramProviderRequirementView view = {0};
         if (!xr_validated_program_provider_requirement(program, requirement, &view) ||
             !stable_id_equal(view.contract_id, contract_id))
@@ -766,48 +760,42 @@ static XrAotHostedClockBindings hosted_clock_bindings(const XrBackendIR *ir) {
     XrAotHostedClockBindings bindings = {0};
     const XrValidatedProgram *program = ir ? ir->program : NULL;
     bindings.realtime = find_program_provider_operation(
-        program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
-        XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY, &bindings.realtime_requirement,
-        &bindings.realtime_operation);
+        program, XR_PROVIDER_CLOCK_CONTRACT_KEY, XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY,
+        &bindings.realtime_requirement, &bindings.realtime_operation);
     bindings.monotonic = find_program_provider_operation(
-        program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
-        XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY, &bindings.monotonic_requirement,
-        &bindings.monotonic_operation);
+        program, XR_PROVIDER_CLOCK_CONTRACT_KEY, XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY,
+        &bindings.monotonic_requirement, &bindings.monotonic_operation);
     bindings.process_cpu = find_program_provider_operation(
-        program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
-        XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY,
+        program, XR_PROVIDER_CLOCK_CONTRACT_KEY, XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY,
         &bindings.process_cpu_requirement, &bindings.process_cpu_operation);
     bindings.utc_offset = find_program_provider_operation(
         program, XR_PROVIDER_CLOCK_CONTRACT_KEY,
-        XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
-        &bindings.utc_offset_requirement, &bindings.utc_offset_operation);
+        XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY, &bindings.utc_offset_requirement,
+        &bindings.utc_offset_operation);
     return bindings;
 }
 
 static XrAotHostedPipeBindings hosted_pipe_bindings(const XrBackendIR *ir) {
     XrAotHostedPipeBindings bindings = {0};
     const XrValidatedProgram *program = ir ? ir->program : NULL;
-    bindings.open = find_program_provider_operation(program, XR_PROVIDER_IO_CONTRACT_KEY,
-                                                    XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
-                                                    &bindings.open_requirement,
-                                                    &bindings.open_operation);
-    bindings.close = find_program_provider_operation(program, XR_PROVIDER_IO_CONTRACT_KEY,
-                                                     XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
-                                                     &bindings.close_requirement,
-                                                     &bindings.close_operation);
+    bindings.open = find_program_provider_operation(
+        program, XR_PROVIDER_IO_CONTRACT_KEY, XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
+        &bindings.open_requirement, &bindings.open_operation);
+    bindings.close = find_program_provider_operation(
+        program, XR_PROVIDER_IO_CONTRACT_KEY, XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
+        &bindings.close_requirement, &bindings.close_operation);
     return bindings;
 }
 
 static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *ir,
-                                             uint32_t function_id, uint8_t *state) {
+                                            uint32_t function_id, uint8_t *state) {
     if (state[function_id] == 2u)
         return true;
     if (state[function_id] == 1u)
         return false;
     state[function_id] = 1u;
     const XrBackendFunction *function = &ir->functions[function_id];
-    for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count;
-         ++safepoint) {
+    for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count; ++safepoint) {
         const XrBackendInstruction *instruction =
             coroutine_suspension_instruction(function, safepoint, NULL);
         if (!instruction)
@@ -827,8 +815,7 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
             !append_format(buffer, "    %s parameter_%u;\n", type, parameter))
             return false;
     }
-    for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count;
-         ++safepoint) {
+    for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count; ++safepoint) {
         const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
         const XrBackendInstruction *instruction =
             coroutine_suspension_instruction(function, safepoint, NULL);
@@ -836,8 +823,8 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
             return false;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
             char storage[32];
-            const char *type = type_c_name(function->value_types[point->live_value_ids[live]],
-                                           storage);
+            const char *type =
+                type_c_name(function->value_types[point->live_value_ids[live]], storage);
             if (!type || !append_format(buffer, "    %s live_%u_%u;\n", type, safepoint, live))
                 return false;
         }
@@ -856,8 +843,7 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
 static bool emit_coroutine_frames(CBuffer *buffer, const XrBackendIR *ir) {
     for (uint32_t function_id = 0u; function_id < ir->function_count; ++function_id) {
         if (ir->functions[function_id].coroutine_safepoint_count != 0u &&
-            !append_format(buffer,
-                           "typedef struct XrAotCoroutineFrame%u XrAotCoroutineFrame%u;\n",
+            !append_format(buffer, "typedef struct XrAotCoroutineFrame%u XrAotCoroutineFrame%u;\n",
                            function_id, function_id))
             return false;
     }
@@ -962,16 +948,20 @@ static bool emit_provider_failure(CBuffer *buffer, const XrBackendFunction *func
 static bool emit_direct_call_outcome(CBuffer *buffer, const XrBackendFunction *function,
                                      const XrBackendInstruction *instruction,
                                      uint32_t call_operand_count, uint32_t function_id,
-                                     uint32_t instruction_id) {
+                                     uint32_t instruction_id, bool has_panic) {
     if (instruction->successor_count == 1u) {
         if (!append_format(buffer, "        if (call_%u.kind == 1 && call_%u.trap == 7) ",
                            instruction_id, instruction_id) ||
-            !emit_parallel_edge(buffer, function, instruction, 0u, call_operand_count,
-                                function_id))
+            !emit_parallel_edge(buffer, function, instruction, 0u, call_operand_count, function_id))
             return false;
     }
-    return append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n",
-                         instruction_id, instruction_id);
+    if (has_panic && !append_format(buffer,
+                                    "        if (call_%u.kind == UINT32_C(3)) { *out_panic = "
+                                    "call_panic_%u; return call_%u; }\n",
+                                    instruction_id, instruction_id, instruction_id))
+        return false;
+    return append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n", instruction_id,
+                         instruction_id);
 }
 
 static bool emit_return(CBuffer *buffer, const XrBackendFunction *function,
@@ -994,12 +984,15 @@ static bool emit_return(CBuffer *buffer, const XrBackendFunction *function,
     return append_text(buffer, " return result; }\n");
 }
 
-static bool emit_call(CBuffer *buffer, const XrBackendIR *ir,
-                      const XrBackendFunction *function,
+static bool emit_call(CBuffer *buffer, const XrBackendIR *ir, const XrBackendFunction *function,
                       const XrBackendInstruction *instruction, uint32_t function_id,
                       uint32_t instruction_id) {
     uint32_t callee_id = instruction->immediate.function_id;
     const XrBackendFunction *callee = &ir->functions[callee_id];
+    bool has_panic = callee->panic_type_id != XR_CORE_TYPE_VOID;
+    if (has_panic &&
+        !append_format(buffer, "        uint32_t call_panic_%u = 0;\n", instruction_id))
+        return false;
     if (!append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(xr_ctx", instruction_id,
                        callee_id))
         return false;
@@ -1011,12 +1004,14 @@ static bool emit_call(CBuffer *buffer, const XrBackendIR *ir,
     if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
         !append_format(buffer, ", &v%u", instruction->result_id))
         return false;
+    if (has_panic && !append_format(buffer, ", &call_panic_%u", instruction_id))
+        return false;
     if (!append_text(buffer, ")"))
         return false;
     if (!append_text(buffer, ";\n"))
         return false;
     if (!emit_direct_call_outcome(buffer, function, instruction, call_operand_count, function_id,
-                                  instruction_id)) {
+                                  instruction_id, has_panic)) {
         return false;
     }
     if (instruction->result_id != XR_PROGRAM_LOCATION_NONE) {
@@ -1125,7 +1120,7 @@ static bool emit_witness_call(CBuffer *buffer, const XrBackendIR *ir,
     if (!emit_witness_call_cases(buffer, ir, instruction, signature, interface_id, instruction_id,
                                  result, NULL, NULL) ||
         !emit_direct_call_outcome(buffer, function, instruction, signature->parameter_count,
-                                  function_id, instruction_id))
+                                  function_id, instruction_id, false))
         return false;
     if (instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
         signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
@@ -1229,8 +1224,8 @@ static bool emit_callable_call(CBuffer *buffer, const XrBackendIR *ir,
     }
     if (!emit_callable_call_cases(buffer, ir, function, instruction, signature, instruction_id,
                                   result, NULL, NULL) ||
-        !emit_direct_call_outcome(buffer, function, instruction,
-                                  signature->parameter_count + 1u, function_id, instruction_id))
+        !emit_direct_call_outcome(buffer, function, instruction, signature->parameter_count + 1u,
+                                  function_id, instruction_id, false))
         return false;
     if (instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
         signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
@@ -1610,13 +1605,12 @@ static bool emit_callable_copy(CBuffer *buffer, const XrBackendIR *ir,
 
 static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
                                 const XrBackendFunction *function,
-                                const XrBackendInstruction *instruction,
-                                uint32_t function_id, uint32_t instruction_id) {
+                                const XrBackendInstruction *instruction, uint32_t function_id,
+                                uint32_t instruction_id) {
     uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
     uint32_t safepoint_id = instruction->immediate.coroutine_call.safepoint_id;
     const XrBackendFunction *callee = &ir->functions[callee_id];
-    const XrBackendCoroutineSafepoint *point =
-        &function->coroutine_safepoints[safepoint_id];
+    const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint_id];
     uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
     if (!append_format(buffer,
                        "        if (!frame->child_active_%u) {\n"
@@ -1645,8 +1639,8 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
     if (!append_format(buffer, "        if (child_%u.kind == UINT32_C(5)) {\n", instruction_id))
         return false;
     for (uint32_t live = 0u; live < point->live_value_count; ++live) {
-        if (!append_format(buffer, "            frame->live_%u_%u = v%u;\n", safepoint_id,
-                           live, instruction->operands[callee->parameter_count + live]))
+        if (!append_format(buffer, "            frame->live_%u_%u = v%u;\n", safepoint_id, live,
+                           instruction->operands[callee->parameter_count + live]))
             return false;
     }
     if (!append_format(buffer,
@@ -1667,8 +1661,8 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
         const char *field = outcome_field(callee->result_type_id);
         if (!field)
             return false;
-        (void) snprintf(result_expression, sizeof(result_expression), "child_%u.%s",
-                        instruction_id, field);
+        (void) snprintf(result_expression, sizeof(result_expression), "child_%u.%s", instruction_id,
+                        field);
         result = result_expression;
     }
     return emit_invoke_edge(buffer, function, instruction, 0u, implicit_result,
@@ -1728,15 +1722,15 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  instruction->operands[1], instruction->result_id,
                                  instruction->operands[0], instruction->operands[1]);
         case XR_CORE_OP_CORE_LOGICAL_NOT:
-            return append_format(buffer, "        v%u = (uint8_t)!v%u;\n",
-                                 instruction->result_id, instruction->operands[0]);
+            return append_format(buffer, "        v%u = (uint8_t)!v%u;\n", instruction->result_id,
+                                 instruction->operands[0]);
         case XR_CORE_OP_CORE_LOGICAL_AND:
         case XR_CORE_OP_CORE_LOGICAL_OR:
-            return append_format(
-                buffer, "        v%u = (uint8_t)(v%u %s v%u);\n", instruction->result_id,
-                instruction->operands[0],
-                instruction->operation_id == XR_CORE_OP_CORE_LOGICAL_AND ? "&&" : "||",
-                instruction->operands[1]);
+            return append_format(buffer, "        v%u = (uint8_t)(v%u %s v%u);\n",
+                                 instruction->result_id, instruction->operands[0],
+                                 instruction->operation_id == XR_CORE_OP_CORE_LOGICAL_AND ? "&&"
+                                                                                          : "||",
+                                 instruction->operands[1]);
         case XR_CORE_OP_CORE_COMPARE_I64: {
             static const char *operators[] = {"==", "!=", "<", "<=", ">", ">="};
             return append_format(buffer, "        v%u = (uint8_t)(v%u %s v%u);\n",
@@ -1762,6 +1756,20 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return emit_parallel_edge(buffer, function, instruction, 1u, 1u + true_count,
                                       function_id);
         }
+        case XR_CORE_OP_CORE_ASSERT_CONDITION:
+            if (instruction->successor_count == 1u) {
+                char panic_expression[32];
+                (void) snprintf(panic_expression, sizeof(panic_expression), "UINT32_C(%u)",
+                                instruction->immediate.u32);
+                if (!append_format(buffer, "        if (!v%u) ", instruction->operands[0]))
+                    return false;
+                return emit_invoke_edge(buffer, function, instruction, 0u, 1u, 1u, function_id,
+                                        panic_expression);
+            }
+            return append_format(buffer,
+                                 "        if (!v%u) { *out_panic = UINT32_C(%u); return "
+                                 "xr_aot_make(3, 0, 0); }\n",
+                                 instruction->operands[0], instruction->immediate.u32);
         case XR_CORE_OP_CORE_RETURN:
             if (function->coroutine_safepoint_count != 0u &&
                 !append_text(buffer, "        frame->state = UINT32_MAX;\n"))
@@ -1833,8 +1841,7 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_PROVIDER_CALL: {
             uint32_t provider_operand_count = instruction->operand_count;
             if (instruction->successor_count == 1u) {
-                const XrBackendBlock *target =
-                    &function->blocks[instruction->successors[0]];
+                const XrBackendBlock *target = &function->blocks[instruction->successors[0]];
                 provider_operand_count -= target->argument_count;
             }
             uint16_t operand_type = provider_operand_count == 1u
@@ -1846,44 +1853,43 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY) {
                 if (!append_format(
                         buffer,
-                    "        if (!xr_ctx->provider_call_i64_unary || "
-                    "xr_ctx->provider_call_i64_unary(xr_ctx->provider_context, UINT32_C(%u), "
+                        "        if (!xr_ctx->provider_call_i64_unary || "
+                        "xr_ctx->provider_call_i64_unary(xr_ctx->provider_context, UINT32_C(%u), "
                         "UINT32_C(%u), v%u, &v%u) != 0) ",
-                    instruction->immediate.provider_operation.requirement_index,
-                    instruction->immediate.provider_operation.operation_index,
+                        instruction->immediate.provider_operation.requirement_index,
+                        instruction->immediate.provider_operation.operation_index,
                         instruction->operands[0], instruction->result_id))
                     return false;
-                return emit_provider_failure(buffer, function, instruction,
-                                             provider_operand_count, function_id);
+                return emit_provider_failure(buffer, function, instruction, provider_operand_count,
+                                             function_id);
             }
             if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY) {
                 if (!append_format(
                         buffer,
-                    "        if (!xr_ctx->provider_call_i64_nullary || "
-                    "xr_ctx->provider_call_i64_nullary(xr_ctx->provider_context, UINT32_C(%u), "
+                        "        if (!xr_ctx->provider_call_i64_nullary || "
+                        "xr_ctx->provider_call_i64_nullary(xr_ctx->provider_context, UINT32_C(%u), "
                         "UINT32_C(%u), &v%u) != 0) ",
-                    instruction->immediate.provider_operation.requirement_index,
-                    instruction->immediate.provider_operation.operation_index,
+                        instruction->immediate.provider_operation.requirement_index,
+                        instruction->immediate.provider_operation.operation_index,
                         instruction->result_id))
                     return false;
-                return emit_provider_failure(buffer, function, instruction,
-                                             provider_operand_count, function_id);
+                return emit_provider_failure(buffer, function, instruction, provider_operand_count,
+                                             function_id);
             }
             if (call_kind == XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY) {
-                if (!append_format(
-                        buffer,
-                    "        {\n"
-                    "            uint8_t xr_result = UINT8_C(0);\n"
-                    "            if (!xr_ctx->provider_call_bool_i64_unary || "
-                    "xr_ctx->provider_call_bool_i64_unary(xr_ctx->provider_context, "
-                    "UINT32_C(%u), UINT32_C(%u), v%u, &xr_result) != 0) "
-                        "",
-                    instruction->immediate.provider_operation.requirement_index,
-                    instruction->immediate.provider_operation.operation_index,
-                        instruction->operands[0]))
+                if (!append_format(buffer,
+                                   "        {\n"
+                                   "            uint8_t xr_result = UINT8_C(0);\n"
+                                   "            if (!xr_ctx->provider_call_bool_i64_unary || "
+                                   "xr_ctx->provider_call_bool_i64_unary(xr_ctx->provider_context, "
+                                   "UINT32_C(%u), UINT32_C(%u), v%u, &xr_result) != 0) "
+                                   "",
+                                   instruction->immediate.provider_operation.requirement_index,
+                                   instruction->immediate.provider_operation.operation_index,
+                                   instruction->operands[0]))
                     return false;
-                if (!emit_provider_failure(buffer, function, instruction,
-                                           provider_operand_count, function_id))
+                if (!emit_provider_failure(buffer, function, instruction, provider_operand_count,
+                                           function_id))
                     return false;
                 return append_format(buffer,
                                      "            v%u = xr_result != UINT8_C(0);\n"
@@ -1897,19 +1903,19 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                     return false;
                 if (!append_format(
                         buffer,
-                    "        {\n"
-                    "            uint8_t xr_present = UINT8_C(0);\n"
-                    "            int64_t xr_first = INT64_C(0);\n"
-                    "            int64_t xr_second = INT64_C(0);\n"
-                    "            if (!xr_ctx->provider_call_optional_i64_pair_nullary || "
-                    "xr_ctx->provider_call_optional_i64_pair_nullary(xr_ctx->provider_context, "
-                    "UINT32_C(%u), UINT32_C(%u), &xr_present, &xr_first, &xr_second) != 0) "
+                        "        {\n"
+                        "            uint8_t xr_present = UINT8_C(0);\n"
+                        "            int64_t xr_first = INT64_C(0);\n"
+                        "            int64_t xr_second = INT64_C(0);\n"
+                        "            if (!xr_ctx->provider_call_optional_i64_pair_nullary || "
+                        "xr_ctx->provider_call_optional_i64_pair_nullary(xr_ctx->provider_context, "
+                        "UINT32_C(%u), UINT32_C(%u), &xr_present, &xr_first, &xr_second) != 0) "
                         "",
                         instruction->immediate.provider_operation.requirement_index,
                         instruction->immediate.provider_operation.operation_index))
                     return false;
-                if (!emit_provider_failure(buffer, function, instruction,
-                                           provider_operand_count, function_id))
+                if (!emit_provider_failure(buffer, function, instruction, provider_operand_count,
+                                           function_id))
                     return false;
                 return append_format(
                     buffer,
@@ -2175,13 +2181,13 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
                 !append_format(buffer, "        case UINT32_C(%u):\n", state))
                 return false;
             for (uint32_t live = 0; live < point->live_value_count; ++live) {
-                uint32_t target = suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD
-                                      ? function->blocks[resume_block].argument_ids[live]
-                                      : suspension->operands[
-                                            ir->functions[suspension->immediate.coroutine_call
-                                                              .function_id]
-                                                    .parameter_count +
-                                                live];
+                uint32_t target =
+                    suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD
+                        ? function->blocks[resume_block].argument_ids[live]
+                        : suspension->operands
+                              [ir->functions[suspension->immediate.coroutine_call.function_id]
+                                   .parameter_count +
+                               live];
                 if (!append_format(buffer, "            v%u = frame->live_%u_%u;\n", target,
                                    safepoint_id, live))
                     return false;
@@ -2215,8 +2221,7 @@ static bool emit_coroutine_entry_adapter(CBuffer *buffer, const XrBackendIR *ir)
     if (entry->coroutine_safepoint_count == 0u)
         return true;
     if (entry->parameter_count != 0u ||
-        (entry->result_type_id != XR_CORE_TYPE_VOID &&
-         entry->result_type_id != XR_CORE_TYPE_I64) ||
+        (entry->result_type_id != XR_CORE_TYPE_VOID && entry->result_type_id != XR_CORE_TYPE_I64) ||
         entry->error_type_id != XR_CORE_TYPE_VOID || entry->panic_type_id != XR_CORE_TYPE_VOID)
         return false;
     bool checked = false;
@@ -2328,24 +2333,20 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     if (!append_text(buffer, "int main(void) {\n    XrAotContext xr_ctx = {0};\n"))
         return false;
     if (output &&
-        !append_text(buffer,
-                     "    xr_ctx.provider_output_write = xr_aot_host_output_write;\n"))
+        !append_text(buffer, "    xr_ctx.provider_output_write = xr_aot_host_output_write;\n"))
         return false;
     if ((clock.realtime || clock.monotonic || clock.process_cpu) &&
-        !append_text(buffer,
-                     "    xr_ctx.provider_call_i64_nullary = "
-                     "xr_aot_host_clock_nullary;\n"))
+        !append_text(buffer, "    xr_ctx.provider_call_i64_nullary = "
+                             "xr_aot_host_clock_nullary;\n"))
         return false;
     if (clock.utc_offset &&
-        !append_text(buffer,
-                     "    xr_ctx.provider_call_i64_unary = xr_aot_host_clock_unary;\n"))
+        !append_text(buffer, "    xr_ctx.provider_call_i64_unary = xr_aot_host_clock_unary;\n"))
         return false;
     if (pipe.open && !append_text(buffer, "    xr_ctx.provider_call_optional_i64_pair_nullary = "
                                           "xr_aot_host_pipe_open;\n"))
         return false;
     if (pipe.close &&
-        !append_text(buffer,
-                     "    xr_ctx.provider_call_bool_i64_unary = xr_aot_host_pipe_close;\n"))
+        !append_text(buffer, "    xr_ctx.provider_call_bool_i64_unary = xr_aot_host_pipe_close;\n"))
         return false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
         char storage[32];
@@ -2446,8 +2447,7 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
         bool output = false;
         scan_helpers(ir, &checked, &wrapping, &arena, &output);
         if (output) {
-            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_EMISSION_REJECTED, 0u, 0u, 0u,
-                                      0u);
+            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_EMISSION_REJECTED, 0u, 0u, 0u, 0u);
             return XR_BACKEND_EMISSION_REJECTED;
         }
     }

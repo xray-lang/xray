@@ -12,6 +12,7 @@
 
 #include "base/xmalloc.h"
 #include "aot/program/xr_backend_ir.h"
+#include "shared/xr_assertion_plan.h"
 #include "execution/xr_execution.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_identity.h"
@@ -79,16 +80,15 @@ static bool stable_id_equal(XrStableId left, XrStableId right) {
     return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
 }
 
-static uint32_t program_operation_count(const XrValidatedProgram *program,
-                                        uint16_t operation_id) {
+static uint32_t program_operation_count(const XrValidatedProgram *program, uint16_t operation_id) {
     uint32_t count = 0u;
     for (uint32_t function_index = 0u; program && function_index < program->function_count;
          ++function_index) {
         const XrValidatedFunction *function = &program->functions[function_index];
         for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
             const XrValidatedBlock *block = &function->blocks[block_index];
-            for (uint32_t instruction_index = 0u;
-                 instruction_index < block->instruction_count; ++instruction_index) {
+            for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
                 count += block->instructions[instruction_index].operation_id == operation_id;
             }
         }
@@ -97,18 +97,16 @@ static uint32_t program_operation_count(const XrValidatedProgram *program,
 }
 
 static uint32_t program_operation_successor_count(const XrValidatedProgram *program,
-                                                  uint16_t operation_id,
-                                                  uint32_t successor_count) {
+                                                  uint16_t operation_id, uint32_t successor_count) {
     uint32_t count = 0u;
     for (uint32_t function_index = 0u; program && function_index < program->function_count;
          ++function_index) {
         const XrValidatedFunction *function = &program->functions[function_index];
         for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
             const XrValidatedBlock *block = &function->blocks[block_index];
-            for (uint32_t instruction_index = 0u;
-                 instruction_index < block->instruction_count; ++instruction_index) {
-                const XrValidatedInstruction *instruction =
-                    &block->instructions[instruction_index];
+            for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
+                const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
                 count += instruction->operation_id == operation_id &&
                          instruction->successor_count == successor_count;
             }
@@ -117,8 +115,8 @@ static uint32_t program_operation_successor_count(const XrValidatedProgram *prog
     return count;
 }
 
-static const XrTargetProviderContract *
-find_profile_provider(const XrTargetProfile *profile, XrStableId contract_id) {
+static const XrTargetProviderContract *find_profile_provider(const XrTargetProfile *profile,
+                                                             XrStableId contract_id) {
     for (size_t i = 0; profile && i < xr_target_profile_provider_count(profile); i++) {
         const XrTargetProviderContract *provider = xr_target_profile_provider(profile, i);
         if (provider && stable_id_equal(provider->contract_id, contract_id))
@@ -128,8 +126,7 @@ find_profile_provider(const XrTargetProfile *profile, XrStableId contract_id) {
 }
 
 static const XrTargetProviderOperationContract *
-find_profile_provider_operation(const XrTargetProviderContract *provider,
-                                XrStableId operation_id) {
+find_profile_provider_operation(const XrTargetProviderContract *provider, XrStableId operation_id) {
     for (uint16_t i = 0; provider && i < provider->operation_count; i++) {
         if (stable_id_equal(provider->operations[i].stable_id, operation_id))
             return &provider->operations[i];
@@ -158,7 +155,7 @@ static XrProviderCallStatus provider_trap_clock_probe(void *context, int64_t *re
 }
 
 static XrProviderCallStatus provider_trap_close_probe(void *context, int64_t handle,
-                                                       bool *result_out) {
+                                                      bool *result_out) {
     ProviderTrapCleanupProbe *probe = context;
     if (!probe || !result_out)
         return XR_PROVIDER_CALL_FAILED;
@@ -172,12 +169,11 @@ static XrProviderCallStatus provider_trap_close_probe(void *context, int64_t han
 }
 
 static XrProviderCallStatus pipe_close_provider_probe(void *context, int64_t handle,
-                                                       bool *result_out) {
+                                                      bool *result_out) {
     PipeProviderProbe *probe = context;
     if (!probe || !result_out)
         return XR_PROVIDER_CALL_FAILED;
-    int64_t expected = (probe->close_calls & 1u) == 0u ? probe->read_handle
-                                                       : probe->write_handle;
+    int64_t expected = (probe->close_calls & 1u) == 0u ? probe->read_handle : probe->write_handle;
     if (handle != expected)
         return XR_PROVIDER_CALL_FAILED;
     *result_out = probe->close_results[probe->close_calls & 1u];
@@ -212,8 +208,8 @@ static XrProviderCallStatus pipe_provider_probe(void *context, bool *present_out
 static bool reference_clock_provider_call(void *context, uint32_t requirement_index,
                                           uint32_t operation_index, int64_t *result_out) {
     const XrExecutionLease *lease = context;
-    return xr_execution_lease_provider_call_i64_nullary(
-               lease, requirement_index, operation_index, result_out) ==
+    return xr_execution_lease_provider_call_i64_nullary(lease, requirement_index, operation_index,
+                                                        result_out) ==
            XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
@@ -221,9 +217,9 @@ static bool reference_clock_provider_call_unary(void *context, uint32_t requirem
                                                 uint32_t operation_index, int64_t argument,
                                                 int64_t *result_out) {
     const XrExecutionLease *lease = context;
-    return xr_execution_lease_provider_call_i64_unary(
-               lease, requirement_index, operation_index, argument, result_out) ==
-           XR_EXECUTION_PROVIDER_CALL_OK;
+    return xr_execution_lease_provider_call_i64_unary(lease, requirement_index, operation_index,
+                                                      argument,
+                                                      result_out) == XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
 static bool reference_pipe_provider_call(void *context, uint32_t requirement_index,
@@ -236,11 +232,11 @@ static bool reference_pipe_provider_call(void *context, uint32_t requirement_ind
 }
 
 static bool reference_pipe_close_provider_call(void *context, uint32_t requirement_index,
-                                                uint32_t operation_index, int64_t handle,
-                                                bool *result_out) {
+                                               uint32_t operation_index, int64_t handle,
+                                               bool *result_out) {
     const XrExecutionLease *lease = context;
-    return xr_execution_lease_provider_call_bool_i64_unary(
-               lease, requirement_index, operation_index, handle, result_out) ==
+    return xr_execution_lease_provider_call_bool_i64_unary(lease, requirement_index,
+                                                           operation_index, handle, result_out) ==
            XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
@@ -264,8 +260,7 @@ static void source_build_fixture_free(SourceBuildFixture *fixture) {
     if (!fixture)
         return;
     if (fixture->isolate && fixture->session && fixture->original_session)
-        (void) xr_compiler_session_attach_isolate(fixture->isolate,
-                                                   fixture->original_session);
+        (void) xr_compiler_session_attach_isolate(fixture->isolate, fixture->original_session);
     xr_compiler_session_delete(fixture->session);
     xray_vm_delete(fixture->isolate);
     xr_module_resolver_free(fixture->resolver);
@@ -291,20 +286,17 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
     if (!xr_test_mkdtemp(fixture->directory))
         goto fail;
     char absolute_directory[XR_TEST_PATH_MAX];
-    if (!xr_test_realpath_buf(fixture->directory, absolute_directory,
-                              sizeof(absolute_directory)))
+    if (!xr_test_realpath_buf(fixture->directory, absolute_directory, sizeof(absolute_directory)))
         goto fail;
-    (void) snprintf(fixture->directory, sizeof(fixture->directory), "%s",
-                    absolute_directory);
+    (void) snprintf(fixture->directory, sizeof(fixture->directory), "%s", absolute_directory);
     int entry_length = snprintf(fixture->entry_path, sizeof(fixture->entry_path), "%s/main.xr",
                                 fixture->directory);
     if (entry_length < 0 || (size_t) entry_length >= sizeof(fixture->entry_path) ||
         !write_source_file(fixture->entry_path, entry_source))
         goto fail;
     if (dependency_source) {
-        int dependency_length =
-            snprintf(fixture->dependency_path, sizeof(fixture->dependency_path),
-                     "%s/library.xr", fixture->directory);
+        int dependency_length = snprintf(fixture->dependency_path, sizeof(fixture->dependency_path),
+                                         "%s/library.xr", fixture->directory);
         if (dependency_length < 0 ||
             (size_t) dependency_length >= sizeof(fixture->dependency_path) ||
             !write_source_file(fixture->dependency_path, dependency_source))
@@ -315,13 +307,11 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
     fixture->isolate = xray_vm_new_full(&vm_config);
     if (!fixture->isolate)
         goto fail;
-    fixture->original_session =
-        xr_compiler_session_current_for_isolate(fixture->isolate);
+    fixture->original_session = xr_compiler_session_current_for_isolate(fixture->isolate);
     XrCompilerSessionConfig session_config = {0};
     fixture->session = xr_compiler_session_new(&session_config);
-    if (!fixture->session ||
-        xr_compiler_session_attach_isolate(fixture->isolate, fixture->session) !=
-            fixture->original_session)
+    if (!fixture->session || xr_compiler_session_attach_isolate(
+                                 fixture->isolate, fixture->session) != fixture->original_session)
         goto fail;
     XrModuleResolverConfig resolver_config = {0};
     fixture->resolver = xr_module_resolver_new(&resolver_config);
@@ -331,8 +321,7 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
     fixture->authority.kind = XR_MODULE_IDENTITY_SCRIPT;
     fixture->authority.physical_root = fixture->directory;
     if (!xr_module_identity_from_source(&fixture->authority, fixture->entry_path,
-                                        &fixture->entry_identity,
-                                        &fixture->entry_logical_path))
+                                        &fixture->entry_identity, &fixture->entry_logical_path))
         goto fail;
     XrFingerprint source_fingerprint;
     xr_module_source_fingerprint(entry_source, &source_fingerprint);
@@ -343,15 +332,15 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
         .resolver = fixture->resolver,
         .entry_source_path = fixture->entry_path,
         .entry_authority = &fixture->authority,
-        .entry = {
-            .kind = XR_PROGRAM_SOURCE_ENTRY_FUNCTION,
-            .module_identity = fixture->entry_identity,
-            .function_name = "answer",
-            .source_content_fingerprint = source_fingerprint,
-        },
+        .entry =
+            {
+                .kind = XR_PROGRAM_SOURCE_ENTRY_FUNCTION,
+                .module_identity = fixture->entry_identity,
+                .function_name = "answer",
+                .source_content_fingerprint = source_fingerprint,
+            },
         .source_profile = XR_PROGRAM_SOURCE_PROFILE_NATIVE_RELEASE,
-        .semantic_profile_fingerprint =
-            semantic_fingerprint("source-owner-native-release"),
+        .semantic_profile_fingerprint = semantic_fingerprint("source-owner-native-release"),
     };
     return true;
 
@@ -367,9 +356,7 @@ static void assert_products_equal(const XrProgramSourceProduct *first,
     ASSERT_NOT_NULL(first->program);
     ASSERT_NOT_NULL(second->program);
     ASSERT_EQ_UINT(first->artifact.size, second->artifact.size);
-    ASSERT_EQ_INT(memcmp(first->artifact.bytes, second->artifact.bytes,
-                         first->artifact.size),
-                  0);
+    ASSERT_EQ_INT(memcmp(first->artifact.bytes, second->artifact.bytes, first->artifact.size), 0);
     ASSERT_TRUE(xr_program_id_equal(xr_validated_program_id(first->program),
                                     xr_validated_program_id(second->program)));
     ASSERT_EQ_UINT(xr_validated_program_entry_function(first->program),
@@ -381,8 +368,9 @@ static void assert_source_build_ok(const XrProgramSourceBuildInput *input,
                                    XrProgramSourceDiagnostic *diagnostic) {
     XrProgramSourceBuildStatus status = xr_program_source_build(input, product, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK) {
-        fprintf(stderr, "source build failed: status=%s stage=%u module=%u underlying=%u "
-                        "writer=%u verifier=%u message=%s\n",
+        fprintf(stderr,
+                "source build failed: status=%s stage=%u module=%u underlying=%u "
+                "writer=%u verifier=%u message=%s\n",
                 xr_program_source_build_status_name(status), (unsigned) diagnostic->stage,
                 diagnostic->module_index, diagnostic->underlying_status,
                 (unsigned) diagnostic->writer_status, (unsigned) diagnostic->verifier_status,
@@ -409,8 +397,7 @@ TEST(source_owner_single_module_is_deterministic_and_detached) {
     ASSERT_EQ_INT(xr_test_unlink(fixture.entry_path), 0);
     fixture.entry_path[0] = '\0';
     size_t retained_size = 0u;
-    const uint8_t *retained_bytes =
-        xr_validated_program_bytes(first.program, &retained_size);
+    const uint8_t *retained_bytes = xr_validated_program_bytes(first.program, &retained_size);
     ASSERT_NOT_NULL(retained_bytes);
     ASSERT_EQ_UINT(retained_size, first.artifact.size);
     ASSERT_EQ_INT(memcmp(retained_bytes, first.artifact.bytes, retained_size), 0);
@@ -432,9 +419,8 @@ TEST(source_owner_two_module_graph_is_deterministic) {
     static const char library_source[] =
         "export fn increment(value: i64) -> i64 { return value + 1 }\n"
         "export fn unused(value: i64) -> i64 { return value + 100 }\n";
-    static const char entry_source[] =
-        "import { increment } from \"./library\"\n"
-        "fn answer() -> i64 { return increment(41) }\n";
+    static const char entry_source[] = "import { increment } from \"./library\"\n"
+                                       "fn answer() -> i64 { return increment(41) }\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
     XrProgramSourceProduct first = {0};
@@ -459,8 +445,7 @@ TEST(source_owner_module_initializer_is_a_canonical_entry) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
     assert_source_build_ok(&fixture.input, &product, &diagnostic);
@@ -470,9 +455,9 @@ TEST(source_owner_module_initializer_is_a_canonical_entry) {
     XrBackendOptions options = xr_backend_default_options();
     XrBackendIR *backend_ir = NULL;
     XrBackendDiagnostic backend_diagnostic;
-    ASSERT_EQ_INT(xr_backend_ir_build(product.program, profile, &options, &backend_ir,
-                                      &backend_diagnostic),
-                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(product.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
@@ -495,8 +480,7 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
     XrProgramSourceProduct second = {0};
@@ -519,16 +503,14 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_UINT(entry->coroutine_state_count, 2u);
     ASSERT_EQ_UINT(entry->coroutine_safepoint_count, 1u);
     ASSERT_EQ_UINT(entry->effect_mask, XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_SUSPEND);
-    ASSERT_EQ_UINT(entry->capability_mask,
-                   XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+    ASSERT_EQ_UINT(entry->capability_mask, XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
 
     const XrValidatedInstruction *coroutine_call = NULL;
     for (uint32_t block_index = 0u; block_index < entry->block_count; ++block_index) {
         const XrValidatedBlock *block = &entry->blocks[block_index];
-        for (uint32_t instruction_index = 0u;
-             instruction_index < block->instruction_count; ++instruction_index) {
-            const XrValidatedInstruction *candidate =
-                &block->instructions[instruction_index];
+        for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+             ++instruction_index) {
+            const XrValidatedInstruction *candidate = &block->instructions[instruction_index];
             if (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
                 ASSERT_NULL(coroutine_call);
                 coroutine_call = candidate;
@@ -536,8 +518,7 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
         }
     }
     ASSERT_NOT_NULL(coroutine_call);
-    ASSERT_EQ_INT(coroutine_call->immediate_kind,
-                  XR_CORE_IR_IMMEDIATE_COROUTINE_CALL);
+    ASSERT_EQ_INT(coroutine_call->immediate_kind, XR_CORE_IR_IMMEDIATE_COROUTINE_CALL);
     ASSERT_EQ_UINT(coroutine_call->immediate.coroutine_call.safepoint_id, 0u);
     uint32_t child_function = coroutine_call->immediate.coroutine_call.function_id;
     ASSERT_LT(child_function, program->function_count);
@@ -550,8 +531,7 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_UINT(child->coroutine_state_count, 2u);
     ASSERT_EQ_UINT(child->coroutine_safepoint_count, 1u);
     ASSERT_EQ_UINT(child->effect_mask, XR_CORE_EFFECT_SUSPEND);
-    ASSERT_EQ_UINT(child->capability_mask,
-                   XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+    ASSERT_EQ_UINT(child->capability_mask, XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
 
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -561,14 +541,13 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     };
     XrExecutionDiagnostic execution_diagnostic;
     XrInstance *instance = NULL;
-    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance,
-                                                &execution_diagnostic),
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
 
     XrReferenceExecution *reference = NULL;
-    ASSERT_TRUE(xr_reference_execution_create(instance, entry_function, NULL, 0u,
-                                               NULL, &reference));
+    ASSERT_TRUE(
+        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference));
     XrReferenceOutcome reference_suspend = xr_reference_execution_step(reference);
     ASSERT_EQ_INT(reference_suspend.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
     ASSERT_EQ_UINT(reference_suspend.safepoint_id, 0u);
@@ -581,11 +560,9 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic),
-                  XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic), XR_VM_CODE_OK);
     XrVmExecution *vm_execution = NULL;
-    ASSERT_TRUE(xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u,
-                                       &vm_execution));
+    ASSERT_TRUE(xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
     XrVmOutcome vm_suspend = xr_vm_execution_step(vm_execution);
     ASSERT_EQ_INT(vm_suspend.kind, XR_VM_OUTCOME_SUSPENDED);
     ASSERT_EQ_UINT(vm_suspend.safepoint_id, reference_suspend.safepoint_id);
@@ -600,17 +577,15 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     XrBackendIR *backend_ir = NULL;
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions options = xr_backend_default_options();
-    ASSERT_EQ_INT(xr_backend_ir_build(first.program, profile, &options, &backend_ir,
-                                      &backend_diagnostic),
-                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(first.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated,
-                                      &backend_diagnostic),
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated,
-                                      &backend_diagnostic),
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -620,8 +595,7 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     if (cross_module_coroutine_aot_output_path) {
         FILE *output = fopen(cross_module_coroutine_aot_output_path, "wb");
         ASSERT_NOT_NULL(output);
-        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output),
-                       generated.size);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_EQ_INT(fclose(output), 0);
     }
     xr_generated_c_free(&repeated);
@@ -630,10 +604,8 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
     source_build_fixture_free(&fixture);
@@ -641,28 +613,24 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
 }
 
 TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors) {
-    static const char library_source[] =
-        "export fn child(value: i64) -> i64 {\n"
-        "  Coro.yield()\n"
-        "  return value\n"
-        "}\n";
-    static const char entry_source[] =
-        "import { child } from \"./library\"\n"
-        "fn answer() -> i64 { return child(7) }\n";
+    static const char library_source[] = "export fn child(value: i64) -> i64 {\n"
+                                         "  Coro.yield()\n"
+                                         "  return value\n"
+                                         "}\n";
+    static const char entry_source[] = "import { child } from \"./library\"\n"
+                                       "fn answer() -> i64 { return child(7) }\n";
     assert_cross_module_coroutine_program(entry_source, library_source);
 }
 
 TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors) {
-    static const char library_source[] =
-        "export class Worker {\n"
-        "  static child(value: i64) -> i64 {\n"
-        "    Coro.yield()\n"
-        "    return value\n"
-        "  }\n"
-        "}\n";
-    static const char entry_source[] =
-        "import \"./library\" as library\n"
-        "fn answer() -> i64 { return library.Worker.child(7) }\n";
+    static const char library_source[] = "export class Worker {\n"
+                                         "  static child(value: i64) -> i64 {\n"
+                                         "    Coro.yield()\n"
+                                         "    return value\n"
+                                         "  }\n"
+                                         "}\n";
+    static const char entry_source[] = "import \"./library\" as library\n"
+                                       "fn answer() -> i64 { return library.Worker.child(7) }\n";
     assert_cross_module_coroutine_program(entry_source, library_source);
 }
 
@@ -683,8 +651,7 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -698,8 +665,8 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     uint32_t entry = xr_validated_program_entry_function(product.program);
 
     XrReferenceProfile reference_profile = {.pointer_width = 64u};
-    XrReferenceOutcome reference = xr_reference_evaluate(
-        product.program, entry, NULL, 0u, &reference_profile, NULL);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate(product.program, entry, NULL, 0u, &reference_profile, NULL);
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
     ASSERT_EQ_INT(reference.value.as.i64, 48);
@@ -712,14 +679,12 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     };
     XrExecutionDiagnostic execution_diagnostic;
     XrInstance *instance = NULL;
-    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance,
-                                                &execution_diagnostic),
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic),
-                  XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic), XR_VM_CODE_OK);
     XrVmOutcome vm_result = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
     ASSERT_EQ_INT(vm_result.kind, XR_VM_OUTCOME_RETURN);
     ASSERT_EQ_INT(vm_result.value.kind, XR_VM_VALUE_I64);
@@ -728,17 +693,15 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic backend_diagnostic;
     XrBackendIR *backend_ir = NULL;
-    ASSERT_EQ_INT(xr_backend_ir_build(product.program, profile, &options, &backend_ir,
-                                      &backend_diagnostic),
-                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(product.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated,
-                                      &backend_diagnostic),
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated,
-                                      &backend_diagnostic),
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -757,40 +720,36 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     xr_vm_code_free(vm_code);
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
     xr_program_source_product_free(&product);
     xr_target_profile_free(profile);
     source_build_fixture_free(&fixture);
 }
 
 TEST(source_owner_clock_provider_is_exact_across_private_executors) {
-    static const char source[] =
-        "import time\n"
-        "fn answer() -> i64 {\n"
-        "  const wall = time.now()\n"
-        "  const monotonic = time.monotonic()\n"
-        "  const cpu = time.clock()\n"
-        "  const offset = time.localOffsetAt(0)\n"
-        "  if (wall <= 0) { return 0 }\n"
-        "  if (monotonic <= 0) { return 0 }\n"
-        "  if (cpu < 0) { return 0 }\n"
-        "  if (offset < -1440) { return 0 }\n"
-        "  if (offset > 1440) { return 0 }\n"
-        "  return 1\n"
-        "}\n";
+    static const char source[] = "import time\n"
+                                 "fn answer() -> i64 {\n"
+                                 "  const wall = time.now()\n"
+                                 "  const monotonic = time.monotonic()\n"
+                                 "  const cpu = time.clock()\n"
+                                 "  const offset = time.localOffsetAt(0)\n"
+                                 "  if (wall <= 0) { return 0 }\n"
+                                 "  if (monotonic <= 0) { return 0 }\n"
+                                 "  if (cpu < 0) { return 0 }\n"
+                                 "  if (offset < -1440) { return 0 }\n"
+                                 "  if (offset > 1440) { return 0 }\n"
+                                 "  return 1\n"
+                                 "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = NULL;
     char profile_error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
     XrProgramSourceProduct second = {0};
@@ -820,11 +779,10 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
         XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
     };
     XrFingerprint key_digest;
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_CLOCK_CONTRACT_KEY,
-                                      &expected_contract, &key_digest));
+    ASSERT_TRUE(
+        xr_stable_id_from_key(XR_PROVIDER_CLOCK_CONTRACT_KEY, &expected_contract, &key_digest));
     for (uint32_t i = 0u; i < 4u; ++i)
-        ASSERT_TRUE(xr_stable_id_from_key(operation_keys[i], &expected_operations[i],
-                                          &key_digest));
+        ASSERT_TRUE(xr_stable_id_from_key(operation_keys[i], &expected_operations[i], &key_digest));
     ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_contract));
 
     const XrTargetProviderContract *contract =
@@ -841,29 +799,24 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
          ++operation_index) {
         uint32_t expected_index = UINT32_MAX;
         for (uint32_t i = 0u; i < 4u; ++i) {
-            if (stable_id_equal(requirement.operation_ids[operation_index],
-                                expected_operations[i]))
+            if (stable_id_equal(requirement.operation_ids[operation_index], expected_operations[i]))
                 expected_index = i;
         }
         ASSERT_LT(expected_index, 4u);
         const XrTargetProviderOperationContract *contract_operation =
-            find_profile_provider_operation(contract,
-                                            requirement.operation_ids[operation_index]);
+            find_profile_provider_operation(contract, requirement.operation_ids[operation_index]);
         ASSERT_NOT_NULL(contract_operation);
         ASSERT_EQ_INT(contract_operation->call_abi.result.value_kind,
                       XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
-        operations[operation_index].operation_id =
-            requirement.operation_ids[operation_index];
+        operations[operation_index].operation_id = requirement.operation_ids[operation_index];
         operations[operation_index].context = &probes[expected_index];
         if (expected_index == 3u) {
             ASSERT_EQ_UINT(contract_operation->call_abi.parameter_count, 1u);
-            operations[operation_index].trampoline_kind =
-                XR_PROVIDER_TRAMPOLINE_I64_UNARY;
+            operations[operation_index].trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_UNARY;
             operations[operation_index].entry.i64_unary = clock_provider_unary_probe;
         } else {
             ASSERT_EQ_UINT(contract_operation->call_abi.parameter_count, 0u);
-            operations[operation_index].trampoline_kind =
-                XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
+            operations[operation_index].trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
             operations[operation_index].entry.i64_nullary = clock_provider_probe;
         }
     }
@@ -873,8 +826,7 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
         .operations = operations,
         .operation_count = 4u,
     };
-    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
-                      contract, &provider.contract_fingerprint),
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(contract, &provider.contract_fingerprint),
                   XR_RUNTIME_ABI_OK);
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -886,8 +838,7 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     };
     XrExecutionDiagnostic execution_diagnostic;
     XrInstance *instance = NULL;
-    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance,
-                                                &execution_diagnostic),
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
     uint32_t entry = xr_validated_program_entry_function(first.program);
@@ -899,8 +850,8 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
         .call_i64_unary = reference_clock_provider_call_unary,
         .call_i64_nullary = reference_clock_provider_call,
     };
-    XrReferenceOutcome reference = xr_reference_evaluate_bound(
-        first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate_bound(first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
     ASSERT_EQ_INT(reference.value.as.i64, 1);
@@ -910,8 +861,7 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic),
-                  XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic), XR_VM_CODE_OK);
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
     ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_RETURN);
     ASSERT_EQ_INT(vm.value.kind, XR_VM_VALUE_I64);
@@ -922,17 +872,15 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic backend_diagnostic;
     XrBackendIR *backend_ir = NULL;
-    ASSERT_EQ_INT(xr_backend_ir_build(first.program, profile, &options, &backend_ir,
-                                      &backend_diagnostic),
-                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(first.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated,
-                                      &backend_diagnostic),
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated,
-                                      &backend_diagnostic),
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
@@ -942,8 +890,7 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     if (clock_provider_aot_output_path) {
         FILE *output = fopen(clock_provider_aot_output_path, "wb");
         ASSERT_NOT_NULL(output);
-        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output),
-                       generated.size);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_EQ_INT(fclose(output), 0);
     }
 
@@ -953,10 +900,8 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     xr_vm_code_free(vm_code);
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
     xr_target_profile_free(profile);
@@ -1009,12 +954,11 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = NULL;
     char profile_error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
     XrProgramSourceProduct second = {0};
@@ -1030,18 +974,17 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     }
     assert_products_equal(&first, &second);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PROVIDER_CALL), 3u);
-    ASSERT_EQ_UINT(program_operation_count(first.program,
-                                           XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ),
-                   1u);
-    ASSERT_EQ_UINT(program_operation_successor_count(
-                       first.program, XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE, 3u),
-                   1u);
-    ASSERT_EQ_UINT(program_operation_successor_count(
-                       first.program, XR_CORE_OP_CORE_CALL_WITNESS_INVOKE, 3u),
-                   1u);
-    ASSERT_EQ_UINT(program_operation_successor_count(
-                       first.program, XR_CORE_OP_CORE_CALL_SEALED_INVOKE, 3u),
-                   1u);
+    ASSERT_EQ_UINT(
+        program_operation_count(first.program, XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ), 1u);
+    ASSERT_EQ_UINT(
+        program_operation_successor_count(first.program, XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE, 3u),
+        1u);
+    ASSERT_EQ_UINT(
+        program_operation_successor_count(first.program, XR_CORE_OP_CORE_CALL_WITNESS_INVOKE, 3u),
+        1u);
+    ASSERT_EQ_UINT(
+        program_operation_successor_count(first.program, XR_CORE_OP_CORE_CALL_SEALED_INVOKE, 3u),
+        1u);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_TRAP), 2u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 2u);
 
@@ -1050,18 +993,18 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     XrStableId expected_io_contract = {{0}};
     XrStableId expected_close_operation = {{0}};
     XrFingerprint key_digest;
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_CLOCK_CONTRACT_KEY,
-                                      &expected_clock_contract, &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_CLOCK_CONTRACT_KEY, &expected_clock_contract,
+                                      &key_digest));
     ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY,
                                       &expected_clock_operation, &key_digest));
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_io_contract,
-                                      &key_digest));
+    ASSERT_TRUE(
+        xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_io_contract, &key_digest));
     ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
                                       &expected_close_operation, &key_digest));
 
     ProviderTrapCleanupProbe probe = {
-        .close_handles = {INT64_C(2147483642), INT64_C(2147483643),
-                          INT64_C(2147483646), INT64_C(2147483647)},
+        .close_handles = {INT64_C(2147483642), INT64_C(2147483643), INT64_C(2147483646),
+                          INT64_C(2147483647)},
     };
     XrProviderOperationBinding operations[2] = {0};
     XrProviderBinding providers[2] = {0};
@@ -1069,8 +1012,8 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     uint32_t io_requirement = UINT32_MAX;
     for (uint32_t requirement_index = 0u; requirement_index < 2u; ++requirement_index) {
         XrProgramProviderRequirementView requirement = {0};
-        ASSERT_TRUE(xr_validated_program_provider_requirement(
-            first.program, requirement_index, &requirement));
+        ASSERT_TRUE(xr_validated_program_provider_requirement(first.program, requirement_index,
+                                                              &requirement));
         ASSERT_EQ_UINT(requirement.operation_count, 1u);
         const XrTargetProviderContract *contract =
             find_profile_provider(profile, requirement.contract_id);
@@ -1078,19 +1021,15 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
         operations[requirement_index].operation_id = requirement.operation_ids[0];
         operations[requirement_index].context = &probe;
         if (stable_id_equal(requirement.contract_id, expected_clock_contract)) {
-            ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0],
-                                        expected_clock_operation));
+            ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0], expected_clock_operation));
             clock_requirement = requirement_index;
-            operations[requirement_index].trampoline_kind =
-                XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
+            operations[requirement_index].trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
             operations[requirement_index].entry.i64_nullary = provider_trap_clock_probe;
         } else {
             ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_io_contract));
-            ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0],
-                                        expected_close_operation));
+            ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0], expected_close_operation));
             io_requirement = requirement_index;
-            operations[requirement_index].trampoline_kind =
-                XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
+            operations[requirement_index].trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
             operations[requirement_index].entry.bool_i64_unary = provider_trap_close_probe;
         }
         providers[requirement_index].contract_id = requirement.contract_id;
@@ -1125,8 +1064,8 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
         .call_i64_nullary = reference_clock_provider_call,
         .call_bool_i64_unary = reference_pipe_close_provider_call,
     };
-    XrReferenceOutcome reference = xr_reference_evaluate_bound(
-        first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate_bound(first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_TRAP);
     ASSERT_EQ_INT(reference.trap, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
     ASSERT_EQ_UINT(probe.events, 5u);
@@ -1149,9 +1088,9 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic backend_diagnostic;
     XrBackendIR *backend_ir = NULL;
-    ASSERT_EQ_INT(xr_backend_ir_build(first.program, profile, &options, &backend_ir,
-                                      &backend_diagnostic),
-                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(first.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
@@ -1169,41 +1108,41 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
         FILE *output = fopen(provider_trap_cleanup_aot_output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
-        ASSERT_TRUE(fprintf(
-            output,
-            "\nstatic uint32_t xr_probe_events;\n"
-            "static int xr_probe_refuse(void *context, uint32_t requirement, "
-            "uint32_t operation, int64_t *result) {\n"
-            "    (void)context;\n"
-            "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
-            "!result || xr_probe_events != UINT32_C(0)) return 2;\n"
-            "    ++xr_probe_events;\n"
-            "    return 1;\n"
-            "}\n"
-            "static int xr_probe_close(void *context, uint32_t requirement, "
-            "uint32_t operation, int64_t handle, uint8_t *result) {\n"
-            "    (void)context;\n"
-            "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
-            "!result) return 3;\n"
-            "    static const int64_t handles[] = {INT64_C(2147483642), "
-            "INT64_C(2147483643), INT64_C(2147483646), INT64_C(2147483647)};\n"
-            "    if (xr_probe_events < UINT32_C(1) || xr_probe_events > UINT32_C(4) || "
-            "handle != handles[xr_probe_events - UINT32_C(1)]) return 4;\n"
-            "    *result = UINT8_C(1);\n"
-            "    ++xr_probe_events;\n"
-            "    return 0;\n"
-            "}\n"
-            "int main(void) {\n"
-            "    XrAotContext context = {0};\n"
-            "    context.provider_call_i64_nullary = xr_probe_refuse;\n"
-            "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
-            "    XrAotOutcome outcome = xr_aot_fn_%u(&context);\n"
-            "    int exit_code = outcome.kind == 1 && outcome.trap == 7 && "
-            "xr_probe_events == 5 ? 207 : 255;\n"
-            "    xr_aot_context_destroy(&context);\n"
-            "    return exit_code;\n"
-            "}\n",
-            clock_requirement, io_requirement, entry) > 0);
+        ASSERT_TRUE(
+            fprintf(output,
+                    "\nstatic uint32_t xr_probe_events;\n"
+                    "static int xr_probe_refuse(void *context, uint32_t requirement, "
+                    "uint32_t operation, int64_t *result) {\n"
+                    "    (void)context;\n"
+                    "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
+                    "!result || xr_probe_events != UINT32_C(0)) return 2;\n"
+                    "    ++xr_probe_events;\n"
+                    "    return 1;\n"
+                    "}\n"
+                    "static int xr_probe_close(void *context, uint32_t requirement, "
+                    "uint32_t operation, int64_t handle, uint8_t *result) {\n"
+                    "    (void)context;\n"
+                    "    if (requirement != UINT32_C(%u) || operation != UINT32_C(0) || "
+                    "!result) return 3;\n"
+                    "    static const int64_t handles[] = {INT64_C(2147483642), "
+                    "INT64_C(2147483643), INT64_C(2147483646), INT64_C(2147483647)};\n"
+                    "    if (xr_probe_events < UINT32_C(1) || xr_probe_events > UINT32_C(4) || "
+                    "handle != handles[xr_probe_events - UINT32_C(1)]) return 4;\n"
+                    "    *result = UINT8_C(1);\n"
+                    "    ++xr_probe_events;\n"
+                    "    return 0;\n"
+                    "}\n"
+                    "int main(void) {\n"
+                    "    XrAotContext context = {0};\n"
+                    "    context.provider_call_i64_nullary = xr_probe_refuse;\n"
+                    "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                    "    XrAotOutcome outcome = xr_aot_fn_%u(&context);\n"
+                    "    int exit_code = outcome.kind == 1 && outcome.trap == 7 && "
+                    "xr_probe_events == 5 ? 207 : 255;\n"
+                    "    xr_aot_context_destroy(&context);\n"
+                    "    return exit_code;\n"
+                    "}\n",
+                    clock_requirement, io_requirement, entry) > 0);
         ASSERT_EQ_INT(fclose(output), 0);
     }
 
@@ -1253,12 +1192,11 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = NULL;
     char profile_error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
     XrProgramSourceProduct second = {0};
@@ -1291,14 +1229,12 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         const XrValidatedFunction *function = &first.program->functions[function_index];
         for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
             const XrValidatedBlock *block = &function->blocks[block_index];
-            for (uint32_t instruction_index = 0u;
-                 instruction_index < block->instruction_count; ++instruction_index) {
-                aggregate_constructs +=
-                    block->instructions[instruction_index].operation_id ==
-                    XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT;
-                aggregate_projects +=
-                    block->instructions[instruction_index].operation_id ==
-                    XR_CORE_OP_CORE_AGGREGATE_PROJECT;
+            for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
+                aggregate_constructs += block->instructions[instruction_index].operation_id ==
+                                        XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT;
+                aggregate_projects += block->instructions[instruction_index].operation_id ==
+                                      XR_CORE_OP_CORE_AGGREGATE_PROJECT;
                 place_projects += block->instructions[instruction_index].operation_id ==
                                   XR_CORE_OP_CORE_PLACE_PROJECT;
                 place_loads += block->instructions[instruction_index].operation_id ==
@@ -1336,12 +1272,12 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     XrStableId expected_open = {{0}};
     XrStableId expected_close = {{0}};
     XrFingerprint key_digest;
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_contract,
+    ASSERT_TRUE(
+        xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_contract, &key_digest));
+    ASSERT_TRUE(
+        xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY, &expected_open, &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY, &expected_close,
                                       &key_digest));
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
-                                      &expected_open, &key_digest));
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
-                                      &expected_close, &key_digest));
     ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_contract));
 
     uint32_t open_index = UINT32_MAX;
@@ -1379,8 +1315,7 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_EQ_INT(close_contract->call_abi.result.ownership,
                   XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE);
     ASSERT_EQ_UINT(close_contract->effect_flags, XR_TARGET_PROVIDER_EFFECT_IO);
-    ASSERT_EQ_UINT(close_contract->lifetime_flags,
-                   XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED);
+    ASSERT_EQ_UINT(close_contract->lifetime_flags, XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED);
     ASSERT_EQ_UINT(close_contract->failure_flags, 0u);
 
     PipeProviderProbe probe = {
@@ -1410,8 +1345,7 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         .operations = operations,
         .operation_count = 2u,
     };
-    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
-                      contract, &provider.contract_fingerprint),
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(contract, &provider.contract_fingerprint),
                   XR_RUNTIME_ABI_OK);
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -1435,8 +1369,8 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         .call_bool_i64_unary = reference_pipe_close_provider_call,
         .call_optional_i64_pair_nullary = reference_pipe_provider_call,
     };
-    XrReferenceOutcome reference = xr_reference_evaluate_bound(
-        first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate_bound(first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
     ASSERT_EQ_INT(reference.value.as.i64, 1);
@@ -1523,12 +1457,11 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = NULL;
     char profile_error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
     XrProgramSourceProduct second = {0};
@@ -1543,11 +1476,8 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(program_operation_count(first.program,
-                                           XR_CORE_OP_CORE_CALL_SEALED_INVOKE),
-                   2u);
-    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_ERROR_PUBLISH),
-                   2u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_CALL_SEALED_INVOKE), 2u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_ERROR_PUBLISH), 2u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
 
     XrProgramProviderRequirementView requirement = {0};
@@ -1556,10 +1486,10 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     XrStableId expected_contract = {{0}};
     XrStableId expected_close = {{0}};
     XrFingerprint key_digest;
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_contract,
+    ASSERT_TRUE(
+        xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &expected_contract, &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY, &expected_close,
                                       &key_digest));
-    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
-                                      &expected_close, &key_digest));
     ASSERT_TRUE(stable_id_equal(requirement.contract_id, expected_contract));
     ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0], expected_close));
 
@@ -1570,8 +1500,7 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
         find_profile_provider_operation(contract, expected_close);
     ASSERT_NOT_NULL(close_contract);
     ASSERT_EQ_UINT(close_contract->failure_flags, 0u);
-    ASSERT_EQ_UINT(close_contract->lifetime_flags,
-                   XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED);
+    ASSERT_EQ_UINT(close_contract->lifetime_flags, XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED);
 
     PipeProviderProbe probe = {
         .read_handle = 2147483646,
@@ -1590,8 +1519,7 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
         .operations = &operation,
         .operation_count = 1u,
     };
-    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
-                      contract, &provider.contract_fingerprint),
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(contract, &provider.contract_fingerprint),
                   XR_RUNTIME_ABI_OK);
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -1614,8 +1542,8 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
         .context = &lease,
         .call_bool_i64_unary = reference_pipe_close_provider_call,
     };
-    XrReferenceOutcome reference = xr_reference_evaluate_bound(
-        first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate_bound(first.program, entry, NULL, 0u, NULL, NULL, &reference_binding);
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
     ASSERT_EQ_INT(reference.value.as.i64, 1);
@@ -1624,8 +1552,7 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic),
-                  XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic), XR_VM_CODE_OK);
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
     ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_RETURN);
     ASSERT_EQ_INT(vm.value.kind, XR_VM_VALUE_I64);
@@ -1635,9 +1562,9 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic backend_diagnostic;
     XrBackendIR *backend_ir = NULL;
-    ASSERT_EQ_INT(xr_backend_ir_build(first.program, profile, &options, &backend_ir,
-                                      &backend_diagnostic),
-                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(first.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
@@ -1664,10 +1591,8 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     xr_vm_code_free(vm_code);
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
-    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic),
-                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
     xr_target_profile_free(profile);
@@ -1698,8 +1623,8 @@ static void assert_uncaught_reference_error(XrValidatedProgram *program, XrInsta
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 }
 
-static void assert_uncaught_vm_error(XrInstance *instance, uint32_t entry,
-                                     uint16_t error_type_id, PipeProviderProbe *probe) {
+static void assert_uncaught_vm_error(XrInstance *instance, uint32_t entry, uint16_t error_type_id,
+                                     PipeProviderProbe *probe) {
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
     ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &code, &diagnostic), XR_VM_CODE_OK);
@@ -1717,14 +1642,13 @@ static void assert_uncaught_vm_error(XrInstance *instance, uint32_t entry,
     xr_vm_code_free(code);
 }
 
-static void write_uncaught_error_aot(XrValidatedProgram *program,
-                                     const XrTargetProfile *profile, uint32_t entry,
-                                     uint16_t error_type_id, const char *output_path) {
+static void write_uncaught_error_aot(XrValidatedProgram *program, const XrTargetProfile *profile,
+                                     uint32_t entry, uint16_t error_type_id,
+                                     const char *output_path) {
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic diagnostic;
     XrBackendIR *ir = NULL;
-    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic),
-                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic), XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(ir, &diagnostic));
     XrGeneratedC generated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic), XR_BACKEND_OK);
@@ -1735,30 +1659,32 @@ static void write_uncaught_error_aot(XrValidatedProgram *program,
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
-        ASSERT_TRUE(fprintf(
-            output,
-            "\nstatic uint32_t xr_probe_calls;\n"
-            "static int xr_probe_close(void *context, uint32_t requirement, uint32_t operation, "
-            "int64_t argument, uint8_t *result) {\n"
-            "    static const int64_t expected[2] = {INT64_C(2147483646), "
-            "INT64_C(2147483647)};\n"
-            "    (void)context;\n"
-            "    if (requirement != 0 || operation != 0 || !result || xr_probe_calls >= 2 || "
-            "argument != expected[xr_probe_calls]) return 1;\n"
-            "    *result = 0;\n"
-            "    ++xr_probe_calls;\n"
-            "    return 0;\n"
-            "}\n"
-            "int main(void) {\n"
-            "    XrAotContext context = {0};\n"
-            "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
-            "    XrAotType%u error = {0};\n"
-            "    XrAotOutcome outcome = xr_aot_fn_%u(&context, &error);\n"
-            "    if (outcome.kind != 2 || error.tag != 0 || "
-            "error.payload.case_0.f0 != -INT64_C(2) || xr_probe_calls != 2) return 255;\n"
-            "    return 220;\n"
-            "}\n",
-            error_type_id, entry) > 0);
+        ASSERT_TRUE(
+            fprintf(
+                output,
+                "\nstatic uint32_t xr_probe_calls;\n"
+                "static int xr_probe_close(void *context, uint32_t requirement, uint32_t "
+                "operation, "
+                "int64_t argument, uint8_t *result) {\n"
+                "    static const int64_t expected[2] = {INT64_C(2147483646), "
+                "INT64_C(2147483647)};\n"
+                "    (void)context;\n"
+                "    if (requirement != 0 || operation != 0 || !result || xr_probe_calls >= 2 || "
+                "argument != expected[xr_probe_calls]) return 1;\n"
+                "    *result = 0;\n"
+                "    ++xr_probe_calls;\n"
+                "    return 0;\n"
+                "}\n"
+                "int main(void) {\n"
+                "    XrAotContext context = {0};\n"
+                "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "    XrAotType%u error = {0};\n"
+                "    XrAotOutcome outcome = xr_aot_fn_%u(&context, &error);\n"
+                "    if (outcome.kind != 2 || error.tag != 0 || "
+                "error.payload.case_0.f0 != -INT64_C(2) || xr_probe_calls != 2) return 255;\n"
+                "    return 220;\n"
+                "}\n",
+                error_type_id, entry) > 0);
         ASSERT_EQ_INT(fclose(output), 0);
     }
     xr_generated_c_free(&generated);
@@ -1786,12 +1712,11 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
     fixture.input.entry.function_name = "doomed";
     XrTargetProfile *profile = NULL;
     char profile_error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
     XrProgramSourceProduct second = {0};
@@ -1806,11 +1731,8 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(program_operation_count(first.program,
-                                           XR_CORE_OP_CORE_CALL_SEALED_INVOKE),
-                   1u);
-    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_ERROR_PUBLISH),
-                   2u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_CALL_SEALED_INVOKE), 1u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_ERROR_PUBLISH), 2u);
     uint32_t entry = xr_validated_program_entry_function(first.program);
     ASSERT_LT(entry, first.program->function_count);
     const XrValidatedFunction *entry_function = &first.program->functions[entry];
@@ -1845,8 +1767,7 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
     const XrTargetProviderContract *contract =
         find_profile_provider(profile, requirement.contract_id);
     ASSERT_NOT_NULL(contract);
-    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(
-                      contract, &provider.contract_fingerprint),
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(contract, &provider.contract_fingerprint),
                   XR_RUNTIME_ABI_OK);
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -1862,8 +1783,8 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
 
-    assert_uncaught_reference_error(first.program, instance, entry,
-                                    entry_function->error_type_id, &probe);
+    assert_uncaught_reference_error(first.program, instance, entry, entry_function->error_type_id,
+                                    &probe);
     assert_uncaught_vm_error(instance, entry, entry_function->error_type_id, &probe);
     write_uncaught_error_aot(first.program, profile, entry, entry_function->error_type_id,
                              pipe_uncaught_error_aot_output_path);
@@ -1877,57 +1798,140 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
     source_build_fixture_free(&fixture);
 }
 
-TEST(source_owner_keeps_defer_panic_surface_fail_closed) {
-    static const char source[] =
-        "import sys\n"
-        "fn doomed(divisor: i64) -> i64 {\n"
-        "  var live = sys.Pipe(2147483646, 2147483647)\n"
-        "  defer {\n"
-        "    live.closeRead()\n"
-        "    live.closeWrite()\n"
-        "  }\n"
-        "  assert(divisor != 0)\n"
-        "  return 1\n"
-        "}\n"
-        "fn answer() -> i64 { return doomed(1) }\n";
+TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors) {
+    static const char source[] = "import sys\n"
+                                 "fn doomed(divisor: i64) -> i64 {\n"
+                                 "  var live = sys.Pipe(2147483646, 2147483647)\n"
+                                 "  defer {\n"
+                                 "    live.closeRead()\n"
+                                 "    live.closeWrite()\n"
+                                 "  }\n"
+                                 "  assert(divisor != 0)\n"
+                                 "  return 1\n"
+                                 "}\n"
+                                 "fn answer() -> i64 { return doomed(0) }\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = NULL;
     char profile_error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
-    ASSERT_EQ_INT(xr_program_source_build(&fixture.input, &product, &diagnostic),
-                  XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED);
-    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE);
-    ASSERT_EQ_INT(diagnostic.writer_status, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
-    ASSERT_NOT_NULL(strstr(diagnostic.message, "operation ASSERTION"));
-    ASSERT_NULL(product.artifact.bytes);
-    ASSERT_NULL(product.program);
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    ASSERT_NOT_NULL(product.program);
+    ASSERT_EQ_UINT(
+        program_operation_successor_count(product.program, XR_CORE_OP_CORE_ASSERT_CONDITION, 1u),
+        1u);
+    ASSERT_GT(program_operation_count(product.program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 0u);
+
+    XrProgramProviderRequirementView requirement = {0};
+    ASSERT_TRUE(xr_validated_program_provider_requirement(product.program, 0u, &requirement));
+    PipeProviderProbe probe = {
+        .read_handle = 2147483646,
+        .write_handle = 2147483647,
+        .close_results = {true, true},
+    };
+    XrProviderOperationBinding operation = {
+        .operation_id = requirement.operation_ids[0],
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
+        .context = &probe,
+    };
+    operation.entry.bool_i64_unary = pipe_close_provider_probe;
+    XrProviderBinding provider = {
+        .contract_id = requirement.contract_id,
+        .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
+        .operations = &operation,
+        .operation_count = 1u,
+    };
+    const XrTargetProviderContract *contract =
+        find_profile_provider(profile, requirement.contract_id);
+    ASSERT_NOT_NULL(contract);
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(contract, &provider.contract_fingerprint),
+                  XR_RUNTIME_ABI_OK);
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = product.program,
+        .profile = profile,
+        .providers = &provider,
+        .provider_count = 1u,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+    uint32_t entry = xr_validated_program_entry_function(product.program);
+
+    XrExecutionLease lease = {0};
+    ASSERT_TRUE(xr_execution_instance_acquire(instance, &lease));
+    XrReferenceProviderBinding reference_binding = {
+        .context = &lease,
+        .call_bool_i64_unary = reference_pipe_close_provider_call,
+    };
+    XrReferenceOutcome reference = xr_reference_evaluate_bound(product.program, entry, NULL, 0u,
+                                                               NULL, NULL, &reference_binding);
+    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_PANIC);
+    ASSERT_EQ_INT(reference.panic_value.kind, XR_REFERENCE_VALUE_PANIC_INFO);
+    ASSERT_EQ_UINT(reference.panic_value.as.panic_info, XR_ASSERTION_FAILURE_CONDITION_FALSE);
+    ASSERT_EQ_UINT(probe.close_calls, 2u);
+    xr_reference_outcome_dispose(&reference);
+    ASSERT_TRUE(xr_execution_lease_release(&lease));
+
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic), XR_VM_CODE_OK);
+    XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
+    ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_PANIC);
+    ASSERT_EQ_INT(vm.panic_value.kind, XR_VM_VALUE_PANIC_INFO);
+    ASSERT_EQ_UINT(vm.panic_value.as.panic_info, XR_ASSERTION_FAILURE_CONDITION_FALSE);
+    ASSERT_EQ_UINT(probe.close_calls, 4u);
+    xr_vm_outcome_dispose(&vm);
+    xr_vm_code_free(vm_code);
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(product.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "out_panic"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "UINT32_C(1)"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "call_panic_"));
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+    xr_program_source_product_free(&product);
 
     xr_target_profile_free(profile);
     source_build_fixture_free(&fixture);
 }
 
 TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed) {
-    static const char source[] =
-        "import time\n"
-        "fn answer() -> i64 { time.sleep(1); return 0 }\n";
+    static const char source[] = "import time\n"
+                                 "fn answer() -> i64 { time.sleep(1); return 0 }\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = NULL;
     char profile_error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
     ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
-    fixture.input.semantic_profile_fingerprint =
-        xr_target_profile_target_semantics_id(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -1948,8 +1952,7 @@ TEST(source_owner_rejects_non_authoritative_entry_identity) {
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     char *wrong_identity = NULL;
-    ASSERT_TRUE(xr_module_identity_from_logical(&fixture.authority, "other.xr",
-                                                &wrong_identity));
+    ASSERT_TRUE(xr_module_identity_from_logical(&fixture.authority, "other.xr", &wrong_identity));
     XrProgramSourceBuildInput input = fixture.input;
     input.entry.module_identity = wrong_identity;
     XrProgramSourceProduct product = {0};
@@ -1986,9 +1989,8 @@ TEST(source_owner_rejects_non_authoritative_entry_identity) {
 TEST(source_owner_rejects_module_budget_before_analysis) {
     static const char library_source[] =
         "export fn increment(value: i64) -> i64 { return value + 1 }\n";
-    static const char entry_source[] =
-        "import { increment } from \"./library\"\n"
-        "fn answer() -> i64 { return increment(41) }\n";
+    static const char entry_source[] = "import { increment } from \"./library\"\n"
+                                       "fn answer() -> i64 { return increment(41) }\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
     XrProgramSourceBuildInput input = fixture.input;
@@ -2048,7 +2050,7 @@ RUN_TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup);
 RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
 RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
 RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);
-RUN_TEST(source_owner_keeps_defer_panic_surface_fail_closed);
+RUN_TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);

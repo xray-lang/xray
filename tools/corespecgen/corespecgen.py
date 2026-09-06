@@ -326,7 +326,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 and operation["determinism"]["allowed_trace"],
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
-            "aggregate-construct", "aggregate-project", "aggregate-update",
+            "aggregate-construct", "aggregate-project", "aggregate-update", "assert-condition",
             "block-arguments", "branch", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
             "place-local", "place-project", "place-store", "place-take", "return",
@@ -559,6 +559,17 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("condition_type") == "bool"
                 and actual.get("true_argument_types") == actual.get("true_parameter_types")
                 and actual.get("false_argument_types") == actual.get("false_parameter_types"))
+    if validator == "assert-condition":
+        has_panic_edge = actual.get("successor_count", 0) != 0
+        panic_edge_valid = (
+            actual.get("successor_count", 0) == 1
+            and actual.get("panic_type") == "panic-info"
+            and isinstance(actual.get("live_values"), list)
+            and actual.get("live_values") == actual.get("panic_edge_values")
+        )
+        return (actual.get("condition_type") == "bool"
+                and actual.get("failure_kind") == "condition-false"
+                and (not has_panic_edge or panic_edge_valid))
     if validator == "return":
         values = actual.get("value_types")
         result = actual.get("function_result_type")
@@ -576,7 +587,7 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
                 and actual.get("callee_error_type") == "void"
-                and actual.get("callee_panic_type") == "void"
+                and actual.get("callee_panic_type") in {"void", "panic-info"}
                 and (not has_trap_edge or trap_edge_valid))
     if validator == "sealed-invoke":
         error_type = actual.get("callee_error_type")
