@@ -295,14 +295,29 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
+        .name = "ADDRESS_HOST_MAX_BYTES",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "COROUTINE_MONITOR_CAPACITY",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
         .name = "CORO_NAME_MAX",
         .signature = ": i64",
         .summary = "",
     },
     {
         .name = "ClusterConfig",
-        .signature = "{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, // The heartbeat schedule, when this node wants one of its own. Omitting a // field leaves it null and takes the constant above, so the defaults still // have exactly one owner and a caller who needs a faster detector no longer // has to be told the numbers are not negotiable. heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }",
+        .signature = "{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }",
         .summary = "",
+    },
+    {
+        .name = "ClusterConfig.heartbeatIntervalMs",
+        .signature = "i64?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterConfig.heartbeatTimeoutMs",
@@ -335,209 +350,224 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "Type alias field",
     },
     {
-        .name = "ClusterDelivery",
-        .signature = "enum ClusterDelivery",
-        .summary = "Outcome of handing one opaque service envelope to the cluster transport",
+        .name = "ClusterCoroExit",
+        .signature = "{ name: string, reason: string, }",
+        .summary = "",
     },
     {
-        .name = "ClusterDelivery.Accepted",
-        .signature = "ClusterDelivery.Accepted",
-        .summary = "Enum variant",
+        .name = "ClusterCoroExit.name",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
-        .name = "ClusterDelivery.Disconnected",
-        .signature = "ClusterDelivery.Disconnected",
-        .summary = "Enum variant",
+        .name = "ClusterCoroExit.reason",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
-        .name = "ClusterDelivery.InvalidEnvelope",
-        .signature = "ClusterDelivery.InvalidEnvelope",
-        .summary = "Enum variant",
+        .name = "ClusterDiscoveryAnnouncement",
+        .signature = "{ name: string, port: i64, clusterHash: u64, }",
+        .summary = "",
     },
     {
-        .name = "ClusterDelivery.InvalidTopic",
-        .signature = "ClusterDelivery.InvalidTopic",
-        .summary = "Enum variant",
+        .name = "ClusterDiscoveryAnnouncement.clusterHash",
+        .signature = "u64",
+        .summary = "Type alias field",
     },
     {
-        .name = "ClusterDelivery.Overloaded",
-        .signature = "ClusterDelivery.Overloaded",
-        .summary = "Enum variant",
+        .name = "ClusterDiscoveryAnnouncement.name",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
-        .name = "ClusterDelivery.Unavailable",
-        .signature = "ClusterDelivery.Unavailable",
-        .summary = "Enum variant",
+        .name = "ClusterDiscoveryAnnouncement.port",
+        .signature = "i64",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterFrame",
+        .signature = "{ kind: i64, payload: Array<u8>, }",
+        .summary = "",
+    },
+    {
+        .name = "ClusterFrame.kind",
+        .signature = "i64",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterFrame.payload",
+        .signature = "Array<u8>",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterHandshakeAck",
+        .signature = "{ name: string, nonce: Array<u8>, proof: Array<u8>, flags: i64, }",
+        .summary = "",
+    },
+    {
+        .name = "ClusterHandshakeAck.flags",
+        .signature = "i64",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterHandshakeAck.name",
+        .signature = "string",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterHandshakeAck.nonce",
+        .signature = "Array<u8>",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterHandshakeAck.proof",
+        .signature = "Array<u8>",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterHandshakeRequest",
+        .signature = "{ name: string, nonce: Array<u8>, flags: i64, }",
+        .summary = "",
+    },
+    {
+        .name = "ClusterHandshakeRequest.flags",
+        .signature = "i64",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterHandshakeRequest.name",
+        .signature = "string",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterHandshakeRequest.nonce",
+        .signature = "Array<u8>",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo",
-        .signature = "{ self: string, port: i64, running: bool, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: ClusterTlsStatus }",
-        .summary = "Typed diagnostic snapshot for the local cluster runtime",
+        .signature = "{ self: string, port: i64, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tlsEnabled: bool, }",
+        .summary = "",
     },
     {
         .name = "ClusterInfo.deadNodes",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo.heartbeatIntervalMs",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo.heartbeatTimeoutMs",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo.listeners",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo.maxMissedHeartbeats",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo.nodes",
-        .signature = "const Array<ClusterNodeInfo>",
-        .summary = "Object field",
+        .signature = "Array<ClusterNodeInfo>",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo.port",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "ClusterInfo.running",
-        .signature = "const bool",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterInfo.self",
-        .signature = "const string",
-        .summary = "Object field",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
-        .name = "ClusterInfo.tls",
-        .signature = "const ClusterTlsStatus",
-        .summary = "Object field",
+        .name = "ClusterInfo.tlsEnabled",
+        .signature = "bool",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo",
-        .signature = "{ name: string, host: string, port: i64, state: ClusterNodeState, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }",
-        .summary = "Typed diagnostic snapshot for one remote cluster node",
+        .signature = "{ name: string, endpoint: Endpoint?, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64, }",
+        .summary = "",
     },
     {
         .name = "ClusterNodeInfo.bytesReceived",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.bytesSent",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterNodeInfo.endpoint",
+        .signature = "Endpoint?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.framesReceived",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.framesSent",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "ClusterNodeInfo.host",
-        .signature = "const string",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.missedHeartbeats",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.name",
-        .signature = "const string",
-        .summary = "Object field",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.outQueueBytes",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.outQueueFrames",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.phi",
-        .signature = "const f64",
-        .summary = "Object field",
-    },
-    {
-        .name = "ClusterNodeInfo.port",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "f64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.rttMs",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.sendErrors",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.slow",
-        .signature = "const bool",
-        .summary = "Object field",
+        .signature = "bool",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterNodeInfo.slowConsumerEvents",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "ClusterNodeInfo.state",
-        .signature = "const ClusterNodeState",
-        .summary = "Object field",
-    },
-    {
-        .name = "ClusterNodeState",
-        .signature = "enum ClusterNodeState",
-        .summary = "Lifecycle state of a remote cluster node",
-    },
-    {
-        .name = "ClusterNodeState.Closing",
-        .signature = "ClusterNodeState.Closing",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterNodeState.Connected",
-        .signature = "ClusterNodeState.Connected",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterNodeState.Connecting",
-        .signature = "ClusterNodeState.Connecting",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterNodeState.Handshaking",
-        .signature = "ClusterNodeState.Handshaking",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterNodeState.Idle",
-        .signature = "ClusterNodeState.Idle",
-        .summary = "Enum variant",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterTlsOptions",
@@ -570,32 +600,52 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "Type alias field",
     },
     {
-        .name = "ClusterTlsStatus",
-        .signature = "{ enabled: bool, clientReady: bool, serverReady: bool }",
-        .summary = "Effective TLS posture of a running cluster node",
+        .name = "ClusterTransportFrame",
+        .signature = "{ hopLimit: i64, topic: string, envelope: Array<u8>, }",
+        .summary = "",
     },
     {
-        .name = "ClusterTlsStatus.clientReady",
-        .signature = "const bool",
-        .summary = "Object field",
+        .name = "ClusterTransportFrame.envelope",
+        .signature = "Array<u8>",
+        .summary = "Type alias field",
     },
     {
-        .name = "ClusterTlsStatus.enabled",
-        .signature = "const bool",
-        .summary = "Object field",
+        .name = "ClusterTransportFrame.hopLimit",
+        .signature = "i64",
+        .summary = "Type alias field",
     },
     {
-        .name = "ClusterTlsStatus.serverReady",
-        .signature = "const bool",
-        .summary = "Object field",
+        .name = "ClusterTransportFrame.topic",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
-        .name = "ENVELOPE_HEADER_SIZE",
+        .name = "DISCOVERY_INTERVAL_MS",
         .signature = ": i64",
         .summary = "",
     },
     {
-        .name = "FRAME_CORO_DEMONITOR",
+        .name = "DISCOVERY_MAGIC",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "DISCOVERY_MULTICAST_GROUP",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "DISCOVERY_MULTICAST_PORT",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "DISCOVERY_VERSION",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "ENVELOPE_HEADER_SIZE",
         .signature = ": i64",
         .summary = "",
     },
@@ -670,12 +720,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "HEARTBEAT_TICK_MIN_MS",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
         .name = "HEARTBEAT_TIMEOUT_MS",
         .signature = ": i64",
         .summary = "",
     },
     {
         .name = "MAX_MISSED_HEARTBEATS",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "NODE_MONITOR_CAPACITY",
         .signature = ": i64",
         .summary = "",
     },
@@ -690,22 +750,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
-        .name = "NodeAddress",
-        .signature = "NodeAddress",
+        .name = "OUTPUT_QUEUE_HIGH_WATERMARK_BYTES",
+        .signature = ": i64",
         .summary = "",
     },
     {
-        .name = "NodeAddress.constructor",
-        .signature = "(host: string, port: i64): ()",
+        .name = "PHI_MIN_SAMPLES",
+        .signature = ": i64",
         .summary = "",
     },
     {
-        .name = "NodeAddress.host",
-        .signature = ": string",
+        .name = "PHI_THRESHOLD",
+        .signature = ": f64",
         .summary = "",
     },
     {
-        .name = "NodeAddress.port",
+        .name = "PHI_WINDOW_SIZE",
         .signature = ": i64",
         .summary = "",
     },
@@ -715,12 +775,82 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "PhiDetector",
+        .signature = "PhiDetector",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.constructor",
+        .signature = "(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.intervals",
+        .signature = ": Array<f64>",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.lastHeartbeatMs",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.mean",
+        .signature = ": f64",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.sampleCount",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.sum",
+        .signature = ": f64",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.sumSquares",
+        .signature = ": f64",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.value",
+        .signature = "(nowMs: i64): f64",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.variance",
+        .signature = ": f64",
+        .summary = "",
+    },
+    {
+        .name = "PhiDetector.writeIndex",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "SHARED_SECRET_MAX_BYTES",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
         .name = "SUBSCRIPTION_CAPACITY_MAX",
         .signature = ": i64",
         .summary = "",
     },
     {
+        .name = "TOMBSTONE_RETENTION_MS",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
         .name = "TOPIC_DEFAULT_HOP_LIMIT",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "TOPIC_DELIVERY_FANOUT_MAX",
         .signature = ": i64",
         .summary = "",
     },
@@ -735,8 +865,123 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "computeHandshakeProof",
+        .signature = "(secret: string, nonce: Array<u8>): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "decodeCoroExit",
+        .signature = "(payload: Array<u8>): ClusterCoroExit?",
+        .summary = "",
+    },
+    {
+        .name = "decodeCoroMonitor",
+        .signature = "(payload: Array<u8>): string?",
+        .summary = "",
+    },
+    {
+        .name = "decodeDiscoveryAnnouncement",
+        .signature = "(data: Array<u8>): ClusterDiscoveryAnnouncement?",
+        .summary = "",
+    },
+    {
+        .name = "decodeFrame",
+        .signature = "(data: Array<u8>): ClusterFrame?",
+        .summary = "",
+    },
+    {
+        .name = "decodeHandshakeAck",
+        .signature = "(payload: Array<u8>): ClusterHandshakeAck?",
+        .summary = "",
+    },
+    {
+        .name = "decodeHandshakeDone",
+        .signature = "(payload: Array<u8>): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "decodeHandshakeRequest",
+        .signature = "(payload: Array<u8>): ClusterHandshakeRequest?",
+        .summary = "",
+    },
+    {
+        .name = "decodeHeartbeat",
+        .signature = "(payload: Array<u8>): i64?",
+        .summary = "",
+    },
+    {
+        .name = "decodeTransportFrame",
+        .signature = "(data: Array<u8>): ClusterTransportFrame?",
+        .summary = "",
+    },
+    {
         .name = "discover",
-        .signature = "(): ()",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "discoveryClusterHash",
+        .signature = "(secret: string): u64",
+        .summary = "",
+    },
+    {
+        .name = "encodeCoroExit",
+        .signature = "(value: ClusterCoroExit): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeCoroMonitor",
+        .signature = "(name: string): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeDiscoveryAnnouncement",
+        .signature = "(value: ClusterDiscoveryAnnouncement): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeFrame",
+        .signature = "(kind: i64, payload: Array<u8>): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeHandshakeAck",
+        .signature = "(ack: ClusterHandshakeAck): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeHandshakeDone",
+        .signature = "(proof: Array<u8>): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeHandshakeRequest",
+        .signature = "(request: ClusterHandshakeRequest): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeHeartbeat",
+        .signature = "(kind: i64, timestampMs: i64): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "encodeTransportFrame",
+        .signature = "(hopLimit: i64, topic: string, envelope: Array<u8>): Array<u8>?",
+        .summary = "",
+    },
+    {
+        .name = "handshakeProofEqual",
+        .signature = "(left: Array<u8>, right: Array<u8>): bool",
+        .summary = "",
+    },
+    {
+        .name = "heartbeatIsDead",
+        .signature = "(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool",
+        .summary = "",
+    },
+    {
+        .name = "heartbeatTickInterval",
+        .signature = "(intervalMs: i64): i64",
         .summary = "",
     },
     {
@@ -756,7 +1001,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "monitor",
-        .signature = "(name: string, coroName: string? = null): Channel<string>",
+        .signature = "(name: string, coroName: string? = null): Channel<string>?",
         .summary = "",
     },
     {
@@ -766,7 +1011,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "parseAddress",
-        .signature = "(addr: string): NodeAddress",
+        .signature = "(addr: string): Endpoint",
         .summary = "",
     },
     {
@@ -780,6 +1025,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "shouldJoinDiscoveredNode",
+        .signature = "(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool",
+        .summary = "",
+    },
+    {
         .name = "start",
         .signature = "(config: ClusterConfig): bool",
         .summary = "",
@@ -790,8 +1040,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "tombstoneIsLive",
+        .signature = "(markedAtMs: i64, nowMs: i64): bool",
+        .summary = "",
+    },
+    {
         .name = "topicMatches",
         .signature = "(pattern: string, topic: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "validCoroutineName",
+        .signature = "(name: string): bool",
         .summary = "",
     },
     {
@@ -894,6 +1154,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
         .summary = "",
     },
     {
+        .name = "hmacBytes",
+        .signature = "(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?",
+        .summary = "",
+    },
+    {
         .name = "md5",
         .signature = "(data: string): string",
         .summary = "",
@@ -921,6 +1186,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
     {
         .name = "timingSafeEqual",
         .signature = "(a: string, b: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "timingSafeEqualBytes",
+        .signature = "(a: Array<u8>, b: Array<u8>): bool",
         .summary = "",
     },
     {
@@ -1496,31 +1766,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "CookieJar.add",
-        .signature = "(cookie: Cookie, nowSeconds: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.addFromResponse",
-        .signature = "(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.cleanup",
-        .signature = "(nowSeconds: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.clear",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.clearDomain",
-        .signature = "(domain: string): ()",
-        .summary = "",
-    },
-    {
         .name = "CookieJar.constructor",
         .signature = "(maxCookies: i64 = 300): ()",
         .summary = "",
@@ -1548,16 +1793,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "FormData",
         .signature = "FormData",
-        .summary = "",
-    },
-    {
-        .name = "FormData.append",
-        .signature = "(name: string, value: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "FormData.appendFile",
-        .signature = "(name: string, path: Path): bool",
         .summary = "",
     },
     {
@@ -1601,11 +1836,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "Headers.add",
-        .signature = "(name: string, value: string): ()",
-        .summary = "",
-    },
-    {
         .name = "Headers.constructor",
         .signature = "(): ()",
         .summary = "",
@@ -1628,11 +1858,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "Headers.getAll",
         .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "Headers.set",
-        .signature = "(name: string, value: string): ()",
         .summary = "",
     },
     {
@@ -1937,7 +2162,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RequestHead.constructor",
-        .signature = "(method: string, target: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
+        .signature = "(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
         .summary = "",
     },
     {
@@ -1976,7 +2201,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RequestHead.target",
+        .name = "RequestHead.requestTarget",
         .signature = ": string",
         .summary = "",
     },
@@ -2161,11 +2386,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "Router.add",
-        .signature = "(method: string, path: string, value: T): bool",
-        .summary = "",
-    },
-    {
         .name = "Router.constructor",
         .signature = "(): ()",
         .summary = "",
@@ -2186,18 +2406,23 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "Server.handler",
+        .signature = ": fn(HttpRequest) -> HttpResponse",
+        .summary = "",
+    },
+    {
         .name = "Server.listen",
         .signature = "(port: i64, running: Atomic<bool>): bool",
         .summary = "",
     },
     {
-        .name = "Server.route",
-        .signature = "(method: string, path: string, value: T): bool",
+        .name = "Server.method",
+        .signature = ": string,",
         .summary = "",
     },
     {
-        .name = "Server.routeHandler",
-        .signature = "(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse): bool",
+        .name = "Server.path",
+        .signature = ": string,",
         .summary = "",
     },
     {
@@ -2399,11 +2624,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
         .summary = "",
     },
     {
-        .name = "HeaderList.add",
-        .signature = "(name: string, value: string): ()",
-        .summary = "",
-    },
-    {
         .name = "HeaderList.constructor",
         .signature = "(): ()",
         .summary = "",
@@ -2434,16 +2654,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
         .summary = "",
     },
     {
-        .name = "HpackDecoder.decode",
-        .signature = "(block: Array<u8>): HeaderList?",
-        .summary = "",
-    },
-    {
-        .name = "HpackDecoder.decodeRange",
-        .signature = "(block: Array<u8>, start: i64, limit: i64): HeaderList?",
-        .summary = "",
-    },
-    {
         .name = "HpackDecoder.lookupName",
         .signature = "(index: i64): string?",
         .summary = "",
@@ -2451,11 +2661,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
     {
         .name = "HpackDecoder.lookupValue",
         .signature = "(index: i64): string?",
-        .summary = "",
-    },
-    {
-        .name = "HpackDecoder.readNameValue",
-        .signature = "(block: Array<u8>, pos: i64, limit: i64, nameIndex: i64): _NameValue?",
         .summary = "",
     },
     {
@@ -2471,16 +2676,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
     {
         .name = "HpackEncoder.constructor",
         .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()",
-        .summary = "",
-    },
-    {
-        .name = "HpackEncoder.encode",
-        .signature = "(names: Array<string>, values: Array<string>): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "HpackEncoder.encodeHeader",
-        .signature = "(out: ref Array<u8>, name: string, value: string): ()",
         .summary = "",
     },
     {
@@ -2546,11 +2741,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
     {
         .name = "Settings.get",
         .signature = "(id: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "Settings.set",
-        .signature = "(id: i64, value: i64): ()",
         .summary = "",
     },
     {
@@ -2627,18 +2817,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
-        .name = "BufReader.close",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
         .name = "BufReader.open",
         .signature = "(path: Path, chunkSize: i64 = 131072): BufReader?",
-        .summary = "",
-    },
-    {
-        .name = "BufReader.readLine",
-        .signature = "(): string?",
         .summary = "",
     },
     {
@@ -2662,38 +2842,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
-        .name = "BufWriter.reset",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "BufWriter.size",
         .signature = "(): i64",
         .summary = "",
     },
     {
-        .name = "BufWriter.write",
-        .signature = "(data: Slice<u8>): i64",
-        .summary = "",
-    },
-    {
-        .name = "BufWriter.writeBytes",
-        .signature = "(data: Array<u8>): i64",
-        .summary = "",
-    },
-    {
-        .name = "BufWriter.writeString",
-        .signature = "(data: string): i64",
-        .summary = "",
-    },
-    {
         .name = "File",
         .signature = "File",
-        .summary = "",
-    },
-    {
-        .name = "File.close",
-        .signature = "(): bool",
         .summary = "",
     },
     {
@@ -2814,11 +2969,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "LineIterator.hasNext",
         .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "LineIterator.next",
-        .signature = "(): string?",
         .summary = "",
     },
     {
@@ -2958,7 +3108,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "symlink",
-        .signature = "(target: Path, link: Path): bool",
+        .signature = "(source: Path, link: Path): bool",
         .summary = "",
     },
     {
@@ -3610,8 +3760,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "pageAlloc",
-        .signature = "(bytes: i64, prot?: i64): MutPtr<u8>",
-        .summary = "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
+        .signature = "(bytes: i64, prot: i64 = PROT_READ | PROT_WRITE): MutPtr<u8>",
+        .summary = "",
     },
     {
         .name = "pageFree",
@@ -3662,18 +3812,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "CopyBidirectionalResult.constructor",
-        .signature = "(aToB: i64, bToA: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "DialOptions",
         .signature = "DialOptions",
         .summary = "",
     },
     {
+        .name = "DialOptions.alpnProtocols",
+        .signature = ": Array<string>?",
+        .summary = "",
+    },
+    {
         .name = "DialOptions.constructor",
-        .signature = "(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()",
+        .signature = "(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()",
         .summary = "",
     },
     {
@@ -3727,59 +3877,54 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "NetError",
-        .signature = "enum NetError",
-        .summary = "Typed failure from network operations; classification from native codes lives in net.xr",
+        .name = "NetConn",
+        .signature = "NetConn",
+        .summary = "",
     },
     {
-        .name = "NetError.Cancelled",
-        .signature = "NetError.Cancelled",
-        .summary = "Enum variant",
+        .name = "NetConn.constructor",
+        .signature = "(storage: __NetConnStorage): ()",
+        .summary = "",
     },
     {
-        .name = "NetError.Closed",
-        .signature = "NetError.Closed",
-        .summary = "Enum variant",
+        .name = "NetListener",
+        .signature = "NetListener",
+        .summary = "",
     },
     {
-        .name = "NetError.Dns",
-        .signature = "NetError.Dns",
-        .summary = "Enum variant",
+        .name = "NetListener.constructor",
+        .signature = "(storage: __NetListenerStorage): ()",
+        .summary = "",
     },
     {
-        .name = "NetError.Invalid",
-        .signature = "NetError.Invalid",
-        .summary = "Enum variant",
+        .name = "TlsClientContext",
+        .signature = "TlsClientContext",
+        .summary = "",
     },
     {
-        .name = "NetError.Io",
-        .signature = "NetError.Io",
-        .summary = "Enum variant",
+        .name = "TlsClientContext.create",
+        .signature = "(caFile: string = \"\", certFile: string = \"\", keyFile: string = \"\", verifyPeer: bool = true, alpnProtocols: Array<string>? = null): TlsClientContext",
+        .summary = "",
     },
     {
-        .name = "NetError.OutOfMemory",
-        .signature = "NetError.OutOfMemory",
-        .summary = "Enum variant",
+        .name = "TlsClientContext.upgrade",
+        .signature = "(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()",
+        .summary = "",
     },
     {
-        .name = "NetError.Refused",
-        .signature = "NetError.Refused",
-        .summary = "Enum variant",
+        .name = "TlsServerContext",
+        .signature = "TlsServerContext",
+        .summary = "",
     },
     {
-        .name = "NetError.Reset",
-        .signature = "NetError.Reset",
-        .summary = "Enum variant",
+        .name = "TlsServerContext.accept",
+        .signature = "(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()",
+        .summary = "",
     },
     {
-        .name = "NetError.Timeout",
-        .signature = "NetError.Timeout",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "NetError.Tls",
-        .signature = "NetError.Tls",
-        .summary = "Enum variant",
+        .name = "TlsServerContext.create",
+        .signature = "(certFile: string, keyFile: string, caFile: string = \"\", requireClientCertificate: bool = false, alpnProtocols: Array<string>? = null): TlsServerContext",
+        .summary = "",
     },
     {
         .name = "UdpFrom",
@@ -3847,6 +3992,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
+        .name = "isClosed",
+        .signature = "(handle: NetConn | NetListener): bool",
+        .summary = "",
+    },
+    {
+        .name = "isTLS",
+        .signature = "(conn: NetConn): bool",
+        .summary = "",
+    },
+    {
         .name = "lastErrno",
         .signature = "(handle: NetConn | NetListener): i64",
         .summary = "",
@@ -3864,6 +4019,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
         .name = "lookup",
         .signature = "(hostname: string): Array<IpAddress>",
+        .summary = "",
+    },
+    {
+        .name = "negotiatedProtocol",
+        .signature = "(conn: NetConn): string?",
+        .summary = "",
+    },
+    {
+        .name = "port",
+        .signature = "(listener: NetListener): i64",
         .summary = "",
     },
     {
@@ -3932,6 +4097,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
+        .name = "udpMulticastBind",
+        .signature = "(group: string, port: i64, ttl: i64 = 1, loopback: bool = false): NetConn",
+        .summary = "",
+    },
+    {
         .name = "upgradeTLS",
         .signature = "(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()",
         .summary = "",
@@ -3951,7 +4121,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "ExecResult.constructor",
-        .signature = "(stdout: string, stderr: string, exitCode: i64): ()",
+        .signature = "(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()",
         .summary = "",
     },
     {
@@ -3961,22 +4131,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "ExecResult.stderr",
-        .signature = ": string",
+        .signature = ": Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "ExecResult.stderrTruncated",
+        .signature = ": bool",
         .summary = "",
     },
     {
         .name = "ExecResult.stdout",
-        .signature = ": string",
+        .signature = ": Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "ExecResult.stdoutTruncated",
+        .signature = ": bool",
         .summary = "",
     },
     {
         .name = "arch",
         .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "clock",
-        .signature = "(): f64",
         .summary = "",
     },
     {
@@ -3996,7 +4171,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "exec",
-        .signature = "(command: string): ExecResult?",
+        .signature = "(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES, maxStderrBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES): ExecResult?",
         .summary = "",
     },
     {
@@ -4070,11 +4245,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
         .summary = "",
     },
     {
-        .name = "spawn",
-        .signature = "(program: string, args: Array<string>): ExecResult?",
-        .summary = "",
-    },
-    {
         .name = "tmpdir",
         .signature = "(): string",
         .summary = "",
@@ -4128,38 +4298,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
         .summary = "",
     },
     {
-        .name = "Plan.close",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "Plan.constructor",
         .signature = "(options: Options, init: fn(i64) -> S): ()",
         .summary = "",
     },
     {
-        .name = "Plan.forEach",
-        .signature = "(range: Range, body: fn(S, i64)): ()",
-        .summary = "",
-    },
-    {
-        .name = "Plan.map",
-        .signature = "(range: Range, body: fn(S, i64) -> T): Array<T>",
-        .summary = "",
-    },
-    {
-        .name = "Plan.mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: fn(S, i64) -> T): ()",
-        .summary = "",
-    },
-    {
         .name = "Plan.options",
         .signature = ": Options",
-        .summary = "",
-    },
-    {
-        .name = "Plan.reduce",
-        .signature = "(range: Range, initial: A, body: fn(S, i64) -> A, combine: fn(A, A) -> A): A",
         .summary = "",
     },
     {
@@ -4319,6 +4464,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
         .summary = "",
     },
     {
+        .name = "Regex.constructor",
+        .signature = "(pattern: string, flags: string = \"\"): ()",
+        .summary = "",
+    },
+    {
         .name = "Regex.flags",
         .signature = ": i64",
         .summary = "",
@@ -4331,6 +4481,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "Regex.prog",
         .signature = ": Array<i64>",
+        .summary = "",
+    },
+    {
+        .name = "RegexMatch",
+        .signature = "RegexMatch",
+        .summary = "",
+    },
+    {
+        .name = "RegexMatch.constructor",
+        .signature = "(start: i64, end: i64, text: string, groups: Array<string>): ()",
+        .summary = "",
+    },
+    {
+        .name = "RegexMatch.end",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "RegexMatch.groups",
+        .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "RegexMatch.start",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "RegexMatch.text",
+        .signature = ": string",
         .summary = "",
     },
     {
@@ -4407,27 +4587,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
         .summary = "",
     },
     {
-        .name = "RuntimeInfo.blocks",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
         .name = "RuntimeInfo.constructor",
-        .signature = "(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64): ()",
+        .signature = "(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()",
         .summary = "",
     },
     {
         .name = "RuntimeInfo.finalizerCount",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RuntimeInfo.freeBlocks",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RuntimeInfo.fullBlocks",
         .signature = ": i64",
         .summary = "",
     },
@@ -4444,6 +4609,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "RuntimeInfo.liveObjects",
         .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "finalizerCount",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -5158,11 +5328,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Condvar.broadcast",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "Condvar.constructor",
         .signature = "(): ()",
         .summary = "",
@@ -5173,18 +5338,88 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Condvar.signal",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "Condvar.unlock",
         .signature = "(): ()",
         .summary = "",
     },
     {
-        .name = "Condvar.wait",
+        .name = "CountdownLatch",
+        .signature = "CountdownLatch",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.close",
         .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.constructor",
+        .signature = "(count: i64): ()",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.done",
+        .signature = "(count: i64 = 1): i64",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.isClosed",
+        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.remaining",
+        .signature = ": i64 { fn() { return this._remaining.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.reset",
+        .signature = "(count: i64): bool",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.tryWait",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "CountdownLatch.wait",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "EventCount",
+        .signature = "EventCount",
+        .summary = "",
+    },
+    {
+        .name = "EventCount.advance",
+        .signature = "(step: i64 = 1): i64",
+        .summary = "",
+    },
+    {
+        .name = "EventCount.close",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "EventCount.constructor",
+        .signature = "(epoch: i64): ()",
+        .summary = "",
+    },
+    {
+        .name = "EventCount.epoch",
+        .signature = ": i64 { fn() { return this._epoch.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "EventCount.isClosed",
+        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "EventCount.wait",
+        .signature = "(lastEpoch: i64, workerHint: i64 = -1): i64",
         .summary = "",
     },
     {
@@ -5203,11 +5438,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Mutex.replace",
-        .signature = "(body: fn(T) -> T): T",
-        .summary = "",
-    },
-    {
         .name = "Mutex.tryLock",
         .signature = "(body: fn(T) -> U): U?",
         .summary = "",
@@ -5223,13 +5453,38 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Once.call",
-        .signature = "(body: fn()): ()",
+        .name = "Once.constructor",
+        .signature = "(): ()",
         .summary = "",
     },
     {
-        .name = "Once.constructor",
-        .signature = "(): ()",
+        .name = "ResultGroup",
+        .signature = "ResultGroup",
+        .summary = "",
+    },
+    {
+        .name = "ResultGroup.batchSize",
+        .signature = ": i64 { fn() { return this._batchSize } }",
+        .summary = "",
+    },
+    {
+        .name = "ResultGroup.constructor",
+        .signature = "(batchSize: i64 = 1): ()",
+        .summary = "",
+    },
+    {
+        .name = "ResultGroup.isClosed",
+        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "ResultGroup.pendingCount",
+        .signature = ": i64 { fn() { return this._pending.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "ResultGroup.readyCount",
+        .signature = ": i64 { fn() { return len(this._ready) } }",
         .summary = "",
     },
     {
@@ -5243,16 +5498,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "RwLock.read",
-        .signature = "(body: fn(T) -> U): U",
-        .summary = "",
-    },
-    {
-        .name = "RwLock.replace",
-        .signature = "(body: fn(T) -> T): T",
-        .summary = "",
-    },
-    {
         .name = "RwLock.value",
         .signature = ": T",
         .summary = "",
@@ -5260,6 +5505,76 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     {
         .name = "RwLock.write",
         .signature = "(body: fn(T) -> U): U",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore",
+        .signature = "Semaphore",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore.acquire",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore.available",
+        .signature = ": i64 { fn() { return this._available.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore.close",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore.constructor",
+        .signature = "(permits: i64): ()",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore.isClosed",
+        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore.release",
+        .signature = "(count: i64 = 1): i64",
+        .summary = "",
+    },
+    {
+        .name = "Semaphore.tryAcquire",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "WorkQueue",
+        .signature = "WorkQueue",
+        .summary = "",
+    },
+    {
+        .name = "WorkQueue.close",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "WorkQueue.constructor",
+        .signature = "(shards: i64 = 1, capacity: i64 = 256): ()",
+        .summary = "",
+    },
+    {
+        .name = "WorkQueue.isClosed",
+        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
+        .summary = "",
+    },
+    {
+        .name = "WorkQueue.length",
+        .signature = ": i64 { fn() { return len(this._items) } }",
+        .summary = "",
+    },
+    {
+        .name = "WorkQueue.shardCount",
+        .signature = ": i64 { fn() { return this._shards } }",
         .summary = "",
     },
     {
@@ -5273,11 +5588,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     {
         .name = "Dylib",
         .signature = "Dylib",
-        .summary = "",
-    },
-    {
-        .name = "Dylib.close",
-        .signature = "(): bool",
         .summary = "",
     },
     {
@@ -5302,47 +5612,122 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "OsBarrier",
-        .signature = "(parties: i64): OsBarrier",
-        .summary = "Create a reusable OS-domain barrier",
+        .signature = "OsBarrier",
+        .summary = "",
+    },
+    {
+        .name = "OsBarrier.constructor",
+        .signature = "(parties: i64): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsBarrier.wait",
+        .signature = "(): bool",
+        .summary = "",
     },
     {
         .name = "OsCondvar",
-        .signature = "(): OsCondvar",
-        .summary = "Create an OS-domain condition variable",
+        .signature = "OsCondvar",
+        .summary = "",
+    },
+    {
+        .name = "OsCondvar.broadcast",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsCondvar.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsCondvar.signal",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsCondvar.wait",
+        .signature = "(mutex: OsMutex): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsCondvar.waitFor",
+        .signature = "(mutex: OsMutex, timeoutNs: i64): bool",
+        .summary = "",
     },
     {
         .name = "OsMutex",
-        .signature = "(): OsMutex",
-        .summary = "Create an OS-domain mutex",
+        .signature = "OsMutex",
+        .summary = "",
+    },
+    {
+        .name = "OsMutex.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsMutex.lock",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsMutex.tryLock",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "OsMutex.unlock",
+        .signature = "(): ()",
+        .summary = "",
     },
     {
         .name = "OsOnce",
-        .signature = "(): OsOnce",
-        .summary = "Create an OS-domain once gate",
+        .signature = "OsOnce",
+        .summary = "",
+    },
+    {
+        .name = "OsOnce.call",
+        .signature = "(body: fn()): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsOnce.constructor",
+        .signature = "(): ()",
+        .summary = "",
     },
     {
         .name = "OsRwLock",
-        .signature = "(): OsRwLock",
-        .summary = "Create an OS-domain read-write lock",
+        .signature = "OsRwLock",
+        .summary = "",
+    },
+    {
+        .name = "OsRwLock.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsRwLock.rdlock",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsRwLock.rdunlock",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsRwLock.wrlock",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "OsRwLock.wrunlock",
+        .signature = "(): ()",
+        .summary = "",
     },
     {
         .name = "Pipe",
         .signature = "Pipe",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.close",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.closeRead",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.closeWrite",
-        .signature = "(): bool",
         .summary = "",
     },
     {
@@ -5401,16 +5786,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "Process.tryWait",
-        .signature = "(): i64?",
-        .summary = "",
-    },
-    {
-        .name = "Process.wait",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
         .name = "ProcessOptions",
         .signature = "ProcessOptions",
         .summary = "",
@@ -5461,16 +5836,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "ThreadLocal.get",
-        .signature = "(): T",
-        .summary = "",
-    },
-    {
-        .name = "ThreadLocal.set",
-        .signature = "(value: T): ()",
-        .summary = "",
-    },
-    {
         .name = "onSignal",
         .signature = "(signal: Signal, handler: fn()): bool",
         .summary = "",
@@ -5478,12 +5843,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     {
         .name = "pinToCpu",
         .signature = "(cpu: i64): bool",
-        .summary = "Best-effort pin of the current OS thread to a CPU index",
+        .summary = "",
     },
     {
         .name = "threadYield",
         .signature = "(): ()",
-        .summary = "Yield the current OS thread to another runnable OS thread",
+        .summary = "",
     },
 };
 
@@ -5574,7 +5939,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_time[] = {
     {
         .name = "sleep",
         .signature = "(ms: i64): ()",
-        .summary = "Sleep for milliseconds",
+        .summary = "",
     },
 };
 
@@ -5597,11 +5962,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     {
         .name = "TomlArray.len",
         .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlArray.push",
-        .signature = "(value: TomlValue): ()",
         .summary = "",
     },
     {
@@ -5742,11 +6102,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     {
         .name = "TomlTable.keys",
         .signature = "(): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "TomlTable.set",
-        .signature = "(key: string, value: TomlValue): ()",
         .summary = "",
     },
     {
@@ -6028,11 +6383,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
         .summary = "",
     },
     {
-        .name = "QueryParams.add",
-        .signature = "(name: string, value: string): ()",
-        .summary = "",
-    },
-    {
         .name = "QueryParams.constructor",
         .signature = "(): ()",
         .summary = "",
@@ -6055,11 +6405,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     {
         .name = "QueryParams.getAll",
         .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "QueryParams.set",
-        .signature = "(name: string, value: string): ()",
         .summary = "",
     },
     {
@@ -6242,7 +6587,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ParsedUpgradeRequest.constructor",
-        .signature = "(target: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()",
+        .signature = "(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()",
         .summary = "",
     },
     {
@@ -6261,12 +6606,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "ParsedUpgradeRequest.secKey",
+        .name = "ParsedUpgradeRequest.requestTarget",
         .signature = ": string",
         .summary = "",
     },
     {
-        .name = "ParsedUpgradeRequest.target",
+        .name = "ParsedUpgradeRequest.secKey",
         .signature = ": string",
         .summary = "",
     },
@@ -6301,11 +6646,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "WsConn.close",
-        .signature = "(code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
-        .summary = "",
-    },
-    {
         .name = "WsConn.constructor",
         .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()",
         .summary = "",
@@ -6323,11 +6663,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "WsConn.ping",
         .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.recv",
-        .signature = "(timeout: i64 = -1): WsMessage?",
         .summary = "",
     },
     {
@@ -6864,11 +7199,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     {
         .name = "YamlMapping.keys",
         .signature = ": Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping.set",
-        .signature = "(key: string, value: YamlValue): ()",
         .summary = "",
     },
     {
@@ -8820,79 +9150,98 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "cluster",
-        .summary = "Distributed cluster communication (P2P, pub/sub, RPC)",
+        .summary = "Authenticated cluster membership, monitoring, discovery, and bounded topic messaging",
         .body =
             "# cluster module\n"
             "\n"
-            "Distributed cluster communication (P2P, pub/sub, RPC).\n"
+            "Authenticated peer membership and node/coroutine monitoring with LAN discovery and bounded topic delivery. The public messaging surface is `listen` and `send`; the module defines no request/response or RPC primitive.\n"
             "\n"
-            "Usage: `import cluster` then call `cluster.function()`.\n"
+            "Usage: `import cluster`, start a node with a typed `ClusterConfig`, join authenticated peers, and exchange `Buffer` values through `listen` and `send`.\n"
+            "\n"
+            "### Control plane\n"
+            "`start`, `stop`, `join`, `self`, `nodes`, `info`, `discover`, and `monitor` own node lifecycle, membership observation, authenticated discovery, and node/coroutine exit monitoring.\n"
+            "\n"
+            "### Topic delivery\n"
+            "`listen(pattern, capacity)` creates a bounded `Channel<Buffer>` subscription. `send(topic, envelope, hopLimit)` moves an opaque `Buffer` into local and peer topic delivery and reports a `ClusterDelivery` admission result.\n"
+            "\n"
+            "### Protocol surface\n"
+            "The exported frame, handshake, heartbeat, coroutine-monitor, and discovery codecs define the byte-exact peer protocol. Request correlation and response routing are not part of the cluster API.\n"
             "\n"
             "## API\n"
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `cluster.ADDRESS_HOST_MAX_BYTES` | `: i64` |  |\n"
+            "| `cluster.COROUTINE_MONITOR_CAPACITY` | `: i64` |  |\n"
             "| `cluster.CORO_NAME_MAX` | `: i64` |  |\n"
-            "| `cluster.ClusterConfig` | `{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, // The heartbeat schedule, when this node wants one of its own. Omitting a // field leaves it null and takes the constant above, so the defaults still // have exactly one owner and a caller who needs a faster detector no longer // has to be told the numbers are not negotiable. heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }` |  |\n"
+            "| `cluster.ClusterConfig` | `{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }` |  |\n"
+            "| `cluster.ClusterConfig.heartbeatIntervalMs` | `i64?` | Type alias field |\n"
             "| `cluster.ClusterConfig.heartbeatTimeoutMs` | `i64?` | Type alias field |\n"
             "| `cluster.ClusterConfig.maxMissedHeartbeats` | `i64?` | Type alias field |\n"
             "| `cluster.ClusterConfig.name` | `string` | Type alias field |\n"
             "| `cluster.ClusterConfig.port` | `i64` | Type alias field |\n"
             "| `cluster.ClusterConfig.secret` | `string?` | Type alias field |\n"
             "| `cluster.ClusterConfig.tls` | `ClusterTlsOptions?` | Type alias field |\n"
-            "| `cluster.ClusterDelivery` | `enum ClusterDelivery` | Outcome of handing one opaque service envelope to the cluster transport |\n"
-            "| `cluster.ClusterDelivery.Accepted` | `ClusterDelivery.Accepted` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.Disconnected` | `ClusterDelivery.Disconnected` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.InvalidEnvelope` | `ClusterDelivery.InvalidEnvelope` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.InvalidTopic` | `ClusterDelivery.InvalidTopic` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.Overloaded` | `ClusterDelivery.Overloaded` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.Unavailable` | `ClusterDelivery.Unavailable` | Enum variant |\n"
-            "| `cluster.ClusterInfo` | `{ self: string, port: i64, running: bool, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
-            "| `cluster.ClusterInfo.deadNodes` | `const i64` | Object field |\n"
-            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const i64` | Object field |\n"
-            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const i64` | Object field |\n"
-            "| `cluster.ClusterInfo.listeners` | `const i64` | Object field |\n"
-            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const i64` | Object field |\n"
-            "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Object field |\n"
-            "| `cluster.ClusterInfo.port` | `const i64` | Object field |\n"
-            "| `cluster.ClusterInfo.running` | `const bool` | Object field |\n"
-            "| `cluster.ClusterInfo.self` | `const string` | Object field |\n"
-            "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Object field |\n"
-            "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: i64, state: ClusterNodeState, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }` | Typed diagnostic snapshot for one remote cluster node |\n"
-            "| `cluster.ClusterNodeInfo.bytesReceived` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.bytesSent` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.framesReceived` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.framesSent` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.host` | `const string` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.name` | `const string` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueBytes` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueFrames` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.phi` | `const f64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.port` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.rttMs` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.sendErrors` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.slow` | `const bool` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `const i64` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.state` | `const ClusterNodeState` | Object field |\n"
-            "| `cluster.ClusterNodeState` | `enum ClusterNodeState` | Lifecycle state of a remote cluster node |\n"
-            "| `cluster.ClusterNodeState.Closing` | `ClusterNodeState.Closing` | Enum variant |\n"
-            "| `cluster.ClusterNodeState.Connected` | `ClusterNodeState.Connected` | Enum variant |\n"
-            "| `cluster.ClusterNodeState.Connecting` | `ClusterNodeState.Connecting` | Enum variant |\n"
-            "| `cluster.ClusterNodeState.Handshaking` | `ClusterNodeState.Handshaking` | Enum variant |\n"
-            "| `cluster.ClusterNodeState.Idle` | `ClusterNodeState.Idle` | Enum variant |\n"
+            "| `cluster.ClusterCoroExit` | `{ name: string, reason: string, }` |  |\n"
+            "| `cluster.ClusterCoroExit.name` | `string` | Type alias field |\n"
+            "| `cluster.ClusterCoroExit.reason` | `string` | Type alias field |\n"
+            "| `cluster.ClusterDiscoveryAnnouncement` | `{ name: string, port: i64, clusterHash: u64, }` |  |\n"
+            "| `cluster.ClusterDiscoveryAnnouncement.clusterHash` | `u64` | Type alias field |\n"
+            "| `cluster.ClusterDiscoveryAnnouncement.name` | `string` | Type alias field |\n"
+            "| `cluster.ClusterDiscoveryAnnouncement.port` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterFrame` | `{ kind: i64, payload: Array<u8>, }` |  |\n"
+            "| `cluster.ClusterFrame.kind` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterFrame.payload` | `Array<u8>` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeAck` | `{ name: string, nonce: Array<u8>, proof: Array<u8>, flags: i64, }` |  |\n"
+            "| `cluster.ClusterHandshakeAck.flags` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeAck.name` | `string` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeAck.nonce` | `Array<u8>` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeAck.proof` | `Array<u8>` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeRequest` | `{ name: string, nonce: Array<u8>, flags: i64, }` |  |\n"
+            "| `cluster.ClusterHandshakeRequest.flags` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeRequest.name` | `string` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeRequest.nonce` | `Array<u8>` | Type alias field |\n"
+            "| `cluster.ClusterInfo` | `{ self: string, port: i64, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tlsEnabled: bool, }` |  |\n"
+            "| `cluster.ClusterInfo.deadNodes` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterInfo.listeners` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterInfo.nodes` | `Array<ClusterNodeInfo>` | Type alias field |\n"
+            "| `cluster.ClusterInfo.port` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterInfo.self` | `string` | Type alias field |\n"
+            "| `cluster.ClusterInfo.tlsEnabled` | `bool` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo` | `{ name: string, endpoint: Endpoint?, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64, }` |  |\n"
+            "| `cluster.ClusterNodeInfo.bytesReceived` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.bytesSent` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.endpoint` | `Endpoint?` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.framesReceived` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.framesSent` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.name` | `string` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueBytes` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueFrames` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.phi` | `f64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.rttMs` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.sendErrors` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.slow` | `bool` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `i64` | Type alias field |\n"
             "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }` |  |\n"
             "| `cluster.ClusterTlsOptions.caFile` | `string?` | Type alias field |\n"
             "| `cluster.ClusterTlsOptions.certFile` | `string?` | Type alias field |\n"
             "| `cluster.ClusterTlsOptions.enabled` | `bool` | Type alias field |\n"
             "| `cluster.ClusterTlsOptions.insecure` | `bool` | Type alias field |\n"
             "| `cluster.ClusterTlsOptions.keyFile` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterTlsStatus` | `{ enabled: bool, clientReady: bool, serverReady: bool }` | Effective TLS posture of a running cluster node |\n"
-            "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Object field |\n"
-            "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Object field |\n"
-            "| `cluster.ClusterTlsStatus.serverReady` | `const bool` | Object field |\n"
+            "| `cluster.ClusterTransportFrame` | `{ hopLimit: i64, topic: string, envelope: Array<u8>, }` |  |\n"
+            "| `cluster.ClusterTransportFrame.envelope` | `Array<u8>` | Type alias field |\n"
+            "| `cluster.ClusterTransportFrame.hopLimit` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterTransportFrame.topic` | `string` | Type alias field |\n"
+            "| `cluster.DISCOVERY_INTERVAL_MS` | `: i64` |  |\n"
+            "| `cluster.DISCOVERY_MAGIC` | `: i64` |  |\n"
+            "| `cluster.DISCOVERY_MULTICAST_GROUP` | `: string` |  |\n"
+            "| `cluster.DISCOVERY_MULTICAST_PORT` | `: i64` |  |\n"
+            "| `cluster.DISCOVERY_VERSION` | `: i64` |  |\n"
             "| `cluster.ENVELOPE_HEADER_SIZE` | `: i64` |  |\n"
-            "| `cluster.FRAME_CORO_DEMONITOR` | `: i64` |  |\n"
             "| `cluster.FRAME_CORO_EXIT` | `: i64` |  |\n"
             "| `cluster.FRAME_CORO_MONITOR` | `: i64` |  |\n"
             "| `cluster.FRAME_HANDSHAKE_ACK` | `: i64` |  |\n"
@@ -8907,31 +9256,73 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.HANDSHAKE_TIMEOUT_MS` | `: i64` |  |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: i64` |  |\n"
             "| `cluster.HEARTBEAT_INTERVAL_MS` | `: i64` |  |\n"
+            "| `cluster.HEARTBEAT_TICK_MIN_MS` | `: i64` |  |\n"
             "| `cluster.HEARTBEAT_TIMEOUT_MS` | `: i64` |  |\n"
             "| `cluster.MAX_MISSED_HEARTBEATS` | `: i64` |  |\n"
+            "| `cluster.NODE_MONITOR_CAPACITY` | `: i64` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: i64` |  |\n"
             "| `cluster.NONCE_SIZE` | `: i64` |  |\n"
-            "| `NodeAddress` | `NodeAddress` |  |\n"
-            "| `NodeAddress.constructor` | `(host: string, port: i64): ()` |  |\n"
-            "| `NodeAddress.host` | `: string` |  |\n"
-            "| `NodeAddress.port` | `: i64` |  |\n"
+            "| `cluster.OUTPUT_QUEUE_HIGH_WATERMARK_BYTES` | `: i64` |  |\n"
+            "| `cluster.PHI_MIN_SAMPLES` | `: i64` |  |\n"
+            "| `cluster.PHI_THRESHOLD` | `: f64` |  |\n"
+            "| `cluster.PHI_WINDOW_SIZE` | `: i64` |  |\n"
             "| `cluster.PROOF_SIZE` | `: i64` |  |\n"
+            "| `PhiDetector` | `PhiDetector` |  |\n"
+            "| `PhiDetector.constructor` | `(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()` |  |\n"
+            "| `PhiDetector.intervals` | `: Array<f64>` |  |\n"
+            "| `PhiDetector.lastHeartbeatMs` | `: i64` |  |\n"
+            "| `PhiDetector.mean` | `: f64` |  |\n"
+            "| `PhiDetector.sampleCount` | `: i64` |  |\n"
+            "| `PhiDetector.sum` | `: f64` |  |\n"
+            "| `PhiDetector.sumSquares` | `: f64` |  |\n"
+            "| `PhiDetector.value` | `(nowMs: i64): f64` |  |\n"
+            "| `PhiDetector.variance` | `: f64` |  |\n"
+            "| `PhiDetector.writeIndex` | `: i64` |  |\n"
+            "| `cluster.SHARED_SECRET_MAX_BYTES` | `: i64` |  |\n"
             "| `cluster.SUBSCRIPTION_CAPACITY_MAX` | `: i64` |  |\n"
+            "| `cluster.TOMBSTONE_RETENTION_MS` | `: i64` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: i64` |  |\n"
+            "| `cluster.TOPIC_DELIVERY_FANOUT_MAX` | `: i64` |  |\n"
             "| `cluster.TOPIC_MAX_HOP_LIMIT` | `: i64` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: i64` |  |\n"
-            "| `cluster.discover` | `(): ()` |  |\n"
+            "| `cluster.computeHandshakeProof` | `(secret: string, nonce: Array<u8>): Array<u8>?` |  |\n"
+            "| `cluster.decodeCoroExit` | `(payload: Array<u8>): ClusterCoroExit?` |  |\n"
+            "| `cluster.decodeCoroMonitor` | `(payload: Array<u8>): string?` |  |\n"
+            "| `cluster.decodeDiscoveryAnnouncement` | `(data: Array<u8>): ClusterDiscoveryAnnouncement?` |  |\n"
+            "| `cluster.decodeFrame` | `(data: Array<u8>): ClusterFrame?` |  |\n"
+            "| `cluster.decodeHandshakeAck` | `(payload: Array<u8>): ClusterHandshakeAck?` |  |\n"
+            "| `cluster.decodeHandshakeDone` | `(payload: Array<u8>): Array<u8>?` |  |\n"
+            "| `cluster.decodeHandshakeRequest` | `(payload: Array<u8>): ClusterHandshakeRequest?` |  |\n"
+            "| `cluster.decodeHeartbeat` | `(payload: Array<u8>): i64?` |  |\n"
+            "| `cluster.decodeTransportFrame` | `(data: Array<u8>): ClusterTransportFrame?` |  |\n"
+            "| `cluster.discover` | `(): bool` |  |\n"
+            "| `cluster.discoveryClusterHash` | `(secret: string): u64` |  |\n"
+            "| `cluster.encodeCoroExit` | `(value: ClusterCoroExit): Array<u8>?` |  |\n"
+            "| `cluster.encodeCoroMonitor` | `(name: string): Array<u8>?` |  |\n"
+            "| `cluster.encodeDiscoveryAnnouncement` | `(value: ClusterDiscoveryAnnouncement): Array<u8>?` |  |\n"
+            "| `cluster.encodeFrame` | `(kind: i64, payload: Array<u8>): Array<u8>?` |  |\n"
+            "| `cluster.encodeHandshakeAck` | `(ack: ClusterHandshakeAck): Array<u8>?` |  |\n"
+            "| `cluster.encodeHandshakeDone` | `(proof: Array<u8>): Array<u8>?` |  |\n"
+            "| `cluster.encodeHandshakeRequest` | `(request: ClusterHandshakeRequest): Array<u8>?` |  |\n"
+            "| `cluster.encodeHeartbeat` | `(kind: i64, timestampMs: i64): Array<u8>?` |  |\n"
+            "| `cluster.encodeTransportFrame` | `(hopLimit: i64, topic: string, envelope: Array<u8>): Array<u8>?` |  |\n"
+            "| `cluster.handshakeProofEqual` | `(left: Array<u8>, right: Array<u8>): bool` |  |\n"
+            "| `cluster.heartbeatIsDead` | `(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool` |  |\n"
+            "| `cluster.heartbeatTickInterval` | `(intervalMs: i64): i64` |  |\n"
             "| `cluster.info` | `(): ClusterInfo?` |  |\n"
             "| `cluster.join` | `(addr: string): bool` |  |\n"
             "| `cluster.listen` | `(pattern: string, capacity: i64 = 1024): Channel<Buffer>?` |  |\n"
-            "| `cluster.monitor` | `(name: string, coroName: string? = null): Channel<string>` |  |\n"
+            "| `cluster.monitor` | `(name: string, coroName: string? = null): Channel<string>?` |  |\n"
             "| `cluster.nodes` | `(): Array<string>?` |  |\n"
-            "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
+            "| `cluster.parseAddress` | `(addr: string): Endpoint` |  |\n"
             "| `cluster.self` | `(): string` |  |\n"
             "| `cluster.send` | `(topic: string, envelope: move Buffer, hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT): ClusterDelivery` |  |\n"
+            "| `cluster.shouldJoinDiscoveredNode` | `(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool` |  |\n"
             "| `cluster.start` | `(config: ClusterConfig): bool` |  |\n"
             "| `cluster.stop` | `(): ()` |  |\n"
+            "| `cluster.tombstoneIsLive` | `(markedAtMs: i64, nowMs: i64): bool` |  |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
+            "| `cluster.validCoroutineName` | `(name: string): bool` |  |\n"
             "| `cluster.validNodeName` | `(name: string): bool` |  |\n"
             "| `cluster.validTopicName` | `(topic: string): bool` |  |\n"
             "| `cluster.validTopicPattern` | `(pattern: string): bool` |  |\n"
@@ -9009,12 +9400,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `crypto.decrypt` | `(key: string, ciphertext: string): string?` |  |\n"
             "| `crypto.encrypt` | `(key: string, plaintext: string): string` |  |\n"
             "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` |  |\n"
+            "| `crypto.hmacBytes` | `(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?` |  |\n"
             "| `crypto.md5` | `(data: string): string` |  |\n"
             "| `crypto.randomBytes` | `(n: i64): string` |  |\n"
             "| `crypto.sha1` | `(data: string): string` |  |\n"
             "| `crypto.sha256` | `(data: string): string` |  |\n"
             "| `crypto.sha512` | `(data: string): string` |  |\n"
             "| `crypto.timingSafeEqual` | `(a: string, b: string): bool` |  |\n"
+            "| `crypto.timingSafeEqualBytes` | `(a: Array<u8>, b: Array<u8>): bool` |  |\n"
             "| `crypto.uuid` | `(): string` |  |\n"
             "",
         .symbols = _symbols_crypto,
@@ -9199,19 +9592,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Cookie.serialize` | `(): string` |  |\n"
             "| `Cookie.value` | `: string` |  |\n"
             "| `CookieJar` | `CookieJar` |  |\n"
-            "| `CookieJar.add` | `(cookie: Cookie, nowSeconds: i64 = 0): ()` |  |\n"
-            "| `CookieJar.addFromResponse` | `(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: i64 = 0): ()` |  |\n"
-            "| `CookieJar.cleanup` | `(nowSeconds: i64 = 0): ()` |  |\n"
-            "| `CookieJar.clear` | `(): ()` |  |\n"
-            "| `CookieJar.clearDomain` | `(domain: string): ()` |  |\n"
             "| `CookieJar.constructor` | `(maxCookies: i64 = 300): ()` |  |\n"
             "| `CookieJar.cookies` | `: Array<Cookie>` |  |\n"
             "| `CookieJar.count` | `: i64 { fn() { return len(this.cookies) } }` |  |\n"
             "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?` |  |\n"
             "| `CookieJar.maxCookies` | `: i64` |  |\n"
             "| `FormData` | `FormData` |  |\n"
-            "| `FormData.append` | `(name: string, value: string): bool` |  |\n"
-            "| `FormData.appendFile` | `(name: string, path: Path): bool` |  |\n"
             "| `FormData.boundary` | `: string` |  |\n"
             "| `FormData.build` | `(): MultipartBody` |  |\n"
             "| `FormData.constructor` | `(maxTotalSize: i64, maxFileSize: i64): ()` |  |\n"
@@ -9220,13 +9606,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `FormData.maxTotalSize` | `: i64` |  |\n"
             "| `FormData.totalSize` | `: i64` |  |\n"
             "| `Headers` | `Headers` |  |\n"
-            "| `Headers.add` | `(name: string, value: string): ()` |  |\n"
             "| `Headers.constructor` | `(): ()` |  |\n"
             "| `Headers.contains` | `(name: string): bool` |  |\n"
             "| `Headers.entries` | `(): Array<(string, string)>` |  |\n"
             "| `Headers.get` | `(name: string): string?` |  |\n"
             "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
-            "| `Headers.set` | `(name: string, value: string): ()` |  |\n"
             "| `HttpMethod` | `HttpMethod` |  |\n"
             "| `HttpMethod.constructor` | `(token: string): ()` |  |\n"
             "| `HttpMethod.delete` | `(): HttpMethod` |  |\n"
@@ -9287,7 +9671,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RedirectDecision.url` | `: string` |  |\n"
             "| `RequestHead` | `RequestHead` |  |\n"
             "| `RequestHead.chunked` | `: bool` |  |\n"
-            "| `RequestHead.constructor` | `(method: string, target: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
+            "| `RequestHead.constructor` | `(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
             "| `RequestHead.contentLength` | `: i64` |  |\n"
             "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
@@ -9295,7 +9679,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestHead.headers` | `: Headers` |  |\n"
             "| `RequestHead.keepAlive` | `: bool` |  |\n"
             "| `RequestHead.method` | `: string` |  |\n"
-            "| `RequestHead.target` | `: string` |  |\n"
+            "| `RequestHead.requestTarget` | `: string` |  |\n"
             "| `RequestHead.version` | `: string` |  |\n"
             "| `RequestMessage` | `RequestMessage` |  |\n"
             "| `RequestMessage.body` | `: string` |  |\n"
@@ -9332,14 +9716,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RouteMatch.params` | `: Map<string, string>` |  |\n"
             "| `RouteMatch.value` | `: T` |  |\n"
             "| `Router` | `Router` |  |\n"
-            "| `Router.add` | `(method: string, path: string, value: T): bool` |  |\n"
             "| `Router.constructor` | `(): ()` |  |\n"
             "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n"
             "| `Server` | `Server` |  |\n"
             "| `Server.constructor` | `(): ()` |  |\n"
+            "| `Server.handler` | `: fn(HttpRequest) -> HttpResponse` |  |\n"
             "| `Server.listen` | `(port: i64, running: Atomic<bool>): bool` |  |\n"
-            "| `Server.route` | `(method: string, path: string, value: T): bool` |  |\n"
-            "| `Server.routeHandler` | `(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse): bool` |  |\n"
+            "| `Server.method` | `: string,` |  |\n"
+            "| `Server.path` | `: string,` |  |\n"
             "| `http.cookieJar` | `(maxCookies: i64 = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: i64 = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: i64 = 67108864, maxFileSize: i64 = 33554432): FormData` |  |\n"
@@ -9397,23 +9781,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `FrameHeader.streamId` | `: i64` |  |\n"
             "| `http2.HTTP_1_1_REQUIRED` | `: i64` |  |\n"
             "| `HeaderList` | `HeaderList` |  |\n"
-            "| `HeaderList.add` | `(name: string, value: string): ()` |  |\n"
             "| `HeaderList.constructor` | `(): ()` |  |\n"
             "| `HeaderList.count` | `(): i64` |  |\n"
             "| `HeaderList.names` | `: Array<string>` |  |\n"
             "| `HeaderList.values` | `: Array<string>` |  |\n"
             "| `HpackDecoder` | `HpackDecoder` |  |\n"
             "| `HpackDecoder.constructor` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
-            "| `HpackDecoder.decode` | `(block: Array<u8>): HeaderList?` |  |\n"
-            "| `HpackDecoder.decodeRange` | `(block: Array<u8>, start: i64, limit: i64): HeaderList?` |  |\n"
             "| `HpackDecoder.lookupName` | `(index: i64): string?` |  |\n"
             "| `HpackDecoder.lookupValue` | `(index: i64): string?` |  |\n"
-            "| `HpackDecoder.readNameValue` | `(block: Array<u8>, pos: i64, limit: i64, nameIndex: i64): _NameValue?` |  |\n"
             "| `HpackDecoder.table` | `: HpackTable` |  |\n"
             "| `HpackEncoder` | `HpackEncoder` |  |\n"
             "| `HpackEncoder.constructor` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
-            "| `HpackEncoder.encode` | `(names: Array<string>, values: Array<string>): Array<u8>` |  |\n"
-            "| `HpackEncoder.encodeHeader` | `(out: ref Array<u8>, name: string, value: string): ()` |  |\n"
             "| `HpackEncoder.staticFull` | `(name: string, value: string): i64` |  |\n"
             "| `HpackEncoder.staticName` | `(name: string): i64` |  |\n"
             "| `HpackEncoder.table` | `: HpackTable` |  |\n"
@@ -9427,7 +9805,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Settings` | `Settings` |  |\n"
             "| `Settings.constructor` | `(): ()` |  |\n"
             "| `Settings.get` | `(id: i64): i64` |  |\n"
-            "| `Settings.set` | `(id: i64, value: i64): ()` |  |\n"
             "| `Settings.values` | `: Array<i64>` |  |\n"
             "| `http2.applySettingsPayload` | `(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64` |  |\n"
             "| `http2.encodeClientSettings` | `(settings: Settings): Array<u8>` |  |\n"
@@ -9460,20 +9837,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `BufReader` | `BufReader` |  |\n"
-            "| `BufReader.close` | `(): bool` |  |\n"
             "| `BufReader.open` | `(path: Path, chunkSize: i64 = 131072): BufReader?` |  |\n"
-            "| `BufReader.readLine` | `(): string?` |  |\n"
             "| `BufWriter` | `BufWriter` |  |\n"
             "| `BufWriter.bytes` | `(): Array<u8>` |  |\n"
             "| `BufWriter.constructor` | `(path: Path, capacity: i64 = 131072): ()` |  |\n"
             "| `BufWriter.path` | `(): Path` |  |\n"
-            "| `BufWriter.reset` | `(): ()` |  |\n"
             "| `BufWriter.size` | `(): i64` |  |\n"
-            "| `BufWriter.write` | `(data: Slice<u8>): i64` |  |\n"
-            "| `BufWriter.writeBytes` | `(data: Array<u8>): i64` |  |\n"
-            "| `BufWriter.writeString` | `(data: string): i64` |  |\n"
             "| `File` | `File` |  |\n"
-            "| `File.close` | `(): bool` |  |\n"
             "| `File.flush` | `(): bool` |  |\n"
             "| `File.open` | `(path: Path): File?` |  |\n"
             "| `File.openWrite` | `(path: Path, append: bool): File?` |  |\n"
@@ -9498,7 +9868,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `LineIterator` | `LineIterator` |  |\n"
             "| `LineIterator.constructor` | `(reader: BufReader): ()` |  |\n"
             "| `LineIterator.hasNext` | `(): bool` |  |\n"
-            "| `LineIterator.next` | `(): string?` |  |\n"
             "| `io.appendFile` | `(path: Path, data: string): bool` |  |\n"
             "| `io.chdir` | `(path: Path): bool` |  |\n"
             "| `io.chmod` | `(path: Path, mode: i64): bool` |  |\n"
@@ -9526,7 +9895,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.removeAll` | `(path: Path): bool` |  |\n"
             "| `io.rename` | `(old: Path, newPath: Path): bool` |  |\n"
             "| `io.stat` | `(path: Path): FileStat?` |  |\n"
-            "| `io.symlink` | `(target: Path, link: Path): bool` |  |\n"
+            "| `io.symlink` | `(source: Path, link: Path): bool` |  |\n"
             "| `io.tempDir` | `(): Path?` |  |\n"
             "| `io.tempFile` | `(): Path?` |  |\n"
             "| `io.touch` | `(path: Path): bool` |  |\n"
@@ -9739,7 +10108,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.fence` | `(ordering: i64): ()` |  |\n"
             "| `mem.move` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n"
             "| `mem.nontemporalStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n"
-            "| `mem.pageAlloc` | `(bytes: i64, prot?: i64): MutPtr<u8>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
+            "| `mem.pageAlloc` | `(bytes: i64, prot: i64 = PROT_READ \\| PROT_WRITE): MutPtr<u8>` |  |\n"
             "| `mem.pageFree` | `(ptr: MutPtr<u8>, bytes: i64): bool` |  |\n"
             "| `mem.pageProtect` | `(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool` |  |\n"
             "| `mem.prefetch` | `(ptr: Ptr<u8>, rw: i64): ()` |  |\n"
@@ -9752,11 +10121,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "net",
-        .summary = "TCP/UDP/TLS networking with native stream pumps",
+        .summary = "TCP/UDP/TLS networking with typed handles and source-owned stream policy",
         .body =
             "# net module\n"
             "\n"
-            "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Array<u8>`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.\n"
+            "TCP/UDP/TLS networking. Binary I/O uses reusable `Array<u8>` buffers through `readInto` and `writeBytes`; source-owned `copy` and `copyBidirectional` pumps compose those operations for relays.\n"
             "\n"
             "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.\n"
             "\n"
@@ -9765,6 +10134,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "### Deadlines and errors\n"
             "Use `setReadDeadline`, `setWriteDeadline`, `setDeadline`, and `setAcceptDeadline` with `time.monotonic()` deadlines. Operations return the normal null or `-1` failure shape, and `lastError(handle)` / `lastErrno(handle)` expose diagnostic causes such as `timeout`, `closed`, `reset`, `refused`, `dns`, `tls`, and `io`.\n"
+            "\n"
+            "### TLS and ALPN\n"
+            "Use `dial(host, port, DialOptions(timeoutMs, true, protocols))` for ordinary TLS clients with an optional ALPN offer. `TlsClientContext` adds custom trust, client identity, and STARTTLS policy. `TlsServerContext` takes protocols in server-preference order. After either handshake, `negotiatedProtocol(conn)` returns the selected protocol or `null`; the application protocol owns acceptance.\n"
             "\n"
             "### Lifecycle\n"
             "`shutdownRead`, `shutdownWrite`, and `shutdown` expose TCP half-close semantics. `copyBidirectional(a, b)` runs two stream pumps and half-closes the opposite write side on EOF, which is the preferred primitive for generic TCP proxy and relay code.\n"
@@ -9800,9 +10172,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CopyBidirectionalResult` | `CopyBidirectionalResult` |  |\n"
             "| `CopyBidirectionalResult.aToB` | `: i64` |  |\n"
             "| `CopyBidirectionalResult.bToA` | `: i64` |  |\n"
-            "| `CopyBidirectionalResult.constructor` | `(aToB: i64, bToA: i64): ()` |  |\n"
             "| `DialOptions` | `DialOptions` |  |\n"
-            "| `DialOptions.constructor` | `(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()` |  |\n"
+            "| `DialOptions.alpnProtocols` | `: Array<string>?` |  |\n"
+            "| `DialOptions.constructor` | `(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()` |  |\n"
             "| `DialOptions.timeoutMs` | `: i64` |  |\n"
             "| `DialOptions.tls` | `: bool` |  |\n"
             "| `Endpoint` | `Endpoint` |  |\n"
@@ -9813,17 +10185,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `IpAddress.constructor` | `(value: string): ()` |  |\n"
             "| `IpAddress.toString` | `(): string` |  |\n"
             "| `IpAddress.value` | `: string` |  |\n"
-            "| `net.NetError` | `enum NetError` | Typed failure from network operations; classification from native codes lives in net.xr |\n"
-            "| `net.NetError.Cancelled` | `NetError.Cancelled` | Enum variant |\n"
-            "| `net.NetError.Closed` | `NetError.Closed` | Enum variant |\n"
-            "| `net.NetError.Dns` | `NetError.Dns` | Enum variant |\n"
-            "| `net.NetError.Invalid` | `NetError.Invalid` | Enum variant |\n"
-            "| `net.NetError.Io` | `NetError.Io` | Enum variant |\n"
-            "| `net.NetError.OutOfMemory` | `NetError.OutOfMemory` | Enum variant |\n"
-            "| `net.NetError.Refused` | `NetError.Refused` | Enum variant |\n"
-            "| `net.NetError.Reset` | `NetError.Reset` | Enum variant |\n"
-            "| `net.NetError.Timeout` | `NetError.Timeout` | Enum variant |\n"
-            "| `net.NetError.Tls` | `NetError.Tls` | Enum variant |\n"
+            "| `NetConn` | `NetConn` |  |\n"
+            "| `NetConn.constructor` | `(storage: __NetConnStorage): ()` |  |\n"
+            "| `NetListener` | `NetListener` |  |\n"
+            "| `NetListener.constructor` | `(storage: __NetListenerStorage): ()` |  |\n"
+            "| `TlsClientContext` | `TlsClientContext` |  |\n"
+            "| `TlsClientContext.create` | `(caFile: string = \"\", certFile: string = \"\", keyFile: string = \"\", verifyPeer: bool = true, alpnProtocols: Array<string>? = null): TlsClientContext` |  |\n"
+            "| `TlsClientContext.upgrade` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
+            "| `TlsServerContext` | `TlsServerContext` |  |\n"
+            "| `TlsServerContext.accept` | `(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
+            "| `TlsServerContext.create` | `(certFile: string, keyFile: string, caFile: string = \"\", requireClientCertificate: bool = false, alpnProtocols: Array<string>? = null): TlsServerContext` |  |\n"
             "| `UdpFrom` | `UdpFrom` |  |\n"
             "| `UdpFrom.constructor` | `(n: i64, host: string, port: i64): ()` |  |\n"
             "| `UdpFrom.host` | `: string` |  |\n"
@@ -9837,10 +10208,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions? = null): NetConn` |  |\n"
             "| `net.fd` | `(handle: NetConn \\| NetListener): i64` |  |\n"
             "| `net.hasTLS` | `(): bool` |  |\n"
+            "| `net.isClosed` | `(handle: NetConn \\| NetListener): bool` |  |\n"
+            "| `net.isTLS` | `(conn: NetConn): bool` |  |\n"
             "| `net.lastErrno` | `(handle: NetConn \\| NetListener): i64` |  |\n"
             "| `net.lastError` | `(handle: NetConn \\| NetListener): NetError?` |  |\n"
             "| `net.listen` | `(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener` |  |\n"
             "| `net.lookup` | `(hostname: string): Array<IpAddress>` |  |\n"
+            "| `net.negotiatedProtocol` | `(conn: NetConn): string?` |  |\n"
+            "| `net.port` | `(listener: NetListener): i64` |  |\n"
             "| `net.readBytes` | `(conn: NetConn, maxBytes: i64 = 4096): Array<u8>?` |  |\n"
             "| `net.readInto` | `(conn: NetConn, buffer: ref Array<u8>, maxlen: i64 = 1048576): i64` |  |\n"
             "| `net.recvFrom` | `(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1): UdpFrom?` |  |\n"
@@ -9854,6 +10229,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.shutdownRead` | `(conn: NetConn): bool` |  |\n"
             "| `net.shutdownWrite` | `(conn: NetConn): bool` |  |\n"
             "| `net.udpBind` | `(port: i64, address: string = \"\"): NetConn` |  |\n"
+            "| `net.udpMulticastBind` | `(group: string, port: i64, ttl: i64 = 1, loopback: bool = false): NetConn` |  |\n"
             "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
             "| `net.writeBytes` | `(conn: NetConn, data: Array<u8>): i64` |  |\n"
             "",
@@ -9862,11 +10238,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "os",
-        .summary = "Operating system interface (env, exec, signals)",
+        .summary = "Operating system interface (environment, bounded process-byte capture, signals)",
         .body =
             "# os module\n"
             "\n"
-            "Operating system interface (env, exec, signals).\n"
+            "Operating system interface with byte-preserving, independently bounded stdout and stderr capture.\n"
             "\n"
             "Usage: `import os` then call `os.function()`.\n"
             "\n"
@@ -9875,16 +10251,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `ExecResult` | `ExecResult` |  |\n"
-            "| `ExecResult.constructor` | `(stdout: string, stderr: string, exitCode: i64): ()` |  |\n"
+            "| `ExecResult.constructor` | `(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()` |  |\n"
             "| `ExecResult.exitCode` | `: i64` |  |\n"
-            "| `ExecResult.stderr` | `: string` |  |\n"
-            "| `ExecResult.stdout` | `: string` |  |\n"
+            "| `ExecResult.stderr` | `: Array<u8>` |  |\n"
+            "| `ExecResult.stderrTruncated` | `: bool` |  |\n"
+            "| `ExecResult.stdout` | `: Array<u8>` |  |\n"
+            "| `ExecResult.stdoutTruncated` | `: bool` |  |\n"
             "| `os.arch` | `(): string` |  |\n"
-            "| `os.clock` | `(): f64` |  |\n"
             "| `os.cpuCount` | `(): i64` |  |\n"
             "| `os.environ` | `(): Map<string, string>` |  |\n"
             "| `os.eol` | `(): string` |  |\n"
-            "| `os.exec` | `(command: string): ExecResult?` |  |\n"
+            "| `os.exec` | `(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES, maxStderrBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES): ExecResult?` |  |\n"
             "| `os.exit` | `(code: i64 = 0): ()` |  |\n"
             "| `os.freeMemory` | `(): i64` |  |\n"
             "| `os.getcwd` | `(): string` |  |\n"
@@ -9899,7 +10276,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.ppid` | `(): i64` |  |\n"
             "| `os.sep` | `(): string` |  |\n"
             "| `os.setenv` | `(name: string, value: string): bool` |  |\n"
-            "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` |  |\n"
             "| `os.tmpdir` | `(): string` |  |\n"
             "| `os.totalMemory` | `(): i64` |  |\n"
             "| `os.uid` | `(): i64` |  |\n"
@@ -9950,13 +10326,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Options.constructor` | `(workers: i64 = 0): ()` |  |\n"
             "| `Options.workers` | `: i64` |  |\n"
             "| `Plan` | `Plan` |  |\n"
-            "| `Plan.close` | `(): ()` |  |\n"
             "| `Plan.constructor` | `(options: Options, init: fn(i64) -> S): ()` |  |\n"
-            "| `Plan.forEach` | `(range: Range, body: fn(S, i64)): ()` |  |\n"
-            "| `Plan.map` | `(range: Range, body: fn(S, i64) -> T): Array<T>` |  |\n"
-            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: fn(S, i64) -> T): ()` |  |\n"
             "| `Plan.options` | `: Options` |  |\n"
-            "| `Plan.reduce` | `(range: Range, initial: A, body: fn(S, i64) -> A, combine: fn(A, A) -> A): A` |  |\n"
             "| `parallel.forEach` | `(range: Range, body: fn(i64), options: Options = Options()): ()` |  |\n"
             "| `parallel.map` | `(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>` |  |\n"
             "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()): ()` |  |\n"
@@ -10023,9 +10394,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Regex` | `Regex` |  |\n"
+            "| `Regex.constructor` | `(pattern: string, flags: string = \"\"): ()` |  |\n"
             "| `Regex.flags` | `: i64` |  |\n"
             "| `Regex.pattern` | `: string` |  |\n"
             "| `Regex.prog` | `: Array<i64>` |  |\n"
+            "| `RegexMatch` | `RegexMatch` |  |\n"
+            "| `RegexMatch.constructor` | `(start: i64, end: i64, text: string, groups: Array<string>): ()` |  |\n"
+            "| `RegexMatch.end` | `: i64` |  |\n"
+            "| `RegexMatch.groups` | `: Array<string>` |  |\n"
+            "| `RegexMatch.start` | `: i64` |  |\n"
+            "| `RegexMatch.text` | `: string` |  |\n"
             "| `regex.compile` | `(pattern: string, flags: string = \"\"): Regex` |  |\n"
             "| `regex.count` | `(pattern: Regex, s: string): i64` |  |\n"
             "| `regex.escape` | `(s: string): string` |  |\n"
@@ -10058,14 +10436,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `RuntimeInfo` | `RuntimeInfo` |  |\n"
-            "| `RuntimeInfo.blocks` | `: i64` |  |\n"
-            "| `RuntimeInfo.constructor` | `(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64): ()` |  |\n"
+            "| `RuntimeInfo.constructor` | `(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()` |  |\n"
             "| `RuntimeInfo.finalizerCount` | `: i64` |  |\n"
-            "| `RuntimeInfo.freeBlocks` | `: i64` |  |\n"
-            "| `RuntimeInfo.fullBlocks` | `: i64` |  |\n"
             "| `RuntimeInfo.liveBytes` | `: i64` |  |\n"
             "| `RuntimeInfo.liveKB` | `: f64` |  |\n"
             "| `RuntimeInfo.liveObjects` | `: i64` |  |\n"
+            "| `runtime.finalizerCount` | `(): i64` |  |\n"
             "| `runtime.info` | `(): RuntimeInfo` |  |\n"
             "| `runtime.liveBytes` | `(): i64` |  |\n"
             "| `runtime.liveObjects` | `(): i64` |  |\n"
@@ -10275,27 +10651,56 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CachePadded` | `CachePadded` |  |\n"
             "| `CachePadded.value` | `: T` |  |\n"
             "| `Condvar` | `Condvar` |  |\n"
-            "| `Condvar.broadcast` | `(): ()` |  |\n"
             "| `Condvar.constructor` | `(): ()` |  |\n"
             "| `Condvar.lock` | `(): ()` |  |\n"
-            "| `Condvar.signal` | `(): ()` |  |\n"
             "| `Condvar.unlock` | `(): ()` |  |\n"
-            "| `Condvar.wait` | `(): ()` |  |\n"
+            "| `CountdownLatch` | `CountdownLatch` |  |\n"
+            "| `CountdownLatch.close` | `(): ()` |  |\n"
+            "| `CountdownLatch.constructor` | `(count: i64): ()` |  |\n"
+            "| `CountdownLatch.done` | `(count: i64 = 1): i64` |  |\n"
+            "| `CountdownLatch.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
+            "| `CountdownLatch.remaining` | `: i64 { fn() { return this._remaining.load(Ordering.Acquire) } }` |  |\n"
+            "| `CountdownLatch.reset` | `(count: i64): bool` |  |\n"
+            "| `CountdownLatch.tryWait` | `(): bool` |  |\n"
+            "| `CountdownLatch.wait` | `(): bool` |  |\n"
+            "| `EventCount` | `EventCount` |  |\n"
+            "| `EventCount.advance` | `(step: i64 = 1): i64` |  |\n"
+            "| `EventCount.close` | `(): ()` |  |\n"
+            "| `EventCount.constructor` | `(epoch: i64): ()` |  |\n"
+            "| `EventCount.epoch` | `: i64 { fn() { return this._epoch.load(Ordering.Acquire) } }` |  |\n"
+            "| `EventCount.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
+            "| `EventCount.wait` | `(lastEpoch: i64, workerHint: i64 = -1): i64` |  |\n"
             "| `Mutex` | `Mutex` |  |\n"
             "| `Mutex.constructor` | `(v: T): ()` |  |\n"
             "| `Mutex.lock` | `(body: fn(T) -> U): U` |  |\n"
-            "| `Mutex.replace` | `(body: fn(T) -> T): T` |  |\n"
             "| `Mutex.tryLock` | `(body: fn(T) -> U): U?` |  |\n"
             "| `Mutex.value` | `: T` |  |\n"
             "| `Once` | `Once` |  |\n"
-            "| `Once.call` | `(body: fn()): ()` |  |\n"
             "| `Once.constructor` | `(): ()` |  |\n"
+            "| `ResultGroup` | `ResultGroup` |  |\n"
+            "| `ResultGroup.batchSize` | `: i64 { fn() { return this._batchSize } }` |  |\n"
+            "| `ResultGroup.constructor` | `(batchSize: i64 = 1): ()` |  |\n"
+            "| `ResultGroup.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
+            "| `ResultGroup.pendingCount` | `: i64 { fn() { return this._pending.load(Ordering.Acquire) } }` |  |\n"
+            "| `ResultGroup.readyCount` | `: i64 { fn() { return len(this._ready) } }` |  |\n"
             "| `RwLock` | `RwLock` |  |\n"
             "| `RwLock.constructor` | `(v: T): ()` |  |\n"
-            "| `RwLock.read` | `(body: fn(T) -> U): U` |  |\n"
-            "| `RwLock.replace` | `(body: fn(T) -> T): T` |  |\n"
             "| `RwLock.value` | `: T` |  |\n"
             "| `RwLock.write` | `(body: fn(T) -> U): U` |  |\n"
+            "| `Semaphore` | `Semaphore` |  |\n"
+            "| `Semaphore.acquire` | `(): bool` |  |\n"
+            "| `Semaphore.available` | `: i64 { fn() { return this._available.load(Ordering.Acquire) } }` |  |\n"
+            "| `Semaphore.close` | `(): ()` |  |\n"
+            "| `Semaphore.constructor` | `(permits: i64): ()` |  |\n"
+            "| `Semaphore.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
+            "| `Semaphore.release` | `(count: i64 = 1): i64` |  |\n"
+            "| `Semaphore.tryAcquire` | `(): bool` |  |\n"
+            "| `WorkQueue` | `WorkQueue` |  |\n"
+            "| `WorkQueue.close` | `(): ()` |  |\n"
+            "| `WorkQueue.constructor` | `(shards: i64 = 1, capacity: i64 = 256): ()` |  |\n"
+            "| `WorkQueue.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
+            "| `WorkQueue.length` | `: i64 { fn() { return len(this._items) } }` |  |\n"
+            "| `WorkQueue.shardCount` | `: i64 { fn() { return this._shards } }` |  |\n"
             "| `sync.fence` | `(order: Ordering): ()` |  |\n"
             "",
         .symbols = _symbols_sync,
@@ -10316,20 +10721,34 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Dylib` | `Dylib` |  |\n"
-            "| `Dylib.close` | `(): bool` |  |\n"
             "| `Dylib.constructor` | `(handle: i64): ()` |  |\n"
             "| `Dylib.lastError` | `(): string` |  |\n"
             "| `Dylib.open` | `(path: Path): Dylib?` |  |\n"
             "| `Dylib.symbol` | `(name: string): Ptr<u8>?` |  |\n"
-            "| `sys.OsBarrier` | `(parties: i64): OsBarrier` | Create a reusable OS-domain barrier |\n"
-            "| `sys.OsCondvar` | `(): OsCondvar` | Create an OS-domain condition variable |\n"
-            "| `sys.OsMutex` | `(): OsMutex` | Create an OS-domain mutex |\n"
-            "| `sys.OsOnce` | `(): OsOnce` | Create an OS-domain once gate |\n"
-            "| `sys.OsRwLock` | `(): OsRwLock` | Create an OS-domain read-write lock |\n"
+            "| `OsBarrier` | `OsBarrier` |  |\n"
+            "| `OsBarrier.constructor` | `(parties: i64): ()` |  |\n"
+            "| `OsBarrier.wait` | `(): bool` |  |\n"
+            "| `OsCondvar` | `OsCondvar` |  |\n"
+            "| `OsCondvar.broadcast` | `(): ()` |  |\n"
+            "| `OsCondvar.constructor` | `(): ()` |  |\n"
+            "| `OsCondvar.signal` | `(): ()` |  |\n"
+            "| `OsCondvar.wait` | `(mutex: OsMutex): ()` |  |\n"
+            "| `OsCondvar.waitFor` | `(mutex: OsMutex, timeoutNs: i64): bool` |  |\n"
+            "| `OsMutex` | `OsMutex` |  |\n"
+            "| `OsMutex.constructor` | `(): ()` |  |\n"
+            "| `OsMutex.lock` | `(): ()` |  |\n"
+            "| `OsMutex.tryLock` | `(): bool` |  |\n"
+            "| `OsMutex.unlock` | `(): ()` |  |\n"
+            "| `OsOnce` | `OsOnce` |  |\n"
+            "| `OsOnce.call` | `(body: fn()): ()` |  |\n"
+            "| `OsOnce.constructor` | `(): ()` |  |\n"
+            "| `OsRwLock` | `OsRwLock` |  |\n"
+            "| `OsRwLock.constructor` | `(): ()` |  |\n"
+            "| `OsRwLock.rdlock` | `(): ()` |  |\n"
+            "| `OsRwLock.rdunlock` | `(): ()` |  |\n"
+            "| `OsRwLock.wrlock` | `(): ()` |  |\n"
+            "| `OsRwLock.wrunlock` | `(): ()` |  |\n"
             "| `Pipe` | `Pipe` |  |\n"
-            "| `Pipe.close` | `(): bool` |  |\n"
-            "| `Pipe.closeRead` | `(): bool` |  |\n"
-            "| `Pipe.closeWrite` | `(): bool` |  |\n"
             "| `Pipe.constructor` | `(readHandle: i64, writeHandle: i64): ()` |  |\n"
             "| `Pipe.open` | `(): Pipe?` |  |\n"
             "| `Pipe.read` | `(maxBytes: i64 = 8192): Array<u8>?` |  |\n"
@@ -10341,8 +10760,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Process.id` | `: i64 { fn() { return this._id } }` |  |\n"
             "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
             "| `Process.spawn` | `(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?` |  |\n"
-            "| `Process.tryWait` | `(): i64?` |  |\n"
-            "| `Process.wait` | `(): i64` |  |\n"
             "| `ProcessOptions` | `ProcessOptions` |  |\n"
             "| `ProcessOptions.constructor` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()` |  |\n"
             "| `ProcessOptions.cwd` | `: string?` |  |\n"
@@ -10353,11 +10770,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ProcessOptions.stdout` | `: i64?` |  |\n"
             "| `ThreadLocal` | `ThreadLocal` |  |\n"
             "| `ThreadLocal.constructor` | `(init: fn() -> T): ()` |  |\n"
-            "| `ThreadLocal.get` | `(): T` |  |\n"
-            "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
             "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n"
-            "| `sys.pinToCpu` | `(cpu: i64): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
-            "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"
+            "| `sys.pinToCpu` | `(cpu: i64): bool` |  |\n"
+            "| `sys.threadYield` | `(): ()` |  |\n"
             "",
         .symbols = _symbols_sys,
         .symbol_count = (int)(sizeof(_symbols_sys) / sizeof(_symbols_sys[0])),
@@ -10417,7 +10832,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `time.monotonic` | `(): i64` |  |\n"
             "| `time.nanos` | `(): i64` |  |\n"
             "| `time.now` | `(): i64` |  |\n"
-            "| `time.sleep` | `(ms: i64): ()` | Sleep for milliseconds |\n"
+            "| `time.sleep` | `(ms: i64): ()` |  |\n"
             "",
         .symbols = _symbols_time,
         .symbol_count = (int)(sizeof(_symbols_time) / sizeof(_symbols_time[0])),
@@ -10440,7 +10855,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TomlArray.at` | `(index: i64): TomlValue?` |  |\n"
             "| `TomlArray.constructor` | `(): ()` |  |\n"
             "| `TomlArray.len` | `(): i64` |  |\n"
-            "| `TomlArray.push` | `(value: TomlValue): ()` |  |\n"
             "| `TomlArray.values` | `: Array<TomlValue>` |  |\n"
             "| `TomlDateTime` | `TomlDateTime` |  |\n"
             "| `TomlDateTime.constructor` | `(raw: string): ()` |  |\n"
@@ -10469,7 +10883,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TomlTable.containsKey` | `(key: string): bool` |  |\n"
             "| `TomlTable.get` | `(key: string): TomlValue?` |  |\n"
             "| `TomlTable.keys` | `(): Array<string>` |  |\n"
-            "| `TomlTable.set` | `(key: string, value: TomlValue): ()` |  |\n"
             "| `TomlTable.values` | `: Map<string, TomlValue>` |  |\n"
             "| `TomlValue` | `TomlValue` |  |\n"
             "| `TomlValue.Array` | `(value: TomlArray): TomlValue` |  |\n"
@@ -10543,13 +10956,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `QueryParams` | `QueryParams` |  |\n"
-            "| `QueryParams.add` | `(name: string, value: string): ()` |  |\n"
             "| `QueryParams.constructor` | `(): ()` |  |\n"
             "| `QueryParams.encode` | `(): string` |  |\n"
             "| `QueryParams.entries` | `(): Array<(string, string)>` |  |\n"
             "| `QueryParams.get` | `(name: string): string?` |  |\n"
             "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n"
-            "| `QueryParams.set` | `(name: string, value: string): ()` |  |\n"
             "| `URL` | `URL` |  |\n"
             "| `URL.constructor` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n"
             "| `URL.hash` | `: string` |  |\n"
@@ -10603,24 +11014,22 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ParsedFrame.payload` | `: Array<u8>` |  |\n"
             "| `ParsedFrame.rsv1` | `: bool` |  |\n"
             "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n"
-            "| `ParsedUpgradeRequest.constructor` | `(target: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n"
+            "| `ParsedUpgradeRequest.constructor` | `(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n"
             "| `ParsedUpgradeRequest.deflate` | `: bool` |  |\n"
             "| `ParsedUpgradeRequest.origin` | `: string?` |  |\n"
             "| `ParsedUpgradeRequest.protocol` | `: string?` |  |\n"
+            "| `ParsedUpgradeRequest.requestTarget` | `: string` |  |\n"
             "| `ParsedUpgradeRequest.secKey` | `: string` |  |\n"
-            "| `ParsedUpgradeRequest.target` | `: string` |  |\n"
             "| `ParsedUpgradeResponse` | `ParsedUpgradeResponse` |  |\n"
             "| `ParsedUpgradeResponse.constructor` | `(statusCode: i64, protocol: string? = null, deflate: bool = false): ()` |  |\n"
             "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
             "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
             "| `ParsedUpgradeResponse.statusCode` | `: i64` |  |\n"
             "| `WsConn` | `WsConn` |  |\n"
-            "| `WsConn.close` | `(code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
             "| `WsConn.constructor` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()` |  |\n"
             "| `WsConn.error` | `: string?` |  |\n"
             "| `WsConn.isOpen` | `(): bool` |  |\n"
             "| `WsConn.ping` | `(): bool` |  |\n"
-            "| `WsConn.recv` | `(timeout: i64 = -1): WsMessage?` |  |\n"
             "| `WsConn.sendBytes` | `(data: Array<u8>, binary: bool = false): bool` |  |\n"
             "| `WsConn.sendText` | `(data: string): bool` |  |\n"
             "| `WsConn.url` | `: string` |  |\n"
@@ -10763,7 +11172,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlMapping.containsKey` | `(key: string): bool` |  |\n"
             "| `YamlMapping.get` | `(key: string): YamlValue?` |  |\n"
             "| `YamlMapping.keys` | `: Array<string>` |  |\n"
-            "| `YamlMapping.set` | `(key: string, value: YamlValue): ()` |  |\n"
             "| `YamlMapping.size` | `(): i64` |  |\n"
             "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
             "| `yaml.YamlOptions` | `{ strict: bool }` |  |\n"
