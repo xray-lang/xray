@@ -65,7 +65,7 @@ normally reachable cancel continuations; generated C does not treat frame dispos
 or trap as a cancellation alias.
 
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
-anchor-sha256: tests/unit/CMakeLists.txt 9509a186bb76d1d1b3e560bde36004cd92f40ebac6162656ccd1d3985fe6f860
+anchor-sha256: tests/unit/CMakeLists.txt 67ef155e718a1e3cd872135ee5936fc2bc2dcada08666f0f04e47acd7a9248fc
 anchor-sha256: xisa/core/registry.json 6ef47b9c8055809d8856bd01aed88390c4c4c2a5ba44b6cf23b831d194b0f71b
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json c3425475365edbbbe3a77fd5812107f9b1dec144a3d594a101419f56c7844f5d

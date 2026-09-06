@@ -2202,7 +2202,38 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/runtime/object
     )
     target_link_libraries(test_mcp_protocol PRIVATE xray_core)
-    add_test(NAME test_mcp_protocol COMMAND test_mcp_protocol)
+    set(XR_MCP_PROTOCOL_TEST_GROUPS
+        core
+        tools
+        format
+        analyze
+        run_basic
+        run_deadline
+        run_import_net
+        run_import_http
+        run_import_io
+        run_import_os
+        run_import_process
+        run_import_cluster
+        run_import_ws
+        run_import_path
+        knowledge_tools
+        resources
+        resource_templates
+        prompts
+        knowledge
+        dispatch
+    )
+    foreach(group IN LISTS XR_MCP_PROTOCOL_TEST_GROUPS)
+        add_custom_target(test_mcp_protocol_${group} DEPENDS test_mcp_protocol)
+        add_test(
+            NAME test_mcp_protocol_${group}
+            COMMAND test_mcp_protocol --group ${group}
+        )
+        set_tests_properties(test_mcp_protocol_${group} PROPERTIES
+            LABELS "unit;mcp-protocol;sharded"
+        )
+    endforeach()
     add_test(NAME test_mcp_knowledge_generation
         COMMAND ${XRAY_PYTHON}
             ${CMAKE_SOURCE_DIR}/tests/mcp/test_knowledge_generation.py

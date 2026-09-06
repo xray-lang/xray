@@ -81,6 +81,10 @@ static XrJsonValue *parse_json(const char *json) {
     return xjson_parse(json, strlen(json));
 }
 
+static bool test_group_selected(const char *requested_group, const char *group) {
+    return requested_group == NULL || strcmp(requested_group, group) == 0;
+}
+
 static XmcpRegistry test_registry(size_t tools, size_t resources, size_t templates,
                                   size_t prompts) {
     XmcpRegistry registry = {0};
@@ -1117,11 +1121,11 @@ TEST(tools_call_run_deadline_keeps_server_usable) {
     xjson_free(list_result);
 }
 
-TEST(tools_call_run_blocks_dangerous_import) {
-    /* `net` is not in the runner allowlist; the import must fail so the
-     * snippet exits non-zero. The structured payload signals !ok. */
+static void assert_dangerous_import_is_blocked(const char *module) {
     XmcpServer server = test_server_with_runner(true);
-    XrJsonValue *params = make_run_params("import net\n");
+    char code[64];
+    snprintf(code, sizeof(code), "import %s\n", module);
+    XrJsonValue *params = make_run_params(code);
 
     XrJsonValue *result = call_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
@@ -1137,29 +1141,19 @@ TEST(tools_call_run_blocks_dangerous_import) {
     xjson_free(result);
 }
 
-TEST(tools_call_run_blocks_all_dangerous_imports) {
-    const char *modules[] = {"net", "http", "io", "os", "process", "cluster", "ws", "path"};
-
-    for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
-        XmcpServer server = test_server_with_runner(true);
-        char code[64];
-        snprintf(code, sizeof(code), "import %s\n", modules[i]);
-        XrJsonValue *params = make_run_params(code);
-
-        XrJsonValue *result = call_tools_call(&server, params);
-        ASSERT_NOT_NULL(result);
-        ASSERT(xjson_get_bool(result, "isError") == true);
-
-        XrJsonValue *structured = xjson_get_object(result, "structuredContent");
-        ASSERT_NOT_NULL(structured);
-        ASSERT(xjson_get_bool(structured, "ok") == false);
-        ASSERT(xjson_get_bool(structured, "timedOut") == false);
-        ASSERT(xjson_get_int_or(structured, "exitCode", 0) != 0);
-
-        xjson_free(params);
-        xjson_free(result);
+#define DANGEROUS_IMPORT_TEST(module)                                                              \
+    TEST(tools_call_run_blocks_import_##module) {                                                  \
+        assert_dangerous_import_is_blocked(#module);                                               \
     }
-}
+
+DANGEROUS_IMPORT_TEST(net)
+DANGEROUS_IMPORT_TEST(http)
+DANGEROUS_IMPORT_TEST(io)
+DANGEROUS_IMPORT_TEST(os)
+DANGEROUS_IMPORT_TEST(process)
+DANGEROUS_IMPORT_TEST(cluster)
+DANGEROUS_IMPORT_TEST(ws)
+DANGEROUS_IMPORT_TEST(path)
 
 TEST(tools_call_run_missing_code_is_error_result) {
     /* Empty `code` is a tool-level error, not a JSON-RPC error. */
@@ -1879,133 +1873,160 @@ TEST(method_entry_struct_size) {
  * Main
  * ========================================================================= */
 
-int main(void) {
+int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
+    const char *requested_group = NULL;
+    if (argc == 3 && strcmp(argv[1], "--group") == 0) {
+        requested_group = argv[2];
+    } else if (argc != 1) {
+        fprintf(stderr, "usage: %s [--group <name>]\n", argv[0]);
+        return 2;
+    }
+
     printf("=== MCP Protocol Tests ===\n");
 
-    /* Error codes */
-    RUN_TEST(error_codes_standard_range);
-    RUN_TEST(error_codes_mcp_range);
+    if (test_group_selected(requested_group, "core")) {
+        RUN_TEST(error_codes_standard_range);
+        RUN_TEST(error_codes_mcp_range);
+        RUN_TEST(protocol_version);
+        RUN_TEST(server_name);
+        RUN_TEST(server_version_defined);
+        RUN_TEST(initialize_returns_protocol_version);
+        RUN_TEST(initialize_does_not_rewind_ready_state);
+        RUN_TEST(jsonrpc_valid_request);
+        RUN_TEST(jsonrpc_valid_notification);
+        RUN_TEST(jsonrpc_rejects_missing_version);
+        RUN_TEST(jsonrpc_rejects_invalid_id);
+        RUN_TEST(jsonrpc_rejects_missing_method);
+        RUN_TEST(jsonrpc_rejects_scalar_params);
+        RUN_TEST(jsonrpc_rejects_batch_array);
+        RUN_TEST(jsonrpc_rejects_null_params);
+        RUN_TEST(initialize_returns_server_info);
+        RUN_TEST(initialize_capabilities_with_all_features);
+        RUN_TEST(initialize_capabilities_without_prompts);
+        RUN_TEST(initialize_capabilities_minimal);
+        RUN_TEST(registry_init_counts_features);
+        RUN_TEST(registry_finds_tools_by_name);
+        RUN_TEST(registry_indexes_resources_and_prompts);
+    }
 
-    /* Protocol constants */
-    RUN_TEST(protocol_version);
-    RUN_TEST(server_name);
-    RUN_TEST(server_version_defined);
+    if (test_group_selected(requested_group, "tools")) {
+        RUN_TEST(tools_list_returns_default_tools);
+        RUN_TEST(tools_list_has_required_fields);
+        RUN_TEST(tools_list_has_annotations);
+        RUN_TEST(tools_list_tool_names);
+        RUN_TEST(tools_list_default_tools_have_output_schema);
+        RUN_TEST(tools_call_unknown_tool);
+        RUN_TEST(tools_call_missing_name);
+        RUN_TEST(tools_call_rejects_non_object_arguments);
+        RUN_TEST(tools_call_validates_required_arguments);
+        RUN_TEST(tools_call_validates_argument_types);
+        RUN_TEST(tools_call_validates_string_enums);
+        RUN_TEST(tools_call_validates_integer_ranges);
+        RUN_TEST(tools_call_rejects_fractional_integers);
+    }
 
-    /* Initialize */
-    RUN_TEST(initialize_returns_protocol_version);
-    RUN_TEST(initialize_does_not_rewind_ready_state);
+    if (test_group_selected(requested_group, "format")) {
+        RUN_TEST(tools_call_format_missing_code);
+        RUN_TEST(tools_call_format_schema_has_optional_params);
+        RUN_TEST(tools_call_format_returns_structured_content);
+        RUN_TEST(tools_call_format_syntax_errors_are_structured);
+    }
 
-    /* JSON-RPC validation */
-    RUN_TEST(jsonrpc_valid_request);
-    RUN_TEST(jsonrpc_valid_notification);
-    RUN_TEST(jsonrpc_rejects_missing_version);
-    RUN_TEST(jsonrpc_rejects_invalid_id);
-    RUN_TEST(jsonrpc_rejects_missing_method);
-    RUN_TEST(jsonrpc_rejects_scalar_params);
-    RUN_TEST(jsonrpc_rejects_batch_array);
-    RUN_TEST(jsonrpc_rejects_null_params);
+    if (test_group_selected(requested_group, "analyze")) {
+        RUN_TEST(tools_call_analyze_missing_code);
+        RUN_TEST(tools_call_analyze_schema);
+        RUN_TEST(tools_call_analyze_returns_structured_diagnostics);
+    }
 
-    /* Initialize result shape */
-    RUN_TEST(initialize_returns_server_info);
-    RUN_TEST(initialize_capabilities_with_all_features);
-    RUN_TEST(initialize_capabilities_without_prompts);
-    RUN_TEST(initialize_capabilities_minimal);
-    RUN_TEST(registry_init_counts_features);
-    RUN_TEST(registry_finds_tools_by_name);
-    RUN_TEST(registry_indexes_resources_and_prompts);
+    if (test_group_selected(requested_group, "run_basic")) {
+        RUN_TEST(tools_call_run_disabled_by_default);
+        RUN_TEST(tools_list_runner_enabled_includes_run);
+        RUN_TEST(tools_call_run_basic_print_returns_structured);
+        RUN_TEST(tools_call_run_requires_module_identity);
+        RUN_TEST(tools_call_run_output_truncated);
+        RUN_TEST(tools_call_run_missing_code_is_error_result);
+    }
 
-    /* Tools */
-    RUN_TEST(tools_list_returns_default_tools);
-    RUN_TEST(tools_list_has_required_fields);
-    RUN_TEST(tools_list_has_annotations);
-    RUN_TEST(tools_list_tool_names);
-    RUN_TEST(tools_list_default_tools_have_output_schema);
-    RUN_TEST(tools_call_unknown_tool);
-    RUN_TEST(tools_call_missing_name);
-    RUN_TEST(tools_call_rejects_non_object_arguments);
-    RUN_TEST(tools_call_validates_required_arguments);
-    RUN_TEST(tools_call_validates_argument_types);
-    RUN_TEST(tools_call_validates_string_enums);
-    RUN_TEST(tools_call_validates_integer_ranges);
-    RUN_TEST(tools_call_rejects_fractional_integers);
+    if (test_group_selected(requested_group, "run_deadline")) {
+        RUN_TEST(tools_call_run_deadline_exceeded);
+        RUN_TEST(tools_call_run_deadline_keeps_server_usable);
+    }
 
-    /* Format tool */
-    RUN_TEST(tools_call_format_missing_code);
-    RUN_TEST(tools_call_format_schema_has_optional_params);
-    RUN_TEST(tools_call_format_returns_structured_content);
-    RUN_TEST(tools_call_format_syntax_errors_are_structured);
+#define RUN_DANGEROUS_IMPORT_GROUP(module)                                                         \
+    if (test_group_selected(requested_group, "run_import_" #module))                               \
+    RUN_TEST(tools_call_run_blocks_import_##module)
 
-    /* Diagnostics tool */
-    RUN_TEST(tools_call_analyze_missing_code);
-    RUN_TEST(tools_call_analyze_schema);
-    RUN_TEST(tools_call_analyze_returns_structured_diagnostics);
+    RUN_DANGEROUS_IMPORT_GROUP(net);
+    RUN_DANGEROUS_IMPORT_GROUP(http);
+    RUN_DANGEROUS_IMPORT_GROUP(io);
+    RUN_DANGEROUS_IMPORT_GROUP(os);
+    RUN_DANGEROUS_IMPORT_GROUP(process);
+    RUN_DANGEROUS_IMPORT_GROUP(cluster);
+    RUN_DANGEROUS_IMPORT_GROUP(ws);
+    RUN_DANGEROUS_IMPORT_GROUP(path);
 
-    /* Run tool */
-    RUN_TEST(tools_call_run_disabled_by_default);
-    RUN_TEST(tools_list_runner_enabled_includes_run);
-    RUN_TEST(tools_call_run_basic_print_returns_structured);
-    RUN_TEST(tools_call_run_requires_module_identity);
-    RUN_TEST(tools_call_run_output_truncated);
-    RUN_TEST(tools_call_run_deadline_exceeded);
-    RUN_TEST(tools_call_run_deadline_keeps_server_usable);
-    RUN_TEST(tools_call_run_blocks_dangerous_import);
-    RUN_TEST(tools_call_run_blocks_all_dangerous_imports);
-    RUN_TEST(tools_call_run_missing_code_is_error_result);
+    if (test_group_selected(requested_group, "knowledge_tools")) {
+        RUN_TEST(tools_call_syntax_lookup_returns_structured_content);
+        RUN_TEST(tools_call_stdlib_search_returns_structured_content);
+        RUN_TEST(tools_call_stdlib_search_json_reports_builtin_usage);
+        RUN_TEST(tools_call_definition_returns_structured_content);
+        RUN_TEST(tools_call_definition_not_found_is_structured);
+        RUN_TEST(tools_call_definition_missing_symbol);
+        RUN_TEST(tools_call_definition_schema);
+    }
 
-    /* Knowledge tools */
-    RUN_TEST(tools_call_syntax_lookup_returns_structured_content);
-    RUN_TEST(tools_call_stdlib_search_returns_structured_content);
-    RUN_TEST(tools_call_stdlib_search_json_reports_builtin_usage);
-    RUN_TEST(tools_call_definition_returns_structured_content);
-    RUN_TEST(tools_call_definition_not_found_is_structured);
+    if (test_group_selected(requested_group, "resources")) {
+        RUN_TEST(resources_list_returns_three);
+        RUN_TEST(resources_list_has_required_fields);
+        RUN_TEST(resources_list_uris);
+        RUN_TEST(resources_read_cheatsheet);
+        RUN_TEST(resources_read_stdlib_list_omits_json_module);
+        RUN_TEST(resources_read_unknown_uri);
+        RUN_TEST(resources_read_missing_uri);
+    }
 
-    /* Definition tool */
-    RUN_TEST(tools_call_definition_missing_symbol);
-    RUN_TEST(tools_call_definition_schema);
+    if (test_group_selected(requested_group, "resource_templates")) {
+        RUN_TEST(resource_templates_list_returns_two);
+        RUN_TEST(resource_templates_have_required_fields);
+        RUN_TEST(resource_templates_uris);
+        RUN_TEST(resources_read_topic_template);
+        RUN_TEST(resources_read_json_builtin_template);
+        RUN_TEST(resources_read_stdlib_template);
+    }
 
-    /* Resources */
-    RUN_TEST(resources_list_returns_three);
-    RUN_TEST(resources_list_has_required_fields);
-    RUN_TEST(resources_list_uris);
-    RUN_TEST(resources_read_cheatsheet);
-    RUN_TEST(resources_read_stdlib_list_omits_json_module);
-    RUN_TEST(resources_read_unknown_uri);
-    RUN_TEST(resources_read_missing_uri);
+    if (test_group_selected(requested_group, "prompts")) {
+        RUN_TEST(prompts_list_returns_five);
+        RUN_TEST(prompts_list_has_required_fields);
+        RUN_TEST(prompts_list_prompt_names);
+        RUN_TEST(prompts_list_has_arguments);
+        RUN_TEST(prompts_get_code_review);
+        RUN_TEST(prompts_get_unknown_prompt);
+        RUN_TEST(prompts_get_missing_name);
+    }
 
-    /* Resource templates */
-    RUN_TEST(resource_templates_list_returns_two);
-    RUN_TEST(resource_templates_have_required_fields);
-    RUN_TEST(resource_templates_uris);
-    RUN_TEST(resources_read_topic_template);
-    RUN_TEST(resources_read_json_builtin_template);
-    RUN_TEST(resources_read_stdlib_template);
+    if (test_group_selected(requested_group, "knowledge")) {
+        RUN_TEST(knowledge_new_and_load);
+        RUN_TEST(knowledge_lookup_exact);
+        RUN_TEST(knowledge_lookup_alias);
+        RUN_TEST(knowledge_lookup_not_found);
+        RUN_TEST(knowledge_search_stdlib);
+        RUN_TEST(knowledge_search_stdlib_ranks_symbols);
+        RUN_TEST(knowledge_search_stdlib_module_symbol_direct);
+        RUN_TEST(knowledge_search_stdlib_multi_token_module_context);
+        RUN_TEST(knowledge_search_stdlib_no_match);
+        RUN_TEST(knowledge_get_cheatsheet);
+        RUN_TEST(knowledge_get_concurrency);
+        RUN_TEST(knowledge_get_stdlib_list);
+    }
 
-    /* Prompts */
-    RUN_TEST(prompts_list_returns_five);
-    RUN_TEST(prompts_list_has_required_fields);
-    RUN_TEST(prompts_list_prompt_names);
-    RUN_TEST(prompts_list_has_arguments);
-    RUN_TEST(prompts_get_code_review);
-    RUN_TEST(prompts_get_unknown_prompt);
-    RUN_TEST(prompts_get_missing_name);
+    if (test_group_selected(requested_group, "dispatch"))
+        RUN_TEST(method_entry_struct_size);
 
-    /* Knowledge base */
-    RUN_TEST(knowledge_new_and_load);
-    RUN_TEST(knowledge_lookup_exact);
-    RUN_TEST(knowledge_lookup_alias);
-    RUN_TEST(knowledge_lookup_not_found);
-    RUN_TEST(knowledge_search_stdlib);
-    RUN_TEST(knowledge_search_stdlib_ranks_symbols);
-    RUN_TEST(knowledge_search_stdlib_module_symbol_direct);
-    RUN_TEST(knowledge_search_stdlib_multi_token_module_context);
-    RUN_TEST(knowledge_search_stdlib_no_match);
-    RUN_TEST(knowledge_get_cheatsheet);
-    RUN_TEST(knowledge_get_concurrency);
-    RUN_TEST(knowledge_get_stdlib_list);
-
-    /* Dispatch table */
-    RUN_TEST(method_entry_struct_size);
+    if (requested_group != NULL && tests_passed == 0 && tests_failed == 0) {
+        fprintf(stderr, "unknown or empty MCP protocol test group: %s\n", requested_group);
+        return 2;
+    }
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
