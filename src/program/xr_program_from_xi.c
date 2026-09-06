@@ -1471,6 +1471,37 @@ static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, con
 static const XrStdlibDefEntry *resolved_provider_native_call(
     const XrXiBuildContext *context, const XiFunc *caller, const XiValue *call);
 
+static bool exact_static_cleanup_try(const XiFunc *function, const XiValue *value) {
+    if (!function || !value || value->op != XI_TRY ||
+        value->aux_int != XI_TRY_AUX_STATIC_CLEANUP || value->nargs != 0u || !value->aux ||
+        !value->block || value->block->func != function ||
+        (value->flags & XI_FLAG_SIDE_EFFECT) == 0u)
+        return false;
+    const XiBlock *handler = (const XiBlock *) value->aux;
+    if (handler->func != function)
+        return false;
+    for (uint32_t index = 0u; index < handler->nvalues; ++index) {
+        const XiValue *candidate = handler->values[index];
+        if (candidate && candidate->op == XI_CATCH && candidate->aux == value &&
+            candidate->nargs == 0u)
+            return true;
+    }
+    return false;
+}
+
+static bool exact_static_cleanup_end(const XiFunc *function, const XiValue *value) {
+    const XiValue *registration =
+        value && value->op == XI_END_TRY ? (const XiValue *) value->aux : NULL;
+    return value && value->nargs == 0u && (value->flags & XI_FLAG_SIDE_EFFECT) != 0u &&
+           exact_static_cleanup_try(function, registration);
+}
+
+static bool exact_cleanup_boundary_marker(const XiValue *value) {
+    return value && (value->op == XI_CLEANUP_ENTER || value->op == XI_CLEANUP_LEAVE) &&
+           value->nargs == 0u && value->type && value->type->kind == XR_KIND_UNIT &&
+           (value->flags & XI_FLAG_SIDE_EFFECT) != 0u;
+}
+
 static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *context,
                                                         const XiFunc *function,
                                                         const XiFunc **stack, uint32_t depth,
@@ -1487,6 +1518,7 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
     }
     stack[depth] = function;
     bool found = false;
+    bool has_static_cleanup = false;
     for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
         const XiBlock *block = function->blocks[block_index];
         if (!canonical_block_is_reachable(context, function, block))
@@ -1495,7 +1527,23 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
             const XiValue *value = block->values[value_index];
             if (!value)
                 continue;
-            if (value->op == XI_TRY || value->op == XI_CATCH || value->op == XI_END_TRY)
+            if (value->op == XI_TRY) {
+                if (!exact_static_cleanup_try(function, value))
+                    return fail(diagnostic, diagnostic_size,
+                                XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi function %s still uses implicit panic-handler state",
+                                function->name ? function->name : "<anonymous>");
+                has_static_cleanup = true;
+                continue;
+            }
+            if (value->op == XI_END_TRY) {
+                if (exact_static_cleanup_end(function, value))
+                    continue;
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi function %s still uses implicit panic-handler state",
+                            function->name ? function->name : "<anonymous>");
+            }
+            if (value->op == XI_CATCH)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi function %s still uses implicit panic-handler state",
                             function->name ? function->name : "<anonymous>");
@@ -1523,6 +1571,10 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
             }
         }
     }
+    if (found && has_static_cleanup)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi function %s needs explicit panic cleanup continuations",
+                    function->name ? function->name : "<anonymous>");
     *has_panic = found;
     return XR_PROGRAM_BUILD_OK;
 }
@@ -4347,13 +4399,28 @@ static bool imported_callable_checktype_is_exact(const XrXiBuildContext *context
     return imported_callable_checktype_proof_failure(context, function, check) == NULL;
 }
 
+static bool cleanup_return_copy_is_exact(const XiValue *value) {
+    return xi_copy_is_cleanup_return(value) && value->nargs == 1u && value->args &&
+           value->args[0] && value->type && value->args[0]->type &&
+           xr_type_equals(value->type, value->args[0]->type) &&
+           value->xg_existential_kind == XI_EXISTENTIAL_NONE &&
+           value->enum_metadata_owner == NULL && value->enum_metadata_kind == 0u;
+}
+
 static const XiValue *exact_logical_value_identity(const XrXiBuildContext *context,
                                                    const XiFunc *function, const XiValue *value) {
-    value = logical_value_identity(value);
-    while (imported_callable_checktype_is_exact(context, function, value)) {
-        value = logical_value_identity(value->args[0]);
+    for (;;) {
+        value = logical_value_identity(value);
+        if (cleanup_return_copy_is_exact(value)) {
+            value = value->args[0];
+            continue;
+        }
+        if (imported_callable_checktype_is_exact(context, function, value)) {
+            value = value->args[0];
+            continue;
+        }
+        return value;
     }
-    return value;
 }
 
 static const XrType *imported_callable_refined_type(const XrXiBuildContext *context,
@@ -6207,6 +6274,15 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         return true;
     if (value_is_invoke_scaffold(context, function, value))
         return true;
+    /* A defer's error-exit work is already ordinary Xi CFG.  Its TRY/END_TRY
+     * pair exists only for the separate panic-unwind route, and the cleanup
+     * boundary markers carry no value or executor-visible effect.  Elide
+     * these markers only when their compiler-generated structure is exact;
+     * panic-capable functions with a static cleanup remain rejected while
+     * signatures are prepared until that route has explicit continuations. */
+    if (exact_static_cleanup_try(function, value) || exact_static_cleanup_end(function, value) ||
+        exact_cleanup_boundary_marker(value))
+        return true;
     if (static_function_publication_is_exact(function, value))
         return true;
     if (static_import_publication_is_exact(context, function, value))
@@ -6216,6 +6292,7 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
     if (imported_callable_checktype_is_exact(context, function, value))
         return true;
     if (value->op == XI_PARAM || value->op == XI_THROW || xi_copy_is_identity_alias(value) ||
+        cleanup_return_copy_is_exact(value) ||
         (xi_copy_is_value_clone(value) && logical_value_identity(value) != value))
         return true;
     /* Physical RC is executor-private representation.  Canonical ownership is
@@ -6296,18 +6373,20 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
         if (status != XR_PROGRAM_BUILD_OK)
             return status;
     }
-    uint16_t begin =
+    const XiFunc *sealed_callee =
+        value->op == XI_CALL || value->op == XI_CALL_METHOD ||
+                value->op == XI_CALL_METHOD_DIRECT
+            ? resolved_sealed_callee(context, function->xi, value)
+            : NULL;
+    bool erased_first_operand =
         value->op == XI_VARIANT_CONSTRUCT ||
-                (((value->op == XI_CALL || value->op == XI_CALL_METHOD ||
-                   value->op == XI_CALL_METHOD_DIRECT) &&
-                  (resolved_sealed_callee(context, function->xi, value) != NULL ||
-                   resolved_provider_native_call(context, function->xi, value))) ||
-                 (value->op == XI_CALL && resolved_canonical_class_construction(
-                                              context, function->xi, value, NULL, NULL))) ||
-                resolved_empty_struct_literal(context, function->xi, value) ||
-                resolved_unit_enum_literal(context, function->xi, value, NULL)
-            ? 1u
-            : 0u;
+        resolved_provider_native_call(context, function->xi, value) ||
+        (sealed_callee && !sealed_callee->has_receiver) ||
+        (value->op == XI_CALL && resolved_canonical_class_construction(
+                                     context, function->xi, value, NULL, NULL)) ||
+        resolved_empty_struct_literal(context, function->xi, value) ||
+        resolved_unit_enum_literal(context, function->xi, value, NULL);
+    uint16_t begin = erased_first_operand ? 1u : 0u;
     for (uint16_t argument = begin; argument < value->nargs; ++argument) {
         XrProgramBuildStatus status = require_value_available(
             context, function, block, value->args[argument], changed, diagnostic, diagnostic_size);

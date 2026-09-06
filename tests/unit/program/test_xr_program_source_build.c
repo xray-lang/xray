@@ -1192,22 +1192,16 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
         "  if (value < 0) { throw CleanupFailure.Negative { code: value } }\n"
         "  return value\n"
         "}\n"
-        "fn answer() -> i64 {\n"
+        "fn doomed() -> i64 {\n"
         "  var live = sys.Pipe(2147483646, 2147483647)\n"
-        "  var observed = 0\n"
-        "  try {\n"
-        "    observed = fail(-2)\n"
-        "  } catch (error) {\n"
-        "    observed = 1\n"
+        "  defer {\n"
+        "    live.closeRead()\n"
+        "    live.closeWrite()\n"
         "  }\n"
-        "  var readClosed = live.closeRead()\n"
-        "  var closedReadHandle = live.readEnd()\n"
-        "  var writeClosed = live.closeWrite()\n"
-        "  var closedWriteHandle = live.writeEnd()\n"
-        "  var closed = (move live).close()\n"
-        "  if (readClosed || writeClosed || !closed) { return 0 }\n"
-        "  if (closedReadHandle != -1 || closedWriteHandle != -1) { return 0 }\n"
-        "  return observed\n"
+        "  return fail(-2)\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        "  try { return doomed() } catch (error) { return 1 }\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1235,10 +1229,9 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     assert_products_equal(&first, &second);
     ASSERT_EQ_UINT(program_operation_count(first.program,
                                            XR_CORE_OP_CORE_CALL_SEALED_INVOKE),
-                   1u);
+                   2u);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_ERROR_PUBLISH),
-                   1u);
-    ASSERT_TRUE(program_operation_count(first.program, XR_CORE_OP_CORE_OWNER_DROP) != 0u);
+                   2u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
 
     XrProgramProviderRequirementView requirement = {0};
@@ -1361,6 +1354,44 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
                   XR_EXECUTION_OK);
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_keeps_defer_panic_surface_fail_closed) {
+    static const char source[] =
+        "import sys\n"
+        "fn doomed(divisor: i64) -> i64 {\n"
+        "  var live = sys.Pipe(2147483646, 2147483647)\n"
+        "  defer {\n"
+        "    live.closeRead()\n"
+        "    live.closeWrite()\n"
+        "  }\n"
+        "  assert(divisor != 0)\n"
+        "  return 1\n"
+        "}\n"
+        "fn answer() -> i64 { return doomed(1) }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = NULL;
+    char profile_error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
+        &profile, profile_error, sizeof(profile_error)));
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint =
+        xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&fixture.input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE);
+    ASSERT_EQ_INT(diagnostic.writer_status, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "operation ASSERTION"));
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_NULL(product.program);
+
     xr_target_profile_free(profile);
     source_build_fixture_free(&fixture);
 }
@@ -1492,6 +1523,7 @@ RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_ex
 RUN_TEST(source_owner_clock_provider_is_exact_across_private_executors);
 RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
 RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
+RUN_TEST(source_owner_keeps_defer_panic_surface_fail_closed);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);

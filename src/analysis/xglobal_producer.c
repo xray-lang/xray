@@ -11413,13 +11413,13 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
                 goto fail;
             method = candidate;
         }
-        bool exact_constructor =
-            method && (method->flags & XG_METHOD_CONSTRUCTOR) != 0u &&
-            (method->flags & (XG_METHOD_STATIC | XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE)) ==
-                0u;
-        if (callsite->kind != XG_CALL_INTERFACE && !exact_constructor)
+        bool exact_source_method =
+            method &&
+            (method->flags &
+             (XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE | XG_METHOD_OVERRIDDEN)) == 0u;
+        if (callsite->kind != XG_CALL_INTERFACE && !exact_source_method)
             continue;
-        if (exact_constructor) {
+        if (exact_source_method) {
             const XgBodySummary *body = NULL;
             for (uint32_t body_index = 0u; body_index < producer->evidence->nbodies; ++body_index) {
                 const XgBodySummary *candidate = &producer->evidence->bodies[body_index];
@@ -11430,12 +11430,12 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
                     goto fail;
                 body = candidate;
             }
-            /* This is an evidence refinement, not an assumption. Constructors
-             * whose
-             * complete source call graph cannot be closed keep the
-             * analyzer's
-             * conservative fact and remain unavailable to exact
-             * consumers. */
+            /* This is an evidence refinement, not an assumption. A sealed
+             * source method whose complete call graph cannot be closed keeps
+             * the analyzer's conservative fact and remains unavailable to
+             * exact consumers.  This also covers calls duplicated into a
+             * static defer frontier, where the analyzer intentionally does
+             * not publish a second per-call effect fact. */
             if (!body || !xg_body_effects_compose_closed_world_calls(producer->evidence, body,
                                                                      &effect_union))
                 continue;
