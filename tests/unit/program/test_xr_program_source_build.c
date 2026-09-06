@@ -69,6 +69,23 @@ static bool stable_id_equal(XrStableId left, XrStableId right) {
     return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
 }
 
+static uint32_t program_operation_count(const XrValidatedProgram *program,
+                                        uint16_t operation_id) {
+    uint32_t count = 0u;
+    for (uint32_t function_index = 0u; program && function_index < program->function_count;
+         ++function_index) {
+        const XrValidatedFunction *function = &program->functions[function_index];
+        for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
+            const XrValidatedBlock *block = &function->blocks[block_index];
+            for (uint32_t instruction_index = 0u;
+                 instruction_index < block->instruction_count; ++instruction_index) {
+                count += block->instructions[instruction_index].operation_id == operation_id;
+            }
+        }
+    }
+    return count;
+}
+
 static const XrTargetProviderContract *
 find_profile_provider(const XrTargetProfile *profile, XrStableId contract_id) {
     for (size_t i = 0; profile && i < xr_target_profile_provider_count(profile); i++) {
@@ -1170,8 +1187,19 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
 TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     static const char source[] =
         "import sys\n"
+        "enum CleanupFailure { Negative { code: i64 } }\n"
+        "fn fail(value: i64) -> i64 {\n"
+        "  if (value < 0) { throw CleanupFailure.Negative { code: value } }\n"
+        "  return value\n"
+        "}\n"
         "fn answer() -> i64 {\n"
         "  var live = sys.Pipe(2147483646, 2147483647)\n"
+        "  var observed = 0\n"
+        "  try {\n"
+        "    observed = fail(-2)\n"
+        "  } catch (error) {\n"
+        "    observed = 1\n"
+        "  }\n"
         "  var readClosed = live.closeRead()\n"
         "  var closedReadHandle = live.readEnd()\n"
         "  var writeClosed = live.closeWrite()\n"
@@ -1179,7 +1207,7 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
         "  var closed = (move live).close()\n"
         "  if (readClosed || writeClosed || !closed) { return 0 }\n"
         "  if (closedReadHandle != -1 || closedWriteHandle != -1) { return 0 }\n"
-        "  return 1\n"
+        "  return observed\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1205,6 +1233,12 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
         return;
     }
     assert_products_equal(&first, &second);
+    ASSERT_EQ_UINT(program_operation_count(first.program,
+                                           XR_CORE_OP_CORE_CALL_SEALED_INVOKE),
+                   1u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_ERROR_PUBLISH),
+                   1u);
+    ASSERT_TRUE(program_operation_count(first.program, XR_CORE_OP_CORE_OWNER_DROP) != 0u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
 
     XrProgramProviderRequirementView requirement = {0};
@@ -1305,6 +1339,7 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_close"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "out_error"));
     ASSERT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_open"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
     if (pipe_close_failure_aot_output_path) {
