@@ -643,6 +643,15 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         panic_type = actual.get("callee_panic_type")
         has_error = error_type not in {None, "void"}
         has_panic = panic_type not in {None, "void"}
+        typed_successors = 1 + int(has_error) + int(has_panic)
+        successor_count = actual.get("successor_count", typed_successors)
+        has_trap_edge = successor_count != typed_successors
+        trap_edge_valid = (
+            successor_count == typed_successors + 1
+            and actual.get("trap") == "provider-call-failed"
+            and isinstance(actual.get("live_values"), list)
+            and actual.get("live_values") == actual.get("trap_edge_values")
+        )
         return (actual.get("receiver_interface") == actual.get("slot_interface")
                 and isinstance(ordinal, int) and isinstance(count, int)
                 and 0 <= ordinal < count
@@ -652,7 +661,8 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("error_argument_type") == error_type
                 and actual.get("panic_argument_type") == panic_type
                 and (not has_error or error_type != "panic-info")
-                and (not has_panic or panic_type == "panic-info"))
+                and (not has_panic or panic_type == "panic-info")
+                and (not has_trap_edge or trap_edge_valid))
     if validator == "aggregate-construct":
         return (actual.get("operand_types") == actual.get("field_types")
                 and actual.get("result_type") == actual.get("aggregate_type"))

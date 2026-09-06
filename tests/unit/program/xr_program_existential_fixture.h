@@ -18,6 +18,8 @@ typedef enum XrProgramExistentialFixtureMutation {
     XR_EXISTENTIAL_FIXTURE_WITNESS_SLOT_OUT_OF_RANGE,
     XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP,
     XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP_LOST_OWNER,
+    XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP,
+    XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP_BAD_TARGET,
 } XrProgramExistentialFixtureMutation;
 
 enum {
@@ -464,6 +466,10 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
                                mutation == XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP_LOST_OWNER;
     bool witness_direct_lost_owner =
         mutation == XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP_LOST_OWNER;
+    bool witness_invoke_trap = mutation == XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP ||
+                               mutation == XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP_BAD_TARGET;
+    bool any_witness_trap = witness_direct_trap || witness_invoke_trap;
+    bool witness_trap_has_owner = witness_direct_trap && !witness_direct_lost_owner;
     XrCoreIrKey entry_ref_witness_operands[] = {entry_ref_erased, entry_ref_erased};
     XrCoreIrKey entry_ref_witness_successors[] = {witness_trap_block_key};
     XrCoreIrKey entry_ref_drop_operands[] = {entry_ref_erased};
@@ -594,7 +600,11 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
     XrCoreIrKey true_return_fallback[] = {true_fallback};
     XrCoreIrKey witness_direct_operands[] = {true_erased};
     XrCoreIrKey witness_invoke_operands[] = {true_erased, witness_direct_result};
-    XrCoreIrKey witness_invoke_successors[] = {witness_normal_block_key, witness_error_block_key};
+    XrCoreIrKey witness_invoke_successors[] = {
+        witness_normal_block_key,
+        witness_error_block_key,
+        witness_trap_block_key,
+    };
     XrCoreIrInstructionInput true_instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -638,7 +648,7 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
          .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
          .immediate.u32 = mutation == XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_INFALLIBLE ? 0u : 1u,
          .successors = witness_invoke_successors,
-         .successor_count = 2u},
+         .successor_count = witness_invoke_trap ? 3u : 2u},
     };
     if (mutation == XR_EXISTENTIAL_FIXTURE_FALSE_EDGE_PROJECT) {
         true_instructions[1] = (XrCoreIrInstructionInput) {
@@ -794,12 +804,12 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
     witness_trap_instructions[0] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
         .result_type_id = XR_CORE_TYPE_VOID,
-        .operands = witness_direct_lost_owner ? NULL : witness_trap_block_args,
-        .operand_count = witness_direct_lost_owner ? 0u : 1u,
+        .operands = witness_trap_has_owner ? witness_trap_block_args : NULL,
+        .operand_count = witness_trap_has_owner ? 1u : 0u,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
     uint32_t witness_trap_instruction_count = 1u;
-    if (!witness_direct_lost_owner) {
+    if (witness_trap_has_owner) {
         witness_trap_instructions[witness_trap_instruction_count++] =
             (XrCoreIrInstructionInput) {
                 .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
@@ -814,12 +824,13 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
             .operation_id = XR_CORE_OP_CORE_TRAP,
             .result_type_id = XR_CORE_TYPE_VOID,
             .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
-            .immediate.u32 = 7u,
+            .immediate.u32 =
+                mutation == XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP_BAD_TARGET ? 4u : 7u,
         };
     XrCoreIrBlockInput witness_trap_block = {
         .key = witness_trap_block_key,
-        .arguments = witness_direct_lost_owner ? NULL : witness_trap_arguments,
-        .argument_count = witness_direct_lost_owner ? 0u : 1u,
+        .arguments = witness_trap_has_owner ? witness_trap_arguments : NULL,
+        .argument_count = witness_trap_has_owner ? 1u : 0u,
         .instructions = witness_trap_instructions,
         .instruction_count = witness_trap_instruction_count,
     };
@@ -835,12 +846,12 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
         .result_ownership = XR_CORE_IR_NON_OWNER,
         .error_type_id = XR_CORE_TYPE_VOID,
         .panic_type_id = XR_CORE_TYPE_VOID,
-        .effect_mask = XR_CORE_EFFECT_CALL | (witness_direct_trap ? XR_CORE_EFFECT_TRAP : 0u),
+        .effect_mask = XR_CORE_EFFECT_CALL | (any_witness_trap ? XR_CORE_EFFECT_TRAP : 0u),
         .entry_block = entry_block_key,
         .blocks = entry_blocks,
         .block_count = mutation == XR_EXISTENTIAL_FIXTURE_FALSE_EDGE_PROJECT
                            ? 3u
-                           : (witness_direct_trap ? 6u : 5u),
+                           : (any_witness_trap ? 6u : 5u),
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
 

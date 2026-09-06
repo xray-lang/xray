@@ -1755,7 +1755,8 @@
           "P...",
           "normal-edge-values...",
           "error-edge-values...",
-          "panic-edge-values..."
+          "panic-edge-values...",
+          "trap-edge-values..."
         ],
         "result": "void",
         "immediates": {
@@ -1767,7 +1768,7 @@
         "normal": true,
         "error": true,
         "panic": true,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -1784,7 +1785,8 @@
           "parameter-mode...",
           "normal-edge-transfer...",
           "error-edge-transfer...",
-          "panic-edge-transfer..."
+          "panic-edge-transfer...",
+          "trap-edge-preserve..."
         ],
         "result": "normal-result-and-present-error/panic-values-are-successor-block-arguments"
       },
@@ -1792,7 +1794,7 @@
       "materialization": "executor-private-witness-dispatch-terminator",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the exact conformance slot target selects one normal, typed-error, or typed-panic continuation"
+        "allowed_trace": "the exact conformance slot target selects one normal, typed-error, or typed-panic continuation; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
       },
       "kat_validator": "witness-invoke",
       "coverage": {

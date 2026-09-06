@@ -901,6 +901,9 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     uint32_t successor = 0u;
                     uint32_t implicit = 0u;
                     uint32_t operand = callee->parameter_count;
+                    uint32_t typed_successors =
+                        1u + (callee->error_type_id == XR_CORE_TYPE_VOID ? 0u : 1u) +
+                        (callee->panic_type_id == XR_CORE_TYPE_VOID ? 0u : 1u);
                     if (instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE &&
                         !callee->has_receiver)
                         ++operand;
@@ -933,6 +936,21 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                             .as.value = nested.panic_value,
                         };
                         implicit = 1u;
+                    } else if (instruction->operation_id ==
+                                   XR_CORE_OP_CORE_CALL_WITNESS_INVOKE &&
+                               nested.kind == XR_REFERENCE_OUTCOME_TRAP &&
+                               nested.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED &&
+                               instruction->successor_count == typed_successors + 1u) {
+                        successor = typed_successors;
+                        for (uint32_t prior = 0u; prior < typed_successors; ++prior) {
+                            uint32_t prior_implicit =
+                                prior == 0u
+                                    ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u)
+                                    : 1u;
+                            const XrValidatedBlock *prior_target =
+                                &function->blocks[instruction->successors[prior]];
+                            operand += prior_target->argument_count - prior_implicit;
+                        }
                     } else {
                         result = nested;
                         goto done;

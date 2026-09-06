@@ -412,12 +412,12 @@
     },
     {
       "id": "core.call.witness_invoke",
-      "core_spec_contract": "dispatch one existential receiver through one explicit object-safe interface slot and transfer exactly once to normal, typed-error or typed-panic continuations",
-      "program_encoding": "existential receiver, ordered call and edge operands, canonical interface-slot ordinal and explicit successor blocks with implicit typed channel prefixes",
-      "decoder_verifier_evaluator": "the witness slot signature owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; exact ConformanceId selects the slot FunctionId independently",
-      "vm_implementation": "private typed frame dispatch followed by one verified normal, error or panic edge without selector lookup or ambient pending state",
-      "aot_lowering": "the same closed typed ConformanceId switch feeds explicit result/error/panic locals and direct C control transfer",
-      "source_producer": "fallible class, struct and enum witness calls lower to exact nominal slots plus explicit normal/error continuation edges",
+      "core_spec_contract": "dispatch one existential receiver through one explicit object-safe interface slot and transfer exactly once to normal, typed-error or typed-panic continuations, or to one optional provider-failed trap continuation",
+      "program_encoding": "existential receiver, ordered call and edge operands, canonical interface-slot ordinal, explicit typed-channel successor blocks and at most one final provider-failed trap edge carrying the exact live-value set",
+      "decoder_verifier_evaluator": "the witness slot signature owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; exact ConformanceId selects the slot FunctionId independently; an optional final trap edge must target trap 7 and preserve every live owner exactly once",
+      "vm_implementation": "private typed frame dispatch followed by one verified normal, error, panic or provider-failed trap edge without selector lookup or ambient pending state",
+      "aot_lowering": "the same closed typed ConformanceId switch feeds explicit result/error/panic locals and direct C control transfer, including an independently verified provider-failed trap edge",
+      "source_producer": "fallible class, struct and enum witness calls lower to exact nominal slots plus explicit normal/error/panic edges; a call inside a cleanup scope may gain the sole explicit provider-failed trap continuation",
       "old_owner_deletion": "the canonical source route contains no selector lookup, class-only itable, erased universal invoke ABI or implicit pending error/panic state; the frozen pre-cut product route is physically deleted by Task 302",
       "status": "COMPLETE_W7_WAVE4",
       "evidence": [
@@ -429,7 +429,9 @@
         "src/aot/program/xr_backend_ir_emit_c.c",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
-        "tests/unit/program/xr_program_existential_fixture.h"
+        "tests/unit/program/xr_program_existential_fixture.h",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/aot/test_xr_program_aot.c"
       ]
     },
     {

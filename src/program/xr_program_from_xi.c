@@ -7149,6 +7149,15 @@ static bool exact_witness_direct_call(const XrXiBuildContext *context, const XiF
            resolved_witness_callsite(context, function, call) != NULL;
 }
 
+static bool exact_witness_invoke_call(const XrXiBuildContext *context, const XiFunc *function,
+                                      const XiValue *call) {
+    return call && call->block &&
+           (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
+           call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE &&
+           block_typed_invoke_call(context, function, call->block) == call &&
+           resolved_witness_callsite(context, function, call) != NULL;
+}
+
 static XrProgramBuildStatus prepare_trap_continuations(
     XrXiBuildContext *context, char *diagnostic, size_t diagnostic_size) {
     for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
@@ -7164,8 +7173,12 @@ static XrProgramBuildStatus prepare_trap_continuations(
                 for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
                     const XiValue *call = block->values[value_index];
                     bool provider_call = resolved_provider_native_call(context, function, call);
+                    bool witness_invoke =
+                        provider_call ? false : exact_witness_invoke_call(context, function, call);
                     bool witness_call =
-                        provider_call ? false : exact_witness_direct_call(context, function, call);
+                        provider_call
+                            ? false
+                            : (witness_invoke || exact_witness_direct_call(context, function, call));
                     const XiFunc *sealed_callee = provider_call || witness_call
                                                          ? NULL
                                                          : resolved_sealed_callee(context, function,
@@ -7174,7 +7187,8 @@ static XrProgramBuildStatus prepare_trap_continuations(
                                              ? false
                                              : exact_indirect_direct_call(context, function, call);
                     if ((!provider_call && !witness_call && !sealed_callee && !indirect_call) ||
-                        block_typed_invoke_call(context, function, block) == call ||
+                        (block_typed_invoke_call(context, function, block) == call &&
+                         !witness_invoke) ||
                         resolved_canonical_class_construction(context, function, call, NULL, NULL))
                         continue;
                     const XiValue *active = NULL;
@@ -7356,11 +7370,12 @@ static bool trap_call_contract(XrXiBuildContext *context,
     if (!context || !function || !call || !call->args || !contract)
         return false;
     memset(contract, 0, sizeof(*contract));
-    if (exact_witness_direct_call(context, function->xi, call)) {
+    bool witness_invoke = exact_witness_invoke_call(context, function->xi, call);
+    if (witness_invoke || exact_witness_direct_call(context, function->xi, call)) {
         const XrCoreIrCallableSignatureInput *slot = interface_slot_contract(
             context, call->xg_interface_id, call->xg_interface_dispatch_slot);
-        if (!slot || slot->error_type_id != XR_CORE_TYPE_VOID ||
-            slot->panic_type_id != XR_CORE_TYPE_VOID)
+        if (!slot || (!witness_invoke && (slot->error_type_id != XR_CORE_TYPE_VOID ||
+                                          slot->panic_type_id != XR_CORE_TYPE_VOID)))
             return false;
         contract->parameter_modes = slot->parameter_modes;
         contract->parameter_count = slot->parameter_count;
@@ -7762,6 +7777,52 @@ unavailable:
                 unavailable_value ? (unsigned) unavailable_value->op : UINT32_MAX,
                 unavailable_value && unavailable_value->block ? unavailable_value->block->id
                                                               : UINT32_MAX);
+}
+
+static XrProgramBuildStatus append_invoke_trap_edge_operands(
+    const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
+    const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
+    const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
+    if (!instruction || !handler ||
+        instruction->operand_count > UINT32_MAX - handler->argument_count ||
+        instruction->successor_count == UINT32_MAX)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t operand_count = instruction->operand_count + handler->argument_count;
+    XrCoreIrKey *operands = operand_count ? xr_calloc(operand_count, sizeof(*operands)) : NULL;
+    if (operand_count && !operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (instruction->operand_count)
+        memcpy(operands, instruction->operands,
+               (size_t) instruction->operand_count * sizeof(*operands));
+    uint32_t cursor = instruction->operand_count;
+    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+        const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+        if (edge_argument->phi ||
+            edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+            !value_operand_key(context, function, source, edge_argument->source,
+                               &operands[cursor++])) {
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi invoke trap continuation argument %u is unavailable", argument);
+        }
+    }
+    uint32_t successor_count = instruction->successor_count + 1u;
+    XrCoreIrKey *successors = xr_calloc(successor_count, sizeof(*successors));
+    if (!successors) {
+        xr_free(operands);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (instruction->successor_count)
+        memcpy(successors, instruction->successors,
+               (size_t) instruction->successor_count * sizeof(*successors));
+    successors[instruction->successor_count] = block_key(function, handler->xi);
+    xr_free((void *) instruction->operands);
+    xr_free((void *) instruction->successors);
+    instruction->operands = operands;
+    instruction->operand_count = operand_count;
+    instruction->successors = successors;
+    instruction->successor_count = successor_count;
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static bool exact_cooperative_yield_contract(XrXiBuildContext *context,
@@ -9093,6 +9154,15 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                                          normal, error, first_operand, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
+            const XrXiTrapEdge *trap_edge = find_trap_edge(context, xi, invoke_call);
+            if (trap_edge) {
+                const XrXiBlockStorage *handler = find_block_storage(storage, trap_edge->handler);
+                status = append_invoke_trap_edge_operands(
+                    context, terminator, storage, block_storage, handler, diagnostic,
+                    diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
         } else if (exact_infallible_class_construction_in_block(context, xi, xi_block)) {
             XrXiBlockStorage *successor = find_block_storage(storage, xi_block->succs[1]);
             if (!successor)

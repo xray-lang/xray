@@ -2253,9 +2253,67 @@ static bool callable_arguments_match(const XrValidatedProgram *program,
     return true;
 }
 
+static uint32_t invoke_typed_successor_count(const XrValidatedSignature *callee) {
+    return callee ? 1u + (callee->error_type_id != XR_CORE_TYPE_VOID ? 1u : 0u) +
+                        (callee->panic_type_id != XR_CORE_TYPE_VOID ? 1u : 0u)
+                  : 0u;
+}
+
+static bool verify_optional_trap_continuation_at(
+    VerifyContext *context, const XrValidatedFunction *function,
+    const XrValidatedInstruction *instruction, uint32_t base_successor_count, uint32_t block_id,
+    uint32_t instruction_id, uint32_t operand_start, bool required, const bool *consumed,
+    XrProgramSemanticLocation location) {
+    if (instruction->successor_count == base_successor_count) {
+        if (required || instruction->operand_count != operand_start) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
+            return false;
+        }
+        return true;
+    }
+    if (instruction->successor_count != base_successor_count + 1u ||
+        instruction->successors[base_successor_count] >= function->block_count) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+        return false;
+    }
+    const XrValidatedBlock *target =
+        &function->blocks[instruction->successors[base_successor_count]];
+    if (target->instruction_count == 0u ||
+        instruction->operand_count != operand_start + target->argument_count) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
+        return false;
+    }
+    const XrValidatedInstruction *trap = &target->instructions[target->instruction_count - 1u];
+    if (trap->operation_id != XR_CORE_OP_CORE_TRAP ||
+        trap->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 || trap->immediate.u32 != 7u) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+        return false;
+    }
+    if (!verify_successor_arguments(context, function, instruction, base_successor_count,
+                                    operand_start, location))
+        return false;
+    for (uint32_t value = 0u; value < function->value_count; ++value) {
+        if (function->value_blocks[value] != block_id ||
+            function->value_ownerships[value] != XR_CORE_IR_OWNER || consumed[value] ||
+            !value_is_available(function, block_id, instruction_id, value))
+            continue;
+        uint32_t occurrences = 0u;
+        for (uint32_t operand = operand_start; operand < instruction->operand_count; ++operand)
+            occurrences += instruction->operands[operand] == value;
+        if (occurrences != 1u) {
+            location.value_id = value;
+            reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool verify_witness_invoke(VerifyContext *context, XrValidatedFunction *function,
                                   XrValidatedInstruction *instruction,
-                                  XrProgramSemanticLocation location, uint32_t *local_effects) {
+                                  uint32_t block_id, uint32_t instruction_id,
+                                  XrProgramSemanticLocation location, uint32_t *local_effects,
+                                  const bool *consumed) {
     const XrValidatedSignature *callee =
         witness_call_signature(context->program, function, instruction);
     if (!callee || instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
@@ -2265,13 +2323,15 @@ static bool verify_witness_invoke(VerifyContext *context, XrValidatedFunction *f
     }
     bool has_error = callee->error_type_id != XR_CORE_TYPE_VOID;
     bool has_panic = callee->panic_type_id != XR_CORE_TYPE_VOID;
-    uint32_t expected_successors = 1u + (has_error ? 1u : 0u) + (has_panic ? 1u : 0u);
-    if ((!has_error && !has_panic) || instruction->successor_count != expected_successors ||
+    uint32_t typed_successors = invoke_typed_successor_count(callee);
+    if ((!has_error && !has_panic) ||
+        (instruction->successor_count != typed_successors &&
+         instruction->successor_count != typed_successors + 1u) ||
         !witness_arguments_match(context->program, function, instruction, callee)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
     }
-    for (uint32_t successor = 0u; successor < expected_successors; ++successor) {
+    for (uint32_t successor = 0u; successor < typed_successors; ++successor) {
         if (instruction->successors[successor] >= function->block_count) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
             return false;
@@ -2333,10 +2393,10 @@ static bool verify_witness_invoke(VerifyContext *context, XrValidatedFunction *f
             return false;
         operand += panic->argument_count - 1u;
     }
-    if (instruction->operand_count != operand) {
-        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+    if (!verify_optional_trap_continuation_at(
+            context, function, instruction, typed_successors, block_id, instruction_id, operand,
+            false, consumed, location))
         return false;
-    }
     uint32_t escaping_effects = callee->effect_mask;
     if (has_error)
         escaping_effects &= ~XR_CORE_EFFECT_ERROR;
@@ -2792,17 +2852,25 @@ static uint32_t owner_occurrences_on_successor_edge(const VerifyContext *context
             operation_call_signature(context->program, function, terminator);
         if (!callee)
             return 0u;
+        uint32_t typed_successors = invoke_typed_successor_count(callee);
         start = call_operand_prefix(terminator->operation_id) + callee->parameter_count;
         for (uint32_t prior = 0u; prior < successor_index; ++prior) {
             uint32_t implicit =
-                prior == 0u ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u) : 1u;
+                prior >= typed_successors
+                    ? 0u
+                    : (prior == 0u ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u)
+                                    : 1u);
             const XrValidatedBlock *target = &function->blocks[terminator->successors[prior]];
             if (target->argument_count < implicit)
                 return 0u;
             start += target->argument_count - implicit;
         }
         uint32_t implicit =
-            successor_index == 0u ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u) : 1u;
+            successor_index >= typed_successors
+                ? 0u
+                : (successor_index == 0u
+                       ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u)
+                       : 1u);
         const XrValidatedBlock *target = &function->blocks[terminator->successors[successor_index]];
         if (target->argument_count < implicit)
             return 0u;
@@ -2862,48 +2930,9 @@ static bool verify_optional_trap_continuation(
     const XrValidatedInstruction *instruction, uint32_t block_id, uint32_t instruction_id,
     uint32_t operand_start, bool required, const bool *consumed,
     XrProgramSemanticLocation location) {
-    if (instruction->successor_count == 0u) {
-        if (required || instruction->operand_count != operand_start) {
-            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
-            return false;
-        }
-        return true;
-    }
-    if (instruction->successor_count != 1u ||
-        instruction->successors[0] >= function->block_count) {
-        reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
-        return false;
-    }
-    const XrValidatedBlock *target = &function->blocks[instruction->successors[0]];
-    if (target->instruction_count == 0u ||
-        instruction->operand_count != operand_start + target->argument_count) {
-        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
-        return false;
-    }
-    const XrValidatedInstruction *trap = &target->instructions[target->instruction_count - 1u];
-    if (trap->operation_id != XR_CORE_OP_CORE_TRAP ||
-        trap->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 || trap->immediate.u32 != 7u) {
-        reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
-        return false;
-    }
-    if (!verify_successor_arguments(context, function, instruction, 0u, operand_start,
-                                    location))
-        return false;
-    for (uint32_t value = 0u; value < function->value_count; ++value) {
-        if (function->value_blocks[value] != block_id ||
-            function->value_ownerships[value] != XR_CORE_IR_OWNER || consumed[value] ||
-            !value_is_available(function, block_id, instruction_id, value))
-            continue;
-        uint32_t occurrences = 0u;
-        for (uint32_t operand = operand_start; operand < instruction->operand_count; ++operand)
-            occurrences += instruction->operands[operand] == value;
-        if (occurrences != 1u) {
-            location.value_id = value;
-            reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
-            return false;
-        }
-    }
-    return true;
+    return verify_optional_trap_continuation_at(
+        context, function, instruction, 0u, block_id, instruction_id, operand_start, required,
+        consumed, location);
 }
 
 static bool verify_operation(VerifyContext *context, uint32_t function_id, uint32_t block_id,
@@ -3565,7 +3594,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             return true;
         }
         case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
-            return verify_witness_invoke(context, function, instruction, location, local_effects);
+            return verify_witness_invoke(context, function, instruction, block_id, instruction_id,
+                                         location, local_effects, consumed);
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
             return verify_callable_invoke(context, function, instruction, location, local_effects);
         case XR_CORE_OP_CORE_TRAP:
@@ -4145,17 +4175,25 @@ static bool edge_argument_source(const XrValidatedProgram *program,
             operation_call_signature(program, function, terminator);
         if (!callee)
             return false;
+        uint32_t typed_successors = invoke_typed_successor_count(callee);
         operand = call_operand_prefix(terminator->operation_id) + callee->parameter_count;
         for (uint32_t prior = 0; prior < successor_index; ++prior) {
             const XrValidatedBlock *target = &function->blocks[terminator->successors[prior]];
             uint32_t implicit =
-                prior == 0u ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u) : 1u;
+                prior >= typed_successors
+                    ? 0u
+                    : (prior == 0u ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u)
+                                    : 1u);
             if (target->argument_count < implicit)
                 return false;
             operand += target->argument_count - implicit;
         }
         uint32_t implicit =
-            successor_index == 0u ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u) : 1u;
+            successor_index >= typed_successors
+                ? 0u
+                : (successor_index == 0u
+                       ? (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u)
+                       : 1u);
         if (argument_index < implicit)
             return false;
         operand += argument_index - implicit;

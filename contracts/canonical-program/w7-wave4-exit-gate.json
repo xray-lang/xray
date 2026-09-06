@@ -52,7 +52,9 @@
       "kat_validator": "witness-invoke",
       "kats": [
         "witness-invoke-valid",
-        "witness-invoke-rejects-out-of-range-slot"
+        "witness-invoke-rejects-out-of-range-slot",
+        "witness-invoke-provider-trap-continuation",
+        "witness-invoke-rejects-lost-trap-owner"
       ]
     },
     {

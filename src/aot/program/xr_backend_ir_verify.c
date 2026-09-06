@@ -49,6 +49,36 @@ static bool fingerprint_is_zero(XrFingerprint fingerprint) {
     return combined == 0u;
 }
 
+static const XrValidatedSignature *witness_invoke_signature(
+    const XrBackendIR *ir, const XrBackendFunction *function,
+    const XrBackendInstruction *instruction) {
+    if (!ir || !function || !instruction || instruction->operand_count == 0u)
+        return NULL;
+    uint32_t receiver_value = instruction->operands[0];
+    if (receiver_value >= function->value_count)
+        return NULL;
+    const XrValidatedType *receiver =
+        xr_validated_program_type(ir->program, function->value_types[receiver_value]);
+    if (!receiver || receiver->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+        receiver->interface_id >= ir->program->interface_count)
+        return NULL;
+    const XrValidatedInterface *interface_row = &ir->program->interfaces[receiver->interface_id];
+    if (instruction->immediate.u32 >= interface_row->slot_count ||
+        interface_row->slot_signature_ids[instruction->immediate.u32] >=
+            ir->program->signature_count)
+        return NULL;
+    return &ir->program->signatures[interface_row->slot_signature_ids[instruction->immediate.u32]];
+}
+
+static uint32_t witness_invoke_typed_successor_count(
+    const XrBackendIR *ir, const XrBackendFunction *function,
+    const XrBackendInstruction *instruction) {
+    const XrValidatedSignature *signature = witness_invoke_signature(ir, function, instruction);
+    return signature ? 1u + (signature->error_type_id != XR_CORE_TYPE_VOID ? 1u : 0u) +
+                           (signature->panic_type_id != XR_CORE_TYPE_VOID ? 1u : 0u)
+                     : 0u;
+}
+
 static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFunction *function,
                                     const XrBackendInstruction *instruction) {
     if (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
@@ -161,9 +191,17 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
                    instruction->immediate.function_id < ir->function_count;
         case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
         case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
-            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
-                   (instruction->operation_id != XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
-                    instruction->successor_count <= 1u);
+            if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32)
+                return false;
+            if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT)
+                return instruction->successor_count <= 1u;
+            {
+                uint32_t typed =
+                    witness_invoke_typed_successor_count(ir, function, instruction);
+                return typed != 0u &&
+                       (instruction->successor_count == typed ||
+                        instruction->successor_count == typed + 1u);
+            }
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
         case XR_CORE_OP_CORE_PLACE_PROJECT:
@@ -330,13 +368,22 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                                               instruction_id);
                     return false;
                 }
+                uint32_t trap_successor = XR_PROGRAM_LOCATION_NONE;
                 if ((instruction->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
                      instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
                      instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT ||
                      instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT) &&
-                    instruction->successor_count == 1u) {
+                    instruction->successor_count == 1u)
+                    trap_successor = 0u;
+                if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
+                    uint32_t typed =
+                        witness_invoke_typed_successor_count(ir, function, instruction);
+                    if (typed != 0u && instruction->successor_count == typed + 1u)
+                        trap_successor = typed;
+                }
+                if (trap_successor != XR_PROGRAM_LOCATION_NONE) {
                     const XrBackendBlock *target =
-                        &function->blocks[instruction->successors[0]];
+                        &function->blocks[instruction->successors[trap_successor]];
                     if (target->argument_count > instruction->operand_count ||
                         target->instruction_count == 0u) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,

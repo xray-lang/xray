@@ -55,7 +55,7 @@
     {
       "stable_id": 41,
       "id": "core.call.witness_invoke",
-      "law": "dispatch one existential receiver through one exact object-safe witness slot and explicit typed continuations"
+      "law": "dispatch one existential receiver through one exact object-safe witness slot and explicit typed continuations, plus at most one final provider-failed trap continuation"
     },
     {
       "stable_id": 86,
@@ -153,7 +153,7 @@
     "receiver_substitution": "conformance validation substitutes only the existential receiver TypeId with the exact nominal implementor TypeId, requires every other structural signature fact to match, and requires implementation effects and capabilities to be subsets of the slot upper bounds",
     "dispatch": "the carrier exact ConformanceId selects one validated slot-to-FunctionId row; malformed carrier identity is refused and target bodies are never inspected to recover semantics",
     "direct": "witness_direct is admitted only for a slot without error or panic and returns through its typed result",
-    "invoke": "witness_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",
+    "invoke": "witness_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments; a call inside a cleanup scope may append exactly one final provider-failed trap-7 successor carrying the exact live-value set",
     "executor_realization": "reference evaluator and VM resolve the validated FunctionId; portable-C AOT emits a closed ConformanceId switch whose cases directly call the exact typed implementation after unwrapping the receiver",
     "source_status": "complete for class, struct and enum declaration-ordered witness direct/invoke flows",
     "compatibility": "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling"

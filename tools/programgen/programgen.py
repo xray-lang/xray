@@ -206,6 +206,7 @@ EXPECTED_SEMANTIC_CORE_OWNERSHIP = {
         "normal-edge-transfer...",
         "error-edge-transfer...",
         "panic-edge-transfer...",
+        "trap-edge-preserve...",
     ],
 }
 CORE_TYPE_NAMES = {
