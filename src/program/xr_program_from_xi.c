@@ -3534,6 +3534,51 @@ static bool existential_value_contract_is_exact(const XrXiBuildContext *context,
            implementor->verdict_complete && implementor->existential_eligible;
 }
 
+static bool existential_reborrow_contract_is_exact(const XrXiBuildContext *context,
+                                                   const XiFunc *function, const XiValue *value) {
+    const XiValue *source = value && value->nargs == 1u && value->args ? value->args[0] : NULL;
+    const XrClassInfo *source_interface =
+        source && source->type && source->type->kind == XR_KIND_INTERFACE
+            ? source->type->instance.class_ref
+            : NULL;
+    const XrClassInfo *result_interface =
+        value && value->type && value->type->kind == XR_KIND_INTERFACE
+            ? value->type->instance.class_ref
+            : NULL;
+    const XgInterfaceObjectUseSummary *object_use =
+        context && context->source && value
+            ? find_interface_object_use_by_id(context->source->global_evidence,
+                                              value->xg_interface_object_use_id)
+            : NULL;
+    const XgInterfaceObjectUseSummary *authoritative_use =
+        context && context->source && function && object_use && result_interface
+            ? xg_global_evidence_find_interface_object_use(
+                  context->source->global_evidence, (XgFuncId) function->xg_body_func_id,
+                  object_use->source_node_id, (XgInterfaceId) result_interface->xg_interface_id,
+                  XG_INTERFACE_OBJECT_USE_ARGUMENT | XG_INTERFACE_OBJECT_USE_VALUE)
+            : NULL;
+    bool readable_source =
+        source && (source->xg_interface_use_kind == XI_INTERFACE_USE_MOVE ||
+                   source->xg_interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE);
+    return value && source && function && source_interface && result_interface && object_use &&
+           authoritative_use == object_use && value->op == XI_COPY &&
+           value->xg_existential_kind == XI_EXISTENTIAL_REBORROW_READ && readable_source &&
+           function->xg_body_func_id != XG_NO_ID &&
+           object_use->owner_func_id == function->xg_body_func_id &&
+           object_use->source_node_id != 0u && object_use->use_kind == XG_INTERFACE_USE_READ &&
+           source_interface->xg_interface_id != XG_NO_ID &&
+           source_interface->xg_interface_id == result_interface->xg_interface_id &&
+           source->xg_interface_id == source_interface->xg_interface_id &&
+           value->xg_interface_id == result_interface->xg_interface_id &&
+           object_use->interface_id == value->xg_interface_id &&
+           value->xg_interface_use_kind == XI_INTERFACE_USE_READ &&
+           value->xg_conformance_id == XG_NO_ID && value->xg_implementor_decl_id == XG_NO_ID &&
+           value->xg_nominal_key == 0u && value->xg_implementor_kind == 0u &&
+           value->xg_implementor_ownership == XG_NOMINAL_OWNERSHIP_INVALID &&
+           value->xg_implementor_copy_contract == XG_NOMINAL_COPY_INVALID &&
+           value->xg_type_contract_complete == 0u;
+}
+
 static bool interface_parameter_contract_is_exact(const XrXiBuildContext *context,
                                                   const XiFunc *function, const XiValue *parameter,
                                                   XrParamMode mode) {
@@ -3634,6 +3679,22 @@ prepare_existential_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         if (!resolved_witness_callsite(context, xi, value))
                             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                         "Xi witness call v%u has inconsistent stable evidence",
+                                        value->id);
+                        XrProgramBuildStatus status = ensure_interface_conformances(
+                            context, value->xg_interface_id, diagnostic, diagnostic_size);
+                        if (status != XR_PROGRAM_BUILD_OK)
+                            return status;
+                        continue;
+                    }
+                    if (value->xg_existential_kind == XI_EXISTENTIAL_REBORROW_READ) {
+                        XrProgramXiSemanticProjection projection;
+                        if (!xr_program_xi_semantic_projection(
+                                value->op, value->xg_existential_kind, &projection) ||
+                            projection.kind != XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_REBORROW_READ ||
+                            !existential_reborrow_contract_is_exact(context, xi, value))
+                            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                        "Xi existential READ reborrow v%u has inconsistent stable "
+                                        "evidence",
                                         value->id);
                         XrProgramBuildStatus status = ensure_interface_conformances(
                             context, value->xg_interface_id, diagnostic, diagnostic_size);
@@ -5453,6 +5514,9 @@ static XrProgramBuildStatus translate_existential_value(XrXiBuildContext *contex
         case XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PACK:
             expected_operation = XR_CORE_OP_CORE_EXISTENTIAL_PACK;
             break;
+        case XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_REBORROW_READ:
+            expected_operation = XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ;
+            break;
         case XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_TEST:
             expected_operation = XR_CORE_OP_CORE_EXISTENTIAL_TEST;
             break;
@@ -5473,6 +5537,37 @@ static XrProgramBuildStatus translate_existential_value(XrXiBuildContext *contex
                     "Xi existential v%u generated a mismatched canonical operation", value->id);
     memset(instruction, 0, sizeof(*instruction));
     instruction->operation_id = projection.core_operation_id;
+    if (projection.kind == XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_REBORROW_READ) {
+        uint16_t source_type_id = XR_CORE_TYPE_VOID;
+        uint16_t result_type_id = XR_CORE_TYPE_VOID;
+        if (!existential_reborrow_contract_is_exact(context, function->xi, value) ||
+            !map_logical_value_type(context, function->xi, value->args[0], &source_type_id) ||
+            !map_logical_value_type(context, function->xi, value, &result_type_id))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi existential READ reborrow v%u has no canonical carrier types",
+                        value->id);
+        const XrXiTypeStorage *source_type = find_dynamic_type_by_id(context, source_type_id);
+        const XrXiTypeStorage *result_type = find_dynamic_type_by_id(context, result_type_id);
+        if (!source_type || !result_type ||
+            source_type->input.kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+            result_type->input.kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+            !xr_core_ir_key_equal(source_type->input.existential_interface,
+                                  result_type->input.existential_interface) ||
+            (source_type->input.interface_use_kind != XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE &&
+             source_type->input.interface_use_kind !=
+                 XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) ||
+            result_type->input.interface_use_kind != XR_CORE_IR_INTERFACE_EXISTENTIAL_READ)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi existential READ reborrow v%u changes its interface identity",
+                        value->id);
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type_id;
+        instruction->result_category = XR_CORE_IR_VALUE;
+        instruction->result_ownership = XR_CORE_IR_NON_OWNER;
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+        return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
+                            diagnostic_size);
+    }
     if (projection.kind == XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PACK ||
         projection.kind == XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_TEST ||
         projection.kind == XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PROJECT) {
@@ -6429,6 +6524,15 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
                     "Xi operand has no defining block");
     if (value->block == block->xi)
         return XR_PROGRAM_BUILD_OK;
+    if (value->xg_existential_kind == XI_EXISTENTIAL_REBORROW_READ) {
+        if (value->nargs != 1u || !value->args || !value->args[0])
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi existential READ reborrow v%u has no owner", value->id);
+        XrProgramBuildStatus owner_status = require_value_available(
+            context, function, block, value->args[0], changed, diagnostic, diagnostic_size);
+        if (owner_status != XR_PROGRAM_BUILD_OK)
+            return owner_status;
+    }
     XrXiBlockArgumentStorage *available = find_block_argument(block, value);
     if (available) {
         uint16_t source_type = XR_CORE_TYPE_VOID;

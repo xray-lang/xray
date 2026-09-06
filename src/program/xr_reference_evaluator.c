@@ -1288,6 +1288,26 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value.as.existential = carrier;
                     break;
                 }
+                case XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ: {
+                    const XrReferenceExistentialValue *source =
+                        values[instruction->operands[0]].as.value.as.existential;
+                    XrReferenceExistentialValue *carrier = allocate_existential(context);
+                    if (!source || !carrier) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    carrier->existential_type_id = instruction->result_type_id;
+                    carrier->concrete_type_id = source->concrete_type_id;
+                    carrier->conformance_id = source->conformance_id;
+                    carrier->payload.category = XR_CORE_IR_VALUE;
+                    carrier->payload.as.value =
+                        source->payload.category == XR_CORE_IR_PLACE
+                            ? *eval_place_value_const(source->payload.as.place)
+                            : source->payload.as.value;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_EXISTENTIAL;
+                    produced.as.value.as.existential = carrier;
+                    break;
+                }
                 case XR_CORE_OP_CORE_EXISTENTIAL_TEST: {
                     const XrReferenceExistentialValue *carrier =
                         values[instruction->operands[0]].as.value.as.existential;

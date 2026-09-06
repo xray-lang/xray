@@ -314,6 +314,13 @@
       "first_operand_policy": "concrete-by-interface-use"
     },
     {
+      "xi_operation": "xi.copy",
+      "xi_existential_kind": "reborrow-read",
+      "projection_kind": "existential-reborrow-read",
+      "core_operation": "core.existential.reborrow_read",
+      "first_operand_policy": "borrow"
+    },
+    {
       "xi_operation": "xi.is",
       "xi_existential_kind": "test",
       "projection_kind": "existential-test",

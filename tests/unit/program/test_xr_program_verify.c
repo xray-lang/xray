@@ -8,6 +8,7 @@
 #include "program/xr_reference_evaluator.h"
 #include "runtime/abi/xr_target_machine_facts.h"
 #include "xr_program_existential_fixture.h"
+#include "xr_program_reborrow_fixture.h"
 #include "xr_program_callable_fixture.h"
 #include "xr_program_invoke_fixture.h"
 #include "xr_program_panic_fixture.h"
@@ -25,6 +26,8 @@ _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ == 90,
+               "existential READ reborrow stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
@@ -3683,6 +3686,70 @@ static void test_coroutine_state_and_exact_liveness(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_existential_owned_read_reborrow(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    XrProgramBuildStatus reborrow_status =
+        xr_program_reborrow_fixture_write(&artifact, diagnostic, sizeof(diagnostic));
+    if (reborrow_status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "reborrow fixture build failed: %s\n", diagnostic);
+    CHECK(reborrow_status == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    memset(&artifact, 0, sizeof(artifact));
+    CHECK(xr_program_reborrow_fixture_write_mutated(
+              XR_REBORROW_FIXTURE_VALID_LOOP, &artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    const XrProgramReborrowFixtureMutation operation_rejections[] = {
+        XR_REBORROW_FIXTURE_SOURCE_READ,
+        XR_REBORROW_FIXTURE_INTERFACE_MISMATCH,
+    };
+    for (size_t index = 0u;
+         index < sizeof(operation_rejections) / sizeof(operation_rejections[0]); ++index) {
+        memset(&artifact, 0, sizeof(artifact));
+        CHECK(xr_program_reborrow_fixture_write_mutated(
+                  operation_rejections[index], &artifact, diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+    }
+    memset(&artifact, 0, sizeof(artifact));
+    CHECK(xr_program_reborrow_fixture_write_mutated(
+              XR_REBORROW_FIXTURE_RESULT_OWNER, &artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+    xr_program_artifact_free(&artifact);
+
+    const XrProgramReborrowFixtureMutation lifetime_rejections[] = {
+        XR_REBORROW_FIXTURE_LOST_OWNER,
+        XR_REBORROW_FIXTURE_RETURN_ESCAPE,
+        XR_REBORROW_FIXTURE_USE_AFTER_OWNER_DROP,
+    };
+    for (size_t index = 0u;
+         index < sizeof(lifetime_rejections) / sizeof(lifetime_rejections[0]); ++index) {
+        memset(&artifact, 0, sizeof(artifact));
+        CHECK(xr_program_reborrow_fixture_write_mutated(
+                  lifetime_rejections[index], &artifact, diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, index == 1u ? XR_PROGRAM_DIAGNOSTIC_ROOT
+                                                       : XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 typedef struct ReferenceOutputCapture {
     uint8_t bytes[32];
     size_t size;
@@ -3826,6 +3893,7 @@ int main(void) {
     test_callable_interface_conformance_tables();
     test_witness_receiver_capability_and_interface_identity();
     test_existential_pack_test_project();
+    test_existential_owned_read_reborrow();
     test_callable_pack_and_indirect_calls();
     test_coroutine_state_and_exact_liveness();
     test_provider_output_semantics();

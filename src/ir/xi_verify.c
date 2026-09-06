@@ -494,6 +494,38 @@ static bool verify_sum_inject_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
 
 static bool verify_existential_metadata_contract(VerifyCtx *ctx, const XiFunc *f,
                                                  const XiBlock *blk, const XiValue *value) {
+    if (value && value->xg_existential_kind == XI_EXISTENTIAL_REBORROW_READ) {
+        const XiValue *source = value->nargs == 1 && value->args ? value->args[0] : NULL;
+        const XrClassInfo *source_interface =
+            source && source->type && source->type->kind == XR_KIND_INTERFACE
+                ? source->type->instance.class_ref
+                : NULL;
+        const XrClassInfo *result_interface = value->type && value->type->kind == XR_KIND_INTERFACE
+                                                  ? value->type->instance.class_ref
+                                                  : NULL;
+        bool readable_source =
+            source && (source->xg_interface_use_kind == XI_INTERFACE_USE_MOVE ||
+                       source->xg_interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE);
+        bool metadata_is_read_only =
+            value->xg_conformance_id == XG_NO_ID && value->xg_implementor_decl_id == XG_NO_ID &&
+            value->xg_nominal_key == 0 && value->xg_implementor_kind == 0 &&
+            value->xg_implementor_ownership == XG_NOMINAL_OWNERSHIP_INVALID &&
+            value->xg_implementor_copy_contract == XG_NOMINAL_COPY_INVALID &&
+            value->xg_type_contract_complete == 0;
+        if (value->op != XI_COPY || !source || !source_interface || !result_interface ||
+            source_interface->xg_interface_id == XG_NO_ID ||
+            source_interface->xg_interface_id != result_interface->xg_interface_id ||
+            source->xg_interface_id != source_interface->xg_interface_id ||
+            value->xg_interface_id != result_interface->xg_interface_id ||
+            value->xg_interface_object_use_id == XG_NO_ID ||
+            value->xg_interface_use_kind != XI_INTERFACE_USE_READ || !readable_source ||
+            !metadata_is_read_only) {
+            verr(ctx, "func '%s': v%u %s in b%u lacks exact existential READ reborrow metadata",
+                 f->name, value->id, xi_op_name(value->op), blk->id);
+            return false;
+        }
+        return true;
+    }
     if (!value || (value->xg_existential_kind != XI_EXISTENTIAL_PACK &&
                    value->xg_existential_kind != XI_EXISTENTIAL_TEST &&
                    value->xg_existential_kind != XI_EXISTENTIAL_PROJECT))

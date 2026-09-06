@@ -670,6 +670,51 @@ static XiValue *xi_lower_pack_existential(XiLower *l, AstNode *node, XiValue *va
     return pack;
 }
 
+static XiValue *xi_lower_reborrow_existential_read(XiLower *l, AstNode *node, XiValue *value,
+                                                   XrType *target_type) {
+    if (!l || !l->func || !l->cur_block || !node || !value || !value->type || !target_type ||
+        value->type->kind != XR_KIND_INTERFACE || target_type->kind != XR_KIND_INTERFACE)
+        return NULL;
+    if (value->xg_interface_use_kind == XI_INTERFACE_USE_READ)
+        return value;
+    XrClassInfo *source_interface = value->type->instance.class_ref;
+    XrClassInfo *target_interface = target_type->instance.class_ref;
+    bool readable_source = value->xg_interface_use_kind == XI_INTERFACE_USE_MOVE ||
+                           value->xg_interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE;
+    if (!readable_source || !source_interface || !target_interface ||
+        source_interface->xg_interface_id == XG_NO_ID ||
+        source_interface->xg_interface_id != target_interface->xg_interface_id ||
+        value->xg_interface_id != source_interface->xg_interface_id || !l->global_evidence ||
+        l->func->xg_body_func_id == XG_NO_ID) {
+        l->had_error = true;
+        return NULL;
+    }
+    const XgInterfaceObjectUseSummary *object_use = xg_global_evidence_find_interface_object_use(
+        l->global_evidence, (XgFuncId) l->func->xg_body_func_id, xi_lower_source_node_id(l, node),
+        (XgInterfaceId) target_interface->xg_interface_id,
+        XG_INTERFACE_OBJECT_USE_ARGUMENT | XG_INTERFACE_OBJECT_USE_VALUE);
+    if (!object_use || object_use->use_id == XG_NO_ID ||
+        object_use->owner_func_id != l->func->xg_body_func_id ||
+        object_use->source_node_id != xi_lower_source_node_id(l, node) ||
+        object_use->interface_id != target_interface->xg_interface_id ||
+        object_use->use_kind != XG_INTERFACE_USE_READ) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *borrow = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+    if (!borrow) {
+        l->had_error = true;
+        return NULL;
+    }
+    borrow->args[0] = value;
+    borrow->line = (uint32_t) node->line;
+    borrow->xg_interface_object_use_id = object_use->use_id;
+    borrow->xg_interface_id = object_use->interface_id;
+    borrow->xg_existential_kind = XI_EXISTENTIAL_REBORROW_READ;
+    borrow->xg_interface_use_kind = XI_INTERFACE_USE_READ;
+    return borrow;
+}
+
 static bool xi_lower_optional_payload_matches(const XrType *optional, const XrType *payload) {
     if (!optional || !optional->is_nullable || !payload)
         return false;
@@ -6098,6 +6143,45 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
                               callee_type, &writebacks, (int) node->line);
     if (l->had_error)
         return NULL;
+
+    /* The call plan establishes exact formal modes before an owned existential
+     * is narrowed
+     * to a READ view.  Later CFG lowering may forward that view,
+     * but canonical production
+     * must then forward its owner on the same edge. */
+    if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
+        int pc = callee_type->function.param_count;
+        for (int i = 0; i < n && i < pc; ++i) {
+            struct XrType *pt = xr_type_function_param_type(callee_type, i);
+            if (pt && pt->kind == XR_KIND_TYPE_PARAM && call->type_arg_count > 0 &&
+                callee_type->function.type_param_names) {
+                const char *tp_name = pt->type_param.name;
+                for (int ti = 0; ti < callee_type->function.type_param_count; ++ti) {
+                    if (callee_type->function.type_param_names[ti] && tp_name &&
+                        strcmp(callee_type->function.type_param_names[ti], tp_name) == 0 &&
+                        ti < call->type_arg_count && call->type_args[ti]) {
+                        pt = xi_lower_type_or_any(l,
+                                                  xr_tref_resolve(l->isolate, call->type_args[ti]),
+                                                  "call type argument", node ? node->line : 0);
+                        break;
+                    }
+                }
+            }
+            XrParamMode formal_mode =
+                pmodes && i < pcount ? pmodes[i] : xr_type_function_param_mode(callee_type, i);
+            if (!pt || !arg_vals[i] || !arg_vals[i]->type || pt->kind != XR_KIND_INTERFACE ||
+                arg_vals[i]->type->kind != XR_KIND_INTERFACE || formal_mode != XR_PARAM_READ ||
+                arg_vals[i]->xg_interface_use_kind == XI_INTERFACE_USE_READ)
+                continue;
+            AstNode *argument_node =
+                i < call->arg_count && call->arguments ? call->arguments[i] : NULL;
+            if (!argument_node || argument_node->type == AST_SPREAD_EXPR)
+                return NULL;
+            arg_vals[i] = xi_lower_reborrow_existential_read(l, argument_node, arg_vals[i], pt);
+            if (!arg_vals[i] || l->had_error)
+                return NULL;
+        }
+    }
 
     bool is_self_call = (l->self_var_id >= 0 && (uint32_t) l->self_var_id <= XI_MAX_VAR_ID &&
                          callee_val->var_id == (XiVarId) l->self_var_id);

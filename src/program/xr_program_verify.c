@@ -2058,9 +2058,42 @@ operation_call_signature(const XrValidatedProgram *program, const XrValidatedFun
                : NULL;
 }
 
-static uint32_t scoped_affine_borrow_owner(const XrValidatedProgram *program,
-                                           const XrValidatedFunction *function,
-                                           uint32_t value_id, uint32_t block_id);
+static bool edge_argument_source(const XrValidatedProgram *program,
+                                 const XrValidatedFunction *function,
+                                 const XrValidatedInstruction *terminator, uint32_t successor_index,
+                                 uint32_t argument_index, uint32_t *source_out);
+
+static uint32_t scoped_affine_borrow_owner(VerifyContext *context,
+                                           const XrValidatedFunction *function, uint32_t value_id,
+                                           uint32_t block_id);
+
+static bool successor_preserves_scoped_borrow_owner(VerifyContext *context,
+                                                    const XrValidatedFunction *function,
+                                                    const XrValidatedInstruction *instruction,
+                                                    uint32_t successor_index,
+                                                    uint32_t target_argument_index,
+                                                    uint32_t source_owner) {
+    if (!context || !function || !instruction || successor_index >= instruction->successor_count ||
+        instruction->successors[successor_index] >= function->block_count)
+        return false;
+    uint32_t target_block_id = instruction->successors[successor_index];
+    const XrValidatedBlock *target = &function->blocks[target_block_id];
+    if (target_argument_index >= target->argument_count)
+        return false;
+    uint32_t target_owner = scoped_affine_borrow_owner(
+        context, function, target->argument_ids[target_argument_index], target_block_id);
+    if (target_owner == XR_PROGRAM_LOCATION_NONE)
+        return false;
+    for (uint32_t argument = 0u; argument < target->argument_count; ++argument) {
+        if (target->argument_ids[argument] != target_owner)
+            continue;
+        uint32_t incoming_owner = XR_PROGRAM_LOCATION_NONE;
+        return edge_argument_source(context->program, function, instruction, successor_index,
+                                    argument, &incoming_owner) &&
+               incoming_owner == source_owner;
+    }
+    return false;
+}
 
 static bool verify_successor_arguments(VerifyContext *context, const XrValidatedFunction *function,
                                        const XrValidatedInstruction *instruction,
@@ -2089,14 +2122,13 @@ static bool verify_successor_arguments(VerifyContext *context, const XrValidated
         }
         uint32_t source_value = instruction->operands[operand_start + index];
         uint32_t target_value = target->argument_ids[index];
+        uint32_t source_owner = scoped_affine_borrow_owner(context, function, source_value,
+                                                           function->value_blocks[source_value]);
         if (target->argument_categories[index] == XR_CORE_IR_VALUE &&
             target->argument_ownerships[index] == XR_CORE_IR_NON_OWNER &&
-            xr_validated_program_type_ownership(context->program,
-                                                target->argument_types[index]) ==
-                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
-            scoped_affine_borrow_owner(context->program, function, source_value,
-                                       function->value_blocks[source_value]) !=
-                XR_PROGRAM_LOCATION_NONE) {
+            source_owner != XR_PROGRAM_LOCATION_NONE &&
+            !successor_preserves_scoped_borrow_owner(context, function, instruction,
+                                                     successor_index, index, source_owner)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
             return false;
         }
@@ -2139,14 +2171,13 @@ static bool verify_successor_argument_suffix(VerifyContext *context,
         }
         uint32_t source_value = instruction->operands[operand];
         uint32_t target_value = target->argument_ids[index];
+        uint32_t source_owner = scoped_affine_borrow_owner(context, function, source_value,
+                                                           function->value_blocks[source_value]);
         if (target->argument_categories[index] == XR_CORE_IR_VALUE &&
             target->argument_ownerships[index] == XR_CORE_IR_NON_OWNER &&
-            xr_validated_program_type_ownership(context->program,
-                                                target->argument_types[index]) ==
-                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
-            scoped_affine_borrow_owner(context->program, function, source_value,
-                                       function->value_blocks[source_value]) !=
-                XR_PROGRAM_LOCATION_NONE) {
+            source_owner != XR_PROGRAM_LOCATION_NONE &&
+            !successor_preserves_scoped_borrow_owner(context, function, instruction,
+                                                     successor_index, index, source_owner)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
             return false;
         }
@@ -2501,21 +2532,190 @@ static uint32_t scoped_place_root(const XrValidatedFunction *function, uint32_t 
     return XR_PROGRAM_LOCATION_NONE;
 }
 
-static uint32_t scoped_affine_borrow_owner(const XrValidatedProgram *program,
-                                           const XrValidatedFunction *function,
-                                           uint32_t value_id, uint32_t block_id) {
+typedef struct ScopedBorrowPair {
+    uint32_t borrow_value;
+    uint32_t owner_value;
+    uint32_t block_id;
+} ScopedBorrowPair;
+
+static bool scoped_existential_pair_is_exact(VerifyContext *context,
+                                             const XrValidatedFunction *function,
+                                             uint32_t borrow_value, uint32_t owner_value,
+                                             uint32_t block_id) {
+    if (!context || !function || function->value_count == 0u)
+        return false;
+    /* Prove the relation from SSA edges instead of recording a hidden root.
+     * Revisiting a
+     * pair closes a loop, but at least one explicit reborrow must
+     * anchor every accepted
+     * connected component. */
+    ScopedBorrowPair *pending =
+        xr_malloc((size_t) function->value_count * sizeof(ScopedBorrowPair));
+    if (!pending) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, no_location());
+        return false;
+    }
+    uint32_t pending_count = 1u;
+    uint32_t cursor = 0u;
+    bool has_reborrow_anchor = false;
+    pending[0] = (ScopedBorrowPair) {
+        .borrow_value = borrow_value,
+        .owner_value = owner_value,
+        .block_id = block_id,
+    };
+
+    while (cursor < pending_count) {
+        ScopedBorrowPair pair = pending[cursor++];
+        if (!spend(context, 1u, no_location()) || pair.block_id >= function->block_count ||
+            pair.borrow_value >= function->value_count ||
+            pair.owner_value >= function->value_count ||
+            function->value_blocks[pair.borrow_value] != pair.block_id ||
+            function->value_blocks[pair.owner_value] != pair.block_id ||
+            function->value_categories[pair.borrow_value] != XR_CORE_IR_VALUE ||
+            function->value_categories[pair.owner_value] != XR_CORE_IR_VALUE ||
+            function->value_ownerships[pair.borrow_value] != XR_CORE_IR_NON_OWNER ||
+            function->value_ownerships[pair.owner_value] != XR_CORE_IR_OWNER) {
+            xr_free(pending);
+            return false;
+        }
+        const XrValidatedType *borrow_type =
+            xr_validated_program_type(context->program, function->value_types[pair.borrow_value]);
+        const XrValidatedType *owner_type =
+            xr_validated_program_type(context->program, function->value_types[pair.owner_value]);
+        if (!borrow_type || !owner_type || borrow_type->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+            owner_type->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+            borrow_type->interface_use_kind != XR_CORE_IR_INTERFACE_EXISTENTIAL_READ ||
+            (owner_type->interface_use_kind != XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE &&
+             owner_type->interface_use_kind != XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) ||
+            borrow_type->interface_id != owner_type->interface_id) {
+            xr_free(pending);
+            return false;
+        }
+
+        const XrValidatedInstruction *definition =
+            affine_borrow_definition(function, pair.borrow_value);
+        if (definition && definition->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ) {
+            if (definition->operand_count != 1u || definition->operands[0] != pair.owner_value) {
+                xr_free(pending);
+                return false;
+            }
+            has_reborrow_anchor = true;
+            continue;
+        }
+
+        if (function->value_positions[pair.borrow_value] != 0u ||
+            function->value_positions[pair.owner_value] != 0u) {
+            xr_free(pending);
+            return false;
+        }
+        const XrValidatedBlock *block = &function->blocks[pair.block_id];
+        uint32_t borrow_argument = XR_PROGRAM_LOCATION_NONE;
+        uint32_t owner_argument = XR_PROGRAM_LOCATION_NONE;
+        for (uint32_t argument = 0u; argument < block->argument_count; ++argument) {
+            if (block->argument_ids[argument] == pair.borrow_value)
+                borrow_argument = argument;
+            if (block->argument_ids[argument] == pair.owner_value)
+                owner_argument = argument;
+        }
+        if (borrow_argument == XR_PROGRAM_LOCATION_NONE ||
+            owner_argument == XR_PROGRAM_LOCATION_NONE) {
+            xr_free(pending);
+            return false;
+        }
+
+        bool has_predecessor = false;
+        for (uint32_t predecessor = 0u; predecessor < function->block_count; ++predecessor) {
+            const XrValidatedBlock *source_block = &function->blocks[predecessor];
+            if (source_block->instruction_count == 0u)
+                continue;
+            const XrValidatedInstruction *terminator =
+                &source_block->instructions[source_block->instruction_count - 1u];
+            for (uint32_t successor = 0u; successor < terminator->successor_count; ++successor) {
+                if (terminator->successors[successor] != pair.block_id)
+                    continue;
+                has_predecessor = true;
+                uint32_t incoming_borrow = XR_PROGRAM_LOCATION_NONE;
+                uint32_t incoming_owner = XR_PROGRAM_LOCATION_NONE;
+                if (!edge_argument_source(context->program, function, terminator, successor,
+                                          borrow_argument, &incoming_borrow) ||
+                    !edge_argument_source(context->program, function, terminator, successor,
+                                          owner_argument, &incoming_owner)) {
+                    xr_free(pending);
+                    return false;
+                }
+                bool already_pending = false;
+                for (uint32_t known = 0u; known < pending_count; ++known) {
+                    if (pending[known].borrow_value == incoming_borrow &&
+                        pending[known].owner_value == incoming_owner &&
+                        pending[known].block_id == predecessor) {
+                        already_pending = true;
+                        break;
+                    }
+                }
+                if (already_pending)
+                    continue;
+                if (pending_count >= function->value_count) {
+                    xr_free(pending);
+                    return false;
+                }
+                pending[pending_count++] = (ScopedBorrowPair) {
+                    .borrow_value = incoming_borrow,
+                    .owner_value = incoming_owner,
+                    .block_id = predecessor,
+                };
+            }
+        }
+        if (!has_predecessor) {
+            xr_free(pending);
+            return false;
+        }
+    }
+    xr_free(pending);
+    return has_reborrow_anchor;
+}
+
+static uint32_t scoped_affine_borrow_owner(VerifyContext *context,
+                                           const XrValidatedFunction *function, uint32_t value_id,
+                                           uint32_t block_id) {
+    if (!context || !function)
+        return XR_PROGRAM_LOCATION_NONE;
     for (uint32_t depth = 0u; depth < function->value_count; ++depth) {
-        if (value_id >= function->value_count || function->value_blocks[value_id] != block_id)
+        if (value_id >= function->value_count || block_id >= function->block_count ||
+            function->value_blocks[value_id] != block_id || !spend(context, 1u, no_location()))
             return XR_PROGRAM_LOCATION_NONE;
         if (function->value_ownerships[value_id] == XR_CORE_IR_OWNER)
             return value_id;
+
+        const XrValidatedInstruction *definition = affine_borrow_definition(function, value_id);
+        if (definition && definition->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ)
+            return definition->operand_count == 1u ? definition->operands[0]
+                                                   : XR_PROGRAM_LOCATION_NONE;
+
+        if (function->value_positions[value_id] == 0u) {
+            const XrValidatedBlock *block = &function->blocks[block_id];
+            const XrValidatedType *borrow_type =
+                xr_validated_program_type(context->program, function->value_types[value_id]);
+            if (!borrow_type || borrow_type->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+                borrow_type->interface_use_kind != XR_CORE_IR_INTERFACE_EXISTENTIAL_READ)
+                return XR_PROGRAM_LOCATION_NONE;
+            uint32_t matched_owner = XR_PROGRAM_LOCATION_NONE;
+            for (uint32_t argument = 0u; argument < block->argument_count; ++argument) {
+                uint32_t candidate = block->argument_ids[argument];
+                if (!scoped_existential_pair_is_exact(context, function, value_id, candidate,
+                                                      block_id))
+                    continue;
+                if (matched_owner != XR_PROGRAM_LOCATION_NONE)
+                    return XR_PROGRAM_LOCATION_NONE;
+                matched_owner = candidate;
+            }
+            return matched_owner;
+        }
+
         if (function->value_categories[value_id] != XR_CORE_IR_VALUE ||
-            xr_validated_program_type_ownership(program, function->value_types[value_id]) !=
-                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
-            return XR_PROGRAM_LOCATION_NONE;
-        const XrValidatedInstruction *definition =
-            affine_borrow_definition(function, value_id);
-        if (!definition || definition->operand_count != 1u ||
+            xr_validated_program_type_ownership(context->program,
+                                                function->value_types[value_id]) !=
+                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+            !definition || definition->operand_count != 1u ||
             (definition->operation_id != XR_CORE_OP_CORE_AGGREGATE_PROJECT &&
              definition->operation_id != XR_CORE_OP_CORE_VARIANT_PROJECT &&
              definition->operation_id != XR_CORE_OP_CORE_EXISTENTIAL_PROJECT))
@@ -2523,6 +2723,57 @@ static uint32_t scoped_affine_borrow_owner(const XrValidatedProgram *program,
         value_id = definition->operands[0];
     }
     return XR_PROGRAM_LOCATION_NONE;
+}
+
+static bool instruction_forwards_value_to_successor(const VerifyContext *context,
+                                                    const XrValidatedFunction *function,
+                                                    const XrValidatedInstruction *instruction,
+                                                    uint32_t value_id) {
+    for (uint32_t successor = 0u; successor < instruction->successor_count; ++successor) {
+        uint32_t target_id = instruction->successors[successor];
+        if (target_id >= function->block_count)
+            return false;
+        const XrValidatedBlock *target = &function->blocks[target_id];
+        for (uint32_t argument = 0u; argument < target->argument_count; ++argument) {
+            uint32_t source = XR_PROGRAM_LOCATION_NONE;
+            if (edge_argument_source(context->program, function, instruction, successor, argument,
+                                     &source) &&
+                source == value_id)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool scoped_existential_reborrow_use_allowed(VerifyContext *context,
+                                                    const XrValidatedFunction *function,
+                                                    const XrValidatedInstruction *instruction,
+                                                    uint32_t operand_index) {
+    if (!context || !function || !instruction || operand_index >= instruction->operand_count)
+        return false;
+    uint32_t value_id = instruction->operands[operand_index];
+    const XrValidatedInstruction *definition = affine_borrow_definition(function, value_id);
+    uint32_t block_id = function->value_blocks[value_id];
+    bool is_scoped_reborrow =
+        definition && definition->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ;
+    const XrValidatedType *value_type =
+        xr_validated_program_type(context->program, function->value_types[value_id]);
+    if (!is_scoped_reborrow && block_id != function->entry_block && value_type &&
+        value_type->kind == XR_CORE_IR_TYPE_EXISTENTIAL &&
+        value_type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_READ)
+        is_scoped_reborrow = scoped_affine_borrow_owner(context, function, value_id, block_id) !=
+                             XR_PROGRAM_LOCATION_NONE;
+    if (!is_scoped_reborrow)
+        return true;
+    if (instruction->operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT)
+        return true;
+    const XrValidatedSignature *callee =
+        operation_call_signature(context->program, function, instruction);
+    uint32_t prefix = call_operand_prefix(instruction->operation_id);
+    if (callee && operand_index >= prefix && operand_index - prefix < callee->parameter_count &&
+        callee->parameter_modes[operand_index - prefix] == XR_PARAM_READ)
+        return true;
+    return instruction_forwards_value_to_successor(context, function, instruction, value_id);
 }
 
 static uint32_t owner_occurrences_on_successor_edge(const VerifyContext *context,
@@ -2737,10 +2988,14 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
             return false;
         }
-        uint32_t borrow_owner = scoped_affine_borrow_owner(
-            context->program, function, instruction->operands[operand], block_id);
+        uint32_t borrow_owner =
+            scoped_affine_borrow_owner(context, function, instruction->operands[operand], block_id);
         if (borrow_owner != XR_PROGRAM_LOCATION_NONE && consumed[borrow_owner]) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+            return false;
+        }
+        if (!scoped_existential_reborrow_use_allowed(context, function, instruction, operand)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
             return false;
         }
         if (operation_consumes_operand(context, function, instruction, operand))
@@ -3749,6 +4004,31 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 existential->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_READ;
             if (function->value_categories[operand] != expected_category ||
                 (!read_borrow && function->value_ownerships[operand] != expected_operand_ownership))
+                goto aggregate_type_reject;
+            return true;
+        }
+        case XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ: {
+            if (instruction->operand_count != 1u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_category != XR_CORE_IR_VALUE ||
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER)
+                goto aggregate_type_reject;
+            uint32_t operand = instruction->operands[0];
+            const XrValidatedType *source =
+                xr_validated_program_type(context->program, function->value_types[operand]);
+            const XrValidatedType *result =
+                xr_validated_program_type(context->program, instruction->result_type_id);
+            bool source_use_is_readable =
+                source &&
+                (source->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE ||
+                 source->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE);
+            if (!source || !result || source->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+                result->kind != XR_CORE_IR_TYPE_EXISTENTIAL || !source_use_is_readable ||
+                result->interface_use_kind != XR_CORE_IR_INTERFACE_EXISTENTIAL_READ ||
+                source->interface_id != result->interface_id ||
+                function->value_categories[operand] != XR_CORE_IR_VALUE ||
+                function->value_ownerships[operand] != XR_CORE_IR_OWNER)
                 goto aggregate_type_reject;
             return true;
         }

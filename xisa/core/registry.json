@@ -3062,6 +3062,73 @@
       }
     },
     {
+      "stable_id": 90,
+      "spelling": "core.existential.reborrow_read",
+      "class": "existential",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "E"
+        ],
+        "result": "E",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-MOVE-or-OWNED_STORAGE-existential"
+        ],
+        "result": "read-existential-view"
+      },
+      "profile_dependency": "none",
+      "materialization": "executor-private-read-view-sharing-the-source-payload",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one non-owning READ carrier for the same interface, conformance and payload"
+      },
+      "kat_validator": "existential-reborrow-read",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
       "stable_id": 96,
       "spelling": "core.owner.copy",
       "class": "ownership",

@@ -1749,6 +1749,82 @@
       }
     },
     {
+      "id": "existential-reborrow-read-valid-owned-storage",
+      "operation": "core.existential.reborrow_read",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "result_interface": "Shape",
+        "operand_use": "owned-storage",
+        "result_use": "read",
+        "operand_category": "value",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "payload_identity_preserved": true,
+        "operand_consumed": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "existential-reborrow-read-interface-mismatch",
+      "operation": "core.existential.reborrow_read",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "result_interface": "Drawable",
+        "operand_use": "owned-storage",
+        "result_use": "read",
+        "operand_category": "value",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "payload_identity_preserved": true,
+        "operand_consumed": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "existential-reborrow-read-rejects-read-source",
+      "operation": "core.existential.reborrow_read",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "result_interface": "Shape",
+        "operand_use": "read",
+        "result_use": "read",
+        "operand_category": "value",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "payload_identity_preserved": true,
+        "operand_consumed": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "existential-reborrow-read-rejects-ref-source",
+      "operation": "core.existential.reborrow_read",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "result_interface": "Shape",
+        "operand_use": "ref",
+        "result_use": "read",
+        "operand_category": "value",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "payload_identity_preserved": true,
+        "operand_consumed": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "indirect-call-valid",
       "operation": "core.call.indirect_direct",
       "kind": "contract",

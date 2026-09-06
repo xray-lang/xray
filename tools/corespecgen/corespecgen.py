@@ -334,7 +334,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "sealed-invoke", "indirect-call", "indirect-invoke", "witness-call",
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
-            "existential-project", "existential-test",
+            "existential-project", "existential-reborrow-read", "existential-test",
             "provider-call", "output-group-i64",
             "coroutine-yield", "coroutine-call",
         }, f"operation {spelling} has unknown KAT validator")
@@ -717,6 +717,15 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_type") == actual.get("requested_type")
                 and actual.get("result_category") == expected_category
                 and actual.get("result_ownership") == expected_ownership)
+    if validator == "existential-reborrow-read":
+        return (actual.get("operand_interface") == actual.get("result_interface")
+                and actual.get("operand_use") in {"move", "owned-storage"}
+                and actual.get("result_use") == "read"
+                and actual.get("operand_category") == "value"
+                and actual.get("result_category") == "value"
+                and actual.get("result_ownership") == "non-owner"
+                and actual.get("payload_identity_preserved") is True
+                and actual.get("operand_consumed") is False)
     if validator == "callable-pack":
         capture_type = actual.get("capture_type")
         shared = (actual.get("target_identity_closed") is True

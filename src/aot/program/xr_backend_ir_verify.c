@@ -126,6 +126,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_EXISTENTIAL_PACK:
+        case XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ:
         case XR_CORE_OP_CORE_OWNER_COPY:
         case XR_CORE_OP_CORE_OWNER_MOVE:
         case XR_CORE_OP_CORE_OWNER_DROP:

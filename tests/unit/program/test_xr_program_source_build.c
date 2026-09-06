@@ -989,7 +989,8 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
         "  return result\n"
         "}\n"
         "fn answer() -> i64 {\n"
-        "  return invoke(rejected, RejectedClock(), 2)\n"
+        "  var reader: ClockReader = RejectedClock()\n"
+        "  return invoke(rejected, reader, 2)\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1016,6 +1017,9 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
     }
     assert_products_equal(&first, &second);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PROVIDER_CALL), 3u);
+    ASSERT_EQ_UINT(program_operation_count(first.program,
+                                           XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ),
+                   1u);
     ASSERT_EQ_UINT(program_operation_successor_count(
                        first.program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT, 1u),
                    1u);

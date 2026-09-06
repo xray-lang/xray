@@ -24,7 +24,7 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 52,
+  "operation_count": 53,
   "operations": [
     {
       "stable_id": 1,
@@ -341,6 +341,14 @@
     {
       "stable_id": 89,
       "spelling": "core.callable.pack",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 90,
+      "spelling": "core.existential.reborrow_read",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",

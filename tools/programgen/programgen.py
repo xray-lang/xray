@@ -152,6 +152,7 @@ SEMANTIC_MAPPING_KEYS = {
 }
 XI_EXISTENTIAL_KINDS = {
     "pack": "XI_EXISTENTIAL_PACK",
+    "reborrow-read": "XI_EXISTENTIAL_REBORROW_READ",
     "test": "XI_EXISTENTIAL_TEST",
     "project": "XI_EXISTENTIAL_PROJECT",
     "witness-direct": "XI_EXISTENTIAL_WITNESS_DIRECT",
@@ -159,6 +160,7 @@ XI_EXISTENTIAL_KINDS = {
 }
 SEMANTIC_PROJECTION_KINDS = {
     "existential-pack": "XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PACK",
+    "existential-reborrow-read": "XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_REBORROW_READ",
     "existential-test": "XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_TEST",
     "existential-project": "XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PROJECT",
     "witness-direct": "XR_PROGRAM_XI_SEMANTIC_WITNESS_DIRECT",
@@ -174,6 +176,8 @@ FIRST_OPERAND_POLICIES = {
 EXPECTED_SEMANTIC_MAPPINGS = [
     ("xi.copy", "pack", "existential-pack", "core.existential.pack",
      "concrete-by-interface-use"),
+    ("xi.copy", "reborrow-read", "existential-reborrow-read",
+     "core.existential.reborrow_read", "borrow"),
     ("xi.is", "test", "existential-test", "core.existential.test", "borrow"),
     ("xi.as", "project", "existential-project", "core.existential.project",
      "existential-by-interface-use"),
@@ -188,6 +192,7 @@ EXPECTED_SEMANTIC_MAPPINGS = [
 ]
 EXPECTED_SEMANTIC_CORE_OWNERSHIP = {
     "core.existential.pack": ["borrow-or-transfer-concrete-by-interface-use"],
+    "core.existential.reborrow_read": ["borrow-MOVE-or-OWNED_STORAGE-existential"],
     "core.existential.test": ["borrow-existential"],
     "core.existential.project": ["borrow-or-consume-existential-by-interface-use"],
     "core.call.witness_direct": [
@@ -334,7 +339,7 @@ def validate(schema: dict[str, Any]) -> None:
         "operation_type_immediate_contract": "canonical program TypeId; used only by operations whose law names an exact semantic type and never carries layout or backend representation",
         "provider_operation_immediate_contract": "dense (ProviderRequirementIndex,OperationIndex) resolving an exact canonical imports row; every requirement operation is referenced by at least one provider-backed CoreSpec operation and no operation may reference an undeclared provider requirement",
         "coroutine_call_immediate_contract": "dense (FunctionId,SafepointId) naming one sealed child coroutine and one caller-local logical suspension point; it carries no executor frame or slot layout",
-        "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
+        "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; reborrow_read creates a scoped non-owning READ carrier for the same interface, conformance and payload; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
         "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
         "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
         "coroutine_state_contract": "function-local dense states; state zero names entry and every nonzero state names one continuation block",
@@ -532,10 +537,11 @@ def generate_source_projection_header() -> str:
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",
         "    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PACK = 1,",
-        "    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_TEST = 2,",
-        "    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PROJECT = 3,",
-        "    XR_PROGRAM_XI_SEMANTIC_WITNESS_DIRECT = 4,",
-        "    XR_PROGRAM_XI_SEMANTIC_WITNESS_INVOKE = 5,",
+        "    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_REBORROW_READ = 2,",
+        "    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_TEST = 3,",
+        "    XR_PROGRAM_XI_SEMANTIC_EXISTENTIAL_PROJECT = 4,",
+        "    XR_PROGRAM_XI_SEMANTIC_WITNESS_DIRECT = 5,",
+        "    XR_PROGRAM_XI_SEMANTIC_WITNESS_INVOKE = 6,",
         "} XrProgramXiSemanticProjectionKind;",
         "",
         "typedef enum XrProgramXiFirstOperandPolicy {",

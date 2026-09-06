@@ -68,6 +68,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_VARIANT_TEST:
         case XR_CORE_OP_CORE_VARIANT_PROJECT:
         case XR_CORE_OP_CORE_EXISTENTIAL_PACK:
+        case XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ:
         case XR_CORE_OP_CORE_EXISTENTIAL_TEST:
         case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT:
         case XR_CORE_OP_CORE_CALLABLE_PACK:

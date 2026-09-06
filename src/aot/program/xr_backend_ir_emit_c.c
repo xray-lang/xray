@@ -2059,6 +2059,13 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  instruction->result_id, instruction->result_type_id, concrete_type,
                                  conformance, instruction->result_id);
         }
+        case XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ:
+            return append_format(
+                buffer,
+                "        v%u = (XrAotType%u){.concrete_type_id = v%u.concrete_type_id, "
+                ".conformance_id = v%u.conformance_id, .data = v%u.data};\n",
+                instruction->result_id, instruction->result_type_id, instruction->operands[0],
+                instruction->operands[0], instruction->operands[0]);
         case XR_CORE_OP_CORE_EXISTENTIAL_TEST:
             return append_format(buffer,
                                  "        v%u = (uint8_t)(v%u.concrete_type_id == "

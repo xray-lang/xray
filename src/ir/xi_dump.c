@@ -214,6 +214,10 @@ static void dump_value(FILE *out, const XiValue *v) {
                 v->xg_suspend_point_use_id, v->xg_suspend_source_node_id,
                 v->xg_suspend_body_ordinal, (unsigned) v->xg_suspend_point_kind,
                 (unsigned) v->xg_suspend_may_suspend, (unsigned) v->xg_suspend_contract_complete);
+    } else if (v->xg_existential_kind == XI_EXISTENTIAL_REBORROW_READ) {
+        fprintf(out, " [existential_reborrow_read object_use=%u interface=%u use=%u]",
+                v->xg_interface_object_use_id, v->xg_interface_id,
+                (unsigned) v->xg_interface_use_kind);
     } else if (v->xg_existential_kind == XI_EXISTENTIAL_PACK ||
                v->xg_existential_kind == XI_EXISTENTIAL_TEST ||
                v->xg_existential_kind == XI_EXISTENTIAL_PROJECT) {
