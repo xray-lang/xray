@@ -1344,7 +1344,15 @@ static bool emit_invoke(CBuffer *buffer, const XrBackendIR *ir, const XrBackendF
             !emit_invoke_edge(buffer, function, instruction, successor, 1u, operand, function_id,
                               expression))
             return false;
+        operand += function->blocks[instruction->successors[successor]].argument_count - 1u;
+        ++successor;
     }
+    if (instruction->successor_count == successor + 1u &&
+        (!append_format(buffer, "        if (call_%u.kind == 1 && call_%u.trap == 7) ",
+                        instruction_id, instruction_id) ||
+         !emit_invoke_edge(buffer, function, instruction, successor, 0u, operand, function_id,
+                           NULL)))
+        return false;
     return append_format(buffer, "        return call_%u;\n", instruction_id);
 }
 

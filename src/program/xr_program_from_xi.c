@@ -7183,12 +7183,14 @@ static XrProgramBuildStatus prepare_trap_continuations(
                                                          ? NULL
                                                          : resolved_sealed_callee(context, function,
                                                                                   call);
+                    bool sealed_invoke =
+                        sealed_callee && block_typed_invoke_call(context, function, block) == call;
                     bool indirect_call = provider_call || witness_call || sealed_callee
                                              ? false
                                              : exact_indirect_direct_call(context, function, call);
                     if ((!provider_call && !witness_call && !sealed_callee && !indirect_call) ||
                         (block_typed_invoke_call(context, function, block) == call &&
-                         !witness_invoke) ||
+                         !witness_invoke && !sealed_invoke) ||
                         resolved_canonical_class_construction(context, function, call, NULL, NULL))
                         continue;
                     const XiValue *active = NULL;

@@ -2485,6 +2485,20 @@ static void test_sealed_invoke_and_cleanup_cfg(void) {
     }
     xr_program_artifact_free(&artifact);
 
+    CHECK(xr_program_invoke_fixture_write_mutated(
+              XR_INVOKE_FIXTURE_TRAP_CONTINUATION, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_invoke_fixture_write_mutated(
+              XR_INVOKE_FIXTURE_TRAP_BAD_TARGET, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW);
+    xr_program_artifact_free(&artifact);
+
     const struct {
         XrProgramInvokeFixtureMutation mutation;
         XrProgramDiagnosticKind diagnostic;

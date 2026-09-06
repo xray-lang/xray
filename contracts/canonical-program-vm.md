@@ -23,7 +23,7 @@ CoreIR writer, reference evaluator, TargetPlan, legacy Proto VM, and AOT. The ru
 links a build-produced XrProgram byte array against this archive and verifies the resulting symbol
 closure.
 
-The executor covers all fifty-two current CoreSpec operations. `core.logical.not`,
+The executor covers all fifty-three current CoreSpec operations. `core.logical.not`,
 `core.logical.and`, and `core.logical.or` operate only on canonical `bool` SSA values. The binary
 operations are eager at the Program level because their operands are already evaluated; source
 `&&` and `||` expressions whose right-hand side can trap or perform effects are instead projected
@@ -38,8 +38,10 @@ slice additionally verifies exact open/close operation identities, endpoint proj
 optional projection, a `MOVE` close receiver, and two close calls under one pinned execution
 generation. A real-source `time.now()` refusal fixture proves that the independent reference and
 VM executors each issue exactly one provider event and publish the same provider-call-failed trap.
-This is transport-outcome evidence only: trap-path deferred cleanup remains source-gated until the
-Program has an explicit trap continuation rather than an executor-local unwind policy. The Pipe
+Explicit Program trap continuations carry every live owner into the same static Pipe cleanup when
+provider failure crosses direct, sealed-direct, indirect-direct, witness-direct, witness-invoke,
+or sealed-invoke calls. The executor transfers only trap 7 through the verified edge; it does not
+synthesize an unwind policy or catch other traps. The Pipe
 slice uses natural `!`, `&&`, and `||` syntax and guarded division-by-zero right-hand
 sides to verify the same result and short-circuit behavior in the reference evaluator and the
 source-path VM. A dedicated logical-operation fixture covers both VM decode policies. Wave 1 source activates scalar,
@@ -55,11 +57,11 @@ remain covered. Full-language operation families, public embedding ABI, adaptive
 persistent private-code cache remain inactive for later tasks.
 
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
-anchor-sha256: xisa/core/registry.json de16729049b61a04814499d57efcd2eb4b2d7ee8213ff40316d35982d55507f2
+anchor-sha256: xisa/core/registry.json c885ae79d8bceaa9eb05c6c4e540c23b43177698e9bd79cd5d1ec8c0f404f2ef
 anchor-sha256: src/vm/xr_program_vm.h 76bc53a625384448931283a37449d326cc25848bb4737d7fda15e212463e9da5
-anchor-sha256: src/vm/xr_program_vm.c 7212e45b5f44fde9eedef51a53dcdcada2bb7189f5e254fbffe35d2c2d169cb5
+anchor-sha256: src/vm/xr_program_vm.c d7216524b57cb0186a6f341f16992b720918faf801367db20e9effb544f7e2ec
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c e6a43cc3533ce79725f55348453c2ae0c00292c8ce6ae821957a0ef654a063fd
+anchor-sha256: src/program/xr_program_verify.c 8d7911db22b4ce271686cce259fc328d55c04a4696e2411a1b7c57ef3085f0b0
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -68,4 +70,4 @@ anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390
 anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json 6ff5a35cbb08102a139e7c2ba6f8b8695154e54b78fed65ab05be501b0c7a79f
 anchor-sha256: tests/unit/vm/test_xr_program_vm.c 99dab9f9a3a365ff9cfb6ee29336699fbcdeea5c86ca393b726d4d271ea7f3ae
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 76e7c166239fd99d02ca504c20af42e72efeceb61136967674ef7bfafc39ad37
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 3449f0a31be68300d017d8ed4888aa0e17d409b2c4ac618f684854b7b972c30d

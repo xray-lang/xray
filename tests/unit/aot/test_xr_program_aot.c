@@ -1346,6 +1346,64 @@ static void test_sealed_invoke_typed_error_cleanup_lowering(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_sealed_invoke_trap_continuation_lowering_and_mutation(void) {
+    XrProgramArtifact artifact = {0};
+    char build_diagnostic[256] = {0};
+    REQUIRE(xr_program_invoke_fixture_write_mutated(
+                XR_INVOKE_FIXTURE_TRAP_CONTINUATION, &artifact, build_diagnostic,
+                sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendFunction *invoke_function = NULL;
+    XrBackendInstruction *invoke = NULL;
+    for (uint32_t function = 0u; function < ir->function_count; ++function) {
+        for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
+            XrBackendBlock *row = &ir->functions[function].blocks[block];
+            for (uint32_t instruction = 0u; instruction < row->instruction_count;
+                 ++instruction) {
+                if (row->instructions[instruction].operation_id ==
+                    XR_CORE_OP_CORE_CALL_SEALED_INVOKE) {
+                    REQUIRE(invoke == NULL);
+                    invoke_function = &ir->functions[function];
+                    invoke = &row->instructions[instruction];
+                }
+            }
+        }
+    }
+    REQUIRE(invoke_function != NULL);
+    REQUIRE(invoke != NULL);
+    REQUIRE(invoke->successor_count == 3u);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, ".kind == 1 && call_") != NULL);
+    REQUIRE(strstr(generated.bytes, ".trap == 7") != NULL);
+
+    uint32_t trap_block = invoke->successors[2];
+    REQUIRE(trap_block < invoke_function->block_count);
+    XrBackendBlock *target = &invoke_function->blocks[trap_block];
+    REQUIRE(target->instruction_count != 0u);
+    XrBackendInstruction *trap = &target->instructions[target->instruction_count - 1u];
+    REQUIRE(trap->operation_id == XR_CORE_OP_CORE_TRAP);
+    trap->immediate.u32 = 4u;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    trap->immediate.u32 = 7u;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void test_typed_panic_cleanup_lowering(void) {
     XrProgramArtifact artifact = {0};
     char build_diagnostic[256] = {0};
@@ -2077,6 +2135,7 @@ int main(int argc, char **argv) {
         test_affine_copy_lowering();
         test_empty_aggregate_has_portable_private_c_storage();
         test_sealed_invoke_typed_error_cleanup_lowering();
+        test_sealed_invoke_trap_continuation_lowering_and_mutation();
         test_typed_panic_cleanup_lowering();
         test_existential_pack_test_project_lowering();
         test_existential_owned_read_reborrow_lowering();

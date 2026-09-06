@@ -951,6 +951,71 @@
       }
     },
     {
+      "id": "sealed-invoke-provider-trap-continuation",
+      "operation": "core.call.sealed_invoke",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "callee_result_type": "bool",
+        "normal_result_type": "bool",
+        "callee_error_type": "ParseError",
+        "error_argument_type": "ParseError",
+        "callee_panic_type": "void",
+        "panic_argument_type": "void",
+        "callee_sealed": true,
+        "successor_count": 3,
+        "trap": "provider-call-failed",
+        "live_values": [
+          17,
+          23
+        ],
+        "trap_edge_values": [
+          17,
+          23
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "sealed-invoke-rejects-lost-trap-owner",
+      "operation": "core.call.sealed_invoke",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "callee_result_type": "bool",
+        "normal_result_type": "bool",
+        "callee_error_type": "ParseError",
+        "error_argument_type": "ParseError",
+        "callee_panic_type": "void",
+        "panic_argument_type": "void",
+        "callee_sealed": true,
+        "successor_count": 3,
+        "trap": "provider-call-failed",
+        "live_values": [
+          17,
+          23
+        ],
+        "trap_edge_values": [
+          17
+        ]
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "witness-direct-valid",
       "operation": "core.call.witness_direct",
       "kind": "contract",

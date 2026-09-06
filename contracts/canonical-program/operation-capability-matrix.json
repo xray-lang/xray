@@ -327,19 +327,21 @@
     },
     {
       "id": "core.call.sealed_invoke",
-      "core_spec_contract": "closed-world function identity with exact parameters and mutually exclusive normal, optional typed-error, and optional typed-panic continuations",
-      "program_encoding": "stable callee id, ordered call operands, dynamic normal/error/panic targets, implicit typed channel block arguments, and explicit pass-through operands",
-      "decoder_verifier_evaluator": "callee signature and orthogonal error/panic channels, all continuation prefixes/suffixes, handled effects, and path-complete ownership checks",
-      "vm_implementation": "private typed frame call followed by one verified normal, error, or panic edge without ambient pending state",
-      "aot_lowering": "typed result/error/panic out parameters and direct C control transfer generated only from validated BackendIR",
-      "source_producer": "resolved fallible Xi call plus xi.err.check maps error CFG; panicful calls without explicit panic CFG fail closed",
+      "core_spec_contract": "closed-world function identity with exact parameters and mutually exclusive normal, optional typed-error, optional typed-panic, and at most one final provider-failed trap continuation",
+      "program_encoding": "stable callee id, ordered call operands, dynamic normal/error/panic targets, implicit typed channel block arguments, explicit pass-through operands, and an optional final trap edge carrying the exact live-value set",
+      "decoder_verifier_evaluator": "callee signature and orthogonal error/panic channels, all continuation prefixes/suffixes, handled effects, path-complete ownership, and an optional trap-7 target that preserves every live owner exactly once",
+      "vm_implementation": "private typed frame call followed by one verified normal, error, panic, or provider-failed trap edge without ambient pending state",
+      "aot_lowering": "typed result/error/panic out parameters and direct C control transfer generated only from validated BackendIR, including independent validation of the optional final trap-7 edge",
+      "source_producer": "resolved fallible Xi call plus xi.err.check maps error CFG; a call inside an exact static cleanup scope may append the sole provider-failed trap continuation; panicful calls without explicit panic CFG fail closed",
       "old_owner_deletion": "canonical source/reference/VM/AOT contain no pending-error or pending-panic slot, inferred post-call check, or implicit unwind state; the frozen pre-cut route is physically deleted by Task 302",
       "status": "COMPLETE_W7_WAVE3_SLICE5",
       "evidence": [
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
-        "tests/unit/program/xr_program_invoke_fixture.h"
+        "tests/unit/program/xr_program_invoke_fixture.h",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/aot/test_xr_program_aot.c"
       ]
     },
     {

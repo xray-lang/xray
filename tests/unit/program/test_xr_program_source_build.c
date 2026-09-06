@@ -968,13 +968,14 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
         "import sys\n"
         "import time\n"
         "enum ClockFailure { Negative }\n"
+        "fn rejectedFallible() -> i64 {\n"
+        "  var value = time.now()\n"
+        "  if (value < 0) { throw ClockFailure.Negative }\n"
+        "  return value\n"
+        "}\n"
         "interface ClockReader { read() -> i64 }\n"
         "class RejectedClock implements ClockReader {\n"
-        "  read() -> i64 {\n"
-        "    var value = time.now()\n"
-        "    if (value < 0) { throw ClockFailure.Negative }\n"
-        "    return value\n"
-        "  }\n"
+        "  read() -> i64 { return rejectedFallible() }\n"
         "}\n"
         "fn rejected() -> i64 { return time.now() }\n"
         "fn invoke(body: fn() -> i64, reader: ClockReader, mode: i64) -> i64 {\n"
@@ -990,13 +991,14 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
         "    try { result = reader.read() }\n"
         "    catch (error: ClockFailure) { result = 0 }\n"
         "  } else {\n"
-        "    result = rejected()\n"
+        "    try { result = rejectedFallible() }\n"
+        "    catch (error: ClockFailure) { result = 0 }\n"
         "  }\n"
         "  return result\n"
         "}\n"
         "fn answer() -> i64 {\n"
         "  var reader: ClockReader = RejectedClock()\n"
-        "  return invoke(rejected, reader, 2)\n"
+        "  return invoke(rejected, reader, 0)\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1027,13 +1029,13 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
                                            XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ),
                    1u);
     ASSERT_EQ_UINT(program_operation_successor_count(
-                       first.program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT, 1u),
-                   1u);
-    ASSERT_EQ_UINT(program_operation_successor_count(
                        first.program, XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT, 1u),
                    1u);
     ASSERT_EQ_UINT(program_operation_successor_count(
                        first.program, XR_CORE_OP_CORE_CALL_WITNESS_INVOKE, 3u),
+                   1u);
+    ASSERT_EQ_UINT(program_operation_successor_count(
+                       first.program, XR_CORE_OP_CORE_CALL_SEALED_INVOKE, 3u),
                    1u);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_TRAP), 1u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 2u);

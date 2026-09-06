@@ -17,6 +17,8 @@ typedef enum XrProgramInvokeFixtureMutation {
     XR_INVOKE_FIXTURE_DUPLICATE_NORMAL_OWNER,
     XR_INVOKE_FIXTURE_MISSING_ERROR_OWNER,
     XR_INVOKE_FIXTURE_DUPLICATE_ERROR_OWNER,
+    XR_INVOKE_FIXTURE_TRAP_CONTINUATION,
+    XR_INVOKE_FIXTURE_TRAP_BAD_TARGET,
 } XrProgramInvokeFixtureMutation;
 
 static XrCoreIrKey xr_invoke_fixture_key(const char *text) {
@@ -172,6 +174,8 @@ static XrProgramBuildStatus xr_program_invoke_fixture_write_mutated(
     XrCoreIrKey error_owner_duplicate =
         xr_invoke_fixture_key("invoke:entry:error-owner-duplicate");
     XrCoreIrKey error_fallback = xr_invoke_fixture_key("invoke:entry:error-fallback");
+    XrCoreIrKey trap_key = xr_invoke_fixture_key("invoke:entry:trap");
+    XrCoreIrKey trap_owner = xr_invoke_fixture_key("invoke:entry:trap-owner");
     XrCoreIrValueInput entry_arguments[] = {
         {.key = condition, .type_id = XR_CORE_TYPE_BOOL},
         {.key = error_value, .type_id = XR_CORE_TYPE_ERROR},
@@ -187,13 +191,17 @@ static XrProgramBuildStatus xr_program_invoke_fixture_write_mutated(
         mutation == XR_INVOKE_FIXTURE_MISSING_NORMAL_OWNER ? 0u : normal_owner_argument_count;
     uint32_t error_owner_transfer_count =
         mutation == XR_INVOKE_FIXTURE_MISSING_ERROR_OWNER ? 0u : error_owner_argument_count;
-    XrCoreIrKey invoke_operands[6] = {condition, error_value};
+    bool trap_continuation = mutation == XR_INVOKE_FIXTURE_TRAP_CONTINUATION ||
+                             mutation == XR_INVOKE_FIXTURE_TRAP_BAD_TARGET;
+    XrCoreIrKey invoke_operands[7] = {condition, error_value};
     uint32_t invoke_operand_count = 2u;
     for (uint32_t index = 0u; index < normal_owner_transfer_count; ++index)
         invoke_operands[invoke_operand_count++] = owner;
     for (uint32_t index = 0u; index < error_owner_transfer_count; ++index)
         invoke_operands[invoke_operand_count++] = owner;
-    XrCoreIrKey invoke_successors[] = {normal_key, error_key};
+    if (trap_continuation)
+        invoke_operands[invoke_operand_count++] = owner;
+    XrCoreIrKey invoke_successors[] = {normal_key, error_key, trap_key};
     XrCoreIrInstructionInput entry_instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -214,7 +222,7 @@ static XrProgramBuildStatus xr_program_invoke_fixture_write_mutated(
          .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
          .immediate.key = callee_key,
          .successors = invoke_successors,
-         .successor_count = 2u},
+         .successor_count = trap_continuation ? 3u : 2u},
     };
     XrCoreIrValueInput normal_arguments[3] = {
         {.key = normal_result,
@@ -320,6 +328,28 @@ static XrProgramBuildStatus xr_program_invoke_fixture_write_mutated(
         .operand_count = 1u,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
+    XrCoreIrValueInput trap_argument = {
+        .key = trap_owner,
+        .type_id = XR_INVOKE_FIXTURE_AFFINE_TYPE,
+        .ownership = XR_CORE_IR_OWNER,
+    };
+    XrCoreIrKey trap_block_arguments[] = {trap_owner};
+    XrCoreIrInstructionInput trap_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = trap_block_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = trap_block_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_TRAP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = mutation == XR_INVOKE_FIXTURE_TRAP_BAD_TARGET ? 4u : 7u},
+    };
     XrCoreIrBlockInput entry_blocks[] = {
         {.key = entry_block_key,
          .arguments = entry_arguments,
@@ -336,6 +366,11 @@ static XrProgramBuildStatus xr_program_invoke_fixture_write_mutated(
          .argument_count = 1u + error_owner_argument_count,
          .instructions = error_instructions,
          .instruction_count = error_instruction_count},
+        {.key = trap_key,
+         .arguments = &trap_argument,
+         .argument_count = 1u,
+         .instructions = trap_instructions,
+         .instruction_count = 3u},
     };
     uint16_t entry_parameters[] = {XR_CORE_TYPE_BOOL, XR_CORE_TYPE_ERROR, XR_CORE_TYPE_I64};
     XrCoreIrFunctionInput entry_function = {
@@ -344,10 +379,11 @@ static XrProgramBuildStatus xr_program_invoke_fixture_write_mutated(
         .parameter_count = 3u,
         .result_type_id = XR_CORE_TYPE_I64,
         .error_type_id = XR_CORE_TYPE_ERROR,
-        .effect_mask = XR_CORE_EFFECT_ERROR | XR_CORE_EFFECT_CALL,
+        .effect_mask = XR_CORE_EFFECT_ERROR | XR_CORE_EFFECT_CALL |
+                       (trap_continuation ? XR_CORE_EFFECT_TRAP : 0u),
         .entry_block = entry_block_key,
         .blocks = entry_blocks,
-        .block_count = 3u,
+        .block_count = trap_continuation ? 4u : 3u,
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
     XrCoreIrFunctionInput functions[] = {callee_function, entry_function};

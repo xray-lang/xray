@@ -70,13 +70,27 @@ static const XrValidatedSignature *witness_invoke_signature(
     return &ir->program->signatures[interface_row->slot_signature_ids[instruction->immediate.u32]];
 }
 
-static uint32_t witness_invoke_typed_successor_count(
+static uint32_t invoke_typed_successor_count(
     const XrBackendIR *ir, const XrBackendFunction *function,
     const XrBackendInstruction *instruction) {
-    const XrValidatedSignature *signature = witness_invoke_signature(ir, function, instruction);
-    return signature ? 1u + (signature->error_type_id != XR_CORE_TYPE_VOID ? 1u : 0u) +
-                           (signature->panic_type_id != XR_CORE_TYPE_VOID ? 1u : 0u)
-                     : 0u;
+    if (!ir || !instruction)
+        return 0u;
+    if (instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE) {
+        if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+            instruction->immediate.function_id >= ir->function_count)
+            return 0u;
+        const XrBackendFunction *callee = &ir->functions[instruction->immediate.function_id];
+        return 1u + (callee->error_type_id != XR_CORE_TYPE_VOID ? 1u : 0u) +
+               (callee->panic_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
+    }
+    if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
+        const XrValidatedSignature *signature =
+            witness_invoke_signature(ir, function, instruction);
+        return signature ? 1u + (signature->error_type_id != XR_CORE_TYPE_VOID ? 1u : 0u) +
+                               (signature->panic_type_id != XR_CORE_TYPE_VOID ? 1u : 0u)
+                         : 0u;
+    }
+    return 0u;
 }
 
 static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFunction *function,
@@ -185,10 +199,19 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_CALLABLE_PACK:
-            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
-                   (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
-                    instruction->successor_count <= 1u) &&
-                   instruction->immediate.function_id < ir->function_count;
+            if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+                instruction->immediate.function_id >= ir->function_count)
+                return false;
+            if (instruction->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK)
+                return true;
+            if (instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT)
+                return instruction->successor_count <= 1u;
+            {
+                uint32_t typed = invoke_typed_successor_count(ir, function, instruction);
+                return typed > 1u &&
+                       (instruction->successor_count == typed ||
+                        instruction->successor_count == typed + 1u);
+            }
         case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
         case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
             if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32)
@@ -196,9 +219,8 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
             if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT)
                 return instruction->successor_count <= 1u;
             {
-                uint32_t typed =
-                    witness_invoke_typed_successor_count(ir, function, instruction);
-                return typed != 0u &&
+                uint32_t typed = invoke_typed_successor_count(ir, function, instruction);
+                return typed > 1u &&
                        (instruction->successor_count == typed ||
                         instruction->successor_count == typed + 1u);
             }
@@ -375,9 +397,9 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                      instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT) &&
                     instruction->successor_count == 1u)
                     trap_successor = 0u;
-                if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
-                    uint32_t typed =
-                        witness_invoke_typed_successor_count(ir, function, instruction);
+                if (instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+                    instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
+                    uint32_t typed = invoke_typed_successor_count(ir, function, instruction);
                     if (typed != 0u && instruction->successor_count == typed + 1u)
                         trap_successor = typed;
                 }

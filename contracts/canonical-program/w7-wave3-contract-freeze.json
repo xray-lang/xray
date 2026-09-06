@@ -40,8 +40,8 @@
     {
       "stable_id": 37,
       "id": "core.call.sealed_invoke",
-      "law": "call one sealed function and transfer exactly once to normal, optional typed-error, or optional typed-panic continuation",
-      "source": "fallible sealed direct call",
+      "law": "call one sealed function and transfer exactly once to normal, optional typed-error, optional typed-panic, or one final provider-failed trap continuation",
+      "source": "fallible sealed direct call; an exact static cleanup scope may append the sole trap-7 continuation",
       "status": "COMPLETE_W7_WAVE3_SLICE5"
     },
     {
