@@ -848,6 +848,7 @@ CONTRACT_SPECS = (
             "contracts/canonical-program/xrprogram-vm-coverage.json",
             "tests/unit/vm/test_xr_program_vm.c",
             "tests/unit/vm/test_xr_program_vm_runtime.c",
+            "tests/unit/program/test_xr_program_source_build.c",
         ),
     ),
     ContractSpec(
@@ -871,6 +872,7 @@ CONTRACT_SPECS = (
             "scripts/check_xr_program_aot_native.py",
             "scripts/check_xr_program_aot_providers.py",
             "tests/unit/aot/test_xr_program_aot.c",
+            "tests/unit/program/test_xr_program_source_build.c",
         ),
     ),
 )

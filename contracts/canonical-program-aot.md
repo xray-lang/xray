@@ -28,6 +28,9 @@ anonymous-pipe open and endpoint-close helpers only for the exact stable operati
 profile, while retaining no live provider instance or lease in the compiler. Embedded AOT receives
 typed callbacks from its host; hosted standalone AOT binds the generated entry directly to its
 closed native helper set, while freestanding standalone emission without an embedder fails closed.
+A strict native fixture built from real-source `time.now()` proves that one callback refusal becomes
+trap 7 after exactly one provider event. It does not claim deferred cleanup on that trap; explicit
+Program trap continuations remain required before path-complete cleanup can be qualified.
 
 `XrNativeArtifact` owns actual native bytes. `NativeArtifactId` hashes `ExecutionId`, `BackendId`,
 `ToolchainId`, `OptimizationPolicyId`, and those bytes. Toolchain identity is reconstructible from
@@ -35,7 +38,7 @@ provider version, target triple, codegen options, sysroot, runtime objects, and 
 fingerprints; every partition is checked exactly and mismatches fail closed.
 
 The pure-AOT walking-skeleton executable contains no VM, compiler, program-loader, TargetPlan, or
-AOT-toolchain symbol and executes without program bytes. All fifty current CoreSpec operations
+AOT-toolchain symbol and executes without program bytes. All fifty-two current CoreSpec operations
 have private BackendIR/C lowering. `core.logical.not`, `core.logical.and`, and `core.logical.or`
 accept only canonical `bool` values and emit portable C logical expressions over already evaluated
 SSA operands. Source expressions with a trapping or effectful right-hand side are projected into
@@ -53,10 +56,10 @@ also compile and execute as independent native cases. Full language operation fa
 optimizations, public loader ABI, and package publication remain inactive.
 
 anchor-sha256: CMakeLists.txt 2a14f3d1a43bfc8b6f7050c4317b3b7254a70593550a3a47d9c30c9970da899a
-anchor-sha256: tests/unit/CMakeLists.txt 5115b66c276316ffaaaca6ec69f0d1d5952ea54db3b7669f13fd9354349d477c
+anchor-sha256: tests/unit/CMakeLists.txt c599735305a3c4350c73f1db6392af1f581de0c46df2f2bbc143542e3e520866
 anchor-sha256: xisa/core/registry.json 23734012021115d05680360187e4568fa51d7c316b779489e9220b8e072ba28e
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
-anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 068aeb1826fe6e4608ce86372f71b2d33dbbbb5e5ca5f7f9b06a069a579f8842
+anchor-sha256: contracts/canonical-program/operation-capability-matrix.json ae7c05566348d0dd2a1181fabc498e04bfefe6a616ef6d3a3cab2b2165aac1be
 anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json d71b4e109965636523bde91fa58b8ecce43c4bf9204d8b6e535f0c1c9ca1cbce
 anchor-sha256: src/aot/program/xr_backend_ir.h 1d9dca590e0a7ace9034939925bfe69fca8d60eb33b48d3915822cbf4bda42cf
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
@@ -70,3 +73,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f3
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c a3d0997227c4515d4fad35964e823b917588c13e30837267dcaff42779105203
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c a3ca465892ffc334ab1a732e7e130e01b1b7f890fd09d79a23aa46d128fc5550

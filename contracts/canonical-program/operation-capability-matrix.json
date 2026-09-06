@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop, local place load/store, nominal field-place projection, and affine place take are complete Wave 3 slices; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; canonical bool not/and/or preserve source-owned short-circuit policy; existential pack/test/project, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; provider.call has a complete Program and executor foundation but remains IN_PROGRESS until manifest, analyzer, Xglobal, and Xi publish its exact identity; trap and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop, local place load/store, nominal field-place projection, and affine place take are complete Wave 3 slices; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; canonical bool not/and/or preserve source-owned short-circuit policy; existential pack/test/project, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; provider.call now has real-source clock and pipe publication plus exact success/refusal executor evidence, but remains IN_PROGRESS until the complete provider-backed source surface, trap continuations, and old-owner deletion close; trap and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 52 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references; source publication remains fail closed until its owning slice activates it."
+    "note": "All 52 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references. Source publication is active only for registry-backed, structurally admitted clock and pipe routes; other provider-backed source shapes remain fail closed."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 52 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes Program-typed provider callbacks; hosted standalone output and pipe-open bind backend-private host adapters, while unsupported freestanding providers fail closed. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 52 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes Program-typed provider callbacks; real-source clock fixtures prove exact success and one-event refusal-to-trap normalization, while hosted standalone output and pipe-open bind backend-private host adapters and unsupported freestanding providers fail closed. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -575,23 +575,27 @@
       "id": "core.provider.call",
       "core_spec_contract": "invoke one exact typed provider operation admitted by the bound profile and generation-scoped instance or publish provider-call-failed",
       "program_encoding": "logical operands and result types plus dense ProviderRequirementIndex and OperationIndex; no provider key, ABI address, context, trampoline kind, or generation is serialized",
-      "decoder_verifier_evaluator": "bounded exact requirement/operation reference, declared effect/capability checks, one structurally admitted logical call shape per required operation, and independent callback evaluation",
-      "vm_implementation": "select an execution-private typed trampoline from validated XrProgram types and the exact target ABI while the in-flight ticket pin keeps the instance binding alive",
-      "aot_lowering": "emit a portable typed provider callback selected from validated XrProgram types; standalone hosted operations bind backend-private host adapters and refusal normalizes to trap 7",
-      "source_producer": "IN_PROGRESS: a versioned NativePackagePlan row must bind an existing extern C declaration to canonical contract and operation keys before hashing; analyzer, Xglobal, and Xi must publish the verified identity",
-      "old_owner_deletion": "IN_PROGRESS: direct native-call ownership remains excluded from the canonical provider path until source publication and cutover are complete",
+      "decoder_verifier_evaluator": "bounded exact requirement/operation reference, declared effect/capability checks, one structurally admitted logical call shape per required operation, independent callback evaluation, and exact provider-call-failed refusal normalization",
+      "vm_implementation": "select an execution-private typed trampoline from validated XrProgram types and the exact target ABI while the in-flight ticket pin keeps the instance binding alive; refusal becomes the canonical provider-call-failed trap",
+      "aot_lowering": "emit a portable typed provider callback selected from validated XrProgram types; real-source embedded refusal issues one event and normalizes to trap 7, while standalone hosted operations bind backend-private host adapters",
+      "source_producer": "the source-owned stdlib registry publishes canonical contract and operation keys; exact analyzer/Xglobal-resolved builtin calls flow through Xi into XrProgram requirements. Current evidence covers time.now plus sys.Pipe.open/close, and unregistered or unsupported shapes fail closed",
+      "old_owner_deletion": "IN_PROGRESS: the proven clock and pipe source slices execute through canonical XrProgram only, but the remaining provider-backed stdlib surface and product cutover must close before direct native-call ownership can be deleted",
       "status": "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
         "src/program/xr_program_verify.c",
         "src/program/xr_reference_evaluator.c",
+        "src/program/xr_program_from_xi.c",
+        "stdlib/defs/core.def",
+        "src/stdlib/xstdlib_defs_generated.h",
         "src/execution/xr_execution.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
         "tests/unit/execution/test_xr_execution.c",
         "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot.c"
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/test_xr_program_source_build.c"
       ]
     },
     {

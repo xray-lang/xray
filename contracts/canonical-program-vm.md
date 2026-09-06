@@ -23,7 +23,7 @@ CoreIR writer, reference evaluator, TargetPlan, legacy Proto VM, and AOT. The ru
 links a build-produced XrProgram byte array against this archive and verifies the resulting symbol
 closure.
 
-The executor covers all fifty current CoreSpec operations. `core.logical.not`,
+The executor covers all fifty-two current CoreSpec operations. `core.logical.not`,
 `core.logical.and`, and `core.logical.or` operate only on canonical `bool` SSA values. The binary
 operations are eager at the Program level because their operands are already evaluated; source
 `&&` and `||` expressions whose right-hand side can trap or perform effects are instead projected
@@ -36,7 +36,11 @@ Provider calls use shape-specific lease-pinned trampolines for nullary/unary i64
 byte-for-byte against the reference evaluator under both VM decode policies. The Pipe source
 slice additionally verifies exact open/close operation identities, endpoint projection, taking
 optional projection, a `MOVE` close receiver, and two close calls under one pinned execution
-generation. It uses natural `!`, `&&`, and `||` syntax and guarded division-by-zero right-hand
+generation. A real-source `time.now()` refusal fixture proves that the independent reference and
+VM executors each issue exactly one provider event and publish the same provider-call-failed trap.
+This is transport-outcome evidence only: trap-path deferred cleanup remains source-gated until the
+Program has an explicit trap continuation rather than an executor-local unwind policy. The Pipe
+slice uses natural `!`, `&&`, and `||` syntax and guarded division-by-zero right-hand
 sides to verify the same result and short-circuit behavior in the reference evaluator and the
 source-path VM. A dedicated logical-operation fixture covers both VM decode policies. Wave 1 source activates scalar,
 control, block arguments, and sealed calls; Wave 2 adds logical aggregate construction/projection
@@ -64,3 +68,4 @@ anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390
 anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json a7299f42f2de85f45285c8460cb392b83553b22038636d39d3556ae03f973bbb
 anchor-sha256: tests/unit/vm/test_xr_program_vm.c 574e9b1e730e39685e391565d9ef10e2afc5cd2de8d690343440f11139e9f746
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c a3ca465892ffc334ab1a732e7e130e01b1b7f890fd09d79a23aa46d128fc5550
