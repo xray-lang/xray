@@ -369,12 +369,12 @@
     },
     {
       "id": "core.call.indirect_invoke",
-      "core_spec_contract": "call one typed callable value and transfer exactly once to normal, typed-error or typed-panic continuations",
-      "program_encoding": "callable operand, ordered visible call and edge operands, and explicit successor blocks with implicit typed channel prefixes",
-      "decoder_verifier_evaluator": "the callable SignatureId owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; the private target identity cannot override those facts",
-      "vm_implementation": "a private callable carrier invokes one typed frame and transfers through the verified normal, error or panic edge without ambient pending state",
-      "aot_lowering": "the same closed typed FunctionId switch feeds explicit result/error/panic locals and direct C control transfer",
-      "source_producer": "fallible function values and closures lower to one typed callable plus exact indirect invoke and explicit normal/error continuation edges",
+      "core_spec_contract": "call one typed callable value and transfer exactly once to normal, typed-error or typed-panic continuations; provider trap 7 either escapes or transfers through one optional final trap continuation",
+      "program_encoding": "callable operand, ordered visible call and channel-edge operands, explicit normal/error/panic successors, and an optional final trap successor followed by its exact live values",
+      "decoder_verifier_evaluator": "the callable SignatureId owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; the verifier also proves the optional trap target and exact live-owner set, and private target identity cannot override those facts",
+      "vm_implementation": "a private callable carrier invokes one typed frame and transfers through the verified normal, error, panic or provider-trap edge without ambient pending state",
+      "aot_lowering": "the same closed typed FunctionId switch feeds explicit result/error/panic locals and direct C control transfer, including the verified provider-trap continuation",
+      "source_producer": "fallible function values and closures lower to one typed callable plus exact indirect invoke and explicit normal/error/trap continuations; split Xi call/check blocks and conservative open-call coroutine reservations are resolved from the closed Xglobal target contract",
       "old_owner_deletion": "the canonical source route contains no erased closure invocation, inferred post-call check or implicit pending error/panic state; the frozen pre-cut product route is physically deleted by Task 302",
       "status": "COMPLETE_W7_WAVE4",
       "evidence": [
@@ -386,7 +386,9 @@
         "src/aot/program/xr_backend_ir_emit_c.c",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
-        "tests/unit/program/xr_program_callable_fixture.h"
+        "tests/unit/program/xr_program_callable_fixture.h",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/aot/test_xr_program_aot.c"
       ]
     },
     {

@@ -939,7 +939,9 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     } else if ((instruction->operation_id ==
                                     XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
                                 instruction->operation_id ==
-                                    XR_CORE_OP_CORE_CALL_SEALED_INVOKE) &&
+                                    XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+                                instruction->operation_id ==
+                                    XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE) &&
                                nested.kind == XR_REFERENCE_OUTCOME_TRAP &&
                                nested.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED &&
                                instruction->successor_count == typed_successors + 1u) {

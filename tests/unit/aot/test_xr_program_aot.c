@@ -1846,6 +1846,64 @@ static void test_witness_invoke_trap_continuation_lowering_and_mutation(void) {
     xr_validated_program_free(program);
 }
 
+static void test_callable_invoke_trap_continuation_lowering_and_mutation(void) {
+    XrProgramArtifact artifact = {0};
+    char build_diagnostic[256] = {0};
+    REQUIRE(xr_program_callable_fixture_write_mutated(
+                XR_CALLABLE_FIXTURE_INVOKE_TRAP, &artifact, build_diagnostic,
+                sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendFunction *invoke_function = NULL;
+    XrBackendInstruction *invoke = NULL;
+    for (uint32_t function = 0u; function < ir->function_count; ++function) {
+        for (uint32_t block = 0u; block < ir->functions[function].block_count; ++block) {
+            XrBackendBlock *row = &ir->functions[function].blocks[block];
+            for (uint32_t instruction = 0u; instruction < row->instruction_count;
+                 ++instruction) {
+                if (row->instructions[instruction].operation_id ==
+                    XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE) {
+                    REQUIRE(invoke == NULL);
+                    invoke_function = &ir->functions[function];
+                    invoke = &row->instructions[instruction];
+                }
+            }
+        }
+    }
+    REQUIRE(invoke_function != NULL);
+    REQUIRE(invoke != NULL);
+    REQUIRE(invoke->successor_count == 3u);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, ".kind == 1 && call_") != NULL);
+    REQUIRE(strstr(generated.bytes, ".trap == 7") != NULL);
+
+    uint32_t trap_block = invoke->successors[2];
+    REQUIRE(trap_block < invoke_function->block_count);
+    XrBackendBlock *target = &invoke_function->blocks[trap_block];
+    REQUIRE(target->instruction_count != 0u);
+    XrBackendInstruction *trap = &target->instructions[target->instruction_count - 1u];
+    REQUIRE(trap->operation_id == XR_CORE_OP_CORE_TRAP);
+    trap->immediate.u32 = 4u;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    trap->immediate.u32 = 7u;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void test_provider_output_lowering_and_mutation(void) {
     XrTargetProfile *profile = xr_test_target_profile_build_with_output(
         false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
@@ -2140,6 +2198,7 @@ int main(int argc, char **argv) {
         test_existential_pack_test_project_lowering();
         test_existential_owned_read_reborrow_lowering();
         test_callable_pack_and_indirect_call_lowering();
+        test_callable_invoke_trap_continuation_lowering_and_mutation();
         test_coroutine_private_state_machine_lowering();
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();

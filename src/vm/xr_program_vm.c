@@ -1058,7 +1058,9 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     } else if ((instruction.operation_id ==
                                     XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
                                 instruction.operation_id ==
-                                    XR_CORE_OP_CORE_CALL_SEALED_INVOKE) &&
+                                    XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+                                instruction.operation_id ==
+                                    XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE) &&
                                nested.kind == XR_VM_OUTCOME_TRAP &&
                                nested.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
                                instruction.successor_count == typed_successors + 1u) {

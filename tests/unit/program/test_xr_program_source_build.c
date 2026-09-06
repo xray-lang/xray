@@ -977,7 +977,6 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
         "class RejectedClock implements ClockReader {\n"
         "  read() -> i64 { return rejectedFallible() }\n"
         "}\n"
-        "fn rejected() -> i64 { return time.now() }\n"
         "fn invoke(body: fn() -> i64, reader: ClockReader, mode: i64) -> i64 {\n"
         "  var live = sys.Pipe(2147483646, 2147483647)\n"
         "  defer {\n"
@@ -986,7 +985,8 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
         "  }\n"
         "  var result = 0\n"
         "  if (mode == 1) {\n"
-        "    result = body()\n"
+        "    try { result = body() }\n"
+        "    catch (error: ClockFailure) { result = 0 }\n"
         "  } else if (mode == 2) {\n"
         "    try { result = reader.read() }\n"
         "    catch (error: ClockFailure) { result = 0 }\n"
@@ -998,7 +998,7 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
         "}\n"
         "fn answer() -> i64 {\n"
         "  var reader: ClockReader = RejectedClock()\n"
-        "  return invoke(rejected, reader, 0)\n"
+        "  return invoke(rejectedFallible, reader, 1)\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1029,7 +1029,7 @@ TEST(source_owner_provider_refusal_runs_explicit_trap_cleanup) {
                                            XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ),
                    1u);
     ASSERT_EQ_UINT(program_operation_successor_count(
-                       first.program, XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT, 1u),
+                       first.program, XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE, 3u),
                    1u);
     ASSERT_EQ_UINT(program_operation_successor_count(
                        first.program, XR_CORE_OP_CORE_CALL_WITNESS_INVOKE, 3u),

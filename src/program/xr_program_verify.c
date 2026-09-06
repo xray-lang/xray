@@ -2416,7 +2416,9 @@ static bool verify_witness_invoke(VerifyContext *context, XrValidatedFunction *f
 
 static bool verify_callable_invoke(VerifyContext *context, XrValidatedFunction *function,
                                    XrValidatedInstruction *instruction,
-                                   XrProgramSemanticLocation location, uint32_t *local_effects) {
+                                   uint32_t block_id, uint32_t instruction_id,
+                                   XrProgramSemanticLocation location, uint32_t *local_effects,
+                                   const bool *consumed) {
     const XrValidatedSignature *callee =
         callable_call_signature(context->program, function, instruction);
     if (!callee || instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
@@ -2426,13 +2428,15 @@ static bool verify_callable_invoke(VerifyContext *context, XrValidatedFunction *
     }
     bool has_error = callee->error_type_id != XR_CORE_TYPE_VOID;
     bool has_panic = callee->panic_type_id != XR_CORE_TYPE_VOID;
-    uint32_t expected_successors = 1u + (has_error ? 1u : 0u) + (has_panic ? 1u : 0u);
-    if ((!has_error && !has_panic) || instruction->successor_count != expected_successors ||
+    uint32_t typed_successors = invoke_typed_successor_count(callee);
+    if ((!has_error && !has_panic) ||
+        (instruction->successor_count != typed_successors &&
+         instruction->successor_count != typed_successors + 1u) ||
         !callable_arguments_match(context->program, function, instruction, callee)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
     }
-    for (uint32_t successor = 0u; successor < expected_successors; ++successor) {
+    for (uint32_t successor = 0u; successor < typed_successors; ++successor) {
         if (instruction->successors[successor] >= function->block_count) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
             return false;
@@ -2494,10 +2498,10 @@ static bool verify_callable_invoke(VerifyContext *context, XrValidatedFunction *
             return false;
         operand += panic->argument_count - 1u;
     }
-    if (instruction->operand_count != operand) {
-        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+    if (!verify_optional_trap_continuation_at(
+            context, function, instruction, typed_successors, block_id, instruction_id, operand,
+            false, consumed, location))
         return false;
-    }
     uint32_t escaping_effects = callee->effect_mask;
     if (has_error)
         escaping_effects &= ~XR_CORE_EFFECT_ERROR;
@@ -3600,7 +3604,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             return verify_witness_invoke(context, function, instruction, block_id, instruction_id,
                                          location, local_effects, consumed);
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
-            return verify_callable_invoke(context, function, instruction, location, local_effects);
+            return verify_callable_invoke(context, function, instruction, block_id, instruction_id,
+                                          location, local_effects, consumed);
         case XR_CORE_OP_CORE_TRAP:
             if (!expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_U32,
                               XR_CORE_TYPE_VOID, false) ||

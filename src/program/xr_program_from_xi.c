@@ -3754,6 +3754,20 @@ static const XiValue *block_typed_invoke_call(const XrXiBuildContext *context,
     return NULL;
 }
 
+static const XiBlock *typed_invoke_check_block_for_call(const XrXiBuildContext *context,
+                                                        const XiFunc *function,
+                                                        const XiValue *call) {
+    if (!context || !function || !call)
+        return NULL;
+    for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+        const XiBlock *block = function->blocks[block_index];
+        if (canonical_block_is_reachable(context, function, block) &&
+            block_typed_invoke_call(context, function, block) == call)
+            return block;
+    }
+    return NULL;
+}
+
 static const XiValue *block_error_catch(const XiBlock *block) {
     const XiValue *found = NULL;
     for (uint32_t index = 0; block && index < block->nvalues; ++index) {
@@ -3775,6 +3789,10 @@ static bool value_is_invoke_scaffold(const XrXiBuildContext *context, const XiFu
         return true;
     if (!function || !value->block)
         return false;
+    if ((value->op == XI_CALL || value->op == XI_CALL_METHOD ||
+         value->op == XI_CALL_METHOD_DIRECT) &&
+        typed_invoke_check_block_for_call(context, function, value))
+        return true;
     const XiValue *call = block_typed_invoke_call(context, function, value->block);
     if (value == call || value == value->block->control)
         return call != NULL ||
@@ -6673,6 +6691,10 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
         const XiValue *call = block_typed_invoke_call(context, function->xi, source);
         if (!call)
             continue;
+        XrProgramBuildStatus operand_status = collect_value_live_ins(
+            context, function, predecessor, call, NULL, diagnostic, diagnostic_size);
+        if (operand_status != XR_PROGRAM_BUILD_OK)
+            return operand_status;
         const XiFunc *callee = resolved_sealed_callee(context, function->xi, call);
         bool witness = call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE;
         bool indirect = callee == NULL && !witness;
@@ -7141,6 +7163,20 @@ static bool exact_indirect_direct_call(XrXiBuildContext *context, const XiFunc *
     return true;
 }
 
+static bool exact_indirect_invoke_call(XrXiBuildContext *context, const XiFunc *function,
+                                       const XiValue *call) {
+    if (!call || !call->block || call->op != XI_CALL || call->nargs == 0u || !call->args ||
+        resolved_sealed_callee(context, function, call) ||
+        !typed_invoke_check_block_for_call(context, function, call))
+        return false;
+    const XgCallsiteSummary *callsite = resolved_callsite(context, function, call);
+    return callsite &&
+           (callsite->kind == XG_CALL_DIRECT_FUNC || callsite->kind == XG_CALL_CLOSURE) &&
+           (callsite->flags & (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR)) ==
+               (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR) &&
+           resolved_callable_call_targets(context, function, call, NULL);
+}
+
 static bool exact_witness_direct_call(const XrXiBuildContext *context, const XiFunc *function,
                                       const XiValue *call) {
     return call &&
@@ -7154,7 +7190,7 @@ static bool exact_witness_invoke_call(const XrXiBuildContext *context, const XiF
     return call && call->block &&
            (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
            call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE &&
-           block_typed_invoke_call(context, function, call->block) == call &&
+           typed_invoke_check_block_for_call(context, function, call) &&
            resolved_witness_callsite(context, function, call) != NULL;
 }
 
@@ -7184,13 +7220,18 @@ static XrProgramBuildStatus prepare_trap_continuations(
                                                          : resolved_sealed_callee(context, function,
                                                                                   call);
                     bool sealed_invoke =
-                        sealed_callee && block_typed_invoke_call(context, function, block) == call;
+                        sealed_callee && typed_invoke_check_block_for_call(context, function, call);
+                    bool indirect_invoke =
+                        provider_call || witness_call || sealed_callee
+                            ? false
+                            : exact_indirect_invoke_call(context, function, call);
                     bool indirect_call = provider_call || witness_call || sealed_callee
                                              ? false
-                                             : exact_indirect_direct_call(context, function, call);
+                                             : (indirect_invoke ||
+                                                exact_indirect_direct_call(context, function, call));
                     if ((!provider_call && !witness_call && !sealed_callee && !indirect_call) ||
-                        (block_typed_invoke_call(context, function, block) == call &&
-                         !witness_invoke && !sealed_invoke) ||
+                        (typed_invoke_check_block_for_call(context, function, call) &&
+                         !witness_invoke && !sealed_invoke && !indirect_invoke) ||
                         resolved_canonical_class_construction(context, function, call, NULL, NULL))
                         continue;
                     const XiValue *active = NULL;
@@ -7330,6 +7371,9 @@ static XrProgramBuildStatus prepare_coroutine_call_arguments(
         const XiCoroSuspendPoint *point = &plan->points[point_index];
         if (point->kind != XI_CORO_SUSP_CALL)
             continue;
+        if (point->op &&
+            typed_invoke_check_block_for_call(context, function->xi, point->op))
+            continue;
         XrXiBlockStorage *resume = find_block_storage(function, point->resume_block);
         uint16_t result_type = XR_CORE_TYPE_VOID;
         if (!point->op || !resume ||
@@ -7393,7 +7437,8 @@ static bool trap_call_contract(XrXiBuildContext *context,
             contract->parameter_count =
                 callee->nparams +
                 (callee_storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
-        } else if (exact_indirect_direct_call(context, function->xi, call)) {
+        } else if (exact_indirect_invoke_call(context, function->xi, call) ||
+                   exact_indirect_direct_call(context, function->xi, call)) {
             const XiValue *callable = logical_value_identity(call->args[0]);
             uint16_t callable_type_id = XR_CORE_TYPE_VOID;
             if (!callable ||
@@ -7542,7 +7587,8 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         }
-        if (block->xi->control && block->static_branch_outcome == XR_XI_STATIC_BRANCH_UNKNOWN) {
+        if (block->xi->control && block->static_branch_outcome == XR_XI_STATIC_BRANCH_UNKNOWN &&
+            !block_typed_invoke_call(context, function->xi, block->xi)) {
             XrProgramBuildStatus status = require_value_available(
                 context, function, block, block->xi->control, NULL, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
@@ -7559,7 +7605,10 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             const XrXiTrapEdge *edge = &context->trap_edges[edge_index];
             if (edge->function != function->xi)
                 continue;
-            XrXiBlockStorage *source = find_block_storage(function, edge->call->block);
+            const XiBlock *invoke_block =
+                typed_invoke_check_block_for_call(context, function->xi, edge->call);
+            XrXiBlockStorage *source =
+                find_block_storage(function, invoke_block ? invoke_block : edge->call->block);
             XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
             if (!source || !handler)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -8709,7 +8758,8 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             resolved_provider_native_call(context, storage->xi, value))
                             continue;
                         const XiFunc *callee = resolved_sealed_callee(context, storage->xi, value);
-                        bool invoke = block_typed_invoke_call(context, storage->xi, block) == value;
+                        bool invoke =
+                            typed_invoke_check_block_for_call(context, storage->xi, value) != NULL;
                         if (witness) {
                             uint32_t witness_effects = 0u;
                             uint32_t witness_capabilities = 0u;
@@ -9372,8 +9422,8 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                             resolved_provider_native_call(context, function->xi, value))
                             continue;
                         const XiFunc *callee = resolved_sealed_callee(context, function->xi, value);
-                        bool invoke =
-                            block_typed_invoke_call(context, function->xi, block) == value;
+                        bool invoke = typed_invoke_check_block_for_call(
+                                          context, function->xi, value) != NULL;
                         if (witness) {
                             uint32_t witness_effects = 0u;
                             uint32_t witness_capabilities = 0u;

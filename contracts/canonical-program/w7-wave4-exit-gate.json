@@ -30,7 +30,9 @@
       "kat_validator": "indirect-invoke",
       "kats": [
         "indirect-invoke-valid",
-        "indirect-invoke-rejects-infallible-signature"
+        "indirect-invoke-rejects-infallible-signature",
+        "indirect-invoke-provider-trap-continuation",
+        "indirect-invoke-rejects-lost-trap-owner"
       ]
     },
     {

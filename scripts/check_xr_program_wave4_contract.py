@@ -194,7 +194,7 @@ def validate(root: Path) -> None:
         "compatibility",
     }, "Wave 4 callable-operation contract drifted")
     require(callable_contract.get("source_status") ==
-            "complete for function values, closures, imported callable unions and resolved finite target sets",
+            "complete for function values, closures, imported callable unions, resolved finite target sets, split Xi call/error-check blocks and provider-trap cleanup",
             "Wave 4 callable source evidence drifted")
     require(callable_contract.get("compatibility") ==
             "no erased argument vector, universal closure ABI, name/selector lookup, backend semantic inference, old reader or dual operation spelling",

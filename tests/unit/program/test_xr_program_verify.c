@@ -3671,21 +3671,36 @@ static void test_callable_pack_and_indirect_calls(void) {
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 
+    CHECK(xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_INVOKE_TRAP, &artifact,
+                                                    diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
     const XrProgramCallableFixtureMutation rejected[] = {
         XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,
         XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
         XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
         XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
         XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER,
+        XR_CALLABLE_FIXTURE_INVOKE_TRAP_BAD_TARGET,
+        XR_CALLABLE_FIXTURE_INVOKE_TRAP_LOST_OWNER,
     };
     for (size_t index = 0; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
         memset(&artifact, 0, sizeof(artifact));
         CHECK(xr_program_callable_fixture_write_mutated(rejected[index], &artifact, diagnostic,
                                                         sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
         bool value_use = rejected[index] == XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE ||
-                         rejected[index] == XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER;
-        expect_semantic_reject(&artifact, value_use ? XR_PROGRAM_DIAGNOSTIC_VALUE_USE
-                                                    : XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+                         rejected[index] == XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER ||
+                         rejected[index] == XR_CALLABLE_FIXTURE_INVOKE_TRAP_LOST_OWNER;
+        XrProgramDiagnosticKind expected =
+            rejected[index] == XR_CALLABLE_FIXTURE_INVOKE_TRAP_BAD_TARGET
+                ? XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW
+                : (value_use ? XR_PROGRAM_DIAGNOSTIC_VALUE_USE
+                             : XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        expect_semantic_reject(&artifact, expected);
         xr_program_artifact_free(&artifact);
     }
 }

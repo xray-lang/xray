@@ -45,7 +45,7 @@
     {
       "stable_id": 39,
       "id": "core.call.indirect_invoke",
-      "law": "call one typed callable value and transfer to normal, optional typed-error and optional typed-panic continuations"
+      "law": "call one typed callable value and transfer to normal, optional typed-error and optional typed-panic continuations; provider trap 7 either escapes or transfers through one optional final trap continuation carrying the exact live set"
     },
     {
       "stable_id": 40,
@@ -164,10 +164,10 @@
     "capture_shape": "a captureless target matches the visible structural signature; a captured target adds exactly one READ receiver whose TypeId is the optional aggregate capture operand; implementation effects and capabilities must be subsets of the visible upper bounds",
     "capture_ownership": "capture aggregates are affine explicit-copy owners; callable values are affine explicit-copy owners and cloning recursively copies the typed capture only through core.owner.copy",
     "direct": "indirect_direct is admitted only for a callable signature without error or panic and returns through its exact typed result",
-    "invoke": "indirect_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",
-    "executor_realization": "reference evaluator and VM resolve the validated FunctionId from a private carrier; portable-C AOT emits a closed FunctionId switch whose cases directly call the exact typed target and prepend a typed capture receiver only when required",
+    "invoke": "indirect_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments; one optional final trap successor is legal only for provider trap 7 and carries every live value exactly once",
+    "executor_realization": "reference evaluator and VM resolve the validated FunctionId from a private carrier; portable-C AOT emits a closed FunctionId switch whose cases directly call the exact typed target and prepend a typed capture receiver only when required; all three transfer provider trap 7 through the same verified optional continuation",
     "boundary": "callable carrier layout is backend-private and callable values cannot escape as public reference-evaluator or VM outcomes",
-    "source_status": "complete for function values, closures, imported callable unions and resolved finite target sets",
+    "source_status": "complete for function values, closures, imported callable unions, resolved finite target sets, split Xi call/error-check blocks and provider-trap cleanup",
     "compatibility": "no erased argument vector, universal closure ABI, name/selector lookup, backend semantic inference, old reader or dual operation spelling"
   },
   "old_owner_inventory": [

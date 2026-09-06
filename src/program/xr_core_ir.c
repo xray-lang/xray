@@ -179,6 +179,7 @@ static void free_instruction(XrCoreIrInstruction *instruction) {
         return;
     xr_free(instruction->operands);
     xr_free(instruction->successors);
+    memset(instruction, 0, sizeof(*instruction));
 }
 
 static void free_signature(XrCoreIrCallableSignature *signature) {
@@ -206,6 +207,7 @@ static void free_block(XrCoreIrBlock *block) {
         free_instruction(&block->instructions[index]);
     xr_free(block->instructions);
     xr_free(block->arguments);
+    memset(block, 0, sizeof(*block));
 }
 
 static void free_function(XrCoreIrFunction *function) {
@@ -225,6 +227,7 @@ static void free_function(XrCoreIrFunction *function) {
         xr_free(function->coroutine_safepoints[index].live_values);
     xr_free(function->coroutine_safepoints);
     xr_free(function->coroutine_states);
+    memset(function, 0, sizeof(*function));
 }
 
 void xr_core_ir_program_free(XrCoreIrProgram *program) {
