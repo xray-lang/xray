@@ -19,6 +19,7 @@
 
 struct XrBackendExecution {
     XrBackendNativeStep step;
+    XrBackendNativeCancel cancel;
     XrBackendNativeDrop drop;
     void *frame;
     XrBackendExecutionOutcome last;
@@ -44,6 +45,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
         case XR_CORE_OP_CORE_ASSERT_CONDITION:
         case XR_CORE_OP_CORE_RETURN:
+        case XR_CORE_OP_CORE_CANCEL_PUBLISH:
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
@@ -720,7 +722,7 @@ bool xr_backend_execution_create(XrExecutionId execution_id,
     if (!descriptor || !execution_out ||
         descriptor->schema_version != XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION ||
         descriptor->reserved32 != 0u || descriptor->frame_size == 0u || !descriptor->initialize ||
-        !descriptor->step || !descriptor->drop ||
+        !descriptor->step || !descriptor->cancel || !descriptor->drop ||
         !xr_fingerprint_equal(descriptor->execution_id, execution_id))
         return false;
     XrBackendExecution *execution = xr_calloc(1u, sizeof(*execution));
@@ -733,27 +735,44 @@ bool xr_backend_execution_create(XrExecutionId execution_id,
     }
     descriptor->initialize(execution->frame);
     execution->step = descriptor->step;
+    execution->cancel = descriptor->cancel;
     execution->drop = descriptor->drop;
     execution->last.kind = XR_BACKEND_EXECUTION_INVALID;
     *execution_out = execution;
     return true;
 }
 
-XrBackendExecutionOutcome xr_backend_execution_step(XrBackendExecution *execution) {
-    if (!execution || execution->finished)
-        return (XrBackendExecutionOutcome) {.kind = XR_BACKEND_EXECUTION_INVALID};
-    XrBackendNativeOutcome native = execution->step(execution->frame);
-    execution->last = (XrBackendExecutionOutcome) {
+static XrBackendExecutionOutcome backend_execution_outcome(XrBackendExecution *execution,
+                                                           XrBackendNativeOutcome native) {
+    XrBackendExecutionOutcome result = {
         .kind = native.kind <= XR_BACKEND_EXECUTION_TRAP
                     ? (XrBackendExecutionOutcomeKind) native.kind
-                    : XR_BACKEND_EXECUTION_INVALID,
+                : native.kind == UINT32_C(3) ? XR_BACKEND_EXECUTION_CANCELLED
+                                             : XR_BACKEND_EXECUTION_INVALID,
         .value = native.value,
         .state_id = native.state_id,
         .safepoint_id = native.safepoint_id,
     };
+    if (execution)
+        execution->last = result;
+    return result;
+}
+
+XrBackendExecutionOutcome xr_backend_execution_step(XrBackendExecution *execution) {
+    if (!execution || execution->finished)
+        return (XrBackendExecutionOutcome) {.kind = XR_BACKEND_EXECUTION_INVALID};
+    execution->last = backend_execution_outcome(execution, execution->step(execution->frame));
     if (execution->last.kind != XR_BACKEND_EXECUTION_SUSPENDED) {
         execution->finished = true;
     }
+    return execution->last;
+}
+
+XrBackendExecutionOutcome xr_backend_execution_cancel(XrBackendExecution *execution) {
+    if (!execution || execution->finished || execution->last.kind != XR_BACKEND_EXECUTION_SUSPENDED)
+        return (XrBackendExecutionOutcome) {.kind = XR_BACKEND_EXECUTION_INVALID};
+    execution->last = backend_execution_outcome(execution, execution->cancel(execution->frame));
+    execution->finished = true;
     return execution->last;
 }
 

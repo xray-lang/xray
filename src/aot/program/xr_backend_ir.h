@@ -19,7 +19,7 @@
 #include "../../execution/xr_execution_identity.h"
 
 #define XR_BACKEND_IR_SCHEMA_VERSION UINT32_C(1)
-#define XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION UINT32_C(1)
+#define XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION UINT32_C(2)
 #define XR_AOT_TOOLCHAIN_SCHEMA_VERSION UINT32_C(1)
 #define XR_NATIVE_ARTIFACT_SCHEMA_VERSION UINT32_C(1)
 #define XR_AOT_BACKEND_NAME "xray-c11-aot"
@@ -75,6 +75,7 @@ typedef enum XrBackendExecutionOutcomeKind {
     XR_BACKEND_EXECUTION_RETURN = 0,
     XR_BACKEND_EXECUTION_SUSPENDED,
     XR_BACKEND_EXECUTION_TRAP,
+    XR_BACKEND_EXECUTION_CANCELLED,
     XR_BACKEND_EXECUTION_INVALID,
 } XrBackendExecutionOutcomeKind;
 
@@ -96,6 +97,7 @@ typedef struct XrBackendNativeOutcome {
 // Owns frame lifecycle and exact-generation authority only.
 // CoreSpec semantics remain exclusively in generated native code.
 typedef XrBackendNativeOutcome (*XrBackendNativeStep)(void *frame);
+typedef XrBackendNativeOutcome (*XrBackendNativeCancel)(void *frame);
 typedef void (*XrBackendNativeInitialize)(void *frame);
 typedef void (*XrBackendNativeDrop)(void *frame);
 
@@ -106,6 +108,7 @@ typedef struct XrBackendNativeDescriptor {
     size_t frame_size;
     XrBackendNativeInitialize initialize;
     XrBackendNativeStep step;
+    XrBackendNativeCancel cancel;
     XrBackendNativeDrop drop;
 } XrBackendNativeDescriptor;
 
@@ -191,6 +194,7 @@ XR_FUNC bool xr_backend_execution_create(XrExecutionId execution_id,
                                          const XrBackendNativeDescriptor *descriptor,
                                          XrBackendExecution **execution_out);
 XR_FUNC XrBackendExecutionOutcome xr_backend_execution_step(XrBackendExecution *execution);
+XR_FUNC XrBackendExecutionOutcome xr_backend_execution_cancel(XrBackendExecution *execution);
 XR_FUNC void xr_backend_execution_free(XrBackendExecution *execution);
 
 XR_FUNC bool xr_aot_toolchain_binding_build(const XrAotToolchainInput *input,

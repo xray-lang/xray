@@ -78,6 +78,19 @@ int main(void) {
     REQUIRE(xr_backend_execution_step(execution).kind == XR_BACKEND_EXECUTION_INVALID);
     xr_backend_execution_free(execution);
 
+    XrBackendExecution *cancel_execution = NULL;
+    REQUIRE(xr_backend_execution_create(execution_id, &xr_aot_entry_coroutine_descriptor,
+                                        &cancel_execution));
+    REQUIRE(xr_backend_execution_cancel(cancel_execution).kind == XR_BACKEND_EXECUTION_INVALID);
+    XrBackendExecutionOutcome cancel_yield = xr_backend_execution_step(cancel_execution);
+    REQUIRE(cancel_yield.kind == XR_BACKEND_EXECUTION_SUSPENDED);
+    XrBackendExecutionOutcome cancelled = xr_backend_execution_cancel(cancel_execution);
+    REQUIRE(cancelled.kind == XR_BACKEND_EXECUTION_CANCELLED);
+    REQUIRE(cancelled.state_id == cancel_yield.state_id);
+    REQUIRE(xr_backend_execution_step(cancel_execution).kind == XR_BACKEND_EXECUTION_INVALID);
+    REQUIRE(xr_backend_execution_cancel(cancel_execution).kind == XR_BACKEND_EXECUTION_INVALID);
+    xr_backend_execution_free(cancel_execution);
+
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
     puts("generated native coroutine step lifecycle test passed");

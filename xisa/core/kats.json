@@ -2594,18 +2594,47 @@
       }
     },
     {
+      "id": "cancel-publish-valid",
+      "operation": "core.cancel.publish",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [],
+        "successor_count": 0,
+        "result_type": "void"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "cancel-publish-rejects-payload",
+      "operation": "core.cancel.publish",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "panic-info"
+        ],
+        "successor_count": 0,
+        "result_type": "void"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "coroutine-yield-valid",
       "operation": "core.coroutine.yield",
       "kind": "contract",
       "actual": {
         "result_type": "void",
-        "successor_count": 1,
+        "successor_count": 2,
         "resume_state": 1,
         "continuation_state": 1,
+        "cancel_terminal": true,
         "live_values": [
           2
         ],
-        "edge_values": [
+        "resume_edge_values": [
           2
         ]
       },
@@ -2619,13 +2648,14 @@
       "kind": "contract",
       "actual": {
         "result_type": "void",
-        "successor_count": 1,
+        "successor_count": 2,
         "resume_state": 1,
         "continuation_state": 1,
+        "cancel_terminal": true,
         "live_values": [
           2
         ],
-        "edge_values": []
+        "resume_edge_values": []
       },
       "expect": {
         "valid": false
@@ -2749,9 +2779,10 @@
       "kind": "contract",
       "actual": {
         "result_type": "void",
-        "successor_count": 1,
+        "successor_count": 2,
         "resume_state": 1,
         "continuation_state": 1,
+        "cancel_terminal": true,
         "callee_coroutine": true,
         "callee_suspend_kind": "cooperative-yield",
         "callee_error_type": "void",
@@ -2760,7 +2791,7 @@
         "live_values": [
           2
         ],
-        "edge_values": [
+        "resume_edge_values": [
           2
         ]
       },
@@ -2774,16 +2805,17 @@
       "kind": "contract",
       "actual": {
         "result_type": "void",
-        "successor_count": 1,
+        "successor_count": 2,
         "resume_state": 1,
         "continuation_state": 1,
+        "cancel_terminal": true,
         "callee_coroutine": true,
         "callee_suspend_kind": "cooperative-yield",
         "callee_error_type": "error",
         "callee_panic_type": "void",
         "scalar_non_owner_boundary": true,
         "live_values": [],
-        "edge_values": []
+        "resume_edge_values": []
       },
       "expect": {
         "valid": false

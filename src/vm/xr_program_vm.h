@@ -72,6 +72,7 @@ typedef struct XrVmValue {
 typedef enum XrVmOutcomeKind {
     XR_VM_OUTCOME_RETURN = 0,
     XR_VM_OUTCOME_SUSPENDED,
+    XR_VM_OUTCOME_CANCELLED,
     XR_VM_OUTCOME_TRAP,
     XR_VM_OUTCOME_ERROR,
     XR_VM_OUTCOME_PANIC,
@@ -155,6 +156,7 @@ XR_FUNC bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance,
                                     uint32_t function_id, const XrVmValue *arguments,
                                     uint32_t argument_count, XrVmExecution **execution_out);
 XR_FUNC XrVmOutcome xr_vm_execution_step(XrVmExecution *execution);
+XR_FUNC XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution);
 XR_FUNC void xr_vm_execution_free(XrVmExecution *execution);
 XR_FUNC const char *xr_vm_code_status_name(XrVmCodeStatus status);
 

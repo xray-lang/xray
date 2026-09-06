@@ -9,6 +9,8 @@
 typedef enum XrProgramCoroutineFixtureMutation {
     XR_PROGRAM_COROUTINE_FIXTURE_VALID = 0,
     XR_PROGRAM_COROUTINE_FIXTURE_UNUSED_LIVE,
+    XR_PROGRAM_COROUTINE_FIXTURE_MISSING_CANCEL_EDGE,
+    XR_PROGRAM_COROUTINE_FIXTURE_NORMAL_EDGE_TO_CANCEL,
 } XrProgramCoroutineFixtureMutation;
 
 static XrCoreIrKey xr_program_coroutine_fixture_key(const char *text) {
@@ -30,12 +32,13 @@ static XrProgramBuildStatus xr_program_coroutine_fixture_write_mutated(
     };
     XrCoreIrKey entry_key = xr_program_coroutine_fixture_key("coro:entry");
     XrCoreIrKey resume_key = xr_program_coroutine_fixture_key("coro:resume");
+    XrCoreIrKey cancel_key = xr_program_coroutine_fixture_key("coro:cancel");
     XrCoreIrKey forty = xr_program_coroutine_fixture_key("coro:value:forty");
     XrCoreIrKey resumed = xr_program_coroutine_fixture_key("coro:value:resumed");
     XrCoreIrKey two = xr_program_coroutine_fixture_key("coro:value:two");
     XrCoreIrKey sum = xr_program_coroutine_fixture_key("coro:value:sum");
     XrCoreIrKey yield_operands[] = {forty};
-    XrCoreIrKey yield_successors[] = {resume_key};
+    XrCoreIrKey yield_successors[] = {resume_key, cancel_key};
     XrCoreIrInstructionInput entry_instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = forty,
@@ -49,7 +52,8 @@ static XrProgramBuildStatus xr_program_coroutine_fixture_write_mutated(
          .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
          .immediate.u32 = 0u,
          .successors = yield_successors,
-         .successor_count = 1u},
+         .successor_count =
+             mutation == XR_PROGRAM_COROUTINE_FIXTURE_MISSING_CANCEL_EDGE ? 1u : 2u},
     };
     XrCoreIrValueInput resume_argument = {
         .key = resumed,
@@ -85,6 +89,19 @@ static XrProgramBuildStatus xr_program_coroutine_fixture_write_mutated(
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
     };
+    XrCoreIrInstructionInput cancel_instruction = {
+        .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    XrCoreIrKey cancel_successor[] = {cancel_key};
+    if (mutation == XR_PROGRAM_COROUTINE_FIXTURE_NORMAL_EDGE_TO_CANCEL) {
+        resume_instructions[3].operation_id = XR_CORE_OP_CORE_BRANCH;
+        resume_instructions[3].operands = NULL;
+        resume_instructions[3].operand_count = 0u;
+        resume_instructions[3].successors = cancel_successor;
+        resume_instructions[3].successor_count = 1u;
+    }
     XrCoreIrBlockInput blocks[] = {
         {.key = entry_key,
          .instructions = entry_instructions,
@@ -94,6 +111,7 @@ static XrProgramBuildStatus xr_program_coroutine_fixture_write_mutated(
          .argument_count = 1u,
          .instructions = resume_instructions,
          .instruction_count = 4u},
+        {.key = cancel_key, .instructions = &cancel_instruction, .instruction_count = 1u},
     };
     XrCoreIrCoroutineStateInput states[] = {
         {.state_id = 0u, .continuation_block = entry_key},
@@ -109,11 +127,11 @@ static XrProgramBuildStatus xr_program_coroutine_fixture_write_mutated(
     XrCoreIrFunctionInput function = {
         .key = xr_program_coroutine_fixture_key("coro:function"),
         .result_type_id = XR_CORE_TYPE_I64,
-        .effect_mask = XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_TRAP,
+        .effect_mask = XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_TRAP,
         .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD,
         .entry_block = entry_key,
         .blocks = blocks,
-        .block_count = 2u,
+        .block_count = 3u,
         .coroutine_states = states,
         .coroutine_state_count = 2u,
         .coroutine_safepoints = &safepoint,

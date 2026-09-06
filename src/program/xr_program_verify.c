@@ -1747,6 +1747,7 @@ static bool instruction_is_terminator(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_RETURN || operation_id == XR_CORE_OP_CORE_TRAP ||
+           operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH ||
            operation_id == XR_CORE_OP_CORE_ERROR_PUBLISH ||
            operation_id == XR_CORE_OP_CORE_PANIC_PUBLISH;
 }
@@ -2994,6 +2995,82 @@ static bool verify_optional_panic_continuation(VerifyContext *context,
     return true;
 }
 
+static bool verify_cancel_continuation(VerifyContext *context, const XrValidatedFunction *function,
+                                       const XrValidatedInstruction *instruction,
+                                       uint32_t successor_index, uint32_t operand_start,
+                                       XrProgramSemanticLocation location) {
+    if (successor_index >= instruction->successor_count ||
+        instruction->successors[successor_index] >= function->block_count) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+        return false;
+    }
+    const XrValidatedBlock *target = &function->blocks[instruction->successors[successor_index]];
+    if (target->argument_count != 0u || target->instruction_count == 0u ||
+        instruction->operand_count != operand_start ||
+        target->instructions[target->instruction_count - 1u].operation_id !=
+            XR_CORE_OP_CORE_CANCEL_PUBLISH) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+        return false;
+    }
+    return true;
+}
+
+static bool verify_cancel_entry_edges(VerifyContext *context, const XrValidatedFunction *function,
+                                      XrProgramSemanticLocation location) {
+    bool *cancel_entries =
+        xr_calloc(function->block_count ? function->block_count : 1u, sizeof(*cancel_entries));
+    if (!cancel_entries) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+        return false;
+    }
+    for (uint32_t source_id = 0u; source_id < function->block_count; ++source_id) {
+        const XrValidatedBlock *source = &function->blocks[source_id];
+        for (uint32_t instruction_id = 0u; instruction_id < source->instruction_count;
+             ++instruction_id) {
+            const XrValidatedInstruction *instruction = &source->instructions[instruction_id];
+            for (uint32_t successor = 0u; successor < instruction->successor_count; ++successor) {
+                uint32_t target_id = instruction->successors[successor];
+                if (target_id >= function->block_count)
+                    continue;
+                const XrValidatedBlock *target = &function->blocks[target_id];
+                bool publishes_cancel =
+                    target->instruction_count != 0u &&
+                    target->instructions[target->instruction_count - 1u].operation_id ==
+                        XR_CORE_OP_CORE_CANCEL_PUBLISH;
+                if (!publishes_cancel)
+                    continue;
+                bool canonical_edge =
+                    successor == 1u &&
+                    (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                     instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED);
+                if (!canonical_edge) {
+                    location.block_id = source_id;
+                    location.instruction_id = instruction_id;
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                    xr_free(cancel_entries);
+                    return false;
+                }
+                cancel_entries[target_id] = true;
+            }
+        }
+    }
+    for (uint32_t block_id = 0u; block_id < function->block_count; ++block_id) {
+        const XrValidatedBlock *block = &function->blocks[block_id];
+        if (block->instruction_count != 0u &&
+            block->instructions[block->instruction_count - 1u].operation_id ==
+                XR_CORE_OP_CORE_CANCEL_PUBLISH &&
+            !cancel_entries[block_id]) {
+            location.block_id = block_id;
+            location.instruction_id = block->instruction_count - 1u;
+            reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+            xr_free(cancel_entries);
+            return false;
+        }
+    }
+    xr_free(cancel_entries);
+    return true;
+}
+
 static bool verify_operation(VerifyContext *context, uint32_t function_id, uint32_t block_id,
                              uint32_t instruction_id, uint32_t *local_effects,
                              uint32_t *local_capabilities, bool *consumed) {
@@ -3245,8 +3322,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 instruction->result_type_id != XR_CORE_TYPE_VOID ||
                 instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 ||
                 instruction->immediate.u32 >= function->coroutine_safepoint_count ||
-                instruction->successor_count != 1u ||
-                instruction->successors[0] >= function->block_count) {
+                instruction->successor_count != 2u ||
+                instruction->successors[0] >= function->block_count ||
+                instruction->successors[1] >= function->block_count) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                 return false;
             }
@@ -3259,7 +3337,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 instruction->operand_count != safepoint->live_value_count ||
                 instruction->operand_count !=
                     function->blocks[instruction->successors[0]].argument_count ||
-                !verify_successor_arguments(context, function, instruction, 0u, 0u, location)) {
+                !verify_successor_arguments(context, function, instruction, 0u, 0u, location) ||
+                !verify_cancel_continuation(context, function, instruction, 1u,
+                                            safepoint->live_value_count, location)) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                 return false;
             }
@@ -3310,8 +3390,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_COROUTINE_CALL ||
                 callee_id >= context->program->function_count ||
                 safepoint_id >= function->coroutine_safepoint_count ||
-                instruction->successor_count != 1u ||
-                instruction->successors[0] >= function->block_count) {
+                instruction->successor_count != 2u ||
+                instruction->successors[0] >= function->block_count ||
+                instruction->successors[1] >= function->block_count) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                 return false;
             }
@@ -3338,6 +3419,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 instruction->operand_count !=
                     callee->parameter_count + safepoint->live_value_count ||
                 normal->argument_count != implicit_result + safepoint->live_value_count ||
+                !verify_cancel_continuation(context, function, instruction, 1u,
+                                            callee->parameter_count + safepoint->live_value_count,
+                                            location) ||
                 (implicit_result != 0u &&
                  (callee->result_type_id < XR_CORE_TYPE_BOOL ||
                   callee->result_type_id > XR_CORE_TYPE_TARGET_ENDIAN ||
@@ -3683,6 +3767,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             return true;
+        case XR_CORE_OP_CORE_CANCEL_PUBLISH:
+            return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                                XR_CORE_TYPE_VOID, false);
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
             if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
                               XR_CORE_TYPE_VOID, false) ||
@@ -4444,6 +4531,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     }
     bool has_coroutine = function->coroutine_safepoint_count != 0u;
     if (has_coroutine != ((function->effect_mask & XR_CORE_EFFECT_SUSPEND) != 0u) ||
+        has_coroutine != ((function->effect_mask & XR_CORE_EFFECT_CANCEL) != 0u) ||
         has_coroutine !=
             ((function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) != 0u) ||
         (has_coroutine &&
@@ -4541,6 +4629,8 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
         }
     }
     xr_free(consumed);
+    if (!verify_cancel_entry_edges(context, function, location))
+        return false;
     if (suspension_count != function->coroutine_safepoint_count) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
         return false;

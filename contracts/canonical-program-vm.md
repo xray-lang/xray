@@ -23,7 +23,7 @@ CoreIR writer, reference evaluator, TargetPlan, legacy Proto VM, and AOT. The ru
 links a build-produced XrProgram byte array against this archive and verifies the resulting symbol
 closure.
 
-The executor covers all fifty-three current CoreSpec operations. `core.logical.not`,
+The executor covers all fifty-five current CoreSpec operations. `core.logical.not`,
 `core.logical.and`, and `core.logical.or` operate only on canonical `bool` SSA values. The binary
 operations are eager at the Program level because their operands are already evaluated; source
 `&&` and `||` expressions whose right-hand side can trap or perform effects are instead projected
@@ -58,18 +58,25 @@ exist. Native LP64 and explicit foreign ILP32 profiles, resource limits, and gen
 remain covered. Full-language operation families, public embedding ABI, adaptive quickening, and any
 persistent private-code cache remain inactive for later tasks.
 
+Coroutine suspension has separate normal and cancel successors. A private VM session remembers the
+cancel target only while it is suspended, rejects cancellation at every other lifecycle point,
+recursively cancels an active sealed child, charges the child's cleanup steps to the parent budget,
+and terminates through `core.cancel.publish`. Cancellation is a distinct outcome, retains the
+cancelled safepoint state for cross-executor comparison, and releases the exact generation lease;
+there is no frame-dispose fallback or cancellation-as-error compatibility path.
+
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
-anchor-sha256: xisa/core/registry.json 03c974e4d984583d0628ec3fe86b8ab8fb417d0dad11e857ca8a830603c73939
-anchor-sha256: src/vm/xr_program_vm.h 76bc53a625384448931283a37449d326cc25848bb4737d7fda15e212463e9da5
-anchor-sha256: src/vm/xr_program_vm.c 808e3db375301ceb1f2122c797aca874c8825030e7226ce8d2f36cea09ea3415
+anchor-sha256: xisa/core/registry.json 6ef47b9c8055809d8856bd01aed88390c4c4c2a5ba44b6cf23b831d194b0f71b
+anchor-sha256: src/vm/xr_program_vm.h 39db3f37a2da2c3c16688f97a29ef880d08a1216ed3fe10eb1b24795a55d0acc
+anchor-sha256: src/vm/xr_program_vm.c 0d074a52200b00b68bd52f871577f59aafca4ce35204afc3b0be2fa59ec2a385
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 3cb9ee33193ab96e1fb54d6a17b8af83044719dfb5d2c92cea88f701c6dc1368
+anchor-sha256: src/program/xr_program_verify.c 32d58893de39ffdf574ee541cb16e473ff822650476e29e52cf32f956bc7d1b4
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf
 anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390b981e9d78b0801da4b550a5fc6b5be90893a7c72
-anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json 8061dc7f098a61b42a5d5db22158a42c18cdbc0aafc37d8d7876b6678bae9075
-anchor-sha256: tests/unit/vm/test_xr_program_vm.c 9cf7e79fced49515871d5682397952f25df37bcc9d5f8b4bf120aa87907f957d
+anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json dd8b3088756d093a260be71a4663e4e5942153ec98369aedf9de42c9fb32bdaf
+anchor-sha256: tests/unit/vm/test_xr_program_vm.c a0e8d8791dfc132bb4a169d1df0ed55701a20f27c126fe5d5cc90db198262b7d
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 6e92f3367b2780ef406536434ffff42d47a24c4957e844e99ae68864eb6671ac
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c b8999ce6ebd15f935f0e12917b974337a1a36fa1c8108ab5be19e5a40d976b6f

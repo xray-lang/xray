@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 54u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 55u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -91,6 +91,8 @@ static void test_operation_metadata(void) {
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_YIELD);
     const XrCoreOperationSpec *coroutine_call =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED);
+    const XrCoreOperationSpec *cancel =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CANCEL_PUBLISH);
 
     CHECK(constant != NULL);
     CHECK(constant->operand_arity == 0u);
@@ -170,8 +172,8 @@ static void test_operation_metadata(void) {
     CHECK(strcmp(yield->operation_class, "coroutine-terminator") == 0);
     CHECK(yield->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
     CHECK(yield->result_type == XR_CORE_TYPE_VOID);
-    CHECK(yield->successor_mask == UINT8_C(32));
-    CHECK(yield->effect_mask == XR_CORE_EFFECT_SUSPEND);
+    CHECK(yield->successor_mask == UINT8_C(48));
+    CHECK(yield->effect_mask == (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND));
     CHECK(yield->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
     CHECK(strcmp(yield->profile_dependency, "scheduler-yield") == 0);
     CHECK(strcmp(yield->materialization, "logical-coroutine-control") == 0);
@@ -180,11 +182,18 @@ static void test_operation_metadata(void) {
     CHECK(strcmp(coroutine_call->operation_class, "coroutine-call-terminator") == 0);
     CHECK(coroutine_call->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
     CHECK(coroutine_call->result_type == XR_CORE_TYPE_VOID);
-    CHECK(coroutine_call->successor_mask == UINT8_C(33));
-    CHECK(coroutine_call->effect_mask == (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_SUSPEND));
+    CHECK(coroutine_call->successor_mask == UINT8_C(49));
+    CHECK(coroutine_call->effect_mask ==
+          (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND));
     CHECK(coroutine_call->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
     CHECK(strcmp(coroutine_call->profile_dependency, "scheduler-yield") == 0);
     CHECK(strcmp(coroutine_call->materialization, "logical-child-coroutine-control") == 0);
+    CHECK(cancel != NULL);
+    CHECK(strcmp(cancel->spelling, "core.cancel.publish") == 0);
+    CHECK(strcmp(cancel->operation_class, "termination") == 0);
+    CHECK(cancel->operand_arity == 0u);
+    CHECK(cancel->successor_mask == UINT8_C(16));
+    CHECK(cancel->effect_mask == XR_CORE_EFFECT_CANCEL);
 }
 
 int main(void) {

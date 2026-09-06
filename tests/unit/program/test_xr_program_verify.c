@@ -26,6 +26,7 @@ _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable i
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CANCEL_PUBLISH == 51, "cancel publish stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_ASSERT_CONDITION == 109, "condition assert stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ == 90,
@@ -3712,6 +3713,18 @@ static void test_coroutine_state_and_exact_liveness(void) {
     CHECK(xr_program_coroutine_fixture_write_mutated(XR_PROGRAM_COROUTINE_FIXTURE_UNUSED_LIVE,
                                                      &artifact, diagnostic,
                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_coroutine_fixture_write_mutated(
+              XR_PROGRAM_COROUTINE_FIXTURE_MISSING_CANCEL_EDGE, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+    xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_coroutine_fixture_write_mutated(
+              XR_PROGRAM_COROUTINE_FIXTURE_NORMAL_EDGE_TO_CANCEL, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
     xr_program_artifact_free(&artifact);
 }

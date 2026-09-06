@@ -99,6 +99,11 @@
       "stable_id": 7,
       "name": "provider-call",
       "description": "Invoke one exact operation through the provider binding of the active execution instance."
+    },
+    {
+      "stable_id": 8,
+      "name": "cancel",
+      "description": "Terminate a suspended coroutine through its explicit cancellation continuation."
     }
   ],
   "capabilities": [
@@ -2037,6 +2042,71 @@
       }
     },
     {
+      "stable_id": 51,
+      "spelling": "core.cancel.publish",
+      "class": "termination",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": false,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": true,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "cancel"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "cancel",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one terminal cancellation outcome after the selected cleanup continuation"
+      },
+      "kat_validator": "cancel-publish",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
       "stable_id": 64,
       "spelling": "core.target.pointer_width",
       "class": "target-query",
@@ -3755,7 +3825,8 @@
       "epoch": 1,
       "type_rule": {
         "operands": [
-          "suspend-edge-values..."
+          "suspend-edge-values...",
+          "cancel-edge-values..."
         ],
         "result": "void",
         "immediates": {
@@ -3768,13 +3839,14 @@
         "error": false,
         "panic": false,
         "trap": false,
-        "cancel": false,
+        "cancel": true,
         "suspend": true
       },
       "arithmetic": {
         "kind": "none"
       },
       "effects": [
+        "cancel",
         "suspend"
       ],
       "capability_requirements": [
@@ -3790,7 +3862,7 @@
       "materialization": "logical-coroutine-control",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one suspend at the named safepoint followed by at most one resume at the declared logical state"
+        "allowed_trace": "one suspend at the named safepoint followed by exactly one resume or one terminal cancellation continuation"
       },
       "kat_validator": "coroutine-yield",
       "coverage": {
@@ -3982,7 +4054,8 @@
       "type_rule": {
         "operands": [
           "P...",
-          "suspend-edge-values..."
+          "suspend-edge-values...",
+          "cancel-edge-values..."
         ],
         "result": "void",
         "immediates": {
@@ -3996,7 +4069,7 @@
         "error": false,
         "panic": false,
         "trap": false,
-        "cancel": false,
+        "cancel": true,
         "suspend": true
       },
       "arithmetic": {
@@ -4004,6 +4077,7 @@
       },
       "effects": [
         "call",
+        "cancel",
         "suspend"
       ],
       "capability_requirements": [
@@ -4020,7 +4094,7 @@
       "materialization": "logical-child-coroutine-control",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends and takes the normal continuation exactly once after the child returns"
+        "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends, then takes exactly one normal continuation after return or one cancellation continuation after child cancellation"
       },
       "kat_validator": "coroutine-call",
       "coverage": {

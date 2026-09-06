@@ -3071,10 +3071,19 @@ def output_paths(root: Path) -> dict[Path, str]:
     }
 
 
+def write_if_changed(path: Path, content: str) -> bool:
+    """Write one generated file without invalidating unchanged consumers."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+    return True
+
+
 def write_outputs(root: Path) -> None:
     for path, content in output_paths(root).items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        write_if_changed(path, content)
 
 
 def check_outputs(root: Path) -> int:

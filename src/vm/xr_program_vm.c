@@ -160,10 +160,12 @@ struct XrVmExecution {
     uint32_t block_id;
     uint32_t instruction_id;
     uint32_t state_id;
+    uint32_t cancel_block_id;
     XrVmRuntimeValue *values;
     bool *initialized;
     struct XrVmExecution *child;
     bool owns_lease;
+    bool suspended;
     bool finished;
 };
 
@@ -1704,7 +1706,7 @@ static bool vm_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
-           operation_id == XR_CORE_OP_CORE_RETURN;
+           operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_RETURN;
 }
 
 static void vm_execution_release_lease(XrVmExecution *execution) {
@@ -1734,6 +1736,7 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
     child->code = xr_vm_code_retain(parent->code);
     child->function_id = function_id;
     child->block_id = function->entry_block;
+    child->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     child->values =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->values));
     child->initialized =
@@ -1810,6 +1813,7 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
     execution->code = xr_vm_code_retain(code);
     execution->function_id = function_id;
     execution->block_id = function->entry_block;
+    execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->values =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->values));
     execution->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
@@ -1845,6 +1849,8 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
 XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
     if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
         return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
+    execution->suspended = false;
+    execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     const XrValidatedFunction *function =
         &execution->context.code->program->functions[execution->function_id];
     for (;;) {
@@ -1930,6 +1936,8 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 execution->state_id = safepoint->resume_state_id;
                 execution->block_id = instruction.successors[0];
                 execution->instruction_id = 0u;
+                execution->suspended = true;
+                execution->cancel_block_id = instruction.successors[1];
                 XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_SUSPENDED);
                 result.safepoint_id = safepoint_id;
                 return result;
@@ -1962,6 +1970,8 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 if (child.kind == XR_VM_OUTCOME_SUSPENDED) {
                     --execution->instruction_id;
                     execution->state_id = safepoint->resume_state_id;
+                    execution->suspended = true;
+                    execution->cancel_block_id = instruction.successors[1];
                     XrVmOutcome suspended =
                         vm_execution_outcome(execution, XR_VM_OUTCOME_SUSPENDED);
                     suspended.safepoint_id = safepoint_id;
@@ -1998,6 +2008,10 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 execution->instruction_id = 0u;
                 break;
             }
+            case XR_CORE_OP_CORE_CANCEL_PUBLISH:
+                execution->finished = true;
+                vm_execution_release_lease(execution);
+                return vm_execution_outcome(execution, XR_VM_OUTCOME_CANCELLED);
             case XR_CORE_OP_CORE_RETURN: {
                 execution->finished = true;
                 XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_RETURN);
@@ -2013,6 +2027,40 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
         }
     }
+}
+
+XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
+    if (!execution || execution->finished || !execution->suspended ||
+        execution->cancel_block_id == XR_PROGRAM_LOCATION_NONE ||
+        !xr_execution_lease_is_valid(&execution->lease))
+        return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
+    if (execution->child) {
+        uint64_t child_steps = execution->child->context.steps;
+        XrVmOutcome child = xr_vm_execution_cancel(execution->child);
+        uint64_t child_delta = child.steps - child_steps;
+        if (child_delta > execution->context.code->options.max_steps - execution->context.steps) {
+            execution->finished = true;
+            xr_vm_execution_free(execution->child);
+            execution->child = NULL;
+            vm_execution_release_lease(execution);
+            return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
+        }
+        execution->context.steps += child_delta;
+        if (child.kind != XR_VM_OUTCOME_CANCELLED) {
+            execution->finished = true;
+            xr_vm_execution_free(execution->child);
+            execution->child = NULL;
+            vm_execution_release_lease(execution);
+            child.steps = execution->context.steps;
+            child.state_id = execution->state_id;
+            return child;
+        }
+        xr_vm_execution_free(execution->child);
+        execution->child = NULL;
+    }
+    execution->block_id = execution->cancel_block_id;
+    execution->instruction_id = 0u;
+    return xr_vm_execution_step(execution);
 }
 
 void xr_vm_execution_free(XrVmExecution *execution) {

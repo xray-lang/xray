@@ -467,6 +467,7 @@ def validate(root: Path) -> None:
     }
     wave_five_coroutine_yield = {"core.coroutine.yield"}
     canonical_coroutine_call = {"core.coroutine.call.sealed"}
+    canonical_coroutine_cancel = {"core.cancel.publish"}
     wave_five_provider = {"core.provider.call"}
     wave_five_reborrow = {"core.existential.reborrow_read"}
     canonical_source_output = {"core.output.group.i64"}
@@ -519,6 +520,8 @@ def validate(root: Path) -> None:
            for operation in wave_five_coroutine_yield},
         **{operation: "COROUTINE_CALL_CANONICAL_ONLY"
            for operation in canonical_coroutine_call},
+        **{operation: "COROUTINE_CANCEL_CANONICAL_ONLY"
+           for operation in canonical_coroutine_cancel},
         **{operation: "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE"
            for operation in wave_five_provider},
         **{operation: "COMPLETE_W7_WAVE5_REBORROW"

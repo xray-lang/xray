@@ -18,6 +18,12 @@ ordered operation identities, non-null operation entries, and required thread/re
 behavior before the instance becomes ACTIVE. In particular, a provider compiled for a different
 target call ABI is rejected even when it implements the same stable operation names.
 
+Coroutine execution keeps the generation lease pinned while suspended. Resume and cancellation
+are distinct operations on that same execution: cancellation is valid only at a verified
+safepoint, follows the Program-owned cancel successor, recursively cancels an active sealed child,
+and releases the lease only after canonical cancellation publication. Disposing a frame is not an
+implicit cancellation operation, and no error, panic, or trap outcome aliases cancellation.
+
 Callable dispatch is program-owned rather than provider-owned. An indirect call performs a
 non-consuming `READ` of its affine callable operand, so an owned pack and a borrowed non-owner
 function parameter are both valid; target identity and capture layout remain private to each
@@ -68,7 +74,7 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 3cb9ee33193ab96e1fb54d6a17b8af83044719dfb5d2c92cea88f701c6dc1368
+anchor-sha256: src/program/xr_program_verify.c 32d58893de39ffdf574ee541cb16e473ff822650476e29e52cf32f956bc7d1b4
 anchor-sha256: src/program/xr_validated_program_internal.h 5732d42e183594f3103b9a092d37dd17e4d4cd6d2bbeebaa0657b64f8f706a07
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa

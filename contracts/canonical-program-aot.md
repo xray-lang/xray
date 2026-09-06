@@ -40,7 +40,7 @@ provider version, target triple, codegen options, sysroot, runtime objects, and 
 fingerprints; every partition is checked exactly and mismatches fail closed.
 
 The pure-AOT walking-skeleton executable contains no VM, compiler, program-loader, TargetPlan, or
-AOT-toolchain symbol and executes without program bytes. All fifty-three current CoreSpec operations
+AOT-toolchain symbol and executes without program bytes. All fifty-five current CoreSpec operations
 have private BackendIR/C lowering. `core.logical.not`, `core.logical.and`, and `core.logical.or`
 accept only canonical `bool` values and emit portable C logical expressions over already evaluated
 SSA operands. Source expressions with a trapping or effectful right-hand side are projected into
@@ -57,22 +57,29 @@ which rows have a production source owner. Checked overflow, wrapping overflow, 
 also compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
+Generated coroutine descriptors have distinct step and cancel callbacks. Their private frames
+dispatch cancellation from the exact suspended state, recursively close an active sealed child,
+follow the verified Program cancel successor, and publish a normalized cancelled outcome that
+retains the cancelled state identity. The BackendIR verifier rejects missing, malformed, or
+normally reachable cancel continuations; generated C does not treat frame disposal, error, panic,
+or trap as a cancellation alias.
+
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
-anchor-sha256: tests/unit/CMakeLists.txt de4783e5d2fbc1d6799d0cc1879d20acfbb4a9580b3dfd25925dbe991d942aed
-anchor-sha256: xisa/core/registry.json 03c974e4d984583d0628ec3fe86b8ab8fb417d0dad11e857ca8a830603c73939
+anchor-sha256: tests/unit/CMakeLists.txt 9509a186bb76d1d1b3e560bde36004cd92f40ebac6162656ccd1d3985fe6f860
+anchor-sha256: xisa/core/registry.json 6ef47b9c8055809d8856bd01aed88390c4c4c2a5ba44b6cf23b831d194b0f71b
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
-anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 826ade77ae80323fb3f782ad41c33cb65e1d6c7fcfaa84dafe5e022bde7d12a2
-anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 4a48ef9685baa94a7237d74ee1ad1ba77c6b9be03d509b73ea68a42bfbd28adb
-anchor-sha256: src/aot/program/xr_backend_ir.h 1d9dca590e0a7ace9034939925bfe69fca8d60eb33b48d3915822cbf4bda42cf
+anchor-sha256: contracts/canonical-program/operation-capability-matrix.json c3425475365edbbbe3a77fd5812107f9b1dec144a3d594a101419f56c7844f5d
+anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 81bb6fb3456dbc45d6bd4d81b672a296e9c2990cf846a2c8ed72a2a2b45fa6da
+anchor-sha256: src/aot/program/xr_backend_ir.h 5da7eb88ceb96551a2132873920f03163a0575fce45214b8750df7248b95bcaf
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
-anchor-sha256: src/aot/program/xr_backend_ir.c d3b1ee74913ce46cdf19ce389673b1e2c9f6e2fc3b0df35c91681b85325833fb
-anchor-sha256: src/aot/program/xr_backend_ir_verify.c 2f1da8a33156865fb5f31afa51d083f42aa6165f1944c6c12b484ed2c216ecb9
-anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 45c02b58a2f126dee62b73f188e1f3d8c0a35ea6721760e2d675cf0a9160f398
+anchor-sha256: src/aot/program/xr_backend_ir.c d2f80522ab5b2907551229d5efd615c6be04bb7ce6ba6e6a40eae40cdb6c0c3d
+anchor-sha256: src/aot/program/xr_backend_ir_verify.c 1c1939548347594439dc7886a6c9d49619c14c39f08bc3f3e07f7b2bec2feef1
+anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 0401bb4f4da4b1f269ba0599cf26e1386ca825f98e039f77cc11556f4e95d3c3
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf
 anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f376ebedb92e0efe7d838e5d95286509e64d2af2d96
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
-anchor-sha256: tests/unit/aot/test_xr_program_aot.c 868c752b3669330b4bb758ac80bf88d8b2a9964f58dfacca375bb7c44220196c
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 6e92f3367b2780ef406536434ffff42d47a24c4957e844e99ae68864eb6671ac
+anchor-sha256: tests/unit/aot/test_xr_program_aot.c 37ce286961554e101aa257b81fc943300dd258673e3d9c405325772dd4a0be6d
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c b8999ce6ebd15f935f0e12917b974337a1a36fa1c8108ab5be19e5a40d976b6f

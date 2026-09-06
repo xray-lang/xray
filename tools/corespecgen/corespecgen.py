@@ -81,11 +81,11 @@ GENERIC_TYPES = {
     "A", "C", "Capture?", "E", "V", "T", "T...", "R", "R?", "P...",
     "TargetEnum",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
-    "trap-edge-values...", "suspend-edge-values...",
+    "trap-edge-values...", "cancel-edge-values...", "suspend-edge-values...",
 }
 VARIADIC_TYPES = {
     "T...", "P...", "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
-    "trap-edge-values...", "suspend-edge-values...",
+    "trap-edge-values...", "cancel-edge-values...", "suspend-edge-values...",
 }
 IMPLEMENTATION_KEYS = {
     "aot_handler",
@@ -327,7 +327,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
             "aggregate-construct", "aggregate-project", "aggregate-update", "assert-condition",
-            "block-arguments", "branch", "conditional-branch", "error-publish",
+            "block-arguments", "branch", "cancel-publish", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
             "place-local", "place-project", "place-store", "place-take", "return",
             "scalar-oracle", "sealed-call",
@@ -788,6 +788,10 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     if validator == "panic-publish":
         return (actual.get("function_panic_type") == "panic-info"
                 and actual.get("operand_types") == ["panic-info"])
+    if validator == "cancel-publish":
+        return (actual.get("operand_types") == []
+                and actual.get("successor_count") == 0
+                and actual.get("result_type") == "void")
     if validator == "owner-copy":
         ownership = actual.get("type_ownership")
         operand_ownership = actual.get("operand_ownership")
@@ -837,21 +841,23 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_ownership") == "owner")
     if validator == "coroutine-yield":
         return (actual.get("result_type") == "void"
-                and actual.get("successor_count") == 1
+                and actual.get("successor_count") == 2
                 and actual.get("resume_state") == actual.get("continuation_state")
+                and actual.get("cancel_terminal") is True
                 and isinstance(actual.get("live_values"), list)
-                and actual.get("live_values") == actual.get("edge_values"))
+                and actual.get("live_values") == actual.get("resume_edge_values"))
     if validator == "coroutine-call":
         return (actual.get("result_type") == "void"
-                and actual.get("successor_count") == 1
+                and actual.get("successor_count") == 2
                 and actual.get("resume_state") == actual.get("continuation_state")
+                and actual.get("cancel_terminal") is True
                 and actual.get("callee_coroutine") is True
                 and actual.get("callee_suspend_kind") == "cooperative-yield"
                 and actual.get("callee_error_type") == "void"
                 and actual.get("callee_panic_type") == "void"
                 and actual.get("scalar_non_owner_boundary") is True
                 and isinstance(actual.get("live_values"), list)
-                and actual.get("live_values") == actual.get("edge_values"))
+                and actual.get("live_values") == actual.get("resume_edge_values"))
     raise CoreSpecError(f"KAT {case['id']} has no contract oracle for {validator}")
 
 

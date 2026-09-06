@@ -43,6 +43,7 @@ _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id dr
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CANCEL_PUBLISH == 51, "cancel publish stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -2293,6 +2294,24 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
             XR_EXECUTION_OK);
     retire_and_free(&reference_successor);
 
+    XrInstance *reference_cancel_instance = create_instance(program, profile, &bindings, 102u);
+    XrReferenceExecution *reference_cancel = NULL;
+    REQUIRE(xr_reference_execution_create(reference_cancel_instance, 0u, NULL, 0u, NULL,
+                                          &reference_cancel));
+    REQUIRE(xr_reference_execution_cancel(reference_cancel).kind ==
+            XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    XrReferenceOutcome reference_cancel_yield = xr_reference_execution_step(reference_cancel);
+    REQUIRE(reference_cancel_yield.kind == XR_REFERENCE_OUTCOME_SUSPENDED);
+    XrReferenceOutcome reference_cancelled = xr_reference_execution_cancel(reference_cancel);
+    REQUIRE(reference_cancelled.kind == XR_REFERENCE_OUTCOME_CANCELLED);
+    REQUIRE(reference_cancelled.state_id == reference_cancel_yield.state_id);
+    REQUIRE(reference_cancelled.steps == reference_cancel_yield.steps + 1u);
+    REQUIRE(xr_reference_execution_step(reference_cancel).kind ==
+            XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    REQUIRE(xr_execution_instance_lease_count(reference_cancel_instance) == 0u);
+    xr_reference_execution_free(reference_cancel);
+    retire_and_free(&reference_cancel_instance);
+
     XrFingerprint traces[2] = {{{0}}, {{0}}};
     const XrVmDecodePolicy policies[] = {
         XR_VM_DECODE_BASELINE_VIEW,
@@ -2335,6 +2354,29 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
         REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) == XR_EXECUTION_OK);
         xr_vm_execution_free(execution);
         REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) == XR_EXECUTION_OK);
+
+        XrInstance *cancel_instance =
+            create_instance(program, profile, &bindings, 301u + policy_index);
+        XrVmCode *cancel_code = NULL;
+        REQUIRE(xr_vm_code_build(cancel_instance, &options, &cancel_code, &code_diagnostic) ==
+                XR_VM_CODE_OK);
+        XrVmExecution *cancel_execution = NULL;
+        REQUIRE(xr_vm_execution_create(cancel_code, cancel_instance, 0u, NULL, 0u,
+                                       &cancel_execution));
+        REQUIRE(xr_vm_execution_cancel(cancel_execution).kind ==
+                XR_VM_OUTCOME_INVALID_INVOCATION);
+        XrVmOutcome cancel_yield = xr_vm_execution_step(cancel_execution);
+        REQUIRE(cancel_yield.kind == XR_VM_OUTCOME_SUSPENDED);
+        XrVmOutcome cancelled = xr_vm_execution_cancel(cancel_execution);
+        REQUIRE(cancelled.kind == XR_VM_OUTCOME_CANCELLED);
+        REQUIRE(cancelled.state_id == cancel_yield.state_id);
+        REQUIRE(cancelled.steps == cancel_yield.steps + 1u);
+        REQUIRE(xr_vm_execution_step(cancel_execution).kind ==
+                XR_VM_OUTCOME_INVALID_INVOCATION);
+        REQUIRE(xr_execution_instance_lease_count(cancel_instance) == 0u);
+        xr_vm_execution_free(cancel_execution);
+        xr_vm_code_free(cancel_code);
+        retire_and_free(&cancel_instance);
     }
     REQUIRE(memcmp(traces[0].bytes, traces[1].bytes, sizeof(traces[0].bytes)) == 0);
     xr_target_profile_free(profile);

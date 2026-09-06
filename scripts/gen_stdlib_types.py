@@ -63,6 +63,16 @@ METHOD_PATTERN = re.compile(
 _ADJACENT_STR = re.compile(r'"\s*\n?\s*"')
 
 
+def write_if_changed(path: Path, content: str) -> bool:
+    """Write generated metadata only when its bytes actually change."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.read_text(encoding='utf-8') == content:
+        return False
+    with path.open('w', encoding='utf-8', newline='\n') as handle:
+        handle.write(content)
+    return True
+
+
 def _join_adjacent_strings(text: str) -> str:
     return _ADJACENT_STR.sub('', text)
 
@@ -1520,12 +1530,8 @@ def main():
         return check_outputs(analyzer_content, lsp_content)
 
     # Write outputs
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        f.write(analyzer_content)
-    LSP_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(LSP_OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        f.write(lsp_content)
+    write_if_changed(OUTPUT_FILE, analyzer_content)
+    write_if_changed(LSP_OUTPUT_FILE, lsp_content)
 
     print(f"\nGenerated: {OUTPUT_FILE}", file=sys.stderr)
     print(f"Generated: {LSP_OUTPUT_FILE}", file=sys.stderr)

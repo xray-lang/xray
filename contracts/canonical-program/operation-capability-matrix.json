@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 53 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; explicit reborrow proves a same-interface scoped READ view is paired with one live MOVE/OWNED_STORAGE owner across every SSA edge; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references. Source publication is active only for registry-backed, structurally admitted clock and pipe routes; other provider-backed source shapes remain fail closed."
+    "note": "All 55 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; explicit reborrow proves a same-interface scoped READ view is paired with one live MOVE/OWNED_STORAGE owner across every SSA edge; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; coroutine suspension now carries an explicit cancel continuation ending in a distinct terminal cancellation outcome; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references. Source publication is active only for registry-backed, structurally admitted clock and pipe routes; other provider-backed source shapes remain fail closed."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 53 registered operations execute in the independent typed VM and match the reference evaluator. Provider operations use only Program-typed, ABI-matched, lease-pinned private adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, including the nonowning READ reborrow view, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 55 registered operations execute in the independent typed VM and match the reference evaluator. Suspended sessions select either the resume edge or the explicit cancellation continuation, recursively cancelling an active sealed child before publishing cancellation. Provider operations use only Program-typed, ABI-matched, lease-pinned private adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, including the nonowning READ reborrow view, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 53 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Embedded AOT exposes Program-typed provider callbacks; real-source clock fixtures prove exact success and one-event refusal-to-trap normalization, while hosted standalone output and pipe-open bind backend-private host adapters and unsupported freestanding providers fail closed. Existential and callable carriers, including the nonowning READ reborrow copy, remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 55 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Native coroutine descriptors expose distinct step and cancel callbacks; generated cancellation recursively closes an active child frame and follows the Program cancel edge. Embedded AOT exposes Program-typed provider callbacks; real-source clock fixtures prove exact success and one-event refusal-to-trap normalization, while hosted standalone output and pipe-open bind backend-private host adapters and unsupported freestanding providers fail closed. Existential and callable carriers, including the nonowning READ reborrow copy, remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -484,6 +484,30 @@
         "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot.c"
+      ]
+    },
+    {
+      "id": "core.cancel.publish",
+      "core_spec_contract": "terminate one suspended coroutine through its selected cancellation continuation without manufacturing an error or panic payload",
+      "program_encoding": "zero-payload terminal operation reached only by the explicit cancel successor of a coroutine suspension terminator",
+      "decoder_verifier_evaluator": "bounded terminal shape and exact two-successor suspension closure; resumable reference sessions expose a distinct cancelled outcome and recursively cancel an active sealed child",
+      "vm_implementation": "private sessions remember the verified cancel block only while suspended, release the exact generation lease after cancellation, and expose no compatibility fallback",
+      "aot_lowering": "generated frames accept an explicit private cancel poll, recursively cancel an active child frame, take the canonical cancel edge, and publish a distinct native cancelled outcome",
+      "source_producer": "the Xi logical coroutine plan's terminal cancel edge is projected into one synthetic canonical cancellation block; this slice deliberately rejects owner-carrying safepoints until their cleanup operands are projected",
+      "old_owner_deletion": "cancellation is not encoded as error, panic, trap, implicit frame disposal, or a second serialized executor plan",
+      "status": "COROUTINE_CANCEL_CANONICAL_ONLY",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c"
       ]
     },
     {

@@ -47,12 +47,11 @@ Environment:
     XR_BUILD_DIR   build directory (default: build)
     XR_JOBS        parallelism (default: cores - 2)
     XR_NO_BUILD=1  skip the incremental build step
-    XR_FAST=1      t0/t1 only: build in build-fast without the stdlib VM
-                   fastpaths. That generator is a single ~70s serial edge that
-                   reruns after any src/ edit; dropping it takes the same
-                   one-file rebuild from 67.0s to 1.4s. Semantics are
-                   unaffected (the corpus fails identically), but t2/t3 gate
-                   the fastpaths themselves and reject the flag.
+    XR_FAST=1      t0/t1/canonical: build in build-fast, load stdlib source
+                   from disk, and omit stdlib VM fastpaths. This removes both
+                   self-hosted stdlib generation edges from the edit loop; the
+                   fastpath edge alone costs ~70s after any src/ edit. t2/t3
+                   gate embedded stdlib and fastpaths and reject the flag.
     XR_SHARDS=N    run only 1/N of the two big corpora (backend diff, AOT
                    filetests). OFF by default and deliberately so: t2 exists
                    precisely to catch a backend divergence, and a tier that
@@ -203,8 +202,17 @@ def ctest_names(build_dir: Path, args: Sequence[str]) -> List[str]:
     return names
 
 
+def cache_contains_all(build_dir: Path, entries: Sequence[str]) -> bool:
+    cache = build_dir / "CMakeCache.txt"
+    if not cache.is_file():
+        return False
+    text = cache.read_text(encoding="utf-8", errors="replace")
+    return all(entry in text for entry in entries)
+
+
 def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
-                   include_xray: bool = True) -> bool:
+                   include_xray: bool = True,
+                   required_targets: Sequence[str] = ()) -> bool:
     """Build exactly what this run needs.
 
     Every tier needs current binaries; running a tier against a stale one is
@@ -221,7 +229,15 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
                      for match in (NINJA_TARGET_RE.match(line) for line in
                                    known.stdout.decode("utf-8", "replace").splitlines())
                      if match}
+        missing_targets = sorted(set(required_targets) - available)
+        if missing_targets:
+            print(f"{RED}BUILD PROFILE INVALID{NC}: required Ninja target(s) missing")
+            for target in missing_targets:
+                print(f"    {target}")
+            return False
+        targets.extend(required_targets)
         targets.extend(sorted(set(selected) & available))
+        targets = list(dict.fromkeys(targets))
     else:
         # No target list available: fall back to a full build rather than
         # silently under-building and testing stale binaries.
@@ -326,12 +342,11 @@ def main(argv: List[str]) -> int:
     build_dir = Path(os.environ.get("XR_BUILD_DIR", "build"))
     jobs = platform.env_int("XR_JOBS", default_jobs())
 
-    # XR_FAST drops the hosted VM stdlib fastpath generator from the edit cycle.
-    # That generator is one ~70s edge that cannot be parallelized and reruns
-    # whenever xray_stdlib_bcgen relinks -- after ANY src/ edit, even when its
-    # output is byte-identical. It is safe to drop below t2 because the
-    # fastpaths are a VM performance layer, not a semantic one. It is NOT safe
-    # at t2/t3, which exist to gate the generated fastpaths themselves.
+    # XR_FAST removes both self-hosted stdlib generation edges from the edit
+    # cycle.  Source loading preserves the language/compiler checks while
+    # avoiding an embedded-bytecode rebuild that cannot succeed during parts of
+    # the bootstrap.  Fastpaths are a VM performance layer, not a semantic one.
+    # t2/t3 explicitly gate both production configurations and reject the flag.
     if platform.env_flag("XR_FAST"):
         if tier in ("t2", "t3"):
             print(f"{RED}Error{NC}: XR_FAST=1 is not accepted by {tier}.")
@@ -340,15 +355,21 @@ def main(argv: List[str]) -> int:
             print("       them would report a pass those tiers never established.")
             return 1
         build_dir = Path(os.environ.get("XR_BUILD_DIR", "build-fast"))
-        if not (build_dir / "CMakeCache.txt").is_file():
-            print(f"{BLUE}==>{NC} configuring {build_dir} (no stdlib VM fastpaths)")
+        fast_cache = (
+            "XR_STDLIB_FROM_FILE:BOOL=ON",
+            "XRAY_STDLIB_VM_FASTPATHS:BOOL=OFF",
+        )
+        if not cache_contains_all(build_dir, fast_cache):
+            print(f"{BLUE}==>{NC} configuring {build_dir} (source stdlib, no VM fastpaths)")
             configure = proc.run(["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
                                   "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
+                                  "-DXR_STDLIB_FROM_FILE=ON",
                                   "-DXRAY_STDLIB_VM_FASTPATHS=OFF",
                                   "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"])
             if not configure.ok:
+                sys.stdout.write(configure.combined_text())
                 return 1
-        print(f"{YELLOW}XR_FAST{NC}: using {build_dir} without stdlib VM fastpaths")
+        print(f"{YELLOW}XR_FAST{NC}: using {build_dir} with source stdlib and no VM fastpaths")
 
     shards = platform.env_int("XR_SHARDS", 1)
     shard_index = platform.env_int("XR_SHARD_INDEX", 0)
@@ -410,8 +431,14 @@ def main(argv: List[str]) -> int:
             return 1
 
     if not platform.env_flag("XR_NO_BUILD"):
-        if not build_selected(build_dir, selected, jobs,
-                              include_xray=not canonical_preflight):
+        if not build_selected(
+            build_dir,
+            selected,
+            jobs,
+            include_xray=not canonical_preflight,
+            required_targets=(canonical_profile.BUILD_TARGETS
+                              if canonical_preflight else ()),
+        ):
             return 1
 
     env = dict(os.environ)

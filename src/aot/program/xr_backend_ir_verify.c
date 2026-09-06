@@ -177,17 +177,18 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 < function->coroutine_safepoint_count &&
-                   instruction->successor_count == 1u;
+                   instruction->successor_count == 2u;
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL &&
                    instruction->immediate.coroutine_call.function_id < ir->function_count &&
                    instruction->immediate.coroutine_call.safepoint_id <
                        function->coroutine_safepoint_count &&
-                   instruction->successor_count == 1u;
+                   instruction->successor_count == 2u;
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
         case XR_CORE_OP_CORE_RETURN:
+        case XR_CORE_OP_CORE_CANCEL_PUBLISH:
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_PANIC_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
@@ -457,11 +458,15 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     ++suspension_count;
                     const XrBackendCoroutineSafepoint *point =
                         &function->coroutine_safepoints[instruction->immediate.u32];
+                    const XrBackendBlock *cancel = &function->blocks[instruction->successors[1]];
                     if (instruction->successors[0] !=
                             function->coroutine_states[point->resume_state_id].continuation_block ||
                         instruction->operand_count != point->live_value_count ||
                         !array_u32_equal(instruction->operands, point->live_value_ids,
-                                         point->live_value_count)) {
+                                         point->live_value_count) ||
+                        cancel->argument_count != 0u || cancel->instruction_count == 0u ||
+                        cancel->instructions[cancel->instruction_count - 1u].operation_id !=
+                            XR_CORE_OP_CORE_CANCEL_PUBLISH) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
                                                   instruction_id);
@@ -476,6 +481,7 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     const XrBackendCoroutineSafepoint *point =
                         &function->coroutine_safepoints[safepoint_id];
                     const XrBackendBlock *normal = &function->blocks[instruction->successors[0]];
+                    const XrBackendBlock *cancel = &function->blocks[instruction->successors[1]];
                     uint32_t implicit_result =
                         callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
                     if (callee_id == function_id || callee->coroutine_state_count != 2u ||
@@ -486,7 +492,10 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                             block_id ||
                         instruction->operand_count !=
                             callee->parameter_count + point->live_value_count ||
-                        normal->argument_count != implicit_result + point->live_value_count) {
+                        normal->argument_count != implicit_result + point->live_value_count ||
+                        cancel->argument_count != 0u || cancel->instruction_count == 0u ||
+                        cancel->instructions[cancel->instruction_count - 1u].operation_id !=
+                            XR_CORE_OP_CORE_CANCEL_PUBLISH) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
                                                   instruction_id);

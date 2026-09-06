@@ -45,6 +45,7 @@ _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id dr
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CANCEL_PUBLISH == 51, "cancel publish stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -1234,6 +1235,8 @@ static void test_coroutine_private_state_machine_lowering(void) {
     REQUIRE(strstr(generated.bytes, "frame->live_0_0 = v") != NULL);
     REQUIRE(strstr(generated.bytes, "return xr_aot_make(5, UINT32_C(0), 0)") != NULL);
     REQUIRE(strstr(generated.bytes, "xr_aot_entry_coroutine_step(void *opaque)") != NULL);
+    REQUIRE(strstr(generated.bytes, "xr_aot_entry_coroutine_cancel(void *opaque)") != NULL);
+    REQUIRE(strstr(generated.bytes, "return xr_aot_make(6, 0, 0)") != NULL);
     REQUIRE(strstr(generated.bytes, "XrBackendNativeOutcome") != NULL);
     REQUIRE(strstr(generated.bytes, "xr_aot_entry_coroutine_descriptor") != NULL);
     REQUIRE(strstr(generated.bytes, "XrBackendNativeExecutionId execution_id") != NULL);

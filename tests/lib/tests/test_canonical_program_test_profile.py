@@ -19,6 +19,7 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
         self.assertLessEqual(set(profile.BUILD_TARGETS), set(profile.CTEST_NAMES))
+        self.assertIn("test_xr_program_vm_runtime", profile.BUILD_TARGETS)
 
     def test_regex_is_exact(self) -> None:
         pattern = re.compile(profile.ctest_regex())
@@ -42,6 +43,7 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_verify",
             "test_xr_program_source_build",
             "test_xr_program_vm",
+            "test_xr_program_vm_runtime",
             "test_xr_program_aot",
             "test_xr_program_provider_trap_cleanup_aot_native",
             "meta_ownership_inventory",

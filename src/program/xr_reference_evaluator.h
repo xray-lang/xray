@@ -90,6 +90,7 @@ typedef struct XrReferenceProviderBinding {
 typedef enum XrReferenceOutcomeKind {
     XR_REFERENCE_OUTCOME_RETURN = 0,
     XR_REFERENCE_OUTCOME_SUSPENDED,
+    XR_REFERENCE_OUTCOME_CANCELLED,
     XR_REFERENCE_OUTCOME_TRAP,
     XR_REFERENCE_OUTCOME_ERROR,
     XR_REFERENCE_OUTCOME_PANIC,
@@ -149,6 +150,7 @@ XR_FUNC bool xr_reference_execution_create(XrInstance *instance, uint32_t functi
                                            uint32_t argument_count, const XrReferenceBudget *budget,
                                            XrReferenceExecution **execution_out);
 XR_FUNC XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution);
+XR_FUNC XrReferenceOutcome xr_reference_execution_cancel(XrReferenceExecution *execution);
 XR_FUNC void xr_reference_execution_free(XrReferenceExecution *execution);
 
 #endif /* XR_REFERENCE_EVALUATOR_H */

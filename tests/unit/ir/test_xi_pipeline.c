@@ -1922,7 +1922,8 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     const XrValidatedFunction *function = &validated->functions[entry_function];
     PIPELINE_TEST_REQUIRE(function->coroutine_state_count == 2u &&
                           function->coroutine_safepoint_count == 1u &&
-                          function->effect_mask == XR_CORE_EFFECT_SUSPEND &&
+                          function->effect_mask ==
+                              (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
                           function->capability_mask ==
                               XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
                           validated_program_has_operation(validated,
@@ -1952,6 +1953,15 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
                           reference_return.state_id == 1u);
     xr_reference_execution_free(reference);
 
+    XrReferenceExecution *reference_cancel = NULL;
+    PIPELINE_TEST_REQUIRE(xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL,
+                                                        &reference_cancel));
+    PIPELINE_TEST_REQUIRE(xr_reference_execution_step(reference_cancel).kind ==
+                          XR_REFERENCE_OUTCOME_SUSPENDED);
+    PIPELINE_TEST_REQUIRE(xr_reference_execution_cancel(reference_cancel).kind ==
+                          XR_REFERENCE_OUTCOME_CANCELLED);
+    xr_reference_execution_free(reference_cancel);
+
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
@@ -1968,6 +1978,12 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
                           vm_return.value.kind == XR_VM_VALUE_VOID &&
                           vm_return.state_id == reference_return.state_id);
     xr_vm_execution_free(vm_execution);
+    XrVmExecution *vm_cancel = NULL;
+    PIPELINE_TEST_REQUIRE(
+        xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_cancel));
+    PIPELINE_TEST_REQUIRE(xr_vm_execution_step(vm_cancel).kind == XR_VM_OUTCOME_SUSPENDED);
+    PIPELINE_TEST_REQUIRE(xr_vm_execution_cancel(vm_cancel).kind == XR_VM_OUTCOME_CANCELLED);
+    xr_vm_execution_free(vm_cancel);
     xr_vm_code_free(vm_code);
 
     XrBackendIR *backend_ir = NULL;
@@ -1996,6 +2012,7 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
                           generated_again.size == generated.size &&
                           memcmp(generated_again.bytes, generated.bytes, generated.size) == 0 &&
                           strstr(generated.bytes, "xr_aot_entry_coroutine_step") != NULL &&
+                          strstr(generated.bytes, "xr_aot_entry_coroutine_cancel") != NULL &&
                           strstr(generated.bytes, "xr_aot_entry_coroutine_descriptor") != NULL &&
                           strstr(generated.bytes, "XrProto") == NULL &&
                           strstr(generated.bytes, "TargetPlan") == NULL);
@@ -2098,7 +2115,8 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(entry->result_type_id == XR_CORE_TYPE_I64 &&
                           entry->coroutine_state_count == 2u &&
                           entry->coroutine_safepoint_count == 1u &&
-                          entry->effect_mask == (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_SUSPEND) &&
+                          entry->effect_mask == (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL |
+                                                 XR_CORE_EFFECT_SUSPEND) &&
                           entry->capability_mask ==
                               XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
 
@@ -2118,7 +2136,7 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
                           coroutine_call->immediate_kind ==
                               XR_CORE_IR_IMMEDIATE_COROUTINE_CALL &&
                           coroutine_call->immediate.coroutine_call.safepoint_id == 0u &&
-                          coroutine_call->successor_count == 1u &&
+                          coroutine_call->successor_count == 2u &&
                           coroutine_call->operand_count == 1u);
     uint32_t child_function = coroutine_call->immediate.coroutine_call.function_id;
     PIPELINE_TEST_REQUIRE(child_function < validated->function_count &&
@@ -2130,7 +2148,8 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
                           validated_child->result_type_id == XR_CORE_TYPE_I64 &&
                           validated_child->coroutine_state_count == 2u &&
                           validated_child->coroutine_safepoint_count == 1u &&
-                          validated_child->effect_mask == XR_CORE_EFFECT_SUSPEND &&
+                          validated_child->effect_mask ==
+                              (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
                           validated_child->capability_mask ==
                               XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
                           validated_program_has_operation(
@@ -2161,6 +2180,15 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
                           reference_return.state_id == 1u);
     xr_reference_execution_free(reference);
 
+    XrReferenceExecution *reference_cancel = NULL;
+    PIPELINE_TEST_REQUIRE(xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL,
+                                                        &reference_cancel));
+    PIPELINE_TEST_REQUIRE(xr_reference_execution_step(reference_cancel).kind ==
+                          XR_REFERENCE_OUTCOME_SUSPENDED);
+    PIPELINE_TEST_REQUIRE(xr_reference_execution_cancel(reference_cancel).kind ==
+                          XR_REFERENCE_OUTCOME_CANCELLED);
+    xr_reference_execution_free(reference_cancel);
+
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
@@ -2178,6 +2206,12 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
                           vm_return.value.as.i64 == reference_return.value.as.i64 &&
                           vm_return.state_id == reference_return.state_id);
     xr_vm_execution_free(vm_execution);
+    XrVmExecution *vm_cancel = NULL;
+    PIPELINE_TEST_REQUIRE(
+        xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_cancel));
+    PIPELINE_TEST_REQUIRE(xr_vm_execution_step(vm_cancel).kind == XR_VM_OUTCOME_SUSPENDED);
+    PIPELINE_TEST_REQUIRE(xr_vm_execution_cancel(vm_cancel).kind == XR_VM_OUTCOME_CANCELLED);
+    xr_vm_execution_free(vm_cancel);
     xr_vm_code_free(vm_code);
 
     XrBackendIR *backend_ir = NULL;
@@ -2208,6 +2242,7 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
                           strstr(generated.bytes, "child_active_0") != NULL &&
                           strstr(generated.bytes, "parameter_0") != NULL &&
                           strstr(generated.bytes, "XrAotCoroutineFrame") != NULL &&
+                          strstr(generated.bytes, "xr_aot_entry_coroutine_cancel") != NULL &&
                           strstr(generated.bytes, "XrProto") == NULL &&
                           strstr(generated.bytes, "TargetPlan") == NULL);
     if (g_coroutine_call_aot_output_path) {

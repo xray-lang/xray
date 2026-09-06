@@ -1890,6 +1890,14 @@ if(XRAY_STDLIB_VM_FASTPATHS)
         LABELS "stdlib;metadata;tooling;task-256"
     )
 endif()
+add_test(
+    NAME test_stdlib_generators_content_stable
+    COMMAND ${XRAY_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/test_stdlib_generators_content_stable.py
+)
+set_tests_properties(test_stdlib_generators_content_stable PROPERTIES
+    LABELS "stdlib;metadata;tooling;incremental-build"
+)
 # ============================================================================
 # regex/ — Regex engine
 # ============================================================================

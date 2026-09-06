@@ -502,7 +502,8 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     const XrValidatedFunction *entry = &program->functions[entry_function];
     ASSERT_EQ_UINT(entry->coroutine_state_count, 2u);
     ASSERT_EQ_UINT(entry->coroutine_safepoint_count, 1u);
-    ASSERT_EQ_UINT(entry->effect_mask, XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_SUSPEND);
+    ASSERT_EQ_UINT(entry->effect_mask,
+                   XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND);
     ASSERT_EQ_UINT(entry->capability_mask, XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
 
     const XrValidatedInstruction *coroutine_call = NULL;
@@ -520,6 +521,12 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_NOT_NULL(coroutine_call);
     ASSERT_EQ_INT(coroutine_call->immediate_kind, XR_CORE_IR_IMMEDIATE_COROUTINE_CALL);
     ASSERT_EQ_UINT(coroutine_call->immediate.coroutine_call.safepoint_id, 0u);
+    ASSERT_EQ_UINT(coroutine_call->successor_count, 2u);
+    const XrValidatedBlock *cancel = &entry->blocks[coroutine_call->successors[1]];
+    ASSERT_EQ_UINT(cancel->argument_count, 0u);
+    ASSERT_TRUE(cancel->instruction_count != 0u);
+    ASSERT_EQ_UINT(cancel->instructions[cancel->instruction_count - 1u].operation_id,
+                   XR_CORE_OP_CORE_CANCEL_PUBLISH);
     uint32_t child_function = coroutine_call->immediate.coroutine_call.function_id;
     ASSERT_LT(child_function, program->function_count);
     ASSERT_TRUE(child_function != entry_function);
@@ -530,7 +537,7 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_UINT(child->result_type_id, XR_CORE_TYPE_I64);
     ASSERT_EQ_UINT(child->coroutine_state_count, 2u);
     ASSERT_EQ_UINT(child->coroutine_safepoint_count, 1u);
-    ASSERT_EQ_UINT(child->effect_mask, XR_CORE_EFFECT_SUSPEND);
+    ASSERT_EQ_UINT(child->effect_mask, XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND);
     ASSERT_EQ_UINT(child->capability_mask, XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
 
     XrExecutionBindingInput binding = {
@@ -558,6 +565,15 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_INT(reference_return.value.as.i64, 7);
     xr_reference_execution_free(reference);
 
+    XrReferenceExecution *reference_cancel = NULL;
+    ASSERT_TRUE(xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL,
+                                              &reference_cancel));
+    ASSERT_EQ_INT(xr_reference_execution_step(reference_cancel).kind,
+                  XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_INT(xr_reference_execution_cancel(reference_cancel).kind,
+                  XR_REFERENCE_OUTCOME_CANCELLED);
+    xr_reference_execution_free(reference_cancel);
+
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
     ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic), XR_VM_CODE_OK);
@@ -572,6 +588,12 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_INT(vm_return.value.kind, XR_VM_VALUE_I64);
     ASSERT_EQ_INT(vm_return.value.as.i64, reference_return.value.as.i64);
     xr_vm_execution_free(vm_execution);
+
+    XrVmExecution *vm_cancel = NULL;
+    ASSERT_TRUE(xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_cancel));
+    ASSERT_EQ_INT(xr_vm_execution_step(vm_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
+    ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED);
+    xr_vm_execution_free(vm_cancel);
     xr_vm_code_free(vm_code);
 
     XrBackendIR *backend_ir = NULL;
@@ -590,6 +612,7 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "child_active_0"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_entry_coroutine_cancel"));
     ASSERT_NULL(strstr(generated.bytes, "XrProto"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
     if (cross_module_coroutine_aot_output_path) {

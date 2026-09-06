@@ -97,6 +97,7 @@ typedef struct XrXiFunctionStorage {
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
     XrCoreIrBlockInput *blocks;
+    XrCoreIrInstructionInput *cancel_instructions;
     XrXiBlockStorage *block_storage;
     XrCoreIrCoroutineStateInput *coroutine_states;
     XrCoreIrCoroutineSafepointInput *coroutine_safepoints;
@@ -355,6 +356,10 @@ static XrCoreIrKey function_key(XrStableId module_id, uint32_t function_index) {
 
 static XrCoreIrKey block_key(const XrXiFunctionStorage *function, const XiBlock *block) {
     return key_from_key_and_u32(UINT8_C(0x42), function->key, block->id);
+}
+
+static XrCoreIrKey cancel_block_key(const XrXiFunctionStorage *function, uint32_t safepoint_id) {
+    return key_from_key_and_u32(UINT8_C(0x4b), function->key, safepoint_id);
 }
 
 static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value) {
@@ -5158,6 +5163,7 @@ static void free_context(XrXiBuildContext *context) {
                 xr_free(block->argument_storage);
             }
             xr_free(function->block_storage);
+            xr_free(function->cancel_instructions);
             xr_free(function->blocks);
             xr_free(function->parameter_types);
             xr_free(function->parameter_modes);
@@ -8296,6 +8302,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
 
     const XiCoroSuspendPoint *point = &plan->points[0];
     const XiCoroEdge *resume = xi_coro_point_find_edge(point, XI_CORO_EDGE_RESUME);
+    const XiCoroEdge *cancel = xi_coro_point_find_edge(point, XI_CORO_EDGE_CANCEL);
     if (point->state_id != 1u || !point->op || point->op->block != point->suspend_block ||
         !point->suspend_block || point->suspend_block->nvalues != 1u ||
         point->suspend_block->values[0] != point->op ||
@@ -8307,7 +8314,11 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         plan->dispatch[1].state_id != point->state_id ||
         plan->dispatch[1].target != point->suspend_block || !resume || resume->terminal ||
         resume->source_state_id != point->state_id || resume->target_state_id != point->state_id ||
-        resume->target_block != point->resume_block)
+        resume->target_block != point->resume_block || !cancel || !cancel->terminal ||
+        cancel->source_state_id != point->state_id ||
+        cancel->target_state_id != XI_CORO_STATE_TERMINAL || cancel->target_block != NULL ||
+        cancel->drops != point->drops || cancel->ndrops != point->ndrops || point->ndrops != 0u ||
+        (point->capability_mask & XI_CORO_CAP_CANCEL_CLEANUP) == 0u)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %s suspension lacks exact logical plan closure",
                     xi->name ? xi->name : "<anonymous>");
@@ -8409,12 +8420,13 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
     instruction->result_type_id = XR_CORE_TYPE_VOID;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
     instruction->immediate.u32 = safepoint_id;
-    XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+    XrCoreIrKey *successors = xr_calloc(2u, sizeof(*successors));
     if (!successors)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     successors[0] = block_key(function, point->resume_block);
+    successors[1] = cancel_block_key(function, safepoint_id);
     instruction->successors = successors;
-    instruction->successor_count = 1u;
+    instruction->successor_count = 2u;
     XrProgramBuildStatus status = set_edge_operands(context, instruction, function, block, resume,
                                                     NULL, NULL, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK)
@@ -8509,7 +8521,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
                         "Xi coroutine call live value is unavailable");
         }
     }
-    XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+    XrCoreIrKey *successors = xr_calloc(2u, sizeof(*successors));
     XrCoreIrKey *live_values = live_count ? xr_calloc(live_count, sizeof(*live_values)) : NULL;
     if (!successors || (live_count && !live_values)) {
         xr_free(live_values);
@@ -8521,6 +8533,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         memcpy(live_values, operands + call.operand_count,
                (size_t) live_count * sizeof(*live_values));
     successors[0] = block_key(function, point->resume_block);
+    successors[1] = cancel_block_key(function, safepoint_id);
     instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
     instruction->result_type_id = XR_CORE_TYPE_VOID;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
@@ -8529,7 +8542,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     instruction->operands = operands;
     instruction->operand_count = operand_count;
     instruction->successors = successors;
-    instruction->successor_count = 1u;
+    instruction->successor_count = 2u;
     function->coroutine_safepoints[safepoint_id].live_values = live_values;
     function->coroutine_safepoints[safepoint_id].live_value_count = live_count;
     return XR_PROGRAM_BUILD_OK;
@@ -9270,10 +9283,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
     XrCoreIrFunctionInput *output = &module->functions[function_index];
     XrXiFunctionStorage *storage = &module->function_storage[function_index];
 
-    storage->blocks = xr_calloc(xi->nblocks, sizeof(*storage->blocks));
-    if (!storage->blocks || !storage->block_storage)
+    if (!storage->block_storage)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    output->blocks = storage->blocks;
     output->entry_block = block_key(storage, xi->entry);
     XrProgramBuildStatus status =
         close_block_arguments(context, storage, diagnostic, diagnostic_size);
@@ -9282,6 +9293,13 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
     status = prepare_coroutine_shape(context, storage, output, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
+    if (output->coroutine_safepoint_count > UINT32_MAX - xi->nblocks)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t block_capacity = xi->nblocks + output->coroutine_safepoint_count;
+    storage->blocks = xr_calloc(block_capacity, sizeof(*storage->blocks));
+    if (!storage->blocks)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    output->blocks = storage->blocks;
 
     output->block_count = 0u;
     for (uint32_t block_index = 0u; block_index < xi->nblocks; ++block_index)
@@ -9289,6 +9307,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             !block_is_elided_class_construction_error_continuation(context, xi,
                                                                    xi->blocks[block_index]))
             ++output->block_count;
+    output->block_count += output->coroutine_safepoint_count;
     if (output->block_count == 0u || !find_block_storage(storage, xi->entry)->reachable ||
         block_is_elided_class_construction_error_continuation(context, xi, xi->entry))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -9645,6 +9664,29 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                         "Xi block b%u has no CoreSpec terminal operation", xi_block->id);
         storage->local_effect_mask |= terminal_operation->effect_mask;
         storage->local_capability_mask |= terminal_operation->capability_mask;
+    }
+    if (output->coroutine_safepoint_count != 0u) {
+        storage->cancel_instructions =
+            xr_calloc(output->coroutine_safepoint_count, sizeof(*storage->cancel_instructions));
+        if (!storage->cancel_instructions)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        for (uint32_t safepoint = 0u; safepoint < output->coroutine_safepoint_count; ++safepoint) {
+            XrCoreIrBlockInput *cancel_block = &storage->blocks[output_block_index++];
+            XrCoreIrInstructionInput *publish = &storage->cancel_instructions[safepoint];
+            cancel_block->key = cancel_block_key(storage, safepoint);
+            cancel_block->instructions = publish;
+            cancel_block->instruction_count = 1u;
+            publish->operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH;
+            publish->result_type_id = XR_CORE_TYPE_VOID;
+            publish->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            const XrCoreOperationSpec *operation =
+                xr_core_spec_operation_by_id(publish->operation_id);
+            if (!operation)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "canonical cancel publication has no CoreSpec operation");
+            storage->local_effect_mask |= operation->effect_mask;
+            storage->local_capability_mask |= operation->capability_mask;
+        }
     }
     if (output_block_index != output->block_count)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
