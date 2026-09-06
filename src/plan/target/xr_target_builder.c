@@ -274,9 +274,11 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t debug_fact_count;
 } XrTargetMaterializedPlan;
 
-typedef struct XrTargetPlanBuilder XrTargetPlanBuilder;
+/* Intent collection is transient compiler state, not a semantic plan or an
+ * executable target-plan identity. Keep its name separate from both artifacts. */
+typedef struct XrTargetBuildContext XrTargetBuildContext;
 
-struct XrTargetPlanBuilder {
+struct XrTargetBuildContext {
     XrSemanticPlan *semantic_plan;
     XrSemanticPlan **semantic_dependencies;
     uint32_t semantic_dependency_count;
@@ -308,7 +310,7 @@ struct XrTargetPlanBuilder {
     bool poisoned;
 };
 
-static void builder_free(XrTargetPlanBuilder *builder);
+static void builder_free(XrTargetBuildContext *builder);
 
 static bool fail(char *error, size_t error_size, const char *code, const char *detail) {
     if (error && error_size)
@@ -745,7 +747,7 @@ static bool make_machine_rep(const XrTargetMachineFacts *profile, uint16_t kind,
  * Unit enums share i64 storage, but their nominal semantic type is part of the
  * representation identity and is required by the independent verifier. Keep
  * that typed decision here so every storage family publishes the same row. */
-static bool make_scalar_type_rep(const XrTargetPlanBuilder *builder, uint32_t semantic_type,
+static bool make_scalar_type_rep(const XrTargetBuildContext *builder, uint32_t semantic_type,
                                  uint16_t kind, XrTargetMachineRepRecord *out) {
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(builder ? builder->semantic_plan : NULL, semantic_type);
@@ -885,7 +887,7 @@ static int compare_slot_intent(const void *left, const void *right) {
     return xr_stable_id_compare(a->identity, b->identity);
 }
 
-static bool private_leaf_program_excludes_function(const XrTargetPlanBuilder *builder,
+static bool private_leaf_program_excludes_function(const XrTargetBuildContext *builder,
                                                    uint32_t semantic_function) {
     const XrSemanticPlan *semantic = builder ? builder->semantic_plan : NULL;
     const XrSemanticProgramProvenance *program =
@@ -901,7 +903,7 @@ static bool private_leaf_program_excludes_function(const XrTargetPlanBuilder *bu
            !xr_semantic_plan_program_function_for_semantic_function(semantic, semantic_function);
 }
 
-static bool program_module_set_excludes_function(const XrTargetPlanBuilder *builder,
+static bool program_module_set_excludes_function(const XrTargetBuildContext *builder,
                                                  uint32_t semantic_function) {
     return builder && builder->program_reachability &&
            !xr_target_program_function_is_reachable(builder->program_reachability,
@@ -932,7 +934,7 @@ static bool private_leaf_program_compile_time_callee_value(const XrSemanticPlan 
     return false;
 }
 
-static bool append_rep_intent(XrTargetPlanBuilder *builder, const XrTargetMachineRepRecord *record,
+static bool append_rep_intent(XrTargetBuildContext *builder, const XrTargetMachineRepRecord *record,
                               char *error, size_t error_size) {
     for (uint32_t i = 0; i < builder->rep_intent_count; i++)
         if (compare_rep_record(&builder->rep_intents[i].record, record) == 0)
@@ -949,7 +951,7 @@ static bool semantic_direct_local_array_type_is_exact(const XrSemanticPlan *plan
                                                       uint32_t type_index, bool indexes_elements,
                                                       uint8_t *storage);
 
-static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic_type, uint8_t kind,
+static bool append_layout_intent(XrTargetBuildContext *builder, uint32_t semantic_type, uint8_t kind,
                                  uint32_t element_count, const XrTargetMachineRepRecord *memory_rep,
                                  char *error, size_t error_size) {
     /* Element storage is a property of the exact semantic Array type, not of
@@ -989,7 +991,7 @@ static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic
     return true;
 }
 
-static bool append_value_intent(XrTargetPlanBuilder *builder, const XrTargetValueIntent *intent,
+static bool append_value_intent(XrTargetBuildContext *builder, const XrTargetValueIntent *intent,
                                 char *error, size_t error_size) {
     if (intent && (private_leaf_program_excludes_function(builder, intent->semantic_function) ||
                    private_leaf_program_compile_time_callee_value(
@@ -1005,7 +1007,7 @@ static bool append_value_intent(XrTargetPlanBuilder *builder, const XrTargetValu
     return true;
 }
 
-static bool append_slot_intent(XrTargetPlanBuilder *builder, const XrTargetSlotIntent *intent,
+static bool append_slot_intent(XrTargetBuildContext *builder, const XrTargetSlotIntent *intent,
                                char *error, size_t error_size) {
     if (intent && (private_leaf_program_excludes_function(builder, intent->function) ||
                    private_leaf_program_compile_time_callee_value(
@@ -1019,7 +1021,7 @@ static bool append_slot_intent(XrTargetPlanBuilder *builder, const XrTargetSlotI
     return true;
 }
 
-static bool append_call_intent(XrTargetPlanBuilder *builder, const XrTargetCallIntent *intent,
+static bool append_call_intent(XrTargetBuildContext *builder, const XrTargetCallIntent *intent,
                                char *error, size_t error_size) {
     if (!reserve_records((void **) &builder->call_intents, &builder->call_intent_capacity,
                          builder->call_intent_count + 1u, 10000000u,
@@ -1029,7 +1031,7 @@ static bool append_call_intent(XrTargetPlanBuilder *builder, const XrTargetCallI
     return true;
 }
 
-static bool append_call_argument_intent(XrTargetPlanBuilder *builder,
+static bool append_call_argument_intent(XrTargetBuildContext *builder,
                                         const XrTargetCallArgumentIntent *intent, char *error,
                                         size_t error_size) {
     if (!reserve_records((void **) &builder->call_argument_intents,
@@ -1987,7 +1989,7 @@ static bool semantic_direct_local_array_type_is_exact(const XrSemanticPlan *plan
                                                                false, storage);
 }
 
-static bool append_tagged_boundary_layout_intent(XrTargetPlanBuilder *builder,
+static bool append_tagged_boundary_layout_intent(XrTargetBuildContext *builder,
                                                  uint32_t semantic_type, uint8_t storage,
                                                  const XrTargetMachineRepRecord *memory_rep,
                                                  bool admits_instance, char *error,
@@ -3463,7 +3465,7 @@ direct_local_go_callee_storage_value_is_exact(const XrSemanticPlan *plan,
  * already, and wrong for every other local.  The pointee's type still governs
  * the type-wide representation: an `int` local is I64 whether or not something
  * takes its address, so the address is bound without touching that record. */
-static bool note_scalar_value_ex(XrTargetPlanBuilder *builder,
+static bool note_scalar_value_ex(XrTargetBuildContext *builder,
                                  XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
                                  uint32_t semantic_type, uint32_t semantic_function,
                                  uint32_t semantic_operation, uint8_t role,
@@ -3565,7 +3567,7 @@ static bool note_scalar_value_ex(XrTargetPlanBuilder *builder,
     return append_value_intent(builder, &value, error, error_size);
 }
 
-static bool note_closure_storage_value(XrTargetPlanBuilder *builder,
+static bool note_closure_storage_value(XrTargetBuildContext *builder,
                                        XrTargetValueStorageAnalysis *analysis,
                                        uint32_t semantic_operation, char *error,
                                        size_t error_size) {
@@ -3702,7 +3704,7 @@ static bool semantic_u8_slice_parameter_is_exact(const XrSemanticPlan *plan,
            semantic_u8_slice_type_is_exact(plan, parameter->type);
 }
 
-static bool note_u8_slice_view_parameter_storage_value(XrTargetPlanBuilder *builder,
+static bool note_u8_slice_view_parameter_storage_value(XrTargetBuildContext *builder,
                                                        XrTargetValueStorageAnalysis *analysis,
                                                        const XrSemanticParameterRecord *parameter,
                                                        char *error, size_t error_size) {
@@ -3755,7 +3757,7 @@ static bool note_u8_slice_view_parameter_storage_value(XrTargetPlanBuilder *buil
            append_value_intent(builder, &value, error, error_size);
 }
 
-static bool note_string_byte_slice_view_storage_value(XrTargetPlanBuilder *builder,
+static bool note_string_byte_slice_view_storage_value(XrTargetBuildContext *builder,
                                                       XrTargetValueStorageAnalysis *analysis,
                                                       uint32_t semantic_operation, char *error,
                                                       size_t error_size) {
@@ -3816,7 +3818,7 @@ static bool note_string_byte_slice_view_storage_value(XrTargetPlanBuilder *build
  * and reports its own family by name on refusal; what remains is the same for
  * both -- a dynamic value carrier, a temporary slot, a dynamic layout --
  * because a heap constant is a heap constant however its payload is spelled. */
-static bool note_heap_literal_storage_value(XrTargetPlanBuilder *builder,
+static bool note_heap_literal_storage_value(XrTargetBuildContext *builder,
                                             XrTargetValueStorageAnalysis *analysis,
                                             uint32_t semantic_operation, char *error,
                                             size_t error_size) {
@@ -3875,7 +3877,7 @@ static bool note_heap_literal_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool note_string_literal_storage_value(XrTargetPlanBuilder *builder,
+static bool note_string_literal_storage_value(XrTargetBuildContext *builder,
                                               XrTargetValueStorageAnalysis *analysis,
                                               uint32_t semantic_operation, char *error,
                                               size_t error_size) {
@@ -3888,7 +3890,7 @@ static bool note_string_literal_storage_value(XrTargetPlanBuilder *builder,
                                            error_size);
 }
 
-static bool note_bigint_value_storage_value(XrTargetPlanBuilder *builder,
+static bool note_bigint_value_storage_value(XrTargetBuildContext *builder,
                                             XrTargetValueStorageAnalysis *analysis,
                                             uint32_t semantic_operation, char *error,
                                             size_t error_size) {
@@ -3901,7 +3903,7 @@ static bool note_bigint_value_storage_value(XrTargetPlanBuilder *builder,
                                            error_size);
 }
 
-static bool note_stringbuilder_constructor_storage_value(XrTargetPlanBuilder *builder,
+static bool note_stringbuilder_constructor_storage_value(XrTargetBuildContext *builder,
                                                          XrTargetValueStorageAnalysis *analysis,
                                                          uint32_t semantic_operation, char *error,
                                                          size_t error_size) {
@@ -3962,7 +3964,7 @@ static bool note_stringbuilder_constructor_storage_value(XrTargetPlanBuilder *bu
     return true;
 }
 
-static bool note_stringbuilder_receiver_alias_storage_value(XrTargetPlanBuilder *builder,
+static bool note_stringbuilder_receiver_alias_storage_value(XrTargetBuildContext *builder,
                                                             XrTargetValueStorageAnalysis *analysis,
                                                             uint32_t semantic_operation, bool clear,
                                                             char *error, size_t error_size) {
@@ -4025,7 +4027,7 @@ static bool note_stringbuilder_receiver_alias_storage_value(XrTargetPlanBuilder 
     return true;
 }
 
-static bool note_string_runes_storage_value(XrTargetPlanBuilder *builder,
+static bool note_string_runes_storage_value(XrTargetBuildContext *builder,
                                             XrTargetValueStorageAnalysis *analysis,
                                             uint32_t semantic_operation, char *error,
                                             size_t error_size) {
@@ -4088,7 +4090,7 @@ static bool note_string_runes_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool note_string_slice_range_storage_value(XrTargetPlanBuilder *builder,
+static bool note_string_slice_range_storage_value(XrTargetBuildContext *builder,
                                                   XrTargetValueStorageAnalysis *analysis,
                                                   uint32_t semantic_operation, char *error,
                                                   size_t error_size) {
@@ -4155,7 +4157,7 @@ static bool note_string_slice_range_storage_value(XrTargetPlanBuilder *builder,
 /* A rune conversion allocates a new immutable String. Its exact storage is the
  * owned tagged value returned by that one operation; the Rune receiver remains
  * independently owned by the scalar family and contributes no dynamic slot. */
-static bool note_rune_to_string_storage_value(XrTargetPlanBuilder *builder,
+static bool note_rune_to_string_storage_value(XrTargetBuildContext *builder,
                                               XrTargetValueStorageAnalysis *analysis,
                                               uint32_t semantic_operation, char *error,
                                               size_t error_size) {
@@ -4215,7 +4217,7 @@ static bool note_rune_to_string_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool note_stringbuilder_to_string_storage_value(XrTargetPlanBuilder *builder,
+static bool note_stringbuilder_to_string_storage_value(XrTargetBuildContext *builder,
                                                        XrTargetValueStorageAnalysis *analysis,
                                                        uint32_t semantic_operation, char *error,
                                                        size_t error_size) {
@@ -4269,7 +4271,7 @@ static bool note_stringbuilder_to_string_storage_value(XrTargetPlanBuilder *buil
     return true;
 }
 
-static bool note_json_namespace_value_storage_value(XrTargetPlanBuilder *builder,
+static bool note_json_namespace_value_storage_value(XrTargetBuildContext *builder,
                                                     XrTargetValueStorageAnalysis *analysis,
                                                     uint32_t semantic_operation, char *error,
                                                     size_t error_size) {
@@ -4330,7 +4332,7 @@ static bool note_json_namespace_value_storage_value(XrTargetPlanBuilder *builder
  * owned, so the result is a dynamic root exactly like every other allocating
  * builtin: the value binding states the dynamic layout, and the slot owns what
  * it holds until the throw path consumes it. */
-static bool note_panic_info_constructor_storage_value(XrTargetPlanBuilder *builder,
+static bool note_panic_info_constructor_storage_value(XrTargetBuildContext *builder,
                                                       XrTargetValueStorageAnalysis *analysis,
                                                       uint32_t semantic_operation, char *error,
                                                       size_t error_size) {
@@ -4384,7 +4386,7 @@ static bool note_panic_info_constructor_storage_value(XrTargetPlanBuilder *build
 }
 
 static bool note_direct_local_callee_storage_value(
-    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    XrTargetBuildContext *builder, XrTargetValueStorageAnalysis *analysis,
     const XrDirectLocalCalleeStorageAnalysis *callee_analysis, uint32_t semantic_operation,
     char *error, size_t error_size) {
     const XrSemanticOperationRecord *operation =
@@ -4426,7 +4428,7 @@ static bool note_direct_local_callee_storage_value(
 }
 
 static bool note_direct_local_go_callee_storage_value(
-    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    XrTargetBuildContext *builder, XrTargetValueStorageAnalysis *analysis,
     const XrDirectLocalGoCalleeStorageAnalysis *callee_analysis, uint32_t semantic_operation,
     char *error, size_t error_size) {
     const XrSemanticOperationRecord *operation =
@@ -4487,7 +4489,7 @@ static bool note_direct_local_go_callee_storage_value(
     return true;
 }
 
-static bool note_channel_allocation_storage_value(XrTargetPlanBuilder *builder,
+static bool note_channel_allocation_storage_value(XrTargetBuildContext *builder,
                                                   XrTargetValueStorageAnalysis *analysis,
                                                   const uint8_t *exact_channel_values,
                                                   uint32_t semantic_operation, char *error,
@@ -4556,7 +4558,7 @@ static bool note_channel_allocation_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool note_channel_receive_storage_value(XrTargetPlanBuilder *builder,
+static bool note_channel_receive_storage_value(XrTargetBuildContext *builder,
                                                XrTargetValueStorageAnalysis *analysis,
                                                const uint8_t *exact_channel_values,
                                                uint32_t semantic_operation, char *error,
@@ -4624,7 +4626,7 @@ static bool note_channel_receive_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+static bool note_scalar_value(XrTargetBuildContext *builder, XrTargetValueStorageAnalysis *analysis,
                               uint32_t semantic_value, uint32_t semantic_type,
                               uint32_t semantic_function, uint32_t semantic_operation, uint8_t role,
                               XrStableId source_identity, char *error, size_t error_size) {
@@ -4633,7 +4635,7 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetValueStorage
                                 error_size);
 }
 
-static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
+static bool collect_scalar_intents(XrTargetBuildContext *builder,
                                    XrTargetValueStorageAnalysis *analysis, char *error,
                                    size_t error_size) {
     if (!index_value_operations(builder->semantic_plan, analysis, error, error_size))
@@ -4704,7 +4706,7 @@ static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_begin_family(XrTargetPlanBuilder *builder, uint64_t family, char *error,
+static bool builder_begin_family(XrTargetBuildContext *builder, uint64_t family, char *error,
                                  size_t error_size) {
     /* A poisoned builder refuses every family after the one that poisoned it,
      * which is what keeps a partial plan from reaching a backend. A survey is
@@ -4722,7 +4724,7 @@ static bool builder_begin_family(XrTargetPlanBuilder *builder, uint64_t family, 
     return true;
 }
 
-static bool builder_add_scalars(XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+static bool builder_add_scalars(XrTargetBuildContext *builder, char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SCALAR, error, error_size))
         return false;
     XrTargetValueStorageAnalysis analysis = {0};
@@ -4741,7 +4743,7 @@ static bool builder_add_scalars(XrTargetPlanBuilder *builder, char *error, size_
     return true;
 }
 
-static bool builder_add_closure_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_closure_storage(XrTargetBuildContext *builder, char *error,
                                         size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CLOSURE_STORAGE, error, error_size))
         return false;
@@ -4775,7 +4777,7 @@ static bool builder_add_closure_storage(XrTargetPlanBuilder *builder, char *erro
 /* The namespace handle is a borrowed compiler-owned reference: it is loaded
  * from a module shared slot and never adapted to a native representation, so
  * its storage stays the borrowed tagged value in its own temporary slot. */
-static bool note_native_module_namespace_storage_value(XrTargetPlanBuilder *builder,
+static bool note_native_module_namespace_storage_value(XrTargetBuildContext *builder,
                                                        XrTargetValueStorageAnalysis *analysis,
                                                        uint32_t semantic_operation, char *error,
                                                        size_t error_size) {
@@ -4834,7 +4836,7 @@ static bool note_native_module_namespace_storage_value(XrTargetPlanBuilder *buil
     return true;
 }
 
-static bool builder_add_native_module_namespace_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_native_module_namespace_storage(XrTargetBuildContext *builder, char *error,
                                                         size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE, error,
                               error_size))
@@ -4873,7 +4875,7 @@ static bool builder_add_native_module_namespace_storage(XrTargetPlanBuilder *bui
     return true;
 }
 
-static bool note_array_allocation_storage_value(XrTargetPlanBuilder *builder,
+static bool note_array_allocation_storage_value(XrTargetBuildContext *builder,
                                                 XrTargetValueStorageAnalysis *analysis,
                                                 uint32_t semantic_operation, char *error,
                                                 size_t error_size) {
@@ -4958,7 +4960,7 @@ static bool note_array_allocation_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_add_array_allocation_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_array_allocation_storage(XrTargetBuildContext *builder, char *error,
                                                  size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE, error,
                               error_size))
@@ -4995,7 +4997,7 @@ static bool builder_add_array_allocation_storage(XrTargetPlanBuilder *builder, c
     return true;
 }
 
-static bool builder_add_array_intrinsic_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_array_intrinsic_storage(XrTargetBuildContext *builder, char *error,
                                                 size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE, error, error_size))
         return false;
@@ -5027,7 +5029,7 @@ static bool builder_add_array_intrinsic_storage(XrTargetPlanBuilder *builder, ch
     return true;
 }
 
-static bool builder_add_array_hof_result_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_array_hof_result_storage(XrTargetBuildContext *builder, char *error,
                                                  size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE, error,
                               error_size))
@@ -5084,7 +5086,7 @@ typedef enum XrTargetTaggedBoundaryCarrier {
 } XrTargetTaggedBoundaryCarrier;
 
 static bool note_direct_local_tagged_boundary_storage(
-    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
+    XrTargetBuildContext *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
     uint32_t semantic_type, uint32_t semantic_function, uint32_t semantic_operation, uint8_t role,
     uint8_t carrier, XrStableId source_identity, char *error, size_t error_size) {
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
@@ -5190,7 +5192,7 @@ static bool note_direct_local_tagged_boundary_storage(
  * instance; the call boundary must not reconstruct that producer from an
  * opcode. It consumes the existing value binding and checks only the facts it
  * owns: exact boundary type, function identity and tagged storage. */
-static bool builder_ref_caller_storage_is_exact(const XrTargetPlanBuilder *builder,
+static bool builder_ref_caller_storage_is_exact(const XrTargetBuildContext *builder,
                                                 uint32_t semantic_value, uint32_t semantic_type,
                                                 uint32_t semantic_function) {
     uint8_t array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
@@ -5296,7 +5298,7 @@ static bool builder_ref_caller_storage_is_exact(const XrTargetPlanBuilder *build
  * shared exact semantic shapes and only exact tagged Array representations.
  * It never guesses from an opcode or admits an arbitrary cross-type COPY. */
 static bool builder_close_exact_tagged_array_forwarding_storage(
-    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis, char *error,
+    XrTargetBuildContext *builder, XrTargetValueStorageAnalysis *analysis, char *error,
     size_t error_size) {
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
     bool changed;
@@ -5392,7 +5394,7 @@ static bool builder_close_exact_tagged_array_forwarding_storage(
     return true;
 }
 
-static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetPlanBuilder *builder,
+static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetBuildContext *builder,
                                                                  char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE,
                               error, error_size))
@@ -5627,7 +5629,7 @@ static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetPlanBui
  * in it is ever released. Every nullable scalar of one semantic type shares the
  * single tagged geometry, so the type carries one dynamic layout. */
 static bool note_nullable_scalar_storage_value(
-    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
+    XrTargetBuildContext *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
     uint32_t semantic_type, uint32_t semantic_function, uint32_t semantic_operation, uint8_t role,
     XrStableId source_identity, char *error, size_t error_size) {
     if (semantic_value >= analysis->total_values || semantic_type >= analysis->type_count ||
@@ -5693,7 +5695,7 @@ static bool note_nullable_scalar_storage_value(
  * fact whatever produced it, so parameters and operation results are walked in
  * the same order the scalar family walks them and are claimed on the same
  * ground. A value another family already bound is not this family's to claim. */
-static bool builder_add_nullable_scalar_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_nullable_scalar_storage(XrTargetBuildContext *builder, char *error,
                                                 size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_NULLABLE_SCALAR_STORAGE, error, error_size))
         return false;
@@ -5755,7 +5757,7 @@ static bool builder_add_nullable_scalar_storage(XrTargetPlanBuilder *builder, ch
  * can be an array literal whose defining operation has no separate allocation
  * authority, and append_layout_intent is idempotent when another exact family
  * already froze the same geometry. */
-static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_array_member_result_storage(XrTargetBuildContext *builder, char *error,
                                                     size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_MEMBER_RESULT_STORAGE, error,
                               error_size))
@@ -5851,7 +5853,7 @@ static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder
  * machine case, a managed element stored in the tagged lane. The result gets
  * its own SSA slot because it is a distinct value, but that slot is borrowed
  * and therefore neither owns nor releases the Array's allocation. */
-static bool builder_add_array_index_result_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_array_index_result_storage(XrTargetBuildContext *builder, char *error,
                                                    size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_ARRAY_INDEX_RESULT_STORAGE, error,
                               error_size))
@@ -5956,7 +5958,7 @@ static bool builder_add_array_index_result_storage(XrTargetPlanBuilder *builder,
  * family adds no root or cleanup row. The representation is the outer tagged
  * value because that is what Xi selects for an erased reference; freezing a
  * bare object pointer here would state a machine fact the IR does not carry. */
-static bool note_source_class_object_storage_value(XrTargetPlanBuilder *builder,
+static bool note_source_class_object_storage_value(XrTargetBuildContext *builder,
                                                    XrTargetValueStorageAnalysis *analysis,
                                                    uint32_t semantic_operation, char *error,
                                                    size_t error_size) {
@@ -6019,7 +6021,7 @@ static bool note_source_class_object_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_add_source_class_object_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_source_class_object_storage(XrTargetBuildContext *builder, char *error,
                                                     size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_OBJECT_STORAGE, error,
                               error_size))
@@ -6091,7 +6093,7 @@ static bool builder_add_source_class_object_storage(XrTargetPlanBuilder *builder
  * of the family, so a read can never be frozen as an owning root. Semantic
  * ownership and the existing AOT class lifetime path still own the allocation,
  * its roots and its cleanup, so this family adds no root or cleanup row. */
-static bool note_source_class_instance_storage_value(XrTargetPlanBuilder *builder,
+static bool note_source_class_instance_storage_value(XrTargetBuildContext *builder,
                                                      XrTargetValueStorageAnalysis *analysis,
                                                      uint32_t semantic_operation, char *error,
                                                      size_t error_size) {
@@ -6165,7 +6167,7 @@ static bool note_source_class_instance_storage_value(XrTargetPlanBuilder *builde
  * this is mechanical plan authority and never walks the caller's import/store
  * graph again. */
 static bool
-imported_source_class_instance_storage_is_exact(const XrTargetPlanBuilder *builder,
+imported_source_class_instance_storage_is_exact(const XrTargetBuildContext *builder,
                                                 uint32_t semantic_operation,
                                                 const XrSemanticOperationRecord *operation) {
     const XrSemanticPlan *plan = builder ? builder->semantic_plan : NULL;
@@ -6214,7 +6216,7 @@ imported_source_class_instance_storage_is_exact(const XrTargetPlanBuilder *build
  * class identity to match the dependency's exact declaration before assigning
  * tagged owned storage to the result. */
 static bool
-source_export_owned_class_instance_storage_is_exact(const XrTargetPlanBuilder *builder,
+source_export_owned_class_instance_storage_is_exact(const XrTargetBuildContext *builder,
                                                     uint32_t semantic_operation,
                                                     const XrSemanticOperationRecord *operation) {
     const XrSemanticPlan *caller = builder ? builder->semantic_plan : NULL;
@@ -6251,7 +6253,7 @@ source_export_owned_class_instance_storage_is_exact(const XrTargetPlanBuilder *b
            xr_stable_id_equal(target->callee_function, callee->id);
 }
 
-static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_source_class_instance_storage(XrTargetBuildContext *builder, char *error,
                                                       size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE, error,
                               error_size))
@@ -6305,7 +6307,7 @@ static bool builder_add_source_class_instance_storage(XrTargetPlanBuilder *build
  * the value is bound on entry rather than computed. The allocation, its roots
  * and its cleanup stay with semantic ownership and the existing AOT class
  * lifetime path, so this family adds no root or cleanup row. */
-static bool note_tagged_parameter_storage_value(XrTargetPlanBuilder *builder,
+static bool note_tagged_parameter_storage_value(XrTargetBuildContext *builder,
                                                 XrTargetValueStorageAnalysis *analysis,
                                                 uint32_t parameter_index, bool exact_parameter,
                                                 char *error, size_t error_size) {
@@ -6386,7 +6388,7 @@ static bool note_tagged_parameter_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool note_source_class_parameter_storage_value(XrTargetPlanBuilder *builder,
+static bool note_source_class_parameter_storage_value(XrTargetBuildContext *builder,
                                                       XrTargetValueStorageAnalysis *analysis,
                                                       uint32_t parameter_index, char *error,
                                                       size_t error_size) {
@@ -6400,7 +6402,7 @@ static bool note_source_class_parameter_storage_value(XrTargetPlanBuilder *build
 /* The three parameter shapes are collected by three families rather than one so
  * that a plan states which of them it actually contains; they share one
  * collector because the storage row they bind is the same. */
-static bool builder_add_source_class_parameter_family(XrTargetPlanBuilder *builder, uint64_t family,
+static bool builder_add_source_class_parameter_family(XrTargetBuildContext *builder, uint64_t family,
                                                       uint32_t (*judge)(const XrSemanticPlan *,
                                                                         uint32_t),
                                                       char *error, size_t error_size) {
@@ -6438,28 +6440,28 @@ static bool builder_add_source_class_parameter_family(XrTargetPlanBuilder *build
     return true;
 }
 
-static bool builder_add_source_class_receiver_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_source_class_receiver_storage(XrTargetBuildContext *builder, char *error,
                                                       size_t error_size) {
     return builder_add_source_class_parameter_family(
         builder, XR_TARGET_FAMILY_SOURCE_CLASS_RECEIVER_STORAGE,
         xr_semantic_class_constructor_receiver_source_class, error, error_size);
 }
 
-static bool builder_add_source_class_method_receiver_storage(XrTargetPlanBuilder *builder,
+static bool builder_add_source_class_method_receiver_storage(XrTargetBuildContext *builder,
                                                              char *error, size_t error_size) {
     return builder_add_source_class_parameter_family(
         builder, XR_TARGET_FAMILY_SOURCE_CLASS_METHOD_RECEIVER_STORAGE,
         xr_semantic_class_method_receiver_source_class, error, error_size);
 }
 
-static bool builder_add_source_class_argument_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_source_class_argument_storage(XrTargetBuildContext *builder, char *error,
                                                       size_t error_size) {
     return builder_add_source_class_parameter_family(
         builder, XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE,
         xr_semantic_class_argument_source_class, error, error_size);
 }
 
-static bool builder_add_native_class_argument_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_native_class_argument_storage(XrTargetBuildContext *builder, char *error,
                                                       size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_NATIVE_CLASS_ARGUMENT_STORAGE, error,
                               error_size))
@@ -6491,7 +6493,7 @@ static bool builder_add_native_class_argument_storage(XrTargetPlanBuilder *build
  * storage fact, exactly as it is for a String literal and for the owned String
  * a direct-local call returns. The join consumes every operand, so this row
  * states no borrow of its own. */
-static bool builder_add_string_concat_result_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_string_concat_result_storage(XrTargetBuildContext *builder, char *error,
                                                      size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_CONCAT_RESULT_STORAGE, error,
                               error_size))
@@ -6587,7 +6589,7 @@ static bool builder_add_string_concat_result_storage(XrTargetPlanBuilder *builde
  * operation and the other has explicit call-dispatch authority. Their inputs
  * remain owned by the families that froze those representations, so this row
  * states no borrow of its own. */
-static bool builder_add_string_convert_result_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_string_convert_result_storage(XrTargetBuildContext *builder, char *error,
                                                       size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE, error,
                               error_size))
@@ -6679,7 +6681,7 @@ static bool builder_add_string_convert_result_storage(XrTargetPlanBuilder *build
     return true;
 }
 
-static bool builder_add_panic_catch_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_panic_catch_storage(XrTargetBuildContext *builder, char *error,
                                             size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_PANIC_CATCH_STORAGE, error, error_size))
         return false;
@@ -6762,7 +6764,7 @@ static bool builder_add_panic_catch_storage(XrTargetPlanBuilder *builder, char *
     return true;
 }
 
-static bool builder_add_string_literal_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_string_literal_storage(XrTargetBuildContext *builder, char *error,
                                                size_t error_size) {
     if (!builder_begin_family(builder,
                               XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |
@@ -6794,7 +6796,7 @@ static bool builder_add_string_literal_storage(XrTargetPlanBuilder *builder, cha
     return true;
 }
 
-static bool builder_add_string_byte_slice_view_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_string_byte_slice_view_storage(XrTargetBuildContext *builder, char *error,
                                                        size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE, error,
                               error_size))
@@ -6832,7 +6834,7 @@ static bool builder_add_string_byte_slice_view_storage(XrTargetPlanBuilder *buil
  * parameter carries and never a tagged carrier: there is no allocation behind
  * it to hold. The container operand keeps whatever carrier its own family bound,
  * which is what leaves this row adapter-free. */
-static bool note_range_slice_view_storage_value(XrTargetPlanBuilder *builder,
+static bool note_range_slice_view_storage_value(XrTargetBuildContext *builder,
                                                 XrTargetValueStorageAnalysis *analysis,
                                                 uint32_t semantic_operation, char *error,
                                                 size_t error_size) {
@@ -6889,7 +6891,7 @@ static bool note_range_slice_view_storage_value(XrTargetPlanBuilder *builder,
            append_value_intent(builder, &value, error, error_size);
 }
 
-static bool builder_add_range_slice_view_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_range_slice_view_storage(XrTargetBuildContext *builder, char *error,
                                                  size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_RANGE_SLICE_VIEW_STORAGE, error,
                               error_size))
@@ -6914,7 +6916,7 @@ static bool builder_add_range_slice_view_storage(XrTargetPlanBuilder *builder, c
     return true;
 }
 
-static bool builder_add_stringbuilder_append_rune_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_stringbuilder_append_rune_storage(XrTargetBuildContext *builder, char *error,
                                                           size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE, error,
                               error_size))
@@ -6946,7 +6948,7 @@ static bool builder_add_stringbuilder_append_rune_storage(XrTargetPlanBuilder *b
     return true;
 }
 
-static bool builder_add_stringbuilder_clear_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_stringbuilder_clear_storage(XrTargetBuildContext *builder, char *error,
                                                     size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE, error,
                               error_size))
@@ -6978,7 +6980,7 @@ static bool builder_add_stringbuilder_clear_storage(XrTargetPlanBuilder *builder
     return true;
 }
 
-static bool builder_add_string_runes_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_string_runes_storage(XrTargetBuildContext *builder, char *error,
                                              size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE, error,
                               error_size))
@@ -7010,7 +7012,7 @@ static bool builder_add_string_runes_storage(XrTargetPlanBuilder *builder, char 
     return true;
 }
 
-static bool builder_add_string_slice_range_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_string_slice_range_storage(XrTargetBuildContext *builder, char *error,
                                                    size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE, error,
                               error_size))
@@ -7042,7 +7044,7 @@ static bool builder_add_string_slice_range_storage(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_add_rune_to_string_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_rune_to_string_storage(XrTargetBuildContext *builder, char *error,
                                                size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE, error,
                               error_size))
@@ -7074,7 +7076,7 @@ static bool builder_add_rune_to_string_storage(XrTargetPlanBuilder *builder, cha
     return true;
 }
 
-static bool builder_add_stringbuilder_to_string_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_stringbuilder_to_string_storage(XrTargetBuildContext *builder, char *error,
                                                         size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE, error,
                               error_size))
@@ -7105,7 +7107,7 @@ static bool builder_add_stringbuilder_to_string_storage(XrTargetPlanBuilder *bui
     return true;
 }
 
-static bool builder_add_json_namespace_value_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_json_namespace_value_storage(XrTargetBuildContext *builder, char *error,
                                                      size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE, error,
                               error_size))
@@ -7136,7 +7138,7 @@ static bool builder_add_json_namespace_value_storage(XrTargetPlanBuilder *builde
     return true;
 }
 
-static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
+static bool note_dynamic_value_storage_value(XrTargetBuildContext *builder,
                                              XrTargetValueStorageAnalysis *analysis,
                                              uint32_t semantic_operation, char *error,
                                              size_t error_size) {
@@ -7217,7 +7219,7 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
  * combined graph to a fixed point.  Neither ordering the families nor making
  * each one a single operation-order sweep can cover both COPY -> MOVE and
  * MOVE -> COPY chains. */
-static bool builder_add_owner_transfer_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_owner_transfer_storage(XrTargetBuildContext *builder, char *error,
                                                size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_OWNER_TRANSFER_STORAGE, error, error_size))
         return false;
@@ -7306,7 +7308,7 @@ static bool builder_add_owner_transfer_storage(XrTargetPlanBuilder *builder, cha
     return true;
 }
 
-static bool builder_add_identity_copy_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_identity_copy_storage(XrTargetBuildContext *builder, char *error,
                                               size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE, error, error_size))
         return false;
@@ -7387,7 +7389,7 @@ static bool builder_add_identity_copy_storage(XrTargetPlanBuilder *builder, char
     return true;
 }
 
-static bool builder_add_container_copy_result_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_container_copy_result_storage(XrTargetBuildContext *builder, char *error,
                                                       size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE, error,
                               error_size))
@@ -7424,7 +7426,7 @@ static bool builder_add_container_copy_result_storage(XrTargetPlanBuilder *build
  * describes the subject, not the address -- see the shape header. The layout it
  * records is the pointer's own, not the subject's: what the address points at
  * is a fact the emitter reads from the source value, which keeps its own row. */
-static bool note_local_address_storage_value(XrTargetPlanBuilder *builder,
+static bool note_local_address_storage_value(XrTargetBuildContext *builder,
                                              XrTargetValueStorageAnalysis *analysis,
                                              uint32_t semantic_operation, char *error,
                                              size_t error_size) {
@@ -7484,7 +7486,7 @@ static bool note_local_address_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_add_local_address_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_local_address_storage(XrTargetBuildContext *builder, char *error,
                                               size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE, error, error_size))
         return false;
@@ -7514,7 +7516,7 @@ static bool builder_add_local_address_storage(XrTargetPlanBuilder *builder, char
     return true;
 }
 
-static bool builder_add_dynamic_value_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_dynamic_value_storage(XrTargetBuildContext *builder, char *error,
                                               size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE, error, error_size))
         return false;
@@ -7555,7 +7557,7 @@ static bool builder_add_dynamic_value_storage(XrTargetPlanBuilder *builder, char
     return true;
 }
 
-static bool builder_add_panic_info_constructor_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_panic_info_constructor_storage(XrTargetBuildContext *builder, char *error,
                                                        size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_PANIC_INFO_CONSTRUCTOR_STORAGE, error,
                               error_size))
@@ -7586,7 +7588,7 @@ static bool builder_add_panic_info_constructor_storage(XrTargetPlanBuilder *buil
     return true;
 }
 
-static bool builder_add_stringbuilder_append_string_storage(XrTargetPlanBuilder *builder,
+static bool builder_add_stringbuilder_append_string_storage(XrTargetBuildContext *builder,
                                                             char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE, error,
                               error_size))
@@ -7670,7 +7672,7 @@ typedef enum XrTargetStringBoundaryCarrier {
  * stay with Semantic ownership and the existing AOT lifetime path, exactly as
  * the String literal and StringBuilder result rows already do. */
 static bool note_direct_local_string_boundary_storage(
-    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
+    XrTargetBuildContext *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
     uint32_t semantic_type, uint32_t semantic_function, uint32_t semantic_operation, uint8_t role,
     uint8_t carrier, XrStableId source_identity, char *error, size_t error_size) {
     const XrSemanticPlan *plan = builder->semantic_plan;
@@ -7730,7 +7732,7 @@ static bool note_direct_local_string_boundary_storage(
     return true;
 }
 
-static bool builder_add_direct_local_string_boundary_storage(XrTargetPlanBuilder *builder,
+static bool builder_add_direct_local_string_boundary_storage(XrTargetBuildContext *builder,
                                                              char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE, error,
                               error_size))
@@ -7847,7 +7849,7 @@ static bool builder_add_direct_local_string_boundary_storage(XrTargetPlanBuilder
  * dynamic carrier.  The semantic judgement owns which result types belong to
  * this closed carrier roster; this target half owns only the profile geometry,
  * slot identity, and root/ownership facts. */
-static bool note_managed_field_result_storage(XrTargetPlanBuilder *builder,
+static bool note_managed_field_result_storage(XrTargetBuildContext *builder,
                                               XrTargetValueStorageAnalysis *analysis,
                                               const XrSemanticOperationRecord *operation,
                                               uint32_t operation_index, char *error,
@@ -7905,7 +7907,7 @@ static bool note_managed_field_result_storage(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_add_source_class_field_result_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_source_class_field_result_storage(XrTargetBuildContext *builder, char *error,
                                                           size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_CLASS_FIELD_RESULT_STORAGE, error,
                               error_size))
@@ -7952,7 +7954,7 @@ static bool builder_add_source_class_field_result_storage(XrTargetPlanBuilder *b
 /* Bind managed values read out of exact source structural shapes.  The field
  * ordinal and result type are frozen in SemanticPlan; the containing aggregate
  * owns the field, so OBJECT_GET_F hands out a borrowed tagged carrier. */
-static bool builder_add_source_structural_field_result_storage(XrTargetPlanBuilder *builder,
+static bool builder_add_source_structural_field_result_storage(XrTargetBuildContext *builder,
                                                                char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_STRUCTURAL_FIELD_RESULT_STORAGE,
                               error, error_size))
@@ -8009,7 +8011,7 @@ static bool builder_add_source_structural_field_result_storage(XrTargetPlanBuild
  * A result the aggregate family declined -- a field that is not itself exact,
  * a recursive layout -- has no binding, and that is refused here rather than
  * left for a backend to discover. */
-static bool builder_add_direct_local_aggregate_result_storage(XrTargetPlanBuilder *builder,
+static bool builder_add_direct_local_aggregate_result_storage(XrTargetBuildContext *builder,
                                                               char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_AGGREGATE_RESULT_STORAGE,
                               error, error_size))
@@ -8087,14 +8089,14 @@ static bool builder_add_direct_local_aggregate_result_storage(XrTargetPlanBuilde
     return true;
 }
 
-static int find_layout_intent(const XrTargetPlanBuilder *builder, uint32_t semantic_type) {
+static int find_layout_intent(const XrTargetBuildContext *builder, uint32_t semantic_type) {
     for (uint32_t i = 0; i < builder->layout_intent_count; i++)
         if (builder->layout_intents[i].semantic_type == semantic_type)
             return (int) i;
     return -1;
 }
 
-static bool note_adt_enum_storage_value(XrTargetPlanBuilder *builder,
+static bool note_adt_enum_storage_value(XrTargetBuildContext *builder,
                                         XrTargetValueStorageAnalysis *analysis,
                                         uint32_t semantic_value, uint32_t semantic_type,
                                         uint32_t semantic_function, uint32_t semantic_operation,
@@ -8161,7 +8163,7 @@ static bool note_adt_enum_storage_value(XrTargetPlanBuilder *builder,
 /* Bind only the exact ADT enum values needed at the constructor and
  * direct-local ABI boundary. Other enum-producing operations remain outside
  * the family until their own immutable producer contract exists. */
-static bool builder_add_adt_enum_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_adt_enum_storage(XrTargetBuildContext *builder, char *error,
                                          size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_ADT_ENUM_STORAGE, error, error_size))
         return false;
@@ -8240,7 +8242,7 @@ static bool builder_add_adt_enum_storage(XrTargetPlanBuilder *builder, char *err
     return true;
 }
 
-static bool builder_add_direct_local_callee_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_direct_local_callee_storage(XrTargetBuildContext *builder, char *error,
                                                     size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE, error,
                               error_size))
@@ -8310,7 +8312,7 @@ static bool builder_add_direct_local_callee_storage(XrTargetPlanBuilder *builder
     return true;
 }
 
-static bool builder_add_direct_local_go_callee_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_direct_local_go_callee_storage(XrTargetBuildContext *builder, char *error,
                                                        size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE, error,
                               error_size))
@@ -8366,7 +8368,7 @@ static bool builder_add_direct_local_go_callee_storage(XrTargetPlanBuilder *buil
  * the runtime executor. The target plan binds only its tagged carrier and its
  * temporary slot; it must never manufacture an ARC cleanup for the executor's
  * task object. */
-static bool builder_add_direct_local_go_task_result_storage(XrTargetPlanBuilder *builder,
+static bool builder_add_direct_local_go_task_result_storage(XrTargetBuildContext *builder,
                                                             char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE, error,
                               error_size))
@@ -8477,7 +8479,7 @@ static bool builder_add_direct_local_go_task_result_storage(XrTargetPlanBuilder 
     return true;
 }
 
-static bool builder_add_channel_allocation_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_channel_allocation_storage(XrTargetBuildContext *builder, char *error,
                                                    size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE, error,
                               error_size))
@@ -8524,7 +8526,7 @@ static bool builder_add_channel_allocation_storage(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_add_channel_receive_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_channel_receive_storage(XrTargetBuildContext *builder, char *error,
                                                 size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE, error, error_size))
         return false;
@@ -8570,7 +8572,7 @@ static bool builder_add_channel_receive_storage(XrTargetPlanBuilder *builder, ch
     return true;
 }
 
-static bool note_source_namespace_storage_value(XrTargetPlanBuilder *builder,
+static bool note_source_namespace_storage_value(XrTargetBuildContext *builder,
                                                 XrTargetValueStorageAnalysis *values,
                                                 const XrSourceNamespaceStorageAnalysis *namespaces,
                                                 uint32_t semantic_operation, char *error,
@@ -9146,7 +9148,7 @@ invalid:
                 "source namespace storage authority is not exact");
 }
 
-static bool builder_add_source_namespace_storage(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_source_namespace_storage(XrTargetBuildContext *builder, char *error,
                                                  size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE, error, error_size))
         return false;
@@ -9252,7 +9254,7 @@ static int aggregate_layout_eligibility(const XrSemanticPlan *plan, uint32_t sem
     return states[semantic_type] = 1;
 }
 
-static bool collect_layout_dependency(XrTargetPlanBuilder *builder, uint32_t semantic_type,
+static bool collect_layout_dependency(XrTargetBuildContext *builder, uint32_t semantic_type,
                                       uint8_t *states, char *error, size_t error_size) {
     if (semantic_type >= xr_semantic_plan_type_count(builder->semantic_plan))
         return fail(error, error_size, "XR_TARGET_1002",
@@ -9350,7 +9352,7 @@ static bool collect_layout_dependency(XrTargetPlanBuilder *builder, uint32_t sem
     return true;
 }
 
-static bool note_aggregate_value(XrTargetPlanBuilder *builder,
+static bool note_aggregate_value(XrTargetBuildContext *builder,
                                  XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
                                  uint32_t semantic_type, uint32_t semantic_function,
                                  uint32_t semantic_operation, uint8_t role,
@@ -9460,7 +9462,7 @@ static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferr
     return true;
 }
 
-static bool collect_aggregate_intents(XrTargetPlanBuilder *builder,
+static bool collect_aggregate_intents(XrTargetBuildContext *builder,
                                       XrTargetValueStorageAnalysis *analysis, uint8_t *states,
                                       int8_t *eligibility, const uint8_t *deferred_functions,
                                       char *error, size_t error_size) {
@@ -9528,7 +9530,7 @@ static bool collect_aggregate_intents(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool builder_add_aggregates(XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+static bool builder_add_aggregates(XrTargetBuildContext *builder, char *error, size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_AGGREGATE, error, error_size))
         return false;
     XrTargetValueStorageAnalysis analysis = {0};
@@ -9645,7 +9647,7 @@ static bool semantic_operation_is_exact_channel_close(const XrSemanticPlan *plan
     return true;
 }
 
-static bool collect_channel_close_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_channel_close_call_intent(XrTargetBuildContext *builder,
                                               uint32_t operation_index,
                                               const XrSemanticOperationRecord *operation,
                                               char *error, size_t error_size) {
@@ -9689,7 +9691,7 @@ static bool collect_channel_close_call_intent(XrTargetPlanBuilder *builder,
  * constructor parameters after its receiver, which the same shared judgement
  * has already matched one for one; the receiver itself is never an argument,
  * because the construction supplies it rather than passing it. */
-static bool collect_source_class_constructor_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_source_class_constructor_call_intent(XrTargetBuildContext *builder,
                                                          uint32_t target_index,
                                                          const XrSemanticCallTargetRecord *target,
                                                          char *error, size_t error_size) {
@@ -9799,7 +9801,7 @@ static bool collect_source_class_constructor_call_intent(XrTargetPlanBuilder *bu
 }
 
 static bool collect_stringbuilder_constructor_call_intent(
-    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    XrTargetBuildContext *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
     if (!semantic_stringbuilder_constructor_is_exact(builder->semantic_plan, operation))
         return fail(error, error_size, "XR_TARGET_1003",
@@ -9833,7 +9835,7 @@ static bool collect_stringbuilder_constructor_call_intent(
 /* The container spelling differs from the scalar one in exactly one respect the
  * row has to carry: the result is a fresh allocation the caller owns, so the
  * call returns ownership rather than nothing. */
-static bool collect_container_copy_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_container_copy_call_intent(XrTargetBuildContext *builder,
                                                uint32_t operation_index,
                                                const XrSemanticOperationRecord *operation,
                                                char *error, size_t error_size) {
@@ -9868,7 +9870,7 @@ static bool collect_container_copy_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_scalar_copy_call_intent(XrTargetPlanBuilder *builder, uint32_t operation_index,
+static bool collect_scalar_copy_call_intent(XrTargetBuildContext *builder, uint32_t operation_index,
                                             const XrSemanticOperationRecord *operation, char *error,
                                             size_t error_size) {
     uint32_t argument = XR_SEMANTIC_INDEX_NONE;
@@ -9898,7 +9900,7 @@ static bool collect_scalar_copy_call_intent(XrTargetPlanBuilder *builder, uint32
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_array_intrinsic_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_array_intrinsic_call_intent(XrTargetBuildContext *builder,
                                                 uint32_t operation_index,
                                                 const XrSemanticOperationRecord *operation,
                                                 char *error, size_t error_size) {
@@ -9961,7 +9963,7 @@ static bool collect_array_intrinsic_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_array_fill_scalar_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_array_fill_scalar_call_intent(XrTargetBuildContext *builder,
                                                   uint32_t operation_index,
                                                   const XrSemanticOperationRecord *operation,
                                                   char *error, size_t error_size) {
@@ -10028,7 +10030,7 @@ static bool collect_array_fill_scalar_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_array_hof_call_intent(XrTargetPlanBuilder *builder, uint32_t operation_index,
+static bool collect_array_hof_call_intent(XrTargetBuildContext *builder, uint32_t operation_index,
                                           const XrSemanticOperationRecord *operation, char *error,
                                           size_t error_size) {
     uint8_t kind = XR_TARGET_ARRAY_HOF_NONE;
@@ -10102,7 +10104,7 @@ static bool collect_array_hof_call_intent(XrTargetPlanBuilder *builder, uint32_t
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_string_byte_slice_view_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_string_byte_slice_view_call_intent(XrTargetBuildContext *builder,
                                                        uint32_t operation_index,
                                                        const XrSemanticOperationRecord *operation,
                                                        char *error, size_t error_size) {
@@ -10134,7 +10136,7 @@ static bool collect_string_byte_slice_view_call_intent(XrTargetPlanBuilder *buil
 }
 
 static bool collect_stringbuilder_append_rune_call_intent(
-    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    XrTargetBuildContext *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
     uint32_t argument = XR_SEMANTIC_INDEX_NONE;
@@ -10169,7 +10171,7 @@ static bool collect_stringbuilder_append_rune_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_string_runes_call_intent(XrTargetPlanBuilder *builder, uint32_t operation_index,
+static bool collect_string_runes_call_intent(XrTargetBuildContext *builder, uint32_t operation_index,
                                              const XrSemanticOperationRecord *operation,
                                              char *error, size_t error_size) {
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
@@ -10200,7 +10202,7 @@ static bool collect_string_runes_call_intent(XrTargetPlanBuilder *builder, uint3
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_builtin_runtime_method_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_builtin_runtime_method_call_intent(XrTargetBuildContext *builder,
                                                        uint32_t operation_index,
                                                        const XrSemanticOperationRecord *operation,
                                                        char *error, size_t error_size) {
@@ -10241,7 +10243,7 @@ static bool collect_builtin_runtime_method_call_intent(XrTargetPlanBuilder *buil
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_iterator_rune_has_next_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_iterator_rune_has_next_call_intent(XrTargetBuildContext *builder,
                                                        uint32_t operation_index,
                                                        const XrSemanticOperationRecord *operation,
                                                        char *error, size_t error_size) {
@@ -10274,7 +10276,7 @@ static bool collect_iterator_rune_has_next_call_intent(XrTargetPlanBuilder *buil
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_iterator_rune_next_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_iterator_rune_next_call_intent(XrTargetBuildContext *builder,
                                                    uint32_t operation_index,
                                                    const XrSemanticOperationRecord *operation,
                                                    char *error, size_t error_size) {
@@ -10307,7 +10309,7 @@ static bool collect_iterator_rune_next_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_map_entry_iterator_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_map_entry_iterator_call_intent(XrTargetBuildContext *builder,
                                                    uint32_t operation_index,
                                                    const XrSemanticOperationRecord *operation,
                                                    char *error, size_t error_size) {
@@ -10364,7 +10366,7 @@ static bool collect_map_entry_iterator_call_intent(XrTargetPlanBuilder *builder,
 /* Same shape as the next call above, plus the index it projects by. The
  * argument is carried as an ordinary call argument so the storage families
  * decide how it is held, exactly as they would for any other scalar operand. */
-static bool collect_iterator_rune_nth_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_iterator_rune_nth_call_intent(XrTargetBuildContext *builder,
                                                   uint32_t operation_index,
                                                   const XrSemanticOperationRecord *operation,
                                                   char *error, size_t error_size) {
@@ -10427,7 +10429,7 @@ static bool collect_iterator_rune_nth_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_rune_to_uint32_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_rune_to_uint32_call_intent(XrTargetBuildContext *builder,
                                                uint32_t operation_index,
                                                const XrSemanticOperationRecord *operation,
                                                char *error, size_t error_size) {
@@ -10461,7 +10463,7 @@ static bool collect_rune_to_uint32_call_intent(XrTargetPlanBuilder *builder,
 
 /* The one-rune string. Same shape as the toUInt32 intent beside it; only the
  * result type and the convention differ. */
-static bool collect_rune_to_string_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_rune_to_string_call_intent(XrTargetBuildContext *builder,
                                                uint32_t operation_index,
                                                const XrSemanticOperationRecord *operation,
                                                char *error, size_t error_size) {
@@ -10493,7 +10495,7 @@ static bool collect_rune_to_string_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_rune_is_whitespace_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_rune_is_whitespace_call_intent(XrTargetBuildContext *builder,
                                                    uint32_t operation_index,
                                                    const XrSemanticOperationRecord *operation,
                                                    char *error, size_t error_size) {
@@ -10526,7 +10528,7 @@ static bool collect_rune_is_whitespace_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_string_slice_range_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_string_slice_range_call_intent(XrTargetBuildContext *builder,
                                                    uint32_t operation_index,
                                                    const XrSemanticOperationRecord *operation,
                                                    char *error, size_t error_size) {
@@ -10565,7 +10567,7 @@ static bool collect_string_slice_range_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_stringbuilder_to_string_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_stringbuilder_to_string_call_intent(XrTargetBuildContext *builder,
                                                         uint32_t operation_index,
                                                         const XrSemanticOperationRecord *operation,
                                                         char *error, size_t error_size) {
@@ -10599,7 +10601,7 @@ static bool collect_stringbuilder_to_string_call_intent(XrTargetPlanBuilder *bui
 }
 
 static bool collect_stringbuilder_append_string_call_intent(
-    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    XrTargetBuildContext *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE, argument = XR_SEMANTIC_INDEX_NONE;
     if (!semantic_stringbuilder_append_string_is_exact(builder->semantic_plan, operation, &receiver,
@@ -10631,7 +10633,7 @@ static bool collect_stringbuilder_append_string_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_stringbuilder_clear_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_stringbuilder_clear_call_intent(XrTargetBuildContext *builder,
                                                     uint32_t operation_index,
                                                     const XrSemanticOperationRecord *operation,
                                                     char *error, size_t error_size) {
@@ -10664,7 +10666,7 @@ static bool collect_stringbuilder_clear_call_intent(XrTargetPlanBuilder *builder
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_json_namespace_value_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_json_namespace_value_call_intent(XrTargetBuildContext *builder,
                                                      uint32_t operation_index,
                                                      const XrSemanticOperationRecord *operation,
                                                      char *error, size_t error_size) {
@@ -10700,7 +10702,7 @@ static bool collect_json_namespace_value_call_intent(XrTargetPlanBuilder *builde
  * the exact decoder.  Its Slice argument is read directly by the existing
  * method emitter, so this row carries dispatch/result authority and does not
  * invent a callee-parameter boundary that no source function declares. */
-static bool collect_string_utf8_static_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_string_utf8_static_call_intent(XrTargetBuildContext *builder,
                                                    uint32_t operation_index,
                                                    const XrSemanticOperationRecord *operation,
                                                    char *error, size_t error_size) {
@@ -10734,7 +10736,7 @@ static bool collect_string_utf8_static_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_panic_info_constructor_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_panic_info_constructor_call_intent(XrTargetBuildContext *builder,
                                                        uint32_t operation_index,
                                                        const XrSemanticOperationRecord *operation,
                                                        char *error, size_t error_size) {
@@ -10776,7 +10778,7 @@ static bool collect_panic_info_constructor_call_intent(XrTargetPlanBuilder *buil
  * already states, so the call row binds no scalar there and every use of that
  * result stays without authority.  Every other member here returns a fresh
  * scalar the row states outright. */
-static bool collect_array_member_scalar_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_array_member_scalar_call_intent(XrTargetBuildContext *builder,
                                                     uint32_t operation_index,
                                                     const XrSemanticOperationRecord *operation,
                                                     char *error, size_t error_size) {
@@ -10871,7 +10873,7 @@ static bool collect_array_member_scalar_call_intent(XrTargetPlanBuilder *builder
  * handle rather than a source argument, so the row carries no argument intent
  * and folds the proven arity into its identity. The result claims no ownership
  * because a plain scalar leaves nothing to release. */
-static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_native_module_scalar_call_intent(XrTargetBuildContext *builder,
                                                      uint32_t operation_index,
                                                      const XrSemanticOperationRecord *operation,
                                                      char *error, size_t error_size) {
@@ -10921,7 +10923,7 @@ static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builde
 }
 
 static bool collect_native_target_leaf_scalar_call_intent(
-    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    XrTargetBuildContext *builder, uint32_t operation_index,
     const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
     const XrStdlibDefEntry *entry = NULL;
     XrStableId native_identity = {{0}};
@@ -10962,7 +10964,7 @@ static bool collect_native_target_leaf_scalar_call_intent(
  * receiver and payloads are frozen semantic inputs to the materialization
  * recipe. The call row owns the exact constructor dispatch and the fresh
  * tagged result, while CEmissionPlan projects the ordered payload recipe. */
-static bool collect_adt_enum_constructor_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_adt_enum_constructor_call_intent(XrTargetBuildContext *builder,
                                                      uint32_t operation_index,
                                                      const XrSemanticOperationRecord *operation,
                                                      char *error, size_t error_size) {
@@ -10995,7 +10997,7 @@ static bool collect_adt_enum_constructor_call_intent(XrTargetPlanBuilder *builde
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint32_t target_index,
+static bool collect_direct_local_call_intent(XrTargetBuildContext *builder, uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
                                              bool suspends, bool callee_suspendable, char *error,
                                              size_t error_size) {
@@ -11476,7 +11478,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint32_t target_index,
+static bool collect_source_export_call_intent(XrTargetBuildContext *builder, uint32_t target_index,
                                               const XrSemanticCallTargetRecord *target,
                                               bool suspends, char *error, size_t error_size) {
     const XrSemanticPlan *plan = builder->semantic_plan;
@@ -11636,7 +11638,7 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
  * the target-neutral suspension ABI here: no source dependency, callee index,
  * or backend symbol is invented. Scalar/unit results are the first closed
  * storage domain; reference-returning yieldables remain fail-closed. */
-static bool collect_native_namespace_yieldable_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_native_namespace_yieldable_call_intent(XrTargetBuildContext *builder,
                                                            uint32_t target_index,
                                                            const XrSemanticCallTargetRecord *target,
                                                            bool suspends, char *error,
@@ -11684,7 +11686,7 @@ static bool collect_native_namespace_yieldable_call_intent(XrTargetPlanBuilder *
  * scalar/unit result domain -- is what the namespace form already proves. An
  * import spelling is not a capability, so refusing this shape while admitting
  * the other one refused the same program written a second way. */
-static bool collect_native_yieldable_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_native_yieldable_call_intent(XrTargetBuildContext *builder,
                                                  uint32_t target_index,
                                                  const XrSemanticCallTargetRecord *target,
                                                  bool suspends, char *error, size_t error_size) {
@@ -11723,7 +11725,7 @@ static bool collect_native_yieldable_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool collect_native_direct_call_intent(XrTargetPlanBuilder *builder, uint32_t target_index,
+static bool collect_native_direct_call_intent(XrTargetBuildContext *builder, uint32_t target_index,
                                               const XrSemanticCallTargetRecord *target,
                                               bool suspends, char *error, size_t error_size) {
     const XrSemanticPlan *plan = builder ? builder->semantic_plan : NULL;
@@ -11808,7 +11810,7 @@ static bool collect_native_direct_call_intent(XrTargetPlanBuilder *builder, uint
  * fact rebuilt here. The receiver is the dispatch target, not an argument, and
  * the arguments the roster allows after it are plain scalars the generic
  * argument walk already binds. */
-static bool collect_builtin_instance_yieldable_call_intent(XrTargetPlanBuilder *builder,
+static bool collect_builtin_instance_yieldable_call_intent(XrTargetBuildContext *builder,
                                                            uint32_t target_index,
                                                            const XrSemanticCallTargetRecord *target,
                                                            bool suspends, char *error,
@@ -11846,7 +11848,7 @@ static bool collect_builtin_instance_yieldable_call_intent(XrTargetPlanBuilder *
     return append_call_intent(builder, &call, error, error_size);
 }
 
-static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_calls_and_adapters(XrTargetBuildContext *builder, char *error,
                                            size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CALL_ADAPTER, error, error_size))
         return false;
@@ -12433,7 +12435,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
     return true;
 }
 
-static bool builder_add_coroutine_state_calls(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_coroutine_state_calls(XrTargetBuildContext *builder, char *error,
                                               size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_COROUTINE_STATE_CALL, error, error_size))
         return false;
@@ -12452,7 +12454,7 @@ static bool builder_add_coroutine_state_calls(XrTargetPlanBuilder *builder, char
     return true;
 }
 
-static bool builder_add_dynamic_entry_expectations(XrTargetPlanBuilder *builder, char *error,
+static bool builder_add_dynamic_entry_expectations(XrTargetBuildContext *builder, char *error,
                                                    size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION, error,
                               error_size))
@@ -12541,7 +12543,7 @@ static int find_slot_id(const XrTargetMaterializedPlan *materialized, uint32_t f
     return -1;
 }
 
-static bool materialize_machine_reps(XrTargetPlanBuilder *builder,
+static bool materialize_machine_reps(XrTargetBuildContext *builder,
                                      XrTargetMaterializedPlan *materialized, char *error,
                                      size_t error_size) {
     for (uint32_t i = 0; i < builder->rep_intent_count; i++)
@@ -12568,7 +12570,7 @@ static bool materialize_machine_reps(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static int find_sorted_layout_intent(const XrTargetPlanBuilder *builder, uint32_t semantic_type) {
+static int find_sorted_layout_intent(const XrTargetBuildContext *builder, uint32_t semantic_type) {
     uint32_t low = 0;
     uint32_t high = builder->layout_intent_count;
     while (low < high) {
@@ -12584,7 +12586,7 @@ static int find_sorted_layout_intent(const XrTargetPlanBuilder *builder, uint32_
                : -1;
 }
 
-static bool semantic_layout_field_type(const XrTargetPlanBuilder *builder,
+static bool semantic_layout_field_type(const XrTargetBuildContext *builder,
                                        const XrTargetLayoutIntent *intent,
                                        const XrSemanticTypeRecord *type, uint32_t field_index,
                                        uint32_t *out_child_type, uint32_t *out_semantic_name,
@@ -12635,7 +12637,7 @@ static bool semantic_layout_field_type(const XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
+static bool materialize_layout_geometry(XrTargetBuildContext *builder,
                                         XrTargetMaterializedPlan *materialized, uint32_t index,
                                         uint8_t *states, char *error, size_t error_size) {
     if (states[index] == 2)
@@ -12709,7 +12711,7 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_layouts(XrTargetPlanBuilder *builder,
+static bool materialize_layouts(XrTargetBuildContext *builder,
                                 XrTargetMaterializedPlan *materialized, char *error,
                                 size_t error_size) {
     if (builder->layout_intent_count > 1u)
@@ -12796,7 +12798,7 @@ static bool materialize_layouts(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_layout_field_representations(const XrTargetPlanBuilder *builder,
+static bool materialize_layout_field_representations(const XrTargetBuildContext *builder,
                                                      XrTargetMaterializedPlan *materialized,
                                                      uint32_t layout_index, uint8_t *states,
                                                      char *error, size_t error_size) {
@@ -12858,7 +12860,7 @@ static bool materialize_layout_field_representations(const XrTargetPlanBuilder *
     return true;
 }
 
-static bool materialize_field_representations(const XrTargetPlanBuilder *builder,
+static bool materialize_field_representations(const XrTargetBuildContext *builder,
                                               XrTargetMaterializedPlan *materialized, char *error,
                                               size_t error_size) {
     uint8_t *states = (uint8_t *) allocate_records(materialized->layout_count, sizeof(*states));
@@ -12874,7 +12876,7 @@ static bool materialize_field_representations(const XrTargetPlanBuilder *builder
     return true;
 }
 
-static bool resolve_intent_reps(const XrTargetPlanBuilder *builder,
+static bool resolve_intent_reps(const XrTargetBuildContext *builder,
                                 const XrTargetMaterializedPlan *materialized,
                                 uint32_t semantic_type, bool resolve_type_rep,
                                 const XrTargetMachineRepRecord *register_intent,
@@ -12893,7 +12895,7 @@ static bool resolve_intent_reps(const XrTargetPlanBuilder *builder,
     return *register_rep >= 0 && *memory_rep >= 0;
 }
 
-static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
+static bool materialize_functions_and_slots(XrTargetBuildContext *builder,
                                             XrTargetMaterializedPlan *materialized, char *error,
                                             size_t error_size) {
     if (builder->slot_intent_count > 1u)
@@ -12974,7 +12976,7 @@ static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_values(XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+static bool materialize_values(XrTargetBuildContext *builder, XrTargetMaterializedPlan *materialized,
                                char *error, size_t error_size) {
     if (builder->value_intent_count > 1u)
         qsort(builder->value_intents, builder->value_intent_count, sizeof(*builder->value_intents),
@@ -13109,7 +13111,7 @@ static bool exact_owned_string_lifecycle_slot(const XrTargetMaterializedPlan *ma
     return true;
 }
 
-static bool materialize_coroutine_roots_and_string_cleanups(XrTargetPlanBuilder *builder,
+static bool materialize_coroutine_roots_and_string_cleanups(XrTargetBuildContext *builder,
                                                             XrTargetMaterializedPlan *materialized,
                                                             char *error, size_t error_size) {
     const XrSemanticPlan *semantic = builder->semantic_plan;
@@ -13467,7 +13469,7 @@ static bool materialized_target_function_for_semantic(const XrTargetMaterialized
     return true;
 }
 
-static bool materialize_i64_overflow_predicates(const XrTargetPlanBuilder *builder,
+static bool materialize_i64_overflow_predicates(const XrTargetBuildContext *builder,
                                                 XrTargetMaterializedPlan *materialized, char *error,
                                                 size_t error_size) {
     const XrSemanticPlan *semantic = builder ? builder->semantic_plan : NULL;
@@ -13558,7 +13560,7 @@ materialized_overflow_predicate_for_operation(const XrSemanticPlan *semantic,
                : NULL;
 }
 
-static bool source_entry_call_is_exact(const XrTargetPlanBuilder *builder,
+static bool source_entry_call_is_exact(const XrTargetBuildContext *builder,
                                        const XrTargetMaterializedPlan *materialized,
                                        uint32_t call_index) {
     if (!builder || !materialized || call_index >= materialized->call_count)
@@ -13644,7 +13646,7 @@ static bool source_entry_call_is_exact(const XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_entry_expectations(const XrTargetPlanBuilder *builder,
+static bool materialize_entry_expectations(const XrTargetBuildContext *builder,
                                            XrTargetMaterializedPlan *materialized, char *error,
                                            size_t error_size) {
     uint32_t count = 0;
@@ -13888,7 +13890,7 @@ static bool scalar_call_rep_is_i64(const XrTargetMaterializedPlan *materialized,
  * specialization. The independent instruction verifier repeats the judgement
  * from frozen TargetPlan rows; this copy sees only materialized builder state
  * and decides whether a semantic XI_CALL may receive a row at all. */
-static bool scalar_direct_i64_call_is_exact(const XrTargetPlanBuilder *builder,
+static bool scalar_direct_i64_call_is_exact(const XrTargetBuildContext *builder,
                                             const XrTargetMaterializedPlan *materialized,
                                             uint32_t call_index) {
     if (!builder || !materialized || call_index >= materialized->call_count)
@@ -13953,7 +13955,7 @@ static bool scalar_direct_i64_call_is_exact(const XrTargetPlanBuilder *builder,
 }
 
 static bool
-scalar_native_target_leaf_i64_call_is_exact(const XrTargetPlanBuilder *builder,
+scalar_native_target_leaf_i64_call_is_exact(const XrTargetBuildContext *builder,
                                             const XrTargetMaterializedPlan *materialized,
                                             uint32_t call_index) {
     if (!builder || !materialized || call_index >= materialized->call_count)
@@ -13989,7 +13991,7 @@ scalar_native_target_leaf_i64_call_is_exact(const XrTargetPlanBuilder *builder,
                                  NULL);
 }
 
-static bool scalar_instruction_analysis_init(const XrTargetPlanBuilder *builder,
+static bool scalar_instruction_analysis_init(const XrTargetBuildContext *builder,
                                              const XrTargetMaterializedPlan *materialized,
                                              XrScalarInstructionAnalysis *analysis) {
     if (!builder || !materialized || !analysis ||
@@ -14182,7 +14184,7 @@ static bool scalar_instruction_analysis_init(const XrTargetPlanBuilder *builder,
  * block's sole XI_YIELD operation and the continuation stays in this exact
  * function. The row carries the state record ID; its resume block remains a
  * TargetPlan fact and is never reconstructed from a runtime tag. */
-static bool scalar_suspend_block_is_exact(const XrTargetPlanBuilder *builder,
+static bool scalar_suspend_block_is_exact(const XrTargetBuildContext *builder,
                                           const XrTargetMaterializedPlan *materialized,
                                           uint32_t function_index,
                                           const XrSemanticFunctionRecord *function,
@@ -14221,7 +14223,7 @@ static bool scalar_suspend_block_is_exact(const XrTargetPlanBuilder *builder,
  * or semantic facts outside this deliberately small closed family make the
  * function unavailable; they never produce a partial executable program.
  */
-static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *builder,
+static bool materialize_scalar_instruction_function(const XrTargetBuildContext *builder,
                                                     const XrTargetMaterializedPlan *materialized,
                                                     uint32_t function_index,
                                                     const XrScalarInstructionAnalysis *analysis,
@@ -14564,7 +14566,7 @@ static bool leaf_materialized_slot_is_exact(const XrTargetMaterializedPlan *mate
  * The source class and field spellings are intentionally absent: the program
  * bindings select the aggregate, declaration ordinals select its two fields,
  * and the frozen SSA rows prove the constructor/get/set/call ordering. */
-static bool leaf_aggregate_instruction_shape_is_exact(const XrTargetPlanBuilder *builder,
+static bool leaf_aggregate_instruction_shape_is_exact(const XrTargetBuildContext *builder,
                                                       const XrTargetMaterializedPlan *materialized,
                                                       XrLeafAggregateInstructionShape *shape) {
     if (shape)
@@ -14777,7 +14779,7 @@ static bool leaf_aggregate_instruction_shape_is_exact(const XrTargetPlanBuilder 
 }
 
 static bool materialize_leaf_aggregate_instruction_function(
-    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    const XrTargetBuildContext *builder, const XrTargetMaterializedPlan *materialized,
     uint32_t function_index, XrTargetInstructionRecord *rows, uint32_t row_begin,
     uint32_t *out_row_count) {
     if (out_row_count)
@@ -14959,7 +14961,7 @@ product_operation_for_value(const XrSemanticPlan *semantic, const XrSemanticBloc
     return match;
 }
 
-static bool leaf_product_instruction_shape_is_exact(const XrTargetPlanBuilder *builder,
+static bool leaf_product_instruction_shape_is_exact(const XrTargetBuildContext *builder,
                                                     const XrTargetMaterializedPlan *materialized,
                                                     XrLeafProductInstructionShape *shape) {
     if (shape)
@@ -15200,7 +15202,7 @@ static bool product_materialized_slot_is_exact(const XrTargetMaterializedPlan *m
 }
 
 static bool materialize_leaf_product_instruction_function(
-    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    const XrTargetBuildContext *builder, const XrTargetMaterializedPlan *materialized,
     uint32_t function_index, XrTargetInstructionRecord *rows, uint32_t row_begin,
     uint32_t *out_row_count) {
     if (out_row_count)
@@ -15404,7 +15406,7 @@ static bool tagged_array_push_parameter_operation_is_exact(
 }
 
 static bool materialize_tagged_array_push_instruction_function(
-    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    const XrTargetBuildContext *builder, const XrTargetMaterializedPlan *materialized,
     uint32_t function_index, XrTargetInstructionRecord *rows, uint32_t row_begin,
     uint32_t *out_row_count) {
     if (out_row_count)
@@ -15532,7 +15534,7 @@ static bool materialize_tagged_array_push_instruction_function(
     return true;
 }
 
-static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
+static bool materialize_typed_instructions(const XrTargetBuildContext *builder,
                                            XrTargetMaterializedPlan *materialized, char *error,
                                            size_t error_size) {
     const XrSemanticProgramProvenance *published =
@@ -15832,7 +15834,7 @@ static bool tagged_container_value_boundary(const XrTargetMaterializedPlan *mate
                                callee, callee_ownership);
 }
 
-static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
+static bool materialize_calls_and_adapters(const XrTargetBuildContext *builder,
                                            XrTargetMaterializedPlan *materialized, char *error,
                                            size_t error_size) {
     materialized->call_count = builder->call_intent_count;
@@ -16269,7 +16271,7 @@ static bool reconstruct_coroutine_resume(const XrSemanticPlan *semantic, uint32_
     return true;
 }
 
-static bool materialize_coroutine_state_calls(const XrTargetPlanBuilder *builder,
+static bool materialize_coroutine_state_calls(const XrTargetBuildContext *builder,
                                               XrTargetMaterializedPlan *materialized, char *error,
                                               size_t error_size) {
     const XrSemanticPlan *semantic = builder->semantic_plan;
@@ -16515,7 +16517,7 @@ static uint32_t debug_fact_operation_for_instruction(const XrTargetMaterializedP
     return XR_SEMANTIC_INDEX_NONE;
 }
 
-static bool materialize_debug_facts(const XrTargetPlanBuilder *builder,
+static bool materialize_debug_facts(const XrTargetBuildContext *builder,
                                     XrTargetMaterializedPlan *materialized, char *error,
                                     size_t error_size) {
     const XrSemanticPlan *semantic = builder->semantic_plan;
@@ -16610,7 +16612,7 @@ static bool materialize_debug_facts(const XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
+static bool materialize_capabilities(const XrTargetBuildContext *builder,
                                      XrTargetMaterializedPlan *materialized, char *error,
                                      size_t error_size) {
     const XrTargetProfileDraft *facts = xr_target_profile_facts(builder->profile);
@@ -16738,7 +16740,7 @@ static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
     return true;
 }
 
-static void prune_private_leaf_program_layout_intents(XrTargetPlanBuilder *builder) {
+static void prune_private_leaf_program_layout_intents(XrTargetBuildContext *builder) {
     const XrSemanticProgramProvenance *program =
         builder ? xr_semantic_plan_program_provenance(builder->semantic_plan) : NULL;
     if (!program || program->program_family !=
@@ -16763,7 +16765,7 @@ static void prune_private_leaf_program_layout_intents(XrTargetPlanBuilder *build
     builder->layout_intent_count = next;
 }
 
-static bool builder_materialize(XrTargetPlanBuilder *builder,
+static bool builder_materialize(XrTargetBuildContext *builder,
                                 XrTargetMaterializedPlan *materialized, char *error,
                                 size_t error_size) {
     if (!builder || !materialized || builder->poisoned || builder->materialized ||
@@ -16795,7 +16797,7 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
 
 static bool builder_new(const XrSemanticPlan *semantic_plan, XrTargetProfile *profile,
                         const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
-                        bool allow_program_graph, XrTargetPlanBuilder **out, char *error,
+                        bool allow_program_graph, XrTargetBuildContext **out, char *error,
                         size_t error_size) {
     if (out)
         *out = NULL;
@@ -16821,7 +16823,7 @@ static bool builder_new(const XrSemanticPlan *semantic_plan, XrTargetProfile *pr
         return fail(error, error_size, "XR_TARGET_1000", "semantic plan is not verified");
     if (!xr_target_profile_verify(profile, error, error_size))
         return false;
-    XrTargetPlanBuilder *builder = (XrTargetPlanBuilder *) xr_calloc(1, sizeof(*builder));
+    XrTargetBuildContext *builder = (XrTargetBuildContext *) xr_calloc(1, sizeof(*builder));
     if (!builder)
         return fail(error, error_size, "XR_EXEC_5003", "target builder allocation failed");
     builder->semantic_plan = xr_semantic_plan_retain((XrSemanticPlan *) semantic_plan);
@@ -16852,7 +16854,7 @@ static bool builder_new(const XrSemanticPlan *semantic_plan, XrTargetProfile *pr
     return true;
 }
 
-static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out, char *error,
+static bool builder_freeze(XrTargetBuildContext *builder, XrTargetPlan **out, char *error,
                            size_t error_size) {
     if (out)
         *out = NULL;
@@ -16913,7 +16915,7 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out, cha
     return frozen;
 }
 
-static void builder_free(XrTargetPlanBuilder *builder) {
+static void builder_free(XrTargetBuildContext *builder) {
     if (!builder)
         return;
     xr_free(builder->rep_intents);
@@ -16934,7 +16936,7 @@ static void builder_free(XrTargetPlanBuilder *builder) {
  * their authorities become readable: a family may read what an earlier one
  * stated and never what a later one will, so the order below is a dependency
  * order and not a list. */
-typedef bool (*XrTargetFamilyBuild)(XrTargetPlanBuilder *builder, char *error, size_t error_size);
+typedef bool (*XrTargetFamilyBuild)(XrTargetBuildContext *builder, char *error, size_t error_size);
 
 typedef struct {
     const char *name;
@@ -17004,7 +17006,7 @@ static const XrTargetFamily k_target_families[] = {
     {"dynamic_entry_expectations", builder_add_dynamic_entry_expectations},
 };
 
-static bool builder_collect_families(XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+static bool builder_collect_families(XrTargetBuildContext *builder, char *error, size_t error_size) {
     bool survey = false;
     uint32_t refused_families = 0;
     for (size_t i = 0; i < sizeof(k_target_families) / sizeof(k_target_families[0]); i++) {
@@ -17040,7 +17042,7 @@ static bool build_program_graph_module(const XrSemanticPlan *semantic,
                                        const XrTargetProgramReachability *program_reachability,
                                        uint32_t program_module, XrTargetMaterializedPlan *out,
                                        char *error, size_t error_size) {
-    XrTargetPlanBuilder *builder = NULL;
+    XrTargetBuildContext *builder = NULL;
     memset(out, 0, sizeof(*out));
     if (!builder_new(semantic, profile, dependencies, dependency_count, true, &builder, error,
                      error_size))
@@ -18269,7 +18271,7 @@ bool xr_target_plan_build_module_set(const XrSemanticPlan *semantic_plan,
                                      const XrSemanticPlan *const *dependencies,
                                      uint32_t dependency_count, XrTargetProfile *profile,
                                      XrTargetPlan **out, char *error, size_t error_size) {
-    XrTargetPlanBuilder *builder = NULL;
+    XrTargetBuildContext *builder = NULL;
     if (out)
         *out = NULL;
     if (!builder_new(semantic_plan, profile, dependencies, dependency_count, false, &builder, error,

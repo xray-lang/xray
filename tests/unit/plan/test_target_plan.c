@@ -3038,9 +3038,12 @@ static void test_plan_snapshot_and_determinism(void) {
      * 1b6fd4f3f7ab0f38a264f261835fd21ba56e79ef5f1da4efdc03a474b2298fce.
      * The source-owned clock provider metadata then moved the canonical stdlib
      * registry fingerprint. Old provider-free digest:
-     * bce8574bb0aad9e5db7433dfc12f880f96295d64a969e5fa2b329209572e4b5f. */
+     * bce8574bb0aad9e5db7433dfc12f880f96295d64a969e5fa2b329209572e4b5f.
+     * The complete source-owned registry then changed the same semantic input.
+     * Old partial-registry digest:
+     * 7161b728d4bf51adf03d0bdca414946d468681e8e04379ae4b084c7cba9ff8e1. */
     REQUIRE(strcmp(target_hex,
-                   "7161b728d4bf51adf03d0bdca414946d468681e8e04379ae4b084c7cba9ff8e1") == 0);
+                   "5af0706e17962a03c1806b139d1891422afb55f46bf18ec41248eaf29a7d4163") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -6186,8 +6189,11 @@ static void test_channel_close_call_authority(void) {
      * The source-owned clock provider metadata then moved the canonical stdlib
      * registry fingerprint even though this fixture does not call time APIs.
      * Old provider-free digest:
-     * 638ac815ed74ef119cbafa71abf5cb88e276b4fed3ed0a0ba4e46e88bc0dc768. */
-    REQUIRE(strcmp(call_hex, "267d5e62f4c032721b71bb38d46d17be1700ec30a75a6f09218360940e6006cd") ==
+     * 638ac815ed74ef119cbafa71abf5cb88e276b4fed3ed0a0ba4e46e88bc0dc768.
+     * The complete source-owned registry then changed the same semantic input.
+     * Old partial-registry digest:
+     * 267d5e62f4c032721b71bb38d46d17be1700ec30a75a6f09218360940e6006cd. */
+    REQUIRE(strcmp(call_hex, "8f93a84725b9200724daf4b600423bb667163be1c35cd5357f74cdc7369372c3") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -7115,10 +7121,13 @@ static void test_direct_local_call_adapter_family(void) {
      * function type identity and changed the stdlib registry fingerprint.
      * Source-owned clock provider metadata then moved that registry again.
      * Old provider-free digest:
-     * 94bdd31a214392344cd369fc2fe4379f6541a3649d0c7f5e017b16c55e9b3874. */
-    if (strcmp(call_hex, "e134424567eedade4a0840d2477085b6e7d644423d43f663a3ad87d769986669") != 0)
+     * 94bdd31a214392344cd369fc2fe4379f6541a3649d0c7f5e017b16c55e9b3874.
+     * The complete source-owned registry then changed the same semantic input.
+     * Old partial-registry digest:
+     * e134424567eedade4a0840d2477085b6e7d644423d43f663a3ad87d769986669. */
+    if (strcmp(call_hex, "9a5a49fffd56edbdfbb3d459ebe39e03ec12544e9d82c9546b64758818416cb6") != 0)
         fprintf(stderr, "direct-local call fingerprint drift: actual=%s\n", call_hex);
-    REQUIRE(strcmp(call_hex, "e134424567eedade4a0840d2477085b6e7d644423d43f663a3ad87d769986669") ==
+    REQUIRE(strcmp(call_hex, "9a5a49fffd56edbdfbb3d459ebe39e03ec12544e9d82c9546b64758818416cb6") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -7985,10 +7994,13 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * BorrowOriginSet then changed the function-type and stdlib identities
      * hashed into the enclosing SemanticPlan. Source-owned clock provider
      * metadata then moved the stdlib registry again. Old provider-free digest:
-     * 3e537461fb50b52a558dd45fb726b46ffbc103fa962a32c821dbacf1757195b8. */
-    if (strcmp(tail_hex, "a57047dc4173efbe39207ff06f9190252411d67241f8e674a32ed91c1a0dfae1") != 0)
+     * 3e537461fb50b52a558dd45fb726b46ffbc103fa962a32c821dbacf1757195b8.
+     * The complete source-owned registry then changed the same semantic input.
+     * Old partial-registry digest:
+     * a57047dc4173efbe39207ff06f9190252411d67241f8e674a32ed91c1a0dfae1. */
+    if (strcmp(tail_hex, "8191bd380ac12928a1575368ee45a0960561e94e6478504802453e9eff7db1f5") != 0)
         fprintf(stderr, "tail-call fingerprint drift: actual=%s\n", tail_hex);
-    REQUIRE(strcmp(tail_hex, "a57047dc4173efbe39207ff06f9190252411d67241f8e674a32ed91c1a0dfae1") ==
+    REQUIRE(strcmp(tail_hex, "8191bd380ac12928a1575368ee45a0960561e94e6478504802453e9eff7db1f5") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;
