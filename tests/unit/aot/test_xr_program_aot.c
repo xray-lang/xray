@@ -322,6 +322,9 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey vmul = fixture_key("aot:value:mul");
     XrCoreIrKey vdiv = fixture_key("aot:value:div");
     XrCoreIrKey vcmp = fixture_key("aot:value:compare");
+    XrCoreIrKey vnot = fixture_key("aot:value:not");
+    XrCoreIrKey vand = fixture_key("aot:value:and");
+    XrCoreIrKey vor = fixture_key("aot:value:or");
     XrCoreIrKey true_arg = fixture_key("aot:value:true-arg");
     XrCoreIrKey false_arg = fixture_key("aot:value:false-arg");
     XrCoreIrKey width = fixture_key("aot:value:width");
@@ -352,7 +355,10 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey pair_add_2[] = {vadd, v2};
     XrCoreIrKey pair_sub_2[] = {vsub, v2};
     XrCoreIrKey pair_div_add[] = {vdiv, vadd};
-    XrCoreIrKey conditional_operands[] = {variant_is_one, vadd, vsub};
+    XrCoreIrKey logical_not_operand[] = {projected_true};
+    XrCoreIrKey logical_and_operands[] = {variant_is_one, projected_true};
+    XrCoreIrKey logical_or_operands[] = {vand, vnot};
+    XrCoreIrKey conditional_operands[] = {vor, vadd, vsub};
     XrCoreIrKey conditional_successors[] = {helper_true, helper_false};
     XrCoreIrInstructionInput helper_entry_instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
@@ -449,6 +455,24 @@ static XrValidatedProgram *build_full_program(void) {
          .operand_count = 2u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
          .immediate.u32 = 2u},
+        {.operation_id = XR_CORE_OP_CORE_LOGICAL_NOT,
+         .result = vnot,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = logical_not_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_LOGICAL_AND,
+         .result = vand,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = logical_and_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_LOGICAL_OR,
+         .result = vor,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = logical_or_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_CONDITIONAL_BRANCH,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = conditional_operands,
@@ -1367,7 +1391,7 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program,
                                  xr_backend_ir_execution_id(portable)));
     REQUIRE(!xr_fingerprint_equal(xr_backend_ir_optimization_policy_id(none),
                                   xr_backend_ir_optimization_policy_id(portable)));
-    REQUIRE(xr_backend_ir_instruction_count(none) == 42u);
+    REQUIRE(xr_backend_ir_instruction_count(none) == 45u);
 
     XrGeneratedC generated_none = {0};
     XrGeneratedC generated_portable = {0};

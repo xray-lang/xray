@@ -64,6 +64,27 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC,
     },
     {
+        XI_NOT,
+        XR_CORE_TYPE_BOOL,
+        XR_CORE_OP_CORE_LOGICAL_NOT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_LOGICAL_UNARY,
+    },
+    {
+        XI_BAND,
+        XR_CORE_TYPE_BOOL,
+        XR_CORE_OP_CORE_LOGICAL_AND,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_LOGICAL_BINARY,
+    },
+    {
+        XI_BOR,
+        XR_CORE_TYPE_BOOL,
+        XR_CORE_OP_CORE_LOGICAL_OR,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_LOGICAL_BINARY,
+    },
+    {
         XI_EQ,
         XR_CORE_TYPE_BOOL,
         XR_CORE_OP_CORE_COMPARE_I64,

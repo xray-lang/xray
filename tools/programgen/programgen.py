@@ -140,6 +140,8 @@ PROJECTION_KINDS = {
     "target-query": "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
     "coroutine-yield": "XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD",
     "output-group-i64": "XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64",
+    "logical-unary": "XR_PROGRAM_XI_PROJECTION_LOGICAL_UNARY",
+    "logical-binary": "XR_PROGRAM_XI_PROJECTION_LOGICAL_BINARY",
 }
 SEMANTIC_MAPPING_KEYS = {
     "xi_operation",
@@ -518,6 +520,8 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,",
         "    XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD = 18,",
         "    XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64 = 19,",
+        "    XR_PROGRAM_XI_PROJECTION_LOGICAL_UNARY = 20,",
+        "    XR_PROGRAM_XI_PROJECTION_LOGICAL_BINARY = 21,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",

@@ -5588,6 +5588,34 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->immediate.u32 = projection.immediate_u32;
             return set_operands(context, instruction, function, block, value->args, value->nargs,
                                 diagnostic, diagnostic_size);
+        case XR_PROGRAM_XI_PROJECTION_LOGICAL_UNARY:
+        case XR_PROGRAM_XI_PROJECTION_LOGICAL_BINARY: {
+            bool unary = projection.kind == XR_PROGRAM_XI_PROJECTION_LOGICAL_UNARY;
+            uint16_t expected_arity = unary ? 1u : 2u;
+            if (value->nargs != expected_arity || result_type != XR_CORE_TYPE_BOOL ||
+                projection.immediate_u32 != 0u ||
+                (unary && projection.core_operation_id != XR_CORE_OP_CORE_LOGICAL_NOT) ||
+                (!unary && projection.core_operation_id != XR_CORE_OP_CORE_LOGICAL_AND &&
+                 projection.core_operation_id != XR_CORE_OP_CORE_LOGICAL_OR))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi logical v%u has no exact bool operation contract", value->id);
+            for (uint16_t operand = 0u; operand < value->nargs; ++operand) {
+                uint16_t operand_type = XR_CORE_TYPE_VOID;
+                if (!map_logical_value_type(context, function->xi, value->args[operand],
+                                            &operand_type) ||
+                    operand_type != XR_CORE_TYPE_BOOL)
+                    return fail(diagnostic, diagnostic_size,
+                                XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi logical v%u operand %u is not exact bool", value->id,
+                                operand);
+            }
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = XR_CORE_TYPE_BOOL;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(context, instruction, function, block, value->args, value->nargs,
+                                diagnostic, diagnostic_size);
+        }
         case XR_PROGRAM_XI_PROJECTION_COMPARE: {
             uint16_t left_type = XR_CORE_TYPE_VOID;
             uint16_t right_type = XR_CORE_TYPE_VOID;

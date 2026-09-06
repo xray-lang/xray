@@ -50,6 +50,134 @@
       }
     },
     {
+      "id": "logical-not-false",
+      "operation": "core.logical.not",
+      "kind": "scalar",
+      "arguments": [
+        false
+      ],
+      "immediates": {},
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "logical-not-true",
+      "operation": "core.logical.not",
+      "kind": "scalar",
+      "arguments": [
+        true
+      ],
+      "immediates": {},
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "logical-and-false-false",
+      "operation": "core.logical.and",
+      "kind": "scalar",
+      "arguments": [
+        false,
+        false
+      ],
+      "immediates": {},
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "logical-and-false-true",
+      "operation": "core.logical.and",
+      "kind": "scalar",
+      "arguments": [
+        false,
+        true
+      ],
+      "immediates": {},
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "logical-and-true-false",
+      "operation": "core.logical.and",
+      "kind": "scalar",
+      "arguments": [
+        true,
+        false
+      ],
+      "immediates": {},
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "logical-and-true-true",
+      "operation": "core.logical.and",
+      "kind": "scalar",
+      "arguments": [
+        true,
+        true
+      ],
+      "immediates": {},
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "logical-or-false-false",
+      "operation": "core.logical.or",
+      "kind": "scalar",
+      "arguments": [
+        false,
+        false
+      ],
+      "immediates": {},
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "logical-or-false-true",
+      "operation": "core.logical.or",
+      "kind": "scalar",
+      "arguments": [
+        false,
+        true
+      ],
+      "immediates": {},
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "logical-or-true-false",
+      "operation": "core.logical.or",
+      "kind": "scalar",
+      "arguments": [
+        true,
+        false
+      ],
+      "immediates": {},
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "logical-or-true-true",
+      "operation": "core.logical.or",
+      "kind": "scalar",
+      "arguments": [
+        true,
+        true
+      ],
+      "immediates": {},
+      "expect": {
+        "value": true
+      }
+    },
+    {
       "id": "constant-target-os-wasi",
       "operation": "core.constant.target_enum",
       "kind": "scalar",

@@ -53,6 +53,27 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.not",
+      "result_type": "bool",
+      "projection_kind": "logical-unary",
+      "core_operation": "core.logical.not",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.band",
+      "result_type": "bool",
+      "projection_kind": "logical-binary",
+      "core_operation": "core.logical.and",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.bor",
+      "result_type": "bool",
+      "projection_kind": "logical-binary",
+      "core_operation": "core.logical.or",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.eq",
       "result_type": "bool",
       "projection_kind": "compare",

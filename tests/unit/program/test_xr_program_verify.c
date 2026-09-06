@@ -762,6 +762,7 @@ static void test_aggregate_variant_operations(void) {
         xr_validated_program_free(program);
     }
     xr_program_artifact_free(&artifact);
+
 }
 
 static XrProgramBuildStatus build_with_type_graph(const XrCoreIrTypeInput *types,
@@ -859,6 +860,9 @@ static void test_scalar_operations(void) {
     XrCoreIrKey vmul = key("scalar:value:mul");
     XrCoreIrKey vdiv = key("scalar:value:div");
     XrCoreIrKey vcmp = key("scalar:value:compare");
+    XrCoreIrKey vnot = key("scalar:value:not");
+    XrCoreIrKey vand = key("scalar:value:and");
+    XrCoreIrKey vor = key("scalar:value:or");
     XrCoreIrKey vcopy = key("scalar:value:copy");
     XrCoreIrKey vbool = key("scalar:value:bool");
     XrCoreIrKey add_args[] = {v6, v2};
@@ -866,7 +870,10 @@ static void test_scalar_operations(void) {
     XrCoreIrKey mul_args[] = {vsub, v2};
     XrCoreIrKey div_args[] = {vmul, v2};
     XrCoreIrKey compare_args[] = {vdiv, v6};
-    XrCoreIrKey copy_args[] = {vcmp};
+    XrCoreIrKey not_args[] = {vbool};
+    XrCoreIrKey and_args[] = {vcmp, vnot};
+    XrCoreIrKey or_args[] = {vand, vbool};
+    XrCoreIrKey copy_args[] = {vor};
     XrCoreIrKey return_args[] = {vcopy};
     XrCoreIrInstructionInput instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
@@ -919,6 +926,24 @@ static void test_scalar_operations(void) {
          .operand_count = 2,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
          .immediate.u32 = 0},
+        {.operation_id = XR_CORE_OP_CORE_LOGICAL_NOT,
+         .result = vnot,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = not_args,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_LOGICAL_AND,
+         .result = vand,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = and_args,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_LOGICAL_OR,
+         .result = vor,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = or_args,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
          .result = vcopy,
          .result_type_id = XR_CORE_TYPE_BOOL,
@@ -960,6 +985,13 @@ static void test_scalar_operations(void) {
         xr_validated_program_free(program);
     }
     xr_program_artifact_free(&artifact);
+
+    not_args[0] = v6;
+    XrProgramArtifact invalid_logical = {0};
+    CHECK(write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,
+                             &invalid_logical) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&invalid_logical, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&invalid_logical);
 }
 
 static void test_control_and_profile(void) {

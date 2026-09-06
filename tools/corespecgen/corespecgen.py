@@ -405,6 +405,16 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         require(isinstance(value, bool) and not arguments,
                 f"KAT {case['id']} bool constant is malformed")
         return {"value": value}
+    if spelling == "core.logical.not":
+        require(len(arguments) == 1 and isinstance(arguments[0], bool) and not immediates,
+                f"KAT {case['id']} logical not contract is malformed")
+        return {"value": not arguments[0]}
+    if spelling in {"core.logical.and", "core.logical.or"}:
+        require(len(arguments) == 2 and all(isinstance(value, bool) for value in arguments)
+                and not immediates,
+                f"KAT {case['id']} logical binary contract is malformed")
+        return {"value": (arguments[0] and arguments[1])
+                if spelling == "core.logical.and" else (arguments[0] or arguments[1])}
     if spelling == "core.constant.target_enum":
         enum_type = immediates.get("type")
         value = immediates.get("value")

@@ -88,6 +88,10 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_DIV_I64:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 == 0u;
+        case XR_CORE_OP_CORE_LOGICAL_NOT:
+        case XR_CORE_OP_CORE_LOGICAL_AND:
+        case XR_CORE_OP_CORE_LOGICAL_OR:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
         case XR_CORE_OP_CORE_COMPARE_I64:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 <= 5u;

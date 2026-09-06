@@ -2720,6 +2720,24 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             return true;
+        case XR_CORE_OP_CORE_LOGICAL_NOT:
+            if (!expect_shape(context, instruction, location, 1u, 0u,
+                              XR_CORE_IR_IMMEDIATE_NONE, XR_CORE_TYPE_BOOL, true) ||
+                !operand_type_is(function, instruction, 0u, XR_CORE_TYPE_BOOL)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        case XR_CORE_OP_CORE_LOGICAL_AND:
+        case XR_CORE_OP_CORE_LOGICAL_OR:
+            if (!expect_shape(context, instruction, location, 2u, 0u,
+                              XR_CORE_IR_IMMEDIATE_NONE, XR_CORE_TYPE_BOOL, true) ||
+                !operand_type_is(function, instruction, 0u, XR_CORE_TYPE_BOOL) ||
+                !operand_type_is(function, instruction, 1u, XR_CORE_TYPE_BOOL)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
         case XR_CORE_OP_CORE_COMPARE_I64:
             if (!expect_shape(context, instruction, location, 2, 0, XR_CORE_IR_IMMEDIATE_U32,
                               XR_CORE_TYPE_BOOL, true) ||

@@ -1672,6 +1672,16 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  instruction->operands[1], instruction->operands[0],
                                  instruction->operands[1], instruction->result_id,
                                  instruction->operands[0], instruction->operands[1]);
+        case XR_CORE_OP_CORE_LOGICAL_NOT:
+            return append_format(buffer, "        v%u = (uint8_t)!v%u;\n",
+                                 instruction->result_id, instruction->operands[0]);
+        case XR_CORE_OP_CORE_LOGICAL_AND:
+        case XR_CORE_OP_CORE_LOGICAL_OR:
+            return append_format(
+                buffer, "        v%u = (uint8_t)(v%u %s v%u);\n", instruction->result_id,
+                instruction->operands[0],
+                instruction->operation_id == XR_CORE_OP_CORE_LOGICAL_AND ? "&&" : "||",
+                instruction->operands[1]);
         case XR_CORE_OP_CORE_COMPARE_I64: {
             static const char *operators[] = {"==", "!=", "<", "<=", ">", ">="};
             return append_format(buffer, "        v%u = (uint8_t)(v%u %s v%u);\n",

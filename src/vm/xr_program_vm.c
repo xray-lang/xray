@@ -724,6 +724,21 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.as.i64 = left / right;
                     break;
                 }
+                case XR_CORE_OP_CORE_LOGICAL_NOT:
+                    produced.as.value.kind = XR_VM_VALUE_BOOL;
+                    produced.as.value.as.boolean =
+                        !values[instruction.operands[0]].as.value.as.boolean;
+                    break;
+                case XR_CORE_OP_CORE_LOGICAL_AND:
+                case XR_CORE_OP_CORE_LOGICAL_OR: {
+                    bool left = values[instruction.operands[0]].as.value.as.boolean;
+                    bool right = values[instruction.operands[1]].as.value.as.boolean;
+                    produced.as.value.kind = XR_VM_VALUE_BOOL;
+                    produced.as.value.as.boolean =
+                        instruction.operation_id == XR_CORE_OP_CORE_LOGICAL_AND ? left && right
+                                                                               : left || right;
+                    break;
+                }
                 case XR_CORE_OP_CORE_COMPARE_I64: {
                     int64_t left = values[instruction.operands[0]].as.value.as.i64;
                     int64_t right = values[instruction.operands[1]].as.value.as.i64;

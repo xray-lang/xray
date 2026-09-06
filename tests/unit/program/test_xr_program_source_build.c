@@ -889,6 +889,12 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
 TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     static const char source[] =
         "import sys\n"
+        "fn guardedAnd(guard: bool, divisor: i64) -> bool {\n"
+        "  return guard && (1 / divisor > 0)\n"
+        "}\n"
+        "fn guardedOr(guard: bool, divisor: i64) -> bool {\n"
+        "  return guard || (1 / divisor > 0)\n"
+        "}\n"
         "fn answer() -> i64 {\n"
         "  var opened = sys.Pipe.open()\n"
         "  if (opened == null) { return 0 }\n"
@@ -897,10 +903,11 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         "  var readHandle = live.readEnd()\n"
         "  var writeHandle = live.writeEnd()\n"
         "  var closed = (move live).close()\n"
-        "  if (readHandle < 0) { return 0 }\n"
-        "  if (writeHandle < 0) { return 0 }\n"
-        "  if (closed) { return 1 }\n"
-        "  return 0\n"
+        "  if (guardedAnd(false, 0)) { return 0 }\n"
+        "  if (!guardedOr(true, 0)) { return 0 }\n"
+        "  var handlesValid = readHandle >= 0 && writeHandle >= 0\n"
+        "  if (!handlesValid || !closed) { return 0 }\n"
+        "  return 1\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -926,13 +933,16 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 5u);
+    ASSERT_EQ_UINT(xr_validated_program_function_count(first.program), 7u);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
 
     uint32_t aggregate_constructs = 0u;
     uint32_t aggregate_projects = 0u;
     uint32_t variant_projects = 0u;
     uint32_t sealed_calls = 0u;
+    uint32_t logical_nots = 0u;
+    uint32_t logical_ands = 0u;
+    uint32_t logical_ors = 0u;
     for (uint32_t function_index = 0u; function_index < first.program->function_count;
          ++function_index) {
         const XrValidatedFunction *function = &first.program->functions[function_index];
@@ -950,13 +960,22 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
                                     XR_CORE_OP_CORE_VARIANT_PROJECT;
                 sealed_calls += block->instructions[instruction_index].operation_id ==
                                 XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
+                logical_nots += block->instructions[instruction_index].operation_id ==
+                                XR_CORE_OP_CORE_LOGICAL_NOT;
+                logical_ands += block->instructions[instruction_index].operation_id ==
+                                XR_CORE_OP_CORE_LOGICAL_AND;
+                logical_ors += block->instructions[instruction_index].operation_id ==
+                               XR_CORE_OP_CORE_LOGICAL_OR;
             }
         }
     }
     ASSERT_EQ_UINT(aggregate_constructs, 1u);
     ASSERT_EQ_UINT(aggregate_projects, 8u);
     ASSERT_EQ_UINT(variant_projects, 3u);
-    ASSERT_EQ_UINT(sealed_calls, 4u);
+    ASSERT_EQ_UINT(sealed_calls, 6u);
+    ASSERT_TRUE(logical_nots != 0u);
+    ASSERT_TRUE(logical_ands != 0u);
+    ASSERT_TRUE(logical_ors != 0u);
 
     XrProgramProviderRequirementView requirement = {0};
     ASSERT_TRUE(xr_validated_program_provider_requirement(first.program, 0u, &requirement));
@@ -1085,9 +1104,16 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic backend_diagnostic;
     XrBackendIR *backend_ir = NULL;
-    ASSERT_EQ_INT(xr_backend_ir_build(first.program, profile, &options, &backend_ir,
-                                      &backend_diagnostic),
-                  XR_BACKEND_OK);
+    XrBackendStatus backend_status =
+        xr_backend_ir_build(first.program, profile, &options, &backend_ir, &backend_diagnostic);
+    if (backend_status != XR_BACKEND_OK)
+        fprintf(stderr,
+                "Pipe lifecycle AOT build failed: status=%u operation=%u function=%u block=%u "
+                "instruction=%u\n",
+                (unsigned) backend_diagnostic.status, backend_diagnostic.operation_id,
+                backend_diagnostic.function_id, backend_diagnostic.block_id,
+                backend_diagnostic.instruction_id);
+    ASSERT_EQ_INT(backend_status, XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};

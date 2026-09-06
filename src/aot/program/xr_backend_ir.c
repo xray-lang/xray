@@ -34,6 +34,9 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_SUB_I64:
         case XR_CORE_OP_CORE_MUL_I64:
         case XR_CORE_OP_CORE_DIV_I64:
+        case XR_CORE_OP_CORE_LOGICAL_NOT:
+        case XR_CORE_OP_CORE_LOGICAL_AND:
+        case XR_CORE_OP_CORE_LOGICAL_OR:
         case XR_CORE_OP_CORE_COMPARE_I64:
         case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
