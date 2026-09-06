@@ -69,6 +69,25 @@ class CacheInspectionTest(unittest.TestCase):
         self.assertIsNotNone(sanitizer.verify_configured(
             self.build, "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDebugDLL"))
 
+    def test_windows_compiler_identity_uses_windows_path_semantics(self):
+        self._cache(
+            "CMAKE_C_COMPILER:STRING=C:/Program Files/LLVM/bin/clang-cl.EXE\n"
+            "CMAKE_CXX_COMPILER:STRING=C:\\Program Files\\LLVM\\bin\\clang-cl.EXE\n"
+        )
+        with mock.patch.object(sanitizer.platform, "IS_WINDOWS", True):
+            self.assertIsNone(sanitizer.verify_configured(
+                self.build,
+                "CMAKE_C_COMPILER=c:\\program files\\llvm\\bin\\clang-cl.exe",
+            ))
+            self.assertIsNone(sanitizer.verify_configured(
+                self.build,
+                "CMAKE_CXX_COMPILER=C:/PROGRAM FILES/LLVM/bin/clang-cl.exe",
+            ))
+            self.assertIsNotNone(sanitizer.verify_configured(
+                self.build,
+                "CMAKE_C_COMPILER=C:/Program Files/LLVM/bin/clang.exe",
+            ))
+
     def test_unconfigured_tree_is_not_an_error(self):
         # Nothing to contradict yet; configure() will create it.
         self.assertIsNone(sanitizer.verify_configured(self.build, "ENABLE_ASAN=ON"))

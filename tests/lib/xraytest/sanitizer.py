@@ -20,6 +20,7 @@ Two invariants are enforced here rather than left to each lane:
 
 from __future__ import annotations
 
+import ntpath
 import os
 import shutil
 import tempfile
@@ -252,8 +253,30 @@ def verify_configured(build_dir: Path, required_flag: str) -> str | None:
     # (e.g. "-fsanitize=thread") that must occur somewhere in the cache.
     if "=" in required_flag and not required_flag.startswith("-"):
         name, value = required_flag.split("=", 1)
-        if not any(line.startswith(f"{name}:") and line.endswith(f"={value}")
-                   for line in text.splitlines()):
+        configured_value = next(
+            (
+                line.split("=", 1)[1]
+                for line in text.splitlines()
+                if line.startswith(f"{name}:") and "=" in line
+            ),
+            None,
+        )
+        matches = configured_value == value
+        if (
+            platform.IS_WINDOWS
+            and name in {"CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER"}
+            and configured_value
+            and value
+        ):
+            # shutil.which() preserves whichever spelling of the executable
+            # happened to occur first in PATH.  Windows and CMake may therefore
+            # alternate between clang-cl.exe and clang-cl.EXE for the same file.
+            # Treat only these path-valued compiler identities with Windows path
+            # semantics; other cache variables remain exact strings.
+            matches = ntpath.normcase(ntpath.normpath(configured_value)) == ntpath.normcase(
+                ntpath.normpath(value)
+            )
+        if not matches:
             return f"{build_dir} is configured without {required_flag}"
         return None
 
