@@ -1808,8 +1808,8 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
         (argument_count != 0u && !arguments) || !xr_vm_code_matches_instance(code, instance))
         return false;
     const XrValidatedFunction *function = &code->program->functions[function_id];
-    if (argument_count != function->parameter_count || function->coroutine_state_count != 2u ||
-        function->coroutine_safepoint_count != 1u ||
+    if (argument_count != function->parameter_count || function->coroutine_safepoint_count == 0u ||
+        function->coroutine_state_count != function->coroutine_safepoint_count + 1u ||
         function->value_count > code->options.max_value_cells)
         return false;
     for (uint32_t block = 0; block < function->block_count; ++block)

@@ -68,7 +68,7 @@ normally reachable cancel values and continuations; generated C does not treat f
 place-address reconstruction, error, panic, or trap as a cancellation alias.
 
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
-anchor-sha256: tests/unit/CMakeLists.txt f80e4524b045b52d3adbff9228c96283b9f243c5e2b0bdc272bee0f532f06c72
+anchor-sha256: tests/unit/CMakeLists.txt dd7f79f96e13c557a11235e8f4dd493b89112f315b3c74cbf35b7f40d79ba7d0
 anchor-sha256: xisa/core/registry.json 6ef47b9c8055809d8856bd01aed88390c4c4c2a5ba44b6cf23b831d194b0f71b
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json c3425475365edbbbe3a77fd5812107f9b1dec144a3d594a101419f56c7844f5d
@@ -76,7 +76,7 @@ anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 81bb6fb34
 anchor-sha256: src/aot/program/xr_backend_ir.h 5da7eb88ceb96551a2132873920f03163a0575fce45214b8750df7248b95bcaf
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
 anchor-sha256: src/aot/program/xr_backend_ir.c d2f80522ab5b2907551229d5efd615c6be04bb7ce6ba6e6a40eae40cdb6c0c3d
-anchor-sha256: src/aot/program/xr_backend_ir_verify.c 36b29080334cc20e4ce27cb8bc0e0d5f1d81a723afedb60ed0454f4b3332711c
+anchor-sha256: src/aot/program/xr_backend_ir_verify.c ccd41a0978503d55d39d81c04922216c25944c0e2ddc5af8af5b6b6357441dfe
 anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 1bb2385702715b3fd26bcff7fa2ee553744e2002d703ddf07904fd519811f048
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -85,4 +85,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f3
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c 74a4cc7fa71bf14a320e9535d7c0df04f6bf53f8daabd98538909e6c5265c850
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 30496c23b94a5a62322fb0f7d35c7403721761d5177cc4157cbfeca38dece054
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 930d60a5130ed8031ca9d68a49342194145a0053cb7840a52084d20acd5d7280

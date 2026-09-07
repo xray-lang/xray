@@ -53,6 +53,7 @@ static const char *pipe_provider_aot_output_path;
 static const char *pipe_close_failure_aot_output_path;
 static const char *pipe_uncaught_error_aot_output_path;
 static const char *pipe_cancel_cleanup_aot_output_path;
+static const char *multi_safepoint_aot_output_path;
 
 typedef struct ClockProviderProbe {
     uint32_t calls;
@@ -536,8 +537,8 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_UINT(child->parameter_types[0], XR_CORE_TYPE_I64);
     ASSERT_EQ_INT(child->parameter_modes[0], XR_PARAM_READ);
     ASSERT_EQ_UINT(child->result_type_id, XR_CORE_TYPE_I64);
-    ASSERT_EQ_UINT(child->coroutine_state_count, 2u);
-    ASSERT_EQ_UINT(child->coroutine_safepoint_count, 1u);
+    ASSERT_EQ_UINT(child->coroutine_state_count, 3u);
+    ASSERT_EQ_UINT(child->coroutine_safepoint_count, 2u);
     ASSERT_EQ_UINT(child->effect_mask, XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND);
     ASSERT_EQ_UINT(child->capability_mask, XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
 
@@ -560,20 +561,27 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_INT(reference_suspend.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
     ASSERT_EQ_UINT(reference_suspend.safepoint_id, 0u);
     ASSERT_EQ_UINT(reference_suspend.state_id, 1u);
+    reference_suspend = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_suspend.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(reference_suspend.safepoint_id, 0u);
+    ASSERT_EQ_UINT(reference_suspend.state_id, 1u);
     XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
     ASSERT_EQ_INT(reference_return.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference_return.value.kind, XR_REFERENCE_VALUE_I64);
     ASSERT_EQ_INT(reference_return.value.as.i64, 7);
     xr_reference_execution_free(reference);
 
-    XrReferenceExecution *reference_cancel = NULL;
-    ASSERT_TRUE(
-        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference_cancel));
-    ASSERT_EQ_INT(xr_reference_execution_step(reference_cancel).kind,
-                  XR_REFERENCE_OUTCOME_SUSPENDED);
-    ASSERT_EQ_INT(xr_reference_execution_cancel(reference_cancel).kind,
-                  XR_REFERENCE_OUTCOME_CANCELLED);
-    xr_reference_execution_free(reference_cancel);
+    for (uint32_t child_point = 1u; child_point <= 2u; ++child_point) {
+        XrReferenceExecution *reference_cancel = NULL;
+        ASSERT_TRUE(xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL,
+                                                  &reference_cancel));
+        for (uint32_t step = 0u; step < child_point; ++step)
+            ASSERT_EQ_INT(xr_reference_execution_step(reference_cancel).kind,
+                          XR_REFERENCE_OUTCOME_SUSPENDED);
+        ASSERT_EQ_INT(xr_reference_execution_cancel(reference_cancel).kind,
+                      XR_REFERENCE_OUTCOME_CANCELLED);
+        xr_reference_execution_free(reference_cancel);
+    }
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
@@ -584,17 +592,25 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_EQ_INT(vm_suspend.kind, XR_VM_OUTCOME_SUSPENDED);
     ASSERT_EQ_UINT(vm_suspend.safepoint_id, reference_suspend.safepoint_id);
     ASSERT_EQ_UINT(vm_suspend.state_id, reference_suspend.state_id);
+    vm_suspend = xr_vm_execution_step(vm_execution);
+    ASSERT_EQ_INT(vm_suspend.kind, XR_VM_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(vm_suspend.safepoint_id, reference_suspend.safepoint_id);
+    ASSERT_EQ_UINT(vm_suspend.state_id, reference_suspend.state_id);
     XrVmOutcome vm_return = xr_vm_execution_step(vm_execution);
     ASSERT_EQ_INT(vm_return.kind, XR_VM_OUTCOME_RETURN);
     ASSERT_EQ_INT(vm_return.value.kind, XR_VM_VALUE_I64);
     ASSERT_EQ_INT(vm_return.value.as.i64, reference_return.value.as.i64);
     xr_vm_execution_free(vm_execution);
 
-    XrVmExecution *vm_cancel = NULL;
-    ASSERT_TRUE(xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_cancel));
-    ASSERT_EQ_INT(xr_vm_execution_step(vm_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
-    ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED);
-    xr_vm_execution_free(vm_cancel);
+    for (uint32_t child_point = 1u; child_point <= 2u; ++child_point) {
+        XrVmExecution *vm_cancel = NULL;
+        ASSERT_TRUE(
+            xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_cancel));
+        for (uint32_t step = 0u; step < child_point; ++step)
+            ASSERT_EQ_INT(xr_vm_execution_step(vm_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED);
+        xr_vm_execution_free(vm_cancel);
+    }
     xr_vm_code_free(vm_code);
 
     XrBackendIR *backend_ir = NULL;
@@ -639,6 +655,7 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
 TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors) {
     static const char library_source[] = "export fn child(value: i64) -> i64 {\n"
                                          "  Coro.yield()\n"
+                                         "  Coro.yield()\n"
                                          "  return value\n"
                                          "}\n";
     static const char entry_source[] = "import { child } from \"./library\"\n"
@@ -649,6 +666,7 @@ TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_execut
 TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors) {
     static const char library_source[] = "export class Worker {\n"
                                          "  static child(value: i64) -> i64 {\n"
+                                         "    Coro.yield()\n"
                                          "    Coro.yield()\n"
                                          "    return value\n"
                                          "  }\n"
@@ -2228,6 +2246,185 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
     source_build_fixture_free(&fixture);
 }
 
+TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors) {
+    static const char source[] = "fn answer() -> i64 {\n"
+                                 "  Coro.yield()\n"
+                                 "  Coro.yield()\n"
+                                 "  return 42\n"
+                                 "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct first = {0};
+    XrProgramSourceProduct second = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &first, &diagnostic);
+    assert_source_build_ok(&fixture.input, &second, &diagnostic);
+    if (!first.program || !second.program) {
+        xr_program_source_product_free(&second);
+        xr_program_source_product_free(&first);
+        xr_target_profile_free(profile);
+        source_build_fixture_free(&fixture);
+        return;
+    }
+    assert_products_equal(&first, &second);
+    uint32_t entry = xr_validated_program_entry_function(first.program);
+    ASSERT_LT(entry, first.program->function_count);
+    const XrValidatedFunction *function = &first.program->functions[entry];
+    ASSERT_EQ_UINT(function->coroutine_state_count, 3u);
+    ASSERT_EQ_UINT(function->coroutine_safepoint_count, 2u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_COROUTINE_YIELD), 2u);
+    for (uint32_t safepoint = 0u; safepoint < 2u; ++safepoint) {
+        ASSERT_EQ_UINT(function->coroutine_safepoints[safepoint].resume_state_id, safepoint + 1u);
+        ASSERT_EQ_UINT(function->coroutine_safepoints[safepoint].live_value_count, 0u);
+    }
+
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = first.program,
+        .profile = profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+
+    XrReferenceExecution *reference = NULL;
+    ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference));
+    XrReferenceOutcome reference_outcome = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_outcome.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(reference_outcome.state_id, 1u);
+    ASSERT_EQ_UINT(reference_outcome.safepoint_id, 0u);
+    reference_outcome = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_outcome.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(reference_outcome.state_id, 2u);
+    ASSERT_EQ_UINT(reference_outcome.safepoint_id, 1u);
+    reference_outcome = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_outcome.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(reference_outcome.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(reference_outcome.value.as.i64, 42);
+    xr_reference_execution_free(reference);
+
+    for (uint32_t cancel_state = 1u; cancel_state <= 2u; ++cancel_state) {
+        XrReferenceExecution *cancelled = NULL;
+        ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &cancelled));
+        for (uint32_t step = 0u; step < cancel_state; ++step) {
+            reference_outcome = xr_reference_execution_step(cancelled);
+            ASSERT_EQ_INT(reference_outcome.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+        }
+        reference_outcome = xr_reference_execution_cancel(cancelled);
+        ASSERT_EQ_INT(reference_outcome.kind, XR_REFERENCE_OUTCOME_CANCELLED);
+        ASSERT_EQ_UINT(reference_outcome.state_id, cancel_state);
+        xr_reference_execution_free(cancelled);
+    }
+
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &code, &vm_diagnostic), XR_VM_CODE_OK);
+    XrVmExecution *vm = NULL;
+    ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm));
+    XrVmOutcome vm_outcome = xr_vm_execution_step(vm);
+    ASSERT_EQ_INT(vm_outcome.kind, XR_VM_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(vm_outcome.state_id, 1u);
+    ASSERT_EQ_UINT(vm_outcome.safepoint_id, 0u);
+    vm_outcome = xr_vm_execution_step(vm);
+    ASSERT_EQ_INT(vm_outcome.kind, XR_VM_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(vm_outcome.state_id, 2u);
+    ASSERT_EQ_UINT(vm_outcome.safepoint_id, 1u);
+    vm_outcome = xr_vm_execution_step(vm);
+    ASSERT_EQ_INT(vm_outcome.kind, XR_VM_OUTCOME_RETURN);
+    ASSERT_EQ_INT(vm_outcome.value.kind, XR_VM_VALUE_I64);
+    ASSERT_EQ_INT(vm_outcome.value.as.i64, 42);
+    xr_vm_execution_free(vm);
+
+    for (uint32_t cancel_state = 1u; cancel_state <= 2u; ++cancel_state) {
+        XrVmExecution *cancelled = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &cancelled));
+        for (uint32_t step = 0u; step < cancel_state; ++step) {
+            vm_outcome = xr_vm_execution_step(cancelled);
+            ASSERT_EQ_INT(vm_outcome.kind, XR_VM_OUTCOME_SUSPENDED);
+        }
+        vm_outcome = xr_vm_execution_cancel(cancelled);
+        ASSERT_EQ_INT(vm_outcome.kind, XR_VM_OUTCOME_CANCELLED);
+        ASSERT_EQ_UINT(vm_outcome.state_id, cancel_state);
+        xr_vm_execution_free(cancelled);
+    }
+    xr_vm_code_free(code);
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(first.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "case UINT32_C(2)"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "return xr_aot_make(5, UINT32_C(1), 0)"));
+    if (multi_safepoint_aot_output_path) {
+        FILE *output = fopen(multi_safepoint_aot_output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_TRUE(
+            fprintf(output,
+                    "\nint main(void) {\n"
+                    "    XrAotEntryCoroutineFrame resumed;\n"
+                    "    xr_aot_entry_coroutine_frame_initialize(&resumed);\n"
+                    "    XrBackendNativeOutcome outcome = "
+                    "xr_aot_entry_coroutine_step(&resumed);\n"
+                    "    if (outcome.kind != UINT32_C(1) || outcome.state_id != UINT32_C(1) || "
+                    "outcome.safepoint_id != UINT32_C(0)) return 255;\n"
+                    "    outcome = xr_aot_entry_coroutine_step(&resumed);\n"
+                    "    if (outcome.kind != UINT32_C(1) || outcome.state_id != UINT32_C(2) || "
+                    "outcome.safepoint_id != UINT32_C(1)) return 254;\n"
+                    "    outcome = xr_aot_entry_coroutine_step(&resumed);\n"
+                    "    if (outcome.kind != 0 || outcome.value != INT64_C(42)) return 253;\n"
+                    "    xr_aot_entry_coroutine_frame_dispose(&resumed);\n"
+                    "    for (uint32_t cancel_state = UINT32_C(1); cancel_state <= UINT32_C(2); "
+                    "++cancel_state) {\n"
+                    "        XrAotEntryCoroutineFrame cancelled;\n"
+                    "        xr_aot_entry_coroutine_frame_initialize(&cancelled);\n"
+                    "        for (uint32_t step = 0; step < cancel_state; ++step) {\n"
+                    "            outcome = xr_aot_entry_coroutine_step(&cancelled);\n"
+                    "            if (outcome.kind != UINT32_C(1)) return 252;\n"
+                    "        }\n"
+                    "        outcome = xr_aot_entry_coroutine_cancel(&cancelled);\n"
+                    "        if (outcome.kind != UINT32_C(3) || outcome.state_id != cancel_state) "
+                    "return 251;\n"
+                    "        xr_aot_entry_coroutine_frame_dispose(&cancelled);\n"
+                    "    }\n"
+                    "    return 227;\n"
+                    "}\n") > 0);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+    xr_program_source_product_free(&second);
+    xr_program_source_product_free(&first);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed) {
     static const char source[] = "import time\n"
                                  "fn answer() -> i64 { time.sleep(1); return 0 }\n";
@@ -2347,7 +2544,9 @@ if (argc >= 8)
     pipe_uncaught_error_aot_output_path = argv[7];
 if (argc >= 9)
     pipe_cancel_cleanup_aot_output_path = argv[8];
-if (argc > 9)
+if (argc >= 10)
+    multi_safepoint_aot_output_path = argv[9];
+if (argc > 10)
     return 2;
 RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
 RUN_TEST(source_owner_two_module_graph_is_deterministic);
@@ -2361,6 +2560,7 @@ RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
 RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);
 RUN_TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors);
 RUN_TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel);
+RUN_TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);

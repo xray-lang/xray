@@ -1680,7 +1680,8 @@ static bool parse_semantic_metadata(VerifyContext *context, const XrProgramView 
         if (safepoint_count > XR_PROGRAM_LIMIT_COROUTINE_SAFEPOINTS_PER_FUNCTION ||
             safepoint_count > SIZE_MAX / sizeof(XrValidatedCoroutineSafepoint) ||
             (state_count == 0u) != (safepoint_count == 0u) ||
-            (state_count != 0u && state_count < 2u) || !spend(context, safepoint_count, location)) {
+            (state_count != 0u && (state_count < 2u || state_count != safepoint_count + 1u)) ||
+            !spend(context, safepoint_count, location)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
             return false;
         }
@@ -1697,7 +1698,7 @@ static bool parse_semantic_metadata(VerifyContext *context, const XrProgramView 
             uint64_t encoded_safepoint = take_uvar(&reader);
             uint64_t resume_state = take_uvar(&reader);
             uint64_t live_count = take_uvar(&reader);
-            if (encoded_safepoint != safepoint || resume_state == 0u ||
+            if (encoded_safepoint != safepoint || resume_state != (uint64_t) safepoint + 1u ||
                 resume_state >= state_count ||
                 live_count > XR_PROGRAM_LIMIT_LIVE_VALUES_PER_SAFEPOINT ||
                 live_count > SIZE_MAX / sizeof(uint32_t) || !spend(context, live_count, location)) {
@@ -3458,16 +3459,20 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 &function->coroutine_safepoints[safepoint_id];
             const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
             uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
-            uint32_t child_yields = 0u;
+            uint32_t child_suspensions = 0u;
             for (uint32_t child_block = 0u; child_block < callee->block_count; ++child_block)
                 for (uint32_t child_instruction = 0u;
                      child_instruction < callee->blocks[child_block].instruction_count;
-                     ++child_instruction)
-                    child_yields +=
-                        callee->blocks[child_block].instructions[child_instruction].operation_id ==
-                        XR_CORE_OP_CORE_COROUTINE_YIELD;
-            if (callee_id == function_id || callee->coroutine_state_count != 2u ||
-                callee->coroutine_safepoint_count != 1u || child_yields != 1u ||
+                     ++child_instruction) {
+                    uint16_t operation =
+                        callee->blocks[child_block].instructions[child_instruction].operation_id;
+                    if (operation == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                        operation == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED)
+                        ++child_suspensions;
+                }
+            if (callee_id == function_id || callee->coroutine_safepoint_count == 0u ||
+                callee->coroutine_state_count != callee->coroutine_safepoint_count + 1u ||
+                child_suspensions != callee->coroutine_safepoint_count ||
                 callee->error_type_id != XR_CORE_TYPE_VOID ||
                 callee->panic_type_id != XR_CORE_TYPE_VOID || safepoint->resume_state_id == 0u ||
                 safepoint->resume_state_id >= function->coroutine_state_count ||
@@ -4610,7 +4615,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
         has_coroutine !=
             ((function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) != 0u) ||
         (has_coroutine &&
-         (function->coroutine_state_count != 2u || function->coroutine_safepoint_count != 1u))) {
+         function->coroutine_state_count != function->coroutine_safepoint_count + 1u)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
         return false;
     }

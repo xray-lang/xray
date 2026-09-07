@@ -379,24 +379,36 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         bool coroutine =
             function->coroutine_state_count != 0u || function->coroutine_safepoint_count != 0u;
         if ((coroutine &&
-             (function->coroutine_state_count != 2u || function->coroutine_safepoint_count != 1u ||
+             (function->coroutine_safepoint_count == 0u ||
+              function->coroutine_state_count != function->coroutine_safepoint_count + 1u ||
               !function->coroutine_states || !function->coroutine_safepoints ||
-              function->coroutine_states[0].continuation_block != function->entry_block ||
-              function->coroutine_states[1].continuation_block >= function->block_count ||
-              function->coroutine_safepoints[0].resume_state_id != 1u ||
-              (function->coroutine_safepoints[0].live_value_count != 0u &&
-               !function->coroutine_safepoints[0].live_value_ids))) ||
+              function->coroutine_states[0].continuation_block != function->entry_block)) ||
             (!coroutine && (function->coroutine_states || function->coroutine_safepoints))) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                       function_id, 0u, 0u);
             return false;
         }
         uint32_t suspension_count = 0u;
-        if (coroutine) {
-            const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[0];
-            if ((function->effect_mask & XR_CORE_EFFECT_SUSPEND) == 0u ||
-                (function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) == 0u ||
-                point->resume_state_id >= function->coroutine_state_count) {
+        if (coroutine &&
+            ((function->effect_mask & XR_CORE_EFFECT_SUSPEND) == 0u ||
+             (function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) == 0u)) {
+            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                      function_id, 0u, 0u);
+            return false;
+        }
+        for (uint32_t state = 1u; state < function->coroutine_state_count; ++state) {
+            if (function->coroutine_states[state].continuation_block >= function->block_count) {
+                xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                          function_id, 0u, 0u);
+                return false;
+            }
+        }
+        for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count;
+             ++safepoint) {
+            const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
+            if (point->resume_state_id != safepoint + 1u ||
+                point->resume_state_id >= function->coroutine_state_count ||
+                (point->live_value_count != 0u && !point->live_value_ids)) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                           function_id, 0u, 0u);
                 return false;
@@ -521,8 +533,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     const XrBackendBlock *normal = &function->blocks[instruction->successors[0]];
                     uint32_t implicit_result =
                         callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
-                    if (callee_id == function_id || callee->coroutine_state_count != 2u ||
-                        callee->coroutine_safepoint_count != 1u ||
+                    if (callee_id == function_id || callee->coroutine_safepoint_count == 0u ||
+                        callee->coroutine_state_count != callee->coroutine_safepoint_count + 1u ||
                         callee->error_type_id != XR_CORE_TYPE_VOID ||
                         callee->panic_type_id != XR_CORE_TYPE_VOID ||
                         function->coroutine_states[point->resume_state_id].continuation_block !=
