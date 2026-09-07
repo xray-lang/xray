@@ -105,6 +105,7 @@ typedef struct XrXiCancelEdge {
     const XiCoroSuspendPoint *point;
     const XiValue *registration;
     const XiBlock *handler;
+    bool private_projection;
 } XrXiCancelEdge;
 
 typedef struct XrXiCancelBlockStorage {
@@ -229,7 +230,8 @@ static const XrXiCancelEdge *find_cancel_edge(const XrXiBuildContext *context,
                                               const XiCoroSuspendPoint *point);
 static XrProgramBuildStatus append_cancel_edge(XrXiBuildContext *context, const XiFunc *function,
                                                const XiCoroSuspendPoint *point,
-                                               const XiValue *registration);
+                                               const XiValue *registration,
+                                               bool private_projection);
 static bool coroutine_function_has_proven_suspend(const XiFunc *function, const XiFunc **stack,
                                                   uint32_t depth);
 static bool exact_condition_assertion(const XiValue *value);
@@ -2807,11 +2809,15 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
 }
 
 /* Xi still carries the generic pending-error scaffold emitted before resolver
- * evidence classifies a constructor-shaped call.  Program may erase that CFG
- * edge only for an exact, fieldless class allocation and only when the error
- * continuation is the isolated mechanical catch/rethrow block created for the
- * same call.  Any cleanup or user-visible work outside that shape remains
- * unsupported instead of being silently discarded. */
+ * evidence
+ * classifies a constructor-shaped call.  Exact nominal construction
+ * has no typed-error outcome,
+ * so its exclusive mechanical error continuation
+ * is unreachable even when that continuation
+ * contains cleanup for other
+ * owners.  Preserve the closed catch/rethrow shell: an aliased or
+ * non-terminal
+ * error block is not constructor-private evidence. */
 static const XiValue *exact_infallible_class_construction_in_block(const XrXiBuildContext *context,
                                                                    const XiFunc *function,
                                                                    const XiBlock *block) {
@@ -2832,23 +2838,22 @@ static const XiValue *exact_infallible_class_construction_in_block(const XrXiBui
         return NULL;
 
     const XiValue *caught = NULL;
+    bool saw_control = false;
     for (uint32_t index = 0u; index < error->nvalues; ++index) {
         const XiValue *value = error->values[index];
-        if (!value)
+        if (!value || value->block != error)
             return NULL;
-        if (value->op == XI_ERR_CATCH) {
-            if (caught || value->nargs != 0u)
-                return NULL;
-            caught = value;
-            continue;
-        }
         if (value == error->control)
+            saw_control = true;
+        if (value->op != XI_ERR_CATCH)
             continue;
-        if (value->op != XI_RELEASE || value->nargs != 1u || !value->args ||
-            logical_value_identity(value->args[0]) != call)
+        if (caught || value->nargs != 0u)
             return NULL;
+        caught = value;
     }
-    return caught && logical_value_identity(error->control->args[0]) == caught ? call : NULL;
+    return caught && saw_control && logical_value_identity(error->control->args[0]) == caught
+               ? call
+               : NULL;
 }
 
 static bool block_is_elided_class_construction_error_continuation(const XrXiBuildContext *context,
@@ -7969,18 +7974,20 @@ static XrProgramBuildStatus prepare_cancel_continuations(XrXiBuildContext *conte
                 XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
-                bool shared_reason = handler_storage && handler_storage->trap_cleanup;
+                bool private_projection = handler_storage && (handler_storage->trap_cleanup ||
+                                                              handler_storage->cancel_cleanup);
                 if (!contains || !handler_storage ||
-                    (handler_storage->reachable && !shared_reason) ||
-                    handler_storage->panic_cleanup || handler_storage->cancel_cleanup ||
+                    (handler_storage->reachable && !private_projection) ||
+                    handler_storage->panic_cleanup ||
                     !exact_static_cleanup_handler(function, registration))
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi suspension v%u has no exact private cancel cleanup",
                                 point->op ? point->op->id : UINT32_MAX);
-                status = append_cancel_edge(context, function, point, registration);
+                status =
+                    append_cancel_edge(context, function, point, registration, private_projection);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
-                if (!shared_reason)
+                if (!private_projection)
                     handler_storage->cancel_cleanup = true;
             }
         }
@@ -9254,13 +9261,13 @@ static bool block_has_argument_key(const XrCoreIrBlockInput *block, XrCoreIrKey 
     return false;
 }
 
-/* A static cleanup body can serve several termination reasons in Xi, but a
- * canonical Program
- * block has exactly one terminal.  Materialize cancellation
- * as a private, re-keyed projection of
- * the already verified cleanup block so
- * trap/panic publication and cancellation never share a
- * terminal block. */
+/* A static cleanup body can serve several termination reasons or suspension
+ * points in Xi, but a
+ * canonical Program block has one terminal and one exact
+ * owner payload.  Materialize every
+ * additional cancellation use as a private,
+ * re-keyed projection of the already verified cleanup
+ * block. */
 static XrProgramBuildStatus
 clone_cancel_cleanup_block(const XrXiBuildContext *context, XrXiFunctionStorage *function,
                            const XrXiBlockStorage *handler, const XrCoreIrBlockInput *source,
@@ -9274,7 +9281,8 @@ clone_cancel_cleanup_block(const XrXiBuildContext *context, XrXiFunctionStorage 
     const XrCoreIrInstructionInput *source_terminal =
         &source->instructions[source->instruction_count - 1u];
     if ((source_terminal->operation_id != XR_CORE_OP_CORE_TRAP &&
-         source_terminal->operation_id != XR_CORE_OP_CORE_PANIC_PUBLISH) ||
+         source_terminal->operation_id != XR_CORE_OP_CORE_PANIC_PUBLISH &&
+         source_terminal->operation_id != XR_CORE_OP_CORE_CANCEL_PUBLISH) ||
         source_terminal->successor_count != 0u)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi shared cleanup has no reason-private terminal");
@@ -9421,7 +9429,8 @@ clone_cancel_cleanup_block(const XrXiBuildContext *context, XrXiFunctionStorage 
 
 static XrProgramBuildStatus append_cancel_edge(XrXiBuildContext *context, const XiFunc *function,
                                                const XiCoroSuspendPoint *point,
-                                               const XiValue *registration) {
+                                               const XiValue *registration,
+                                               bool private_projection) {
     if (context->cancel_edge_count == context->cancel_edge_capacity) {
         uint32_t capacity = context->cancel_edge_capacity ? context->cancel_edge_capacity * 2u : 4u;
         if (capacity < context->cancel_edge_capacity)
@@ -9438,6 +9447,7 @@ static XrProgramBuildStatus append_cancel_edge(XrXiBuildContext *context, const 
         .point = point,
         .registration = registration,
         .handler = (const XiBlock *) registration->aux,
+        .private_projection = private_projection,
     };
     return XR_PROGRAM_BUILD_OK;
 }
@@ -9552,7 +9562,7 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
     if (!successors)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     successors[0] = block_key(function, point->resume_block);
-    successors[1] = cancel_edge && cancel_handler->cancel_cleanup
+    successors[1] = cancel_edge && !cancel_edge->private_projection
                         ? block_key(function, cancel_edge->handler)
                         : cancel_block_key(function, safepoint_id);
     instruction->successors = successors;
@@ -9677,7 +9687,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         memcpy(live_values, operands + call.operand_count,
                (size_t) live_count * sizeof(*live_values));
     successors[0] = block_key(function, point->resume_block);
-    successors[1] = cancel_edge && cancel_handler->cancel_cleanup
+    successors[1] = cancel_edge && !cancel_edge->private_projection
                         ? block_key(function, cancel_edge->handler)
                         : cancel_block_key(function, safepoint_id);
     instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
@@ -10466,8 +10476,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi function %u has no exact safepoint owner", function_index);
         const XrXiCancelEdge *edge = find_cancel_edge(context, xi, point);
-        const XrXiBlockStorage *handler = edge ? find_block_storage(storage, edge->handler) : NULL;
-        synthetic_cancel_count += !handler || !handler->cancel_cleanup;
+        synthetic_cancel_count += !edge || edge->private_projection;
     }
     if (synthetic_cancel_count > UINT32_MAX - xi->nblocks)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
@@ -10883,7 +10892,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                             "Xi function %u has no exact safepoint owner", function_index);
             const XrXiCancelEdge *edge = find_cancel_edge(context, xi, point);
             XrXiBlockStorage *handler = edge ? find_block_storage(storage, edge->handler) : NULL;
-            if (handler && handler->cancel_cleanup)
+            if (edge && !edge->private_projection)
                 continue;
             XrCoreIrBlockInput *cancel_block = &storage->blocks[output_block_index++];
             XrXiCancelBlockStorage *cancel = &storage->cancel_blocks[safepoint];

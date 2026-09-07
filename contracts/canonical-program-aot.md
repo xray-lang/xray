@@ -68,7 +68,7 @@ normally reachable cancel values and continuations; generated C does not treat f
 place-address reconstruction, error, panic, or trap as a cancellation alias.
 
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
-anchor-sha256: tests/unit/CMakeLists.txt 4878f8e24dc8c5e671ac4dad2def347412eefc32f117c4736c5d08861d7c0478
+anchor-sha256: tests/unit/CMakeLists.txt ca0eaf5218371bc35df82a9570344fd2f780291760b58f854a96c264febf1cee
 anchor-sha256: xisa/core/registry.json c38744bb33a8f77f47c4668a6b09a8e1335b8bfbbb244fab1eb756aca2bc4a34
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json c3425475365edbbbe3a77fd5812107f9b1dec144a3d594a101419f56c7844f5d
@@ -85,4 +85,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f3
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c 7d6b7a4a4d15e87a190d847a69debeda3f1f04f5d11b64dd4444bcbe4dc594b7
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 2dee13b15bed684cd59bd1c747b3df59925cbadb161bca7fb53cad13d29f75a2
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 54c995a16b0a917f6b83e187ef7a9321027df179d56bc5d80e3050e0fb543e77

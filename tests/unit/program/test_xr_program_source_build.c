@@ -72,6 +72,12 @@ typedef struct PipeProviderProbe {
     bool close_results[2];
 } PipeProviderProbe;
 
+typedef struct PipeCloseSequenceProbe {
+    const int64_t *expected_handles;
+    uint32_t expected_count;
+    uint32_t calls;
+} PipeCloseSequenceProbe;
+
 typedef struct ProviderTrapCleanupProbe {
     uint32_t events;
     uint32_t clock_calls;
@@ -182,6 +188,24 @@ static XrProviderCallStatus pipe_close_provider_probe(void *context, int64_t han
     *result_out = probe->close_results[probe->close_calls & 1u];
     ++probe->close_calls;
     return XR_PROVIDER_CALL_OK;
+}
+
+static XrProviderCallStatus pipe_close_sequence_probe(void *context, int64_t handle,
+                                                      bool *result_out) {
+    PipeCloseSequenceProbe *probe = context;
+    if (!probe || !result_out || probe->calls >= probe->expected_count ||
+        handle != probe->expected_handles[probe->calls])
+        return XR_PROVIDER_CALL_FAILED;
+    *result_out = true;
+    ++probe->calls;
+    return XR_PROVIDER_CALL_OK;
+}
+
+static void pipe_close_sequence_reset(PipeCloseSequenceProbe *probe, const int64_t *handles,
+                                      uint32_t count) {
+    probe->expected_handles = handles;
+    probe->expected_count = count;
+    probe->calls = 0u;
 }
 
 static XrProviderCallStatus clock_provider_unary_probe(void *context, int64_t argument,
@@ -2431,13 +2455,111 @@ TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors) {
     source_build_fixture_free(&fixture);
 }
 
+static const uint32_t affine_coroutine_states[] = {1u, 1u, 2u, 3u};
+static const uint32_t affine_coroutine_safepoints[] = {0u, 0u, 1u, 2u};
+static const uint32_t affine_coroutine_closes_before[] = {0u, 0u, 2u, 2u};
+static const int64_t affine_coroutine_close_handles[] = {
+    2147483644,
+    2147483645,
+    2147483646,
+    2147483647,
+};
+
+static void assert_affine_reference_executions(XrInstance *instance, uint32_t entry,
+                                               PipeCloseSequenceProbe *probe) {
+    pipe_close_sequence_reset(probe, affine_coroutine_close_handles, 4u);
+    XrReferenceExecution *execution = NULL;
+    ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &execution));
+    for (uint32_t step = 0u; step < 4u; ++step) {
+        XrReferenceOutcome outcome = xr_reference_execution_step(execution);
+        ASSERT_EQ_INT(outcome.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+        ASSERT_EQ_UINT(outcome.state_id, affine_coroutine_states[step]);
+        ASSERT_EQ_UINT(outcome.safepoint_id, affine_coroutine_safepoints[step]);
+        ASSERT_EQ_UINT(probe->calls, affine_coroutine_closes_before[step]);
+    }
+    XrReferenceOutcome returned = xr_reference_execution_step(execution);
+    ASSERT_EQ_INT(returned.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(returned.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(returned.value.as.i64, 42);
+    ASSERT_EQ_UINT(probe->calls, 4u);
+    xr_reference_execution_free(execution);
+    ASSERT_EQ_UINT(probe->calls, 4u);
+
+    for (uint32_t cancel_after = 1u; cancel_after <= 4u; ++cancel_after) {
+        uint32_t expected_closes = cancel_after <= 2u ? 2u : 4u;
+        pipe_close_sequence_reset(probe, affine_coroutine_close_handles, expected_closes);
+        execution = NULL;
+        ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &execution));
+        for (uint32_t step = 0u; step < cancel_after; ++step) {
+            XrReferenceOutcome suspended = xr_reference_execution_step(execution);
+            ASSERT_EQ_INT(suspended.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+            ASSERT_EQ_UINT(suspended.state_id, affine_coroutine_states[step]);
+            ASSERT_EQ_UINT(suspended.safepoint_id, affine_coroutine_safepoints[step]);
+            ASSERT_EQ_UINT(probe->calls, affine_coroutine_closes_before[step]);
+        }
+        XrReferenceOutcome cancelled = xr_reference_execution_cancel(execution);
+        ASSERT_EQ_INT(cancelled.kind, XR_REFERENCE_OUTCOME_CANCELLED);
+        ASSERT_EQ_UINT(cancelled.state_id, affine_coroutine_states[cancel_after - 1u]);
+        ASSERT_EQ_UINT(probe->calls, expected_closes);
+        xr_reference_execution_free(execution);
+        ASSERT_EQ_UINT(probe->calls, expected_closes);
+    }
+}
+
+static void assert_affine_vm_executions(const XrVmCode *code, XrInstance *instance, uint32_t entry,
+                                        PipeCloseSequenceProbe *probe) {
+    pipe_close_sequence_reset(probe, affine_coroutine_close_handles, 4u);
+    XrVmExecution *execution = NULL;
+    ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
+    for (uint32_t step = 0u; step < 4u; ++step) {
+        XrVmOutcome outcome = xr_vm_execution_step(execution);
+        ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_UINT(outcome.state_id, affine_coroutine_states[step]);
+        ASSERT_EQ_UINT(outcome.safepoint_id, affine_coroutine_safepoints[step]);
+        ASSERT_EQ_UINT(probe->calls, affine_coroutine_closes_before[step]);
+    }
+    XrVmOutcome returned = xr_vm_execution_step(execution);
+    ASSERT_EQ_INT(returned.kind, XR_VM_OUTCOME_RETURN);
+    ASSERT_EQ_INT(returned.value.kind, XR_VM_VALUE_I64);
+    ASSERT_EQ_INT(returned.value.as.i64, 42);
+    ASSERT_EQ_UINT(probe->calls, 4u);
+    xr_vm_execution_free(execution);
+    ASSERT_EQ_UINT(probe->calls, 4u);
+
+    for (uint32_t cancel_after = 1u; cancel_after <= 4u; ++cancel_after) {
+        uint32_t expected_closes = cancel_after <= 2u ? 2u : 4u;
+        pipe_close_sequence_reset(probe, affine_coroutine_close_handles, expected_closes);
+        execution = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
+        for (uint32_t step = 0u; step < cancel_after; ++step) {
+            XrVmOutcome suspended = xr_vm_execution_step(execution);
+            ASSERT_EQ_INT(suspended.kind, XR_VM_OUTCOME_SUSPENDED);
+            ASSERT_EQ_UINT(suspended.state_id, affine_coroutine_states[step]);
+            ASSERT_EQ_UINT(suspended.safepoint_id, affine_coroutine_safepoints[step]);
+            ASSERT_EQ_UINT(probe->calls, affine_coroutine_closes_before[step]);
+        }
+        XrVmOutcome cancelled = xr_vm_execution_cancel(execution);
+        ASSERT_EQ_INT(cancelled.kind, XR_VM_OUTCOME_CANCELLED);
+        ASSERT_EQ_UINT(cancelled.state_id, affine_coroutine_states[cancel_after - 1u]);
+        ASSERT_EQ_UINT(probe->calls, expected_closes);
+        xr_vm_execution_free(execution);
+        ASSERT_EQ_UINT(probe->calls, expected_closes);
+    }
+}
+
 TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
     static const char library_source[] = "import sys\n"
                                          "import { Pipe } from sys\n"
                                          "export fn child() -> Pipe {\n"
-                                         "  var live = sys.Pipe(2147483646, 2147483647)\n"
+                                         "  var guard = sys.Pipe(2147483644, 2147483645)\n"
+                                         "  defer {\n"
+                                         "    guard.closeRead()\n"
+                                         "    guard.closeWrite()\n"
+                                         "  }\n"
                                          "  Coro.yield()\n"
-                                         "  return live\n"
+                                         "  Coro.yield()\n"
+                                         "  var result = sys.Pipe(2147483646, 2147483647)\n"
+                                         "  return result\n"
                                          "}\n";
     static const char entry_source[] = "import sys\n"
                                        "import { Pipe } from sys\n"
@@ -2448,6 +2570,8 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
                                        "    live.closeRead()\n"
                                        "    live.closeWrite()\n"
                                        "  }\n"
+                                       "  Coro.yield()\n"
+                                       "  Coro.yield()\n"
                                        "  return live.readEnd() - 2147483604\n"
                                        "}\n";
     SourceBuildFixture fixture;
@@ -2472,6 +2596,8 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
     uint32_t entry = xr_validated_program_entry_function(product.program);
     ASSERT_LT(entry, product.program->function_count);
     const XrValidatedFunction *function = &product.program->functions[entry];
+    ASSERT_EQ_UINT(function->coroutine_state_count, 4u);
+    ASSERT_EQ_UINT(function->coroutine_safepoint_count, 3u);
     const XrValidatedInstruction *coroutine_call = NULL;
     for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
         const XrValidatedBlock *block = &function->blocks[block_index];
@@ -2490,6 +2616,13 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
     ASSERT_LT(child_id, product.program->function_count);
     const XrValidatedFunction *child = &product.program->functions[child_id];
     ASSERT_EQ_INT(child->result_ownership, XR_CORE_IR_OWNER);
+    ASSERT_EQ_UINT(child->coroutine_state_count, 3u);
+    ASSERT_EQ_UINT(child->coroutine_safepoint_count, 2u);
+    ASSERT_EQ_UINT(child->coroutine_safepoints[0].live_value_count, 1u);
+    ASSERT_EQ_UINT(child->coroutine_safepoints[1].live_value_count, 1u);
+    ASSERT_EQ_UINT(function->coroutine_safepoints[0].live_value_count, 0u);
+    ASSERT_EQ_UINT(function->coroutine_safepoints[1].live_value_count, 1u);
+    ASSERT_EQ_UINT(function->coroutine_safepoints[2].live_value_count, 1u);
     const XrValidatedBlock *normal = &function->blocks[coroutine_call->successors[0]];
     const XrValidatedBlock *cancel = &function->blocks[coroutine_call->successors[1]];
     ASSERT_EQ_UINT(normal->argument_count, 1u);
@@ -2500,17 +2633,13 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
     XrProgramProviderRequirementView requirement = {0};
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(product.program), 1u);
     ASSERT_TRUE(xr_validated_program_provider_requirement(product.program, 0u, &requirement));
-    PipeProviderProbe probe = {
-        .read_handle = 2147483646,
-        .write_handle = 2147483647,
-        .close_results = {true, true},
-    };
+    PipeCloseSequenceProbe probe = {0};
     XrProviderOperationBinding operation = {
         .operation_id = requirement.operation_ids[0],
         .trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
         .context = &probe,
     };
-    operation.entry.bool_i64_unary = pipe_close_provider_probe;
+    operation.entry.bool_i64_unary = pipe_close_sequence_probe;
     XrProviderBinding provider = {
         .contract_id = requirement.contract_id,
         .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
@@ -2536,44 +2665,12 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
 
-    XrReferenceExecution *reference = NULL;
-    ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference));
-    ASSERT_EQ_INT(xr_reference_execution_step(reference).kind, XR_REFERENCE_OUTCOME_SUSPENDED);
-    XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
-    ASSERT_EQ_INT(reference_return.kind, XR_REFERENCE_OUTCOME_RETURN);
-    ASSERT_EQ_INT(reference_return.value.kind, XR_REFERENCE_VALUE_I64);
-    ASSERT_EQ_INT(reference_return.value.as.i64, 42);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
-    xr_reference_execution_free(reference);
-
-    XrReferenceExecution *reference_cancel = NULL;
-    ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference_cancel));
-    ASSERT_EQ_INT(xr_reference_execution_step(reference_cancel).kind,
-                  XR_REFERENCE_OUTCOME_SUSPENDED);
-    ASSERT_EQ_INT(xr_reference_execution_cancel(reference_cancel).kind,
-                  XR_REFERENCE_OUTCOME_CANCELLED);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
-    xr_reference_execution_free(reference_cancel);
+    assert_affine_reference_executions(instance, entry, &probe);
 
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
     ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &code, &vm_diagnostic), XR_VM_CODE_OK);
-    XrVmExecution *vm = NULL;
-    ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm));
-    ASSERT_EQ_INT(xr_vm_execution_step(vm).kind, XR_VM_OUTCOME_SUSPENDED);
-    XrVmOutcome vm_return = xr_vm_execution_step(vm);
-    ASSERT_EQ_INT(vm_return.kind, XR_VM_OUTCOME_RETURN);
-    ASSERT_EQ_INT(vm_return.value.kind, XR_VM_VALUE_I64);
-    ASSERT_EQ_INT(vm_return.value.as.i64, 42);
-    ASSERT_EQ_UINT(probe.close_calls, 4u);
-    xr_vm_execution_free(vm);
-
-    XrVmExecution *vm_cancel = NULL;
-    ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm_cancel));
-    ASSERT_EQ_INT(xr_vm_execution_step(vm_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
-    ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED);
-    ASSERT_EQ_UINT(probe.close_calls, 4u);
-    xr_vm_execution_free(vm_cancel);
+    assert_affine_vm_executions(code, instance, entry, &probe);
     xr_vm_code_free(code);
 
     XrBackendOptions options = xr_backend_default_options();
@@ -2599,41 +2696,87 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_TRUE(
-            fprintf(output,
-                    "\nstatic uint32_t xr_probe_calls;\n"
-                    "static int xr_probe_close(void *context, uint32_t requirement, uint32_t "
-                    "operation, int64_t argument, uint8_t *result) {\n"
-                    "    static const int64_t expected[2] = {INT64_C(2147483646), "
-                    "INT64_C(2147483647)};\n"
-                    "    (void)context;\n"
-                    "    if (requirement != 0 || operation != 0 || !result || xr_probe_calls >= 2 "
-                    "|| argument != expected[xr_probe_calls]) return 1;\n"
-                    "    *result = UINT8_C(1);\n"
-                    "    ++xr_probe_calls;\n"
-                    "    return 0;\n"
-                    "}\n"
-                    "int main(void) {\n"
-                    "    XrAotEntryCoroutineFrame resumed;\n"
-                    "    xr_aot_entry_coroutine_frame_initialize(&resumed);\n"
-                    "    resumed.context.provider_call_bool_i64_unary = xr_probe_close;\n"
-                    "    XrBackendNativeOutcome suspended = "
-                    "xr_aot_entry_coroutine_step(&resumed);\n"
-                    "    if (suspended.kind != UINT32_C(1) || xr_probe_calls != 0) return 255;\n"
-                    "    XrBackendNativeOutcome returned = xr_aot_entry_coroutine_step(&resumed);\n"
-                    "    if (returned.kind != 0 || returned.value != INT64_C(42) || "
-                    "xr_probe_calls != 2) return 254;\n"
-                    "    xr_aot_entry_coroutine_frame_dispose(&resumed);\n"
-                    "    XrAotEntryCoroutineFrame cancelled;\n"
-                    "    xr_aot_entry_coroutine_frame_initialize(&cancelled);\n"
-                    "    cancelled.context.provider_call_bool_i64_unary = xr_probe_close;\n"
-                    "    suspended = xr_aot_entry_coroutine_step(&cancelled);\n"
-                    "    if (suspended.kind != UINT32_C(1) || xr_probe_calls != 2) return 253;\n"
-                    "    XrBackendNativeOutcome stopped = "
-                    "xr_aot_entry_coroutine_cancel(&cancelled);\n"
-                    "    if (stopped.kind != UINT32_C(3) || xr_probe_calls != 2) return 252;\n"
-                    "    xr_aot_entry_coroutine_frame_dispose(&cancelled);\n"
-                    "    return 228;\n"
-                    "}\n") > 0);
+            fprintf(
+                output,
+                "\nstatic uint32_t xr_probe_calls;\n"
+                "static const uint32_t xr_probe_states[4] = {UINT32_C(1), UINT32_C(1), "
+                "UINT32_C(2), UINT32_C(3)};\n"
+                "static const uint32_t xr_probe_safepoints[4] = {UINT32_C(0), UINT32_C(0), "
+                "UINT32_C(1), UINT32_C(2)};\n"
+                "static const uint32_t xr_probe_closes_before[4] = {UINT32_C(0), UINT32_C(0), "
+                "UINT32_C(2), UINT32_C(2)};\n"
+                "static int xr_probe_close(void *context, uint32_t requirement, uint32_t "
+                "operation, int64_t argument, uint8_t *result) {\n"
+                "    static const int64_t expected[16] = {\n"
+                "        INT64_C(2147483644), INT64_C(2147483645), INT64_C(2147483646), "
+                "INT64_C(2147483647),\n"
+                "        INT64_C(2147483644), INT64_C(2147483645),\n"
+                "        INT64_C(2147483644), INT64_C(2147483645),\n"
+                "        INT64_C(2147483644), INT64_C(2147483645), INT64_C(2147483646), "
+                "INT64_C(2147483647),\n"
+                "        INT64_C(2147483644), INT64_C(2147483645), INT64_C(2147483646), "
+                "INT64_C(2147483647)};\n"
+                "    (void)context;\n"
+                "    if (requirement != UINT32_C(0) || operation != UINT32_C(0) || !result || "
+                "xr_probe_calls >= UINT32_C(16) || argument != expected[xr_probe_calls]) return "
+                "1;\n"
+                "    *result = UINT8_C(1);\n"
+                "    ++xr_probe_calls;\n"
+                "    return 0;\n"
+                "}\n"
+                "static int xr_probe_is_suspended(XrBackendNativeOutcome outcome, uint32_t "
+                "observation, uint32_t expected_calls) {\n"
+                "    return observation < UINT32_C(4) && outcome.kind == UINT32_C(1) && "
+                "outcome.state_id == xr_probe_states[observation] && outcome.safepoint_id == "
+                "xr_probe_safepoints[observation] && xr_probe_calls == expected_calls;\n"
+                "}\n"
+                "static int xr_probe_run_normal(void) {\n"
+                "    uint32_t base = xr_probe_calls;\n"
+                "    XrAotEntryCoroutineFrame frame;\n"
+                "    xr_aot_entry_coroutine_frame_initialize(&frame);\n"
+                "    frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "    for (uint32_t observation = 0; observation < UINT32_C(4); ++observation) {\n"
+                "        XrBackendNativeOutcome suspended = "
+                "xr_aot_entry_coroutine_step(&frame);\n"
+                "        if (!xr_probe_is_suspended(suspended, observation, base + "
+                "xr_probe_closes_before[observation])) return 10 + (int)observation;\n"
+                "    }\n"
+                "    XrBackendNativeOutcome returned = xr_aot_entry_coroutine_step(&frame);\n"
+                "    if (returned.kind != UINT32_C(0) || returned.value != INT64_C(42) || "
+                "xr_probe_calls != base + UINT32_C(4)) return 14;\n"
+                "    xr_aot_entry_coroutine_frame_dispose(&frame);\n"
+                "    return xr_probe_calls == base + UINT32_C(4) ? 0 : 15;\n"
+                "}\n"
+                "static int xr_probe_run_cancel(uint32_t cancel_after) {\n"
+                "    uint32_t base = xr_probe_calls;\n"
+                "    XrAotEntryCoroutineFrame frame;\n"
+                "    xr_aot_entry_coroutine_frame_initialize(&frame);\n"
+                "    frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "    for (uint32_t observation = 0; observation < cancel_after; ++observation) {\n"
+                "        XrBackendNativeOutcome suspended = "
+                "xr_aot_entry_coroutine_step(&frame);\n"
+                "        if (!xr_probe_is_suspended(suspended, observation, base + "
+                "xr_probe_closes_before[observation])) return 20 + (int)observation;\n"
+                "    }\n"
+                "    uint32_t expected_closes = cancel_after <= UINT32_C(2) ? UINT32_C(2) : "
+                "UINT32_C(4);\n"
+                "    XrBackendNativeOutcome cancelled = xr_aot_entry_coroutine_cancel(&frame);\n"
+                "    if (cancelled.kind != UINT32_C(3) || cancelled.state_id != "
+                "xr_probe_states[cancel_after - UINT32_C(1)] || xr_probe_calls != base + "
+                "expected_closes) return 24;\n"
+                "    xr_aot_entry_coroutine_frame_dispose(&frame);\n"
+                "    return xr_probe_calls == base + expected_closes ? 0 : 25;\n"
+                "}\n"
+                "int main(void) {\n"
+                "    int result = xr_probe_run_normal();\n"
+                "    if (result != 0) return result;\n"
+                "    for (uint32_t cancel_after = UINT32_C(1); cancel_after <= UINT32_C(4); "
+                "++cancel_after) {\n"
+                "        result = xr_probe_run_cancel(cancel_after);\n"
+                "        if (result != 0) return result + (int)(cancel_after * UINT32_C(10));\n"
+                "    }\n"
+                "    return xr_probe_calls == UINT32_C(16) ? 229 : 255;\n"
+                "}\n") > 0);
         ASSERT_EQ_INT(fclose(output), 0);
     }
     xr_generated_c_free(&repeated);

@@ -754,7 +754,7 @@ add_test(NAME test_xr_program_affine_coroutine_result_aot_native
     COMMAND ${XRAY_PYTHON}
         ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
         --executable $<TARGET_FILE:test_xr_program_affine_coroutine_result_aot_native>
-        --expected-exit 228)
+        --expected-exit 229)
 set_tests_properties(test_xr_program_affine_coroutine_result_aot_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;module-graph;provider;pipe;coroutine;affine;cancel;generated-c;native;task-293")
 
