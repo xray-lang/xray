@@ -139,6 +139,10 @@ TIERS: Dict[str, Tuple[str, str, str]] = {
 TEST_NAME_RE = re.compile(r"^\s*Test\s*#[0-9]+:\s*(\S+)")
 NINJA_TARGET_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_.-]*): phony")
 BACKEND_TOUCHED = re.compile(r"^src/(aot|ir|coro|vm|runtime)/|^CMakeLists\.txt$|^xisa/")
+FOCUSED_CTEST_OPTIONS = {
+    "-R", "--tests-regex", "-L", "--label-regex", "-I", "--tests-information",
+    "--rerun-failed", "--tests-from-file",
+}
 
 REGRESSION_BASELINE = REPO_ROOT / "tests" / "regression" / "baseline_failures.txt"
 
@@ -200,6 +204,20 @@ def ctest_names(build_dir: Path, args: Sequence[str]) -> List[str]:
         if match:
             names.append(match.group(1))
     return names
+
+
+def has_explicit_ctest_selection(args: Sequence[str]) -> bool:
+    """Return whether forwarded ctest arguments intentionally narrow the run."""
+    for argument in args:
+        if argument in FOCUSED_CTEST_OPTIONS:
+            return True
+        if ((argument.startswith("-R") or argument.startswith("-L")) and
+                len(argument) > 2):
+            return True
+        if any(argument.startswith(f"{option}=")
+               for option in FOCUSED_CTEST_OPTIONS if option.startswith("--")):
+            return True
+    return False
 
 
 def cache_contains_all(build_dir: Path, entries: Sequence[str]) -> bool:
@@ -415,6 +433,10 @@ def main(argv: List[str]) -> int:
                        "qualification")
     else:
         include, exclude, not_covered = TIERS[tier]
+    focused_selection = not canonical_preflight and has_explicit_ctest_selection(extra)
+    if focused_selection:
+        focus_gap = f"unselected {tier} tests and auxiliary corpora"
+        not_covered = f"{focus_gap}, {not_covered}" if not_covered else focus_gap
     ctest_args = ["--output-on-failure", "-j", str(jobs)]
     if include:
         ctest_args += ["-R", include]
@@ -467,14 +489,15 @@ def main(argv: List[str]) -> int:
     code = subprocess.call(["ctest", *ctest_args, *extra],
                            cwd=str(build_dir), env=env)
 
-    if tier == "t1" and not run_regression_corpus(build_dir, True):
-        code = 1
-    elif tier in ("t2", "t3") and not run_regression_corpus(build_dir, False):
-        code = 1
+    if not focused_selection:
+        if tier == "t1" and not run_regression_corpus(build_dir, True):
+            code = 1
+        elif tier in ("t2", "t3") and not run_regression_corpus(build_dir, False):
+            code = 1
 
     # t0 additionally runs the compile-error corpus: the fastest broad check of
     # parser and analyzer diagnostics there is.
-    if tier == "t0" and code == 0:
+    if tier == "t0" and code == 0 and not focused_selection:
         print(f"{BLUE}==>{NC} compile-error corpus")
         env["XRAY_BIN"] = str(build_dir / platform.exe_name("xray"))
         corpus = proc.run([sys.executable, REPO_ROOT / "tests" / "compile_errors"
