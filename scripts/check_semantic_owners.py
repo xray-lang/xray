@@ -581,14 +581,14 @@ def source_files(root: Path) -> list[Path]:
     return sorted(files)
 
 
-def callers_for(root: Path, header: Path, symbols: list[str], files: list[Path]) -> tuple[list[str], list[str]]:
+def callers_for(root: Path, header: Path, symbols: list[str],
+                source_snapshot: dict[Path, str]) -> tuple[list[str], list[str]]:
     production: set[str] = set()
     tests: set[str] = set()
     needles = (header.name, *symbols)
-    for path in files:
+    for path, text in source_snapshot.items():
         if path == header:
             continue
-        text = path.read_text(encoding="utf-8", errors="strict")
         if not any(needle in text for needle in needles):
             continue
         relative = path.relative_to(root).as_posix()
@@ -598,12 +598,22 @@ def callers_for(root: Path, header: Path, symbols: list[str], files: list[Path])
 
 def build_inventory(root: Path, manifest: dict) -> list[dict]:
     files = source_files(root)
+    # Inventory construction asks the same question for every shared semantic
+    # owner: which production and test sources mention this header or one of
+    # its symbols?  Reading the complete source tree again for each owner made
+    # this O(owners * source bytes) in filesystem work (currently about 94k
+    # opens).  Capture one immutable in-process snapshot instead.  There is no
+    # persistent cache, so every verifier invocation still observes the exact
+    # current checkout and cannot accept stale evidence.
+    source_snapshot = {
+        path: path.read_text(encoding="utf-8", errors="strict") for path in files
+    }
     rows: list[dict] = []
     for entry in sorted(manifest["core"], key=lambda item: item["header"]):
         header = root / entry["header"]
-        text = header.read_text(encoding="utf-8")
+        text = source_snapshot[header]
         symbols = sorted(set(SIGNATURE_RE.findall(text)))
-        production, tests = callers_for(root, header, symbols, files)
+        production, tests = callers_for(root, header, symbols, source_snapshot)
         status = "production" if production else ("test-only" if tests else "dead")
         rows.append(
             {
