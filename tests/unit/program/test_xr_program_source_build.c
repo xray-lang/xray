@@ -1953,7 +1953,7 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
                                  "    live.closeRead()\n"
                                  "    live.closeWrite()\n"
                                  "  }\n"
-                                 "  const readEnd = live._readHandle\n"
+                                 "  const readEnd = live.readEnd()\n"
                                  "  Coro.yield()\n"
                                  "  return readEnd - 2147483604\n"
                                  "}\n";
@@ -1980,8 +1980,9 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PLACE_LOCAL), 3u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PLACE_LOCAL), 4u);
     ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PLACE_TAKE), 1u);
+    ASSERT_GT(program_operation_count(first.program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 0u);
 
     uint32_t entry = xr_validated_program_entry_function(first.program);
     ASSERT_LT(entry, first.program->function_count);
@@ -2046,6 +2047,31 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
     ASSERT_EQ_UINT(cancel->argument_count, 1u);
     ASSERT_EQ_INT(cancel->argument_categories[0], XR_CORE_IR_VALUE);
     ASSERT_EQ_INT(cancel->argument_ownerships[0], XR_CORE_IR_OWNER);
+    ASSERT_GT(cancel->instruction_count, 1u);
+    ASSERT_EQ_INT(cancel->instructions[cancel->instruction_count - 1u].operation_id,
+                  XR_CORE_OP_CORE_CANCEL_PUBLISH);
+    uint32_t cancel_cleanup_calls = 0u;
+    const XrValidatedBlock *trap = NULL;
+    for (uint32_t instruction = 0u; instruction < cancel->instruction_count; ++instruction)
+        cancel_cleanup_calls +=
+            cancel->instructions[instruction].operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
+    for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
+        const XrValidatedBlock *candidate = &function->blocks[block_index];
+        if (candidate->instruction_count == 0u ||
+            candidate->instructions[candidate->instruction_count - 1u].operation_id !=
+                XR_CORE_OP_CORE_TRAP)
+            continue;
+        ASSERT_NULL(trap);
+        trap = candidate;
+    }
+    ASSERT_EQ_UINT(cancel_cleanup_calls, 2u);
+    ASSERT_NOT_NULL(trap);
+    ASSERT_TRUE(trap != cancel);
+    uint32_t trap_cleanup_calls = 0u;
+    for (uint32_t instruction = 0u; instruction < trap->instruction_count; ++instruction)
+        trap_cleanup_calls +=
+            trap->instructions[instruction].operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
+    ASSERT_EQ_UINT(trap_cleanup_calls, 2u);
 
     XrProgramProviderRequirementView requirement = {0};
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);

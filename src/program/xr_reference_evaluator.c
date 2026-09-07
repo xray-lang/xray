@@ -1461,7 +1461,8 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
-           operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_RETURN;
+           operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_TRAP ||
+           operation_id == XR_CORE_OP_CORE_RETURN;
 }
 
 static void reference_execution_release_lease(XrReferenceExecution *execution) {
@@ -1963,6 +1964,15 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->finished = true;
                 reference_execution_release_lease(execution);
                 return execution_outcome(execution, XR_REFERENCE_OUTCOME_CANCELLED);
+            case XR_CORE_OP_CORE_TRAP: {
+                execution->finished = true;
+                XrReferenceOutcome result = execution_outcome(execution, XR_REFERENCE_OUTCOME_TRAP);
+                result.trap = instruction->immediate.u32 == 7u
+                                  ? XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED
+                                  : XR_REFERENCE_TRAP_EXPLICIT;
+                reference_execution_release_lease(execution);
+                return result;
+            }
             case XR_CORE_OP_CORE_RETURN: {
                 execution->finished = true;
                 XrReferenceOutcome result =

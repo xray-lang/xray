@@ -405,6 +405,12 @@ static XrCoreIrKey cancel_argument_key(const XrXiFunctionStorage *function, uint
     return key_from_key_and_u32(UINT8_C(0x59), cancel_block_key(function, safepoint_id), argument);
 }
 
+static XrCoreIrKey cancel_result_key(const XrXiFunctionStorage *function, uint32_t safepoint_id,
+                                     uint32_t instruction) {
+    return key_from_key_and_u32(UINT8_C(0x5b), cancel_block_key(function, safepoint_id),
+                                instruction);
+}
+
 static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value) {
     if (function && value == &function->capture_receiver)
         return key_from_key_and_u32(UINT8_C(0x55), function->key, 0u);
@@ -4723,6 +4729,19 @@ static const XiValue *deferred_coroutine_frame_place_owner(const XrXiBuildContex
                : NULL;
 }
 
+static const XiValue *canonical_owner_storage_identity(const XrXiBuildContext *context,
+                                                       const XrXiFunctionStorage *function,
+                                                       const XiValue *owner) {
+    owner = exact_logical_value_identity(context, function ? function->xi : NULL, owner);
+    if (owner && owner->op == XI_PLACE_LOAD && owner->nargs == 1u && owner->args) {
+        const XiValue *frame_owner =
+            coroutine_frame_place_owner(context, function->xi, owner->args[0]);
+        if (frame_owner)
+            owner = exact_logical_value_identity(context, function->xi, frame_owner);
+    }
+    return owner;
+}
+
 static const XrType *imported_callable_refined_type(const XrXiBuildContext *context,
                                                     const XiFunc *function,
                                                     const XiValue *imported) {
@@ -5150,6 +5169,36 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
         : logical_value_produces_owner(context, function->xi, source, 0u)
             ? logical_ownership_for_type(context, type_id)
             : XR_CORE_IR_NON_OWNER;
+    if (!phi && implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NONE &&
+        ownership == XR_CORE_IR_OWNER) {
+        const XiValue *storage_identity =
+            canonical_owner_storage_identity(context, function, source);
+        for (uint32_t index = 0u; storage_identity && index < block->argument_count; ++index) {
+            XrXiBlockArgumentStorage *current = &block->argument_storage[index];
+            if (current->phi || current->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+                current->ownership != XR_CORE_IR_OWNER ||
+                canonical_owner_storage_identity(context, function, current->source) !=
+                    storage_identity)
+                continue;
+            bool source_is_current = source->op == XI_PLACE_LOAD;
+            bool existing_is_current = current->source->op == XI_PLACE_LOAD;
+            if (source_is_current && existing_is_current && current->source != source)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi block b%u has multiple current owners for one storage",
+                            block->xi ? block->xi->id : UINT32_MAX);
+            if (current->type_id != type_id || current->category != category)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi block b%u has conflicting owner storage contracts",
+                            block->xi ? block->xi->id : UINT32_MAX);
+            if (!source_is_current || existing_is_current)
+                return XR_PROGRAM_BUILD_OK;
+            current->source = source;
+            current->key = imported_value_key(function, block->xi, source);
+            if (changed)
+                *changed = true;
+            return XR_PROGRAM_BUILD_OK;
+        }
+    }
     XrXiBlockArgumentStorage *existing = find_block_argument(block, source);
     if (existing) {
         if (existing->phi != phi || existing->type_id != type_id ||
@@ -5263,6 +5312,24 @@ static bool value_operand_key(const XrXiBuildContext *context, const XrXiFunctio
     XrXiBlockArgumentStorage *argument = find_block_argument((XrXiBlockStorage *) block, value);
     if (argument) {
         *key_out = argument->key;
+        return true;
+    }
+    const XiValue *storage_identity =
+        value->block != block->xi ? canonical_owner_storage_identity(context, function, value)
+                                  : NULL;
+    const XrXiBlockArgumentStorage *storage_owner = NULL;
+    for (uint32_t index = 0u; storage_identity && block && index < block->argument_count; ++index) {
+        const XrXiBlockArgumentStorage *candidate = &block->argument_storage[index];
+        if (candidate->ownership != XR_CORE_IR_OWNER ||
+            canonical_owner_storage_identity(context, function, candidate->source) !=
+                storage_identity)
+            continue;
+        if (storage_owner)
+            return false;
+        storage_owner = candidate;
+    }
+    if (storage_owner) {
+        *key_out = storage_owner->key;
         return true;
     }
     if (value->block != block->xi)
@@ -6921,12 +6988,50 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
             logical_ownership_for_type(context, type_id) != XR_CORE_IR_OWNER)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi frame place v%u has no exact affine owner", value->id);
-        XrProgramBuildStatus owner_status = require_value_available(
-            context, function, block, frame_owner, changed, diagnostic, diagnostic_size);
-        if (owner_status != XR_PROGRAM_BUILD_OK)
-            return owner_status;
+        const XiValue *current_owner = NULL;
+        for (uint32_t edge = 0u; edge < context->trap_edge_count; ++edge) {
+            const XrXiTrapEdge *trap = &context->trap_edges[edge];
+            if (trap->function != function->xi || trap->handler != block->xi || !trap->call)
+                continue;
+            for (uint16_t operand = 0u; operand < trap->call->nargs; ++operand) {
+                const XiValue *candidate =
+                    exact_logical_value_identity(context, function->xi, trap->call->args[operand]);
+                if (!candidate ||
+                    canonical_owner_storage_identity(context, function, candidate) != frame_owner ||
+                    !logical_value_produces_owner(context, function->xi, candidate, 0u))
+                    continue;
+                if (current_owner && current_owner != candidate)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi cleanup place v%u has multiple trap-edge owners", value->id);
+                current_owner = candidate;
+            }
+        }
+        for (uint32_t argument = 0u; argument < block->argument_count; ++argument) {
+            const XrXiBlockArgumentStorage *candidate = &block->argument_storage[argument];
+            const XiValue *origin =
+                canonical_owner_storage_identity(context, function, candidate->source);
+            if (candidate->ownership != XR_CORE_IR_OWNER || origin != frame_owner)
+                continue;
+            if (current_owner && current_owner != candidate->source)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi frame place v%u has multiple current owners in b%u", value->id,
+                            block->xi->id);
+            current_owner = candidate->source;
+        }
+        if (current_owner && !find_block_argument(block, current_owner)) {
+            XrProgramBuildStatus owner_status = require_value_available(
+                context, function, block, current_owner, changed, diagnostic, diagnostic_size);
+            if (owner_status != XR_PROGRAM_BUILD_OK)
+                return owner_status;
+        } else if (!current_owner) {
+            XrProgramBuildStatus owner_status = require_value_available(
+                context, function, block, frame_owner, changed, diagnostic, diagnostic_size);
+            if (owner_status != XR_PROGRAM_BUILD_OK)
+                return owner_status;
+            current_owner = frame_owner;
+        }
         XrProgramBuildStatus place_status =
-            add_reconstructed_place(function, block, value, frame_owner, type_id);
+            add_reconstructed_place(function, block, value, current_owner, type_id);
         if (place_status != XR_PROGRAM_BUILD_OK)
             return fail(diagnostic, diagnostic_size, place_status,
                         "Xi frame place v%u cannot be reconstructed exactly once in b%u", value->id,
@@ -7839,9 +7944,10 @@ static XrProgramBuildStatus prepare_cancel_continuations(XrXiBuildContext *conte
                 XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
-                if (!contains || !handler_storage || handler_storage->reachable ||
-                    handler_storage->trap_cleanup || handler_storage->panic_cleanup ||
-                    handler_storage->cancel_cleanup ||
+                bool shared_reason = handler_storage && handler_storage->trap_cleanup;
+                if (!contains || !handler_storage ||
+                    (handler_storage->reachable && !shared_reason) ||
+                    handler_storage->panic_cleanup || handler_storage->cancel_cleanup ||
                     !exact_static_cleanup_handler(function, registration))
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi suspension v%u has no exact private cancel cleanup",
@@ -7849,7 +7955,8 @@ static XrProgramBuildStatus prepare_cancel_continuations(XrXiBuildContext *conte
                 status = append_cancel_edge(context, function, point, registration);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
-                handler_storage->cancel_cleanup = true;
+                if (!shared_reason)
+                    handler_storage->cancel_cleanup = true;
             }
         }
     }
@@ -8130,6 +8237,14 @@ static XrProgramBuildStatus prepare_panic_arguments(XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
+static const XiValue *canonical_cancel_drop_identity(const XrXiBuildContext *context,
+                                                     const XrXiFunctionStorage *function,
+                                                     const XiCoroSuspendPoint *point,
+                                                     const XiValue *drop) {
+    (void) point;
+    return canonical_owner_storage_identity(context, function, drop);
+}
+
 static XrProgramBuildStatus prepare_cancel_arguments(XrXiBuildContext *context,
                                                      XrXiFunctionStorage *function,
                                                      char *diagnostic, size_t diagnostic_size) {
@@ -8141,9 +8256,27 @@ static XrProgramBuildStatus prepare_cancel_arguments(XrXiBuildContext *context,
         if (!handler || !edge->point)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi cancel continuation endpoint is absent");
+        if (handler->trap_cleanup)
+            continue;
         for (uint32_t drop = 0u; drop < edge->point->ndrops; ++drop) {
             uint16_t type_id = XR_CORE_TYPE_VOID;
-            const XiValue *owner = edge->point->drops[drop];
+            const XiValue *storage_identity = canonical_cancel_drop_identity(
+                context, function, edge->point, edge->point->drops[drop]);
+            const XiValue *owner = NULL;
+            for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+                const XrXiBlockArgumentStorage *candidate = &handler->argument_storage[argument];
+                if (candidate->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+                    candidate->ownership != XR_CORE_IR_OWNER ||
+                    canonical_owner_storage_identity(context, function, candidate->source) !=
+                        storage_identity)
+                    continue;
+                if (owner && owner != candidate->source)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi cancellation owner has multiple current values");
+                owner = candidate->source;
+            }
+            if (!owner)
+                owner = edge->point->drops[drop];
             if (!map_logical_value_type(context, function->xi, owner, &type_id) ||
                 type_id == XR_CORE_TYPE_VOID)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -8157,6 +8290,50 @@ static XrProgramBuildStatus prepare_cancel_arguments(XrXiBuildContext *context,
         }
     }
     return XR_PROGRAM_BUILD_OK;
+}
+
+static bool cancel_handler_owner_payload_is_exact(const XrXiBuildContext *context,
+                                                  const XrXiFunctionStorage *function,
+                                                  const XrXiBlockStorage *handler,
+                                                  const XiCoroSuspendPoint *point) {
+    if (!context || !function || !handler || !point)
+        return false;
+    uint32_t owner_count = 0u;
+    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+        const XrXiBlockArgumentStorage *candidate = &handler->argument_storage[argument];
+        if (candidate->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
+            continue;
+        if (candidate->phi || candidate->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+            candidate->category != XR_CORE_IR_VALUE || candidate->ownership != XR_CORE_IR_OWNER)
+            return false;
+        const XiValue *logical =
+            canonical_owner_storage_identity(context, function, candidate->source);
+        uint32_t matches = 0u;
+        for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
+            matches += canonical_cancel_drop_identity(context, function, point,
+                                                      point->drops[drop]) == logical;
+        if (!logical || matches != 1u)
+            return false;
+        ++owner_count;
+    }
+    if (owner_count != point->ndrops)
+        return false;
+    for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
+        const XiValue *logical_drop =
+            canonical_cancel_drop_identity(context, function, point, point->drops[drop]);
+        uint32_t matches = 0u;
+        for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+            const XrXiBlockArgumentStorage *candidate = &handler->argument_storage[argument];
+            matches += candidate->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NONE &&
+                       candidate->category == XR_CORE_IR_VALUE &&
+                       candidate->ownership == XR_CORE_IR_OWNER &&
+                       canonical_owner_storage_identity(context, function, candidate->source) ==
+                           logical_drop;
+        }
+        if (!logical_drop || matches != 1u)
+            return false;
+    }
+    return true;
 }
 
 static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
@@ -8257,12 +8434,16 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             uint32_t source_argument_count = source->argument_count;
             for (uint32_t argument = 0u; argument < source_argument_count; ++argument) {
                 XrXiBlockArgumentStorage owner = source->argument_storage[argument];
+                const XiValue *current_owner = recovered_reconstructed_place_owner(
+                    context, function, source, owner.source, edge->call);
+                if (!current_owner)
+                    current_owner = owner.source;
                 if (owner.ownership != XR_CORE_IR_OWNER ||
                     owner.implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-                    trap_call_consumes_source(context, function, edge->call, owner.source))
+                    trap_call_consumes_source(context, function, edge->call, current_owner))
                     continue;
                 XrProgramBuildStatus status = add_block_argument(
-                    context, function, handler, owner.source, NULL, owner.type_id,
+                    context, function, handler, current_owner, NULL, owner.type_id,
                     XR_XI_INVOKE_ARGUMENT_NONE, &changed, diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
@@ -8326,19 +8507,20 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (!source || !handler || !edge->point)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi cancel continuation endpoint is absent");
-            if (handler->argument_count != edge->point->ndrops)
+            if (!cancel_handler_owner_payload_is_exact(context, function, handler, edge->point))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "Xi cancel continuation has %u arguments for %u owners",
-                            handler->argument_count, edge->point->ndrops);
+                            "Xi cancel continuation has no exact owner payload");
             for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
                 XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+                if (edge_argument->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
+                    continue;
                 const XiValue *logical_argument =
-                    exact_logical_value_identity(context, function->xi, edge_argument->source);
+                    canonical_owner_storage_identity(context, function, edge_argument->source);
                 uint32_t drop_matches = 0u;
                 for (uint32_t drop = 0u; drop < edge->point->ndrops; ++drop)
-                    drop_matches +=
-                        exact_logical_value_identity(context, function->xi,
-                                                     edge->point->drops[drop]) == logical_argument;
+                    drop_matches += canonical_cancel_drop_identity(context, function, edge->point,
+                                                                   edge->point->drops[drop]) ==
+                                    logical_argument;
                 if (!logical_argument || drop_matches != 1u || edge_argument->phi ||
                     edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
                     edge_argument->category != XR_CORE_IR_VALUE ||
@@ -8360,6 +8542,8 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             XrXiBlockStorage *successor = &function->block_storage[block_index];
             if (!successor->reachable || block_is_elided_class_construction_error_continuation(
                                              context, function->xi, successor->xi))
+                continue;
+            if (successor->trap_cleanup || successor->panic_cleanup || successor->cancel_cleanup)
                 continue;
             uint32_t argument_count = successor->argument_count;
             for (uint16_t predecessor_index = 0; predecessor_index < successor->xi->npreds;
@@ -8915,11 +9099,11 @@ static bool coroutine_cancel_drop_set_matches(const XrXiBuildContext *context,
         const XrXiBlockArgumentStorage *argument =
             &resume->argument_storage[resume_argument_start + live];
         const XiValue *logical =
-            exact_logical_value_identity(context, function->xi, argument->source);
+            canonical_owner_storage_identity(context, function, argument->source);
         uint32_t drop_matches = 0u;
         for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
-            drop_matches +=
-                exact_logical_value_identity(context, function->xi, point->drops[drop]) == logical;
+            drop_matches += canonical_cancel_drop_identity(context, function, point,
+                                                           point->drops[drop]) == logical;
         bool owner = argument->ownership == XR_CORE_IR_OWNER;
         if (!logical || argument->category != XR_CORE_IR_VALUE ||
             argument->ownership != logical_ownership_for_type(context, argument->type_id) ||
@@ -8947,7 +9131,7 @@ prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *funct
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
         const XiValue *logical_drop =
-            exact_logical_value_identity(context, function->xi, point->drops[drop]);
+            canonical_cancel_drop_identity(context, function, point, point->drops[drop]);
         const XrXiBlockArgumentStorage *source = NULL;
         for (uint32_t live = 0u; live < live_count; ++live) {
             const XrXiBlockArgumentStorage *candidate =
@@ -9005,6 +9189,189 @@ prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *funct
         .result_type_id = XR_CORE_TYPE_VOID,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool remap_cancel_cleanup_key(const XrCoreIrKey *source_keys, const XrCoreIrKey *target_keys,
+                                     uint32_t key_count, XrCoreIrKey source, XrCoreIrKey *target) {
+    for (uint32_t index = 0u; index < key_count; ++index) {
+        if (!xr_core_ir_key_equal(source_keys[index], source))
+            continue;
+        *target = target_keys[index];
+        return true;
+    }
+    return false;
+}
+
+static bool block_has_argument_key(const XrCoreIrBlockInput *block, XrCoreIrKey key) {
+    for (uint32_t argument = 0u; block && argument < block->argument_count; ++argument)
+        if (xr_core_ir_key_equal(block->arguments[argument].key, key))
+            return true;
+    return false;
+}
+
+/* A static cleanup body can serve several termination reasons in Xi, but a
+ * canonical Program
+ * block has exactly one terminal.  Materialize cancellation
+ * as a private, re-keyed projection of
+ * the already verified cleanup block so
+ * trap/panic publication and cancellation never share a
+ * terminal block. */
+static XrProgramBuildStatus
+clone_cancel_cleanup_block(const XrXiBuildContext *context, XrXiFunctionStorage *function,
+                           const XrXiBlockStorage *handler, const XrCoreIrBlockInput *source,
+                           const XiCoroSuspendPoint *point, uint32_t safepoint_id, char *diagnostic,
+                           size_t diagnostic_size) {
+    if (!context || !function || !function->cancel_blocks || !handler || !source || !point ||
+        source->argument_count != handler->argument_count || source->instruction_count == 0u ||
+        !cancel_handler_owner_payload_is_exact(context, function, handler, point))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi shared cleanup has no exact cancellable Program projection");
+    const XrCoreIrInstructionInput *source_terminal =
+        &source->instructions[source->instruction_count - 1u];
+    if ((source_terminal->operation_id != XR_CORE_OP_CORE_TRAP &&
+         source_terminal->operation_id != XR_CORE_OP_CORE_PANIC_PUBLISH) ||
+        source_terminal->successor_count != 0u)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi shared cleanup has no reason-private terminal");
+
+    XrXiCancelBlockStorage *cancel = &function->cancel_blocks[safepoint_id];
+    if (cancel->arguments || cancel->instructions)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi cancellation cleanup was materialized twice");
+    cancel->argument_count = point->ndrops;
+    cancel->arguments = point->ndrops ? xr_calloc(point->ndrops, sizeof(*cancel->arguments)) : NULL;
+    if (point->ndrops && !cancel->arguments)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+
+    uint32_t map_capacity = point->ndrops + source->instruction_count;
+    XrCoreIrKey *source_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*source_keys)) : NULL;
+    XrCoreIrKey *target_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*target_keys)) : NULL;
+    if (map_capacity && (!source_keys || !target_keys)) {
+        xr_free(source_keys);
+        xr_free(target_keys);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    uint32_t map_count = 0u;
+    uint32_t cancel_argument = 0u;
+    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+        const XrXiBlockArgumentStorage *logical = &handler->argument_storage[argument];
+        if (logical->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
+            continue;
+        if (!xr_core_ir_key_equal(source->arguments[argument].key, logical->key)) {
+            xr_free(source_keys);
+            xr_free(target_keys);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi shared cleanup argument order changed before projection");
+        }
+        cancel->arguments[cancel_argument] = source->arguments[argument];
+        cancel->arguments[cancel_argument].key =
+            cancel_argument_key(function, safepoint_id, cancel_argument);
+        source_keys[map_count] = source->arguments[argument].key;
+        target_keys[map_count++] = cancel->arguments[cancel_argument++].key;
+    }
+    if (cancel_argument != point->ndrops) {
+        xr_free(source_keys);
+        xr_free(target_keys);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi shared cleanup owner projection changed during materialization");
+    }
+
+    bool has_block_arguments =
+        source->instructions[0].operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT;
+    bool omit_empty_arguments = has_block_arguments && point->ndrops == 0u;
+    cancel->instruction_count = source->instruction_count - (omit_empty_arguments ? 1u : 0u);
+    cancel->instructions = xr_calloc(cancel->instruction_count, sizeof(*cancel->instructions));
+    if (!cancel->instructions) {
+        xr_free(source_keys);
+        xr_free(target_keys);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    for (uint32_t instruction = has_block_arguments ? 1u : 0u;
+         instruction + 1u < source->instruction_count; ++instruction) {
+        if (xr_core_ir_key_is_zero(source->instructions[instruction].result))
+            continue;
+        source_keys[map_count] = source->instructions[instruction].result;
+        target_keys[map_count++] = cancel_result_key(function, safepoint_id, instruction);
+    }
+
+    uint32_t target_index = 0u;
+    for (uint32_t instruction = 0u; instruction < source->instruction_count; ++instruction) {
+        const XrCoreIrInstructionInput *from = &source->instructions[instruction];
+        if (instruction == 0u && has_block_arguments) {
+            if (omit_empty_arguments)
+                continue;
+            XrCoreIrKey *operands = xr_calloc(point->ndrops, sizeof(*operands));
+            if (!operands) {
+                xr_free(source_keys);
+                xr_free(target_keys);
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            }
+            for (uint32_t argument = 0u; argument < point->ndrops; ++argument)
+                operands[argument] = cancel->arguments[argument].key;
+            cancel->instructions[target_index++] = (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+                .result_type_id = XR_CORE_TYPE_VOID,
+                .operands = operands,
+                .operand_count = point->ndrops,
+                .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+            };
+            continue;
+        }
+        if (instruction + 1u == source->instruction_count) {
+            cancel->instructions[target_index++] = (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
+                .result_type_id = XR_CORE_TYPE_VOID,
+                .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+            };
+            continue;
+        }
+        if (from->successor_count != 0u) {
+            xr_free(source_keys);
+            xr_free(target_keys);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi shared cleanup projection crosses a Program block boundary");
+        }
+        XrCoreIrInstructionInput *to = &cancel->instructions[target_index++];
+        *to = *from;
+        to->operands = NULL;
+        to->successors = NULL;
+        if (!xr_core_ir_key_is_zero(from->result) &&
+            !remap_cancel_cleanup_key(source_keys, target_keys, map_count, from->result,
+                                      &to->result)) {
+            xr_free(source_keys);
+            xr_free(target_keys);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi shared cleanup result has no private key");
+        }
+        if (from->operand_count != 0u) {
+            XrCoreIrKey *operands = xr_calloc(from->operand_count, sizeof(*operands));
+            if (!operands) {
+                xr_free(source_keys);
+                xr_free(target_keys);
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            }
+            for (uint32_t operand = 0u; operand < from->operand_count; ++operand) {
+                if (remap_cancel_cleanup_key(source_keys, target_keys, map_count,
+                                             from->operands[operand], &operands[operand]))
+                    continue;
+                if (block_has_argument_key(source, from->operands[operand])) {
+                    xr_free(operands);
+                    xr_free(source_keys);
+                    xr_free(target_keys);
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi shared cleanup body depends on a reason-specific payload");
+                }
+                operands[operand] = from->operands[operand];
+            }
+            to->operands = operands;
+        }
+    }
+    xr_free(source_keys);
+    xr_free(target_keys);
+    if (target_index != cancel->instruction_count)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi shared cleanup projection changed instruction count");
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -9069,35 +9436,43 @@ append_cancel_handler_operands(const XrXiBuildContext *context,
                                const XrXiBlockStorage *handler, const XiCoroSuspendPoint *point,
                                char *diagnostic, size_t diagnostic_size) {
     if (!context || !instruction || !function || !source || !handler || !point ||
-        handler->argument_count != point->ndrops ||
-        handler->argument_count > UINT32_MAX - instruction->operand_count)
+        !cancel_handler_owner_payload_is_exact(context, function, handler, point) ||
+        point->ndrops > UINT32_MAX - instruction->operand_count)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi cancel handler has no exact owner payload");
-    uint32_t count = instruction->operand_count + handler->argument_count;
+    uint32_t count = instruction->operand_count + point->ndrops;
     XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
     if (count && !operands)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     if (instruction->operand_count != 0u)
         memcpy(operands, instruction->operands,
                (size_t) instruction->operand_count * sizeof(*operands));
+    uint32_t cursor = instruction->operand_count;
     for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
         const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
+        if (edge_argument->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
+            continue;
         const XiValue *logical_argument =
-            exact_logical_value_identity(context, function->xi, edge_argument->source);
+            canonical_owner_storage_identity(context, function, edge_argument->source);
         uint32_t drop_matches = 0u;
         for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
-            drop_matches += exact_logical_value_identity(context, function->xi,
-                                                         point->drops[drop]) == logical_argument;
+            drop_matches += canonical_cancel_drop_identity(context, function, point,
+                                                           point->drops[drop]) == logical_argument;
         if (!logical_argument || drop_matches != 1u || edge_argument->phi ||
             edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
             edge_argument->category != XR_CORE_IR_VALUE ||
             edge_argument->ownership != XR_CORE_IR_OWNER ||
             !edge_value_operand_key(context, function, source, edge_argument->source, point->op,
-                                    &operands[instruction->operand_count + argument])) {
+                                    &operands[cursor++])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi cancel handler owner is unavailable at suspension");
         }
+    }
+    if (cursor != count) {
+        xr_free(operands);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi cancel handler owner count changed during translation");
     }
     xr_free((void *) instruction->operands);
     instruction->operands = operands;
@@ -9132,8 +9507,9 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
     if (!successors)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     successors[0] = block_key(function, point->resume_block);
-    successors[1] = cancel_edge ? block_key(function, cancel_edge->handler)
-                                : cancel_block_key(function, safepoint_id);
+    successors[1] = cancel_edge && cancel_handler->cancel_cleanup
+                        ? block_key(function, cancel_edge->handler)
+                        : cancel_block_key(function, safepoint_id);
     instruction->successors = successors;
     instruction->successor_count = 2u;
     XrProgramBuildStatus status = set_edge_operands(context, instruction, function, block, resume,
@@ -10042,7 +10418,9 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         if (!point)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi function %u has no exact safepoint owner", function_index);
-        synthetic_cancel_count += find_cancel_edge(context, xi, point) == NULL;
+        const XrXiCancelEdge *edge = find_cancel_edge(context, xi, point);
+        const XrXiBlockStorage *handler = edge ? find_block_storage(storage, edge->handler) : NULL;
+        synthetic_cancel_count += !handler || !handler->cancel_cleanup;
     }
     if (synthetic_cancel_count > UINT32_MAX - xi->nblocks)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
@@ -10456,10 +10834,29 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             if (!point)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi function %u has no exact safepoint owner", function_index);
-            if (find_cancel_edge(context, xi, point))
+            const XrXiCancelEdge *edge = find_cancel_edge(context, xi, point);
+            XrXiBlockStorage *handler = edge ? find_block_storage(storage, edge->handler) : NULL;
+            if (handler && handler->cancel_cleanup)
                 continue;
             XrCoreIrBlockInput *cancel_block = &storage->blocks[output_block_index++];
             XrXiCancelBlockStorage *cancel = &storage->cancel_blocks[safepoint];
+            if (edge) {
+                const XrCoreIrBlockInput *source = NULL;
+                XrCoreIrKey source_key = block_key(storage, edge->handler);
+                for (uint32_t block = 0u; block + 1u < output_block_index; ++block) {
+                    if (xr_core_ir_key_equal(storage->blocks[block].key, source_key)) {
+                        source = &storage->blocks[block];
+                        break;
+                    }
+                }
+                if (!handler || !source)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi shared cancellation cleanup has no Program source block");
+                status = clone_cancel_cleanup_block(context, storage, handler, source, point,
+                                                    safepoint, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
             if (!cancel->instructions || cancel->instruction_count == 0u)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi function %u has no exact cancellation cleanup", function_index);

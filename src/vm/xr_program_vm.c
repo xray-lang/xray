@@ -1718,7 +1718,8 @@ static bool vm_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
-           operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_RETURN;
+           operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_TRAP ||
+           operation_id == XR_CORE_OP_CORE_RETURN;
 }
 
 static void vm_execution_release_lease(XrVmExecution *execution) {
@@ -2213,6 +2214,14 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 execution->finished = true;
                 vm_execution_release_lease(execution);
                 return vm_execution_outcome(execution, XR_VM_OUTCOME_CANCELLED);
+            case XR_CORE_OP_CORE_TRAP: {
+                execution->finished = true;
+                XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_TRAP);
+                result.trap = instruction.immediate.u32 == 7u ? XR_VM_TRAP_PROVIDER_CALL_FAILED
+                                                              : XR_VM_TRAP_EXPLICIT;
+                vm_execution_release_lease(execution);
+                return result;
+            }
             case XR_CORE_OP_CORE_RETURN: {
                 execution->finished = true;
                 XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_RETURN);
