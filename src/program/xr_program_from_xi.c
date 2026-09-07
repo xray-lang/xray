@@ -7006,6 +7006,28 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
     if (!value || !value->block)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi operand has no defining block");
+    const XiValue *local_frame_owner =
+        value->block != block->xi ? local_place_storage_root(context, function->xi, value) : NULL;
+    if (local_frame_owner) {
+        uint16_t type_id = XR_CORE_TYPE_VOID;
+        if (!map_logical_value_type(context, function->xi, typed_value, &type_id) ||
+            type_id == XR_CORE_TYPE_VOID)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi frame place v%u has no exact logical value type", value->id);
+        if (logical_ownership_for_type(context, type_id) != XR_CORE_IR_OWNER) {
+            XrProgramBuildStatus owner_status = require_value_available(
+                context, function, block, local_frame_owner, changed, diagnostic, diagnostic_size);
+            if (owner_status != XR_PROGRAM_BUILD_OK)
+                return owner_status;
+            XrProgramBuildStatus place_status =
+                add_reconstructed_place(function, block, value, local_frame_owner, type_id);
+            if (place_status != XR_PROGRAM_BUILD_OK)
+                return fail(diagnostic, diagnostic_size, place_status,
+                            "Xi frame place v%u cannot be reconstructed exactly once in b%u",
+                            value->id, block->xi->id);
+            return XR_PROGRAM_BUILD_OK;
+        }
+    }
     const XiValue *frame_owner = value->block == block->xi
                                      ? deferred_cleanup_place_owner(context, function->xi, value)
                                      : cleanup_place_storage_owner(context, function->xi, value);
@@ -9058,7 +9080,7 @@ static const XiValue *canonical_coroutine_live_identity(const XrXiBuildContext *
                                                         const XrXiFunctionStorage *function,
                                                         const XiValue *value) {
     const XiValue *frame_owner =
-        deferred_cleanup_place_owner(context, function ? function->xi : NULL, value);
+        local_place_storage_root(context, function ? function->xi : NULL, value);
     return exact_logical_value_identity(context, function ? function->xi : NULL,
                                         frame_owner ? frame_owner : value);
 }
@@ -9112,10 +9134,11 @@ static bool coroutine_live_set_matches(const XrXiBuildContext *context,
                                                       predecessor->xi, successor->xi, 0u);
         const XiValue *logical_incoming =
             canonical_coroutine_live_identity(context, function, incoming);
-        if (!logical_incoming ||
+        XrCoreIrValueCategory category = logical_value_category(function->xi, logical_incoming);
+        if (!logical_incoming || category > XR_CORE_IR_PLACE ||
             canonical_coroutine_live_occurrences(context, function, point, logical_incoming) !=
                 1u ||
-            successor->argument_storage[argument].category != XR_CORE_IR_VALUE ||
+            successor->argument_storage[argument].category != category ||
             successor->argument_storage[argument].ownership !=
                 logical_ownership_for_type(context, successor->argument_storage[argument].type_id))
             return false;
@@ -9136,14 +9159,15 @@ static bool coroutine_cancel_drop_set_matches(const XrXiBuildContext *context,
     for (uint32_t live = 0u; live < live_count; ++live) {
         const XrXiBlockArgumentStorage *argument =
             &resume->argument_storage[resume_argument_start + live];
+        bool owner = argument->ownership == XR_CORE_IR_OWNER;
         const XiValue *logical =
-            canonical_owner_storage_identity(context, function, argument->source);
+            owner ? canonical_owner_storage_identity(context, function, argument->source)
+                  : canonical_coroutine_live_identity(context, function, argument->source);
         uint32_t drop_matches = 0u;
         for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
             drop_matches += canonical_cancel_drop_identity(context, function, point,
                                                            point->drops[drop]) == logical;
-        bool owner = argument->ownership == XR_CORE_IR_OWNER;
-        if (!logical || argument->category != XR_CORE_IR_VALUE ||
+        if (!logical || argument->category > XR_CORE_IR_PLACE ||
             argument->ownership != logical_ownership_for_type(context, argument->type_id) ||
             drop_matches != (owner ? 1u : 0u))
             return false;
@@ -9613,10 +9637,11 @@ static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
     for (uint32_t argument = implicit_result_count; argument < resume->argument_count; ++argument) {
         const XiValue *logical = canonical_coroutine_live_identity(
             context, function, resume->argument_storage[argument].source);
-        if (!logical ||
+        XrCoreIrValueCategory category = logical_value_category(function->xi, logical);
+        if (!logical || category > XR_CORE_IR_PLACE ||
             canonical_coroutine_live_occurrences(context, function, point, logical) != 1u ||
             resume->argument_storage[argument].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-            resume->argument_storage[argument].category != XR_CORE_IR_VALUE ||
+            resume->argument_storage[argument].category != category ||
             resume->argument_storage[argument].ownership !=
                 logical_ownership_for_type(context, resume->argument_storage[argument].type_id))
             return false;
@@ -9643,10 +9668,12 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     const XrXiFunctionStorage *callee =
         point ? find_xi_function(context, point->resolved_callee, NULL, NULL) : NULL;
     const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
+    bool live_set_matches = resume && coroutine_call_live_set_matches(context, function, resume,
+                                                                      point, implicit_result);
     if (!resume || !callee || !plan || safepoint_id >= plan->nstates ||
         (cancel_edge && !cancel_handler) || call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
         !xr_core_ir_key_equal(call.immediate.key, callee->key) || call.successor_count != 0u ||
-        !coroutine_call_live_set_matches(context, function, resume, point, implicit_result)) {
+        !live_set_matches) {
         xr_free((void *) call.operands);
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi coroutine call in b%u has no exact sealed child continuation",

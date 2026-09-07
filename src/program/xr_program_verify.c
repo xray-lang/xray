@@ -3065,7 +3065,9 @@ static bool verify_cancel_continuation(VerifyContext *context, const XrValidated
         for (uint32_t cancel = 0u; cancel < cancel_count; ++cancel)
             cancel_occurrences += instruction->operands[cancel_operand_start + cancel] == value;
         if (value >= function->value_count || safepoint->live_value_ids[live] != value ||
-            function->value_categories[value] != XR_CORE_IR_VALUE ||
+            function->value_categories[value] > XR_CORE_IR_PLACE ||
+            (function->value_categories[value] == XR_CORE_IR_PLACE &&
+             affine_borrow_definition(function, value) != NULL) ||
             function->value_root_sets[value].root_count != 0u ||
             cancel_occurrences !=
                 (function->value_ownerships[value] == XR_CORE_IR_OWNER ? 1u : 0u)) {
@@ -3436,7 +3438,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                         resume_uses += resume_op->operands[operand] == resume_value;
                 }
                 if (instruction->operands[live] != value ||
-                    function->value_categories[value] != XR_CORE_IR_VALUE || resume_uses == 0u) {
+                    function->value_categories[value] > XR_CORE_IR_PLACE || resume_uses == 0u) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                     return false;
                 }
@@ -3511,14 +3513,35 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
-                if (callee->parameter_modes[parameter] != XR_PARAM_READ ||
-                    callee->parameter_types[parameter] < XR_CORE_TYPE_BOOL ||
-                    callee->parameter_types[parameter] > XR_CORE_TYPE_TARGET_ENDIAN ||
-                    callee->parameter_types[parameter] == XR_CORE_TYPE_ERROR ||
-                    callee->parameter_types[parameter] == XR_CORE_TYPE_PANIC_INFO ||
+                XrParamMode mode = callee->parameter_modes[parameter];
+                XrCoreIrValueCategory category =
+                    mode == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+                bool supported_read =
+                    mode == XR_PARAM_READ &&
+                    callee->parameter_types[parameter] >= XR_CORE_TYPE_BOOL &&
+                    callee->parameter_types[parameter] <= XR_CORE_TYPE_TARGET_ENDIAN &&
+                    callee->parameter_types[parameter] != XR_CORE_TYPE_ERROR &&
+                    callee->parameter_types[parameter] != XR_CORE_TYPE_PANIC_INFO;
+                const XrValidatedInstruction *place_definition =
+                    mode == XR_PARAM_REF
+                        ? affine_borrow_definition(function, instruction->operands[parameter])
+                        : NULL;
+                bool stable_ref = mode != XR_PARAM_REF || !place_definition;
+                if (place_definition &&
+                    place_definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL &&
+                    place_definition->operand_count == 1u) {
+                    uint32_t owner = place_definition->operands[0];
+                    uint32_t owner_live_count = 0u;
+                    for (uint32_t live = 0u; live < safepoint->live_value_count; ++live)
+                        owner_live_count += safepoint->live_value_ids[live] == owner;
+                    stable_ref = owner < function->value_count && owner_live_count == 1u &&
+                                 function->value_categories[owner] == XR_CORE_IR_VALUE &&
+                                 function->value_types[owner] == callee->parameter_types[parameter];
+                }
+                if ((!supported_read && mode != XR_PARAM_REF) || !stable_ref ||
                     !operand_type_is(function, instruction, parameter,
                                      callee->parameter_types[parameter]) ||
-                    !operand_category_is(function, instruction, parameter, XR_CORE_IR_VALUE) ||
+                    !operand_category_is(function, instruction, parameter, category) ||
                     !operand_ownership_is(function, instruction, parameter, XR_CORE_IR_NON_OWNER)) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                     return false;
@@ -3529,9 +3552,11 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 uint32_t value = safepoint->live_value_ids[live];
                 uint32_t target = implicit_result + live;
                 if (instruction->operands[operand] != value ||
-                    function->value_categories[value] != XR_CORE_IR_VALUE ||
+                    function->value_categories[value] > XR_CORE_IR_PLACE ||
+                    (function->value_categories[value] == XR_CORE_IR_PLACE &&
+                     affine_borrow_definition(function, value) != NULL) ||
                     normal->argument_types[target] != function->value_types[value] ||
-                    normal->argument_categories[target] != XR_CORE_IR_VALUE ||
+                    normal->argument_categories[target] != function->value_categories[value] ||
                     normal->argument_ownerships[target] != function->value_ownerships[value]) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                     return false;

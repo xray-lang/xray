@@ -815,8 +815,8 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
     for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
         char storage[32];
         const char *type = type_c_name(function->parameter_types[parameter], storage);
-        if (!type || function->parameter_modes[parameter] == XR_PARAM_REF ||
-            !append_format(buffer, "    %s parameter_%u;\n", type, parameter))
+        const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF ? " *" : "";
+        if (!type || !append_format(buffer, "    %s%s parameter_%u;\n", type, pointer, parameter))
             return false;
     }
     for (uint32_t safepoint = 0u; safepoint < function->coroutine_safepoint_count; ++safepoint) {
@@ -827,9 +827,11 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
             return false;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
             char storage[32];
-            const char *type =
-                type_c_name(function->value_types[point->live_value_ids[live]], storage);
-            if (!type || !append_format(buffer, "    %s live_%u_%u;\n", type, safepoint, live))
+            uint32_t value = point->live_value_ids[live];
+            const char *type = type_c_name(function->value_types[value], storage);
+            const char *pointer = function->value_categories[value] == XR_CORE_IR_PLACE ? " *" : "";
+            if (!type ||
+                !append_format(buffer, "    %s%s live_%u_%u;\n", type, pointer, safepoint, live))
                 return false;
         }
         if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
@@ -863,6 +865,60 @@ static bool emit_coroutine_frames(CBuffer *buffer, const XrBackendIR *ir) {
     }
     xr_free(state);
     return emitted;
+}
+
+static const XrBackendInstruction *backend_value_instruction(const XrBackendFunction *function,
+                                                             uint32_t value_id) {
+    const XrBackendInstruction *found = NULL;
+    for (uint32_t block = 0u; function && block < function->block_count; ++block) {
+        const XrBackendBlock *row = &function->blocks[block];
+        for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
+            const XrBackendInstruction *candidate = &row->instructions[instruction];
+            if (candidate->result_id != value_id)
+                continue;
+            if (found)
+                return NULL;
+            found = candidate;
+        }
+    }
+    return found;
+}
+
+// A ref child may suspend after retaining its incoming place. A place.local
+// points at automatic C storage, so bind it to the matching parent frame slot.
+// Parameter/block-argument places already name caller-owned stable storage.
+static bool coroutine_ref_parameter_frame_slot(const XrBackendFunction *function,
+                                               const XrBackendInstruction *call,
+                                               const XrBackendCoroutineSafepoint *point,
+                                               uint32_t parameter, bool *uses_slot_out,
+                                               uint32_t *owner_out, uint32_t *live_out) {
+    if (!function || !call || !point || !uses_slot_out || !owner_out || !live_out ||
+        parameter >= call->operand_count)
+        return false;
+    *uses_slot_out = false;
+    uint32_t place = call->operands[parameter];
+    const XrBackendInstruction *definition = backend_value_instruction(function, place);
+    if (!definition)
+        return true;
+    if (definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL || definition->operand_count != 1u)
+        return false;
+    uint32_t owner = definition->operands[0];
+    uint32_t occurrence = 0u;
+    uint32_t live_index = 0u;
+    for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+        if (point->live_value_ids[live] != owner)
+            continue;
+        ++occurrence;
+        live_index = live;
+    }
+    if (occurrence != 1u || owner >= function->value_count || place >= function->value_count ||
+        function->value_categories[owner] != XR_CORE_IR_VALUE ||
+        function->value_types[owner] != function->value_types[place])
+        return false;
+    *uses_slot_out = true;
+    *owner_out = owner;
+    *live_out = live_index;
+    return true;
 }
 
 static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *function,
@@ -1616,6 +1672,21 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
     const XrBackendFunction *callee = &ir->functions[callee_id];
     const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint_id];
     uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+    for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
+        if (callee->parameter_modes[parameter] != XR_PARAM_REF)
+            continue;
+        bool uses_slot = false;
+        uint32_t owner = 0u;
+        uint32_t live = 0u;
+        if (!coroutine_ref_parameter_frame_slot(function, instruction, point, parameter, &uses_slot,
+                                                &owner, &live))
+            return false;
+        if (uses_slot && (!append_format(buffer, "        frame->live_%u_%u = v%u;\n", safepoint_id,
+                                         live, owner) ||
+                          !append_format(buffer, "        v%u = &frame->live_%u_%u;\n",
+                                         instruction->operands[parameter], safepoint_id, live)))
+            return false;
+    }
     if (!append_format(buffer,
                        "        if (!frame->child_active_%u) {\n"
                        "            XrAotCoroutineFrame%u child_zero_%u = {0};\n"
@@ -1652,6 +1723,19 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
     }
     if (!append_text(buffer, ");\n"))
         return false;
+    for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
+        if (callee->parameter_modes[parameter] != XR_PARAM_REF)
+            continue;
+        bool uses_slot = false;
+        uint32_t owner = 0u;
+        uint32_t live = 0u;
+        if (!coroutine_ref_parameter_frame_slot(function, instruction, point, parameter, &uses_slot,
+                                                &owner, &live))
+            return false;
+        if (uses_slot &&
+            !append_format(buffer, "        v%u = frame->live_%u_%u;\n", owner, safepoint_id, live))
+            return false;
+    }
     if (!append_format(buffer, "        if (child_%u.kind == UINT32_C(5)) {\n", instruction_id))
         return false;
     for (uint32_t live = 0u; live < point->live_value_count; ++live) {

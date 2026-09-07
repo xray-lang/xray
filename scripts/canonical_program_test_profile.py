@@ -25,6 +25,7 @@ CTEST_NAMES = (
     "test_xr_program_aot_condition_assert",
     "test_xr_program_affine_coroutine_result_aot_native",
     "test_xr_program_multi_safepoint_aot_native",
+    "test_xr_program_ref_parameter_coroutine_aot_native",
     "test_xr_program_provider_trap_cleanup_aot_native",
     "test_xr_program_pipe_cancel_cleanup_aot_native",
     "test_xr_program_source_build",
@@ -50,7 +51,7 @@ CTEST_NAMES = (
     "xr_program_wave4_contract_self_test",
 )
 
-# Script-only gates have no Ninja target.  The thirteen targets below are the
+# Script-only gates have no Ninja target.  The fourteen targets below are the
 # executable/native evidence required before the matching CTest inventory can
 # run.  In particular, this does not build the CLI merely as a blanket proxy.
 BUILD_TARGETS = (
@@ -60,6 +61,7 @@ BUILD_TARGETS = (
     "test_xr_program_aot_condition_assert",
     "test_xr_program_affine_coroutine_result_aot_native",
     "test_xr_program_multi_safepoint_aot_native",
+    "test_xr_program_ref_parameter_coroutine_aot_native",
     "test_xr_program_provider_trap_cleanup_aot_native",
     "test_xr_program_pipe_cancel_cleanup_aot_native",
     "test_xr_program_source_build",

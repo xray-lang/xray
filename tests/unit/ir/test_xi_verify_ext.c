@@ -939,7 +939,7 @@ TEST(call_bound_param_last_use_before_suspend_passes) {
     xi_func_free(f);
 }
 
-TEST(call_bound_param_use_after_suspend_fails) {
+TEST(call_bound_param_use_after_suspend_is_frame_stable) {
     XiFunc *f = make_func("call_place_live_across_suspend");
     ASSERT(f != NULL);
     XiValue *param = make_ref_param(f);
@@ -950,7 +950,7 @@ TEST(call_bound_param_use_after_suspend_fails) {
     load->args[0] = param;
     xi_block_set_return(f->entry, load);
 
-    ASSERT(verify_fail(f));
+    ASSERT(verify_ok(f));
     xi_func_free(f);
 }
 
@@ -3160,7 +3160,7 @@ int main(void) {
     run_call_plan_rejects_declared_escape();
     run_call_bound_place_rejects_return_escape();
     run_call_bound_param_last_use_before_suspend_passes();
-    run_call_bound_param_use_after_suspend_fails();
+    run_call_bound_param_use_after_suspend_is_frame_stable();
     run_call_plan_suspendable_boundary_uses_frame_place();
     run_call_plan_valid_method_receiver_place_passes();
     run_call_plan_rejects_method_receiver_place_mismatch();

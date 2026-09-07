@@ -64,17 +64,20 @@ recursively cancels an active sealed child, charges the child's cleanup steps to
 and terminates through `core.cancel.publish`. Resume operands and the exact live-owner cancel suffix
 are distinct Program segments. The VM materializes only the chosen segment; cancellation transfers
 each owner once to the verified static cleanup block and executes its explicit `owner.drop`, while a
-normal resume leaves that suffix untouched. Cancellation is a distinct outcome, retains the
-cancelled safepoint state for cross-executor comparison, and releases the exact generation lease;
-there is no frame-dispose fallback, place-address reconstruction shortcut, or cancellation-as-error
-compatibility path.
+normal resume leaves that suffix untouched. A sealed child `REF` parameter receives the exact place
+owned by its parent execution. VM value/place storage is execution-owned and remains stable while
+the child is suspended; caller-local places are represented in the Program safepoint by their unique
+storage owner and reconstructed in the selected continuation. Cancellation is a distinct outcome,
+retains the cancelled safepoint state for cross-executor comparison, and releases the exact
+generation lease; there is no frame-dispose fallback, raw stack-address spill, or
+cancellation-as-error compatibility path.
 
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
 anchor-sha256: xisa/core/registry.json c38744bb33a8f77f47c4668a6b09a8e1335b8bfbbb244fab1eb756aca2bc4a34
 anchor-sha256: src/vm/xr_program_vm.h 39db3f37a2da2c3c16688f97a29ef880d08a1216ed3fe10eb1b24795a55d0acc
-anchor-sha256: src/vm/xr_program_vm.c 9d1b1fdf01c5831d3ce0f61fa1223264adac4bf4152054e4edc4f29191a3c4c0
+anchor-sha256: src/vm/xr_program_vm.c 783b6bae2ae20a85a004ffb986df8fc427d8c3dc0b60a4ff868ee2af7681bb1a
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c d67bcaa8ca286875a45d7d73700dd8697403aa68990c37053bfa7447a849b176
+anchor-sha256: src/program/xr_program_verify.c 91267c89b65b3d4a019e3b1a3c6e52ff0b048eb42544f484d2b604bc1449213a
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -83,4 +86,4 @@ anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390
 anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json dd8b3088756d093a260be71a4663e4e5942153ec98369aedf9de42c9fb32bdaf
 anchor-sha256: tests/unit/vm/test_xr_program_vm.c d4aa6a03210602f15baa4c045becaf33e5219402a1c765caa42610305abc6291
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 54c995a16b0a917f6b83e187ef7a9321027df179d56bc5d80e3050e0fb543e77
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c b012c57b4dc93b3e9e4f2681cc2645fe3c7ce7421a38ae4b91b1a628c36f6973

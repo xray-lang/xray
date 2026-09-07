@@ -1776,9 +1776,17 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
     for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
         uint32_t source = instruction->operands[parameter];
         uint32_t target = function->blocks[function->entry_block].argument_ids[parameter];
-        if (!parent->initialized[source] || function->parameter_modes[parameter] != XR_PARAM_READ ||
-            parent->values[source].category != XR_CORE_IR_VALUE ||
-            !value_matches_type(parent->context.code->program, parent->values[source].as.value,
+        XrCoreIrValueCategory expected = function->parameter_modes[parameter] == XR_PARAM_REF
+                                             ? XR_CORE_IR_PLACE
+                                             : XR_CORE_IR_VALUE;
+        XrVmValue value = expected == XR_CORE_IR_PLACE && parent->values[source].as.place
+                              ? *vm_place_value_const(parent->values[source].as.place)
+                              : parent->values[source].as.value;
+        if (!parent->initialized[source] ||
+            (function->parameter_modes[parameter] != XR_PARAM_READ &&
+             function->parameter_modes[parameter] != XR_PARAM_REF) ||
+            parent->values[source].category != expected ||
+            !value_matches_type(parent->context.code->program, value,
                                 function->parameter_types[parameter])) {
             xr_vm_execution_free(child);
             return false;

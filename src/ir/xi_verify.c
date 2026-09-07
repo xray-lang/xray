@@ -2202,15 +2202,6 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
             if (!v)
                 continue;
 
-            if (v->op == XI_PARAM && verify_is_call_bound_place(v) &&
-                xi_coro_value_live_across_proven_suspend(f, live, v)) {
-                verr(ctx,
-                     "func '%s': call-bound parameter place v%u is live across a suspension "
-                     "point",
-                     f->name, v->id);
-                break;
-            }
-
             if (v->op == XI_PLACE_LOAD && v->nargs == 1 && v->args[0] &&
                 xi_own_type_may_be_ref(v->type) &&
                 xi_coro_value_live_across_proven_suspend(f, live, v) &&
