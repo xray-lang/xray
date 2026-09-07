@@ -5273,6 +5273,68 @@ static bool value_operand_key(const XrXiBuildContext *context, const XrXiFunctio
     return true;
 }
 
+/* Reconstructing an affine place consumes the block's incoming owner.  A
+ * subsequent Xi
+ * PLACE_LOAD is therefore the current owner identity for every
+ * edge leaving that block;
+ * forwarding the pre-reconstruction block argument
+ * would create two owners for the same storage.
+ */
+static const XiValue *recovered_reconstructed_place_owner(const XrXiBuildContext *context,
+                                                          const XrXiFunctionStorage *function,
+                                                          const XrXiBlockStorage *block,
+                                                          const XiValue *owner,
+                                                          const XiValue *edge_point) {
+    if (!context || !function || !function->xi || !block || !block->xi || !owner)
+        return NULL;
+    owner = exact_logical_value_identity(context, function->xi, owner);
+    const XrXiReconstructedPlaceStorage *reconstructed = NULL;
+    for (uint32_t index = 0u; owner && block && index < block->reconstructed_place_count; ++index) {
+        const XrXiReconstructedPlaceStorage *candidate = &block->reconstructed_places[index];
+        if (exact_logical_value_identity(context, function->xi, candidate->owner) != owner)
+            continue;
+        if (reconstructed)
+            return NULL;
+        reconstructed = candidate;
+    }
+    uint32_t value_limit = block->xi->nvalues;
+    if (edge_point) {
+        for (uint32_t index = 0u; index < value_limit; ++index) {
+            if (block->xi->values[index] != edge_point)
+                continue;
+            value_limit = index;
+            edge_point = NULL;
+            break;
+        }
+        if (edge_point)
+            return NULL;
+    }
+    const XiValue *recovered = NULL;
+    for (uint32_t index = 0u; reconstructed && index < value_limit; ++index) {
+        const XiValue *candidate = block->xi->values[index];
+        if (!candidate || candidate->op != XI_PLACE_LOAD || candidate->nargs != 1u ||
+            !candidate->args ||
+            exact_logical_value_identity(context, function->xi, candidate->args[0]) !=
+                reconstructed->place ||
+            !candidate->type || !owner->type || !xr_type_equals(candidate->type, owner->type) ||
+            logical_ownership_for_type(context, reconstructed->type_id) != XR_CORE_IR_OWNER)
+            continue;
+        if (recovered)
+            return NULL;
+        recovered = candidate;
+    }
+    return recovered;
+}
+
+static bool edge_value_operand_key(const XrXiBuildContext *context,
+                                   const XrXiFunctionStorage *function,
+                                   const XrXiBlockStorage *block, const XiValue *value,
+                                   const XiValue *edge_point, XrCoreIrKey *key_out) {
+    const XiValue *recovered =
+        recovered_reconstructed_place_owner(context, function, block, value, edge_point);
+    return value_operand_key(context, function, block, recovered ? recovered : value, key_out);
+}
+
 static XrProgramBuildStatus add_constant(XrXiBuildContext *context, XrXiModuleStorage *module,
                                          const XiValue *value, XrCoreIrKey *constant_key_out,
                                          char *diagnostic, size_t diagnostic_size) {
@@ -5448,8 +5510,9 @@ static XrProgramBuildStatus set_operands(const XrXiBuildContext *context,
 static XrProgramBuildStatus
 set_trap_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
                        const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
-                       XiValue *const *provider_arguments, uint32_t provider_argument_count,
-                       const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
+                       const XiValue *call, XiValue *const *provider_arguments,
+                       uint32_t provider_argument_count, const XrXiBlockStorage *handler,
+                       char *diagnostic, size_t diagnostic_size) {
     if (!handler || provider_argument_count > UINT32_MAX - handler->argument_count)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
     uint32_t count = provider_argument_count + handler->argument_count;
@@ -5469,8 +5532,8 @@ set_trap_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput
         const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
         if (edge_argument->phi ||
             edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-            !value_operand_key(context, function, source, edge_argument->source,
-                               &operands[cursor++])) {
+            !edge_value_operand_key(context, function, source, edge_argument->source, call,
+                                    &operands[cursor++])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi trap continuation argument %u is unavailable", argument);
@@ -5492,8 +5555,8 @@ set_trap_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput
 static XrProgramBuildStatus
 set_panic_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
                         const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
-                        const XiValue *condition, const XrXiBlockStorage *handler, char *diagnostic,
-                        size_t diagnostic_size) {
+                        const XiValue *point, const XiValue *condition,
+                        const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
     if (!handler || handler->argument_count == 0u ||
         handler->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_PANIC)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -5512,8 +5575,8 @@ set_panic_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInpu
         const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
         if (edge_argument->phi ||
             edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-            !value_operand_key(context, function, source, edge_argument->source,
-                               &operands[cursor++])) {
+            !edge_value_operand_key(context, function, source, edge_argument->source, point,
+                                    &operands[cursor++])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi panic continuation argument %u is unavailable", argument);
@@ -5603,8 +5666,9 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
             return set_operands(context, instruction, function, block, value->args + 1u,
                                 provider_entry->argc, diagnostic, diagnostic_size);
         const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
-        return set_trap_edge_operands(context, instruction, function, block, value->args + 1u,
-                                      provider_entry->argc, handler, diagnostic, diagnostic_size);
+        return set_trap_edge_operands(context, instruction, function, block, value,
+                                      value->args + 1u, provider_entry->argc, handler, diagnostic,
+                                      diagnostic_size);
     }
     if (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE &&
         callsite->kind != XG_CALL_METHOD)
@@ -5655,7 +5719,7 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
             return set_operands(context, instruction, function, block, value->args, value->nargs,
                                 diagnostic, diagnostic_size);
         const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
-        return set_trap_edge_operands(context, instruction, function, block, value->args,
+        return set_trap_edge_operands(context, instruction, function, block, value, value->args,
                                       value->nargs, handler, diagnostic, diagnostic_size);
     }
     if (!callee_storage)
@@ -5696,7 +5760,7 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         return set_operands(context, instruction, function, block, value->args + first_operand,
                             value->nargs - first_operand, diagnostic, diagnostic_size);
     const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
-    return set_trap_edge_operands(context, instruction, function, block,
+    return set_trap_edge_operands(context, instruction, function, block, value,
                                   value->args + first_operand, value->nargs - first_operand,
                                   handler, diagnostic, diagnostic_size);
 }
@@ -6006,8 +6070,8 @@ static XrProgramBuildStatus translate_existential_value(XrXiBuildContext *contex
         return set_operands(context, instruction, function, block, value->args, value->nargs,
                             diagnostic, diagnostic_size);
     const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
-    return set_trap_edge_operands(context, instruction, function, block, value->args, value->nargs,
-                                  handler, diagnostic, diagnostic_size);
+    return set_trap_edge_operands(context, instruction, function, block, value, value->args,
+                                  value->nargs, handler, diagnostic, diagnostic_size);
 }
 
 static XrProgramBuildStatus
@@ -6147,7 +6211,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
                                 diagnostic_size);
         const XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
-        return set_panic_edge_operands(context, instruction, function, block, value->args[0],
+        return set_panic_edge_operands(context, instruction, function, block, value, value->args[0],
                                        handler, diagnostic, diagnostic_size);
     }
     if (value_is_static_typed_catch_test(value)) {
@@ -8394,7 +8458,8 @@ set_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *ins
             const XiValue *incoming =
                 edge_argument_value(&successor->argument_storage[argument], predecessor->xi,
                                     successor->xi, predecessor_occurrence);
-            if (!value_operand_key(context, function, predecessor, incoming, &operands[cursor++])) {
+            if (!edge_value_operand_key(context, function, predecessor, incoming, NULL,
+                                        &operands[cursor++])) {
                 const XiValue *logical =
                     exact_logical_value_identity(context, function ? function->xi : NULL, incoming);
                 xr_free(operands);
@@ -8454,7 +8519,8 @@ set_invoke_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *i
             const XiValue *incoming =
                 edge_argument_value(&successor->argument_storage[argument], predecessor->xi,
                                     successor->xi, predecessor_occurrence);
-            if (!value_operand_key(context, function, predecessor, incoming, &operands[cursor++])) {
+            if (!edge_value_operand_key(context, function, predecessor, incoming, call,
+                                        &operands[cursor++])) {
                 unavailable_value = incoming;
                 goto unavailable;
             }
@@ -8478,7 +8544,7 @@ unavailable:
 
 static XrProgramBuildStatus append_invoke_trap_edge_operands(
     const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
-    const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
+    const XrXiFunctionStorage *function, const XrXiBlockStorage *source, const XiValue *call,
     const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
     if (!instruction || !handler ||
         instruction->operand_count > UINT32_MAX - handler->argument_count ||
@@ -8496,8 +8562,8 @@ static XrProgramBuildStatus append_invoke_trap_edge_operands(
         const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
         if (edge_argument->phi ||
             edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-            !value_operand_key(context, function, source, edge_argument->source,
-                               &operands[cursor++])) {
+            !edge_value_operand_key(context, function, source, edge_argument->source, call,
+                                    &operands[cursor++])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi invoke trap continuation argument %u is unavailable", argument);
@@ -8982,8 +9048,8 @@ static XrProgramBuildStatus append_cancel_drop_operands(const XrXiBuildContext *
         memcpy(operands, instruction->operands,
                (size_t) instruction->operand_count * sizeof(*operands));
     for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
-        if (!value_operand_key(context, function, source, point->drops[drop],
-                               &operands[instruction->operand_count + drop])) {
+        if (!edge_value_operand_key(context, function, source, point->drops[drop], point->op,
+                                    &operands[instruction->operand_count + drop])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi cancel owner %u is unavailable at suspension",
@@ -9026,8 +9092,8 @@ append_cancel_handler_operands(const XrXiBuildContext *context,
             edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
             edge_argument->category != XR_CORE_IR_VALUE ||
             edge_argument->ownership != XR_CORE_IR_OWNER ||
-            !value_operand_key(context, function, source, edge_argument->source,
-                               &operands[instruction->operand_count + argument])) {
+            !edge_value_operand_key(context, function, source, edge_argument->source, point->op,
+                                    &operands[instruction->operand_count + argument])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi cancel handler owner is unavailable at suspension");
@@ -9169,8 +9235,8 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     xr_free((void *) call.operands);
     for (uint32_t live = 0u; live < live_count; ++live) {
         const XiValue *incoming = resume->argument_storage[implicit_result + live].source;
-        if (!value_operand_key(context, function, block, incoming,
-                               &operands[call.operand_count + live])) {
+        if (!edge_value_operand_key(context, function, block, incoming, point->op,
+                                    &operands[call.operand_count + live])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi coroutine call live value is unavailable");
@@ -9348,7 +9414,13 @@ static uint32_t owner_edge_occurrences(const XrXiBuildContext *context,
             edge_argument_value(&target->argument_storage[argument], predecessor->xi, successor,
                                 predecessor_occurrence);
         XrCoreIrKey key = {{0}};
-        if (incoming && value_operand_key(context, function, predecessor, incoming, &key) &&
+        const XiValue *edge_point = block_typed_invoke_call(context, function->xi, predecessor->xi);
+        const XiCoroSuspendPoint *suspend_point =
+            edge_point ? NULL : coroutine_point_for_block(function, predecessor->xi);
+        if (!edge_point && suspend_point)
+            edge_point = suspend_point->op;
+        if (incoming &&
+            edge_value_operand_key(context, function, predecessor, incoming, edge_point, &key) &&
             xr_core_ir_key_equal(key, owner))
             ++occurrences;
     }
@@ -10221,9 +10293,9 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             const XrXiTrapEdge *trap_edge = find_trap_edge(context, xi, invoke_call);
             if (trap_edge) {
                 const XrXiBlockStorage *handler = find_block_storage(storage, trap_edge->handler);
-                status =
-                    append_invoke_trap_edge_operands(context, terminator, storage, block_storage,
-                                                     handler, diagnostic, diagnostic_size);
+                status = append_invoke_trap_edge_operands(context, terminator, storage,
+                                                          block_storage, invoke_call, handler,
+                                                          diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
             }

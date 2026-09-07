@@ -1945,13 +1945,17 @@ TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors) {
     source_build_fixture_free(&fixture);
 }
 
-TEST(source_owner_reconstructs_place_backed_defer_for_resume_and_cancel) {
+TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel) {
     static const char source[] = "import sys\n"
                                  "fn answer() -> i64 {\n"
                                  "  var live = sys.Pipe(2147483646, 2147483647)\n"
-                                 "  defer { (move live).close() }\n"
+                                 "  defer {\n"
+                                 "    live.closeRead()\n"
+                                 "    live.closeWrite()\n"
+                                 "  }\n"
+                                 "  const readEnd = live._readHandle\n"
                                  "  Coro.yield()\n"
-                                 "  return 42\n"
+                                 "  return readEnd - 2147483604\n"
                                  "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1976,15 +1980,17 @@ TEST(source_owner_reconstructs_place_backed_defer_for_resume_and_cancel) {
         return;
     }
     assert_products_equal(&first, &second);
-    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PLACE_LOCAL), 2u);
-    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PLACE_TAKE), 2u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PLACE_LOCAL), 3u);
+    ASSERT_EQ_UINT(program_operation_count(first.program, XR_CORE_OP_CORE_PLACE_TAKE), 1u);
 
     uint32_t entry = xr_validated_program_entry_function(first.program);
     ASSERT_LT(entry, first.program->function_count);
     const XrValidatedFunction *function = &first.program->functions[entry];
     ASSERT_EQ_UINT(function->coroutine_safepoint_count, 1u);
-    ASSERT_EQ_UINT(function->coroutine_safepoints[0].live_value_count, 1u);
+    ASSERT_EQ_UINT(function->coroutine_safepoints[0].live_value_count, 2u);
     const XrValidatedInstruction *yield = NULL;
+    const XrValidatedBlock *take_block = NULL;
+    const XrValidatedInstruction *take = NULL;
     for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
         const XrValidatedBlock *block = &function->blocks[block_index];
         for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
@@ -1994,16 +2000,52 @@ TEST(source_owner_reconstructs_place_backed_defer_for_resume_and_cancel) {
                 ASSERT_NULL(yield);
                 yield = candidate;
             }
+            if (candidate->operation_id == XR_CORE_OP_CORE_PLACE_TAKE) {
+                ASSERT_NULL(take);
+                take = candidate;
+                take_block = block;
+            }
         }
     }
+    ASSERT_NOT_NULL(take);
+    ASSERT_NOT_NULL(take_block);
+    ASSERT_GT(take_block->instruction_count, 2u);
+    const XrValidatedInstruction *local = NULL;
+    for (uint32_t instruction = 0u; instruction < take_block->instruction_count; ++instruction)
+        if (take_block->instructions[instruction].operation_id == XR_CORE_OP_CORE_PLACE_LOCAL) {
+            ASSERT_NULL(local);
+            local = &take_block->instructions[instruction];
+        }
+    ASSERT_NOT_NULL(local);
+    ASSERT_EQ_UINT(local->operand_count, 1u);
+    const XrValidatedInstruction *recovery_edge =
+        &take_block->instructions[take_block->instruction_count - 1u];
+    ASSERT_EQ_INT(recovery_edge->operation_id, XR_CORE_OP_CORE_BRANCH);
+    uint32_t recovered_occurrences = 0u;
+    uint32_t stale_owner_occurrences = 0u;
+    for (uint32_t operand = 0u; operand < recovery_edge->operand_count; ++operand) {
+        recovered_occurrences += recovery_edge->operands[operand] == take->result_id;
+        stale_owner_occurrences += recovery_edge->operands[operand] == local->operands[0];
+    }
+    ASSERT_EQ_UINT(recovered_occurrences, 1u);
+    ASSERT_EQ_UINT(stale_owner_occurrences, 0u);
     ASSERT_NOT_NULL(yield);
     ASSERT_EQ_UINT(yield->successor_count, 2u);
-    for (uint32_t successor = 0u; successor < 2u; ++successor) {
-        const XrValidatedBlock *continuation = &function->blocks[yield->successors[successor]];
-        ASSERT_EQ_UINT(continuation->argument_count, 1u);
-        ASSERT_EQ_INT(continuation->argument_categories[0], XR_CORE_IR_VALUE);
-        ASSERT_EQ_INT(continuation->argument_ownerships[0], XR_CORE_IR_OWNER);
+    const XrValidatedBlock *resume = &function->blocks[yield->successors[0]];
+    ASSERT_EQ_UINT(resume->argument_count, 2u);
+    uint32_t resume_owner_count = 0u;
+    uint32_t resume_non_owner_count = 0u;
+    for (uint32_t argument = 0u; argument < resume->argument_count; ++argument) {
+        ASSERT_EQ_INT(resume->argument_categories[argument], XR_CORE_IR_VALUE);
+        resume_owner_count += resume->argument_ownerships[argument] == XR_CORE_IR_OWNER;
+        resume_non_owner_count += resume->argument_ownerships[argument] == XR_CORE_IR_NON_OWNER;
     }
+    ASSERT_EQ_UINT(resume_owner_count, 1u);
+    ASSERT_EQ_UINT(resume_non_owner_count, 1u);
+    const XrValidatedBlock *cancel = &function->blocks[yield->successors[1]];
+    ASSERT_EQ_UINT(cancel->argument_count, 1u);
+    ASSERT_EQ_INT(cancel->argument_categories[0], XR_CORE_IR_VALUE);
+    ASSERT_EQ_INT(cancel->argument_ownerships[0], XR_CORE_IR_OWNER);
 
     XrProgramProviderRequirementView requirement = {0};
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(first.program), 1u);
@@ -2292,7 +2334,7 @@ RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
 RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
 RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);
 RUN_TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors);
-RUN_TEST(source_owner_reconstructs_place_backed_defer_for_resume_and_cancel);
+RUN_TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
 RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
 RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);

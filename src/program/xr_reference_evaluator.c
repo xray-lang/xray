@@ -1450,9 +1450,11 @@ static XrReferenceOutcome execution_outcome(XrReferenceExecution *execution,
 static bool reference_coroutine_operation_supported(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
-           operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_SUB_I64 ||
+           operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
            operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
+           operation_id == XR_CORE_OP_CORE_AGGREGATE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
            operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
@@ -1727,12 +1729,16 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->initialized[instruction->result_id] = true;
                 break;
             }
-            case XR_CORE_OP_CORE_ADD_I64: {
+            case XR_CORE_OP_CORE_ADD_I64:
+            case XR_CORE_OP_CORE_SUB_I64: {
                 int64_t left = execution->values[instruction->operands[0]].as.value.as.i64;
                 int64_t right = execution->values[instruction->operands[1]].as.value.as.i64;
                 int64_t value = 0;
                 if (instruction->immediate.u32 == 0u) {
-                    if (!checked_add(left, right, &value)) {
+                    bool valid = instruction->operation_id == XR_CORE_OP_CORE_ADD_I64
+                                     ? checked_add(left, right, &value)
+                                     : checked_sub(left, right, &value);
+                    if (!valid) {
                         execution->finished = true;
                         reference_execution_release_lease(execution);
                         XrReferenceOutcome result =
@@ -1741,7 +1747,9 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                         return result;
                     }
                 } else {
-                    value = i64_from_bits((uint64_t) left + (uint64_t) right);
+                    value = i64_from_bits(instruction->operation_id == XR_CORE_OP_CORE_ADD_I64
+                                              ? (uint64_t) left + (uint64_t) right
+                                              : (uint64_t) left - (uint64_t) right);
                 }
                 execution->values[instruction->result_id] = (EvalRuntimeValue) {
                     .category = XR_CORE_IR_VALUE,
@@ -1769,6 +1777,16 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                             .kind = XR_REFERENCE_VALUE_AGGREGATE,
                             .as.aggregate = aggregate,
                         },
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_AGGREGATE_PROJECT: {
+                const XrReferenceAggregateValue *aggregate =
+                    execution->values[instruction->operands[0]].as.value.as.aggregate;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = aggregate->fields[instruction->immediate.field_ordinal],
                 };
                 execution->initialized[instruction->result_id] = true;
                 break;
