@@ -95,8 +95,16 @@ validate_typed_fixture(const XrCoreIrTypeInput *types, uint32_t type_count,
             XR_PROGRAM_BUILD_OK);
     REQUIRE(xr_program_write(core_program, &artifact, diagnostic, sizeof(diagnostic)) ==
             XR_PROGRAM_BUILD_OK);
-    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
-                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    XrProgramVerifyStatus verify_status =
+        xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &verify_diagnostic);
+    if (verify_status != XR_PROGRAM_VERIFY_OK)
+        fprintf(stderr, "unexpected verify reject: %s/%s decode=%s at f=%u b=%u i=%u v=%u\n",
+                xr_program_verify_status_name(verify_status),
+                xr_program_diagnostic_kind_name(verify_diagnostic.kind),
+                xr_program_decode_status_name(verify_diagnostic.decode_status),
+                verify_diagnostic.location.function_id, verify_diagnostic.location.block_id,
+                verify_diagnostic.location.instruction_id, verify_diagnostic.location.value_id);
+    REQUIRE(verify_status == XR_PROGRAM_VERIFY_OK);
     xr_program_artifact_free(&artifact);
     xr_core_ir_program_free(core_program);
     REQUIRE(program != NULL);

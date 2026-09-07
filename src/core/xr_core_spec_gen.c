@@ -871,7 +871,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         "place",
         "core.base",
         "none",
-        "verifier-confined-local-place",
+        "verifier-confined-local-place-alias",
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,

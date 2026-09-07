@@ -89,7 +89,7 @@
     {
       "stable_id": 104,
       "id": "core.place.local",
-      "law": "create a non-escaping call-bound place for one addressable local binding",
+      "law": "create a non-escaping call-bound alias of one addressable value storage without copying or consuming it; affine values remain owned by that storage",
       "source": "typed ref actual or ref parameter",
       "status": "COMPLETE_W7_WAVE3_SLICE2"
     },
@@ -103,7 +103,7 @@
     {
       "stable_id": 105,
       "id": "core.place.load",
-      "law": "read a value through one verified live place without transferring the place",
+      "law": "read a non-owning value through one verified live place; affine contents remain borrowed from the aliased storage owner",
       "source": "typed call-bound place read",
       "status": "COMPLETE_W7_WAVE3_SLICE2"
     },
@@ -117,7 +117,7 @@
     {
       "stable_id": 108,
       "id": "core.place.take",
-      "law": "consume one owning local affine place and restore exactly one value owner while invalidating that local and every derived field place",
+      "law": "consume the affine storage owner named by one local place and restore exactly one value owner while invalidating that owner, local place, and every derived field place",
       "source": "affine writeback after a canonical REF call",
       "status": "COMPLETE_W7_WAVE3_AGGREGATE_PLACE"
     }
@@ -135,7 +135,7 @@
     "xi.owner.forward": "core.owner.move",
     "xi.local.addr": "core.place.local",
     "xi.load.field/xi.store.field[exact nominal REF]": "core.place.project followed by core.place.load/store",
-    "xi.place.load": "core.place.load for non-owner contents; core.place.take for affine owner writeback",
+    "xi.place.load": "core.place.load as a non-owner borrow for both trivial and affine contents; an explicit consuming source move through a local place resolves to its storage owner, while core.place.take remains the explicit Core IR move-out operation",
     "xi.place.store": "core.place.store",
     "xi.throw": "core.panic.publish after explicit cleanup CFG; implicit handler-state Xi is rejected",
     "xi.call.builtin[copy]": "core.owner.copy for an explicit source copy; unrelated builtins have no projection",

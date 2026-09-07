@@ -83,7 +83,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import platform, proc, workspace  # noqa: E402
+from xraytest import platform, proc, sanitizer, workspace  # noqa: E402
 import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 # This script narrates around children that write straight to fd 1 (ctest, the
@@ -338,6 +338,14 @@ def main(argv: List[str]) -> int:
     if tier not in TIERS and not canonical_preflight:
         print(f"Unknown tier '{tier}'")
         return usage(1)
+
+    def toolchain_log(message: str, *, error: bool = False) -> None:
+        stream = sys.stderr if error else sys.stdout
+        color = RED if error else BLUE
+        print(f"{color}==>{NC} {message}", file=stream)
+
+    if not sanitizer.activate_windows_msvc_environment(toolchain_log):
+        return 1
 
     build_dir = Path(os.environ.get("XR_BUILD_DIR", "build"))
     jobs = platform.env_int("XR_JOBS", default_jobs())

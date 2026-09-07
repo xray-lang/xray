@@ -1627,15 +1627,27 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
                            safepoint_id, parameter, instruction->operands[parameter]))
             return false;
     }
+    if (!append_format(buffer, "            frame->child_active_%u = UINT8_C(1);\n        }\n",
+                       safepoint_id))
+        return false;
+    if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+        char storage[32];
+        const char *type = type_c_name(callee->result_type_id, storage);
+        if (!type ||
+            !append_format(buffer, "        %s child_result_%u = {0};\n", type, instruction_id))
+            return false;
+    }
     if (!append_format(buffer,
-                       "            frame->child_active_%u = UINT8_C(1);\n"
-                       "        }\n"
                        "        XrAotOutcome child_%u = xr_aot_fn_%u_step(xr_ctx, "
                        "&frame->child_%u, UINT8_C(0)",
-                       safepoint_id, instruction_id, callee_id, safepoint_id))
+                       instruction_id, callee_id, safepoint_id))
         return false;
     for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
         if (!append_format(buffer, ", frame->child_%u.parameter_%u", safepoint_id, parameter))
+            return false;
+    }
+    if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+        if (!append_format(buffer, ", &child_result_%u", instruction_id))
             return false;
     }
     if (!append_text(buffer, ");\n"))
@@ -1662,11 +1674,16 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
     char result_expression[64];
     const char *result = NULL;
     if (implicit_result != 0u) {
-        const char *field = outcome_field(callee->result_type_id);
-        if (!field)
-            return false;
-        (void) snprintf(result_expression, sizeof(result_expression), "child_%u.%s", instruction_id,
-                        field);
+        if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+            (void) snprintf(result_expression, sizeof(result_expression), "child_result_%u",
+                            instruction_id);
+        } else {
+            const char *field = outcome_field(callee->result_type_id);
+            if (!field)
+                return false;
+            (void) snprintf(result_expression, sizeof(result_expression), "child_%u.%s",
+                            instruction_id, field);
+        }
         result = result_expression;
     }
     return emit_invoke_edge(buffer, function, instruction, 0u, implicit_result,
@@ -1993,10 +2010,8 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_OWNER_DROP:
             return append_format(buffer, "        (void)v%u;\n", instruction->operands[0]);
         case XR_CORE_OP_CORE_PLACE_LOCAL:
-            return append_format(buffer,
-                                 "        xr_place_%u = v%u;\n        v%u = &xr_place_%u;\n",
-                                 instruction->result_id, instruction->operands[0],
-                                 instruction->result_id, instruction->result_id);
+            return append_format(buffer, "        v%u = &v%u;\n", instruction->result_id,
+                                 instruction->operands[0]);
         case XR_CORE_OP_CORE_PLACE_LOAD:
             return append_format(buffer, "        v%u = *v%u;\n", instruction->result_id,
                                  instruction->operands[0]);
@@ -2159,6 +2174,12 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
                                    parameter))
                     return false;
             }
+            if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+                const XrBackendBlock *normal = &function->blocks[suspension->successors[0]];
+                if (normal->argument_count == 0u ||
+                    !append_format(buffer, ", &v%u", normal->argument_ids[0]))
+                    return false;
+            }
             if (!append_format(buffer,
                                ");\n"
                                "                if (cancel_%u.kind != UINT32_C(6)) "
@@ -2218,10 +2239,6 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
             !append_format(buffer, "    %s%s v%u = %s;\n", type, pointer, value,
                            value_initializer) ||
             !append_format(buffer, "    (void)v%u;\n", value))
-            return false;
-        if (function->value_categories[value] == XR_CORE_IR_PLACE &&
-            (!append_format(buffer, "    %s xr_place_%u = %s;\n", type, value, initializer) ||
-             !append_format(buffer, "    (void)xr_place_%u;\n", value)))
             return false;
     }
     const XrBackendBlock *entry = &function->blocks[function->entry_block];

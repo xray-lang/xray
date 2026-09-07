@@ -2067,6 +2067,39 @@ TEST(coro_plan_transfers_owned_rep_alias_into_frame) {
     xi_func_free(f);
 }
 
+TEST(coro_lower_does_not_cancel_unproduced_owned_call_result) {
+    XiFunc *f = xi_func_new("coro_owned_call_result", &stub_array_i8);
+    ASSERT(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+
+    XiValue *callee = xi_value_new(f, entry, XI_CONST, &stub_func, 0);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_array_i8, 1);
+    ASSERT(callee != NULL && call != NULL);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_MAY_SUSPEND;
+    call->rep = XR_REP_TAGGED;
+    xi_block_set_return(entry, call);
+
+    mark_coro_lower_input(f);
+    XiCoroResolver resolver = {0};
+    resolver.call_suspendability = known_suspend_call;
+    ASSERT(xi_coro_lower(f, &resolver));
+    ASSERT(f->coro_plan != NULL && f->coro_plan->nstates == 1);
+    const XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    const XiCoroSlot *slot = xi_coro_plan_find_slot(f->coro_plan, call);
+    const XiCoroEdge *cancel = xi_coro_point_find_edge(point, XI_CORO_EDGE_CANCEL);
+    ASSERT(point->result_slot == call);
+    ASSERT(point->nlive == 1 && point->live[0] == call);
+    ASSERT(point->nroots == 0 && point->ndrops == 0);
+    ASSERT(slot != NULL && slot->live_across && slot->needs_release);
+    ASSERT(!slot->frame_root && !slot->frame_release);
+    ASSERT(cancel != NULL && cancel->terminal && cancel->ndrops == 0);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
 static XiFunc *make_lowered_two_state_coro(void) {
     XiFunc *f = xi_func_new("coro_lower_two_state", &stub_array_i8);
     if (!f)
@@ -2571,6 +2604,47 @@ TEST(coro_lower_accepts_frame_backed_static_cleanup_region) {
     ASSERT(f->coro_plan != NULL);
     ASSERT(f->coro_plan->cfg_rewritten);
     ASSERT(f->coro_plan->nstates == 1);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_rebinds_post_suspend_static_cleanup_predecessor) {
+    XiFunc *f = make_func("coro_post_suspend_static_cleanup");
+    ASSERT(f != NULL);
+    XiBlock *handler = xi_block_new(f);
+    ASSERT(handler != NULL);
+    handler->sealed = true;
+
+    XiValue *callee = xi_value_new(f, f->entry, XI_CONST, &stub_func, 0);
+    XiValue *call = xi_value_new(f, f->entry, XI_CALL, &stub_int, 1);
+    XiValue *post_suspend_value = xi_const_int(f, f->entry, 42, &stub_int);
+    XiValue *try_op = xi_value_new(f, f->entry, XI_TRY, &stub_unit, 0);
+    ASSERT(callee != NULL && call != NULL && post_suspend_value != NULL && try_op != NULL);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_MAY_SUSPEND;
+    try_op->aux = handler;
+    try_op->aux_int = XI_TRY_AUX_STATIC_CLEANUP;
+    try_op->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_add_pred(handler, f->entry);
+    xi_block_set_return(f->entry, post_suspend_value);
+
+    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_unit, 0);
+    ASSERT(caught != NULL);
+    caught->aux = try_op;
+    caught->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(handler, post_suspend_value);
+
+    mark_coro_lower_input(f);
+    XiCoroResolver resolver = {0};
+    resolver.call_suspendability = known_suspend_call;
+    ASSERT(xi_coro_lower(f, &resolver));
+    ASSERT(f->coro_plan != NULL && f->coro_plan->nstates == 1);
+    XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    ASSERT(point->active_handler_count == 0);
+    ASSERT(post_suspend_value->block == point->resume_block);
+    ASSERT(try_op->block == point->resume_block);
+    ASSERT(handler->npreds == 1);
+    ASSERT(handler->preds[0] == point->resume_block);
     ASSERT(verify_ok(f));
     xi_func_free(f);
 }
@@ -3143,6 +3217,7 @@ int main(void) {
     run_coro_plan_does_not_own_borrowed_place_load();
     run_coro_plan_records_go_as_scheduler_reduction_point();
     run_coro_plan_transfers_owned_rep_alias_into_frame();
+    run_coro_lower_does_not_cancel_unproduced_owned_call_result();
     run_coro_lower_splits_cfg_and_records_cleanup_obligations();
     run_coro_lower_is_deterministic_and_idempotent();
     run_coro_lower_mutation_rejects_missing_spill();
@@ -3165,6 +3240,7 @@ int main(void) {
     run_coro_exception_verifier_rejects_error_continuation_mutation();
     run_coro_verifier_rejects_continuation_action_mutation();
     run_coro_lower_accepts_frame_backed_static_cleanup_region();
+    run_coro_lower_rebinds_post_suspend_static_cleanup_predecessor();
     run_coro_lower_accepts_open_callable_as_state_obligation();
     run_coro_lower_rejects_raw_stage_before_analysis();
     run_coro_lower_preserves_successor_phi_pred_position();

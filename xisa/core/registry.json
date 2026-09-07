@@ -3434,15 +3434,15 @@
       "capability_requirements": [],
       "ownership": {
         "operands": [
-          "consume-initializer"
+          "borrow-value-storage"
         ],
-        "result": "call-frame-place"
+        "result": "call-frame-place-alias"
       },
       "profile_dependency": "none",
-      "materialization": "verifier-confined-local-place",
+      "materialization": "verifier-confined-local-place-alias",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one call-frame cell initialized from the operand and one place identity"
+        "allowed_trace": "one call-frame place identity aliasing the operand storage without copying or transferring its value; affine operands remain the sole storage owner"
       },
       "kat_validator": "place-local",
       "coverage": {
@@ -3503,13 +3503,13 @@
         "operands": [
           "borrow-place"
         ],
-        "result": "copied-value"
+        "result": "non-owning-value-snapshot"
       },
       "profile_dependency": "none",
       "materialization": "logical-place-read",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one value snapshot of the current place contents"
+        "allowed_trace": "one non-owning value snapshot of the current place contents; affine contents remain borrowed from the aliased storage owner"
       },
       "kat_validator": "place-load",
       "coverage": {
@@ -3706,7 +3706,7 @@
       "capability_requirements": [],
       "ownership": {
         "operands": [
-          "consume-owning-local-place"
+          "consume-storage-owner-through-local-place"
         ],
         "result": "moved-value"
       },
@@ -3714,7 +3714,7 @@
       "materialization": "logical-owning-place-take",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one transfer of the initialized affine value from an owning local place followed by permanent invalidation of that local and every derived field place"
+        "allowed_trace": "one transfer of the affine value from the storage owner named by a local place followed by permanent invalidation of that owner, local place, and every derived field place"
       },
       "kat_validator": "place-take",
       "coverage": {

@@ -1504,18 +1504,19 @@ static void test_aggregate_place_projection(void) {
     XrCoreIrKey v40 = key("place-project:value:40");
     XrCoreIrKey aggregate = key("place-project:value:aggregate");
     XrCoreIrKey aggregate_place = key("place-project:value:aggregate-place");
+    XrCoreIrKey borrowed_aggregate = key("place-project:value:borrowed-aggregate");
     XrCoreIrKey field_place = key("place-project:value:field-place");
     XrCoreIrKey v42 = key("place-project:value:42");
-    XrCoreIrKey loaded = key("place-project:value:loaded");
+    XrCoreIrKey borrowed_field = key("place-project:value:borrowed-field");
     XrCoreIrKey taken = key("place-project:value:taken");
     XrCoreIrKey construct_operands[] = {v40};
     XrCoreIrKey aggregate_operand[] = {aggregate};
     XrCoreIrKey aggregate_place_operand[] = {aggregate_place};
+    XrCoreIrKey borrowed_aggregate_operand[] = {borrowed_aggregate};
     XrCoreIrKey store_operands[] = {field_place, v42};
-    XrCoreIrKey field_place_operand[] = {field_place};
     XrCoreIrKey take_operand[] = {aggregate_place};
     XrCoreIrKey drop_operand[] = {taken};
-    XrCoreIrKey return_operand[] = {loaded};
+    XrCoreIrKey return_operand[] = {borrowed_field};
     XrCoreIrInstructionInput instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = v40,
@@ -1536,6 +1537,13 @@ static void test_aggregate_place_projection(void) {
          .operands = aggregate_operand,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+         .result = borrowed_aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .result_ownership = XR_CORE_IR_NON_OWNER,
+         .operands = aggregate_place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_PLACE_PROJECT,
          .result = field_place,
          .result_type_id = XR_CORE_TYPE_I64,
@@ -1554,12 +1562,13 @@ static void test_aggregate_place_projection(void) {
          .operands = store_operands,
          .operand_count = 2u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
-        {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
-         .result = loaded,
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = borrowed_field,
          .result_type_id = XR_CORE_TYPE_I64,
-         .operands = field_place_operand,
+         .operands = borrowed_aggregate_operand,
          .operand_count = 1u,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
         {.operation_id = XR_CORE_OP_CORE_PLACE_TAKE,
          .result = taken,
          .result_type_id = AGGREGATE_TYPE,
@@ -1611,15 +1620,15 @@ static void test_aggregate_place_projection(void) {
     }
     xr_program_artifact_free(&artifact);
 
-    instructions[3].immediate.field_ordinal = 1u;
+    instructions[4].immediate.field_ordinal = 1u;
     CHECK(write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
     xr_program_artifact_free(&artifact);
-    instructions[3].immediate.field_ordinal = 0u;
+    instructions[4].immediate.field_ordinal = 0u;
 
-    XrCoreIrInstructionInput temporary = instructions[6];
-    instructions[6] = instructions[7];
-    instructions[7] = temporary;
+    XrCoreIrInstructionInput temporary = instructions[7];
+    instructions[7] = instructions[8];
+    instructions[8] = temporary;
     CHECK(write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
     xr_program_artifact_free(&artifact);

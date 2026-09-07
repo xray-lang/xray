@@ -812,13 +812,24 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("operand_category") == "value"
                 and actual.get("result_type") == "void")
     if validator == "place-local":
+        ownership = actual.get("type_ownership")
         return (actual.get("operand_type") == actual.get("result_type")
                 and actual.get("operand_category") == "value"
-                and actual.get("result_category") == "place")
+                and actual.get("result_category") == "place"
+                and ownership in {"trivial", "affine"}
+                and actual.get("operand_ownership") ==
+                    ("owner" if ownership == "affine" else "non-owner")
+                and actual.get("result_ownership") == "non-owner"
+                and actual.get("storage_relation") == "aliases-operand-storage")
     if validator == "place-load":
+        ownership = actual.get("type_ownership")
         return (actual.get("operand_type") == actual.get("result_type")
                 and actual.get("operand_category") == "place"
-                and actual.get("result_category") == "value")
+                and actual.get("result_category") == "value"
+                and ownership in {"trivial", "affine"}
+                and actual.get("result_ownership") == "non-owner"
+                and actual.get("value_semantics") ==
+                    ("borrow-owner-storage" if ownership == "affine" else "value-snapshot"))
     if validator == "place-store":
         return (actual.get("place_type") == actual.get("value_type")
                 and actual.get("place_category") == "place"
@@ -836,9 +847,10 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("operand_type") == actual.get("result_type")
                 and actual.get("operand_category") == "place"
                 and actual.get("result_category") == "value"
-                and actual.get("place_origin") == "owning-local"
+                and actual.get("place_origin") == "local-storage-alias"
                 and actual.get("type_ownership") == "affine"
-                and actual.get("result_ownership") == "owner")
+                and actual.get("result_ownership") == "owner"
+                and actual.get("consumes_storage_owner") is True)
     if validator == "coroutine-yield":
         return (actual.get("result_type") == "void"
                 and actual.get("successor_count") == 2

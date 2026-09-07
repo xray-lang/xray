@@ -2425,7 +2425,29 @@
         "operand_type": "i64",
         "result_type": "i64",
         "operand_category": "value",
-        "result_category": "place"
+        "result_category": "place",
+        "type_ownership": "trivial",
+        "operand_ownership": "non-owner",
+        "result_ownership": "non-owner",
+        "storage_relation": "aliases-operand-storage"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-local-affine-alias-valid",
+      "operation": "core.place.local",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Pipe",
+        "result_type": "Pipe",
+        "operand_category": "value",
+        "result_category": "place",
+        "type_ownership": "affine",
+        "operand_ownership": "owner",
+        "result_ownership": "non-owner",
+        "storage_relation": "aliases-operand-storage"
       },
       "expect": {
         "valid": true
@@ -2439,7 +2461,11 @@
         "operand_type": "i64",
         "result_type": "i64",
         "operand_category": "value",
-        "result_category": "value"
+        "result_category": "value",
+        "type_ownership": "trivial",
+        "operand_ownership": "non-owner",
+        "result_ownership": "non-owner",
+        "storage_relation": "aliases-operand-storage"
       },
       "expect": {
         "valid": false
@@ -2453,7 +2479,27 @@
         "operand_type": "i64",
         "result_type": "i64",
         "operand_category": "place",
-        "result_category": "value"
+        "result_category": "value",
+        "type_ownership": "trivial",
+        "result_ownership": "non-owner",
+        "value_semantics": "value-snapshot"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-load-affine-borrow-valid",
+      "operation": "core.place.load",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Pipe",
+        "result_type": "Pipe",
+        "operand_category": "place",
+        "result_category": "value",
+        "type_ownership": "affine",
+        "result_ownership": "non-owner",
+        "value_semantics": "borrow-owner-storage"
       },
       "expect": {
         "valid": true
@@ -2467,7 +2513,10 @@
         "operand_type": "i64",
         "result_type": "i64",
         "operand_category": "value",
-        "result_category": "value"
+        "result_category": "value",
+        "type_ownership": "trivial",
+        "result_ownership": "non-owner",
+        "value_semantics": "value-snapshot"
       },
       "expect": {
         "valid": false
@@ -2552,9 +2601,10 @@
         "result_type": "Pipe",
         "operand_category": "place",
         "result_category": "value",
-        "place_origin": "owning-local",
+        "place_origin": "local-storage-alias",
         "type_ownership": "affine",
-        "result_ownership": "owner"
+        "result_ownership": "owner",
+        "consumes_storage_owner": true
       },
       "expect": {
         "valid": true
@@ -2569,8 +2619,10 @@
         "result_type": "i64",
         "operand_category": "place",
         "result_category": "value",
+        "place_origin": "local-storage-alias",
         "type_ownership": "trivial",
-        "result_ownership": "non-owner"
+        "result_ownership": "non-owner",
+        "consumes_storage_owner": true
       },
       "expect": {
         "valid": false
@@ -2587,7 +2639,8 @@
         "result_category": "value",
         "place_origin": "borrowed-parameter",
         "type_ownership": "affine",
-        "result_ownership": "owner"
+        "result_ownership": "owner",
+        "consumes_storage_owner": true
       },
       "expect": {
         "valid": false

@@ -373,9 +373,9 @@ xr_program_coroutine_owner_fixture_write_mutated(XrProgramCoroutineOwnerFixtureM
     return status;
 }
 
-static XrProgramBuildStatus xr_program_coroutine_owner_fixture_write(XrProgramArtifact *artifact,
-                                                                     char *diagnostic,
-                                                                     size_t diagnostic_size) {
+static inline XrProgramBuildStatus
+xr_program_coroutine_owner_fixture_write(XrProgramArtifact *artifact, char *diagnostic,
+                                         size_t diagnostic_size) {
     return xr_program_coroutine_owner_fixture_write_mutated(
         XR_PROGRAM_COROUTINE_OWNER_FIXTURE_VALID, artifact, diagnostic, diagnostic_size);
 }

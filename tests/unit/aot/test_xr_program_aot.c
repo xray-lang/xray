@@ -1561,7 +1561,8 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrTarget
     REQUIRE(strstr(generated_none.bytes, "struct XrAotType") != NULL);
     REQUIRE(strstr(generated_none.bytes, "payload.case_1.f0") != NULL);
     REQUIRE(strstr(generated_none.bytes, "int64_t * p") != NULL);
-    REQUIRE(strstr(generated_none.bytes, " = &xr_place_") != NULL);
+    REQUIRE(strstr(generated_none.bytes, " = &v") != NULL);
+    REQUIRE(strstr(generated_none.bytes, "xr_place_") == NULL);
     REQUIRE(strstr(generated_none.bytes, " = *v") != NULL);
     REQUIRE(strstr(generated_none.bytes, "*v") != NULL);
     REQUIRE(strstr(generated_none.bytes, "XrVm") == NULL);

@@ -552,7 +552,7 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     if (implicit_result != 0u &&
                         (normal->argument_types[0] != callee->result_type_id ||
                          normal->argument_categories[0] != XR_CORE_IR_VALUE ||
-                         normal->argument_ownerships[0] != XR_CORE_IR_NON_OWNER)) {
+                         normal->argument_ownerships[0] != callee->result_ownership)) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
                                                   instruction_id);

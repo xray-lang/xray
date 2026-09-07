@@ -1308,7 +1308,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 case XR_CORE_OP_CORE_OWNER_DROP:
                     break;
                 case XR_CORE_OP_CORE_PLACE_LOCAL:
-                    places[instruction.result_id].value = values[instruction.operands[0]].as.value;
+                    places[instruction.result_id].alias = &values[instruction.operands[0]].as.value;
                     places[instruction.result_id].initialized = true;
                     produced.category = XR_CORE_IR_PLACE;
                     produced.as.place = &places[instruction.result_id];
@@ -1714,6 +1714,9 @@ static bool vm_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_AGGREGATE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+           operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
+           operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
+           operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
@@ -2037,8 +2040,8 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 execution->initialized[instruction.result_id] = true;
                 break;
             case XR_CORE_OP_CORE_PLACE_LOCAL:
-                execution->places[instruction.result_id].value =
-                    execution->values[instruction.operands[0]].as.value;
+                execution->places[instruction.result_id].alias =
+                    &execution->values[instruction.operands[0]].as.value;
                 execution->places[instruction.result_id].initialized = true;
                 execution->values[instruction.result_id] = (XrVmRuntimeValue) {
                     .category = XR_CORE_IR_PLACE,
@@ -2046,6 +2049,33 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 };
                 execution->initialized[instruction.result_id] = true;
                 break;
+            case XR_CORE_OP_CORE_PLACE_LOAD:
+                execution->values[instruction.result_id] = (XrVmRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        *vm_place_value(execution->values[instruction.operands[0]].as.place),
+                };
+                execution->initialized[instruction.result_id] = true;
+                break;
+            case XR_CORE_OP_CORE_PLACE_STORE:
+                *vm_place_value(execution->values[instruction.operands[0]].as.place) =
+                    execution->values[instruction.operands[1]].as.value;
+                break;
+            case XR_CORE_OP_CORE_PLACE_PROJECT: {
+                XrVmValue *source =
+                    vm_place_value(execution->values[instruction.operands[0]].as.place);
+                XrVmAggregateValue *aggregate =
+                    (XrVmAggregateValue *) (void *) source->as.aggregate;
+                execution->places[instruction.result_id].alias =
+                    &aggregate->fields[instruction.immediate.field_ordinal];
+                execution->places[instruction.result_id].initialized = true;
+                execution->values[instruction.result_id] = (XrVmRuntimeValue) {
+                    .category = XR_CORE_IR_PLACE,
+                    .as.place = &execution->places[instruction.result_id],
+                };
+                execution->initialized[instruction.result_id] = true;
+                break;
+            }
             case XR_CORE_OP_CORE_PLACE_TAKE:
                 execution->values[instruction.result_id] = (XrVmRuntimeValue) {
                     .category = XR_CORE_IR_VALUE,
@@ -2189,10 +2219,19 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 const XrValidatedBlock *normal = &function->blocks[instruction.successors[0]];
                 uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
                 if (implicit_result != 0u) {
+                    XrVmValue transferred = void_value();
+                    if (!clone_vm_value(&execution->context, child.value, callee->result_type_id,
+                                        &transferred)) {
+                        execution->finished = true;
+                        xr_vm_execution_free(execution->child);
+                        execution->child = NULL;
+                        vm_execution_release_lease(execution);
+                        return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
+                    }
                     uint32_t target = normal->argument_ids[0];
                     execution->values[target] = (XrVmRuntimeValue) {
                         .category = XR_CORE_IR_VALUE,
-                        .as.value = child.value,
+                        .as.value = transferred,
                     };
                     execution->initialized[target] = true;
                 }

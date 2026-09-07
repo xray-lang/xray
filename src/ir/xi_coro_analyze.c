@@ -1511,7 +1511,14 @@ static bool xi_coro_slot_can_carry_owner(const XiCoroSlot *slot) {
 static bool xi_coro_slot_carries_owner_at_point(const XiFunc *f, const XiLiveness *live,
                                                 const XiValue *point, const XiCoroSlot *slot,
                                                 bool split) {
-    if (!xi_coro_slot_can_carry_owner(slot))
+    /* The suspension operation's result is a resume value, not a value that
+     * exists before
+     * the scheduler exit.  It still needs a logical live slot so
+     * the resume continuation can
+     * receive it, but cancellation at this point
+     * must neither trace nor release an owner the
+     * child has not returned. */
+    if (!xi_coro_slot_can_carry_owner(slot) || slot->value == point)
         return false;
     if (!xi_coro_slot_is_borrowed_alias(slot->value))
         return true;

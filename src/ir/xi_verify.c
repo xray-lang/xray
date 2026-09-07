@@ -560,8 +560,8 @@ static bool verify_existential_metadata_contract(VerifyCtx *ctx, const XiFunc *f
 }
 
 static const XrTargetQueryEnumDesc *verified_target_enum_type(const XrType *type) {
-    if (!type || type->kind != XR_KIND_ENUM || type->is_nullable ||
-        !type->enum_type.enum_name || !type->enum_type.nominal_ref)
+    if (!type || type->kind != XR_KIND_ENUM || type->is_nullable || !type->enum_type.enum_name ||
+        !type->enum_type.nominal_ref)
         return NULL;
     const XrTargetQueryEnumDesc *desc =
         xr_target_query_enum_by_type_name(type->enum_type.enum_name);
@@ -575,20 +575,18 @@ static const XrTargetQueryEnumDesc *verified_target_enum_type(const XrType *type
 
 static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
                                          const XiValue *value) {
-    bool carries_contract = value &&
-                            (value->xg_target_query_use_id != XG_NO_ID ||
-                             value->xg_target_source_node_id != 0 ||
-                             value->xg_target_body_ordinal != 0 ||
-                             value->xg_target_namespace_id != XG_TARGET_NAMESPACE_NONE ||
-                             value->xg_target_query_kind != XG_TARGET_QUERY_NONE ||
-                             value->xg_target_result_native_type != 0 ||
-                             value->xg_target_query_complete != 0);
+    bool carries_contract =
+        value && (value->xg_target_query_use_id != XG_NO_ID ||
+                  value->xg_target_source_node_id != 0 || value->xg_target_body_ordinal != 0 ||
+                  value->xg_target_namespace_id != XG_TARGET_NAMESPACE_NONE ||
+                  value->xg_target_query_kind != XG_TARGET_QUERY_NONE ||
+                  value->xg_target_result_native_type != 0 || value->xg_target_query_complete != 0);
     if (!value)
         return true;
     if (value->op < XI_TARGET_POINTER_BITS || value->op > XI_TARGET_ENDIANNESS) {
         if (carries_contract) {
-            verr(ctx, "func '%s': v%u %s in b%u carries target-query metadata", f->name,
-                 value->id, xi_op_name(value->op), blk->id);
+            verr(ctx, "func '%s': v%u %s in b%u carries target-query metadata", f->name, value->id,
+                 xi_op_name(value->op), blk->id);
             return false;
         }
         return true;
@@ -620,8 +618,7 @@ static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const 
     }
     const XrTargetQueryEnumDesc *verified_enum = verified_target_enum_type(value->type);
     bool type_matches = expected_enum
-                            ? verified_enum &&
-                                  strcmp(verified_enum->type_name, expected_enum) == 0
+                            ? verified_enum && strcmp(verified_enum->type_name, expected_enum) == 0
                             : value->type && value->type->kind == XR_KIND_INT &&
                                   value->type->scalar_rep == XR_NATIVE_U16;
     if (!type_matches || value->type->is_nullable || value->nargs != 0 || value->aux != NULL ||
@@ -631,8 +628,9 @@ static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const 
         value->xg_target_query_kind != expected_query ||
         value->xg_target_result_native_type != XR_NATIVE_U16 ||
         value->xg_target_query_complete != 1) {
-        verr(ctx, "func '%s': v%u %s in b%u lacks an exact target query "
-                  "contract",
+        verr(ctx,
+             "func '%s': v%u %s in b%u lacks an exact target query "
+             "contract",
              f->name, value->id, xi_op_name(value->op), blk->id);
         return false;
     }
@@ -2922,7 +2920,7 @@ static const XiValue *coro_verify_slot_owner(const XiValue *value) {
 static bool coro_verify_slot_carries_owner(const XiFunc *f, const XiLiveness *live,
                                            const XiCoroSuspendPoint *point, const XiCoroSlot *slot,
                                            bool live_here) {
-    if (!live_here || !slot || !slot->value)
+    if (!live_here || !slot || !slot->value || slot->value == point->op)
         return false;
     if (!coro_verify_borrowed_alias(slot->value))
         return true;

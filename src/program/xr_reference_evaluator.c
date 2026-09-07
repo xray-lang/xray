@@ -1198,8 +1198,8 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                 case XR_CORE_OP_CORE_OWNER_DROP:
                     break;
                 case XR_CORE_OP_CORE_PLACE_LOCAL:
-                    places[instruction->result_id].value =
-                        values[instruction->operands[0]].as.value;
+                    places[instruction->result_id].alias =
+                        &values[instruction->operands[0]].as.value;
                     places[instruction->result_id].initialized = true;
                     produced.category = XR_CORE_IR_PLACE;
                     produced.as.place = &places[instruction->result_id];
@@ -1457,6 +1457,9 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_AGGREGATE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+           operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
+           operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
+           operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
@@ -1798,8 +1801,8 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->initialized[instruction->result_id] = true;
                 break;
             case XR_CORE_OP_CORE_PLACE_LOCAL:
-                execution->places[instruction->result_id].value =
-                    execution->values[instruction->operands[0]].as.value;
+                execution->places[instruction->result_id].alias =
+                    &execution->values[instruction->operands[0]].as.value;
                 execution->places[instruction->result_id].initialized = true;
                 execution->values[instruction->result_id] = (EvalRuntimeValue) {
                     .category = XR_CORE_IR_PLACE,
@@ -1807,6 +1810,33 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 };
                 execution->initialized[instruction->result_id] = true;
                 break;
+            case XR_CORE_OP_CORE_PLACE_LOAD:
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        *eval_place_value(execution->values[instruction->operands[0]].as.place),
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            case XR_CORE_OP_CORE_PLACE_STORE:
+                *eval_place_value(execution->values[instruction->operands[0]].as.place) =
+                    execution->values[instruction->operands[1]].as.value;
+                break;
+            case XR_CORE_OP_CORE_PLACE_PROJECT: {
+                XrReferenceValue *source =
+                    eval_place_value(execution->values[instruction->operands[0]].as.place);
+                XrReferenceAggregateValue *aggregate =
+                    (XrReferenceAggregateValue *) (void *) source->as.aggregate;
+                execution->places[instruction->result_id].alias =
+                    &aggregate->fields[instruction->immediate.field_ordinal];
+                execution->places[instruction->result_id].initialized = true;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_PLACE,
+                    .as.place = &execution->places[instruction->result_id],
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
             case XR_CORE_OP_CORE_PLACE_TAKE:
                 execution->values[instruction->result_id] = (EvalRuntimeValue) {
                     .category = XR_CORE_IR_VALUE,
