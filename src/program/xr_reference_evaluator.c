@@ -78,9 +78,10 @@ struct XrReferenceCallableValue {
 
 struct XrReferenceExecution {
     XrExecutionLease lease;
-    XrValidatedProgram *program;
-    XrReferenceBudget budget;
-    XrReferenceValue *values;
+    EvalContext *context;
+    XrReferenceProviderBinding providers;
+    EvalRuntimeValue *values;
+    EvalPlace *places;
     bool *initialized;
     uint32_t function_id;
     uint32_t block_id;
@@ -89,8 +90,9 @@ struct XrReferenceExecution {
     uint32_t cancel_block_id;
     uint32_t suspension_block_id;
     uint32_t suspension_instruction_id;
-    uint64_t steps;
     struct XrReferenceExecution *child;
+    uint32_t depth;
+    bool owns_context;
     bool owns_lease;
     bool suspended;
     bool finished;
@@ -1395,11 +1397,51 @@ done:
     return result;
 }
 
+static bool reference_execution_provider_i64_unary(void *context, uint32_t requirement_index,
+                                                   uint32_t operation_index, int64_t argument,
+                                                   int64_t *result_out) {
+    return xr_execution_lease_provider_call_i64_unary(context, requirement_index, operation_index,
+                                                      argument,
+                                                      result_out) == XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static bool reference_execution_provider_i64_nullary(void *context, uint32_t requirement_index,
+                                                     uint32_t operation_index,
+                                                     int64_t *result_out) {
+    return xr_execution_lease_provider_call_i64_nullary(context, requirement_index, operation_index,
+                                                        result_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static bool reference_execution_provider_bool_i64_unary(void *context, uint32_t requirement_index,
+                                                        uint32_t operation_index, int64_t argument,
+                                                        bool *result_out) {
+    return xr_execution_lease_provider_call_bool_i64_unary(context, requirement_index,
+                                                           operation_index, argument, result_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static bool
+reference_execution_provider_optional_i64_pair_nullary(void *context, uint32_t requirement_index,
+                                                       uint32_t operation_index, bool *present_out,
+                                                       int64_t *first_out, int64_t *second_out) {
+    return xr_execution_lease_provider_call_optional_i64_pair_nullary(
+               context, requirement_index, operation_index, present_out, first_out, second_out) ==
+           XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
+static bool reference_execution_provider_output_write(void *context, uint32_t requirement_index,
+                                                      uint32_t operation_index,
+                                                      const uint8_t *bytes, size_t size) {
+    return xr_execution_lease_provider_output_write(context, requirement_index, operation_index,
+                                                    bytes, size) == XR_EXECUTION_PROVIDER_CALL_OK;
+}
+
 static XrReferenceOutcome execution_outcome(XrReferenceExecution *execution,
                                             XrReferenceOutcomeKind kind) {
     XrReferenceOutcome result = {.kind = kind};
     if (execution) {
-        result.steps = execution->steps;
+        result.steps = execution->context ? execution->context->steps : 0u;
         result.state_id = execution->state_id;
     }
     return result;
@@ -1409,6 +1451,11 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
            operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+           operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
+           operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
+           operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+           operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
@@ -1425,20 +1472,22 @@ static bool reference_child_execution_create(XrReferenceExecution *parent,
                                              XrReferenceExecution **child_out) {
     if (child_out)
         *child_out = NULL;
-    if (!parent || !instruction || !child_out ||
-        instruction->immediate.coroutine_call.function_id >= parent->program->function_count)
+    if (!parent || !parent->context || !instruction || !child_out ||
+        instruction->immediate.coroutine_call.function_id >=
+            parent->context->program->function_count)
         return false;
     uint32_t function_id = instruction->immediate.coroutine_call.function_id;
-    const XrValidatedFunction *function = &parent->program->functions[function_id];
+    const XrValidatedFunction *function = &parent->context->program->functions[function_id];
     if (instruction->operand_count < function->parameter_count ||
-        function->value_count > parent->budget.max_value_cells)
+        function->value_count > parent->context->budget.max_value_cells ||
+        parent->depth == parent->context->budget.max_call_depth)
         return false;
     XrReferenceExecution *child = xr_calloc(1u, sizeof(*child));
     if (!child)
         return false;
     child->lease = parent->lease;
-    child->program = xr_validated_program_retain(parent->program);
-    child->budget = parent->budget;
+    child->context = parent->context;
+    child->depth = parent->depth + 1u;
     child->function_id = function_id;
     child->block_id = function->entry_block;
     child->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
@@ -1446,17 +1495,25 @@ static bool reference_child_execution_create(XrReferenceExecution *parent,
     child->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
     child->values =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->values));
+    child->places =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->places));
     child->initialized =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->initialized));
-    if (!child->program || !child->values || !child->initialized) {
+    if (!child->values || !child->places || !child->initialized) {
         xr_reference_execution_free(child);
         return false;
     }
     for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
         uint32_t source = instruction->operands[parameter];
         uint32_t target = function->blocks[function->entry_block].argument_ids[parameter];
-        if (!parent->initialized[source] || function->parameter_modes[parameter] != XR_PARAM_READ ||
-            !reference_value_matches_type(parent->program, parent->values[source],
+        XrCoreIrValueCategory expected = function->parameter_modes[parameter] == XR_PARAM_REF
+                                             ? XR_CORE_IR_PLACE
+                                             : XR_CORE_IR_VALUE;
+        XrReferenceValue value = expected == XR_CORE_IR_PLACE && parent->values[source].as.place
+                                     ? *eval_place_value_const(parent->values[source].as.place)
+                                     : parent->values[source].as.value;
+        if (!parent->initialized[source] || parent->values[source].category != expected ||
+            !reference_value_matches_type(parent->context->program, value,
                                           function->parameter_types[parameter])) {
             xr_reference_execution_free(child);
             return false;
@@ -1503,17 +1560,42 @@ bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
         goto reject;
     execution->lease = lease;
     execution->owns_lease = true;
-    execution->program = program;
+    execution->context = xr_calloc(1u, sizeof(*execution->context));
+    execution->owns_context = true;
     execution->values =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->values));
+    execution->places =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->places));
     execution->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
                                        sizeof(*execution->initialized));
-    if (!execution->values || !execution->initialized) {
-        xr_reference_execution_free(execution);
+    if (!execution->context || !execution->values || !execution->places ||
+        !execution->initialized) {
+        if (execution->context) {
+            execution->context->program = program;
+            xr_reference_execution_free(execution);
+        } else {
+            xr_free(execution->initialized);
+            xr_free(execution->places);
+            xr_free(execution->values);
+            reference_execution_release_lease(execution);
+            xr_validated_program_free(program);
+            xr_free(execution);
+        }
         return false;
     }
-    execution->budget = selected;
+    execution->providers = (XrReferenceProviderBinding) {
+        .context = &execution->lease,
+        .call_i64_unary = reference_execution_provider_i64_unary,
+        .call_i64_nullary = reference_execution_provider_i64_nullary,
+        .call_bool_i64_unary = reference_execution_provider_bool_i64_unary,
+        .call_optional_i64_pair_nullary = reference_execution_provider_optional_i64_pair_nullary,
+        .output_write = reference_execution_provider_output_write,
+    };
+    execution->context->program = program;
+    execution->context->providers = &execution->providers;
+    execution->context->budget = selected;
     execution->function_id = function_id;
+    execution->depth = 1u;
     execution->block_id = function->entry_block;
     execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
@@ -1526,7 +1608,10 @@ bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
             xr_reference_execution_free(execution);
             return false;
         }
-        execution->values[value_id] = arguments[argument];
+        execution->values[value_id] = (EvalRuntimeValue) {
+            .category = XR_CORE_IR_VALUE,
+            .as.value = arguments[argument],
+        };
         execution->initialized[value_id] = true;
     }
     *execution_out = execution;
@@ -1539,10 +1624,12 @@ reject:
 }
 
 static bool reference_materialize_suspension_edge(XrReferenceExecution *execution, bool cancel) {
-    if (!execution || execution->suspension_block_id == XR_PROGRAM_LOCATION_NONE ||
+    if (!execution || !execution->context ||
+        execution->suspension_block_id == XR_PROGRAM_LOCATION_NONE ||
         execution->suspension_instruction_id == XR_PROGRAM_LOCATION_NONE)
         return false;
-    const XrValidatedFunction *function = &execution->program->functions[execution->function_id];
+    const XrValidatedFunction *function =
+        &execution->context->program->functions[execution->function_id];
     if (execution->suspension_block_id >= function->block_count)
         return false;
     const XrValidatedBlock *source = &function->blocks[execution->suspension_block_id];
@@ -1561,9 +1648,9 @@ static bool reference_materialize_suspension_edge(XrReferenceExecution *executio
             operand_start = function->blocks[instruction->successors[0]].argument_count;
     } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED && cancel) {
         uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
-        if (callee_id >= execution->program->function_count)
+        if (callee_id >= execution->context->program->function_count)
             return false;
-        const XrValidatedFunction *callee = &execution->program->functions[callee_id];
+        const XrValidatedFunction *callee = &execution->context->program->functions[callee_id];
         const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
         uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
         if (normal->argument_count < implicit_result)
@@ -1587,7 +1674,8 @@ static bool reference_materialize_suspension_edge(XrReferenceExecution *executio
 }
 
 XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) {
-    if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
+    if (!execution || !execution->context || execution->finished ||
+        !xr_execution_lease_is_valid(&execution->lease))
         return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
     if (execution->suspended && !execution->child &&
         !reference_materialize_suspension_edge(execution, false)) {
@@ -1599,7 +1687,8 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
     execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
-    const XrValidatedFunction *function = &execution->program->functions[execution->function_id];
+    const XrValidatedFunction *function =
+        &execution->context->program->functions[execution->function_id];
     for (;;) {
         const XrValidatedBlock *block = &function->blocks[execution->block_id];
         if (execution->instruction_id >= block->instruction_count) {
@@ -1609,7 +1698,7 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
         }
         const XrValidatedInstruction *instruction =
             &block->instructions[execution->instruction_id++];
-        if (++execution->steps > execution->budget.max_steps) {
+        if (++execution->context->steps > execution->context->budget.max_steps) {
             execution->finished = true;
             reference_execution_release_lease(execution);
             return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
@@ -1626,17 +1715,21 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 break;
             case XR_CORE_OP_CORE_CONSTANT_I64: {
                 const XrValidatedConstant *constant =
-                    &execution->program->constants[instruction->immediate.constant_id];
-                execution->values[instruction->result_id] = (XrReferenceValue) {
-                    .kind = XR_REFERENCE_VALUE_I64,
-                    .as.i64 = constant->value.i64,
+                    &execution->context->program->constants[instruction->immediate.constant_id];
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        {
+                            .kind = XR_REFERENCE_VALUE_I64,
+                            .as.i64 = constant->value.i64,
+                        },
                 };
                 execution->initialized[instruction->result_id] = true;
                 break;
             }
             case XR_CORE_OP_CORE_ADD_I64: {
-                int64_t left = execution->values[instruction->operands[0]].as.i64;
-                int64_t right = execution->values[instruction->operands[1]].as.i64;
+                int64_t left = execution->values[instruction->operands[0]].as.value.as.i64;
+                int64_t right = execution->values[instruction->operands[1]].as.value.as.i64;
                 int64_t value = 0;
                 if (instruction->immediate.u32 == 0u) {
                     if (!checked_add(left, right, &value)) {
@@ -1650,9 +1743,116 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 } else {
                     value = i64_from_bits((uint64_t) left + (uint64_t) right);
                 }
-                execution->values[instruction->result_id] =
-                    (XrReferenceValue) {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = value};
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = value},
+                };
                 execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
+                XrReferenceAggregateValue *aggregate =
+                    allocate_aggregate(execution->context, instruction->result_type_id, UINT32_MAX,
+                                       instruction->operand_count);
+                if (!aggregate) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+                }
+                for (uint32_t field = 0u; field < instruction->operand_count; ++field)
+                    aggregate->fields[field] =
+                        execution->values[instruction->operands[field]].as.value;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        {
+                            .kind = XR_REFERENCE_VALUE_AGGREGATE,
+                            .as.aggregate = aggregate,
+                        },
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_OWNER_MOVE:
+                execution->values[instruction->result_id] =
+                    execution->values[instruction->operands[0]];
+                execution->initialized[instruction->result_id] = true;
+                break;
+            case XR_CORE_OP_CORE_PLACE_LOCAL:
+                execution->places[instruction->result_id].value =
+                    execution->values[instruction->operands[0]].as.value;
+                execution->places[instruction->result_id].initialized = true;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_PLACE,
+                    .as.place = &execution->places[instruction->result_id],
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            case XR_CORE_OP_CORE_PLACE_TAKE:
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        *eval_place_value(execution->values[instruction->operands[0]].as.place),
+                };
+                execution->values[instruction->operands[0]].as.place->initialized = false;
+                execution->initialized[instruction->result_id] = true;
+                break;
+            case XR_CORE_OP_CORE_CALL_SEALED_DIRECT: {
+                uint32_t target_function = instruction->immediate.function_id;
+                const XrValidatedFunction *callee =
+                    &execution->context->program->functions[target_function];
+                uint32_t call_operand_count = instruction->operand_count;
+                if (instruction->successor_count == 1u)
+                    call_operand_count -=
+                        function->blocks[instruction->successors[0]].argument_count;
+                if (call_operand_count != callee->parameter_count) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+                }
+                EvalRuntimeValue *arguments = xr_calloc(
+                    callee->parameter_count ? callee->parameter_count : 1u, sizeof(*arguments));
+                if (!arguments) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+                }
+                for (uint32_t argument = 0u; argument < callee->parameter_count; ++argument)
+                    arguments[argument] = execution->values[instruction->operands[argument]];
+                XrReferenceOutcome nested =
+                    evaluate_function(execution->context, target_function, arguments,
+                                      callee->parameter_count, execution->depth + 1u);
+                xr_free(arguments);
+                if (nested.kind != XR_REFERENCE_OUTCOME_RETURN) {
+                    if (nested.kind == XR_REFERENCE_OUTCOME_TRAP &&
+                        nested.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED &&
+                        instruction->successor_count == 1u) {
+                        const XrValidatedBlock *target =
+                            &function->blocks[instruction->successors[0]];
+                        for (uint32_t argument = 0u; argument < target->argument_count;
+                             ++argument) {
+                            uint32_t target_value = target->argument_ids[argument];
+                            execution->values[target_value] =
+                                execution
+                                    ->values[instruction->operands[call_operand_count + argument]];
+                            execution->initialized[target_value] = true;
+                        }
+                        execution->block_id = instruction->successors[0];
+                        execution->instruction_id = 0u;
+                        break;
+                    }
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    nested.state_id = execution->state_id;
+                    return nested;
+                }
+                if (instruction->result_id != XR_PROGRAM_LOCATION_NONE) {
+                    execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                        .category = XR_CORE_IR_VALUE,
+                        .as.value = nested.value,
+                    };
+                    execution->initialized[instruction->result_id] = true;
+                }
                 break;
             }
             case XR_CORE_OP_CORE_BRANCH: {
@@ -1685,7 +1885,8 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
             case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED: {
                 uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
                 uint32_t safepoint_id = instruction->immediate.coroutine_call.safepoint_id;
-                const XrValidatedFunction *callee = &execution->program->functions[callee_id];
+                const XrValidatedFunction *callee =
+                    &execution->context->program->functions[callee_id];
                 const XrValidatedCoroutineSafepoint *safepoint =
                     &function->coroutine_safepoints[safepoint_id];
                 if (!execution->child &&
@@ -1694,21 +1895,7 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     reference_execution_release_lease(execution);
                     return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
                 }
-                uint64_t child_steps = execution->child->steps;
-                uint64_t remaining_steps = execution->budget.max_steps - execution->steps;
-                execution->child->budget.max_steps = child_steps > UINT64_MAX - remaining_steps
-                                                         ? UINT64_MAX
-                                                         : child_steps + remaining_steps;
                 XrReferenceOutcome child = xr_reference_execution_step(execution->child);
-                uint64_t child_delta = child.steps - child_steps;
-                if (child_delta > execution->budget.max_steps - execution->steps) {
-                    execution->finished = true;
-                    xr_reference_execution_free(execution->child);
-                    execution->child = NULL;
-                    reference_execution_release_lease(execution);
-                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
-                }
-                execution->steps += child_delta;
                 if (child.kind == XR_REFERENCE_OUTCOME_SUSPENDED) {
                     execution->suspension_block_id = execution->block_id;
                     execution->suspension_instruction_id = execution->instruction_id - 1u;
@@ -1726,7 +1913,7 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     xr_reference_execution_free(execution->child);
                     execution->child = NULL;
                     reference_execution_release_lease(execution);
-                    child.steps = execution->steps;
+                    child.steps = execution->context->steps;
                     child.state_id = execution->state_id;
                     return child;
                 }
@@ -1734,7 +1921,10 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
                 if (implicit_result != 0u) {
                     uint32_t target = normal->argument_ids[0];
-                    execution->values[target] = child.value;
+                    execution->values[target] = (EvalRuntimeValue) {
+                        .category = XR_CORE_IR_VALUE,
+                        .as.value = child.value,
+                    };
                     execution->initialized[target] = true;
                 }
                 for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
@@ -1761,7 +1951,7 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     execution_outcome(execution, XR_REFERENCE_OUTCOME_RETURN);
                 result.value = instruction->operand_count == 0u
                                    ? void_value()
-                                   : execution->values[instruction->operands[0]];
+                                   : execution->values[instruction->operands[0]].as.value;
                 reference_execution_release_lease(execution);
                 return result;
             }
@@ -1779,23 +1969,13 @@ XrReferenceOutcome xr_reference_execution_cancel(XrReferenceExecution *execution
         !xr_execution_lease_is_valid(&execution->lease))
         return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
     if (execution->child) {
-        uint64_t child_steps = execution->child->steps;
         XrReferenceOutcome child = xr_reference_execution_cancel(execution->child);
-        uint64_t child_delta = child.steps - child_steps;
-        if (child_delta > execution->budget.max_steps - execution->steps) {
-            execution->finished = true;
-            xr_reference_execution_free(execution->child);
-            execution->child = NULL;
-            reference_execution_release_lease(execution);
-            return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
-        }
-        execution->steps += child_delta;
         if (child.kind != XR_REFERENCE_OUTCOME_CANCELLED) {
             execution->finished = true;
             xr_reference_execution_free(execution->child);
             execution->child = NULL;
             reference_execution_release_lease(execution);
-            child.steps = execution->steps;
+            child.steps = execution->context->steps;
             child.state_id = execution->state_id;
             return child;
         }
@@ -1821,9 +2001,15 @@ void xr_reference_execution_free(XrReferenceExecution *execution) {
         return;
     xr_reference_execution_free(execution->child);
     xr_free(execution->initialized);
+    xr_free(execution->places);
     xr_free(execution->values);
     reference_execution_release_lease(execution);
-    xr_validated_program_free(execution->program);
+    if (execution->owns_context && execution->context) {
+        XrValidatedProgram *program = (XrValidatedProgram *) execution->context->program;
+        free_aggregates(execution->context);
+        xr_free(execution->context);
+        xr_validated_program_free(program);
+    }
     xr_free(execution);
 }
 

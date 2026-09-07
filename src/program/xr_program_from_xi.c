@@ -48,6 +48,13 @@ typedef struct XrXiBlockArgumentStorage {
     uint8_t implicit_invoke_kind;
 } XrXiBlockArgumentStorage;
 
+typedef struct XrXiReconstructedPlaceStorage {
+    const XiValue *place;
+    const XiValue *owner;
+    XrCoreIrKey key;
+    uint16_t type_id;
+} XrXiReconstructedPlaceStorage;
+
 enum {
     XR_XI_INVOKE_ARGUMENT_NONE = 0,
     XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT = 1,
@@ -70,6 +77,9 @@ typedef struct XrXiBlockStorage {
     XrXiBlockArgumentStorage *argument_storage;
     uint32_t argument_count;
     uint32_t argument_capacity;
+    XrXiReconstructedPlaceStorage *reconstructed_places;
+    uint32_t reconstructed_place_count;
+    uint32_t reconstructed_place_capacity;
     XrCoreIrValueInput *arguments;
     XrCoreIrInstructionInput *instructions;
     uint32_t instruction_count;
@@ -4638,6 +4648,81 @@ static const XiValue *exact_logical_value_identity(const XrXiBuildContext *conte
     }
 }
 
+static uint32_t coroutine_point_value_occurrences(const XrXiBuildContext *context,
+                                                  const XiFunc *function, XiValue *const *values,
+                                                  uint32_t value_count, const XiValue *target) {
+    uint32_t occurrences = 0u;
+    target = exact_logical_value_identity(context, function, target);
+    for (uint32_t index = 0u; target && values && index < value_count; ++index)
+        occurrences +=
+            exact_logical_value_identity(context, function, values[index]) == target ? 1u : 0u;
+    return occurrences;
+}
+
+/* A cleanup place crossing suspension is a derived address, not an independent
+ * frame value. Its
+ * affine source is the sole stored carrier and the place is
+ * rebuilt in whichever continuation is
+ * selected. */
+static const XiValue *coroutine_frame_place_owner(const XrXiBuildContext *context,
+                                                  const XiFunc *function,
+                                                  const XiValue *candidate) {
+    const XiValue *place = exact_logical_value_identity(context, function, candidate);
+    const XiCoroPlan *plan = function ? function->coro_plan : NULL;
+    if (!place || place->op != XI_LOCAL_ADDR || place->nargs != 1u || !place->args ||
+        !place->args[0] || (place->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) == 0 ||
+        !xi_local_addr_names_operand_storage(place->aux_int) || !plan || !plan->is_coroutine ||
+        !plan->analysis_complete || !plan->actions_materialized || !plan->cfg_rewritten ||
+        !xi_coro_plan_is_current(function, plan) || !plan->points)
+        return NULL;
+    const XiValue *owner = exact_logical_value_identity(context, function, place->args[0]);
+    if (!owner || owner == place || !owner->type || !place->type ||
+        !xr_type_equals(owner->type, place->type))
+        return NULL;
+
+    bool crosses_suspend = false;
+    for (uint32_t point_index = 0u; point_index < plan->nstates; ++point_index) {
+        const XiCoroSuspendPoint *point = &plan->points[point_index];
+        uint32_t place_live =
+            coroutine_point_value_occurrences(context, function, point->live, point->nlive, place);
+        if (place_live == 0u)
+            continue;
+        if (place_live != 1u ||
+            coroutine_point_value_occurrences(context, function, point->live, point->nlive,
+                                              owner) != 1u ||
+            coroutine_point_value_occurrences(context, function, point->drops, point->ndrops,
+                                              owner) != 1u)
+            return NULL;
+        crosses_suspend = true;
+    }
+    return crosses_suspend ? owner : NULL;
+}
+
+static bool coroutine_frame_place_has_definition_block_use(const XrXiBuildContext *context,
+                                                           const XiFunc *function,
+                                                           const XiValue *candidate) {
+    const XiValue *place = exact_logical_value_identity(context, function, candidate);
+    const XiBlock *block = place ? place->block : NULL;
+    for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+        const XiValue *user = block->values[value_index];
+        if (!user || user == place)
+            continue;
+        for (uint16_t argument = 0u; user->args && argument < user->nargs; ++argument)
+            if (exact_logical_value_identity(context, function, user->args[argument]) == place)
+                return true;
+    }
+    return false;
+}
+
+static const XiValue *deferred_coroutine_frame_place_owner(const XrXiBuildContext *context,
+                                                           const XiFunc *function,
+                                                           const XiValue *candidate) {
+    const XiValue *owner = coroutine_frame_place_owner(context, function, candidate);
+    return owner && !coroutine_frame_place_has_definition_block_use(context, function, candidate)
+               ? owner
+               : NULL;
+}
+
 static const XrType *imported_callable_refined_type(const XrXiBuildContext *context,
                                                     const XiFunc *function,
                                                     const XiValue *imported) {
@@ -5103,6 +5188,49 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrXiReconstructedPlaceStorage *find_reconstructed_place(XrXiBlockStorage *block,
+                                                               const XiValue *place) {
+    for (uint32_t index = 0u; block && index < block->reconstructed_place_count; ++index)
+        if (block->reconstructed_places[index].place == place)
+            return &block->reconstructed_places[index];
+    return NULL;
+}
+
+static XrProgramBuildStatus add_reconstructed_place(XrXiFunctionStorage *function,
+                                                    XrXiBlockStorage *block, const XiValue *place,
+                                                    const XiValue *owner, uint16_t type_id) {
+    XrXiReconstructedPlaceStorage *existing = find_reconstructed_place(block, place);
+    if (existing)
+        return existing->owner == owner && existing->type_id == type_id
+                   ? XR_PROGRAM_BUILD_OK
+                   : XR_PROGRAM_BUILD_INVALID_INPUT;
+    for (uint32_t index = 0u; block && index < block->reconstructed_place_count; ++index)
+        if (block->reconstructed_places[index].owner == owner)
+            return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
+    if (!function || !block || !block->xi || !place || !owner || type_id == XR_CORE_TYPE_VOID)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (block->reconstructed_place_count == block->reconstructed_place_capacity) {
+        uint32_t capacity =
+            block->reconstructed_place_capacity ? block->reconstructed_place_capacity * 2u : 2u;
+        if (capacity < block->reconstructed_place_count)
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        XrXiReconstructedPlaceStorage *places =
+            xr_realloc(block->reconstructed_places, (size_t) capacity * sizeof(*places));
+        if (!places)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        block->reconstructed_places = places;
+        block->reconstructed_place_capacity = capacity;
+    }
+    block->reconstructed_places[block->reconstructed_place_count++] =
+        (XrXiReconstructedPlaceStorage) {
+            .place = place,
+            .owner = owner,
+            .key = imported_value_key(function, block->xi, place),
+            .type_id = type_id,
+        };
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static bool value_has_canonical_materialization(const XrXiBuildContext *context,
                                                 const XiFunc *function, const XiValue *value) {
     if (!value)
@@ -5126,6 +5254,12 @@ static bool value_operand_key(const XrXiBuildContext *context, const XrXiFunctio
     value = exact_logical_value_identity(context, function ? function->xi : NULL, value);
     if (!value || !key_out)
         return false;
+    XrXiReconstructedPlaceStorage *place =
+        find_reconstructed_place((XrXiBlockStorage *) block, value);
+    if (place) {
+        *key_out = place->key;
+        return true;
+    }
     XrXiBlockArgumentStorage *argument = find_block_argument((XrXiBlockStorage *) block, value);
     if (argument) {
         *key_out = argument->key;
@@ -5207,6 +5341,7 @@ static void free_context(XrXiBuildContext *context) {
                 xr_free(block->instructions);
                 xr_free(block->arguments);
                 xr_free(block->argument_storage);
+                xr_free(block->reconstructed_places);
             }
             xr_free(function->block_storage);
             for (uint32_t safepoint = 0u;
@@ -6654,6 +6789,8 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         value && value->block ? find_xi_function(context, function, NULL, NULL) : NULL;
     const XrXiBlockStorage *block_storage =
         function_storage ? find_block_storage(function_storage, value->block) : NULL;
+    if (deferred_coroutine_frame_place_owner(context, function, value))
+        return true;
     if (value && value->block && value->block->control == value &&
         value_is_static_typed_catch_test(value) && block_storage &&
         block_storage->static_branch_outcome != XR_XI_STATIC_BRANCH_UNKNOWN)
@@ -6711,6 +6848,27 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
                     "Xi operand has no defining block");
     if (value->block == block->xi)
         return XR_PROGRAM_BUILD_OK;
+    const XiValue *frame_owner = deferred_coroutine_frame_place_owner(context, function->xi, value);
+    if (frame_owner) {
+        uint16_t type_id = XR_CORE_TYPE_VOID;
+        if (!map_logical_value_type(context, function->xi, typed_value, &type_id) ||
+            type_id == XR_CORE_TYPE_VOID ||
+            !logical_value_produces_owner(context, function->xi, frame_owner, 0u) ||
+            logical_ownership_for_type(context, type_id) != XR_CORE_IR_OWNER)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi frame place v%u has no exact affine owner", value->id);
+        XrProgramBuildStatus owner_status = require_value_available(
+            context, function, block, frame_owner, changed, diagnostic, diagnostic_size);
+        if (owner_status != XR_PROGRAM_BUILD_OK)
+            return owner_status;
+        XrProgramBuildStatus place_status =
+            add_reconstructed_place(function, block, value, frame_owner, type_id);
+        if (place_status != XR_PROGRAM_BUILD_OK)
+            return fail(diagnostic, diagnostic_size, place_status,
+                        "Xi frame place v%u cannot be reconstructed exactly once in b%u", value->id,
+                        block->xi->id);
+        return XR_PROGRAM_BUILD_OK;
+    }
     if (value->xg_existential_kind == XI_EXISTENTIAL_REBORROW_READ) {
         if (value->nargs != 1u || !value->args || !value->args[0])
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -8608,23 +8766,67 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
+static const XiValue *canonical_coroutine_live_identity(const XrXiBuildContext *context,
+                                                        const XrXiFunctionStorage *function,
+                                                        const XiValue *value) {
+    const XiValue *frame_owner =
+        deferred_coroutine_frame_place_owner(context, function ? function->xi : NULL, value);
+    return exact_logical_value_identity(context, function ? function->xi : NULL,
+                                        frame_owner ? frame_owner : value);
+}
+
+static uint32_t canonical_coroutine_live_count(const XrXiBuildContext *context,
+                                               const XrXiFunctionStorage *function,
+                                               const XiCoroSuspendPoint *point) {
+    uint32_t count = 0u;
+    for (uint32_t live = 0u; point && point->live && live < point->nlive; ++live) {
+        const XiValue *identity =
+            canonical_coroutine_live_identity(context, function, point->live[live]);
+        if (!identity)
+            return UINT32_MAX;
+        bool duplicate = false;
+        for (uint32_t prior = 0u; prior < live; ++prior)
+            duplicate |= canonical_coroutine_live_identity(context, function, point->live[prior]) ==
+                         identity;
+        count += duplicate ? 0u : 1u;
+    }
+    return point && (point->nlive == 0u || point->live) ? count : UINT32_MAX;
+}
+
+static uint32_t canonical_coroutine_live_occurrences(const XrXiBuildContext *context,
+                                                     const XrXiFunctionStorage *function,
+                                                     const XiCoroSuspendPoint *point,
+                                                     const XiValue *target) {
+    uint32_t occurrences = 0u;
+    target = canonical_coroutine_live_identity(context, function, target);
+    for (uint32_t live = 0u; target && point && point->live && live < point->nlive; ++live) {
+        const XiValue *identity =
+            canonical_coroutine_live_identity(context, function, point->live[live]);
+        bool duplicate = false;
+        for (uint32_t prior = 0u; prior < live; ++prior)
+            duplicate |= canonical_coroutine_live_identity(context, function, point->live[prior]) ==
+                         identity;
+        occurrences += !duplicate && identity == target ? 1u : 0u;
+    }
+    return occurrences;
+}
+
 static bool coroutine_live_set_matches(const XrXiBuildContext *context,
                                        const XrXiFunctionStorage *function,
                                        const XrXiBlockStorage *predecessor,
                                        const XrXiBlockStorage *successor,
                                        const XiCoroSuspendPoint *point) {
-    if (!point || !successor || successor->argument_count != point->nlive)
+    uint32_t live_count = canonical_coroutine_live_count(context, function, point);
+    if (!point || !successor || live_count == UINT32_MAX || successor->argument_count != live_count)
         return false;
     for (uint32_t argument = 0u; argument < successor->argument_count; ++argument) {
         const XiValue *incoming = edge_argument_value(&successor->argument_storage[argument],
                                                       predecessor->xi, successor->xi, 0u);
         const XiValue *logical_incoming =
-            exact_logical_value_identity(context, function->xi, incoming);
-        uint32_t matches = 0u;
-        for (uint32_t live = 0u; live < point->nlive; ++live)
-            matches += exact_logical_value_identity(context, function->xi, point->live[live]) ==
-                       logical_incoming;
-        if (!logical_incoming || matches != 1u ||
+            canonical_coroutine_live_identity(context, function, incoming);
+        if (!logical_incoming ||
+            canonical_coroutine_live_occurrences(context, function, point, logical_incoming) !=
+                1u ||
             successor->argument_storage[argument].category != XR_CORE_IR_VALUE ||
             successor->argument_storage[argument].ownership !=
                 logical_ownership_for_type(context, successor->argument_storage[argument].type_id))
@@ -8900,8 +9102,10 @@ static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
                                             const XrXiBlockStorage *resume,
                                             const XiCoroSuspendPoint *point,
                                             uint32_t implicit_result_count) {
-    if (!context || !function || !resume || !point ||
-        resume->argument_count < implicit_result_count || point->nlive != resume->argument_count)
+    uint32_t canonical_live_count = canonical_coroutine_live_count(context, function, point);
+    if (!context || !function || !resume || !point || canonical_live_count == UINT32_MAX ||
+        resume->argument_count < implicit_result_count ||
+        canonical_live_count != resume->argument_count)
         return false;
     if (implicit_result_count != 0u &&
         (resume->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
@@ -8909,13 +9113,10 @@ static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
              exact_logical_value_identity(context, function->xi, point->op)))
         return false;
     for (uint32_t argument = implicit_result_count; argument < resume->argument_count; ++argument) {
-        const XiValue *logical = exact_logical_value_identity(
-            context, function->xi, resume->argument_storage[argument].source);
-        uint32_t matches = 0u;
-        for (uint32_t live = 0u; live < point->nlive; ++live)
-            matches +=
-                exact_logical_value_identity(context, function->xi, point->live[live]) == logical;
-        if (!logical || matches != 1u ||
+        const XiValue *logical = canonical_coroutine_live_identity(
+            context, function, resume->argument_storage[argument].source);
+        if (!logical ||
+            canonical_coroutine_live_occurrences(context, function, point, logical) != 1u ||
             resume->argument_storage[argument].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
             resume->argument_storage[argument].category != XR_CORE_IR_VALUE ||
             resume->argument_storage[argument].ownership !=
@@ -9807,6 +10008,9 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                                                       : NULL;
 
         uint32_t emitted = block_storage->argument_count != 0u ? 1u : 0u;
+        if (block_storage->reconstructed_place_count > UINT32_MAX - emitted)
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        emitted += block_storage->reconstructed_place_count;
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
             if (value_is_skipped(context, xi, value))
@@ -9847,6 +10051,35 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 operands[argument] = block_storage->arguments[argument].key;
             arguments->operands = operands;
             arguments->operand_count = block_storage->argument_count;
+        }
+        for (uint32_t place_index = 0u; place_index < block_storage->reconstructed_place_count;
+             ++place_index) {
+            const XrXiReconstructedPlaceStorage *place =
+                &block_storage->reconstructed_places[place_index];
+            XrCoreIrInstructionInput *instruction =
+                &block_storage->instructions[instruction_index++];
+            XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+            if (!operand)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            if (!value_operand_key(context, storage, block_storage, place->owner, operand)) {
+                xr_free(operand);
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi frame place owner is unavailable in b%u", xi_block->id);
+            }
+            instruction->operation_id = XR_CORE_OP_CORE_PLACE_LOCAL;
+            instruction->result = place->key;
+            instruction->result_type_id = place->type_id;
+            instruction->result_category = XR_CORE_IR_PLACE;
+            instruction->operands = operand;
+            instruction->operand_count = 1u;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            const XrCoreOperationSpec *operation =
+                xr_core_spec_operation_by_id(instruction->operation_id);
+            if (!operation)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "reconstructed frame place has no CoreSpec operation");
+            storage->local_effect_mask |= operation->effect_mask;
+            storage->local_capability_mask |= operation->capability_mask;
         }
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
