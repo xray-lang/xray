@@ -43,6 +43,9 @@ Extra arguments are forwarded to ctest, e.g.
     scripts/t.py t1 --rerun-failed
     scripts/t.py t0 -R parser
 
+An empty test selection is an error, including after a build refresh. CTest
+execution also enforces --no-tests=error if the inventory changes again.
+
 Each run reports toolchain setup, configure/manifest, incremental build, CTest,
 and auxiliary-corpus wall times separately. Build time includes generated-source
 validation; use .ninja_log to distinguish those checks from compile/link time.
@@ -492,6 +495,9 @@ def main(argv: List[str]) -> int:
     selected = ctest_names(build_dir, ctest_args + extra)
     total = len(ctest_names(build_dir, []))
     print(f"{BLUE}==>{NC} ctest: {len(selected)}/{total} tests")
+    if not selected:
+        print(f"{RED}TEST SELECTION FAILED{NC}: no tests match the selected tier and filters")
+        return 1
 
     if not platform.env_flag("XR_NO_BUILD"):
         if not build_selected(
@@ -504,6 +510,9 @@ def main(argv: List[str]) -> int:
         ):
             return 1
         refreshed = ctest_names(build_dir, ctest_args + extra)
+        if not refreshed:
+            print(f"{RED}TEST SELECTION FAILED{NC}: no tests remain after the build refresh")
+            return 1
         if refreshed != selected:
             print(f"{YELLOW}==>{NC} CTest inventory changed during build; rebuilding exact "
                   "selection")
@@ -549,7 +558,7 @@ def main(argv: List[str]) -> int:
         not_covered = f"{not_covered}, {dropped}" if not_covered else dropped
 
     with timed_phase("ctest"):
-        code = subprocess.call(["ctest", *ctest_args, *extra],
+        code = subprocess.call(["ctest", *ctest_args, *extra, "--no-tests=error"],
                                cwd=str(build_dir), env=env)
 
     if not focused_selection:

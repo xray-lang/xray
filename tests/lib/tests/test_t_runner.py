@@ -102,8 +102,8 @@ class PhaseTimingTest(unittest.TestCase):
                     self.assertIn("timing: toolchain setup=", output)
                     self.assertIn("timing: ctest=", output)
                     self.assertIn("unselected t0 tests and auxiliary corpora", output)
-                    self.assertEqual(ctest.call_args.args[0][-2:],
-                                     ["-R", "^test_xr_program_source_build$"])
+                    self.assertEqual(ctest.call_args.args[0][-3:],
+                                     ["-R", "^test_xr_program_source_build$", "--no-tests=error"])
 
     def test_failed_build_never_runs_ctest(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -111,6 +111,93 @@ class PhaseTimingTest(unittest.TestCase):
         self.assertEqual(result, 1)
         ctest.assert_not_called()
         self.assertNotIn("timing: ctest=", output)
+
+
+class EmptySelectionTest(unittest.TestCase):
+    def run_selection(self, inventories, *, tier="t0", extra=(), no_build=False,
+                      ctest_code=0):
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            stack.enter_context(redirect_stdout(output))
+            environment = {"XR_BUILD_DIR": directory}
+            if no_build:
+                environment["XR_NO_BUILD"] = "1"
+            stack.enter_context(mock.patch.dict(runner.os.environ, environment, clear=True))
+            stack.enter_context(mock.patch.object(runner.sanitizer,
+                                                 "activate_windows_msvc_environment",
+                                                 return_value=True))
+            manifest = stack.enter_context(mock.patch.object(
+                runner, "refresh_cmake_manifest", return_value=True))
+            pending = iter(inventories)
+
+            def names(*args):
+                self.assertTrue(manifest.called, "selection must follow manifest refresh")
+                return next(pending)
+
+            stack.enter_context(mock.patch.object(runner, "ctest_names", side_effect=names))
+            build = stack.enter_context(mock.patch.object(runner, "build_selected",
+                                                         return_value=True))
+            ctest = stack.enter_context(mock.patch.object(runner.subprocess, "call",
+                                                         return_value=ctest_code))
+            corpus = stack.enter_context(mock.patch.object(runner, "run_regression_corpus"))
+            process = stack.enter_context(mock.patch.object(runner.proc, "run"))
+            result = runner.main(["t.py", tier, *extra])
+            manifest.assert_called_once()
+            corpus.assert_not_called()
+            process.assert_not_called()
+        return result, output.getvalue(), build, ctest
+
+    def test_empty_selection_fails_before_build_or_test_for_every_tier(self):
+        for tier in (*runner.TIERS, "canonical"):
+            with self.subTest(tier=tier):
+                result, output, build, ctest = self.run_selection(
+                    [[], ["test_exists"]], tier=tier, extra=["-R", "^nonexistent$"])
+                self.assertEqual(result, 1)
+                self.assertIn("0/1 tests", output)
+                self.assertIn("TEST SELECTION FAILED", output)
+                self.assertNotIn("PASS", output)
+                build.assert_not_called()
+                ctest.assert_not_called()
+
+    def test_empty_inventory_and_no_build_mode_also_fail(self):
+        result, output, build, ctest = self.run_selection([[], []], no_build=True)
+        self.assertEqual(result, 1)
+        self.assertIn("0/0 tests", output)
+        self.assertNotIn("PASS", output)
+        build.assert_not_called()
+        ctest.assert_not_called()
+
+    def test_empty_selection_after_build_never_rebuilds_or_runs_ctest(self):
+        result, output, build, ctest = self.run_selection(
+            [["test_exists"], ["test_exists"], []], tier="t1")
+        self.assertEqual(result, 1)
+        self.assertIn("no tests remain after the build refresh", output)
+        self.assertNotIn("PASS", output)
+        build.assert_called_once()
+        ctest.assert_not_called()
+
+    def test_execution_enforces_empty_selection_error_after_forwarded_options(self):
+        for option in ([], ["--no-tests=error"], ["--no-tests=ignore"]):
+            with self.subTest(option=option):
+                extra = ["-R", "^test_exists$", *option]
+                result, output, build, ctest = self.run_selection(
+                    [["test_exists"], ["test_exists"], ["test_exists"]],
+                    extra=extra, ctest_code=8)
+                self.assertEqual(result, 8)
+                self.assertIn("FAIL", output)
+                self.assertNotIn("PASS", output)
+                build.assert_called_once()
+                self.assertEqual(ctest.call_args.args[0][-len(extra) - 1:],
+                                 [*extra, "--no-tests=error"])
+
+    def test_existing_no_tests_error_option_keeps_nonempty_success(self):
+        result, output, build, ctest = self.run_selection(
+            [["test_exists"], ["test_exists"], ["test_exists"]],
+            extra=["-R", "^test_exists$", "--no-tests=error"])
+        self.assertEqual(result, 0)
+        self.assertIn("PASS", output)
+        build.assert_called_once()
+        ctest.assert_called_once()
 
 
 if __name__ == "__main__":
