@@ -91,6 +91,13 @@ the same conformance row as synchronous execution. Normal resume leaves the call
 cancellation consumes only the verified owner suffix. Missing, duplicate, ambiguous, or
 interface-mismatched owners are rejected before VM code construction.
 
+Source-case registration and native fixture ownership share one manifest. Selecting one fixture
+executes its complete source, reference, VM, and C-emission assertions before publishing that one
+artifact; default execution still runs the complete source suite. Free-function and static-method
+coroutine cases have independent native outputs and checks. Registry identity, declaration census,
+and projection checks reject missing or mismatched evidence rather than silently narrowing the
+canonical preflight. This test-build decomposition changes no VM semantics or supported capability.
+
 anchor-sha256: CMakeLists.txt 675e1585a34cb3d1e345c99083b6a753e76cdff55ae9986a34977f48106e2a8f
 anchor-sha256: xisa/core/registry.json c38744bb33a8f77f47c4668a6b09a8e1335b8bfbbb244fab1eb756aca2bc4a34
 anchor-sha256: src/vm/xr_program_vm.h 39db3f37a2da2c3c16688f97a29ef880d08a1216ed3fe10eb1b24795a55d0acc
@@ -107,4 +114,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c d4aa6a03210602f15baa4c045becaf
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h ae4d353f5950dd9e3e4ad29d587edbe2b8254e1a0abaaba639d0e2d744411423
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c ebcacfa7a72e9e59734dc3965676e90cc8154bb68fa5ce341ba7afd2fa92253c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 24637f1d26beb58eb4a01461d8e61e35b95fe99b43a9320d5f95bf8d477fb62d

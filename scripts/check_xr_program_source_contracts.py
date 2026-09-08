@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import tempfile
 from pathlib import Path
+
+import program_source_fixtures as source_fixtures
 
 
 class ContractError(ValueError):
@@ -73,6 +76,70 @@ def require(condition: bool, message: str) -> None:
 
 def read(root: Path, relative: str) -> str:
     return (root / relative).read_text(encoding="utf-8", errors="strict")
+
+
+def validate_native_fixtures(root: Path, unit_cmake: str, owner_test: str) -> None:
+    try:
+        registry = source_fixtures.load_registry(
+            root / "tests/unit/program/xr_program_source_cases.json",
+            root / "tests/unit/program/test_xr_program_source_build.c")
+    except source_fixtures.FixtureError as exc:
+        raise ContractError(f"source native fixture registry: {exc}") from exc
+    header, registration = source_fixtures.project_registry(registry)
+    native_targets = source_fixtures.native_target_names(registry)
+    registered_targets = re.findall(
+        rb"^add_xr_program_source_native_fixture\(\w+ (\w+) ", registration, re.MULTILINE)
+    require(tuple(name.decode("ascii") for name in registered_targets) == native_targets,
+            "source native projection does not cover the complete manifest")
+    require(header.count(b"    X(source_owner_") == len(registry["cases"]),
+            "source case projection does not cover the complete manifest")
+    for token in (
+        "scripts/program_source_fixtures.py",
+        "program/xr_program_source_cases.json",
+        "COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} project",
+        "--header ${XR_PROGRAM_SOURCE_FIXTURE_HEADER}",
+        "--cmake ${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION}",
+        "COMMAND_ERROR_IS_FATAL ANY",
+        "add_test(NAME xr_program_source_fixtures_self_test",
+        "add_custom_command(TARGET test_xr_program_source_build PRE_LINK",
+        "COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} check",
+    ):
+        require(token in unit_cmake, f"source fixture registration lacks {token}")
+    include = "include(${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION})"
+    require(unit_cmake.count(include) == 1,
+            "source native registration must consume exactly one manifest projection")
+    functions = re.findall(
+        r"function\(add_xr_program_source_native_fixture fixture_id native_target "
+        r"expected_exit fixture_labels\)(.*?)endfunction\(\)", unit_cmake, re.DOTALL)
+    require(len(functions) == 1, "source natives require one fixture registration owner")
+    for token in (
+        'set(generated_c "${XR_PROGRAM_SOURCE_FIXTURE_DIR}/${fixture_id}_native.c")',
+        'OUTPUT "${generated_c}"',
+        "COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} generate",
+        '--fixture "${fixture_id}"',
+        "--producer $<TARGET_FILE:test_xr_program_source_build>",
+        '--output "${generated_c}"',
+        "DEPENDS test_xr_program_source_build",
+        '${XR_PROGRAM_SOURCE_FIXTURE_MANIFEST}',
+        'add_executable(${native_target} "${generated_c}")',
+        "xr_enable_pure_aot_symbol_map(${native_target})",
+        "-std=c11 -pedantic-errors -Wall -Wextra -Werror",
+        "target_compile_options(${native_target} PRIVATE /W4 /WX)",
+        "add_test(NAME ${native_target}",
+        "scripts/check_xr_program_aot_native.py",
+        "--executable $<TARGET_FILE:${native_target}>",
+        "--expected-exit ${expected_exit}",
+        '${fixture_labels};generated-c;native;task-293',
+    ):
+        require(token in functions[0], f"source native fixture binding lacks {token}")
+    for token in (
+        '#include "xr_program_source_cases.gen.h"',
+        "XR_SOURCE_FIXTURES(SELECT_SOURCE_FIXTURE)",
+        "XR_SOURCE_CASES(RUN_SOURCE_CASE)",
+        "strcmp(argv[4], XR_SOURCE_REGISTRY_ID) != 0",
+        "selected_source_fixture == XR_SOURCE_FIXTURE_NONE ? XR_SOURCE_CASE_COUNT : 1u",
+    ):
+        require(token in owner_test, f"source fixture dispatch lacks {token}")
 
 
 def validate(root: Path) -> None:
@@ -198,14 +265,7 @@ def validate(root: Path) -> None:
         "child_active_0",
     ):
         require(token in owner_test, f"source owner evidence lacks {token}")
-    for token in (
-        "test_xr_program_cross_module_coroutine_aot_native",
-        "task-293-cross-module-coroutine",
-        "--expected-exit 7",
-        "module-graph;coroutine;call;generated-c;native;task-293",
-    ):
-        require(token in unit_cmake,
-                f"cross-module coroutine native evidence lacks {token}")
+    validate_native_fixtures(root, unit_cmake, owner_test)
     for token in (
         "source_semantic_module_present",
         "XI_STAGE_OPTIMIZED",
@@ -568,6 +628,7 @@ def self_test(root: Path) -> None:
             "tests/unit/ir/test_xr_program_imported_callable.c",
             "tests/unit/CMakeLists.txt",
             "tests/unit/program/test_xr_program_source_build.c",
+            "tests/unit/program/xr_program_source_cases.json",
             "tests/cli/run_canonical_source_route_tests.py",
             "tests/unit/program/test_xr_program_verify.c",
             "tests/unit/program/xr_program_invoke_fixture.h",
@@ -602,6 +663,37 @@ def self_test(root: Path) -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / relative, destination)
         validate(target)
+        cmake = target / "tests/unit/CMakeLists.txt"
+        original_cmake = cmake.read_text(encoding="utf-8")
+        source_test = read(target, "tests/unit/program/test_xr_program_source_build.c")
+        for before, after in (
+            ("include(${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION})", ""),
+            ('--fixture "${fixture_id}"', '--fixture "${native_target}"'),
+            ("--expected-exit ${expected_exit}", "--expected-exit 0"),
+            ('add_executable(${native_target} "${generated_c}")',
+             'add_executable(${native_target} "other.c")'),
+            ("TARGET test_xr_program_source_build PRE_LINK", "TARGET other PRE_LINK"),
+        ):
+            try:
+                validate_native_fixtures(target, original_cmake.replace(before, after), source_test)
+            except ContractError:
+                pass
+            else:
+                raise ContractError(f"incorrect native fixture registration was accepted: {before}")
+        manifest = target / "tests/unit/program/xr_program_source_cases.json"
+        original_manifest = manifest.read_text(encoding="utf-8")
+        value = json.loads(original_manifest)
+        native_cases = [case for case in value["cases"] if case["fixture"] is not None]
+        native_cases[0]["fixture"], native_cases[1]["fixture"] = (
+            native_cases[1]["fixture"], native_cases[0]["fixture"])
+        manifest.write_text(json.dumps(value), encoding="utf-8")
+        try:
+            validate_native_fixtures(target, original_cmake, source_test)
+        except ContractError:
+            pass
+        else:
+            raise ContractError("swapped source case native fixture ownership was accepted")
+        manifest.write_text(original_manifest, encoding="utf-8")
         matrix = target / "contracts/canonical-program/operation-capability-matrix.json"
         original_matrix = matrix.read_text(encoding="utf-8")
         matrix_value = json.loads(original_matrix)

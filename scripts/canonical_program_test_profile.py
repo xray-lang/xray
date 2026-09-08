@@ -9,9 +9,12 @@ claim for Task 293.
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
+import program_source_fixtures as source_fixtures
 
 
-CTEST_NAMES = (
+_SCRIPT_AND_EXECUTABLE_TESTS = (
     "canonical_cutover_manifests",
     "canonical_cutover_manifests_self_test",
     "contract_freeze",
@@ -23,12 +26,6 @@ CTEST_NAMES = (
     "test_xr_program",
     "test_xr_program_aot",
     "test_xr_program_aot_condition_assert",
-    "test_xr_program_affine_coroutine_result_aot_native",
-    "test_xr_program_multi_safepoint_aot_native",
-    "test_xr_program_ref_parameter_coroutine_aot_native",
-    "test_xr_program_read_existential_coroutine_aot_native",
-    "test_xr_program_provider_trap_cleanup_aot_native",
-    "test_xr_program_pipe_cancel_cleanup_aot_native",
     "test_xr_program_source_build",
     "test_xr_program_verify",
     "test_xr_program_vm",
@@ -44,6 +41,7 @@ CTEST_NAMES = (
     "xr_program_semantic_coverage_self_test",
     "xr_program_source_contracts",
     "xr_program_source_contracts_self_test",
+    "xr_program_source_fixtures_self_test",
     "xr_program_vm_contracts",
     "xr_program_vm_contracts_self_test",
     "xr_program_wave3_closure",
@@ -52,26 +50,35 @@ CTEST_NAMES = (
     "xr_program_wave4_contract_self_test",
 )
 
-# Script-only gates have no Ninja target.  The fifteen targets below are the
-# executable/native evidence required before the matching CTest inventory can
-# run.  In particular, this does not build the CLI merely as a blanket proxy.
-BUILD_TARGETS = (
+# Script-only gates have no Ninja target. Native source fixtures are projected
+# from the same registry as CMake; the CLI is not a blanket build proxy.
+_EXECUTABLE_TARGETS = (
     "test_core_spec",
     "test_xr_program",
     "test_xr_program_aot",
     "test_xr_program_aot_condition_assert",
-    "test_xr_program_affine_coroutine_result_aot_native",
-    "test_xr_program_multi_safepoint_aot_native",
-    "test_xr_program_ref_parameter_coroutine_aot_native",
-    "test_xr_program_read_existential_coroutine_aot_native",
-    "test_xr_program_provider_trap_cleanup_aot_native",
-    "test_xr_program_pipe_cancel_cleanup_aot_native",
     "test_xr_program_source_build",
     "test_xr_program_verify",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
     "test_xi_verify_ext",
 )
+
+
+def load_inventory(manifest: Path = source_fixtures.MANIFEST,
+                   source: Path = source_fixtures.SOURCE) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    registry = source_fixtures.load_registry(manifest, source)
+    native_targets = source_fixtures.native_target_names(registry)
+    tests = _SCRIPT_AND_EXECUTABLE_TESTS + native_targets
+    targets = _EXECUTABLE_TARGETS + native_targets
+    if len(tests) != len(set(tests)) or len(targets) != len(set(targets)):
+        raise source_fixtures.FixtureError("canonical profile contains duplicate registration")
+    if not set(targets) <= set(tests):
+        raise source_fixtures.FixtureError("canonical build target lacks a qualification test")
+    return tests, targets
+
+
+CTEST_NAMES, BUILD_TARGETS = load_inventory()
 
 
 def ctest_regex() -> str:

@@ -88,8 +88,22 @@ keeps the owner carrier alive across child polling, executes witness-direct disp
 borrowed carrier, and releases only the owner on cancellation. A missing, duplicate, ambiguous, or
 interface-mismatched owner is not lowered.
 
+Source-native test registration has one manifest owner. Each fixture has one source-case producer,
+one generated-C output, and one independent strict native execution and symbol check. Free-function
+and exported-static-method coroutine calls have distinct artifacts; one cannot overwrite the other.
+The producer accepts only an exact fixture identity and matching manifest digest, runs that complete
+source case, and stages its C output. Publication follows successful assertions and preserves the
+previous file's bytes, identity, and timestamp when the new bytes match. Missing, duplicate, unknown,
+or stale registration fails closed. The default source suite still executes every registered case;
+the canonical preflight mechanically includes every manifest native target and test.
+
+The source declaration census and both generated registration projections are checked before every
+producer relink. A test-body edit alone does not reconfigure CMake. A new unregistered case fails
+before linking and fails again on retry; unchanged builds need no new check. A real CMake/Ninja
+self-test covers these dependencies independently of the lightweight preflight.
+
 anchor-sha256: CMakeLists.txt 675e1585a34cb3d1e345c99083b6a753e76cdff55ae9986a34977f48106e2a8f
-anchor-sha256: tests/unit/CMakeLists.txt c9b43468b944b6d0b81ffa64b38c6944c327b2ee2e63aa6f2b1cabf461ec0b04
+anchor-sha256: tests/unit/CMakeLists.txt 65df892c19406ffc2884c10a0c7b38a41239843d799f9a678986e4ac0d0e2ec7
 anchor-sha256: xisa/core/registry.json c38744bb33a8f77f47c4668a6b09a8e1335b8bfbbb244fab1eb756aca2bc4a34
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 5554779cd3ab5d8a1ead2ab78d6ba135a1bdab269dfb9f998ab043fb149f7d48
@@ -106,4 +120,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f3
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c 7d6b7a4a4d15e87a190d847a69debeda3f1f04f5d11b64dd4444bcbe4dc594b7
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c ebcacfa7a72e9e59734dc3965676e90cc8154bb68fa5ce341ba7afd2fa92253c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 24637f1d26beb58eb4a01461d8e61e35b95fe99b43a9320d5f95bf8d477fb62d
