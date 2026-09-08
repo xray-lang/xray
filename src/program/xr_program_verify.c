@@ -3108,16 +3108,31 @@ static bool verify_cancel_continuation(VerifyContext *context, const XrValidated
     }
     for (uint32_t live = 0u; live < live_count; ++live) {
         uint32_t value = instruction->operands[live_operand_start + live];
+        uint32_t safepoint_occurrences = 0u;
+        for (uint32_t candidate = 0u; candidate < safepoint->live_value_count; ++candidate)
+            safepoint_occurrences += safepoint->live_value_ids[candidate] == value;
         uint32_t cancel_occurrences = 0u;
         for (uint32_t cancel = 0u; cancel < cancel_count; ++cancel)
             cancel_occurrences += instruction->operands[cancel_operand_start + cancel] == value;
-        if (value >= function->value_count || safepoint->live_value_ids[live] != value ||
+        bool owner =
+            value < function->value_count && function->value_ownerships[value] == XR_CORE_IR_OWNER;
+        if (value >= function->value_count || safepoint_occurrences != 1u ||
             function->value_categories[value] > XR_CORE_IR_PLACE ||
             (function->value_categories[value] == XR_CORE_IR_PLACE &&
              affine_borrow_definition(function, value) != NULL) ||
-            function->value_root_sets[value].root_count != 0u ||
-            cancel_occurrences !=
-                (function->value_ownerships[value] == XR_CORE_IR_OWNER ? 1u : 0u)) {
+            function->value_root_sets[value].root_count != 0u || cancel_occurrences > 1u ||
+            (owner && cancel_occurrences != 1u)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+            return false;
+        }
+    }
+    for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+        uint32_t occurrences = 0u;
+        for (uint32_t operand = 0u; operand < live_count; ++operand)
+            occurrences += instruction->operands[live_operand_start + operand] ==
+                           safepoint->live_value_ids[live];
+        if (occurrences != 1u) {
+            location.value_id = safepoint->live_value_ids[live];
             reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
             return false;
         }
@@ -3128,8 +3143,10 @@ static bool verify_cancel_continuation(VerifyContext *context, const XrValidated
         for (uint32_t live = 0u; live < live_count; ++live)
             live_occurrences += safepoint->live_value_ids[live] == value;
         if (value >= function->value_count || live_occurrences != 1u ||
-            function->value_categories[value] != XR_CORE_IR_VALUE ||
-            function->value_ownerships[value] != XR_CORE_IR_OWNER) {
+            function->value_categories[value] > XR_CORE_IR_PLACE ||
+            (function->value_categories[value] == XR_CORE_IR_PLACE &&
+             affine_borrow_definition(function, value) != NULL) ||
+            function->value_root_sets[value].root_count != 0u) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
             return false;
         }
@@ -3217,7 +3234,8 @@ static bool cleanup_terminal_preserves_reason(VerifyContext *context,
          instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED)) {
         /* Suspension is an observable exit even though it also has explicit
          * successors.
-         * Cleanup may contain ordinary loops, but cannot suspend. */
+
+         * * Cleanup may contain ordinary loops, but cannot suspend. */
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
         return false;
     }
@@ -3593,7 +3611,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             for (uint32_t live = 0; live < safepoint->live_value_count; ++live) {
-                uint32_t value = safepoint->live_value_ids[live];
+                uint32_t value = instruction->operands[live];
                 uint32_t resume_value =
                     function->blocks[instruction->successors[0]].argument_ids[live];
                 uint32_t resume_uses = 0u;
@@ -3605,8 +3623,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     for (uint32_t operand = 0; operand < resume_op->operand_count; ++operand)
                         resume_uses += resume_op->operands[operand] == resume_value;
                 }
-                if (instruction->operands[live] != value ||
-                    function->value_categories[value] > XR_CORE_IR_PLACE || resume_uses == 0u) {
+                if (function->value_categories[value] > XR_CORE_IR_PLACE || resume_uses == 0u) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                     return false;
                 }
@@ -3744,10 +3761,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
                 uint32_t operand = callee->parameter_count + live;
-                uint32_t value = safepoint->live_value_ids[live];
+                uint32_t value = instruction->operands[operand];
                 uint32_t target = implicit_result + live;
-                if (instruction->operands[operand] != value ||
-                    function->value_categories[value] > XR_CORE_IR_PLACE ||
+                if (function->value_categories[value] > XR_CORE_IR_PLACE ||
                     (function->value_categories[value] == XR_CORE_IR_PLACE &&
                      affine_borrow_definition(function, value) != NULL) ||
                     normal->argument_types[target] != function->value_types[value] ||

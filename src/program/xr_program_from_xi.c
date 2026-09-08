@@ -78,9 +78,11 @@ typedef struct XrXiCleanupPointStorage {
 
 typedef struct XrXiCleanupProjectionStorage {
     XrXiCleanupPointStorage *point;
+    const XiBlock *source_block;
     uint32_t begin_gap;
     uint32_t end_gap;
     bool ends_in_trap;
+    uint8_t flow_state;
     uint8_t argument_state;
     XrCoreIrKey *trap_argument_sources;
     XrCoreIrValueInput *trap_arguments;
@@ -167,12 +169,10 @@ typedef struct XrXiCancelEdge {
     bool private_projection;
 } XrXiCancelEdge;
 
-typedef struct XrXiCancelBlockStorage {
-    XrCoreIrValueInput *arguments;
-    uint32_t argument_count;
-    XrCoreIrInstructionInput *instructions;
-    uint32_t instruction_count;
-} XrXiCancelBlockStorage;
+typedef struct XrXiCancelGraphStorage {
+    XrCoreIrBlockInput *blocks;
+    uint32_t block_count;
+} XrXiCancelGraphStorage;
 
 typedef struct XrXiFunctionStorage {
     const XiFunc *xi;
@@ -182,7 +182,7 @@ typedef struct XrXiFunctionStorage {
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
     XrCoreIrBlockInput *blocks;
-    XrXiCancelBlockStorage *cancel_blocks;
+    XrXiCancelGraphStorage *cancel_graphs;
     XrXiBlockStorage *block_storage;
     XrXiCleanupPointStorage *cleanup_points;
     uint32_t cleanup_point_count;
@@ -480,10 +480,19 @@ static XrCoreIrKey cancel_argument_key(const XrXiFunctionStorage *function, uint
     return key_from_key_and_u32(UINT8_C(0x59), cancel_block_key(function, safepoint_id), argument);
 }
 
-static XrCoreIrKey cancel_result_key(const XrXiFunctionStorage *function, uint32_t safepoint_id,
-                                     uint32_t instruction) {
-    return key_from_key_and_u32(UINT8_C(0x5b), cancel_block_key(function, safepoint_id),
-                                instruction);
+static XrCoreIrKey cancel_graph_block_key(const XrXiFunctionStorage *function,
+                                          uint32_t safepoint_id, const XiBlock *source,
+                                          const XiBlock *entry) {
+    XrCoreIrKey root = cancel_block_key(function, safepoint_id);
+    return source == entry ? root : key_from_key_and_u32(UINT8_C(0x4c), root, source->id);
+}
+
+static XrCoreIrKey cancel_graph_argument_key(XrCoreIrKey block, uint32_t argument) {
+    return key_from_key_and_u32(UINT8_C(0x59), block, argument);
+}
+
+static XrCoreIrKey cancel_graph_result_key(XrCoreIrKey block, uint32_t instruction) {
+    return key_from_key_and_u32(UINT8_C(0x5b), block, instruction);
 }
 
 static XrCoreIrKey cleanup_trap_block_key(const XrXiFunctionStorage *function,
@@ -493,7 +502,10 @@ static XrCoreIrKey cleanup_trap_block_key(const XrXiFunctionStorage *function,
                             ? point->boundary->enter->id
                             : UINT32_MAX;
     XrCoreIrKey boundary_key = key_from_key_and_u32(UINT8_C(0x5c), function->key, identity);
-    return key_from_key_and_u32(UINT8_C(0x5f), boundary_key,
+    XrCoreIrKey block_key = key_from_key_and_u32(
+        UINT8_C(0x5f), boundary_key,
+        projection && projection->source_block ? projection->source_block->id : UINT32_MAX);
+    return key_from_key_and_u32(UINT8_C(0x60), block_key,
                                 projection ? projection->begin_gap : UINT32_MAX);
 }
 
@@ -1683,7 +1695,16 @@ static bool exact_static_cleanup_end(const XiFunc *function, const XiValue *valu
            exact_static_cleanup_try(function, registration);
 }
 
-static bool exact_static_cleanup_handler(const XiFunc *function, const XiValue *registration);
+typedef enum XrXiCleanupReason {
+    XR_XI_CLEANUP_REASON_TRAP = 1,
+    XR_XI_CLEANUP_REASON_PANIC = 2,
+    XR_XI_CLEANUP_REASON_CANCEL = 3,
+} XrXiCleanupReason;
+
+static XrProgramBuildStatus
+claim_static_cleanup_handler_graph(XrXiFunctionStorage *function, const XiValue *registration,
+                                   XrXiCleanupReason reason, bool *private_projection,
+                                   char *diagnostic, size_t diagnostic_size);
 
 static bool exact_cleanup_boundary_marker(const XiValue *value) {
     return value && (value->op == XI_CLEANUP_ENTER || value->op == XI_CLEANUP_LEAVE) &&
@@ -5408,7 +5429,12 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
         type_id = source_type_id;
     if (type_id == XR_CORE_TYPE_VOID)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi live-in v%u has no active CoreSpec value type", source->id);
+                    "Xi live-in v%u op%u in b%u has no active CoreSpec value type "
+                    "(closure=%u trap=%u panic=%u cancel=%u)",
+                    source->id, (unsigned) source->op,
+                    block && block->xi ? block->xi->id : UINT32_MAX, changed ? 1u : 0u,
+                    block && block->trap_cleanup ? 1u : 0u, block && block->panic_cleanup ? 1u : 0u,
+                    block && block->cancel_cleanup ? 1u : 0u);
     if (!phi && implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NONE && source->op == XI_PLACE_LOAD &&
         logical_ownership_for_type(context, type_id) == XR_CORE_IR_OWNER) {
         const XiValue *storage_owner = canonical_owner_storage_identity(context, function, source);
@@ -5732,17 +5758,21 @@ static void free_context(XrXiBuildContext *context) {
             }
             xr_free(function->block_storage);
             for (uint32_t safepoint = 0u;
-                 function->cancel_blocks &&
+                 function->cancel_graphs &&
                  safepoint < module->functions[function_index].coroutine_safepoint_count;
                  ++safepoint) {
-                XrXiCancelBlockStorage *cancel = &function->cancel_blocks[safepoint];
-                for (uint32_t instruction = 0u; instruction < cancel->instruction_count;
-                     ++instruction)
-                    free_instruction_input(&cancel->instructions[instruction]);
-                xr_free(cancel->instructions);
-                xr_free(cancel->arguments);
+                XrXiCancelGraphStorage *cancel = &function->cancel_graphs[safepoint];
+                for (uint32_t block = 0u; block < cancel->block_count; ++block) {
+                    for (uint32_t instruction = 0u;
+                         instruction < cancel->blocks[block].instruction_count; ++instruction)
+                        free_instruction_input((XrCoreIrInstructionInput *) &cancel->blocks[block]
+                                                   .instructions[instruction]);
+                    xr_free((void *) cancel->blocks[block].instructions);
+                    xr_free((void *) cancel->blocks[block].arguments);
+                }
+                xr_free(cancel->blocks);
             }
-            xr_free(function->cancel_blocks);
+            xr_free(function->cancel_graphs);
             xr_free(function->blocks);
             for (uint32_t projection_index = 0u;
                  projection_index < function->cleanup_projection_count; ++projection_index) {
@@ -8510,44 +8540,218 @@ static XrProgramBuildStatus mark_reachable_blocks(const XrXiBuildContext *contex
                 "Xi function block reachability did not converge");
 }
 
-static bool exact_static_cleanup_handler(const XiFunc *function, const XiValue *registration) {
-    if (!exact_static_cleanup_try(function, registration))
+static bool static_cleanup_handler_graph_is_exact(const XiFunc *function,
+                                                  const XiValue *registration, uint8_t *members,
+                                                  uint32_t *stack, uint8_t *completes) {
+    if (!exact_static_cleanup_try(function, registration) || !members || !stack || !completes)
         return false;
     const XiBlock *handler = (const XiBlock *) registration->aux;
-    if (!handler || handler->kind != XI_BLOCK_UNREACHABLE || handler->phis)
+    if (!handler || handler->id >= function->nblocks || function->blocks[handler->id] != handler)
         return false;
+
     const XiValue *caught = NULL;
-    const XiValue *throw_value = NULL;
-    uint32_t enter_count = 0u;
-    uint32_t leave_count = 0u;
-    bool in_cleanup = false;
     for (uint32_t index = 0u; index < handler->nvalues; ++index) {
         const XiValue *value = handler->values[index];
-        if (!value)
+        if (!value || value->op != XI_CATCH)
             continue;
-        if (value->op == XI_CATCH && value->aux == registration && value->nargs == 0u) {
-            if (caught)
+        if (caught || value->aux != registration || value->nargs != 0u)
+            return false;
+        caught = value;
+    }
+    if (!caught)
+        return false;
+
+    uint32_t stack_count = 0u;
+    uint32_t member_count = 0u;
+    uint32_t enter_count = 0u;
+    uint32_t leave_count = 0u;
+    uint32_t terminal = UINT32_MAX;
+    members[handler->id] = 2u;
+    stack[stack_count++] = handler->id;
+    while (stack_count != 0u) {
+        uint32_t block_index = stack[--stack_count];
+        if (block_index >= function->nblocks || members[block_index] != 2u)
+            return false;
+        const XiBlock *block = function->blocks[block_index];
+        if (!block || block->id != block_index || block->func != function)
+            return false;
+        members[block_index] = 1u;
+        ++member_count;
+
+        const XiValue *throw_value = NULL;
+        for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
+            const XiValue *value = block->values[value_index];
+            if (!value)
+                continue;
+            if (value->op == XI_CATCH) {
+                if (block != handler || value != caught)
+                    return false;
+            } else if (value->op == XI_THROW) {
+                if (throw_value || value->nargs != 1u || !value->args || value->args[0] != caught)
+                    return false;
+                throw_value = value;
+            } else if (value->op == XI_CLEANUP_ENTER) {
+                if (!exact_cleanup_boundary_marker(value))
+                    return false;
+                ++enter_count;
+            } else if (value->op == XI_CLEANUP_LEAVE) {
+                if (!exact_cleanup_boundary_marker(value))
+                    return false;
+                ++leave_count;
+            }
+        }
+
+        uint32_t successor_count = 0u;
+        if (block->kind == XI_BLOCK_PLAIN) {
+            if (!block->succs[0] || block->succs[1])
                 return false;
-            caught = value;
-        } else if (value->op == XI_THROW) {
-            if (throw_value)
+            successor_count = 1u;
+        } else if (block->kind == XI_BLOCK_IF) {
+            if (!block->control || !block->succs[0] || !block->succs[1])
                 return false;
-            throw_value = value;
-        } else if (value->op == XI_CLEANUP_ENTER) {
-            if (in_cleanup || !exact_cleanup_boundary_marker(value))
+            successor_count = 2u;
+        } else if (block->kind == XI_BLOCK_UNREACHABLE) {
+            if (!throw_value || block->succs[0] || block->succs[1] || terminal != UINT32_MAX)
                 return false;
-            in_cleanup = true;
-            ++enter_count;
-        } else if (value->op == XI_CLEANUP_LEAVE) {
-            if (!in_cleanup || !exact_cleanup_boundary_marker(value))
+            terminal = block_index;
+        } else {
+            return false;
+        }
+        if (throw_value && block->kind != XI_BLOCK_UNREACHABLE)
+            return false;
+        for (uint32_t successor = 0u; successor < successor_count; ++successor) {
+            const XiBlock *target = block->succs[successor];
+            if (!target || target->id >= function->nblocks ||
+                function->blocks[target->id] != target ||
+                (members[target->id] == 0u && stack_count >= function->nblocks))
                 return false;
-            in_cleanup = false;
-            ++leave_count;
+            if (members[target->id] == 0u) {
+                members[target->id] = 2u;
+                stack[stack_count++] = target->id;
+            }
         }
     }
-    return caught && throw_value && throw_value->nargs == 1u && throw_value->args &&
-           throw_value->args[0] == caught && enter_count != 0u && enter_count == leave_count &&
-           !in_cleanup;
+    if (member_count == 0u || terminal == UINT32_MAX || enter_count == 0u ||
+        enter_count != leave_count)
+        return false;
+
+    completes[terminal] = 1u;
+    for (uint32_t round = 0u; round < member_count; ++round) {
+        bool changed = false;
+        for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+            if (!members[block_index] || completes[block_index])
+                continue;
+            const XiBlock *block = function->blocks[block_index];
+            uint32_t successor_count = block->kind == XI_BLOCK_IF ? 2u : 1u;
+            bool complete = true;
+            for (uint32_t successor = 0u; successor < successor_count; ++successor)
+                complete &=
+                    members[block->succs[successor]->id] && completes[block->succs[successor]->id];
+            if (complete) {
+                completes[block_index] = 1u;
+                changed = true;
+            }
+        }
+        if (!changed)
+            break;
+    }
+    for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index)
+        if (members[block_index] && !completes[block_index])
+            return false;
+    return true;
+}
+
+static XrProgramBuildStatus
+claim_static_cleanup_handler_graph(XrXiFunctionStorage *function, const XiValue *registration,
+                                   XrXiCleanupReason reason, bool *private_projection,
+                                   char *diagnostic, size_t diagnostic_size) {
+    if (private_projection)
+        *private_projection = false;
+    if (!function || !function->xi || !registration || !private_projection ||
+        reason < XR_XI_CLEANUP_REASON_TRAP || reason > XR_XI_CLEANUP_REASON_CANCEL)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t count = function->xi->nblocks;
+    uint8_t *members = count ? xr_calloc(count, sizeof(*members)) : NULL;
+    uint32_t *stack = count ? xr_calloc(count, sizeof(*stack)) : NULL;
+    uint8_t *completes = count ? xr_calloc(count, sizeof(*completes)) : NULL;
+    if (count && (!members || !stack || !completes)) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (!static_cleanup_handler_graph_is_exact(function->xi, registration, members, stack,
+                                               completes)) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi static cleanup handler is not an exact closed control-flow graph");
+    }
+
+    uint32_t trap_count = 0u;
+    uint32_t panic_count = 0u;
+    uint32_t cancel_count = 0u;
+    uint32_t member_count = 0u;
+    bool reachable = false;
+    for (uint32_t block_index = 0u; block_index < count; ++block_index) {
+        if (!members[block_index])
+            continue;
+        XrXiBlockStorage *block = &function->block_storage[block_index];
+        ++member_count;
+        trap_count += block->trap_cleanup ? 1u : 0u;
+        panic_count += block->panic_cleanup ? 1u : 0u;
+        cancel_count += block->cancel_cleanup ? 1u : 0u;
+        reachable |= block->reachable;
+    }
+    bool has_trap = trap_count != 0u;
+    bool has_panic = panic_count != 0u;
+    bool has_cancel = cancel_count != 0u;
+    if ((has_trap && trap_count != member_count) || (has_panic && panic_count != member_count) ||
+        (has_cancel && cancel_count != member_count)) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi static cleanup graph has inconsistent reason ownership");
+    }
+    if (has_panic && reason != XR_XI_CLEANUP_REASON_PANIC) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi static cleanup graph already owns a panic reason");
+    }
+    if (reason == XR_XI_CLEANUP_REASON_CANCEL && (has_trap || has_cancel)) {
+        *private_projection = true;
+    } else if ((reason == XR_XI_CLEANUP_REASON_TRAP && (has_panic || has_cancel)) ||
+               (reason == XR_XI_CLEANUP_REASON_PANIC && (has_trap || has_cancel))) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi static cleanup graph requires multiple reason-private owners");
+    } else if (!has_trap && !has_panic && !has_cancel) {
+        if (reachable) {
+            xr_free(completes);
+            xr_free(stack);
+            xr_free(members);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi static cleanup graph is already reachable without an exact reason");
+        }
+        for (uint32_t block_index = 0u; block_index < count; ++block_index) {
+            if (!members[block_index])
+                continue;
+            XrXiBlockStorage *block = &function->block_storage[block_index];
+            block->trap_cleanup = reason == XR_XI_CLEANUP_REASON_TRAP;
+            block->panic_cleanup = reason == XR_XI_CLEANUP_REASON_PANIC;
+            block->cancel_cleanup = reason == XR_XI_CLEANUP_REASON_CANCEL;
+        }
+    }
+    xr_free(completes);
+    xr_free(stack);
+    xr_free(members);
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus append_trap_edge(XrXiBuildContext *context, const XiFunc *function,
@@ -8704,15 +8908,23 @@ static XrProgramBuildStatus prepare_trap_continuations(XrXiBuildContext *context
                     const XiValue *active = active_context->registration;
                     const XiBlock *handler = (const XiBlock *) active->aux;
                     XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
-                    if (!handler_storage || handler_storage->reachable ||
-                        !exact_static_cleanup_handler(function, active))
+                    if (!handler_storage)
                         return fail(
                             diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi trap-capable call v%u has no exact private cleanup", call->id);
-                    XrProgramBuildStatus status = append_trap_edge(context, function, call, active);
+                    bool private_projection = false;
+                    XrProgramBuildStatus status = claim_static_cleanup_handler_graph(
+                        storage, active, XR_XI_CLEANUP_REASON_TRAP, &private_projection, diagnostic,
+                        diagnostic_size);
                     if (status != XR_PROGRAM_BUILD_OK)
                         return status;
-                    handler_storage->trap_cleanup = true;
+                    if (private_projection)
+                        return fail(
+                            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi trap-capable call v%u has no exact private cleanup", call->id);
+                    status = append_trap_edge(context, function, call, active);
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        return status;
                 }
             }
         }
@@ -8764,17 +8976,23 @@ static XrProgramBuildStatus prepare_panic_continuations(XrXiBuildContext *contex
                     const XiValue *active = active_context->registration;
                     const XiBlock *handler = (const XiBlock *) active->aux;
                     XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
-                    if (!handler_storage || handler_storage->reachable ||
-                        handler_storage->trap_cleanup ||
-                        !exact_static_cleanup_handler(function, active))
+                    if (!handler_storage)
                         return fail(diagnostic, diagnostic_size,
                                     XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                     "Xi assertion v%u has no exact panic cleanup", point->id);
-                    XrProgramBuildStatus status =
-                        append_panic_edge(context, function, point, active);
+                    bool private_projection = false;
+                    XrProgramBuildStatus status = claim_static_cleanup_handler_graph(
+                        storage, active, XR_XI_CLEANUP_REASON_PANIC, &private_projection,
+                        diagnostic, diagnostic_size);
                     if (status != XR_PROGRAM_BUILD_OK)
                         return status;
-                    handler_storage->panic_cleanup = true;
+                    if (private_projection)
+                        return fail(diagnostic, diagnostic_size,
+                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                    "Xi assertion v%u has no exact panic cleanup", point->id);
+                    status = append_panic_edge(context, function, point, active);
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        return status;
                 }
             }
         }
@@ -8838,21 +9056,21 @@ static XrProgramBuildStatus prepare_cancel_continuations(XrXiBuildContext *conte
                     cleanup_registration_storage(storage, registration);
                 const XiBlock *handler = (const XiBlock *) registration->aux;
                 XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
-                bool private_projection = handler_storage && (handler_storage->trap_cleanup ||
-                                                              handler_storage->cancel_cleanup);
                 if (!registration_context || registration_context != active_context ||
-                    !handler_storage || (handler_storage->reachable && !private_projection) ||
-                    handler_storage->panic_cleanup ||
-                    !exact_static_cleanup_handler(function, registration))
+                    !handler_storage)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi suspension v%u has no exact private cancel cleanup",
                                 point->op ? point->op->id : UINT32_MAX);
-                XrProgramBuildStatus status =
+                bool private_projection = false;
+                XrProgramBuildStatus status = claim_static_cleanup_handler_graph(
+                    storage, registration, XR_XI_CLEANUP_REASON_CANCEL, &private_projection,
+                    diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                status =
                     append_cancel_edge(context, function, point, registration, private_projection);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
-                if (!private_projection)
-                    handler_storage->cancel_cleanup = true;
             }
         }
     }
@@ -9195,10 +9413,10 @@ static XrProgramBuildStatus prepare_cancel_arguments(XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
-static bool cancel_handler_owner_payload_is_exact(const XrXiBuildContext *context,
-                                                  const XrXiFunctionStorage *function,
-                                                  const XrXiBlockStorage *handler,
-                                                  const XiCoroSuspendPoint *point) {
+static bool cancel_handler_payload_is_exact(const XrXiBuildContext *context,
+                                            const XrXiFunctionStorage *function,
+                                            const XrXiBlockStorage *handler,
+                                            const XiCoroSuspendPoint *point) {
     if (!context || !function || !handler || !point)
         return false;
     uint32_t owner_count = 0u;
@@ -9207,8 +9425,10 @@ static bool cancel_handler_owner_payload_is_exact(const XrXiBuildContext *contex
         if (candidate->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
             continue;
         if (candidate->phi || candidate->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-            candidate->category != XR_CORE_IR_VALUE || candidate->ownership != XR_CORE_IR_OWNER)
+            candidate->category > XR_CORE_IR_PLACE)
             return false;
+        if (candidate->ownership != XR_CORE_IR_OWNER)
+            continue;
         const XiValue *logical =
             canonical_owner_storage_identity(context, function, candidate->source);
         uint32_t matches = 0u;
@@ -9309,7 +9529,11 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         }
-        if (block->xi->control && block->static_branch_outcome == XR_XI_STATIC_BRANCH_UNKNOWN &&
+        bool reason_cleanup_terminal =
+            block->xi->kind == XI_BLOCK_UNREACHABLE &&
+            (block->trap_cleanup || block->panic_cleanup || block->cancel_cleanup);
+        if (block->xi->control && !reason_cleanup_terminal &&
+            block->static_branch_outcome == XR_XI_STATIC_BRANCH_UNKNOWN &&
             !block_typed_invoke_call(context, function->xi, block->xi)) {
             XrProgramBuildStatus status = require_value_available(
                 context, function, block, block->xi->control, NULL, diagnostic, diagnostic_size);
@@ -9407,26 +9631,17 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (!source || !handler || !edge->point)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi cancel continuation endpoint is absent");
-            if (!cancel_handler_owner_payload_is_exact(context, function, handler, edge->point))
+            if (!cancel_handler_payload_is_exact(context, function, handler, edge->point))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi cancel continuation has no exact owner payload");
             for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
                 XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
                 if (edge_argument->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
                     continue;
-                const XiValue *logical_argument =
-                    canonical_owner_storage_identity(context, function, edge_argument->source);
-                uint32_t drop_matches = 0u;
-                for (uint32_t drop = 0u; drop < edge->point->ndrops; ++drop)
-                    drop_matches += canonical_cancel_drop_identity(context, function, edge->point,
-                                                                   edge->point->drops[drop]) ==
-                                    logical_argument;
-                if (!logical_argument || drop_matches != 1u || edge_argument->phi ||
-                    edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-                    edge_argument->category != XR_CORE_IR_VALUE ||
-                    edge_argument->ownership != XR_CORE_IR_OWNER)
+                if (edge_argument->phi ||
+                    edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                "Xi cancel continuation requires an exact owner payload");
+                                "Xi cancel continuation requires an exact payload");
                 XrProgramBuildStatus status =
                     require_value_available(context, function, source, edge_argument->source,
                                             &changed, diagnostic, diagnostic_size);
@@ -9443,8 +9658,8 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (!successor->reachable || block_is_elided_class_construction_error_continuation(
                                              context, function->xi, successor->xi))
                 continue;
-            if (successor->trap_cleanup || successor->panic_cleanup || successor->cancel_cleanup)
-                continue;
+            bool reason_cleanup =
+                successor->trap_cleanup || successor->panic_cleanup || successor->cancel_cleanup;
             uint32_t argument_count = successor->argument_count;
             for (uint16_t predecessor_index = 0; predecessor_index < successor->xi->npreds;
                  ++predecessor_index) {
@@ -9457,6 +9672,10 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                 "Xi CFG predecessor is absent");
                 if (!predecessor->reachable)
+                    continue;
+                if (reason_cleanup && (predecessor->trap_cleanup != successor->trap_cleanup ||
+                                       predecessor->panic_cleanup != successor->panic_cleanup ||
+                                       predecessor->cancel_cleanup != successor->cancel_cleanup))
                     continue;
                 for (uint32_t argument_index = 0; argument_index < argument_count;
                      ++argument_index) {
@@ -9838,8 +10057,8 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         xr_calloc((size_t) plan->nstates + 1u, sizeof(*function->coroutine_states));
     function->coroutine_safepoints =
         xr_calloc(plan->nstates, sizeof(*function->coroutine_safepoints));
-    function->cancel_blocks = xr_calloc(plan->nstates, sizeof(*function->cancel_blocks));
-    if (!function->coroutine_states || !function->coroutine_safepoints || !function->cancel_blocks)
+    function->cancel_graphs = xr_calloc(plan->nstates, sizeof(*function->cancel_graphs));
+    if (!function->coroutine_states || !function->coroutine_safepoints || !function->cancel_graphs)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     function->coroutine_states[0].state_id = XI_CORO_STATE_ENTRY;
     function->coroutine_states[0].continuation_block = block_key(function, xi->entry);
@@ -10109,7 +10328,7 @@ prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *funct
                      const XrXiBlockStorage *resume, uint32_t resume_argument_start,
                      uint32_t live_count, const XiCoroSuspendPoint *point, uint32_t safepoint_id,
                      char *diagnostic, size_t diagnostic_size) {
-    if (!function || !function->cancel_blocks)
+    if (!function || !function->cancel_graphs)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi coroutine safepoint %u has no cancellation storage", safepoint_id);
     if (!coroutine_cancel_drop_set_matches(context, function, resume, resume_argument_start,
@@ -10118,16 +10337,24 @@ prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *funct
                     "Xi function %s safepoint %u cancellation live/drop set is inconsistent",
                     function->xi && function->xi->name ? function->xi->name : "<anonymous>",
                     safepoint_id);
-    XrXiCancelBlockStorage *cancel = &function->cancel_blocks[safepoint_id];
-    if (cancel->arguments || cancel->instructions)
+    XrXiCancelGraphStorage *cancel = &function->cancel_graphs[safepoint_id];
+    if (cancel->blocks || cancel->block_count != 0u)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %s safepoint %u cancellation block was prepared twice",
                     function->xi && function->xi->name ? function->xi->name : "<anonymous>",
                     safepoint_id);
-    cancel->argument_count = point->ndrops;
-    cancel->arguments = point->ndrops ? xr_calloc(point->ndrops, sizeof(*cancel->arguments)) : NULL;
-    if (point->ndrops && !cancel->arguments)
+    cancel->blocks = xr_calloc(1u, sizeof(*cancel->blocks));
+    if (!cancel->blocks)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    cancel->block_count = 1u;
+    XrCoreIrBlockInput *block = &cancel->blocks[0];
+    block->key = cancel_block_key(function, safepoint_id);
+    block->argument_count = point->ndrops;
+    XrCoreIrValueInput *arguments =
+        point->ndrops ? xr_calloc(point->ndrops, sizeof(*arguments)) : NULL;
+    if (point->ndrops && !arguments)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    block->arguments = arguments;
     for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
         const XiValue *logical_drop =
             canonical_cancel_drop_identity(context, function, point, point->drops[drop]);
@@ -10148,25 +10375,27 @@ prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *funct
                         "resume owner",
                         function->xi && function->xi->name ? function->xi->name : "<anonymous>",
                         safepoint_id, logical_drop ? logical_drop->id : UINT32_MAX);
-        cancel->arguments[drop] = (XrCoreIrValueInput) {
+        arguments[drop] = (XrCoreIrValueInput) {
             .key = cancel_argument_key(function, safepoint_id, drop),
             .type_id = source->type_id,
             .category = XR_CORE_IR_VALUE,
             .ownership = XR_CORE_IR_OWNER,
         };
     }
-    cancel->instruction_count = (point->ndrops != 0u ? 1u : 0u) + point->ndrops + 1u;
-    cancel->instructions = xr_calloc(cancel->instruction_count, sizeof(*cancel->instructions));
-    if (!cancel->instructions)
+    block->instruction_count = (point->ndrops != 0u ? 1u : 0u) + point->ndrops + 1u;
+    XrCoreIrInstructionInput *instructions =
+        xr_calloc(block->instruction_count, sizeof(*instructions));
+    if (!instructions)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    block->instructions = instructions;
     uint32_t instruction = 0u;
     if (point->ndrops != 0u) {
         XrCoreIrKey *operands = xr_calloc(point->ndrops, sizeof(*operands));
         if (!operands)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
-            operands[drop] = cancel->arguments[drop].key;
-        cancel->instructions[instruction++] = (XrCoreIrInstructionInput) {
+            operands[drop] = arguments[drop].key;
+        instructions[instruction++] = (XrCoreIrInstructionInput) {
             .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
             .result_type_id = XR_CORE_TYPE_VOID,
             .operands = operands,
@@ -10178,8 +10407,8 @@ prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *funct
         XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
         if (!operand)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-        *operand = cancel->arguments[drop].key;
-        cancel->instructions[instruction++] = (XrCoreIrInstructionInput) {
+        *operand = arguments[drop].key;
+        instructions[instruction++] = (XrCoreIrInstructionInput) {
             .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
             .result_type_id = XR_CORE_TYPE_VOID,
             .operands = operand,
@@ -10187,7 +10416,7 @@ prepare_cancel_block(const XrXiBuildContext *context, XrXiFunctionStorage *funct
             .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
         };
     }
-    cancel->instructions[instruction] = (XrCoreIrInstructionInput) {
+    instructions[instruction] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
         .result_type_id = XR_CORE_TYPE_VOID,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
@@ -10206,188 +10435,334 @@ static bool remap_cancel_cleanup_key(const XrCoreIrKey *source_keys, const XrCor
     return false;
 }
 
-static bool block_has_argument_key(const XrCoreIrBlockInput *block, XrCoreIrKey key) {
-    for (uint32_t argument = 0u; block && argument < block->argument_count; ++argument)
-        if (xr_core_ir_key_equal(block->arguments[argument].key, key))
-            return true;
+static XrProgramBuildStatus static_cleanup_graph_block_count(const XiFunc *function,
+                                                             const XiValue *registration,
+                                                             uint32_t *count_out) {
+    if (count_out)
+        *count_out = 0u;
+    if (!function || !registration || !count_out)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint8_t *members = function->nblocks ? xr_calloc(function->nblocks, sizeof(*members)) : NULL;
+    uint32_t *stack = function->nblocks ? xr_calloc(function->nblocks, sizeof(*stack)) : NULL;
+    uint8_t *completes =
+        function->nblocks ? xr_calloc(function->nblocks, sizeof(*completes)) : NULL;
+    if (function->nblocks && (!members || !stack || !completes)) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    bool exact =
+        static_cleanup_handler_graph_is_exact(function, registration, members, stack, completes);
+    uint32_t count = 0u;
+    if (exact)
+        for (uint32_t block = 0u; block < function->nblocks; ++block)
+            count += members[block] != 0u;
+    xr_free(completes);
+    xr_free(stack);
+    xr_free(members);
+    if (!exact || count == 0u)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *count_out = count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static const XrCoreIrBlockInput *cancel_graph_source_block(const XrXiFunctionStorage *function,
+                                                           uint32_t source_block_count,
+                                                           const XiBlock *source) {
+    XrCoreIrKey key = block_key(function, source);
+    for (uint32_t block = 0u; function && block < source_block_count; ++block)
+        if (xr_core_ir_key_equal(function->blocks[block].key, key))
+            return &function->blocks[block];
+    return NULL;
+}
+
+static bool cancel_graph_has_argument(const XrCoreIrBlockInput *const *blocks, uint32_t block_count,
+                                      XrCoreIrKey key) {
+    for (uint32_t block = 0u; block < block_count; ++block)
+        for (uint32_t argument = 0u; blocks[block] && argument < blocks[block]->argument_count;
+             ++argument)
+            if (xr_core_ir_key_equal(blocks[block]->arguments[argument].key, key))
+                return true;
     return false;
 }
 
 /* A static cleanup body can serve several termination reasons or suspension
- * points in Xi, but a
- * canonical Program block has one terminal and one exact
- * owner payload.  Materialize every
- * additional cancellation use as a private,
- * re-keyed projection of the already verified cleanup
- * block. */
+ * points in Xi.  Each
+ * extra cancellation use gets a fully private, re-keyed
+ * Program subgraph.  Ordinary CFG
+ * successors stay within that subgraph, while
+ * trap continuations raised by cleanup operations
+ * keep pointing at the already
+ * closed trap projection. */
 static XrProgramBuildStatus
-clone_cancel_cleanup_block(const XrXiBuildContext *context, XrXiFunctionStorage *function,
-                           const XrXiBlockStorage *handler, const XrCoreIrBlockInput *source,
-                           const XiCoroSuspendPoint *point, uint32_t safepoint_id, char *diagnostic,
-                           size_t diagnostic_size) {
-    if (!context || !function || !function->cancel_blocks || !handler || !source || !point ||
-        source->argument_count != handler->argument_count || source->instruction_count == 0u ||
-        !cancel_handler_owner_payload_is_exact(context, function, handler, point))
+clone_cancel_cleanup_graph(const XrXiBuildContext *context, XrXiFunctionStorage *function,
+                           const XrXiBlockStorage *handler, const XiValue *registration,
+                           const XiCoroSuspendPoint *point, uint32_t safepoint_id,
+                           uint32_t source_block_count, char *diagnostic, size_t diagnostic_size) {
+    if (!context || !function || !function->xi || !function->cancel_graphs || !handler ||
+        !handler->xi || !registration || !point ||
+        !cancel_handler_payload_is_exact(context, function, handler, point))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi shared cleanup has no exact cancellable Program projection");
-    const XrCoreIrInstructionInput *source_terminal =
-        &source->instructions[source->instruction_count - 1u];
-    if ((source_terminal->operation_id != XR_CORE_OP_CORE_TRAP &&
-         source_terminal->operation_id != XR_CORE_OP_CORE_PANIC_PUBLISH &&
-         source_terminal->operation_id != XR_CORE_OP_CORE_CANCEL_PUBLISH) ||
-        source_terminal->successor_count != 0u)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi shared cleanup has no reason-private terminal");
 
-    XrXiCancelBlockStorage *cancel = &function->cancel_blocks[safepoint_id];
-    if (cancel->arguments || cancel->instructions)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi cancellation cleanup was materialized twice");
-    cancel->argument_count = point->ndrops;
-    cancel->arguments = point->ndrops ? xr_calloc(point->ndrops, sizeof(*cancel->arguments)) : NULL;
-    if (point->ndrops && !cancel->arguments)
+    uint32_t xi_block_count = function->xi->nblocks;
+    uint8_t *members = xi_block_count ? xr_calloc(xi_block_count, sizeof(*members)) : NULL;
+    uint32_t *stack = xi_block_count ? xr_calloc(xi_block_count, sizeof(*stack)) : NULL;
+    uint8_t *completes = xi_block_count ? xr_calloc(xi_block_count, sizeof(*completes)) : NULL;
+    if (xi_block_count && (!members || !stack || !completes)) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (!static_cleanup_handler_graph_is_exact(function->xi, registration, members, stack,
+                                               completes)) {
+        xr_free(completes);
+        xr_free(stack);
+        xr_free(members);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi shared cleanup graph changed before cancellation projection");
+    }
+    xr_free(completes);
+    xr_free(stack);
 
-    uint32_t map_capacity = point->ndrops + source->instruction_count;
-    XrCoreIrKey *source_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*source_keys)) : NULL;
-    XrCoreIrKey *target_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*target_keys)) : NULL;
+    uint32_t member_count = 0u;
+    for (uint32_t block = 0u; block < xi_block_count; ++block)
+        member_count += members[block] != 0u;
+    XrXiCancelGraphStorage *cancel = &function->cancel_graphs[safepoint_id];
+    if (member_count == 0u || cancel->blocks || cancel->block_count != 0u) {
+        xr_free(members);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi cancellation cleanup graph was materialized twice or is empty");
+    }
+
+    const XiBlock **xi_blocks = xr_calloc(member_count, sizeof(*xi_blocks));
+    const XrCoreIrBlockInput **source_blocks = xr_calloc(member_count, sizeof(*source_blocks));
+    XrCoreIrKey *source_keys = NULL;
+    XrCoreIrKey *target_keys = NULL;
+    cancel->blocks = xr_calloc(member_count, sizeof(*cancel->blocks));
+    if (!xi_blocks || !source_blocks || !cancel->blocks) {
+        xr_free(source_blocks);
+        xr_free(xi_blocks);
+        xr_free(members);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    cancel->block_count = member_count;
+    xi_blocks[0] = handler->xi;
+    uint32_t cursor = 1u;
+    for (uint32_t block = 0u; block < xi_block_count; ++block)
+        if (members[block] && function->xi->blocks[block] != handler->xi)
+            xi_blocks[cursor++] = function->xi->blocks[block];
+    xr_free(members);
+    if (cursor != member_count) {
+        xr_free(source_blocks);
+        xr_free(xi_blocks);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+
+    uint64_t map_capacity_wide = 0u;
+    for (uint32_t block = 0u; block < member_count; ++block) {
+        source_blocks[block] =
+            cancel_graph_source_block(function, source_block_count, xi_blocks[block]);
+        if (!source_blocks[block] || source_blocks[block]->instruction_count == 0u) {
+            xr_free(source_blocks);
+            xr_free(xi_blocks);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi shared cleanup graph has no Program source block");
+        }
+        uint64_t block_capacity = (uint64_t) source_blocks[block]->argument_count +
+                                  source_blocks[block]->instruction_count;
+        if (block_capacity > UINT64_MAX - map_capacity_wide) {
+            xr_free(source_blocks);
+            xr_free(xi_blocks);
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        }
+        map_capacity_wide += block_capacity;
+    }
+    if (map_capacity_wide > UINT32_MAX || map_capacity_wide > SIZE_MAX / sizeof(XrCoreIrKey)) {
+        xr_free(source_blocks);
+        xr_free(xi_blocks);
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    }
+    uint32_t map_capacity = (uint32_t) map_capacity_wide;
+    source_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*source_keys)) : NULL;
+    target_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*target_keys)) : NULL;
     if (map_capacity && (!source_keys || !target_keys)) {
-        xr_free(source_keys);
         xr_free(target_keys);
+        xr_free(source_keys);
+        xr_free(source_blocks);
+        xr_free(xi_blocks);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
+
+    XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
     uint32_t map_count = 0u;
-    uint32_t cancel_argument = 0u;
-    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
-        const XrXiBlockArgumentStorage *logical = &handler->argument_storage[argument];
-        if (logical->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
-            continue;
-        if (!xr_core_ir_key_equal(source->arguments[argument].key, logical->key)) {
-            xr_free(source_keys);
-            xr_free(target_keys);
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi shared cleanup argument order changed before projection");
+    for (uint32_t block = 0u; block < member_count && status == XR_PROGRAM_BUILD_OK; ++block) {
+        const XrXiBlockStorage *source_storage = find_block_storage(function, xi_blocks[block]);
+        const XrCoreIrBlockInput *source = source_blocks[block];
+        XrCoreIrBlockInput *target = &cancel->blocks[block];
+        if (!source_storage || source_storage->argument_count != source->argument_count) {
+            status = XR_PROGRAM_BUILD_INVALID_INPUT;
+            break;
         }
-        cancel->arguments[cancel_argument] = source->arguments[argument];
-        cancel->arguments[cancel_argument].key =
-            cancel_argument_key(function, safepoint_id, cancel_argument);
-        source_keys[map_count] = source->arguments[argument].key;
-        target_keys[map_count++] = cancel->arguments[cancel_argument++].key;
-    }
-    if (cancel_argument != point->ndrops) {
-        xr_free(source_keys);
-        xr_free(target_keys);
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi shared cleanup owner projection changed during materialization");
-    }
-
-    bool has_block_arguments =
-        source->instructions[0].operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT;
-    bool omit_empty_arguments = has_block_arguments && point->ndrops == 0u;
-    cancel->instruction_count = source->instruction_count - (omit_empty_arguments ? 1u : 0u);
-    cancel->instructions = xr_calloc(cancel->instruction_count, sizeof(*cancel->instructions));
-    if (!cancel->instructions) {
-        xr_free(source_keys);
-        xr_free(target_keys);
-        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    }
-    for (uint32_t instruction = has_block_arguments ? 1u : 0u;
-         instruction + 1u < source->instruction_count; ++instruction) {
-        if (xr_core_ir_key_is_zero(source->instructions[instruction].result))
-            continue;
-        source_keys[map_count] = source->instructions[instruction].result;
-        target_keys[map_count++] = cancel_result_key(function, safepoint_id, instruction);
-    }
-
-    uint32_t target_index = 0u;
-    for (uint32_t instruction = 0u; instruction < source->instruction_count; ++instruction) {
-        const XrCoreIrInstructionInput *from = &source->instructions[instruction];
-        if (instruction == 0u && has_block_arguments) {
-            if (omit_empty_arguments)
+        target->key = cancel_graph_block_key(function, safepoint_id, xi_blocks[block], handler->xi);
+        uint32_t argument_count = 0u;
+        for (uint32_t argument = 0u; argument < source->argument_count; ++argument)
+            argument_count +=
+                !(block == 0u && source_storage->argument_storage[argument].implicit_invoke_kind ==
+                                     XR_XI_INVOKE_ARGUMENT_PANIC);
+        target->argument_count = argument_count;
+        XrCoreIrValueInput *target_arguments =
+            argument_count ? xr_calloc(argument_count, sizeof(*target_arguments)) : NULL;
+        if (argument_count && !target_arguments) {
+            status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            break;
+        }
+        target->arguments = target_arguments;
+        uint32_t target_argument = 0u;
+        for (uint32_t argument = 0u; argument < source->argument_count; ++argument) {
+            const XrXiBlockArgumentStorage *logical = &source_storage->argument_storage[argument];
+            if (!xr_core_ir_key_equal(source->arguments[argument].key, logical->key)) {
+                status = XR_PROGRAM_BUILD_INVALID_INPUT;
+                break;
+            }
+            if (block == 0u && logical->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
                 continue;
-            XrCoreIrKey *operands = xr_calloc(point->ndrops, sizeof(*operands));
-            if (!operands) {
-                xr_free(source_keys);
-                xr_free(target_keys);
-                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-            }
-            for (uint32_t argument = 0u; argument < point->ndrops; ++argument)
-                operands[argument] = cancel->arguments[argument].key;
-            cancel->instructions[target_index++] = (XrCoreIrInstructionInput) {
-                .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
-                .result_type_id = XR_CORE_TYPE_VOID,
-                .operands = operands,
-                .operand_count = point->ndrops,
-                .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
-            };
-            continue;
+            target_arguments[target_argument] = source->arguments[argument];
+            target_arguments[target_argument].key =
+                cancel_graph_argument_key(target->key, target_argument);
+            source_keys[map_count] = source->arguments[argument].key;
+            target_keys[map_count++] = target_arguments[target_argument++].key;
         }
-        if (instruction + 1u == source->instruction_count) {
-            cancel->instructions[target_index++] = (XrCoreIrInstructionInput) {
-                .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
-                .result_type_id = XR_CORE_TYPE_VOID,
-                .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
-            };
-            continue;
-        }
-        if (from->successor_count != 0u &&
-            (!cleanup_trap_capable_operation(from->operation_id) || from->successor_count != 1u)) {
-            xr_free(source_keys);
-            xr_free(target_keys);
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi shared cleanup projection crosses a Program block boundary");
-        }
-        XrCoreIrInstructionInput *to = &cancel->instructions[target_index++];
-        *to = *from;
-        to->operands = NULL;
-        to->successors = NULL;
-        if (!xr_core_ir_key_is_zero(from->result) &&
-            !remap_cancel_cleanup_key(source_keys, target_keys, map_count, from->result,
-                                      &to->result)) {
-            xr_free(source_keys);
-            xr_free(target_keys);
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi shared cleanup result has no private key");
-        }
-        if (from->operand_count != 0u) {
-            XrCoreIrKey *operands = xr_calloc(from->operand_count, sizeof(*operands));
-            if (!operands) {
-                xr_free(source_keys);
-                xr_free(target_keys);
-                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-            }
-            for (uint32_t operand = 0u; operand < from->operand_count; ++operand) {
-                if (remap_cancel_cleanup_key(source_keys, target_keys, map_count,
-                                             from->operands[operand], &operands[operand]))
-                    continue;
-                if (block_has_argument_key(source, from->operands[operand])) {
-                    xr_free(operands);
-                    xr_free(source_keys);
-                    xr_free(target_keys);
-                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                "Xi shared cleanup body depends on a reason-specific payload");
-                }
-                operands[operand] = from->operands[operand];
-            }
-            to->operands = operands;
-        }
-        if (from->successor_count != 0u) {
-            XrCoreIrKey *successors = xr_calloc(from->successor_count, sizeof(*successors));
-            if (!successors) {
-                xr_free(source_keys);
-                xr_free(target_keys);
-                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-            }
-            memcpy(successors, from->successors,
-                   (size_t) from->successor_count * sizeof(*successors));
-            to->successors = successors;
+        if (target_argument != argument_count)
+            status = XR_PROGRAM_BUILD_INVALID_INPUT;
+        for (uint32_t instruction = 0u;
+             instruction < source->instruction_count && status == XR_PROGRAM_BUILD_OK;
+             ++instruction) {
+            if (xr_core_ir_key_is_zero(source->instructions[instruction].result))
+                continue;
+            source_keys[map_count] = source->instructions[instruction].result;
+            target_keys[map_count++] = cancel_graph_result_key(target->key, instruction);
         }
     }
-    xr_free(source_keys);
+
+    uint32_t reason_terminal_count = 0u;
+    for (uint32_t block = 0u; block < member_count && status == XR_PROGRAM_BUILD_OK; ++block) {
+        const XrCoreIrBlockInput *source = source_blocks[block];
+        XrCoreIrBlockInput *target = &cancel->blocks[block];
+        bool has_block_arguments =
+            source->instructions[0].operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT;
+        bool omit_empty_arguments = has_block_arguments && target->argument_count == 0u;
+        target->instruction_count = source->instruction_count - (omit_empty_arguments ? 1u : 0u);
+        XrCoreIrInstructionInput *target_instructions =
+            xr_calloc(target->instruction_count, sizeof(*target_instructions));
+        if (!target_instructions) {
+            status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            break;
+        }
+        target->instructions = target_instructions;
+        uint32_t target_instruction = 0u;
+        for (uint32_t instruction = 0u; instruction < source->instruction_count; ++instruction) {
+            const XrCoreIrInstructionInput *from = &source->instructions[instruction];
+            if (instruction == 0u && has_block_arguments) {
+                if (omit_empty_arguments)
+                    continue;
+                XrCoreIrKey *operands = xr_calloc(target->argument_count, sizeof(*operands));
+                if (!operands) {
+                    status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                    break;
+                }
+                for (uint32_t argument = 0u; argument < target->argument_count; ++argument)
+                    operands[argument] = target->arguments[argument].key;
+                target_instructions[target_instruction++] = (XrCoreIrInstructionInput) {
+                    .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+                    .result_type_id = XR_CORE_TYPE_VOID,
+                    .operands = operands,
+                    .operand_count = target->argument_count,
+                    .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+                };
+                continue;
+            }
+            bool reason_terminal = instruction + 1u == source->instruction_count &&
+                                   from->successor_count == 0u &&
+                                   (from->operation_id == XR_CORE_OP_CORE_TRAP ||
+                                    from->operation_id == XR_CORE_OP_CORE_PANIC_PUBLISH ||
+                                    from->operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH);
+            if (reason_terminal) {
+                target_instructions[target_instruction++] = (XrCoreIrInstructionInput) {
+                    .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
+                    .result_type_id = XR_CORE_TYPE_VOID,
+                    .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+                };
+                ++reason_terminal_count;
+                continue;
+            }
+            XrCoreIrInstructionInput *to = &target_instructions[target_instruction++];
+            *to = *from;
+            to->operands = NULL;
+            to->successors = NULL;
+            if (!xr_core_ir_key_is_zero(from->result) &&
+                !remap_cancel_cleanup_key(source_keys, target_keys, map_count, from->result,
+                                          &to->result)) {
+                status = XR_PROGRAM_BUILD_INVALID_INPUT;
+                break;
+            }
+            if (from->operand_count != 0u) {
+                XrCoreIrKey *operands = xr_calloc(from->operand_count, sizeof(*operands));
+                if (!operands) {
+                    status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                    break;
+                }
+                for (uint32_t operand = 0u; operand < from->operand_count; ++operand) {
+                    if (!remap_cancel_cleanup_key(source_keys, target_keys, map_count,
+                                                  from->operands[operand], &operands[operand])) {
+                        if (cancel_graph_has_argument(source_blocks, member_count,
+                                                      from->operands[operand])) {
+                            xr_free(operands);
+                            status = XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
+                            break;
+                        }
+                        operands[operand] = from->operands[operand];
+                    }
+                }
+                if (status != XR_PROGRAM_BUILD_OK)
+                    break;
+                to->operands = operands;
+            }
+            if (from->successor_count != 0u) {
+                XrCoreIrKey *successors = xr_calloc(from->successor_count, sizeof(*successors));
+                if (!successors) {
+                    status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                    break;
+                }
+                for (uint32_t successor = 0u; successor < from->successor_count; ++successor) {
+                    successors[successor] = from->successors[successor];
+                    for (uint32_t member = 0u; member < member_count; ++member)
+                        if (xr_core_ir_key_equal(from->successors[successor],
+                                                 source_blocks[member]->key)) {
+                            successors[successor] = cancel->blocks[member].key;
+                            break;
+                        }
+                }
+                to->successors = successors;
+            }
+        }
+        if (target_instruction != target->instruction_count)
+            status = XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (status == XR_PROGRAM_BUILD_OK && reason_terminal_count != 1u)
+        status = XR_PROGRAM_BUILD_INVALID_INPUT;
     xr_free(target_keys);
-    if (target_index != cancel->instruction_count)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi shared cleanup projection changed instruction count");
+    xr_free(source_keys);
+    xr_free(source_blocks);
+    xr_free(xi_blocks);
+    if (status == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE)
+        return fail(diagnostic, diagnostic_size, status,
+                    "Xi shared cleanup graph depends on a reason-specific payload");
+    if (status != XR_PROGRAM_BUILD_OK)
+        return fail(diagnostic, diagnostic_size, status,
+                    "Xi shared cleanup graph could not be projected for cancellation");
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -10457,11 +10832,16 @@ append_cancel_handler_operands(const XrXiBuildContext *context,
                                const XrXiBlockStorage *handler, const XiCoroSuspendPoint *point,
                                char *diagnostic, size_t diagnostic_size) {
     if (!context || !instruction || !function || !source || !handler || !point ||
-        !cancel_handler_owner_payload_is_exact(context, function, handler, point) ||
-        point->ndrops > UINT32_MAX - instruction->operand_count)
+        !cancel_handler_payload_is_exact(context, function, handler, point))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi cancel handler has no exact owner payload");
-    uint32_t count = instruction->operand_count + point->ndrops;
+    uint32_t handler_argument_count = 0u;
+    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument)
+        handler_argument_count +=
+            handler->argument_storage[argument].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_PANIC;
+    if (handler_argument_count > UINT32_MAX - instruction->operand_count)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t count = instruction->operand_count + handler_argument_count;
     XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
     if (count && !operands)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -10473,16 +10853,8 @@ append_cancel_handler_operands(const XrXiBuildContext *context,
         const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
         if (edge_argument->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
             continue;
-        const XiValue *logical_argument =
-            canonical_owner_storage_identity(context, function, edge_argument->source);
-        uint32_t drop_matches = 0u;
-        for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
-            drop_matches += canonical_cancel_drop_identity(context, function, point,
-                                                           point->drops[drop]) == logical_argument;
-        if (!logical_argument || drop_matches != 1u || edge_argument->phi ||
+        if (edge_argument->phi ||
             edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-            edge_argument->category != XR_CORE_IR_VALUE ||
-            edge_argument->ownership != XR_CORE_IR_OWNER ||
             !edge_value_operand_key(context, function, source, edge_argument->source, point->op,
                                     &operands[cursor++])) {
             xr_free(operands);
@@ -10493,7 +10865,7 @@ append_cancel_handler_operands(const XrXiBuildContext *context,
     if (cursor != count) {
         xr_free(operands);
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi cancel handler owner count changed during translation");
+                    "Xi cancel handler argument count changed during translation");
     }
     xr_free((void *) instruction->operands);
     instruction->operands = operands;
@@ -10520,7 +10892,6 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi cooperative yield in b%u has no exact canonical resume/live set",
                     block && block->xi ? block->xi->id : UINT32_MAX);
-
     instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_YIELD;
     instruction->result_type_id = XR_CORE_TYPE_VOID;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
@@ -11072,12 +11443,61 @@ static XrCoreIrBlockInput *find_input_block(XrXiFunctionStorage *function, uint3
     return NULL;
 }
 
+static uint32_t cleanup_projection_block_body_begin(const XrCoreIrBlockInput *block) {
+    return block && block->instruction_count != 0u &&
+                   block->instructions[0].operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT
+               ? 1u
+               : 0u;
+}
+
+static bool cleanup_projection_slice_limits(XrXiFunctionStorage *function,
+                                            const XrXiCleanupProjectionStorage *projection,
+                                            uint32_t original_block_count,
+                                            XrXiBlockStorage **source_storage_out,
+                                            XrCoreIrBlockInput **source_out, uint32_t *begin_limit,
+                                            uint32_t *end_limit) {
+    XrXiCleanupPointStorage *point = projection ? projection->point : NULL;
+    const XiBlock *source_block = projection ? projection->source_block : NULL;
+    if (!point || !source_block)
+        return false;
+    XrXiBlockStorage *source_storage = find_block_storage(function, source_block);
+    XrCoreIrBlockInput *source =
+        find_input_block(function, original_block_count, block_key(function, source_block));
+    if (!source_storage || !source || source->instruction_count == 0u)
+        return false;
+    uint32_t begin = cleanup_projection_block_body_begin(source);
+    uint32_t end = source->instruction_count - 1u;
+    if (source_block == point->enter_block) {
+        if (!point->enter_emitted || point->enter_gap < begin || point->enter_gap > end)
+            return false;
+        begin = point->enter_gap;
+    }
+    if (source_block == point->leave_block) {
+        if (!point->leave_emitted || point->leave_gap < begin || point->leave_gap > end)
+            return false;
+        end = point->leave_gap;
+    }
+    if (begin > end)
+        return false;
+    if (source_storage_out)
+        *source_storage_out = source_storage;
+    if (source_out)
+        *source_out = source;
+    if (begin_limit)
+        *begin_limit = begin;
+    if (end_limit)
+        *end_limit = end;
+    return true;
+}
+
 static XrXiCleanupProjectionStorage *find_cleanup_projection(XrXiFunctionStorage *function,
                                                              const XrXiCleanupPointStorage *point,
+                                                             const XiBlock *source_block,
                                                              uint32_t begin_gap) {
     for (uint32_t index = 0u; function && index < function->cleanup_projection_count; ++index) {
         XrXiCleanupProjectionStorage *projection = &function->cleanup_projections[index];
-        if (projection->point == point && projection->begin_gap == begin_gap)
+        if (projection->point == point && projection->source_block == source_block &&
+            projection->begin_gap == begin_gap)
             return projection;
     }
     return NULL;
@@ -11085,13 +11505,14 @@ static XrXiCleanupProjectionStorage *find_cleanup_projection(XrXiFunctionStorage
 
 static XrProgramBuildStatus
 ensure_cleanup_projection(XrXiFunctionStorage *function, XrXiCleanupPointStorage *point,
-                          uint32_t begin_gap, XrXiCleanupProjectionStorage **projection_out) {
+                          const XiBlock *source_block, uint32_t begin_gap,
+                          XrXiCleanupProjectionStorage **projection_out) {
     if (projection_out)
         *projection_out = NULL;
-    if (!function || !point || !projection_out || begin_gap < point->enter_gap ||
-        begin_gap > point->leave_gap)
+    if (!function || !point || !source_block || !projection_out)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
-    XrXiCleanupProjectionStorage *existing = find_cleanup_projection(function, point, begin_gap);
+    XrXiCleanupProjectionStorage *existing =
+        find_cleanup_projection(function, point, source_block, begin_gap);
     if (existing) {
         *projection_out = existing;
         return XR_PROGRAM_BUILD_OK;
@@ -11114,10 +11535,122 @@ ensure_cleanup_projection(XrXiFunctionStorage *function, XrXiCleanupPointStorage
     XrXiCleanupProjectionStorage *projection =
         &function->cleanup_projections[function->cleanup_projection_count++];
     projection->point = point;
+    projection->source_block = source_block;
     projection->begin_gap = begin_gap;
     projection->end_gap = begin_gap;
     *projection_out = projection;
     return XR_PROGRAM_BUILD_OK;
+}
+
+static const XiBlock *cleanup_projection_xi_block_for_key(const XrXiFunctionStorage *function,
+                                                          XrCoreIrKey key) {
+    for (uint32_t block = 0u; function && function->xi && block < function->xi->nblocks; ++block)
+        if (xr_core_ir_key_equal(block_key(function, function->xi->blocks[block]), key))
+            return function->xi->blocks[block];
+    return NULL;
+}
+
+static bool cleanup_projection_block_is_in_boundary(const XrXiFunctionStorage *function,
+                                                    const XiBlock *block,
+                                                    const XiCleanupBoundary *boundary) {
+    if (!function || !block || !boundary)
+        return false;
+    for (uint32_t value = 0u; value < block->nvalues; ++value) {
+        const XiCleanupBoundary *active = NULL;
+        if (!block->values[value] ||
+            !active_cleanup_boundary_at_program_point(function, block->values[value], &active))
+            return false;
+        if (active == boundary)
+            return true;
+    }
+    return false;
+}
+
+static XrProgramBuildStatus mark_cleanup_trap_projection_graph(
+    XrXiFunctionStorage *function, XrXiCleanupPointStorage *point, const XiBlock *source_block,
+    uint32_t begin_gap, uint32_t original_block_count, char *diagnostic, size_t diagnostic_size) {
+    XrXiCleanupProjectionStorage *projection = NULL;
+    XrProgramBuildStatus status =
+        ensure_cleanup_projection(function, point, source_block, begin_gap, &projection);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    if (projection->flow_state == 2u || projection->flow_state == 1u)
+        return XR_PROGRAM_BUILD_OK;
+    projection->flow_state = 1u;
+
+    XrCoreIrBlockInput *source = NULL;
+    uint32_t begin_limit = 0u;
+    uint32_t end_limit = 0u;
+    if (!cleanup_projection_slice_limits(function, projection, original_block_count, NULL, &source,
+                                         &begin_limit, &end_limit) ||
+        begin_gap < begin_limit || begin_gap > end_limit)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "cleanup projection b%u:%u is outside its closed boundary",
+                    source_block ? source_block->id : UINT32_MAX, begin_gap);
+
+    projection->end_gap = end_limit;
+    projection->ends_in_trap = false;
+    for (uint32_t instruction = begin_gap; instruction < end_limit; ++instruction) {
+        if (!cleanup_trap_capable_operation(source->instructions[instruction].operation_id))
+            continue;
+        projection->end_gap = instruction + 1u;
+        projection->ends_in_trap = true;
+        break;
+    }
+
+    if (projection->ends_in_trap) {
+        status =
+            mark_cleanup_trap_projection_graph(function, point, source_block, projection->end_gap,
+                                               original_block_count, diagnostic, diagnostic_size);
+    } else if (source_block == point->leave_block && projection->end_gap == point->leave_gap) {
+        const XiValue *remaining = point->boundary ? point->boundary->remaining : NULL;
+        if (remaining) {
+            XrXiCleanupPointStorage *next =
+                find_cleanup_point(function, remaining->cleanup_boundary);
+            if (!next || next->boundary->enter != remaining)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "cleanup boundary has no exact remaining program point");
+            status = mark_cleanup_trap_projection_graph(function, next, next->enter_block,
+                                                        next->enter_gap, original_block_count,
+                                                        diagnostic, diagnostic_size);
+        }
+    } else {
+        const XrCoreIrInstructionInput *terminal =
+            &source->instructions[source->instruction_count - 1u];
+        if ((terminal->operation_id != XR_CORE_OP_CORE_BRANCH &&
+             terminal->operation_id != XR_CORE_OP_CORE_CONDITIONAL_BRANCH) ||
+            terminal->successor_count == 0u || terminal->successor_count > 2u)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "cleanup projection b%u exits its boundary before leave", source_block->id);
+        for (uint32_t successor = 0u; successor < terminal->successor_count; ++successor) {
+            const XiBlock *target =
+                cleanup_projection_xi_block_for_key(function, terminal->successors[successor]);
+            if (!target ||
+                !cleanup_projection_block_is_in_boundary(function, target, point->boundary))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "cleanup projection b%u has an out-of-boundary successor",
+                            source_block->id);
+            XrXiCleanupProjectionStorage target_identity = {
+                .point = point,
+                .source_block = target,
+            };
+            XrCoreIrBlockInput *target_source = NULL;
+            uint32_t target_begin = 0u;
+            if (!cleanup_projection_slice_limits(function, &target_identity, original_block_count,
+                                                 NULL, &target_source, &target_begin, NULL))
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            status = mark_cleanup_trap_projection_graph(function, point, target, target_begin,
+                                                        original_block_count, diagnostic,
+                                                        diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                break;
+        }
+    }
+    projection = find_cleanup_projection(function, point, source_block, begin_gap);
+    if (!projection)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    projection->flow_state = status == XR_PROGRAM_BUILD_OK ? 2u : 0u;
+    return status;
 }
 
 static bool cleanup_projection_value_info(const XrCoreIrBlockInput *block, XrCoreIrKey key,
@@ -11273,33 +11806,6 @@ cleanup_projection_add_argument(XrXiFunctionStorage *function,
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus mark_cleanup_trap_projection_chain(XrXiFunctionStorage *function,
-                                                               const XiValue *remaining,
-                                                               char *diagnostic,
-                                                               size_t diagnostic_size) {
-    for (uint32_t steps = 0u; remaining && steps < function->cleanup_point_count; ++steps) {
-        const XiCleanupBoundary *boundary = remaining->cleanup_boundary;
-        XrXiCleanupPointStorage *point = find_cleanup_point(function, boundary);
-        if (!point || boundary->enter != remaining ||
-            boundary->kind != XI_CLEANUP_BOUNDARY_CLOSED || !point->enter_emitted ||
-            !point->leave_emitted || point->enter_block != point->leave_block ||
-            point->enter_gap > point->leave_gap)
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "cleanup remaining v%u is not a closed single-block Program slice",
-                        remaining->id);
-        XrXiCleanupProjectionStorage *projection = NULL;
-        XrProgramBuildStatus status =
-            ensure_cleanup_projection(function, point, point->enter_gap, &projection);
-        if (status != XR_PROGRAM_BUILD_OK)
-            return status;
-        remaining = boundary->remaining;
-    }
-    if (remaining)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "cleanup remaining chain exceeds its verified boundary count");
-    return XR_PROGRAM_BUILD_OK;
-}
-
 static XrProgramBuildStatus prepare_cleanup_trap_projection_arguments(
     const XrXiBuildContext *context, XrXiFunctionStorage *function,
     XrXiCleanupProjectionStorage *projection, uint32_t original_block_count, char *diagnostic,
@@ -11307,33 +11813,29 @@ static XrProgramBuildStatus prepare_cleanup_trap_projection_arguments(
     XrXiCleanupPointStorage *point = projection ? projection->point : NULL;
     if (!point)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
-    XrXiBlockStorage *source_storage = find_block_storage(function, point->enter_block);
-    XrCoreIrBlockInput *source =
-        find_input_block(function, original_block_count, block_key(function, point->enter_block));
-    if (!source_storage || !source || projection->begin_gap < point->enter_gap ||
-        projection->begin_gap > point->leave_gap || point->enter_gap > point->leave_gap ||
-        point->leave_gap > source->instruction_count ||
-        point->enter_value_index >= point->leave_value_index ||
-        point->leave_value_index >= point->enter_block->nvalues)
+    XrXiBlockStorage *source_storage = NULL;
+    XrCoreIrBlockInput *source = NULL;
+    uint32_t begin_limit = 0u;
+    uint32_t end_limit = 0u;
+    if (!cleanup_projection_slice_limits(function, projection, original_block_count,
+                                         &source_storage, &source, &begin_limit, &end_limit) ||
+        projection->flow_state != 2u || projection->begin_gap < begin_limit ||
+        projection->begin_gap > projection->end_gap || projection->end_gap > end_limit)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
-    projection->end_gap = point->leave_gap;
-    projection->ends_in_trap = false;
-    for (uint32_t instruction = projection->begin_gap; instruction < point->leave_gap;
-         ++instruction) {
-        if (!cleanup_trap_capable_operation(source->instructions[instruction].operation_id))
-            continue;
-        projection->end_gap = instruction + 1u;
-        projection->ends_in_trap = true;
-        break;
+
+    XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
+    if (projection->begin_gap == begin_limit) {
+        for (uint32_t argument = 0u; argument < source->argument_count; ++argument) {
+            status = cleanup_projection_add_argument(function, projection, source,
+                                                     source->arguments[argument].key, diagnostic,
+                                                     diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
     }
-    for (uint32_t value = point->enter_value_index + 1u; value < point->leave_value_index; ++value)
-        if (point->enter_block->values[value] &&
-            point->enter_block->values[value]->op == XI_CLEANUP_ENTER)
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "cleanup trap projection contains a nested cleanup boundary");
 
     uint32_t owner_definition_limit = projection->begin_gap;
-    if (owner_definition_limit > point->enter_gap &&
+    if (owner_definition_limit > begin_limit &&
         cleanup_trap_capable_operation(
             source->instructions[owner_definition_limit - 1u].operation_id))
         --owner_definition_limit;
@@ -11359,7 +11861,6 @@ static XrProgramBuildStatus prepare_cleanup_trap_projection_arguments(
         if (!duplicate)
             owners[owner_count++] = candidate->result;
     }
-    XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
     for (uint32_t owner = 0u; owner < owner_count && status == XR_PROGRAM_BUILD_OK; ++owner) {
         uint32_t consumes = 0u;
         for (uint32_t instruction = 0u; instruction < projection->begin_gap; ++instruction) {
@@ -11410,6 +11911,33 @@ static XrProgramBuildStatus prepare_cleanup_trap_projection_arguments(
                 return status;
         }
     }
+    bool reaches_block_terminal = !projection->ends_in_trap && projection->end_gap == end_limit &&
+                                  projection->source_block != point->leave_block;
+    if (reaches_block_terminal) {
+        const XrCoreIrInstructionInput *terminal =
+            &source->instructions[source->instruction_count - 1u];
+        for (uint32_t operand = 0u; operand < terminal->operand_count; ++operand) {
+            XrCoreIrKey dependency = terminal->operands[operand];
+            if (cleanup_projection_key_is_internal(source, dependency, projection->begin_gap,
+                                                   projection->end_gap))
+                continue;
+            XrXiCleanupProjectionValueInfo info;
+            if (!cleanup_projection_value_info(source, dependency, &info))
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            if (info.category == XR_CORE_IR_PLACE) {
+                XrCoreIrKey root = {{0}};
+                if (!cleanup_projection_place_root(source, dependency, projection->begin_gap,
+                                                   &root))
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "cleanup branch cannot reconstruct a borrowed place");
+                dependency = root;
+            }
+            status = cleanup_projection_add_argument(function, projection, source, dependency,
+                                                     diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -11424,8 +11952,11 @@ cleanup_projection_successor(XrXiFunctionStorage *function,
     if (projection->ends_in_trap) {
         if (successor_expected)
             *successor_expected = true;
-        return find_cleanup_projection(function, projection->point, projection->end_gap);
+        return find_cleanup_projection(function, projection->point, projection->source_block,
+                                       projection->end_gap);
     }
+    if (projection->source_block != projection->point->leave_block)
+        return NULL;
     const XiCleanupBoundary *boundary = projection->point->boundary;
     if (!boundary || !boundary->remaining)
         return NULL;
@@ -11433,7 +11964,9 @@ cleanup_projection_successor(XrXiFunctionStorage *function,
         *successor_expected = true;
     XrXiCleanupPointStorage *next_point =
         find_cleanup_point(function, boundary->remaining->cleanup_boundary);
-    return next_point ? find_cleanup_projection(function, next_point, next_point->enter_gap) : NULL;
+    return next_point ? find_cleanup_projection(function, next_point, next_point->enter_block,
+                                                next_point->enter_gap)
+                      : NULL;
 }
 
 static XrProgramBuildStatus close_cleanup_projection_arguments(
@@ -11460,7 +11993,7 @@ static XrProgramBuildStatus close_cleanup_projection_arguments(
         if (status != XR_PROGRAM_BUILD_OK)
             return status;
         XrCoreIrBlockInput *source = find_input_block(
-            function, original_block_count, block_key(function, projection->point->enter_block));
+            function, original_block_count, block_key(function, projection->source_block));
         if (!source)
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         for (uint32_t argument = 0u; argument < next->trap_argument_count; ++argument) {
@@ -11552,13 +12085,16 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
     XrXiCleanupPointStorage *point = projection ? projection->point : NULL;
     if (!point)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
-    XrXiBlockStorage *source_storage = find_block_storage(function, point->enter_block);
-    XrCoreIrBlockInput *source =
-        find_input_block(function, original_block_count, block_key(function, point->enter_block));
-    if (!source_storage || !source || !output || projection->trap_instructions ||
-        projection->begin_gap < point->enter_gap || projection->begin_gap > projection->end_gap ||
-        projection->end_gap > point->leave_gap || point->enter_gap > point->leave_gap ||
-        point->leave_gap > source->instruction_count || projection->argument_state != 2u)
+    XrXiBlockStorage *source_storage = NULL;
+    XrCoreIrBlockInput *source = NULL;
+    uint32_t begin_limit = 0u;
+    uint32_t end_limit = 0u;
+    bool exact_slice =
+        cleanup_projection_slice_limits(function, projection, original_block_count, &source_storage,
+                                        &source, &begin_limit, &end_limit);
+    if (!source_storage || !source || !output || projection->trap_instructions || !exact_slice ||
+        projection->begin_gap < begin_limit || projection->begin_gap > projection->end_gap ||
+        projection->end_gap > end_limit || projection->argument_state != 2u)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
 
     uint32_t body_count = projection->end_gap - projection->begin_gap;
@@ -11779,8 +12315,73 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
 
     XrCoreIrKey *terminal_operands = NULL;
     uint32_t terminal_operand_count = 0u;
+    XrCoreIrKey *terminal_successors = NULL;
+    uint32_t terminal_successor_count = 0u;
     uint16_t terminal_operation = XR_CORE_OP_CORE_TRAP;
-    if (next) {
+    bool crosses_block =
+        !projection->ends_in_trap && projection->source_block != point->leave_block;
+    if (crosses_block) {
+        const XrCoreIrInstructionInput *from =
+            &source->instructions[source->instruction_count - 1u];
+        if ((from->operation_id != XR_CORE_OP_CORE_BRANCH &&
+             from->operation_id != XR_CORE_OP_CORE_CONDITIONAL_BRANCH) ||
+            from->successor_count == 0u || from->successor_count > 2u)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        terminal_operation = from->operation_id;
+        terminal_operand_count = from->operand_count;
+        terminal_successor_count = from->successor_count;
+        terminal_operands = terminal_operand_count
+                                ? xr_calloc(terminal_operand_count, sizeof(*terminal_operands))
+                                : NULL;
+        terminal_successors = xr_calloc(terminal_successor_count, sizeof(*terminal_successors));
+        if ((terminal_operand_count && !terminal_operands) || !terminal_successors) {
+            xr_free(terminal_successors);
+            xr_free(terminal_operands);
+            xr_free(target_keys);
+            xr_free(source_keys);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t operand = 0u; operand < terminal_operand_count; ++operand) {
+            if (!cleanup_projection_remap_key(source_keys, target_keys, map_count,
+                                              from->operands[operand],
+                                              &terminal_operands[operand])) {
+                xr_free(terminal_successors);
+                xr_free(terminal_operands);
+                xr_free(target_keys);
+                xr_free(source_keys);
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "cleanup branch operand is not closed over its slice");
+            }
+        }
+        for (uint32_t successor = 0u; successor < terminal_successor_count; ++successor) {
+            const XiBlock *target =
+                cleanup_projection_xi_block_for_key(function, from->successors[successor]);
+            XrXiCleanupProjectionStorage target_identity = {
+                .point = point,
+                .source_block = target,
+            };
+            uint32_t target_begin = 0u;
+            if (!target ||
+                !cleanup_projection_slice_limits(function, &target_identity, original_block_count,
+                                                 NULL, NULL, &target_begin, NULL)) {
+                xr_free(terminal_successors);
+                xr_free(terminal_operands);
+                xr_free(target_keys);
+                xr_free(source_keys);
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
+            XrXiCleanupProjectionStorage *target_projection =
+                find_cleanup_projection(function, point, target, target_begin);
+            if (!target_projection) {
+                xr_free(terminal_successors);
+                xr_free(terminal_operands);
+                xr_free(target_keys);
+                xr_free(source_keys);
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
+            terminal_successors[successor] = cleanup_trap_block_key(function, target_projection);
+        }
+    } else if (next) {
         terminal_operation = XR_CORE_OP_CORE_BRANCH;
         terminal_operand_count = next->trap_argument_count;
         terminal_operands = terminal_operand_count
@@ -11802,6 +12403,15 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
                             "cleanup trap projection cannot continue to its remaining item");
             }
         }
+        terminal_successor_count = 1u;
+        terminal_successors = xr_calloc(1u, sizeof(*terminal_successors));
+        if (!terminal_successors) {
+            xr_free(terminal_operands);
+            xr_free(target_keys);
+            xr_free(source_keys);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        *terminal_successors = cleanup_trap_block_key(function, next);
     }
 
     for (uint32_t mapped = 0u; mapped < map_count; ++mapped) {
@@ -11822,7 +12432,11 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
         uint32_t transfers = 0u;
         for (uint32_t operand = 0u; operand < terminal_operand_count; ++operand)
             transfers += xr_core_ir_key_equal(terminal_operands[operand], target_keys[mapped]);
+        if (crosses_block && terminal_operation == XR_CORE_OP_CORE_CONDITIONAL_BRANCH &&
+            transfers != 0u)
+            transfers = 1u;
         if (consumes > 1u || (consumes != 0u && transfers != 0u) || transfers > 1u) {
+            xr_free(terminal_successors);
             xr_free(terminal_operands);
             xr_free(target_keys);
             xr_free(source_keys);
@@ -11832,6 +12446,7 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
         if (consumes == 0u && transfers == 0u) {
             XrCoreIrKey *drop = xr_calloc(1u, sizeof(*drop));
             if (!drop) {
+                xr_free(terminal_successors);
                 xr_free(terminal_operands);
                 xr_free(target_keys);
                 xr_free(source_keys);
@@ -11852,22 +12467,14 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
     terminal->result_type_id = XR_CORE_TYPE_VOID;
     terminal->operands = terminal_operands;
     terminal->operand_count = terminal_operand_count;
-    terminal->immediate_kind = terminal_operation == XR_CORE_OP_CORE_TRAP
-                                   ? XR_CORE_IR_IMMEDIATE_U32
-                                   : XR_CORE_IR_IMMEDIATE_NONE;
+    terminal->successors = terminal_successors;
+    terminal->successor_count = terminal_successor_count;
+    terminal->immediate_kind =
+        terminal_operation == XR_CORE_OP_CORE_TRAP ? XR_CORE_IR_IMMEDIATE_U32
+        : crosses_block ? source->instructions[source->instruction_count - 1u].immediate_kind
+                        : XR_CORE_IR_IMMEDIATE_NONE;
     if (terminal_operation == XR_CORE_OP_CORE_TRAP)
         terminal->immediate.u32 = 7u;
-    else {
-        XrCoreIrKey *successor = xr_calloc(1u, sizeof(*successor));
-        if (!successor) {
-            xr_free(target_keys);
-            xr_free(source_keys);
-            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-        }
-        *successor = cleanup_trap_block_key(function, next);
-        terminal->successors = successor;
-        terminal->successor_count = 1u;
-    }
     projection->trap_instruction_count = target_instruction;
     output->key = cleanup_trap_block_key(function, projection);
     output->arguments = projection->trap_arguments;
@@ -11913,22 +12520,27 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
                                 "cleanup value v%u emits multiple trap-capable operations",
                                 value->id);
                 XrXiCleanupPointStorage *active = find_cleanup_point(function, boundary);
+                XrXiCleanupProjectionStorage identity = {
+                    .point = active,
+                    .source_block = block->xi,
+                };
+                uint32_t begin_limit = 0u;
+                uint32_t end_limit = 0u;
                 if (!active || boundary->kind != XI_CLEANUP_BOUNDARY_CLOSED ||
                     !active->enter_emitted || !active->leave_emitted ||
-                    active->enter_block != block->xi || active->leave_block != block->xi ||
-                    instruction < active->enter_gap || instruction >= active->leave_gap)
-                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                    !cleanup_projection_slice_limits(function, &identity, original_block_count,
+                                                     NULL, NULL, &begin_limit, &end_limit) ||
+                    instruction < begin_limit || instruction >= end_limit)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "cleanup call v%u is outside a closed Program graph", value->id);
                 uint32_t handler_state = function->cleanup_handler_state_before_value[value->id];
                 if (handler_state != 0u || candidate->successor_count != 0u)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "cleanup call v%u requires composition with an outer handler",
                                 value->id);
-                XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
-                XrXiCleanupProjectionStorage *projection = NULL;
-                status = ensure_cleanup_projection(function, active, instruction + 1u, &projection);
-                if (status == XR_PROGRAM_BUILD_OK && boundary->remaining)
-                    status = mark_cleanup_trap_projection_chain(function, boundary->remaining,
-                                                                diagnostic, diagnostic_size);
+                XrProgramBuildStatus status = mark_cleanup_trap_projection_graph(
+                    function, active, block->xi, instruction + 1u, original_block_count, diagnostic,
+                    diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
             }
@@ -11977,7 +12589,8 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
                     continue;
                 XrXiCleanupPointStorage *active = find_cleanup_point(function, boundary);
                 XrXiCleanupProjectionStorage *target =
-                    active ? find_cleanup_projection(function, active, instruction + 1u) : NULL;
+                    active ? find_cleanup_projection(function, active, block->xi, instruction + 1u)
+                           : NULL;
                 if (!target)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                 "cleanup refusal edge has no exact projected successor");
@@ -12003,9 +12616,11 @@ static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildCont
                                                 : XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE);
     if (exact_infallible_class_construction_in_block(context, function, block))
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BRANCH);
-    if (canonical_block_is_trap_cleanup(context, function, block))
+    if (block->kind == XI_BLOCK_UNREACHABLE &&
+        canonical_block_is_trap_cleanup(context, function, block))
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_TRAP);
-    if (canonical_block_is_cancel_cleanup(context, function, block))
+    if (block->kind == XI_BLOCK_UNREACHABLE &&
+        canonical_block_is_cancel_cleanup(context, function, block))
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CANCEL_PUBLISH);
     if (block->kind == XI_BLOCK_UNREACHABLE)
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PANIC_PUBLISH);
@@ -12500,7 +13115,20 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi function %u has no exact safepoint owner", function_index);
         const XrXiCancelEdge *edge = find_cancel_edge(context, xi, point);
-        synthetic_cancel_count += !edge || edge->private_projection;
+        if (!edge) {
+            if (synthetic_cancel_count == UINT32_MAX)
+                return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+            ++synthetic_cancel_count;
+        } else if (edge->private_projection) {
+            uint32_t private_block_count = 0u;
+            status = static_cleanup_graph_block_count(xi, edge->registration, &private_block_count);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return fail(diagnostic, diagnostic_size, status,
+                            "Xi private cancellation cleanup graph is invalid");
+            if (private_block_count > UINT32_MAX - synthetic_cancel_count)
+                return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+            synthetic_cancel_count += private_block_count;
+        }
     }
     uint32_t cleanup_projection_upper_bound = storage->cleanup_point_count;
     for (uint32_t block = 0u; block < xi->nblocks; ++block) {
@@ -12997,42 +13625,34 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             XrXiBlockStorage *handler = edge ? find_block_storage(storage, edge->handler) : NULL;
             if (edge && !edge->private_projection)
                 continue;
-            XrCoreIrBlockInput *cancel_block = &storage->blocks[output_block_index++];
-            XrXiCancelBlockStorage *cancel = &storage->cancel_blocks[safepoint];
+            XrXiCancelGraphStorage *cancel = &storage->cancel_graphs[safepoint];
             if (edge) {
-                const XrCoreIrBlockInput *source = NULL;
-                XrCoreIrKey source_key = block_key(storage, edge->handler);
-                for (uint32_t block = 0u; block + 1u < output_block_index; ++block) {
-                    if (xr_core_ir_key_equal(storage->blocks[block].key, source_key)) {
-                        source = &storage->blocks[block];
-                        break;
-                    }
-                }
-                if (!handler || !source)
+                if (!handler)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                "Xi shared cancellation cleanup has no Program source block");
-                status = clone_cancel_cleanup_block(context, storage, handler, source, point,
-                                                    safepoint, diagnostic, diagnostic_size);
+                                "Xi shared cancellation cleanup has no Xi source block");
+                status = clone_cancel_cleanup_graph(context, storage, handler, edge->registration,
+                                                    point, safepoint, original_block_count,
+                                                    diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
             }
-            if (!cancel->instructions || cancel->instruction_count == 0u)
+            if (!cancel->blocks || cancel->block_count == 0u)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi function %u has no exact cancellation cleanup", function_index);
-            cancel_block->key = cancel_block_key(storage, safepoint);
-            cancel_block->arguments = cancel->arguments;
-            cancel_block->argument_count = cancel->argument_count;
-            cancel_block->instructions = cancel->instructions;
-            cancel_block->instruction_count = cancel->instruction_count;
-            for (uint32_t instruction = 0u; instruction < cancel->instruction_count;
-                 ++instruction) {
-                const XrCoreOperationSpec *operation =
-                    xr_core_spec_operation_by_id(cancel->instructions[instruction].operation_id);
-                if (!operation)
-                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                "canonical cancellation cleanup has no CoreSpec operation");
-                storage->local_effect_mask |= operation->effect_mask;
-                storage->local_capability_mask |= operation->capability_mask;
+            for (uint32_t cancel_block = 0u; cancel_block < cancel->block_count; ++cancel_block) {
+                if (output_block_index >= block_capacity)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                storage->blocks[output_block_index++] = cancel->blocks[cancel_block];
+                for (uint32_t instruction = 0u;
+                     instruction < cancel->blocks[cancel_block].instruction_count; ++instruction) {
+                    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
+                        cancel->blocks[cancel_block].instructions[instruction].operation_id);
+                    if (!operation)
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "canonical cancellation cleanup has no CoreSpec operation");
+                    storage->local_effect_mask |= operation->effect_mask;
+                    storage->local_capability_mask |= operation->capability_mask;
+                }
             }
         }
     }

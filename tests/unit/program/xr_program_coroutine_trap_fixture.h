@@ -28,6 +28,8 @@ typedef enum XrProgramCoroutineTrapMutation {
     XR_PROGRAM_COROUTINE_TRAP_NO_TRAP_EDGE,
     XR_PROGRAM_COROUTINE_TRAP_BEFORE_YIELD,
     XR_PROGRAM_COROUTINE_TRAP_OTHER_CHILD_TRAP,
+    XR_PROGRAM_COROUTINE_TRAP_REVERSED_LIVE_TUPLE,
+    XR_PROGRAM_COROUTINE_TRAP_CANCEL_NONOWNER,
     XR_PROGRAM_COROUTINE_TRAP_MISSING_OWNER,
     XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_OWNER,
     XR_PROGRAM_COROUTINE_TRAP_OWNER_NOT_DROPPED,
@@ -42,6 +44,7 @@ typedef enum XrProgramCoroutineTrapMutation {
     XR_PROGRAM_COROUTINE_TRAP_PAYLOAD_WITHOUT_EDGE,
     XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_CANCEL_OWNER,
     XR_PROGRAM_COROUTINE_TRAP_MOVED_CALLER_OWNER,
+    XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_LIVE_VALUE,
 } XrProgramCoroutineTrapMutation;
 
 enum {
@@ -292,9 +295,11 @@ static void xr_program_coroutine_trap_parent_cleanup(XrProgramCoroutineTrapBody 
         xr_program_coroutine_trap_argument(
             parent, block, owner_names[index], XR_PROGRAM_COROUTINE_TRAP_AGGREGATE, false,
             !(trap && mutation == XR_PROGRAM_COROUTINE_TRAP_WRONG_OWNERSHIP));
+    bool carries_snapshot = trap || mutation == XR_PROGRAM_COROUTINE_TRAP_CANCEL_NONOWNER;
     XrCoreIrKey snapshot = {{0}};
-    if (trap)
-        snapshot = xr_program_coroutine_trap_argument(parent, block, "trap-snapshot",
+    if (carries_snapshot)
+        snapshot = xr_program_coroutine_trap_argument(parent, block,
+                                                      trap ? "trap-snapshot" : "cancel-snapshot",
                                                       XR_CORE_TYPE_I64, false, false);
     xr_program_coroutine_trap_arguments(parent, block);
     const char *payload_names[] = {trap ? "trap-payload" : "cancel-payload",
@@ -308,9 +313,10 @@ static void xr_program_coroutine_trap_parent_cleanup(XrProgramCoroutineTrapBody 
         xr_program_coroutine_trap_provider(parent, block, result_names[index], payload, contract,
                                            operation);
     }
-    if (trap)
-        xr_program_coroutine_trap_provider(parent, block, "snapshot-result", snapshot, contract,
-                                           operation);
+    if (carries_snapshot)
+        xr_program_coroutine_trap_provider(parent, block,
+                                           trap ? "snapshot-result" : "cancel-snapshot-result",
+                                           snapshot, contract, operation);
     XrCoreIrInstructionInput *terminal = xr_program_coroutine_trap_emit(
         parent, block, trap ? XR_CORE_OP_CORE_TRAP : XR_CORE_OP_CORE_CANCEL_PUBLISH, NULL,
         XR_CORE_TYPE_VOID, NULL, 0u);
@@ -321,13 +327,23 @@ static void xr_program_coroutine_trap_parent_cleanup(XrProgramCoroutineTrapBody 
 }
 
 static void xr_program_coroutine_trap_parent_normal(XrProgramCoroutineTrapBody *parent,
+                                                    XrProgramCoroutineTrapMutation mutation,
                                                     XrStableId contract, XrStableId operation) {
     XrCoreIrKey result = xr_program_coroutine_trap_argument(parent, 1u, "child-result",
                                                             XR_CORE_TYPE_I64, false, false);
-    XrCoreIrKey owner = xr_program_coroutine_trap_argument(
-        parent, 1u, "normal-owner", XR_PROGRAM_COROUTINE_TRAP_AGGREGATE, false, true);
-    XrCoreIrKey snapshot = xr_program_coroutine_trap_argument(parent, 1u, "normal-snapshot",
-                                                              XR_CORE_TYPE_I64, false, false);
+    XrCoreIrKey owner = {{0}};
+    XrCoreIrKey snapshot = {{0}};
+    if (mutation == XR_PROGRAM_COROUTINE_TRAP_REVERSED_LIVE_TUPLE) {
+        snapshot = xr_program_coroutine_trap_argument(parent, 1u, "normal-snapshot",
+                                                      XR_CORE_TYPE_I64, false, false);
+        owner = xr_program_coroutine_trap_argument(
+            parent, 1u, "normal-owner", XR_PROGRAM_COROUTINE_TRAP_AGGREGATE, false, true);
+    } else {
+        owner = xr_program_coroutine_trap_argument(
+            parent, 1u, "normal-owner", XR_PROGRAM_COROUTINE_TRAP_AGGREGATE, false, true);
+        snapshot = xr_program_coroutine_trap_argument(parent, 1u, "normal-snapshot",
+                                                      XR_CORE_TYPE_I64, false, false);
+    }
     xr_program_coroutine_trap_arguments(parent, 1u);
     XrCoreIrKey payload =
         xr_program_coroutine_trap_drop_payload(parent, 1u, "normal-payload", owner, true);
@@ -373,7 +389,7 @@ static void xr_program_coroutine_trap_parent_init(XrProgramCoroutineTrapBody *pa
     field->immediate.field_ordinal = 0u;
     parent->live[0] = owner;
     parent->live[1] = snapshot;
-    xr_program_coroutine_trap_parent_normal(parent, contract, operation);
+    xr_program_coroutine_trap_parent_normal(parent, mutation, contract, operation);
     xr_program_coroutine_trap_parent_cleanup(parent, 2u, mutation, contract, operation);
     if (!no_trap && !cancel_target)
         xr_program_coroutine_trap_parent_cleanup(parent, 3u, mutation, contract, operation);
@@ -381,11 +397,18 @@ static void xr_program_coroutine_trap_parent_init(XrProgramCoroutineTrapBody *pa
         parent->successors[2] = parent->successors[1];
 
     XrCoreIrKey call_values[9] = {token, field->result, owner, snapshot};
+    if (mutation == XR_PROGRAM_COROUTINE_TRAP_REVERSED_LIVE_TUPLE) {
+        call_values[2] = snapshot;
+        call_values[3] = owner;
+    }
+    if (mutation == XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_LIVE_VALUE)
+        call_values[3] = owner;
     if (mutation == XR_PROGRAM_COROUTINE_TRAP_MOVED_CALLER_OWNER)
         call_values[0] = owner;
     uint32_t count = 4u;
     for (uint32_t cancel = 0u; cancel < parent->blocks[2].argument_count; ++cancel)
-        call_values[count++] = owner;
+        call_values[count++] =
+            parent->blocks[2].arguments[cancel].type_id == XR_CORE_TYPE_I64 ? snapshot : owner;
     uint32_t trap_start = count;
     if (cancel_target)
         call_values[count++] = owner;

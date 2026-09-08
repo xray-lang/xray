@@ -2489,7 +2489,7 @@ static void test_coroutine_trap_continuation_lowering_and_mutation(void) {
     char build_diagnostic[256] = {0};
     REQUIRE(xr_program_coroutine_trap_fixture_write_with_ids(
                 contract->contract_id, contract->operations[0].stable_id,
-                XR_PROGRAM_COROUTINE_TRAP_VALID, &artifact, build_diagnostic,
+                XR_PROGRAM_COROUTINE_TRAP_REVERSED_LIVE_TUPLE, &artifact, build_diagnostic,
                 sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *program = NULL;
     XrProgramDiagnostic verify_diagnostic;

@@ -3807,6 +3807,8 @@ static void test_coroutine_child_trap_requires_recoverable_cleanup_inputs(void) 
         XR_PROGRAM_COROUTINE_TRAP_NO_TRAP_EDGE,
         XR_PROGRAM_COROUTINE_TRAP_BEFORE_YIELD,
         XR_PROGRAM_COROUTINE_TRAP_OTHER_CHILD_TRAP,
+        XR_PROGRAM_COROUTINE_TRAP_REVERSED_LIVE_TUPLE,
+        XR_PROGRAM_COROUTINE_TRAP_CANCEL_NONOWNER,
     };
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -3847,6 +3849,7 @@ static void test_coroutine_child_trap_requires_recoverable_cleanup_inputs(void) 
         {XR_PROGRAM_COROUTINE_TRAP_PAYLOAD_WITHOUT_EDGE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
         {XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_CANCEL_OWNER, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
         {XR_PROGRAM_COROUTINE_TRAP_MOVED_CALLER_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_LIVE_VALUE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
     };
     for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
         CHECK(xr_program_coroutine_trap_fixture_write(invalid[index].mutation, &artifact,

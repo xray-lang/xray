@@ -822,6 +822,32 @@ static bool coroutine_read_argument_is_frame_stable(const XrBackendIR *ir,
            borrow_type->interface_id == owner_type->interface_id && owner_live_count == 1u;
 }
 
+static bool safepoint_live_set_matches(const XrBackendFunction *function,
+                                       const XrBackendInstruction *instruction,
+                                       const XrBackendCoroutineSafepoint *point,
+                                       uint32_t live_operand_start) {
+    if (!function || !instruction || !point || live_operand_start > instruction->operand_count ||
+        point->live_value_count > instruction->operand_count - live_operand_start)
+        return false;
+    for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+        uint32_t value = instruction->operands[live_operand_start + live];
+        uint32_t occurrences = 0u;
+        for (uint32_t candidate = 0u; candidate < point->live_value_count; ++candidate)
+            occurrences += point->live_value_ids[candidate] == value;
+        if (value >= function->value_count || occurrences != 1u)
+            return false;
+    }
+    for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+        uint32_t occurrences = 0u;
+        for (uint32_t operand = 0u; operand < point->live_value_count; ++operand)
+            occurrences +=
+                instruction->operands[live_operand_start + operand] == point->live_value_ids[live];
+        if (occurrences != 1u)
+            return false;
+    }
+    return true;
+}
+
 static bool cancel_continuation_matches(const XrBackendFunction *function,
                                         const XrBackendInstruction *instruction,
                                         const XrBackendCoroutineSafepoint *point,
@@ -832,7 +858,8 @@ static bool cancel_continuation_matches(const XrBackendFunction *function,
            instruction->successor_count == 3u)) ||
         instruction->successors[1] >= function->block_count || !point ||
         live_operand_start > instruction->operand_count ||
-        point->live_value_count > instruction->operand_count - live_operand_start)
+        point->live_value_count > instruction->operand_count - live_operand_start ||
+        !safepoint_live_set_matches(function, instruction, point, live_operand_start))
         return false;
     uint32_t cancel_operand_start = live_operand_start + point->live_value_count;
     const XrBackendBlock *cancel = &function->blocks[instruction->successors[1]];
@@ -850,9 +877,10 @@ static bool cancel_continuation_matches(const XrBackendFunction *function,
         uint32_t cancel_occurrences = 0u;
         for (uint32_t index = 0u; index < cancel_count; ++index)
             cancel_occurrences += instruction->operands[cancel_operand_start + index] == source;
-        if (source >= function->value_count || point->live_value_ids[live] != source ||
-            cancel_occurrences !=
-                (function->value_ownerships[source] == XR_CORE_IR_OWNER ? 1u : 0u))
+        bool owner = source < function->value_count &&
+                     function->value_ownerships[source] == XR_CORE_IR_OWNER;
+        if (source >= function->value_count || cancel_occurrences > 1u ||
+            (owner && cancel_occurrences != 1u))
             return false;
     }
     for (uint32_t index = 0u; index < cancel_count; ++index) {
@@ -862,8 +890,7 @@ static bool cancel_continuation_matches(const XrBackendFunction *function,
         for (uint32_t live = 0u; live < point->live_value_count; ++live)
             live_occurrences += point->live_value_ids[live] == source;
         if (source >= function->value_count || target >= function->value_count ||
-            live_occurrences != 1u || function->value_categories[source] != XR_CORE_IR_VALUE ||
-            function->value_ownerships[source] != XR_CORE_IR_OWNER ||
+            live_occurrences != 1u || function->value_categories[source] > XR_CORE_IR_PLACE ||
             cancel->argument_types[index] != function->value_types[source] ||
             cancel->argument_categories[index] != function->value_categories[source] ||
             cancel->argument_ownerships[index] != function->value_ownerships[source])
@@ -1259,8 +1286,7 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     if (instruction->successors[0] !=
                             function->coroutine_states[point->resume_state_id].continuation_block ||
                         instruction->operand_count < point->live_value_count ||
-                        !array_u32_equal(instruction->operands, point->live_value_ids,
-                                         point->live_value_count) ||
+                        !safepoint_live_set_matches(function, instruction, point, 0u) ||
                         !cancel_continuation_matches(function, instruction, point, 0u)) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
@@ -1330,9 +1356,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     for (uint32_t live = 0u; live < point->live_value_count; ++live) {
                         uint32_t operand = callee->parameter_count + live;
                         uint32_t target = implicit_result + live;
-                        uint32_t value = point->live_value_ids[live];
-                        if (instruction->operands[operand] != value ||
-                            normal->argument_types[target] != function->value_types[value] ||
+                        uint32_t value = instruction->operands[operand];
+                        if (normal->argument_types[target] != function->value_types[value] ||
                             normal->argument_categories[target] !=
                                 function->value_categories[value] ||
                             normal->argument_ownerships[target] !=

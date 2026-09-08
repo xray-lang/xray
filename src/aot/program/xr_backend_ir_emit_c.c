@@ -761,6 +761,33 @@ coroutine_suspension_instruction(const XrBackendFunction *function, uint32_t saf
     return found;
 }
 
+/* Safepoint rows are canonical value-id sets.  Frame slots instead follow the
+ * suspension
+ * instruction's live-operand tuple because that tuple is positionally
+ * paired with the resume
+ * block arguments. */
+static bool coroutine_live_operand_start(const XrBackendIR *ir,
+                                         const XrBackendInstruction *instruction,
+                                         const XrBackendCoroutineSafepoint *point,
+                                         uint32_t *start_out) {
+    if (!ir || !instruction || !point || !start_out)
+        return false;
+    uint32_t start = 0u;
+    if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+        uint32_t callee = instruction->immediate.coroutine_call.function_id;
+        if (callee >= ir->function_count)
+            return false;
+        start = ir->functions[callee].parameter_count;
+    } else if (instruction->operation_id != XR_CORE_OP_CORE_COROUTINE_YIELD) {
+        return false;
+    }
+    if (start > instruction->operand_count ||
+        point->live_value_count > instruction->operand_count - start)
+        return false;
+    *start_out = start;
+    return true;
+}
+
 static bool stable_id_equal(XrStableId left, XrStableId right) {
     return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
 }
@@ -855,11 +882,13 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
         const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
         const XrBackendInstruction *instruction =
             coroutine_suspension_instruction(function, safepoint, NULL);
-        if (!instruction)
+        uint32_t live_operand_start = 0u;
+        if (!instruction ||
+            !coroutine_live_operand_start(ir, instruction, point, &live_operand_start))
             return false;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
             char storage[32];
-            uint32_t value = point->live_value_ids[live];
+            uint32_t value = instruction->operands[live_operand_start + live];
             const char *type = type_c_name(function->value_types[value], storage);
             const char *pointer = function->value_categories[value] == XR_CORE_IR_PLACE ? " *" : "";
             if (!type ||
@@ -928,7 +957,7 @@ typedef struct XrCoroutineRefFrameSlot {
 static bool coroutine_ref_parameter_frame_slot(const XrBackendFunction *function,
                                                const XrBackendInstruction *call,
                                                const XrBackendCoroutineSafepoint *point,
-                                               uint32_t parameter,
+                                               uint32_t live_operand_start, uint32_t parameter,
                                                XrCoroutineRefFrameSlot *slot_out) {
     if (!function || !call || !point || !slot_out || parameter >= call->operand_count)
         return false;
@@ -954,7 +983,7 @@ static bool coroutine_ref_parameter_frame_slot(const XrBackendFunction *function
         uint32_t owner = definition->operands[0];
         uint32_t occurrence = 0u;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
-            if (point->live_value_ids[live] != owner)
+            if (call->operands[live_operand_start + live] != owner)
                 continue;
             ++occurrence;
             slot_out->live = live;
@@ -983,7 +1012,8 @@ static bool emit_coroutine_ref_frame_transfers(CBuffer *buffer, const XrBackendF
         if (callee->parameter_modes[parameter] != XR_PARAM_REF)
             continue;
         XrCoroutineRefFrameSlot slot;
-        if (!coroutine_ref_parameter_frame_slot(function, call, point, parameter, &slot)) {
+        if (!coroutine_ref_parameter_frame_slot(function, call, point, callee->parameter_count,
+                                                parameter, &slot)) {
             emitted = false;
             break;
         }
@@ -1034,7 +1064,8 @@ static bool emit_coroutine_ref_bindings(CBuffer *buffer, const XrBackendFunction
         if (callee->parameter_modes[parameter] != XR_PARAM_REF)
             continue;
         XrCoroutineRefFrameSlot slot;
-        if (!coroutine_ref_parameter_frame_slot(function, call, point, parameter, &slot))
+        if (!coroutine_ref_parameter_frame_slot(function, call, point, callee->parameter_count,
+                                                parameter, &slot))
             return false;
         if (slot.uses_slot && !emit_coroutine_ref_place(buffer, function, &slot,
                                                         call->operands[parameter], safepoint))
@@ -2345,7 +2376,7 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
             return false;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
             if (!append_format(buffer, "                v%u = frame->live_%u_%u;\n",
-                               point->live_value_ids[live], safepoint_id, live))
+                               suspension->operands[live_operand_start + live], safepoint_id, live))
                 return false;
         }
         if (suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {

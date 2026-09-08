@@ -21,12 +21,14 @@ target call ABI is rejected even when it implements the same stable operation na
 Coroutine execution keeps the generation lease pinned while suspended. Resume and cancellation
 are distinct operations on that same execution: cancellation is valid only at a verified
 safepoint, follows the Program-owned cancel successor, recursively cancels an active sealed child,
-and releases the lease only after canonical cancellation publication. A suspension operation owns
-separate resume and cancel operand segments. The cancel segment transfers every live affine owner
-exactly once into its statically selected cleanup block; missing owners, extra values, and cleanup
-blocks that fail to consume an owner are invalid. Executors materialize only the selected edge, so
-resume never pre-consumes cancellation resources. Exact caller-local `REF` places and scoped
-`READ` existential reborrows are admitted only when the Program safepoint carries their unique
+and releases the lease only after canonical cancellation publication. Safepoint metadata is the
+canonical unordered live-value set, while each suspension instruction carries the ordered tuple
+used to transfer and restore those values. The separate cancel segment is an exact subset needed by
+the selected reason-private cleanup graph: every live affine owner appears exactly once, and a
+needed non-owner may appear at most once. Missing owners, duplicate values, values outside the live
+set, and cleanup graphs that fail to consume an owner are invalid. Executors materialize only the
+selected edge, so resume never pre-consumes cancellation resources. Exact caller-local `REF` places
+and scoped `READ` existential reborrows are admitted only when the Program safepoint carries their unique
 owner exactly once; ambiguous projections, missing owners, and duplicate owner paths remain
 rejected. Disposing a frame is not an implicit cancellation operation, and no error, panic, or
 trap outcome aliases cancellation.
@@ -81,7 +83,7 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 776c482fd6f097ca061bea98de6a8ed12d517ee3c4a91953abd2b90177fb690c
+anchor-sha256: src/program/xr_program_verify.c e582bf2d99821a9473a0621914168cccb730f904c93c6180603f2d36f2035eb7
 anchor-sha256: src/program/xr_validated_program_internal.h 1cd61fb3b536b3414091d39919ff909e6b12710387438a89303cf1e5c66e78c8
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa

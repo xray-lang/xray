@@ -69,11 +69,13 @@ optimizations, public loader ABI, and package publication remain inactive.
 Generated coroutine descriptors have distinct step and cancel callbacks. Their private frames
 dispatch cancellation from the exact suspended state, recursively close an active sealed child,
 follow the verified Program cancel successor, and publish a normalized cancelled outcome that
-retains the cancelled state identity. Resume operands and the exact live-owner cancel suffix are
-verified separately. Generated C spills the canonical resume live row, reloads the original live
-value identities for cancellation, and performs the cancel edge's parallel argument transfer before
-the static cleanup drops its owners. A sealed child may accept an exact non-owner `REF` place. A
-caller-local place is never spilled as an automatic C address: its unique storage owner occupies the
+retains the cancelled state identity. Canonical safepoint metadata is verified as an unordered exact
+set, independently from the suspension instruction's positional resume tuple and cancel subset.
+Generated C assigns frame slots from the positional tuple, reloads the original live identities for
+cancellation, and performs the cancel edge's parallel argument transfer before the reason-private
+cleanup graph drops its owners. The cancel subset contains every required owner exactly once and may
+also contain a required non-owner at most once. A sealed child may accept an exact non-owner `REF`
+place. A caller-local place is never spilled as an automatic C address: its unique storage owner occupies the
 parent safepoint slot, the child place is rebound to that slot before polling, and the continuation
 reconstructs its block-local place. A call-bound parameter place may remain live in the child frame
 because its caller owns the backing storage. The BackendIR verifier rejects instruction-defined raw
@@ -104,7 +106,10 @@ The producer accepts only an exact fixture identity and matching manifest digest
 source case, and stages its C output. Publication follows successful assertions and preserves the
 previous file's bytes, identity, and timestamp when the new bytes match. Missing, duplicate, unknown,
 or stale registration fails closed. The default source suite still executes every registered case;
-the canonical preflight mechanically includes every manifest native target and test.
+the canonical preflight mechanically includes every manifest native target and test. A branching
+deferred-Pipe fixture executes normal, cancellation-at-each-safepoint, and provider-refusal paths;
+its native output proves that the complete private cancellation graph preserves branch inputs and
+cleanup order without an AOT-only unwind rule.
 
 The source declaration census and both generated registration projections are checked before every
 producer relink. A test-body edit alone does not reconfigure CMake. A new unregistered case fails
@@ -142,8 +147,8 @@ anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 81bb6fb34
 anchor-sha256: src/aot/program/xr_backend_ir.h af75b1247f80f1b3132d71b65774b05f6c99d4bfbcab3e9fd097911f7694a799
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
 anchor-sha256: src/aot/program/xr_backend_ir.c d2f80522ab5b2907551229d5efd615c6be04bb7ce6ba6e6a40eae40cdb6c0c3d
-anchor-sha256: src/aot/program/xr_backend_ir_verify.c eeae99edc5c0fb85d74cc711fbe83fed34dfd96948e43ebe379d0f85c4b63a5c
-anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 78e21051e18b6307bfc0baf600fcb33dbb3b0f870aa96b18389c0c4dd9634ac0
+anchor-sha256: src/aot/program/xr_backend_ir_verify.c 54b6fd939984b9c0bb26e1ffddea43eff4c76027e2a883306a8db590dfea364f
+anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c b6adfcd64a469889499d825e4e6e8c422b41b0e1e574806a612a7e3da82a1943
 anchor-sha256: src/aot/program/xr_backend_ir_emit_copy.inc.c 8c831fe2d6161dd1b9a4b86de86d9a40b4573e05985650d258772345658d78f8
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -151,5 +156,5 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b91bd3928d1f82b993b1955240e13323b572360497e
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
-anchor-sha256: tests/unit/aot/test_xr_program_aot.c 9a2340d3c3859e49b0d6358f9cccd47221c0a52a70c28a136efd0acb84e7a8ce
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 938b04802603328b720dbf9bf64ee0d5ddfc4ace5b7f758115d90d82fbffbba2
+anchor-sha256: tests/unit/aot/test_xr_program_aot.c ea9d5fb6c739ec615a2064f6e8bb83d14ba2566e0b92989f6c3a77f3570ee240
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1857b41614f1d73cecf86dcd4c36d63e1c3ad2d9f9cfc7a72ec5f6224a728e6c

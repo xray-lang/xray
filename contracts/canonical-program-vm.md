@@ -72,11 +72,12 @@ persistent private-code cache remain inactive for later tasks.
 Coroutine suspension has separate normal and cancel successors. A private VM session remembers the
 cancel target only while it is suspended, rejects cancellation at every other lifecycle point,
 recursively cancels an active sealed child, charges the child's cleanup steps to the parent budget,
-and terminates through `core.cancel.publish`. Resume operands and the exact live-owner cancel suffix
-are distinct Program segments. The VM materializes only the chosen segment; cancellation transfers
-each owner once to the verified static cleanup block and executes its explicit `owner.drop`, while a
-normal resume leaves that suffix untouched. A sealed child `REF` parameter receives the exact place
-owned by its parent execution. VM value/place storage is execution-owned and remains stable while
+and terminates through `core.cancel.publish`. Canonical safepoint metadata is an unordered exact set;
+the suspension instruction's live operands are the ordered resume tuple, and its cancel operands are
+the exact cleanup subset. The VM materializes only the chosen segment. Cancellation transfers every
+owner once and any explicitly required non-owner at most once through the verified reason-private
+cleanup graph, while a normal resume leaves the cancel segment untouched. A sealed child `REF`
+parameter receives the exact place owned by its parent execution. VM value/place storage is execution-owned and remains stable while
 the child is suspended; caller-local places are represented in the Program safepoint by their unique
 storage owner and reconstructed in the selected continuation. Cancellation is a distinct outcome,
 retains the cancelled safepoint state for cross-executor comparison, and releases the exact
@@ -103,7 +104,10 @@ executes its complete source, reference, VM, and C-emission assertions before pu
 artifact; default execution still runs the complete source suite. Free-function and static-method
 coroutine cases have independent native outputs and checks. Registry identity, declaration census,
 and projection checks reject missing or mismatched evidence rather than silently narrowing the
-canonical preflight. This test-build decomposition changes no VM semantics or supported capability.
+canonical preflight. A branching deferred-Pipe fixture proves that provider failure can use the
+shared cleanup graph while cancellation receives a private copy of the complete multi-block graph,
+including the non-owner branch condition. This test-build decomposition changes no VM semantics or
+supported capability.
 
 anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h a964247d2aacfd087417bc19ad30e2c81c870cb5a28521bb953b2dc8d84d2f1f
 anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h c51ff9a5892b84710d42cd5eceab4fc7f2887ed37062dd28b3a2f0bc68fc00ca
@@ -112,15 +116,15 @@ anchor-sha256: xisa/core/registry.json 1066fb08ca4dae249c7fc59d26e1ce4f6c387fbbd
 anchor-sha256: src/vm/xr_program_vm.h 2576452ee188a355ebf60ec19e405a95200304c5ce733c72aa623855640f6c7a
 anchor-sha256: src/vm/xr_program_vm.c ed45b5dce766dfae80042e886e9b46816dc374ac3c68768fd2fee8bc0bd4c0c8
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 776c482fd6f097ca061bea98de6a8ed12d517ee3c4a91953abd2b90177fb690c
+anchor-sha256: src/program/xr_program_verify.c e582bf2d99821a9473a0621914168cccb730f904c93c6180603f2d36f2035eb7
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf
 anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390b981e9d78b0801da4b550a5fc6b5be90893a7c72
 anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json dd8b3088756d093a260be71a4663e4e5942153ec98369aedf9de42c9fb32bdaf
-anchor-sha256: tests/unit/vm/test_xr_program_vm.c f866d42cee7666adf3637762d27514f4424cdb494c670290bf3fe8a99e373d48
+anchor-sha256: tests/unit/vm/test_xr_program_vm.c 28164a25784dd5f1b3b0c3397b10edab68e8b410e6d843ae92ca5ba8430fb4bb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 0e4d14ac337b31262cf3c2e6a51f7d8381c1164962dd81247a7e4cd748ee0695
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 938b04802603328b720dbf9bf64ee0d5ddfc4ace5b7f758115d90d82fbffbba2
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1857b41614f1d73cecf86dcd4c36d63e1c3ad2d9f9cfc7a72ec5f6224a728e6c
