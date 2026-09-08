@@ -25,6 +25,7 @@
 #include "xi_verify_gen.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
+#include "xi_receiver_alias.h"
 #include "xi_semantic_intrinsic.h"
 #include "xi_own.h"
 #include "xi_tbaa.h"
@@ -2152,6 +2153,81 @@ static void verify_place_uses(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* Borrow-preserving PLACE_LOAD derivatives stay borrowed. */
+/* They cannot hide a pre-suspension borrow; VALUE_CLONE may cross. */
+static bool verify_borrowed_place_derivative(const XiValue *value, const uint8_t *derived,
+                                             uint32_t value_count) {
+    if (!value || !derived || !xi_own_type_may_be_ref(value->type) || xi_copy_is_value_clone(value))
+        return false;
+    if (value->op == XI_PLACE_LOAD)
+        return true;
+
+    bool propagates =
+        xi_value_forwards_repr(value) || value->op == XI_CHECKTYPE || value->op == XI_PHI ||
+        value->op == XI_SELECT || xi_call_result_aliases_receiver(value) ||
+        xi_generated_op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+    if (!propagates)
+        return false;
+
+    uint16_t first = value->op == XI_SELECT ? 1u : 0u;
+    for (uint16_t argument = first; argument < value->nargs; ++argument) {
+        const XiValue *source = value->args ? value->args[argument] : NULL;
+        if (source && source->id < value_count && derived[source->id])
+            return true;
+    }
+    return false;
+}
+
+static void verify_borrowed_place_derivatives(const XiFunc *f, uint8_t *derived,
+                                              uint32_t value_count) {
+    if (!f || !derived)
+        return;
+    bool changed;
+    do {
+        changed = false;
+        for (uint32_t block_index = 0; block_index < f->nblocks; ++block_index) {
+            const XiBlock *block = f->blocks[block_index];
+            if (!block)
+                continue;
+            for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+                const XiValue *value = &phi->value;
+                if (value->id < value_count && !derived[value->id] &&
+                    verify_borrowed_place_derivative(value, derived, value_count)) {
+                    derived[value->id] = 1u;
+                    changed = true;
+                }
+            }
+            for (uint32_t value_index = 0; value_index < block->nvalues; ++value_index) {
+                const XiValue *value = block->values[value_index];
+                if (value && value->id < value_count && !derived[value->id] &&
+                    verify_borrowed_place_derivative(value, derived, value_count)) {
+                    derived[value->id] = 1u;
+                    changed = true;
+                }
+            }
+        }
+    } while (changed);
+}
+
+static bool verify_borrowed_place_derivative_interval(VerifyCtx *ctx, const XiFunc *f,
+                                                      const XiLiveness *live,
+                                                      const uint8_t *derived, uint32_t value_count,
+                                                      const XiValue *value) {
+    if (!value || value->id >= value_count || !derived[value->id] ||
+        !xi_coro_value_live_across_proven_suspend(f, live, value) ||
+        xi_coro_value_is_retry_suspend_operand(f, value))
+        return true;
+    if (value->op == XI_PLACE_LOAD)
+        verr(ctx, "func '%s': borrowed place load v%u is live across a suspension point", f->name,
+             value->id);
+    else
+        verr(ctx,
+             "func '%s': borrowed place load derivative v%u %s is live across a suspension "
+             "point",
+             f->name, value->id, xi_op_name(value->op));
+    return false;
+}
+
 static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -2194,26 +2270,31 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
         return;
     }
 
+    uint32_t value_count = f->next_value_id;
+    uint8_t *borrowed_place_derivatives =
+        (uint8_t *) xr_calloc(value_count ? value_count : 1u, sizeof(uint8_t));
+    if (!borrowed_place_derivatives) {
+        xi_liveness_free(live);
+        verr(ctx, "func '%s': cannot allocate borrowed place provenance", f->name);
+        return;
+    }
+    verify_borrowed_place_derivatives(f, borrowed_place_derivatives, value_count);
+
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
+        for (XiPhi *phi = blk->phis; phi && !ctx->failed; phi = phi->next)
+            (void) verify_borrowed_place_derivative_interval(
+                ctx, f, live, borrowed_place_derivatives, value_count, &phi->value);
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v)
-                continue;
-
-            if (v->op == XI_PLACE_LOAD && v->nargs == 1 && v->args[0] &&
-                xi_own_type_may_be_ref(v->type) &&
-                xi_coro_value_live_across_proven_suspend(f, live, v) &&
-                !xi_coro_value_is_retry_suspend_operand(f, v)) {
-                verr(ctx, "func '%s': borrowed place load v%u is live across a suspension point",
-                     f->name, v->id);
-                break;
-            }
+            (void) verify_borrowed_place_derivative_interval(
+                ctx, f, live, borrowed_place_derivatives, value_count, v);
         }
     }
 
+    xr_free(borrowed_place_derivatives);
     xi_liveness_free(live);
 }
 

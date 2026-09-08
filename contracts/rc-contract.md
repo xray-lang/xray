@@ -119,6 +119,17 @@ snapshot across suspension. Copy-out reloads the aggregate from its stable
 place after the callee outcome, so multiple field writebacks preserve one
 another and static cleanup observes the reason-appropriate field values.
 
+A reference-capable `PLACE_LOAD` is a borrowed snapshot, not a frame owner.
+Identity copies, representation adapters, borrowed projections, PHIs, SELECTs,
+and receiver aliases preserve that provenance and may not hide it across a
+proven suspension point. A retrying suspension operation may hold the exact
+borrow only as one of its evaluated retry operands. Otherwise the continuation
+must reload from the stable place after resumption or cross the boundary with
+an explicit `VALUE_CLONE`; scalar place loads contain no reference and remain
+ordinary by-value snapshots. A scoped existential READ reborrow is a separate
+explicit Program contract whose unique owner is carried at the caller
+safepoint, not an implicit exception for a place-load derivative.
+
 Trust premise. C1-C5 verify the path balance of the ARC INSERTION RESULT: the
 verifier consumes the same owned/borrow classification the inserter consumed,
 so a systematic upstream misclassification in xi_own (an owned use read as a

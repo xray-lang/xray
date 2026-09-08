@@ -909,18 +909,22 @@ TEST(call_bound_place_rejects_return_escape) {
     xi_func_free(f);
 }
 
-static XiValue *make_ref_param(XiFunc *f) {
+static XiValue *make_ref_param_of_type(XiFunc *f, XrType *type) {
     f->nparams = 1;
     f->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
     if (!f->params)
         return NULL;
-    XiValue *param = xi_param(f, f->entry, 0, &stub_int);
+    XiValue *param = xi_param(f, f->entry, 0, type);
     if (!param)
         return NULL;
     f->params[0] = param;
     if (!xi_func_set_param_passing_mode(f, 0, XR_PARAM_REF))
         return NULL;
     return param;
+}
+
+static XiValue *make_ref_param(XiFunc *f) {
+    return make_ref_param_of_type(f, &stub_int);
 }
 
 TEST(call_bound_param_last_use_before_suspend_passes) {
@@ -949,6 +953,113 @@ TEST(call_bound_param_use_after_suspend_is_frame_stable) {
     ASSERT(yield != NULL && load != NULL);
     load->args[0] = param;
     xi_block_set_return(f->entry, load);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(borrowed_place_load_identity_live_across_suspend_is_rejected) {
+    XiFunc *f = make_func("borrowed_place_identity_suspend");
+    ASSERT(f != NULL);
+    XiValue *param = make_ref_param_of_type(f, &stub_array_i8);
+    ASSERT(param != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_array_i8, 1);
+    XiValue *alias = xi_value_new(f, f->entry, XI_COPY, &stub_array_i8, 1);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *use = xi_value_new(f, f->entry, XI_PRINT, &stub_unit, 1);
+    XiValue *result = xi_const_int(f, f->entry, 0, &stub_int);
+    ASSERT(load != NULL && alias != NULL && yield != NULL && use != NULL && result != NULL);
+    load->args[0] = param;
+    alias->args[0] = load;
+    use->args[0] = alias;
+    xi_block_set_return(f->entry, result);
+
+    ASSERT(verify_error_prefix(
+        f, "func 'borrowed_place_identity_suspend': borrowed place load derivative"));
+    xi_func_free(f);
+}
+
+TEST(borrowed_place_load_select_live_across_suspend_is_rejected) {
+    XiFunc *f = make_func("borrowed_place_select_suspend");
+    ASSERT(f != NULL);
+    XiValue *param = make_ref_param_of_type(f, &stub_array_i8);
+    ASSERT(param != NULL);
+    XiValue *left = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_array_i8, 1);
+    XiValue *right = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_array_i8, 1);
+    XiValue *condition = xi_const_bool(f, f->entry, true, &stub_bool);
+    XiValue *selected = xi_value_new(f, f->entry, XI_SELECT, &stub_array_i8, 3);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *use = xi_value_new(f, f->entry, XI_PRINT, &stub_unit, 1);
+    XiValue *result = xi_const_int(f, f->entry, 0, &stub_int);
+    ASSERT(left != NULL && right != NULL && condition != NULL && selected != NULL &&
+           yield != NULL && use != NULL && result != NULL);
+    left->args[0] = param;
+    right->args[0] = param;
+    selected->args[0] = condition;
+    selected->args[1] = left;
+    selected->args[2] = right;
+    use->args[0] = selected;
+    xi_block_set_return(f->entry, result);
+
+    ASSERT(verify_error_prefix(
+        f, "func 'borrowed_place_select_suspend': borrowed place load derivative"));
+    xi_func_free(f);
+}
+
+TEST(borrowed_place_load_value_clone_live_across_suspend_passes) {
+    XiFunc *f = make_func("borrowed_place_clone_suspend");
+    ASSERT(f != NULL);
+    XiValue *param = make_ref_param_of_type(f, &stub_array_i8);
+    ASSERT(param != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_array_i8, 1);
+    XiValue *clone = xi_value_new(f, f->entry, XI_COPY, &stub_array_i8, 1);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *use = xi_value_new(f, f->entry, XI_PRINT, &stub_unit, 1);
+    XiValue *result = xi_const_int(f, f->entry, 0, &stub_int);
+    ASSERT(load != NULL && clone != NULL && yield != NULL && use != NULL && result != NULL);
+    load->args[0] = param;
+    clone->args[0] = load;
+    clone->aux_int = XI_COPY_KIND_VALUE_CLONE;
+    use->args[0] = clone;
+    xi_block_set_return(f->entry, result);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(borrowed_place_load_recreated_after_suspend_passes) {
+    XiFunc *f = make_func("borrowed_place_reload_after_suspend");
+    ASSERT(f != NULL);
+    XiValue *param = make_ref_param_of_type(f, &stub_array_i8);
+    ASSERT(param != NULL);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_array_i8, 1);
+    XiValue *use = xi_value_new(f, f->entry, XI_PRINT, &stub_unit, 1);
+    XiValue *result = xi_const_int(f, f->entry, 0, &stub_int);
+    ASSERT(yield != NULL && load != NULL && use != NULL && result != NULL);
+    load->args[0] = param;
+    use->args[0] = load;
+    xi_block_set_return(f->entry, result);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(borrowed_place_load_retry_operand_passes) {
+    XiFunc *f = make_func("borrowed_place_retry_operand");
+    ASSERT(f != NULL);
+    XiValue *param = make_ref_param_of_type(f, &stub_array_i8);
+    ASSERT(param != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_array_i8, 1);
+    XiValue *callee = xi_value_new(f, f->entry, XI_CONST, &stub_func, 0);
+    XiValue *call = xi_value_new(f, f->entry, XI_CALL, &stub_int, 2);
+    ASSERT(load != NULL && callee != NULL && call != NULL);
+    load->args[0] = param;
+    call->args[0] = callee;
+    call->args[1] = load;
+    call->flags |= XI_FLAG_MAY_SUSPEND;
+    call->lowering_flags |= XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS;
+    xi_block_set_return(f->entry, call);
 
     ASSERT(verify_ok(f));
     xi_func_free(f);
@@ -3225,6 +3336,11 @@ int main(void) {
     run_call_bound_place_rejects_return_escape();
     run_call_bound_param_last_use_before_suspend_passes();
     run_call_bound_param_use_after_suspend_is_frame_stable();
+    run_borrowed_place_load_identity_live_across_suspend_is_rejected();
+    run_borrowed_place_load_select_live_across_suspend_is_rejected();
+    run_borrowed_place_load_value_clone_live_across_suspend_passes();
+    run_borrowed_place_load_recreated_after_suspend_passes();
+    run_borrowed_place_load_retry_operand_passes();
     run_call_plan_suspendable_boundary_uses_frame_place();
     run_call_plan_valid_method_receiver_place_passes();
     run_call_plan_rejects_method_receiver_place_mismatch();
