@@ -8,6 +8,7 @@
 
 #include "xi_edit.h"
 #include "xi_analysis.h"
+#include "xi_cleanup.h"
 #include "xi_effect.h"
 #include "xi_tbaa.h"
 #include <stdarg.h>
@@ -58,6 +59,67 @@ static uint64_t hash_assertion_plan(uint64_t hash, const XrAssertionPlan *plan) 
     for (size_t i = 0; i < sizeof(plan->evaluation_order) / sizeof(plan->evaluation_order[0]); i++)
         hash = hash_u64(hash, plan->evaluation_order[i]);
     return hash;
+}
+
+// Removed and foreign values are not identities in this function.
+// A surviving allocation or coincidentally equal numeric ID is insufficient.
+static const XiValue *cleanup_live_value(const XiFunc *func, const XiValue *candidate) {
+    if (!candidate || !func->blocks)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block || !block->values || block->func != func)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            if (block->values[vi] == candidate)
+                return candidate->block == block ? candidate : NULL;
+        }
+    }
+    return NULL;
+}
+
+static uint64_t hash_cleanup_member(uint64_t hash, const XiFunc *func, const XiValue *candidate,
+                                    const XiCleanupBoundary *pair) {
+    if (!candidate)
+        return hash_u64(hash, UINT64_MAX);
+    const XiValue *value = cleanup_live_value(func, candidate);
+    if (!value)
+        return hash_u64(hash, UINT64_MAX - 1u);
+    hash = hash_u64(hash, value->id);
+    // Relocating both markers' record preserves meaning; splitting it does not.
+    // Hash the shared-record relation, never its storage address.
+    if (pair)
+        hash = hash_u64(hash, value->cleanup_boundary == pair);
+    return hash;
+}
+
+static void fingerprint_cleanup(XiEditFingerprint *result, const XiFunc *func,
+                                const XiValue *value) {
+    if (!value || (!value->cleanup_boundary && value->op != XI_CLEANUP_ENTER &&
+                   value->op != XI_CLEANUP_LEAVE))
+        return;
+    uint64_t hash = hash_u64(FNV_OFFSET, value->id);
+    hash = hash_u64(hash, value->op);
+    const XiCleanupBoundary *boundary = value->cleanup_boundary;
+    if (!boundary) {
+        hash = hash_u64(hash, 0u);
+    } else if (!xi_func_arena_contains(func, boundary, (uint32_t) sizeof(*boundary)) ||
+               (uintptr_t) boundary % _Alignof(XiCleanupBoundary) != 0u) {
+        /* Malformed metadata must not be dereferenced while auditing an edit. */
+        hash = hash_u64(hash, 1u);
+    } else {
+        hash = hash_u64(hash, 2u);
+        hash = hash_cleanup_member(hash, func, boundary->enter, boundary);
+        hash = hash_cleanup_member(hash, func, boundary->leave, boundary);
+        hash = hash_cleanup_member(hash, func, boundary->remaining, NULL);
+        hash = hash_cleanup_member(hash, func, boundary->frontier, NULL);
+        hash = hash_u64(hash, boundary->rank);
+        hash = hash_u64(hash, boundary->kind);
+        hash = hash_bytes(hash, boundary->reserved, sizeof(boundary->reserved));
+    }
+    /* Cleanup frontiers determine both control obligations and owner uses. */
+    result->cfg = hash_u64(result->cfg, hash);
+    result->values = hash_u64(result->values, hash);
 }
 
 static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool include_type) {
@@ -150,6 +212,8 @@ XiEditFingerprint xi_edit_fingerprint(const XiFunc *func) {
     };
     if (!func)
         return result;
+    for (uint16_t pi = 0; func->params && pi < func->nparams; pi++)
+        fingerprint_cleanup(&result, func, func->params[pi]);
     result.cfg = hash_u64(result.cfg, func->nblocks);
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *block = func->blocks[bi];
@@ -165,6 +229,7 @@ XiEditFingerprint xi_edit_fingerprint(const XiFunc *func) {
         for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
             result.values = value_semantic_hash(result.values, &phi->value, false);
             result.types = value_type_hash(result.types, &phi->value);
+            fingerprint_cleanup(&result, func, &phi->value);
         }
         result.values = hash_u64(result.values, block->control ? block->control->id : UINT32_MAX);
         result.values = hash_u64(result.values, block->nvalues);
@@ -172,6 +237,7 @@ XiEditFingerprint xi_edit_fingerprint(const XiFunc *func) {
             const XiValue *value = block->values[vi];
             result.values = value_semantic_hash(result.values, value, false);
             result.types = value_type_hash(result.types, value);
+            fingerprint_cleanup(&result, func, value);
             if (value_touches_memory(value))
                 result.memory = value_semantic_hash(result.memory, value, true);
             if (value_is_call(value))

@@ -17,8 +17,12 @@
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_assert_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
+#include "../program/xr_program_coroutine_trap_fixture.h"
 #include "../program/xr_program_output_fixture.h"
 #include "../program/xr_program_trap_fixture.h"
+#include "../program/xr_program_construct_fixture.h"
+#include "../program/xr_program_cleanup_graph_fixture.h"
+#include "../program/xr_program_coroutine_branch_fixture.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -2488,7 +2492,526 @@ static void test_coroutine_cancel_drops_exact_live_owner(void) {
     xr_validated_program_free(program);
 }
 
+typedef enum CoroutineTrapExpected {
+    COROUTINE_TRAP_RETURN,
+    COROUTINE_TRAP_CANCELLED,
+    COROUTINE_TRAP_PROVIDER_FAILED,
+    COROUTINE_TRAP_EXPLICIT,
+} CoroutineTrapExpected;
+
+typedef struct CoroutineTrapCase {
+    const char *name;
+    XrProgramCoroutineTrapMutation mutation;
+    bool cancel;
+    bool refuse_child;
+    CoroutineTrapExpected expected;
+    uint64_t steps;
+    uint32_t event_count;
+    int64_t events[3];
+} CoroutineTrapCase;
+
+typedef struct CoroutineTrapProbe {
+    XrInstance *instance;
+    bool refuse_child;
+    bool refuse_all;
+    uint32_t event_count;
+    int64_t events[3];
+} CoroutineTrapProbe;
+
+static XrProviderCallStatus coroutine_trap_record(void *context, int64_t argument,
+                                                  int64_t *result_out) {
+    CoroutineTrapProbe *probe = context;
+    REQUIRE(probe != NULL && probe->instance != NULL && result_out != NULL);
+    REQUIRE(xr_execution_instance_state(probe->instance) == XR_INSTANCE_DRAINING);
+    REQUIRE(xr_execution_instance_lease_count(probe->instance) == 1u);
+    REQUIRE(xr_execution_instance_cache_key(probe->instance).generation == 701u);
+    REQUIRE(probe->event_count < sizeof(probe->events) / sizeof(probe->events[0]));
+    probe->events[probe->event_count++] = argument;
+    *result_out = -999;
+    return probe->refuse_all || (probe->refuse_child && argument == 11) ? XR_PROVIDER_CALL_FAILED
+                                                                        : XR_PROVIDER_CALL_OK;
+}
+
+static void require_coroutine_trap_events(const CoroutineTrapProbe *probe,
+                                          const CoroutineTrapCase *test) {
+    REQUIRE(probe->event_count == test->event_count);
+    for (uint32_t event = 0u; event < test->event_count; ++event)
+        REQUIRE(probe->events[event] == test->events[event]);
+}
+
+static XrInstance *create_coroutine_trap_instance(XrValidatedProgram *program,
+                                                  XrTargetProfile *profile,
+                                                  CoroutineTrapProbe *probe) {
+    TestProviderBindings bindings;
+    build_scalar_clock_binding(profile, false, &bindings);
+    bindings.operations[0][0].entry.i64_unary = coroutine_trap_record;
+    bindings.operations[0][0].context = probe;
+    probe->instance = create_instance(program, profile, &bindings, 701u);
+    REQUIRE(xr_execution_instance_state(probe->instance) == XR_INSTANCE_ACTIVE);
+    REQUIRE(xr_execution_instance_lease_count(probe->instance) == 0u);
+    return probe->instance;
+}
+
+static void require_coroutine_trap_generation_busy(XrInstance *instance) {
+    XrExecutionDiagnostic diagnostic;
+    REQUIRE(xr_execution_instance_state(instance) == XR_INSTANCE_DRAINING);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 1u);
+    REQUIRE(xr_execution_instance_retire(instance, &diagnostic) ==
+            XR_EXECUTION_GENERATION_REJECTED);
+    REQUIRE(diagnostic.kind == XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY);
+}
+
+static void run_reference_coroutine_trap_case(XrValidatedProgram *program, XrTargetProfile *profile,
+                                              const CoroutineTrapCase *test) {
+    CoroutineTrapProbe probe = {.refuse_child = test->refuse_child};
+    XrInstance *instance = create_coroutine_trap_instance(program, profile, &probe);
+    uint32_t entry = xr_validated_program_entry_function(program);
+    XrReferenceExecution *execution = NULL;
+    REQUIRE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &execution));
+    REQUIRE(xr_reference_execution_cancel(execution).kind ==
+            XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    REQUIRE(probe.event_count == 0u);
+    XrExecutionDiagnostic diagnostic;
+    REQUIRE(xr_execution_instance_begin_drain(instance, &diagnostic) == XR_EXECUTION_OK);
+    require_coroutine_trap_generation_busy(instance);
+    XrReferenceExecution *rejected = NULL;
+    REQUIRE(!xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &rejected));
+    REQUIRE(rejected == NULL);
+    XrReferenceOutcome result = xr_reference_execution_step(execution);
+    bool before_yield = test->mutation == XR_PROGRAM_COROUTINE_TRAP_BEFORE_YIELD;
+    if (!before_yield) {
+        REQUIRE(result.kind == XR_REFERENCE_OUTCOME_SUSPENDED);
+        REQUIRE(result.state_id == 1u && result.safepoint_id == 0u && result.steps == 12u);
+        REQUIRE(probe.event_count == 0u);
+        require_coroutine_trap_generation_busy(instance);
+        result = test->cancel ? xr_reference_execution_cancel(execution)
+                              : xr_reference_execution_step(execution);
+    }
+    REQUIRE(result.state_id == (before_yield ? 0u : 1u));
+    REQUIRE(result.steps == test->steps);
+    REQUIRE(!result.owns_dynamic_values);
+    switch (test->expected) {
+        case COROUTINE_TRAP_RETURN:
+            REQUIRE(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+            REQUIRE(result.trap == XR_REFERENCE_TRAP_NONE);
+            REQUIRE(result.value.kind == XR_REFERENCE_VALUE_I64 && result.value.as.i64 == 44);
+            break;
+        case COROUTINE_TRAP_CANCELLED:
+            REQUIRE(result.kind == XR_REFERENCE_OUTCOME_CANCELLED);
+            REQUIRE(result.trap == XR_REFERENCE_TRAP_NONE);
+            break;
+        case COROUTINE_TRAP_PROVIDER_FAILED:
+            REQUIRE(result.kind == XR_REFERENCE_OUTCOME_TRAP);
+            REQUIRE(result.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+            break;
+        case COROUTINE_TRAP_EXPLICIT:
+            REQUIRE(result.kind == XR_REFERENCE_OUTCOME_TRAP);
+            REQUIRE(result.trap == XR_REFERENCE_TRAP_EXPLICIT);
+            break;
+    }
+    require_coroutine_trap_events(&probe, test);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+    REQUIRE(xr_reference_execution_step(execution).kind == XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    REQUIRE(xr_reference_execution_cancel(execution).kind ==
+            XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+    REQUIRE(xr_execution_instance_retire(instance, &diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_state(instance) == XR_INSTANCE_RETIRED);
+    xr_reference_execution_free(execution);
+    require_coroutine_trap_events(&probe, test);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+    REQUIRE(xr_execution_instance_free(&instance, &diagnostic) == XR_EXECUTION_OK);
+}
+
+static XrFingerprint run_vm_coroutine_trap_case(XrValidatedProgram *program,
+                                                XrTargetProfile *profile,
+                                                const CoroutineTrapCase *test,
+                                                XrVmDecodePolicy policy) {
+    CoroutineTrapProbe probe = {.refuse_child = test->refuse_child};
+    XrInstance *instance = create_coroutine_trap_instance(program, profile, &probe);
+    uint32_t entry = xr_validated_program_entry_function(program);
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    options.decode_policy = policy;
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic code_diagnostic;
+    REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_decode_policy(code) == policy);
+    REQUIRE(xr_vm_code_cache_key(code).generation == 701u);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+    XrVmExecution *execution = NULL;
+    REQUIRE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
+    REQUIRE(xr_vm_execution_cancel(execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+    REQUIRE(probe.event_count == 0u);
+    XrExecutionDiagnostic diagnostic;
+    REQUIRE(xr_execution_instance_begin_drain(instance, &diagnostic) == XR_EXECUTION_OK);
+    require_coroutine_trap_generation_busy(instance);
+    XrVmExecution *rejected = NULL;
+    REQUIRE(!xr_vm_execution_create(code, instance, entry, NULL, 0u, &rejected));
+    REQUIRE(rejected == NULL);
+    xr_vm_code_free(code);
+    XrVmOutcome result = xr_vm_execution_step(execution);
+    bool before_yield = test->mutation == XR_PROGRAM_COROUTINE_TRAP_BEFORE_YIELD;
+    if (!before_yield) {
+        REQUIRE(result.kind == XR_VM_OUTCOME_SUSPENDED);
+        REQUIRE(result.state_id == 1u && result.safepoint_id == 0u && result.steps == 12u);
+        REQUIRE(probe.event_count == 0u);
+        require_coroutine_trap_generation_busy(instance);
+        result = test->cancel ? xr_vm_execution_cancel(execution) : xr_vm_execution_step(execution);
+    }
+    REQUIRE(result.state_id == (before_yield ? 0u : 1u));
+    REQUIRE(result.steps == test->steps);
+    REQUIRE(!result.owns_dynamic_values);
+    switch (test->expected) {
+        case COROUTINE_TRAP_RETURN:
+            REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+            REQUIRE(result.trap == XR_VM_TRAP_NONE);
+            REQUIRE(result.value.kind == XR_VM_VALUE_I64 && result.value.as.i64 == 44);
+            break;
+        case COROUTINE_TRAP_CANCELLED:
+            REQUIRE(result.kind == XR_VM_OUTCOME_CANCELLED);
+            REQUIRE(result.trap == XR_VM_TRAP_NONE);
+            break;
+        case COROUTINE_TRAP_PROVIDER_FAILED:
+            REQUIRE(result.kind == XR_VM_OUTCOME_TRAP);
+            REQUIRE(result.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED);
+            break;
+        case COROUTINE_TRAP_EXPLICIT:
+            REQUIRE(result.kind == XR_VM_OUTCOME_TRAP);
+            REQUIRE(result.trap == XR_VM_TRAP_EXPLICIT);
+            break;
+    }
+    require_coroutine_trap_events(&probe, test);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+    REQUIRE(xr_vm_execution_step(execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+    REQUIRE(xr_vm_execution_cancel(execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+    REQUIRE(xr_execution_instance_retire(instance, &diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_state(instance) == XR_INSTANCE_RETIRED);
+    xr_vm_execution_free(execution);
+    require_coroutine_trap_events(&probe, test);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+    REQUIRE(xr_execution_instance_free(&instance, &diagnostic) == XR_EXECUTION_OK);
+    return result.logical_trace;
+}
+
+static void test_coroutine_child_provider_failure_continuations(void) {
+    // Counts include re-entering the sealed call on resume, but not on cancellation.
+    // Field events distinguish 22 before yield, 44 at yield, and 55 after resume;
+    // the independent snapshot stays 33, including after either child failure.
+    const CoroutineTrapCase cases[] = {
+        {"resume",
+         XR_PROGRAM_COROUTINE_TRAP_VALID,
+         false,
+         false,
+         COROUTINE_TRAP_RETURN,
+         26u,
+         2u,
+         {11, 55}},
+        {"cancel",
+         XR_PROGRAM_COROUTINE_TRAP_VALID,
+         true,
+         false,
+         COROUTINE_TRAP_CANCELLED,
+         22u,
+         2u,
+         {11, 44}},
+        {"child resume refusal",
+         XR_PROGRAM_COROUTINE_TRAP_VALID,
+         false,
+         true,
+         COROUTINE_TRAP_PROVIDER_FAILED,
+         25u,
+         3u,
+         {11, 55, 33}},
+        {"child cancel refusal",
+         XR_PROGRAM_COROUTINE_TRAP_VALID,
+         true,
+         true,
+         COROUTINE_TRAP_PROVIDER_FAILED,
+         22u,
+         3u,
+         {11, 44, 33}},
+        {"before-yield refusal",
+         XR_PROGRAM_COROUTINE_TRAP_BEFORE_YIELD,
+         false,
+         true,
+         COROUTINE_TRAP_PROVIDER_FAILED,
+         15u,
+         3u,
+         {11, 22, 33}},
+        {"resume without trap edge",
+         XR_PROGRAM_COROUTINE_TRAP_NO_TRAP_EDGE,
+         false,
+         true,
+         COROUTINE_TRAP_PROVIDER_FAILED,
+         19u,
+         1u,
+         {11}},
+        {"cancel without trap edge",
+         XR_PROGRAM_COROUTINE_TRAP_NO_TRAP_EDGE,
+         true,
+         true,
+         COROUTINE_TRAP_PROVIDER_FAILED,
+         16u,
+         1u,
+         {11}},
+        {"other child trap",
+         XR_PROGRAM_COROUTINE_TRAP_OTHER_CHILD_TRAP,
+         false,
+         false,
+         COROUTINE_TRAP_EXPLICIT,
+         20u,
+         1u,
+         {11}},
+    };
+    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED, XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    REQUIRE(profile != NULL);
+    const XrTargetProviderContract *contract = scalar_clock_contract(profile);
+    REQUIRE(contract != NULL && contract->operation_count == 1u);
+    for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        const CoroutineTrapCase *test = &cases[index];
+        fprintf(stderr, "coroutine child provider cleanup: %s\n", test->name);
+        XrProgramArtifact artifact = {0};
+        char diagnostic[256] = {0};
+        REQUIRE(xr_program_coroutine_trap_fixture_write_with_ids(
+                    contract->contract_id, contract->operations[0].stable_id, test->mutation,
+                    &artifact, diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = NULL;
+        XrProgramDiagnostic verify_diagnostic;
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                    &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+        xr_program_artifact_free(&artifact);
+        run_reference_coroutine_trap_case(program, profile, test);
+        XrFingerprint baseline =
+            run_vm_coroutine_trap_case(program, profile, test, XR_VM_DECODE_BASELINE_VIEW);
+        XrFingerprint fixed =
+            run_vm_coroutine_trap_case(program, profile, test, XR_VM_DECODE_FIXED_ROWS);
+        XrFingerprint zero = {{0}};
+        REQUIRE(!fingerprint_equal(baseline, zero));
+        REQUIRE(fingerprint_equal(baseline, fixed));
+        xr_validated_program_free(program);
+    }
+    xr_target_profile_free(profile);
+}
+
+static void test_coroutine_self_edge_parallel_arguments(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_coroutine_branch_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    uint32_t entry = xr_validated_program_entry_function(program);
+    for (uint32_t cancel = 0u; cancel < 2u; ++cancel) {
+        uint64_t expected_steps = cancel ? 5u : 13u;
+        XrInstance *instance = create_instance(program, profile, &bindings, 801u);
+        XrReferenceExecution *reference = NULL;
+        REQUIRE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference));
+        XrReferenceOutcome expected = xr_reference_execution_step(reference);
+        REQUIRE(expected.kind == XR_REFERENCE_OUTCOME_SUSPENDED && expected.steps == 4u);
+        expected = cancel ? xr_reference_execution_cancel(reference)
+                          : xr_reference_execution_step(reference);
+        REQUIRE(expected.kind ==
+                (cancel ? XR_REFERENCE_OUTCOME_CANCELLED : XR_REFERENCE_OUTCOME_RETURN));
+        REQUIRE(expected.steps == expected_steps && expected.trap == XR_REFERENCE_TRAP_NONE);
+        if (!cancel)
+            REQUIRE(expected.value.kind == XR_REFERENCE_VALUE_I64 && expected.value.as.i64 == 11);
+        REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+        xr_reference_execution_free(reference);
+        retire_and_free(&instance);
+        XrFingerprint traces[2];
+        const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+        for (uint32_t policy = 0u; policy < 2u; ++policy) {
+            instance = create_instance(program, profile, &bindings, 801u);
+            XrVmCodeOptions options = xr_vm_code_default_options();
+            options.decode_policy = policies[policy];
+            XrVmCode *code = NULL;
+            XrVmCodeDiagnostic code_diagnostic;
+            REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+            XrVmExecution *execution = NULL;
+            REQUIRE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
+            XrVmOutcome result = xr_vm_execution_step(execution);
+            REQUIRE(result.kind == XR_VM_OUTCOME_SUSPENDED && result.steps == 4u);
+            result = cancel ? xr_vm_execution_cancel(execution) : xr_vm_execution_step(execution);
+            REQUIRE(result.kind == (cancel ? XR_VM_OUTCOME_CANCELLED : XR_VM_OUTCOME_RETURN));
+            REQUIRE(result.steps == expected_steps && result.trap == XR_VM_TRAP_NONE);
+            if (!cancel)
+                REQUIRE(result.value.kind == XR_VM_VALUE_I64 && result.value.as.i64 == 11);
+            REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+            traces[policy] = result.logical_trace;
+            xr_vm_execution_free(execution);
+            xr_vm_code_free(code);
+            retire_and_free(&instance);
+        }
+        REQUIRE(fingerprint_equal(traces[0], traces[1]));
+    }
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_reason_private_cleanup_graph_differential(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED, XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    REQUIRE(profile != NULL);
+    const XrTargetProviderContract *contract = scalar_clock_contract(profile);
+    REQUIRE(contract != NULL && contract->operation_count == 1u);
+    XrProgramCleanupGraphFixture fixture;
+    REQUIRE(xr_program_cleanup_graph_fixture_init(&fixture));
+    fixture.requirement.contract_id = contract->contract_id;
+    fixture.operation = contract->operations[0].stable_id;
+    for (uint32_t block = 0u; block < XR_CLEANUP_GRAPH_BLOCK_COUNT; ++block) {
+        for (uint32_t index = 0u; index < fixture.blocks[block].instruction_count; ++index) {
+            XrCoreIrInstructionInput *instruction = &fixture.instructions[block][index];
+            if (instruction->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
+                instruction->immediate.provider_operation.contract_id =
+                    fixture.requirement.contract_id;
+                instruction->immediate.provider_operation.operation_id = fixture.operation;
+            }
+        }
+    }
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_cleanup_graph_fixture_write_input(
+                &fixture, &artifact, diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    uint32_t entry = xr_validated_program_entry_function(program);
+    for (uint32_t mode = 0u; mode < 4u; ++mode) {
+        bool cancel = (mode & 1u) != 0u;
+        bool refuse = (mode & 2u) != 0u;
+        // These counts follow the fixture's explicit blocks, not another executor.
+        const uint64_t expected_steps[] = {8u, 16u, 14u, 19u};
+        int64_t expected_event = cancel ? 72 : 71;
+        CoroutineTrapProbe probe = {.refuse_all = refuse};
+        XrInstance *instance = create_coroutine_trap_instance(program, profile, &probe);
+        XrReferenceExecution *reference = NULL;
+        REQUIRE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference));
+        XrExecutionDiagnostic execution_diagnostic;
+        REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                XR_EXECUTION_OK);
+        XrReferenceOutcome reference_result = xr_reference_execution_step(reference);
+        REQUIRE(reference_result.kind == XR_REFERENCE_OUTCOME_SUSPENDED);
+        REQUIRE(reference_result.steps == 3u && reference_result.state_id == 1u &&
+                reference_result.safepoint_id == 0u && probe.event_count == 0u);
+        require_coroutine_trap_generation_busy(instance);
+        reference_result = cancel ? xr_reference_execution_cancel(reference)
+                                  : xr_reference_execution_step(reference);
+        REQUIRE(reference_result.kind == (refuse   ? XR_REFERENCE_OUTCOME_TRAP
+                                          : cancel ? XR_REFERENCE_OUTCOME_CANCELLED
+                                                   : XR_REFERENCE_OUTCOME_RETURN));
+        REQUIRE(reference_result.trap ==
+                (refuse ? XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED : XR_REFERENCE_TRAP_NONE));
+        REQUIRE(reference_result.steps == expected_steps[mode] && reference_result.state_id == 1u);
+        REQUIRE(!reference_result.owns_dynamic_values);
+        if (!refuse && !cancel)
+            REQUIRE(reference_result.value.kind == XR_REFERENCE_VALUE_VOID);
+        REQUIRE(probe.event_count == 1u && probe.events[0] == expected_event);
+        REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+        REQUIRE(xr_reference_execution_step(reference).kind ==
+                XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+        REQUIRE(xr_reference_execution_cancel(reference).kind ==
+                XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+        xr_reference_execution_free(reference);
+        REQUIRE(probe.event_count == 1u);
+        REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) == XR_EXECUTION_OK);
+        REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) == XR_EXECUTION_OK);
+
+        XrFingerprint traces[2];
+        const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+        for (uint32_t policy = 0u; policy < 2u; ++policy) {
+            probe = (CoroutineTrapProbe) {.refuse_all = refuse};
+            instance = create_coroutine_trap_instance(program, profile, &probe);
+            XrVmCodeOptions options = xr_vm_code_default_options();
+            options.decode_policy = policies[policy];
+            XrVmCode *code = NULL;
+            XrVmCodeDiagnostic code_diagnostic;
+            REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+            XrVmExecution *execution = NULL;
+            REQUIRE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
+            REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                    XR_EXECUTION_OK);
+            xr_vm_code_free(code);
+            XrVmOutcome result = xr_vm_execution_step(execution);
+            REQUIRE(result.kind == XR_VM_OUTCOME_SUSPENDED);
+            REQUIRE(result.steps == 3u && result.state_id == 1u && result.safepoint_id == 0u &&
+                    probe.event_count == 0u);
+            require_coroutine_trap_generation_busy(instance);
+            result = cancel ? xr_vm_execution_cancel(execution) : xr_vm_execution_step(execution);
+            REQUIRE(result.kind == (refuse   ? XR_VM_OUTCOME_TRAP
+                                    : cancel ? XR_VM_OUTCOME_CANCELLED
+                                             : XR_VM_OUTCOME_RETURN));
+            REQUIRE(result.trap == (refuse ? XR_VM_TRAP_PROVIDER_CALL_FAILED : XR_VM_TRAP_NONE));
+            REQUIRE(result.steps == expected_steps[mode] && result.state_id == 1u);
+            REQUIRE(!result.owns_dynamic_values);
+            if (!refuse && !cancel)
+                REQUIRE(result.value.kind == XR_VM_VALUE_VOID);
+            REQUIRE(probe.event_count == 1u && probe.events[0] == expected_event);
+            REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+            REQUIRE(xr_vm_execution_step(execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+            REQUIRE(xr_vm_execution_cancel(execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+            traces[policy] = result.logical_trace;
+            xr_vm_execution_free(execution);
+            REQUIRE(probe.event_count == 1u);
+            REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                    XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                    XR_EXECUTION_OK);
+        }
+        XrFingerprint zero = {{0}};
+        REQUIRE(!fingerprint_equal(traces[0], zero));
+        REQUIRE(fingerprint_equal(traces[0], traces[1]));
+    }
+    xr_validated_program_free(program);
+    xr_target_profile_free(profile);
+}
+
+static void test_aggregate_construct_owner_transfers(void) {
+    uint32_t executed = 0u;
+    for (size_t index = 0u; index < XR_PROGRAM_CONSTRUCT_CASE_COUNT; ++index) {
+        const XrProgramConstructCase *test = &xr_program_construct_cases[index];
+        REQUIRE(test->kind == (XrProgramConstructCaseKind) index);
+        if (test->diagnostic != XR_PROGRAM_DIAGNOSTIC_NONE)
+            continue;
+        fprintf(stderr, "aggregate owner transfer differential: %s\n", test->name);
+        XrProgramArtifact artifact = {0};
+        char diagnostic[256] = {0};
+        XrProgramBuildStatus status = xr_program_construct_fixture_write(
+            test->kind, &artifact, diagnostic, sizeof(diagnostic));
+        if (status != XR_PROGRAM_BUILD_OK)
+            fprintf(stderr, "construct fixture build failed: %s\n", diagnostic);
+        REQUIRE(status == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = NULL;
+        XrProgramDiagnostic verify_diagnostic;
+        XrProgramVerifyStatus verified =
+            xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &verify_diagnostic);
+        if (verified != XR_PROGRAM_VERIFY_OK)
+            fprintf(stderr, "construct rejected: %s at f=%u b=%u i=%u v=%u\n",
+                    xr_program_diagnostic_kind_name(verify_diagnostic.kind),
+                    verify_diagnostic.location.function_id, verify_diagnostic.location.block_id,
+                    verify_diagnostic.location.instruction_id, verify_diagnostic.location.value_id);
+        REQUIRE(verified == XR_PROGRAM_VERIFY_OK && program != NULL);
+        xr_program_artifact_free(&artifact);
+        run_program(program, false, NULL, NULL, 0u, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
+        xr_validated_program_free(program);
+        ++executed;
+    }
+    REQUIRE(executed > 0u);
+}
+
 int main(void) {
+    test_coroutine_self_edge_parallel_arguments();
+    test_reason_private_cleanup_graph_differential();
+    test_aggregate_construct_owner_transfers();
     test_operation_semantics();
     test_provider_call_differential();
     test_provider_trap_continuation_differential();
@@ -2505,6 +3028,7 @@ int main(void) {
     test_policy_budget_generation_and_smoke_benchmark();
     test_coroutine_suspend_resume_generation_lease();
     test_coroutine_cancel_drops_exact_live_owner();
+    test_coroutine_child_provider_failure_continuations();
     puts("task-299 typed XrProgram VM tests passed");
     return 0;
 }

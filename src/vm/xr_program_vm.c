@@ -164,6 +164,7 @@ struct XrVmExecution {
     uint32_t suspension_block_id;
     uint32_t suspension_instruction_id;
     XrVmRuntimeValue *values;
+    XrVmRuntimeValue *edge_values;
     XrVmPlace *places;
     bool *initialized;
     struct XrVmExecution *child;
@@ -672,6 +673,76 @@ static XrVmInstructionView instruction_view(const XrVmCode *code, uint32_t funct
     return view;
 }
 
+static XrVmOutcome vm_provider_call(XrVmContext *context, const XrValidatedFunction *function,
+                                    const XrVmInstructionView *instruction,
+                                    const XrVmRuntimeValue *values, uint32_t operand_count) {
+    uint16_t operand_type =
+        operand_count == 1u ? function->value_types[instruction->operands[0]] : XR_CORE_TYPE_VOID;
+    XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
+        context->code->program, instruction->result_type_id,
+        operand_count == 1u ? &operand_type : NULL, operand_count);
+    XrVmOutcome result = vm_outcome(XR_VM_OUTCOME_RETURN, context);
+    XrExecutionProviderCallResult call = XR_EXECUTION_PROVIDER_CALL_FAILED;
+    if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY ||
+        call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY) {
+        int64_t provider_result = 0;
+        call =
+            call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY
+                ? xr_execution_lease_provider_call_i64_unary(
+                      context->lease, instruction->immediate.provider_operation.requirement_index,
+                      instruction->immediate.provider_operation.operation_index,
+                      values[instruction->operands[0]].as.value.as.i64, &provider_result)
+                : xr_execution_lease_provider_call_i64_nullary(
+                      context->lease, instruction->immediate.provider_operation.requirement_index,
+                      instruction->immediate.provider_operation.operation_index, &provider_result);
+        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
+            result.value.kind = XR_VM_VALUE_I64;
+            result.value.as.i64 = provider_result;
+        }
+    } else if (call_kind == XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY) {
+        bool provider_result = false;
+        call = xr_execution_lease_provider_call_bool_i64_unary(
+            context->lease, instruction->immediate.provider_operation.requirement_index,
+            instruction->immediate.provider_operation.operation_index,
+            values[instruction->operands[0]].as.value.as.i64, &provider_result);
+        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
+            result.value.kind = XR_VM_VALUE_BOOL;
+            result.value.as.boolean = provider_result;
+        }
+    } else if (call_kind == XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY) {
+        uint16_t pair_type_id = XR_CORE_TYPE_VOID;
+        (void) xr_validated_program_type_is_optional_i64_pair(
+            context->code->program, instruction->result_type_id, &pair_type_id);
+        XrVmAggregateValue *pair = allocate_aggregate(context, pair_type_id, UINT32_MAX, 2u);
+        XrVmAggregateValue *optional =
+            allocate_aggregate(context, instruction->result_type_id, 1u, 1u);
+        if (!pair || !optional)
+            return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+        bool present = false;
+        int64_t first = 0;
+        int64_t second = 0;
+        call = xr_execution_lease_provider_call_optional_i64_pair_nullary(
+            context->lease, instruction->immediate.provider_operation.requirement_index,
+            instruction->immediate.provider_operation.operation_index, &present, &first, &second);
+        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
+            if (present) {
+                pair->fields[0] = (XrVmValue) {.kind = XR_VM_VALUE_I64, .as.i64 = first};
+                pair->fields[1] = (XrVmValue) {.kind = XR_VM_VALUE_I64, .as.i64 = second};
+                optional->fields[0] =
+                    (XrVmValue) {.kind = XR_VM_VALUE_AGGREGATE, .as.aggregate = pair};
+            } else {
+                optional->variant_ordinal = 0u;
+                optional->field_count = 0u;
+            }
+            result.value.kind = XR_VM_VALUE_AGGREGATE;
+            result.value.as.aggregate = optional;
+        }
+    }
+    return call == XR_EXECUTION_PROVIDER_CALL_OK
+               ? result
+               : vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
+}
+
 static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                                     const XrVmRuntimeValue *arguments, uint32_t argument_count,
                                     uint32_t depth) {
@@ -1176,83 +1247,12 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     uint32_t provider_operand_count =
                         instruction.operand_count -
                         (trap_target ? trap_target->argument_count : 0u);
-                    uint16_t operand_type = provider_operand_count == 1u
-                                                ? function->value_types[instruction.operands[0]]
-                                                : XR_CORE_TYPE_VOID;
-                    XrProviderLogicalCallKind call_kind = xr_validated_program_provider_call_kind(
-                        context->code->program, instruction.result_type_id,
-                        provider_operand_count == 1u ? &operand_type : NULL,
-                        provider_operand_count);
-                    XrExecutionProviderCallResult call = XR_EXECUTION_PROVIDER_CALL_FAILED;
-                    if (call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY ||
-                        call_kind == XR_PROVIDER_LOGICAL_CALL_I64_NULLARY) {
-                        int64_t provider_result = 0;
-                        call = call_kind == XR_PROVIDER_LOGICAL_CALL_I64_UNARY
-                                   ? xr_execution_lease_provider_call_i64_unary(
-                                         context->lease,
-                                         instruction.immediate.provider_operation.requirement_index,
-                                         instruction.immediate.provider_operation.operation_index,
-                                         values[instruction.operands[0]].as.value.as.i64,
-                                         &provider_result)
-                                   : xr_execution_lease_provider_call_i64_nullary(
-                                         context->lease,
-                                         instruction.immediate.provider_operation.requirement_index,
-                                         instruction.immediate.provider_operation.operation_index,
-                                         &provider_result);
-                        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
-                            produced.as.value.kind = XR_VM_VALUE_I64;
-                            produced.as.value.as.i64 = provider_result;
-                        }
-                    } else if (call_kind == XR_PROVIDER_LOGICAL_CALL_BOOL_I64_UNARY) {
-                        bool provider_result = false;
-                        call = xr_execution_lease_provider_call_bool_i64_unary(
-                            context->lease,
-                            instruction.immediate.provider_operation.requirement_index,
-                            instruction.immediate.provider_operation.operation_index,
-                            values[instruction.operands[0]].as.value.as.i64, &provider_result);
-                        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
-                            produced.as.value.kind = XR_VM_VALUE_BOOL;
-                            produced.as.value.as.boolean = provider_result;
-                        }
-                    } else if (call_kind == XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY) {
-                        uint16_t pair_type_id = XR_CORE_TYPE_VOID;
-                        (void) xr_validated_program_type_is_optional_i64_pair(
-                            context->code->program, instruction.result_type_id, &pair_type_id);
-                        XrVmAggregateValue *pair =
-                            allocate_aggregate(context, pair_type_id, UINT32_MAX, 2u);
-                        XrVmAggregateValue *optional =
-                            allocate_aggregate(context, instruction.result_type_id, 1u, 1u);
-                        if (!pair || !optional) {
-                            result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
-                            goto done;
-                        }
-                        bool present = false;
-                        int64_t first = 0;
-                        int64_t second = 0;
-                        call = xr_execution_lease_provider_call_optional_i64_pair_nullary(
-                            context->lease,
-                            instruction.immediate.provider_operation.requirement_index,
-                            instruction.immediate.provider_operation.operation_index, &present,
-                            &first, &second);
-                        if (call == XR_EXECUTION_PROVIDER_CALL_OK) {
-                            if (present) {
-                                pair->fields[0] =
-                                    (XrVmValue) {.kind = XR_VM_VALUE_I64, .as.i64 = first};
-                                pair->fields[1] =
-                                    (XrVmValue) {.kind = XR_VM_VALUE_I64, .as.i64 = second};
-                                optional->fields[0] = (XrVmValue) {.kind = XR_VM_VALUE_AGGREGATE,
-                                                                   .as.aggregate = pair};
-                            } else {
-                                optional->variant_ordinal = 0u;
-                                optional->field_count = 0u;
-                            }
-                            produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
-                            produced.as.value.as.aggregate = optional;
-                        }
-                    }
-                    if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
-                        if (!has_trap_edge) {
-                            result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
+                    XrVmOutcome provider = vm_provider_call(context, function, &instruction, values,
+                                                            provider_operand_count);
+                    if (provider.kind != XR_VM_OUTCOME_RETURN) {
+                        if (provider.kind != XR_VM_OUTCOME_TRAP ||
+                            provider.trap != XR_VM_TRAP_PROVIDER_CALL_FAILED || !has_trap_edge) {
+                            result = provider;
                             goto done;
                         }
                         for (uint32_t index = 0u; index < trap_target->argument_count; ++index)
@@ -1261,6 +1261,8 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         incoming_count = trap_target->argument_count;
                         block_id = instruction.successors[0];
                         transferred = true;
+                    } else {
+                        produced.as.value = provider.value;
                     }
                     break;
                 }
@@ -1707,8 +1709,11 @@ XrVmDecodePolicy xr_vm_code_decode_policy(const XrVmCode *code) {
 static bool vm_coroutine_operation_supported(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
+           operation_id == XR_CORE_OP_CORE_CONSTANT_BOOL ||
            operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_SUB_I64 ||
            operation_id == XR_CORE_OP_CORE_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
            operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
            operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
            operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
@@ -1731,6 +1736,26 @@ static bool vm_coroutine_operation_supported(uint16_t operation_id) {
 static void vm_execution_release_lease(XrVmExecution *execution) {
     if (execution && execution->owns_lease && xr_execution_lease_is_valid(&execution->lease))
         (void) xr_execution_lease_release(&execution->lease);
+}
+
+static bool vm_execution_allocate_values(XrVmExecution *execution,
+                                         const XrValidatedFunction *function) {
+    size_t count = function->value_count ? function->value_count : 1u;
+    size_t edge_count = 1u;
+    for (uint32_t block = 0u; block < function->block_count; ++block)
+        if (function->blocks[block].argument_count > edge_count)
+            edge_count = function->blocks[block].argument_count;
+    if (edge_count > count || count > SIZE_MAX / sizeof(*execution->values) ||
+        count > SIZE_MAX / sizeof(*execution->places) ||
+        count > SIZE_MAX / sizeof(*execution->initialized) ||
+        edge_count > SIZE_MAX / sizeof(*execution->edge_values))
+        return false;
+    execution->values = xr_calloc(count, sizeof(*execution->values));
+    execution->places = xr_calloc(count, sizeof(*execution->places));
+    execution->initialized = xr_calloc(count, sizeof(*execution->initialized));
+    execution->edge_values = xr_calloc(edge_count, sizeof(*execution->edge_values));
+    return execution->values && execution->places && execution->initialized &&
+           execution->edge_values;
 }
 
 static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructionView *instruction,
@@ -1760,13 +1785,7 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
     child->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     child->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
     child->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
-    child->values =
-        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->values));
-    child->places =
-        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->places));
-    child->initialized =
-        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*child->initialized));
-    if (!child->code || !child->values || !child->places || !child->initialized) {
+    if (!child->code || !vm_execution_allocate_values(child, function)) {
         xr_vm_execution_free(child);
         return false;
     }
@@ -1798,6 +1817,72 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
         child->initialized[target] = true;
     }
     *child_out = child;
+    return true;
+}
+
+static void *vm_reserve_child_carriers(void *storage, uint32_t count, uint32_t added,
+                                       uint32_t *capacity, size_t item_size) {
+    if (added > UINT32_MAX - count || (size_t) (count + added) > SIZE_MAX / item_size)
+        return NULL;
+    uint32_t required = count + added;
+    if (required <= *capacity)
+        return storage;
+    void *grown = xr_realloc(storage, (size_t) required * item_size);
+    if (grown)
+        *capacity = required;
+    return grown;
+}
+
+static bool vm_adopt_child_storage(XrVmExecution *execution) {
+    XrVmContext *parent = &execution->context;
+    XrVmContext *child = &execution->child->context;
+    if (parent->aggregate_cell_count > parent->code->options.max_value_cells ||
+        child->aggregate_cell_count >
+            parent->code->options.max_value_cells - parent->aggregate_cell_count)
+        return false;
+    if (child->aggregate_count != 0u) {
+        XrVmAggregateValue **grown = vm_reserve_child_carriers(
+            parent->aggregates, parent->aggregate_count, child->aggregate_count,
+            &parent->aggregate_capacity, sizeof(*parent->aggregates));
+        if (!grown)
+            return false;
+        parent->aggregates = grown;
+    }
+    if (child->existential_count != 0u) {
+        XrVmExistentialValue **grown = vm_reserve_child_carriers(
+            parent->existentials, parent->existential_count, child->existential_count,
+            &parent->existential_capacity, sizeof(*parent->existentials));
+        if (!grown)
+            return false;
+        parent->existentials = grown;
+    }
+    if (child->callable_count != 0u) {
+        XrVmCallableValue **grown = vm_reserve_child_carriers(
+            parent->callables, parent->callable_count, child->callable_count,
+            &parent->callable_capacity, sizeof(*parent->callables));
+        if (!grown)
+            return false;
+        parent->callables = grown;
+    }
+    // REF writes and uncaught outcomes can retain child-created carriers. Moving
+    // their allocation ownership preserves aliases when the child frame ends.
+    if (child->aggregate_count != 0u)
+        memcpy(parent->aggregates + parent->aggregate_count, child->aggregates,
+               (size_t) child->aggregate_count * sizeof(*child->aggregates));
+    if (child->existential_count != 0u)
+        memcpy(parent->existentials + parent->existential_count, child->existentials,
+               (size_t) child->existential_count * sizeof(*child->existentials));
+    if (child->callable_count != 0u)
+        memcpy(parent->callables + parent->callable_count, child->callables,
+               (size_t) child->callable_count * sizeof(*child->callables));
+    parent->aggregate_count += child->aggregate_count;
+    parent->existential_count += child->existential_count;
+    parent->callable_count += child->callable_count;
+    parent->aggregate_cell_count += child->aggregate_cell_count;
+    child->aggregate_count = 0u;
+    child->existential_count = 0u;
+    child->callable_count = 0u;
+    child->aggregate_cell_count = 0u;
     return true;
 }
 
@@ -1850,13 +1935,7 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
     execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
-    execution->values =
-        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->values));
-    execution->places =
-        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->places));
-    execution->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
-                                       sizeof(*execution->initialized));
-    if (!execution->values || !execution->places || !execution->initialized) {
+    if (!vm_execution_allocate_values(execution, function)) {
         xr_vm_execution_free(execution);
         return false;
     }
@@ -1884,7 +1963,8 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
     return true;
 }
 
-static bool vm_materialize_suspension_edge(XrVmExecution *execution, bool cancel) {
+static bool vm_suspension_instruction(const XrVmExecution *execution,
+                                      XrVmInstructionView *instruction) {
     if (!execution || execution->suspension_block_id == XR_PROGRAM_LOCATION_NONE ||
         execution->suspension_instruction_id == XR_PROGRAM_LOCATION_NONE)
         return false;
@@ -1894,19 +1974,47 @@ static bool vm_materialize_suspension_edge(XrVmExecution *execution, bool cancel
         execution->suspension_instruction_id >=
             function->blocks[execution->suspension_block_id].instruction_count)
         return false;
-    XrVmInstructionView instruction =
+    *instruction =
         instruction_view(execution->context.code, execution->function_id,
                          execution->suspension_block_id, execution->suspension_instruction_id);
-    uint32_t successor_index = cancel ? 1u : 0u;
-    if (instruction.successor_count != 2u ||
+    return true;
+}
+
+static void vm_execution_assign_edge(XrVmExecution *execution, const XrValidatedBlock *target,
+                                     const uint32_t *operands, uint32_t start,
+                                     const XrVmValue *implicit) {
+    uint32_t prefix = implicit ? 1u : 0u;
+    if (implicit)
+        execution->edge_values[0] =
+            (XrVmRuntimeValue) {.category = XR_CORE_IR_VALUE, .as.value = *implicit};
+    // A back-edge may permute its own arguments; all reads precede every write.
+    for (uint32_t argument = prefix; argument < target->argument_count; ++argument)
+        execution->edge_values[argument] = execution->values[operands[start + argument - prefix]];
+    for (uint32_t argument = 0u; argument < target->argument_count; ++argument) {
+        uint32_t value = target->argument_ids[argument];
+        execution->values[value] = execution->edge_values[argument];
+        execution->initialized[value] = true;
+    }
+}
+
+static bool vm_materialize_suspension_edge(XrVmExecution *execution, uint32_t successor_index) {
+    XrVmInstructionView instruction;
+    if (!vm_suspension_instruction(execution, &instruction))
+        return false;
+    const XrValidatedFunction *function =
+        &execution->context.code->program->functions[execution->function_id];
+    if (successor_index >= instruction.successor_count ||
         instruction.successors[successor_index] >= function->block_count)
         return false;
     const XrValidatedBlock *target = &function->blocks[instruction.successors[successor_index]];
     uint32_t operand_start = 0u;
     if (instruction.operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
-        if (cancel)
+        if (instruction.successor_count != 2u)
+            return false;
+        if (successor_index == 1u)
             operand_start = function->blocks[instruction.successors[0]].argument_count;
-    } else if (instruction.operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED && cancel) {
+    } else if (instruction.operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+               successor_index != 0u && instruction.successor_count <= 3u) {
         uint32_t callee_id = instruction.immediate.coroutine_call.function_id;
         if (callee_id >= execution->context.code->program->function_count)
             return false;
@@ -1916,6 +2024,8 @@ static bool vm_materialize_suspension_edge(XrVmExecution *execution, bool cancel
         if (normal->argument_count < implicit_result)
             return false;
         operand_start = callee->parameter_count + normal->argument_count - implicit_result;
+        if (successor_index == 2u)
+            operand_start += function->blocks[instruction.successors[1]].argument_count;
     } else {
         return false;
     }
@@ -1924,12 +2034,11 @@ static bool vm_materialize_suspension_edge(XrVmExecution *execution, bool cancel
         return false;
     for (uint32_t argument = 0u; argument < target->argument_count; ++argument) {
         uint32_t source_value = instruction.operands[operand_start + argument];
-        uint32_t target_value = target->argument_ids[argument];
         if (!execution->initialized[source_value])
             return false;
-        execution->values[target_value] = execution->values[source_value];
-        execution->initialized[target_value] = true;
     }
+    vm_execution_assign_edge(execution, target, instruction.operands, operand_start, NULL);
+    execution->block_id = instruction.successors[successor_index];
     return true;
 }
 
@@ -1937,7 +2046,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
     if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
         return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
     if (execution->suspended && !execution->child &&
-        !vm_materialize_suspension_edge(execution, false)) {
+        !vm_materialize_suspension_edge(execution, 0u)) {
         execution->finished = true;
         vm_execution_release_lease(execution);
         return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
@@ -1976,6 +2085,16 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
         switch (instruction.operation_id) {
             case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
                 break;
+            case XR_CORE_OP_CORE_CONSTANT_BOOL: {
+                const XrValidatedConstant *constant =
+                    &execution->context.code->program->constants[instruction.immediate.constant_id];
+                execution->values[instruction.result_id] = (XrVmRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = {.kind = XR_VM_VALUE_BOOL, .as.boolean = constant->value.boolean},
+                };
+                execution->initialized[instruction.result_id] = true;
+                break;
+            }
             case XR_CORE_OP_CORE_CONSTANT_I64: {
                 const XrValidatedConstant *constant =
                     &execution->context.code->program->constants[instruction.immediate.constant_id];
@@ -2161,6 +2280,36 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 execution->values[instruction.operands[0]].as.place->initialized = false;
                 execution->initialized[instruction.result_id] = true;
                 break;
+            case XR_CORE_OP_CORE_PROVIDER_CALL: {
+                const XrValidatedBlock *trap_target =
+                    instruction.successor_count == 1u ? &function->blocks[instruction.successors[0]]
+                                                      : NULL;
+                uint32_t operand_count =
+                    instruction.operand_count - (trap_target ? trap_target->argument_count : 0u);
+                XrVmOutcome provider = vm_provider_call(&execution->context, function, &instruction,
+                                                        execution->values, operand_count);
+                if (provider.kind != XR_VM_OUTCOME_RETURN) {
+                    if (provider.kind == XR_VM_OUTCOME_TRAP &&
+                        provider.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED && trap_target) {
+                        vm_execution_assign_edge(execution, trap_target, instruction.operands,
+                                                 operand_count, NULL);
+                        execution->block_id = instruction.successors[0];
+                        execution->instruction_id = 0u;
+                        break;
+                    }
+                    execution->finished = true;
+                    XrVmOutcome failed = vm_execution_outcome(execution, provider.kind);
+                    failed.trap = provider.trap;
+                    vm_execution_release_lease(execution);
+                    return failed;
+                }
+                execution->values[instruction.result_id] = (XrVmRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = provider.value,
+                };
+                execution->initialized[instruction.result_id] = true;
+                break;
+            }
             case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
             case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT: {
                 uint32_t target_function =
@@ -2219,14 +2368,8 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                         instruction.successor_count == 1u) {
                         const XrValidatedBlock *target =
                             &function->blocks[instruction.successors[0]];
-                        for (uint32_t argument = 0u; argument < target->argument_count;
-                             ++argument) {
-                            uint32_t target_value = target->argument_ids[argument];
-                            execution->values[target_value] =
-                                execution
-                                    ->values[instruction.operands[call_operand_count + argument]];
-                            execution->initialized[target_value] = true;
-                        }
+                        vm_execution_assign_edge(execution, target, instruction.operands,
+                                                 call_operand_count, NULL);
                         execution->block_id = instruction.successors[0];
                         execution->instruction_id = 0u;
                         break;
@@ -2245,15 +2388,18 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 }
                 break;
             }
-            case XR_CORE_OP_CORE_BRANCH: {
-                const XrValidatedBlock *target = &function->blocks[instruction.successors[0]];
-                for (uint32_t argument = 0u; argument < instruction.operand_count; ++argument) {
-                    uint32_t target_value = target->argument_ids[argument];
-                    execution->values[target_value] =
-                        execution->values[instruction.operands[argument]];
-                    execution->initialized[target_value] = true;
+            case XR_CORE_OP_CORE_BRANCH:
+            case XR_CORE_OP_CORE_CONDITIONAL_BRANCH: {
+                uint32_t edge = 0u;
+                uint32_t start = 0u;
+                if (instruction.operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH) {
+                    edge = execution->values[instruction.operands[0]].as.value.as.boolean ? 0u : 1u;
+                    start = 1u + (edge ? function->blocks[instruction.successors[0]].argument_count
+                                       : 0u);
                 }
-                execution->block_id = instruction.successors[0];
+                const XrValidatedBlock *target = &function->blocks[instruction.successors[edge]];
+                vm_execution_assign_edge(execution, target, instruction.operands, start, NULL);
+                execution->block_id = instruction.successors[edge];
                 execution->instruction_id = 0u;
                 break;
             }
@@ -2309,7 +2455,33 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                     suspended.safepoint_id = safepoint_id;
                     return suspended;
                 }
+                if (!vm_adopt_child_storage(execution)) {
+                    execution->finished = true;
+                    xr_vm_execution_free(execution->child);
+                    execution->child = NULL;
+                    vm_execution_release_lease(execution);
+                    return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
+                }
                 if (child.kind != XR_VM_OUTCOME_RETURN) {
+                    if (child.kind == XR_VM_OUTCOME_TRAP &&
+                        child.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
+                        instruction.successor_count == 3u) {
+                        execution->suspension_block_id = execution->block_id;
+                        execution->suspension_instruction_id = instruction_id;
+                        bool transferred = vm_materialize_suspension_edge(execution, 2u);
+                        xr_vm_execution_free(execution->child);
+                        execution->child = NULL;
+                        execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
+                        execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
+                        if (!transferred) {
+                            execution->finished = true;
+                            vm_execution_release_lease(execution);
+                            return vm_execution_outcome(execution,
+                                                        XR_VM_OUTCOME_INVALID_INVOCATION);
+                        }
+                        execution->instruction_id = 0u;
+                        break;
+                    }
                     execution->finished = true;
                     xr_vm_execution_free(execution->child);
                     execution->child = NULL;
@@ -2320,29 +2492,9 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 }
                 const XrValidatedBlock *normal = &function->blocks[instruction.successors[0]];
                 uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
-                if (implicit_result != 0u) {
-                    XrVmValue transferred = void_value();
-                    if (!clone_vm_value(&execution->context, child.value, callee->result_type_id,
-                                        &transferred)) {
-                        execution->finished = true;
-                        xr_vm_execution_free(execution->child);
-                        execution->child = NULL;
-                        vm_execution_release_lease(execution);
-                        return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
-                    }
-                    uint32_t target = normal->argument_ids[0];
-                    execution->values[target] = (XrVmRuntimeValue) {
-                        .category = XR_CORE_IR_VALUE,
-                        .as.value = transferred,
-                    };
-                    execution->initialized[target] = true;
-                }
-                for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
-                    uint32_t source = instruction.operands[callee->parameter_count + live];
-                    uint32_t target = normal->argument_ids[implicit_result + live];
-                    execution->values[target] = execution->values[source];
-                    execution->initialized[target] = true;
-                }
+                vm_execution_assign_edge(execution, normal, instruction.operands,
+                                         callee->parameter_count,
+                                         implicit_result ? &child.value : NULL);
                 xr_vm_execution_free(execution->child);
                 execution->child = NULL;
                 execution->block_id = instruction.successors[0];
@@ -2385,6 +2537,7 @@ XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
         execution->cancel_block_id == XR_PROGRAM_LOCATION_NONE ||
         !xr_execution_lease_is_valid(&execution->lease))
         return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
+    uint32_t successor_index = 1u;
     if (execution->child) {
         uint64_t child_steps = execution->child->context.steps;
         XrVmOutcome child = xr_vm_execution_cancel(execution->child);
@@ -2397,7 +2550,20 @@ XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
             return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
         }
         execution->context.steps += child_delta;
-        if (child.kind != XR_VM_OUTCOME_CANCELLED) {
+        if (!vm_adopt_child_storage(execution)) {
+            execution->finished = true;
+            xr_vm_execution_free(execution->child);
+            execution->child = NULL;
+            vm_execution_release_lease(execution);
+            return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
+        }
+        XrVmInstructionView instruction;
+        if (child.kind == XR_VM_OUTCOME_TRAP && child.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
+            vm_suspension_instruction(execution, &instruction) &&
+            instruction.operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+            instruction.successor_count == 3u) {
+            successor_index = 2u;
+        } else if (child.kind != XR_VM_OUTCOME_CANCELLED) {
             execution->finished = true;
             xr_vm_execution_free(execution->child);
             execution->child = NULL;
@@ -2409,12 +2575,11 @@ XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
         xr_vm_execution_free(execution->child);
         execution->child = NULL;
     }
-    if (!vm_materialize_suspension_edge(execution, true)) {
+    if (!vm_materialize_suspension_edge(execution, successor_index)) {
         execution->finished = true;
         vm_execution_release_lease(execution);
         return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
     }
-    execution->block_id = execution->cancel_block_id;
     execution->instruction_id = 0u;
     execution->suspended = false;
     execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
@@ -2431,6 +2596,7 @@ void xr_vm_execution_free(XrVmExecution *execution) {
     free_aggregates(&execution->context);
     xr_free(execution->initialized);
     xr_free(execution->places);
+    xr_free(execution->edge_values);
     xr_free(execution->values);
     xr_vm_code_free(execution->code);
     xr_free(execution);

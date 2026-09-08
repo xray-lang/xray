@@ -24,6 +24,7 @@ Usage:
   python3 xisagen.py aot-layout <rep.def> <layout.def> <output.h>
   python3 xisagen.py aot-c-emission-rules <rules.def> <output-root>
   python3 xisagen.py target-vm-ops <vm_ops.def> <output-root>
+  python3 xisagen.py test-fast
   python3 xisagen.py test
 """
 
@@ -45,6 +46,7 @@ import shutil
 import contextlib
 import io
 from collections import Counter
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -4968,35 +4970,74 @@ def _xi_terminal_selector_census(
     census = {selector: set() for selector in selectors}
     if not known_emitters:
         return census
-    token_pattern = re.compile(r'\bXI_[A-Z0-9_]+\b')
+    selector_rows = frozenset(selectors)
+    emitter_rows = frozenset(known_emitters)
+    terminator_rows = frozenset(terminators)
+    predicate_rows = tuple(
+        (selector, tuple(sorted(predicate_helpers[selector])))
+        for selector in sorted(selectors))
+    factory_rows = tuple(
+        (selector, tuple(sorted(factory_helpers[selector])))
+        for selector in sorted(selectors))
+    declared_by_function: dict[tuple[str, str], set[str]] = {}
+    for selector, routes in declared_routes.items():
+        for route in routes:
+            declared_by_function.setdefault(route, set()).add(selector)
+    for source_path, symbol, function_body in aot_functions:
+        discovered = _xi_terminal_selector_routes_for_function(
+            function_body, selector_rows, emitter_rows, terminator_rows,
+            frozenset(declared_by_function.get((source_path, symbol), set())),
+            predicate_rows, factory_rows,
+            frozenset(root_values.get((source_path, symbol), set())))
+        for selector in discovered:
+            census[selector].add((source_path, symbol))
+    return census
+
+
+@functools.lru_cache(maxsize=32768)
+def _xi_terminal_selector_routes_for_function(
+        function_body: str, selectors: frozenset[str],
+        known_emitters: frozenset[str], terminators: frozenset[str],
+        declared_selectors: frozenset[str],
+        predicate_rows: tuple[tuple[str, tuple[str, ...]], ...],
+        factory_rows: tuple[tuple[str, tuple[str, ...]], ...],
+        root_values: frozenset[str]) -> frozenset[str]:
+    """Cache immutable per-function route evidence, never a validation verdict.
+
+    Mutation tests still rebuild the complete census and compare it with their
+    current declarations.  An unchanged function body can reuse only the
+    lexical/control-flow evidence computed under the exact same selector,
+    emitter, helper, terminator, declared-route and root-value inputs.
+    """
     emitter_pattern = re.compile(
         r'\b(?:' + '|'.join(
             re.escape(symbol) for symbol in sorted(known_emitters)) + r')\s*\(')
-    for source_path, symbol, function_body in aot_functions:
-        if emitter_pattern.search(function_body) is None:
-            continue
-        candidates = set(token_pattern.findall(function_body)) & selectors
-        candidates.update(
-            selector for selector, helpers in predicate_helpers.items()
-            if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
-                   for helper in helpers))
-        candidates.update(
-            selector for selector, helpers in factory_helpers.items()
-            if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
-                   for helper in helpers))
-        for selector in candidates:
-            if (source_path, symbol) in declared_routes.get(selector, set()):
-                continue
-            if _xi_direct_selector_present(
-                    function_body, selector, known_emitters, terminators):
-                census[selector].add((source_path, symbol))
-            elif _xi_hidden_selector_route_present(
-                    function_body, selector, predicate_helpers[selector],
-                    factory_helpers[selector],
-                    root_values.get((source_path, symbol), set()),
-                    known_emitters, terminators):
-                census[selector].add((source_path, symbol))
-    return census
+    if emitter_pattern.search(function_body) is None:
+        return frozenset()
+    predicate_helpers = {selector: set(helpers)
+                         for selector, helpers in predicate_rows}
+    factory_helpers = {selector: set(helpers)
+                       for selector, helpers in factory_rows}
+    candidates = set(re.findall(r'\bXI_[A-Z0-9_]+\b', function_body)) & selectors
+    candidates.update(
+        selector for selector, helpers in predicate_helpers.items()
+        if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
+               for helper in helpers))
+    candidates.update(
+        selector for selector, helpers in factory_helpers.items()
+        if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
+               for helper in helpers))
+    discovered = set()
+    for selector in candidates - declared_selectors:
+        if _xi_direct_selector_present(
+                function_body, selector, set(known_emitters), set(terminators)):
+            discovered.add(selector)
+        elif _xi_hidden_selector_route_present(
+                function_body, selector, predicate_helpers[selector],
+                factory_helpers[selector], set(root_values),
+                set(known_emitters), set(terminators)):
+            discovered.add(selector)
+    return frozenset(discovered)
 
 
 def validate_xi_lowering_consumer_sources(
@@ -9247,28 +9288,207 @@ def cmd_target_vm_ops(args: list[str]):
         print(f"xisagen: generated {path}", file=sys.stderr)
 
 
+@dataclass
+class _XiSelfTestTimerFrame:
+    kind: str
+    name: str
+    child_seconds: float = 0.0
+
+
+_XI_SELF_TEST_TIMERS: ContextVar[tuple[_XiSelfTestTimerFrame, ...]] = ContextVar(
+    'xisagen_self_test_timers', default=())
+
+
+def _xi_self_test_event(*, stream=None, **fields) -> None:
+    """Flush one standalone record even after a test's partial progress line."""
+    record = {'schema': 'xisagen-self-test/1', **fields}
+    print('\nxisagen-self-test: ' + json.dumps(record, sort_keys=True),
+          file=sys.stderr if stream is None else stream, flush=True)
+
+
+@contextlib.contextmanager
+def _xi_self_test_timer(kind: str, name: str, *, stream=None):
+    parents = _XI_SELF_TEST_TIMERS.get()
+    parent_path = [{'kind': parent.kind, 'name': parent.name} for parent in parents]
+    frame = _XiSelfTestTimerFrame(kind, name)
+    started = time.perf_counter()
+    _xi_self_test_event(stream=stream, event='start', kind=kind, name=name,
+                        parents=parent_path)
+    token = _XI_SELF_TEST_TIMERS.set((*parents, frame))
+    status = 'failed'
+    failure = {}
+    try:
+        yield
+    except BaseException as error:
+        failure['exception'] = type(error).__name__
+        if isinstance(error, KeyboardInterrupt):
+            status = 'interrupted'
+        raise
+    else:
+        status = 'passed'
+    finally:
+        elapsed = time.perf_counter() - started
+        _XI_SELF_TEST_TIMERS.reset(token)
+        if parents:
+            parents[-1].child_seconds += elapsed
+        _xi_self_test_event(
+            stream=stream, event='end', kind=kind, name=name, status=status,
+            parents=parent_path, elapsed_seconds=round(elapsed, 6),
+            self_seconds=round(max(0.0, elapsed - frame.child_seconds), 6), **failure)
+
+
+@contextlib.contextmanager
+def _xi_self_test_phase_reporting():
+    """Observe real calls in the parser suite without changing production entry points.
+
+    Keep timing records outside captured negative-case diagnostics. Each wrapper
+    invokes the original callable, including its existing lexical cache, once.
+    The patch scope restores every callable even after rejection or interruption.
+    """
+    from unittest import mock
+
+    stream = sys.stderr
+
+    def measured(function):
+        @functools.wraps(function)
+        def invoke(*args, **kwargs):
+            with _xi_self_test_timer('phase', function.__name__, stream=stream):
+                return function(*args, **kwargs)
+        for attribute in ('cache_info', 'cache_clear', 'cache_parameters'):
+            if hasattr(function, attribute):
+                setattr(invoke, attribute, getattr(function, attribute))
+        return invoke
+
+    with contextlib.ExitStack() as patches:
+        for name in (
+                'capture_xi_lowering_validation_snapshot',
+                '_xi_capture_aot_discovery_census',
+                'validate_xi_lowering_consumer_sources',
+                '_xi_aot_discovery_functions',
+                '_xi_transitive_selector_helper_symbols',
+                '_xi_selector_passthrough_helpers',
+                '_xi_validate_governed_token_aliases',
+                '_xi_transitive_terminal_emitters',
+                '_xi_reachable_activation_callers',
+                '_xi_terminal_selector_census',
+                '_xi_run_lowering_verification',
+                'check_xi_lowering_outputs'):
+            patches.enter_context(mock.patch.object(
+                sys.modules[__name__], name, measured(globals()[name])))
+        yield
+
+
+class _XiSelfTestCaseTimings:
+    """Derive the case manifest from real invocations, never a parallel roster."""
+
+    def __init__(self, expected_counts: dict[str, int],
+                 selected_cases: frozenset[str] | None = None):
+        self.expected_counts = dict(expected_counts)
+        self.selected_cases = selected_cases
+        self.started: dict[str, str] = {}
+        self.completed: dict[str, str] = {}
+
+    def track(self, category: str):
+        assert category in self.expected_counts, category
+
+        def decorate(case):
+            @functools.wraps(case)
+            def invoke(case_id: str, *args, **kwargs):
+                assert isinstance(case_id, str) and case_id, case_id
+                name = f'{category}/{case_id}'
+                if self.selected_cases is not None and name not in self.selected_cases:
+                    return None
+                assert name not in self.started, f'duplicate self-test case: {name}'
+                self.started[name] = category
+                with _xi_self_test_timer('case', name):
+                    result = case(case_id, *args, **kwargs)
+                self.completed[name] = category
+                return result
+            return invoke
+        return decorate
+
+    def assert_complete(self) -> None:
+        actual = dict(Counter(self.completed.values()))
+        assert self.started == self.completed, 'incomplete self-test case'
+        expected = self.expected_counts
+        profile = 'exhaustive'
+        if self.selected_cases is not None:
+            expected = dict(Counter(
+                name.split('/', 1)[0] for name in self.selected_cases))
+            assert set(self.completed) == self.selected_cases, (
+                self.selected_cases, set(self.completed))
+            profile = 'fast'
+        assert actual == expected, (expected, actual)
+        _xi_self_test_event(
+            event='complete', kind='case-manifest', name='xi-lowering-negative',
+            profile=profile, counts=actual, cases=list(self.completed), status='passed')
+
+
 def cmd_test(args: list[str]):
+    """Run every self-test in its original order, with live wall-clock records."""
     import c_emission_rules
 
-    """Run self-tests."""
     print("xisagen self-test:", file=sys.stderr)
-    _test_generated_file_writes()
-    _test_sexpr_parser()
-    _test_xi_ops_parser()
-    _test_xi_semantic_ops_parser()
-    _test_xi_preprocessor_content_cache()
-    _test_xi_lowering_parser()
-    _test_xi_lowering_build_artifacts()
-    _test_xi_lowering_ninja_failed_edge()
-    _test_xi_lowering_actual_ninja_edge()
-    _test_xi_verifier_parser()
-    _test_aot_rep_parser()
-    _test_aot_abi_parser()
-    _test_aot_layout_parser()
-    c_emission_rules.self_test()
-    _test_target_instruction_parser()
-    _test_error_paths()
+    for suite in (
+            _test_generated_file_writes,
+            _test_sexpr_parser,
+            _test_xi_ops_parser,
+            _test_xi_semantic_ops_parser,
+            _test_xi_preprocessor_content_cache,
+            _test_xi_lowering_parser,
+            _test_xi_lowering_build_artifacts,
+            _test_xi_lowering_ninja_failed_edge,
+            _test_xi_lowering_actual_ninja_edge,
+            _test_xi_verifier_parser,
+            _test_aot_rep_parser,
+            _test_aot_abi_parser,
+            _test_aot_layout_parser,
+            c_emission_rules.self_test,
+            _test_target_instruction_parser,
+            _test_error_paths):
+        with _xi_self_test_timer('suite', suite.__name__):
+            suite()
     print("All xisagen self-tests passed.", file=sys.stderr)
+
+
+XI_FAST_NEGATIVE_CASES = frozenset({
+    'binding/await-missing-owner',
+    'discovery/initializer_alias_go_owner',
+    'source/await-inverted-selector',
+    'source/phi-loop-body-entry-missing',
+})
+
+
+def cmd_test_fast(args: list[str]):
+    """Run the bounded edit-loop profile without claiming exhaustive coverage."""
+    if args:
+        die("usage: xisagen.py test-fast")
+    import c_emission_rules
+
+    print("xisagen fast self-test:", file=sys.stderr)
+    suites = (
+        _test_generated_file_writes,
+        _test_sexpr_parser,
+        _test_xi_ops_parser,
+        _test_xi_semantic_ops_parser,
+        _test_xi_preprocessor_content_cache,
+        lambda: _test_xi_lowering_parser(XI_FAST_NEGATIVE_CASES),
+        _test_xi_lowering_build_artifacts,
+        _test_xi_verifier_parser,
+        _test_aot_rep_parser,
+        _test_aot_abi_parser,
+        _test_aot_layout_parser,
+        c_emission_rules.self_test,
+        _test_target_instruction_parser,
+        _test_error_paths,
+    )
+    for suite in suites:
+        name = '_test_xi_lowering_parser_fast' if suite.__name__ == '<lambda>' \
+            else suite.__name__
+        with _xi_self_test_timer('suite', name):
+            suite()
+    print("All xisagen fast self-tests passed; exhaustive profile not run.",
+          file=sys.stderr)
 
 def _test_generated_file_writes() -> None:
     from unittest import mock
@@ -9861,7 +10081,9 @@ def _test_xi_preprocessor_content_cache() -> None:
     print(" PASS", file=sys.stderr)
 
 
-def _test_xi_lowering_parser():
+@_xi_self_test_phase_reporting()
+def _test_xi_lowering_parser(
+        selected_cases: frozenset[str] | None = None):
     print("  test_xi_lowering_parser...", end='', file=sys.stderr)
     ops_text = '''
     (define-xi-op xi.add
@@ -10525,41 +10747,44 @@ def _test_xi_lowering_parser():
         def mutate_before_projection_check() -> None:
             early_projection.write_bytes(early_content + b'/* pre-check drift */\n')
 
-        try:
-            _xi_run_lowering_verification(
-                real_ops_path, real_lowering_path, Path(directory), proof_stamp,
-                proof_depfile,
-                after_validation_hook=mutate_before_projection_check)
-            assert False, "post-validation pre-check mutation must fail closed"
-        except SystemExit:
-            pass
-        early_projection.write_bytes(early_content)
+        if selected_cases is None:
+            try:
+                _xi_run_lowering_verification(
+                    real_ops_path, real_lowering_path, Path(directory), proof_stamp,
+                    proof_depfile,
+                    after_validation_hook=mutate_before_projection_check)
+                assert False, "post-validation pre-check mutation must fail closed"
+            except SystemExit:
+                pass
+            early_projection.write_bytes(early_content)
 
         def mutate_early_projection_after_compare() -> None:
             early_projection.write_bytes(early_content + b'/* mid-check drift */\n')
 
-        try:
-            _xi_run_lowering_verification(
-                real_ops_path, real_lowering_path, Path(directory), proof_stamp,
-                proof_depfile,
-                after_first_projection_hook=mutate_early_projection_after_compare)
-            assert False, "an early projection changed after comparison must fail closed"
-        except SystemExit:
-            pass
-        early_projection.write_bytes(early_content)
+        if selected_cases is None:
+            try:
+                _xi_run_lowering_verification(
+                    real_ops_path, real_lowering_path, Path(directory), proof_stamp,
+                    proof_depfile,
+                    after_first_projection_hook=mutate_early_projection_after_compare)
+                assert False, "an early projection changed after comparison must fail closed"
+            except SystemExit:
+                pass
+            early_projection.write_bytes(early_content)
 
         def replace_proof_after_publication() -> None:
             _xi_atomic_write(proof_stamp, proof_stamp.read_text(encoding='utf-8'))
 
-        try:
-            _xi_run_lowering_verification(
-                real_ops_path, real_lowering_path, Path(directory), proof_stamp,
-                proof_depfile, after_stamp_hook=replace_proof_after_publication)
-            assert False, "proof stamp identity drift after publication must fail closed"
-        except SystemExit:
-            pass
-        assert not proof_stamp.exists()
-        assert not proof_depfile.exists()
+        if selected_cases is None:
+            try:
+                _xi_run_lowering_verification(
+                    real_ops_path, real_lowering_path, Path(directory), proof_stamp,
+                    proof_depfile, after_stamp_hook=replace_proof_after_publication)
+                assert False, "proof stamp identity drift after publication must fail closed"
+            except SystemExit:
+                pass
+            assert not proof_stamp.exists()
+            assert not proof_depfile.exists()
         stale_output = Path(first_outputs[0])
         stale_output.write_text(
             stale_output.read_text(encoding='utf-8') + '/* stale */\n',
@@ -10667,7 +10892,11 @@ def _test_xi_lowering_parser():
          'emit_thread_spawn_value_stmt')
     ]
 
-    def reject_binding_mutation(op_name: str, binding_index: int,
+    negative_cases = _XiSelfTestCaseTimings(
+        {'binding': 8, 'discovery': 26, 'source': 58}, selected_cases)
+
+    @negative_cases.track('binding')
+    def reject_binding_mutation(case_id: str, op_name: str, binding_index: int,
                                 binding: XiConsumerBinding) -> None:
         mutated = list(real_entries)
         entry_index = next(index for index, entry in enumerate(mutated)
@@ -10688,25 +10917,25 @@ def _test_xi_lowering_parser():
 
     await_entry = next(entry for entry in real_entries if entry.op_name == 'xi.await')
     await_binding = await_entry.target_consumers['aot-c'][0]
-    reject_binding_mutation('xi.await', 0,
+    reject_binding_mutation('await-missing-owner', 'xi.await', 0,
                             replace(await_binding, symbol='missing_consumer_owner'))
-    reject_binding_mutation('xi.await', 0,
+    reject_binding_mutation('await-thread-owner', 'xi.await', 0,
                             replace(await_binding, symbol='emit_thread_spawn_value_stmt'))
     reject_binding_mutation(
-        'xi.await', 0,
+        'await-debug-helper', 'xi.await', 0,
         replace(await_binding, symbol='emit_coro_debug_result_source_var_sync'))
     reject_binding_mutation(
-        'xi.await', 0,
+        'await-foreign-source', 'xi.await', 0,
         replace(await_binding, source_path='src/aot/xi_cgen.c',
                 symbol='cg_debug_source_var_storage_value'))
     phi_entry = next(entry for entry in real_entries if entry.op_name == 'xi.phi')
     phi_binding = phi_entry.target_consumers['aot-c'][0]
-    reject_binding_mutation('xi.phi', 0,
+    reject_binding_mutation('phi-wrong-owner', 'xi.phi', 0,
                             replace(phi_binding, symbol='emit_phi_ref'))
     par_reduce_entry = next(entry for entry in real_entries
                             if entry.op_name == 'xi.par.reduce')
     par_reduce_binding = par_reduce_entry.target_consumers['aot-c'][0]
-    reject_binding_mutation('xi.par.reduce', 0,
+    reject_binding_mutation('par-reduce-map-owner', 'xi.par.reduce', 0,
                             replace(par_reduce_binding, symbol='xicgen_par_map'))
     mul_entry = next(entry for entry in real_entries if entry.op_name == 'xi.mul')
     mul_binding = mul_entry.target_consumers['aot-c'][0]
@@ -10716,11 +10945,11 @@ def _test_xi_lowering_parser():
                                    'src/aot/xi_cgen.c',
                                    'cg_u64_mul_wide_value_is_eligible'),)
     reject_binding_mutation(
-        'xi.mul', 0,
+        'mul-domain-as-predicate', 'xi.mul', 0,
         replace(mul_binding, predicates=(XiConsumerPredicateWitness(
             'src/aot/xi_cgen.c', 'cg_u64_mul_wide_value_is_eligible'),)))
     reject_binding_mutation(
-        'xi.mul', 0,
+        'mul-emitter-as-predicate', 'xi.mul', 0,
         replace(mul_binding, predicates=(XiConsumerPredicateWitness(
             'src/aot/xi_cgen.c', 'emit_value_stmt'),)))
 
@@ -10739,13 +10968,16 @@ def _test_xi_lowering_parser():
             destination = discovery_root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(source_path.read_bytes())
-        unrelated = discovery_root / 'src/aot/discovery/plain_unrelated.c'
-        unrelated.parent.mkdir(parents=True, exist_ok=True)
-        unrelated.write_text(
-            'static void plain_unrelated(void) {}\n', encoding='utf-8')
-        validate_xi_lowering_consumer_sources(
-            real_entries, discovery_root, 'plain unrelated discovery source')
+        discovery_directory = discovery_root / 'src/aot/discovery'
+        discovery_directory.mkdir(parents=True, exist_ok=True)
+        if selected_cases is None:
+            unrelated = discovery_directory / 'plain_unrelated.c'
+            unrelated.write_text(
+                'static void plain_unrelated(void) {}\n', encoding='utf-8')
+            validate_xi_lowering_consumer_sources(
+                real_entries, discovery_root, 'plain unrelated discovery source')
 
+        @negative_cases.track('discovery')
         def reject_discovery_source(name: str, source: str,
                                     expected_reason: str) -> None:
             hostile = discovery_root / f'src/aot/discovery/{name}.c'
@@ -11023,59 +11255,61 @@ def _test_xi_lowering_parser():
             '}\n',
             'governed function token is used through an alias')
 
-        observation = discovery_root / 'src/aot/discovery/log_observation.c'
-        observation.write_text(
-            'static void log_observation(void) { '
-            'int observed = observe(XI_GO); (void) observed; }\n'
-            'static void literal_controls(void) { '
-            'const char *text = "XI_??/\nGO"; '
-            '/* XI_\\\nGO */ (void) text; }\n',
-            encoding='utf-8')
-        validate_xi_lowering_consumer_sources(
-            real_entries, discovery_root, 'non-routing selector observation')
-        observation.unlink()
+        if selected_cases is None:
+            observation = discovery_root / 'src/aot/discovery/log_observation.c'
+            observation.write_text(
+                'static void log_observation(void) { '
+                'int observed = observe(XI_GO); (void) observed; }\n'
+                'static void literal_controls(void) { '
+                'const char *text = "XI_??/\nGO"; '
+                '/* XI_\\\nGO */ (void) text; }\n',
+                encoding='utf-8')
+            validate_xi_lowering_consumer_sources(
+                real_entries, discovery_root, 'non-routing selector observation')
+            observation.unlink()
 
-        xi_cgen_path = discovery_root / 'src/aot/xi_cgen.c'
-        xi_cgen_original = xi_cgen_path.read_text(encoding='utf-8')
-        header_owner = discovery_root / 'src/aot/discovery/header_go_owner.h'
-        header_owner.write_text(
-            'static void header_go_owner(XiValue *v, XiCgenCtx *ctx, FILE *out, '
-            'const XiFunc *f, const char *prefix) {\n'
-            '    if (v->op == XI_GO) { xicgen_go(ctx, out, f, v, prefix); return; }\n'
-            '}\n', encoding='utf-8')
-        xi_cgen_path.write_text(
-            xi_cgen_original + '\n#include "discovery/header_go_owner.h"\n',
-            encoding='utf-8')
-        diagnostics = io.StringIO()
-        try:
-            with contextlib.redirect_stderr(diagnostics):
-                validate_xi_lowering_consumer_sources(
-                    real_entries, discovery_root, 'header-only undeclared owner')
-            assert False, "header-only undeclared owner must fail closed"
-        except SystemExit:
-            message = diagnostics.getvalue()
-            assert 'xi.go:aot-c: direct-consumer router census mismatch' in message
-            assert 'src/aot/discovery/header_go_owner.h::header_go_owner' in message
-        finally:
+            xi_cgen_path = discovery_root / 'src/aot/xi_cgen.c'
+            xi_cgen_original = xi_cgen_path.read_text(encoding='utf-8')
+            header_owner = discovery_root / 'src/aot/discovery/header_go_owner.h'
+            header_owner.write_text(
+                'static void header_go_owner(XiValue *v, XiCgenCtx *ctx, FILE *out, '
+                'const XiFunc *f, const char *prefix) {\n'
+                '    if (v->op == XI_GO) { xicgen_go(ctx, out, f, v, prefix); return; }\n'
+                '}\n', encoding='utf-8')
+            xi_cgen_path.write_text(
+                xi_cgen_original + '\n#include "discovery/header_go_owner.h"\n',
+                encoding='utf-8')
+            diagnostics = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(diagnostics):
+                    validate_xi_lowering_consumer_sources(
+                        real_entries, discovery_root, 'header-only undeclared owner')
+                assert False, "header-only undeclared owner must fail closed"
+            except SystemExit:
+                message = diagnostics.getvalue()
+                assert 'xi.go:aot-c: direct-consumer router census mismatch' in message
+                assert 'src/aot/discovery/header_go_owner.h::header_go_owner' in message
+            finally:
+                xi_cgen_path.write_text(xi_cgen_original, encoding='utf-8')
+                header_owner.unlink()
+
+            plain_header = discovery_root / 'src/aot/discovery/plain_unrelated.h'
+            plain_header.write_text('static inline int i1_plain(void) { return 1; }\n',
+                                    encoding='utf-8')
+            xi_cgen_path.write_text(
+                xi_cgen_original + '\n#include "discovery/plain_unrelated.h"\n',
+                encoding='utf-8')
+            header_snapshot = capture_xi_lowering_validation_snapshot(discovery_root)
+            validate_xi_lowering_consumer_sources(
+                real_entries, discovery_root, 'plain included header')
+            plain_header.write_text('static inline int i1_plain(void) { return 2; }\n',
+                                    encoding='utf-8')
+            assert capture_xi_lowering_validation_snapshot(discovery_root) != header_snapshot
             xi_cgen_path.write_text(xi_cgen_original, encoding='utf-8')
-            header_owner.unlink()
+            plain_header.unlink()
 
-        plain_header = discovery_root / 'src/aot/discovery/plain_unrelated.h'
-        plain_header.write_text('static inline int i1_plain(void) { return 1; }\n',
-                                encoding='utf-8')
-        xi_cgen_path.write_text(
-            xi_cgen_original + '\n#include "discovery/plain_unrelated.h"\n',
-            encoding='utf-8')
-        header_snapshot = capture_xi_lowering_validation_snapshot(discovery_root)
-        validate_xi_lowering_consumer_sources(
-            real_entries, discovery_root, 'plain included header')
-        plain_header.write_text('static inline int i1_plain(void) { return 2; }\n',
-                                encoding='utf-8')
-        assert capture_xi_lowering_validation_snapshot(discovery_root) != header_snapshot
-        xi_cgen_path.write_text(xi_cgen_original, encoding='utf-8')
-        plain_header.unlink()
-
-    def reject_source_mutation(relative: str,
+    @negative_cases.track('source')
+    def reject_source_mutation(case_id: str, relative: str,
                                replacements: tuple[tuple[str, str], ...],
                                expected_reason: str,
                                append: str = '') -> None:
@@ -11112,12 +11346,14 @@ def _test_xi_lowering_parser():
             assert 'outside the validated' not in message
 
     reject_source_mutation(
+        'await-comment-and-literal-only',
         'src/aot/xi_cgen_coro.inc.c',
         (('v->op == XI_AWAIT', 'v->op == XI_REMOVED_AWAIT'),),
         'does not select XI_AWAIT',
         append='\n/* v->op == XI_AWAIT */\n'
                'const char *xi_await_witness = "XI_AWAIT";\n')
     reject_source_mutation(
+        'await-inverted-selector',
         'src/aot/xi_cgen_coro.inc.c',
         (('v->op == XI_AWAIT', 'v->op != XI_AWAIT'),),
         'does not select XI_AWAIT')
@@ -11126,28 +11362,33 @@ def _test_xi_lowering_parser():
         'v->op == XI_CALL_METHOD_DIRECT ||\n'
         '           v->op == XI_CALL_BUILTIN;')
     reject_source_mutation(
+        'call-predicate-true-arm',
         'src/aot/xi_cgen.c',
         ((call_selector_return,
           call_selector_return.replace(
               'v->op == XI_CALL ||', 'v->op == XI_CALL || true ||')),),
         'does not return exactly the declared positive selector set')
     reject_source_mutation(
+        'call-predicate-inverted-selector',
         'src/aot/xi_cgen.c',
         ((call_selector_return,
           call_selector_return.replace(
               'v->op == XI_CALL ||', 'v->op != XI_CALL ||')),),
         'does not return exactly the declared positive selector set')
     reject_source_mutation(
+        'call-predicate-foreign-root',
         'src/aot/xi_cgen.c',
         ((call_selector_return,
           call_selector_return.replace(
               'v->op == XI_CALL ||', 'f->op == XI_CALL ||')),),
         'does not return exactly the declared positive selector set')
     reject_source_mutation(
+        'call-predicate-constant',
         'src/aot/xi_cgen.c',
         ((call_selector_return, 'return true;'),),
         'does not return exactly the declared positive selector set')
     reject_source_mutation(
+        'call-predicate-extra-selector',
         'src/aot/xi_cgen.c',
         ((call_selector_return,
           call_selector_return.replace(
@@ -11156,30 +11397,36 @@ def _test_xi_lowering_parser():
         'does not return exactly the declared positive selector set')
     wide_domain = '(v->op != XI_MUL && v->op != XI_BIT_MUL_HIGH)'
     reject_source_mutation(
+        'wide-domain-inverted',
         'src/aot/xi_cgen.c',
         ((wide_domain, '(v->op == XI_MUL || v->op == XI_BIT_MUL_HIGH)'),),
         'does not admit exactly the declared selector set')
     reject_source_mutation(
+        'wide-domain-false-arm',
         'src/aot/xi_cgen.c',
         ((wide_domain,
           '(v->op != XI_MUL && v->op != XI_BIT_MUL_HIGH && false)'),),
         'does not admit exactly the declared selector set')
     reject_source_mutation(
+        'wide-eligibility-inverted',
         'src/aot/xi_cgen.c',
         (('!cg_u64_mul_wide_value_is_eligible(ctx, f, v)',
           'cg_u64_mul_wide_value_is_eligible(ctx, f, v)'),),
         'is not fail-closed through its declared selector domain')
     reject_source_mutation(
+        'wide-eligibility-foreign-root',
         'src/aot/xi_cgen.c',
         (('!cg_u64_mul_wide_value_is_eligible(ctx, f, v)',
           '!cg_u64_mul_wide_value_is_eligible(ctx, f, v->args[0])'),),
         'is not fail-closed through its declared selector domain')
     reject_source_mutation(
+        'coro-owner-log-only',
         'src/aot/xi_cgen_coro.inc.c',
         (('emit_aot_coro_op_stmt(ctx, out, f, v);',
           'fprintf(out, "log only");'),),
         'does not select XI_CORO_OP')
     reject_source_mutation(
+        'coro-owner-fake-helper',
         'src/aot/xi_cgen_coro.inc.c',
         (('emit_aot_coro_op_stmt(ctx, out, f, v);',
           'emit_fake(out); fprintf(out, "log only");'),),
@@ -11187,12 +11434,14 @@ def _test_xi_lowering_parser():
         append='\nstatic void emit_fake(FILE *out) { '
                'fprintf(out, "log only"); }\n')
     reject_source_mutation(
+        'coro-owner-after-abort',
         'src/aot/xi_cgen_coro.inc.c',
         (('emit_aot_coro_op_stmt(ctx, out, f, v);',
           'abort(); emit_aot_coro_op_stmt(ctx, out, f, v);'),),
         'stale terminal selector(s): '
         'src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt')
     reject_source_mutation(
+        'coro-owner-after-noreturn',
         'src/aot/xi_cgen_coro.inc.c',
         (('emit_aot_coro_op_stmt(ctx, out, f, v);',
           'audit_noreturn(); emit_aot_coro_op_stmt(ctx, out, f, v);'),),
@@ -11202,35 +11451,42 @@ def _test_xi_lowering_parser():
     thread_guard = ('    if (!v || v->op != XI_THREAD_SPAWN)\n'
                     '        return false;')
     reject_source_mutation(
+        'thread-guard-missing-null',
         'src/aot/xi_cgen_coro.inc.c',
         ((thread_guard,
           '    if (v->op != XI_THREAD_SPAWN)\n        return false;'),),
         'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
     reject_source_mutation(
+        'thread-guard-inverted',
         'src/aot/xi_cgen_coro.inc.c',
         ((thread_guard,
           '    if (!v || v->op == XI_THREAD_SPAWN)\n        return false;'),),
         'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
     reject_source_mutation(
+        'thread-guard-wrong-selector',
         'src/aot/xi_cgen_coro.inc.c',
         ((thread_guard,
           '    if (!v || v->op != XI_AWAIT)\n        return false;'),),
         'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
     reject_source_mutation(
+        'thread-guard-returns-true',
         'src/aot/xi_cgen_coro.inc.c',
         ((thread_guard,
           '    if (!v || v->op != XI_THREAD_SPAWN)\n        return true;'),),
         'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
     reject_source_mutation(
+        'thread-guard-missing',
         'src/aot/xi_cgen_coro.inc.c',
         ((thread_guard, ''),),
         'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
     reject_source_mutation(
+        'thread-guard-not-leading',
         'src/aot/xi_cgen_coro.inc.c',
         ((thread_guard,
           '    emit_value_generated_line_reset(ctx, out, v);\n' + thread_guard),),
         'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
     reject_source_mutation(
+        'thread-owner-disabled',
         'src/aot/xi_cgen_coro.inc.c',
         (('static bool emit_thread_spawn_value_stmt(',
           '#if 0\nstatic bool emit_thread_spawn_value_stmt('),
@@ -11245,48 +11501,58 @@ def _test_xi_lowering_parser():
             'v->op == XI_CHAN_IS_CLOSED',
             'v->op == XI_CHAN_NEW'):
         reject_source_mutation(
+            f"channel-owner:{selector_condition}",
             'src/aot/xi_cgen_coro.inc.c',
             ((f'if ({selector_condition}) {{',
               f'if (v->op == XI_REMOVED_CHANNEL_OWNER) {{'),),
             'does not select ' + re.search(
                 r'XI_[A-Z0-9_]+', selector_condition).group(0))
     reject_source_mutation(
+        'coro-owner-duplicate',
         'src/aot/xi_cgen_coro.inc.c', (),
         'expected one file-scope definition',
         append='\nstatic void emit_coro_value_stmt(void) {}\n')
     reject_source_mutation(
+        'parallel-router-wrong-selector',
         'src/aot/xi_cgen_dispatch_helpers.inc.c',
         (('case XI_PAR_REDUCE:', 'case XI_REMOVED_PAR_REDUCE:'),),
         'does not route XI_PAR_REDUCE')
     reject_source_mutation(
+        'parallel-router-wrong-scrutinee',
         'src/aot/xi_cgen_dispatch_helpers.inc.c',
         (('switch (v->op) {', 'switch (v->aux_int) {'),),
         'does not route XI_PAR_FOR')
     reject_source_mutation(
+        'parallel-router-missing-owner',
         'src/aot/xi_cgen_dispatch_helpers.inc.c',
         (('xicgen_par_reduce(ctx, out, f, v, prefix, false);',
           'removed_par_reduce(ctx, out, f, v, prefix, false);'),),
         'does not route XI_PAR_REDUCE')
     reject_source_mutation(
+        'parallel-router-foreign-owner',
         'src/aot/xi_cgen_dispatch_helpers.inc.c',
         (('xicgen_par_reduce(ctx, out, f, v, prefix, false);',
           'emit_aot_coro_op_stmt(ctx, out, f, v);\n'
           '            xicgen_par_reduce(ctx, out, f, v, prefix, false);'),),
         'does not route XI_PAR_REDUCE')
     reject_source_mutation(
+        'go-guard-false',
         'src/aot/xi_cgen.c',
         (('if (v->op == XI_GO) {', 'if (v->op == XI_GO && false) {'),),
         'contains a statically false conditional branch')
     reject_source_mutation(
+        'parallel-guard-false',
         'src/aot/xi_cgen.c',
         (('if (v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE) {',
           'if ((v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE) && false) {'),),
         'contains a statically false conditional branch')
     reject_source_mutation(
+        'par-map-selector-inverted',
         'src/aot/xi_cgen.c',
         (('if (v->op == XI_PAR_MAP)', 'if (v->op != XI_PAR_MAP)'),),
         'does not route XI_PAR_MAP')
     reject_source_mutation(
+        'go-owner-disabled',
         'src/aot/xi_cgen.c',
         (('        xicgen_go(ctx, out, f, v, prefix);',
           '        #if 0\n'
@@ -11298,11 +11564,13 @@ def _test_xi_lowering_parser():
         'case XI_GO: xicgen_go(); } } }',
         'XI_GO', 'xicgen_go')
     reject_source_mutation(
+        'phi-loop-guard-pre-missing',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
           'removed_phi_copies(ctx, out, f, loop.guard, pre_idx);'),),
         'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
     reject_source_mutation(
+        'phi-loop-guard-pre-disabled',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
           '#if 0\n'
@@ -11310,60 +11578,72 @@ def _test_xi_lowering_parser():
           '#endif'),),
         'contains conditional preprocessing')
     reject_source_mutation(
+        'phi-loop-guard-body-missing',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.guard, body_idx);',
           'removed_phi_copies(ctx, out, f, loop.guard, body_idx);'),),
         'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
     reject_source_mutation(
+        'phi-loop-body-entry-missing',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.body, entry_idx);',
           'removed_phi_copies(ctx, out, f, loop.body, entry_idx);'),),
         'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
     reject_source_mutation(
+        'phi-loop-body-backedge-missing',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.body, body_idx);',
           'removed_phi_copies(ctx, out, f, loop.body, body_idx);'),),
         'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
     reject_source_mutation(
+        'phi-loop-guard-pre-wrong-predecessor',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
           'emit_phi_copies(ctx, out, f, loop.guard, body_idx);'),),
         'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
     reject_source_mutation(
+        'phi-loop-guard-pre-unreachable',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
           'return true;\n    emit_phi_copies(ctx, out, f, loop.guard, pre_idx);'),),
         'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
     reject_source_mutation(
+        'phi-loop-body-entry-wrong-predecessor',
         'src/aot/xi_cgen_loop_helpers.inc.c',
         (('emit_phi_copies(ctx, out, f, loop.body, entry_idx);',
           'emit_phi_copies(ctx, out, f, loop.body, body_idx);'),),
         'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
     reject_source_mutation(
+        'thread-sync-activation-prefixed',
         'src/aot/xi_cgen.c',
         (('if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, false))',
           'if (v->op == XI_OP_COUNT && '
           'emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, false))'),),
         'guarded activation must be the complete if predicate')
     reject_source_mutation(
+        'thread-coro-activation-prefixed',
         'src/aot/xi_cgen_coro.inc.c',
         (('if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, true))',
           'if (v->op == XI_OP_COUNT && '
           'emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, true))'),),
         'guarded activation must be the complete if predicate')
     reject_source_mutation(
+        'declaration-activation-missing',
         'src/aot/xi_cgen.c',
         (('    emit_declarations(ctx, out, f);\n', ''),),
         'activation census for src/aot/xi_cgen.c::emit_declarations differs')
     reject_source_mutation(
+        'frame-activation-missing',
         'src/aot/xi_cgen_coro.inc.c',
         (('    emit_coro_frame_type(ctx, out, f, prefix);\n', ''),),
         'activation census for src/aot/xi_cgen_coro.inc.c::emit_coro_frame_type differs')
     reject_source_mutation(
+        'coro-declaration-activation-missing',
         'src/aot/xi_cgen_coro.inc.c',
         (('    emit_coro_local_declarations(ctx, out, f);\n', ''),),
         'activation census for src/aot/xi_cgen_coro.inc.c::emit_coro_local_declarations differs')
     reject_source_mutation(
+        'declaration-output-wrong-stream',
         'src/aot/xi_cgen.c',
         (('            fprintf(out, "    %s%s ",\n'
           '                    cg_value_is_cleanup_live_local_source',
@@ -11371,11 +11651,13 @@ def _test_xi_lowering_parser():
           '                    cg_value_is_cleanup_live_local_source'),),
         'output sequence expected')
     reject_source_mutation(
+        'coro-declaration-output-wrong-stream',
         'src/aot/xi_cgen_coro.inc.c',
         (('            fprintf(out, "    %s ", cg_coro_decl_ctype',
           '            fprintf(stderr, "    %s ", cg_coro_decl_ctype'),),
         'output sequence expected')
     reject_source_mutation(
+        'phi-output-wrong-stream',
         'src/aot/xi_cgen_coro.inc.c',
         (('            fprintf(out, "    %s ", ctype);\n'
           '            emit_phi_ref(ctx, out, phi);',
@@ -11383,6 +11665,7 @@ def _test_xi_lowering_parser():
           '            emit_phi_ref(ctx, out, phi);'),),
         'output sequence expected')
     reject_source_mutation(
+        'phi-output-after-abort',
         'src/aot/xi_cgen_coro.inc.c',
         (('            fprintf(out, "    %s ", ctype);\n'
           '            emit_phi_ref(ctx, out, phi);',
@@ -11391,6 +11674,7 @@ def _test_xi_lowering_parser():
           '            emit_phi_ref(ctx, out, phi);'),),
         'output sequence expected')
     reject_source_mutation(
+        'phi-output-after-return',
         'src/aot/xi_cgen_coro.inc.c',
         (('            fprintf(out, "    %s ", ctype);\n'
           '            emit_phi_ref(ctx, out, phi);',
@@ -11399,22 +11683,26 @@ def _test_xi_lowering_parser():
           '            emit_phi_ref(ctx, out, phi);'),),
         'output sequence expected')
     reject_source_mutation(
+        'counted-loop-activation-missing',
         'src/aot/xi_cgen.c',
         (('if (emit_structured_counted_loop_stmt(ctx, out, f, blk, prefix))',
           'if (removed_structured_counted_loop_stmt(ctx, out, f, blk, prefix))'),),
         'activation census for src/aot/xi_cgen_loop_helpers.inc.c::'
         'emit_structured_counted_loop_stmt differs')
     reject_source_mutation(
+        'array-fill-activation-missing',
         'src/aot/xi_cgen.c',
         (('if (emit_structured_array_fill_loop_stmt(ctx, out, f, blk, prefix))',
           'if (removed_structured_array_fill_loop_stmt(ctx, out, f, blk, prefix))'),),
         'activation census for src/aot/xi_cgen_loop_helpers.inc.c::'
         'emit_structured_array_fill_loop_stmt differs')
     reject_source_mutation(
+        'phi-edge-copy-witness-missing',
         'src/aot/xi_cgen.c',
         (('emit_phi_incoming_as_rep(ctx, out, phi, pred_idx);',
           'removed_phi_incoming_as_rep(ctx, out, phi, pred_idx);'),),
         'lacks edge-parallel-copy witness token(s): emit_phi_incoming_as_rep')
+    negative_cases.assert_complete()
     print(" PASS", file=sys.stderr)
 
 
@@ -11760,6 +12048,7 @@ def main():
         'aot-layout': cmd_aot_layout,
         'aot-c-emission-rules': cmd_aot_c_emission_rules,
         'target-vm-ops': cmd_target_vm_ops,
+        'test-fast': cmd_test_fast,
         'test': cmd_test,
     }
 

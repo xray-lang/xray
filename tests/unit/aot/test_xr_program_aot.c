@@ -19,6 +19,9 @@
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_assert_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
+#include "../program/xr_program_coroutine_branch_fixture.h"
+#include "../program/xr_program_coroutine_trap_fixture.h"
+#include "../program/xr_program_cleanup_graph_fixture.h"
 #include "../program/xr_program_output_fixture.h"
 #include "../program/xr_program_pipe_fixture.h"
 #include "../program/xr_program_trap_fixture.h"
@@ -1265,6 +1268,47 @@ static void test_coroutine_private_state_machine_lowering(void) {
     xr_validated_program_free(program);
 }
 
+static void test_coroutine_self_loop_parallel_edges_lowering(void) {
+    XrProgramArtifact artifact = {0};
+    char message[256] = {0};
+    REQUIRE(xr_program_coroutine_branch_fixture_write(&artifact, message, sizeof(message)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic program_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    const XrBackendFunction *function = &ir->functions[ir->entry_function];
+    REQUIRE(function->block_count == 4u && function->coroutine_state_count == 2u);
+    uint32_t self_edges = 0u;
+    for (uint32_t b = 0u; b < function->block_count; ++b) {
+        const XrBackendBlock *block = &function->blocks[b];
+        const XrBackendInstruction *terminal = &block->instructions[block->instruction_count - 1u];
+        if (terminal->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH) {
+            REQUIRE(terminal->successors[0] == b && block->argument_count == 3u);
+            REQUIRE(terminal->operands[1] == block->argument_ids[1]);
+            REQUIRE(terminal->operands[2] == block->argument_ids[0]);
+            ++self_edges;
+        }
+    }
+    REQUIRE(self_edges == 1u);
+    XrGeneratedC first = {0}, second = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &first, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &second, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(first.size != 0u && first.size == second.size);
+    REQUIRE(memcmp(first.bytes, second.bytes, first.size) == 0);
+    xr_generated_c_free(&second);
+    xr_generated_c_free(&first);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_coroutine_owner_cancel_cleanup_lowering(void) {
     XrValidatedProgram *program = build_owner_coroutine_program();
     XrTargetProfile *profile =
@@ -1617,7 +1661,7 @@ static void test_foreign_profile_and_translation_mutation(void) {
     REQUIRE(strstr(generated.bytes, "uint16_t v0") != NULL);
     REQUIRE(strstr(generated.bytes, "UINT16_C(32)") != NULL);
     REQUIRE(strstr(generated.bytes, "result.u16") != NULL);
-    REQUIRE(strstr(generated.bytes, "sizeof(void") == NULL);
+    REQUIRE(strstr(generated.bytes, "v0 = UINT16_C(32);") != NULL);
 
     uint8_t saved_representation = ir->functions[0].value_representations[0];
     ir->functions[0].value_representations[0] = XR_BACKEND_VALUE_U32;
@@ -1694,9 +1738,8 @@ static void test_foreign_profile_and_translation_mutation(void) {
         generated = (XrGeneratedC) {0};
         REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
         char literal[48];
-        (void) snprintf(literal, sizeof(literal), "UINT16_C(%u)", cases[index].expected);
+        (void) snprintf(literal, sizeof(literal), "v0 = UINT16_C(%u);", cases[index].expected);
         REQUIRE(strstr(generated.bytes, literal) != NULL);
-        REQUIRE(strstr(generated.bytes, "sizeof(void") == NULL);
         xr_generated_c_free(&generated);
         xr_backend_ir_free(ir);
         xr_target_profile_free(profile);
@@ -1797,6 +1840,26 @@ static void test_condition_assert_panic_cleanup_lowering(void) {
     REQUIRE(assertion->successor_count == 1u);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
+    REQUIRE(ir->function_count == 1u);
+    XrBackendFunction *function = &ir->functions[ir->entry_function];
+    XrBackendBlock *panic = &function->blocks[assertion->successors[0]];
+    REQUIRE(panic->argument_count == 2u);
+    REQUIRE(panic->argument_types[0] == XR_CORE_TYPE_PANIC_INFO);
+    REQUIRE(panic->argument_ownerships[0] == XR_CORE_IR_OWNER);
+    uint32_t panic_value = panic->argument_ids[0];
+    REQUIRE(function->value_ownerships[panic_value] == XR_CORE_IR_OWNER);
+    XrFingerprint saved_digest = ir->lowering_digest;
+    panic->argument_ownerships[0] = XR_CORE_IR_NON_OWNER;
+    function->value_ownerships[panic_value] = XR_CORE_IR_NON_OWNER;
+    xr_backend_compute_lowering_digest(ir, &ir->lowering_digest);
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    REQUIRE(diagnostic.operation_id == XR_CORE_OP_CORE_ASSERT_CONDITION);
+    panic->argument_ownerships[0] = XR_CORE_IR_OWNER;
+    function->value_ownerships[panic_value] = XR_CORE_IR_OWNER;
+    ir->lowering_digest = saved_digest;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(xr_backend_ir_translation_validate(ir, &diagnostic));
     REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
     REQUIRE(strstr(generated.bytes, "if (!v") != NULL);
     REQUIRE(strstr(generated.bytes, "UINT32_C(1)") != NULL);
@@ -1864,6 +1927,610 @@ static void test_provider_trap_continuation_lowering_and_mutation(void) {
     provider_call->successor_count = 1u;
     REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
 
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_validated_program_free(program);
+    xr_target_profile_free(profile);
+}
+
+static void require_backend_operation_rejected(XrBackendIR *ir, const char *mutation,
+                                               uint16_t expected_operation) {
+    // A refreshed digest prevents integrity drift from masking missing semantic checks.
+    XrFingerprint saved = ir->lowering_digest;
+    xr_backend_compute_lowering_digest(ir, &ir->lowering_digest);
+    XrBackendDiagnostic diagnostic = {0};
+    bool accepted = xr_backend_ir_verify(ir, &diagnostic);
+    if (accepted || diagnostic.operation_id != expected_operation)
+        fprintf(stderr, "coroutine BackendIR mutation %s: accepted=%d status=%s op=%u\n", mutation,
+                accepted, xr_backend_status_name(diagnostic.status), diagnostic.operation_id);
+    REQUIRE(!accepted);
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    REQUIRE(diagnostic.operation_id == expected_operation);
+    ir->lowering_digest = saved;
+}
+
+static void require_coroutine_backend_rejected(XrBackendIR *ir, const char *mutation) {
+    require_backend_operation_rejected(ir, mutation, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED);
+}
+
+static void require_coroutine_backend_restored(XrBackendIR *ir) {
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(xr_backend_ir_translation_validate(ir, &diagnostic));
+}
+
+static XrValidatedProgram *build_cleanup_graph_program(const XrTargetProfile *profile) {
+    XrProgramCleanupGraphFixture fixture;
+    REQUIRE(xr_program_cleanup_graph_fixture_init(&fixture));
+    const XrTargetProviderContract *contract = NULL;
+    for (size_t p = 0u; p < xr_target_profile_provider_count(profile); ++p) {
+        const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, p);
+        if (candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+            REQUIRE(contract == NULL);
+            contract = candidate;
+        }
+    }
+    REQUIRE(contract && contract->operation_count == 1u);
+    fixture.requirement.contract_id = contract->contract_id;
+    fixture.operation = contract->operations[0].stable_id;
+    for (uint32_t b = 0u; b < XR_CLEANUP_GRAPH_BLOCK_COUNT; ++b) {
+        for (uint32_t i = 0u; i < fixture.blocks[b].instruction_count; ++i) {
+            XrCoreIrInstructionInput *instruction = &fixture.instructions[b][i];
+            if (instruction->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
+                instruction->immediate.provider_operation.contract_id =
+                    fixture.requirement.contract_id;
+                instruction->immediate.provider_operation.operation_id = fixture.operation;
+            }
+        }
+    }
+    XrProgramArtifact artifact = {0};
+    char message[256] = {0};
+    REQUIRE(xr_program_cleanup_graph_fixture_write_input(&fixture, &artifact, message,
+                                                         sizeof(message)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic diagnostic;
+    XrProgramVerifyStatus status =
+        xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic);
+    if (status != XR_PROGRAM_VERIFY_OK)
+        fprintf(stderr, "cleanup graph validation failed: kind=%u f=%u b=%u i=%u\n",
+                diagnostic.kind, diagnostic.location.function_id, diagnostic.location.block_id,
+                diagnostic.location.instruction_id);
+    REQUIRE(status == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
+static XrBackendInstruction *cleanup_graph_terminal(XrBackendFunction *function, uint32_t block) {
+    REQUIRE(block < function->block_count && function->blocks[block].instruction_count != 0u);
+    XrBackendBlock *row = &function->blocks[block];
+    return &row->instructions[row->instruction_count - 1u];
+}
+
+static void test_cleanup_graph_exit_mutations(XrBackendIR *ir, uint32_t block_id, bool cancel) {
+    XrBackendFunction *function = &ir->functions[ir->entry_function];
+    XrBackendInstruction *terminal = cleanup_graph_terminal(function, block_id);
+    XrBackendInstruction saved = *terminal;
+    uint32_t operand = function->blocks[block_id].argument_ids[0];
+    const uint16_t exits[] = {XR_CORE_OP_CORE_RETURN, XR_CORE_OP_CORE_ERROR_PUBLISH,
+                              XR_CORE_OP_CORE_PANIC_PUBLISH, XR_CORE_OP_CORE_TRAP,
+                              XR_CORE_OP_CORE_CANCEL_PUBLISH};
+    for (size_t i = 0u; i < sizeof(exits) / sizeof(exits[0]); ++i) {
+        if (cancel && exits[i] == XR_CORE_OP_CORE_CANCEL_PUBLISH)
+            continue;
+        *terminal = saved;
+        terminal->operation_id = exits[i];
+        terminal->immediate_kind =
+            exits[i] == XR_CORE_OP_CORE_TRAP ? XR_CORE_IR_IMMEDIATE_U32 : XR_CORE_IR_IMMEDIATE_NONE;
+        terminal->immediate.u32 = cancel ? 7u : 4u;
+        if (exits[i] == XR_CORE_OP_CORE_ERROR_PUBLISH ||
+            exits[i] == XR_CORE_OP_CORE_PANIC_PUBLISH) {
+            terminal->operand_count = 1u;
+            terminal->operands = &operand;
+        }
+        require_backend_operation_rejected(ir, "cleanup explicit exit changes reason", exits[i]);
+        *terminal = saved;
+        require_coroutine_backend_restored(ir);
+    }
+}
+
+static void test_cleanup_graph_storage_mutations(XrBackendIR *ir, uint32_t block_id) {
+    XrBackendFunction *function = &ir->functions[ir->entry_function];
+    XrBackendBlock *block = &function->blocks[block_id];
+    XrBackendInstruction *branch = cleanup_graph_terminal(function, block_id);
+    XrBackendInstruction saved = *branch;
+    XrBackendInstruction *saved_instructions = block->instructions;
+    XrBackendDiagnostic diagnostic;
+    // Invalid storage cannot be hashed. It must be rejected before following the graph.
+    block->instructions = NULL;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    block->instructions = saved_instructions;
+    branch->successors = NULL;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    *branch = saved;
+    branch->operands = NULL;
+    REQUIRE(!xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(diagnostic.status == XR_BACKEND_INVARIANT_REJECTED);
+    *branch = saved;
+    uint32_t targets[] = {function->block_count, saved.successors[0]};
+    branch->successors = targets;
+    require_backend_operation_rejected(ir, "cleanup successor outside function",
+                                       XR_CORE_OP_CORE_BRANCH);
+    targets[0] = saved.successors[0];
+    branch->successor_count = 2u;
+    require_backend_operation_rejected(ir, "branch with invented reason successor",
+                                       XR_CORE_OP_CORE_BRANCH);
+    *branch = saved;
+    require_coroutine_backend_restored(ir);
+}
+
+static void test_cleanup_graph_suspension_rejected(XrBackendIR *ir, uint32_t block_id,
+                                                   uint32_t cancel_exit) {
+    XrBackendFunction *function = &ir->functions[ir->entry_function];
+    REQUIRE(function->coroutine_state_count == 2u && function->coroutine_safepoint_count == 1u);
+    XrBackendInstruction *terminal = cleanup_graph_terminal(function, block_id);
+    XrBackendInstruction saved = *terminal;
+    XrBackendCoroutineState *saved_states = function->coroutine_states;
+    XrBackendCoroutineSafepoint *saved_points = function->coroutine_safepoints;
+    uint32_t owner = function->blocks[block_id].argument_ids[0];
+    uint32_t operands[] = {owner, owner};
+    uint32_t successors[] = {block_id, cancel_exit};
+    XrBackendCoroutineState states[] = {
+        saved_states[0], saved_states[1], {.continuation_block = block_id}};
+    XrBackendCoroutineSafepoint points[] = {
+        saved_points[0], {.resume_state_id = 2u, .live_value_ids = &owner, .live_value_count = 1u}};
+    *terminal = (XrBackendInstruction) {.operation_id = XR_CORE_OP_CORE_COROUTINE_YIELD,
+                                        .result_type_id = XR_CORE_TYPE_VOID,
+                                        .result_id = XR_PROGRAM_LOCATION_NONE,
+                                        .operands = operands,
+                                        .operand_count = 2u,
+                                        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+                                        .immediate.u32 = 1u,
+                                        .successors = successors,
+                                        .successor_count = 2u};
+    function->coroutine_states = states;
+    function->coroutine_state_count = 3u;
+    function->coroutine_safepoints = points;
+    function->coroutine_safepoint_count = 2u;
+    require_backend_operation_rejected(ir, "cleanup cannot publish suspended outcome",
+                                       XR_CORE_OP_CORE_COROUTINE_YIELD);
+    *terminal = saved;
+    function->coroutine_states = saved_states;
+    function->coroutine_state_count = 2u;
+    function->coroutine_safepoints = saved_points;
+    function->coroutine_safepoint_count = 1u;
+    require_coroutine_backend_restored(ir);
+}
+
+static void test_cleanup_graph_owner_edges(XrBackendIR *ir, uint32_t adapter_id) {
+    XrBackendFunction *function = &ir->functions[ir->entry_function];
+    XrBackendFunction saved_function = *function;
+    XrBackendBlock *adapter = &function->blocks[adapter_id];
+    XrBackendBlock saved_adapter = *adapter;
+    REQUIRE(adapter->instruction_count == 2u);
+    uint32_t original = adapter->argument_ids[0];
+    uint32_t copied = function->value_count;
+    uint32_t second_argument = copied + 1u;
+    size_t capacity = (size_t) function->value_count + 2u;
+    function->value_types = xr_malloc(capacity * sizeof(*function->value_types));
+    function->value_categories = xr_malloc(capacity * sizeof(*function->value_categories));
+    function->value_ownerships = xr_malloc(capacity * sizeof(*function->value_ownerships));
+    function->value_representations =
+        xr_malloc(capacity * sizeof(*function->value_representations));
+    REQUIRE(function->value_types && function->value_categories && function->value_ownerships &&
+            function->value_representations);
+    for (uint32_t v = 0u; v < capacity; ++v) {
+        uint32_t source = v < saved_function.value_count ? v : original;
+        function->value_types[v] = saved_function.value_types[source];
+        function->value_categories[v] = saved_function.value_categories[source];
+        function->value_ownerships[v] = saved_function.value_ownerships[source];
+        function->value_representations[v] = saved_function.value_representations[source];
+    }
+    function->value_count = copied + 1u;
+    uint32_t passed[] = {original, original};
+    XrBackendInstruction instructions[4] = {
+        saved_adapter.instructions[0],
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result_type_id = function->value_types[original],
+         .result_id = copied,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = &original,
+         .operand_count = 1u},
+        saved_adapter.instructions[1],
+    };
+    instructions[2].operands = passed;
+    adapter->instructions = instructions;
+    adapter->instruction_count = 3u;
+    require_backend_operation_rejected(ir, "branch omits copied live owner",
+                                       XR_CORE_OP_CORE_BRANCH);
+    passed[0] = copied;
+    require_backend_operation_rejected(ir, "same-type substitution abandons original owner",
+                                       XR_CORE_OP_CORE_BRANCH);
+
+    uint32_t target_id = instructions[2].successors[0];
+    XrBackendBlock *target = &function->blocks[target_id];
+    XrBackendBlock saved_target = *target;
+    REQUIRE(target->argument_count == 1u && target->instruction_count < 6u);
+    uint32_t ids[] = {target->argument_ids[0], second_argument};
+    uint16_t types[] = {target->argument_types[0], target->argument_types[0]};
+    XrCoreIrValueCategory categories[] = {XR_CORE_IR_VALUE, XR_CORE_IR_VALUE};
+    XrCoreIrOwnershipDisposition ownerships[] = {XR_CORE_IR_OWNER, XR_CORE_IR_OWNER};
+    XrBackendInstruction target_instructions[8];
+    target_instructions[0] = target->instructions[0];
+    target_instructions[1] = (XrBackendInstruction) {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+                                                     .result_type_id = XR_CORE_TYPE_VOID,
+                                                     .result_id = XR_PROGRAM_LOCATION_NONE,
+                                                     .operands = &second_argument,
+                                                     .operand_count = 1u};
+    target_instructions[2] = target_instructions[1];
+    target_instructions[2].operation_id = XR_CORE_OP_CORE_OWNER_DROP;
+    memcpy(target_instructions + 3u, target->instructions + 1u,
+           (target->instruction_count - 1u) * sizeof(*target_instructions));
+    target->instructions = target_instructions;
+    target->instruction_count += 2u;
+    target->argument_ids = ids;
+    target->argument_types = types;
+    target->argument_categories = categories;
+    target->argument_ownerships = ownerships;
+    target->argument_count = 2u;
+    function->value_count++;
+    instructions[2].operand_count = 2u;
+    passed[0] = original;
+    require_backend_operation_rejected(ir, "duplicate owner on one edge loses second owner",
+                                       XR_CORE_OP_CORE_BRANCH);
+    *target = saved_target;
+    function->value_count--;
+    instructions[2].operand_count = 1u;
+
+    instructions[3] = instructions[2];
+    instructions[2] = (XrBackendInstruction) {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+                                              .result_type_id = XR_CORE_TYPE_VOID,
+                                              .result_id = XR_PROGRAM_LOCATION_NONE,
+                                              .operands = &copied,
+                                              .operand_count = 1u};
+    adapter->instruction_count = 4u;
+    passed[0] = copied;
+    require_backend_operation_rejected(ir, "edge uses already consumed owner",
+                                       XR_CORE_OP_CORE_BRANCH);
+
+    // A fresh owner may legally replace the old identity after the old one is dropped.
+    instructions[2].operands = &original;
+    XrFingerprint saved_digest = ir->lowering_digest;
+    xr_backend_compute_lowering_digest(ir, &ir->lowering_digest);
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(!xr_backend_ir_translation_validate(ir, &diagnostic));
+    ir->lowering_digest = saved_digest;
+    xr_free(function->value_types);
+    xr_free(function->value_categories);
+    xr_free(function->value_ownerships);
+    xr_free(function->value_representations);
+    *adapter = saved_adapter;
+    *function = saved_function;
+    require_coroutine_backend_restored(ir);
+}
+
+static void test_cleanup_reason_graph_lowering_and_mutation(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED, XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    REQUIRE(profile != NULL);
+    XrValidatedProgram *program = build_cleanup_graph_program(profile);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendFunction *function = &ir->functions[ir->entry_function];
+    REQUIRE(function->block_count == XR_CLEANUP_GRAPH_BLOCK_COUNT);
+    XrBackendInstruction *yield = cleanup_graph_terminal(function, function->entry_block);
+    REQUIRE(yield->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD);
+    uint32_t normal_id = yield->successors[0];
+    uint32_t cancel_adapter = yield->successors[1];
+    XrBackendInstruction *cancel_entry = cleanup_graph_terminal(function, cancel_adapter);
+    REQUIRE(cancel_entry->operation_id == XR_CORE_OP_CORE_BRANCH);
+    XrBackendInstruction *cancel_branch =
+        cleanup_graph_terminal(function, cancel_entry->successors[0]);
+    REQUIRE(cancel_branch->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH);
+    uint32_t cancel_body = cancel_branch->successors[0];
+    uint32_t cancel_exit = cancel_branch->successors[1];
+    XrBackendInstruction *loop = cleanup_graph_terminal(function, cancel_body);
+    REQUIRE(loop->successors[0] == cancel_body && loop->successors[1] == cancel_exit);
+    XrBackendInstruction *provider = NULL;
+    for (uint32_t i = 0u; i < function->blocks[cancel_body].instruction_count; ++i) {
+        XrBackendInstruction *candidate = &function->blocks[cancel_body].instructions[i];
+        if (candidate->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
+            REQUIRE(provider == NULL);
+            provider = candidate;
+        }
+    }
+    REQUIRE(provider && provider->successor_count == 1u);
+    uint32_t trap_adapter = provider->successors[0];
+    XrBackendInstruction *trap_entry = cleanup_graph_terminal(function, trap_adapter);
+    REQUIRE(trap_entry->operation_id == XR_CORE_OP_CORE_BRANCH);
+    XrBackendInstruction *trap_branch = cleanup_graph_terminal(function, trap_entry->successors[0]);
+    REQUIRE(trap_branch->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH);
+    bool saved_verified = ir->verified;
+    ir->verified = false;
+    require_coroutine_backend_restored(ir);
+    ir->verified = saved_verified;
+
+    test_cleanup_graph_exit_mutations(ir, cancel_exit, true);
+    test_cleanup_graph_exit_mutations(ir, trap_branch->successors[0], false);
+    test_cleanup_graph_exit_mutations(ir, trap_branch->successors[1], false);
+    test_cleanup_graph_suspension_rejected(ir, cancel_body, cancel_exit);
+    test_cleanup_graph_suspension_rejected(ir, trap_entry->successors[0], cancel_exit);
+
+    uint32_t saved = trap_entry->successors[0];
+    trap_entry->successors[0] = cancel_adapter;
+    require_backend_operation_rejected(ir, "trap branches back to cancellation",
+                                       XR_CORE_OP_CORE_BRANCH);
+    trap_entry->successors[0] = saved;
+    require_coroutine_backend_restored(ir);
+    saved = provider->successors[0];
+    provider->successors[0] = cancel_adapter;
+    require_backend_operation_rejected(ir, "cancel refusal cannot remain cancellation",
+                                       XR_CORE_OP_CORE_PROVIDER_CALL);
+    provider->successors[0] = saved;
+    require_coroutine_backend_restored(ir);
+
+    XrBackendBlock *normal = &function->blocks[normal_id];
+    uint32_t saved_count = normal->instruction_count;
+    REQUIRE(saved_count >= 2u);
+    XrBackendInstruction *drop = &normal->instructions[saved_count - 2u];
+    XrBackendInstruction saved_drop = *drop;
+    REQUIRE(drop->operation_id == XR_CORE_OP_CORE_OWNER_DROP);
+    drop->operation_id = XR_CORE_OP_CORE_BRANCH;
+    drop->successor_count = 1u;
+    drop->successors = &cancel_adapter;
+    normal->instruction_count--;
+    require_backend_operation_rejected(ir, "ordinary resume enters cancel through adapter",
+                                       XR_CORE_OP_CORE_BRANCH);
+    normal->instruction_count = saved_count;
+    *drop = saved_drop;
+    require_coroutine_backend_restored(ir);
+
+    saved = trap_branch->successors[1];
+    trap_branch->successors[1] = trap_branch->successors[0];
+    require_backend_operation_rejected(ir, "orphan explicit trap alternative", 0u);
+    trap_branch->successors[1] = saved;
+    require_coroutine_backend_restored(ir);
+    test_cleanup_graph_storage_mutations(ir, cancel_adapter);
+    test_cleanup_graph_owner_edges(ir, cancel_adapter);
+    xr_backend_ir_free(ir);
+    xr_validated_program_free(program);
+    xr_target_profile_free(profile);
+}
+
+static void test_coroutine_backend_trap_payload_mutations(XrBackendIR *ir,
+                                                          XrBackendFunction *function,
+                                                          XrBackendInstruction *call) {
+    const XrBackendFunction *callee = &ir->functions[call->immediate.coroutine_call.function_id];
+    const XrBackendCoroutineSafepoint *point =
+        &function->coroutine_safepoints[call->immediate.coroutine_call.safepoint_id];
+    XrBackendBlock *cancel = &function->blocks[call->successors[1]];
+    XrBackendBlock *trap = &function->blocks[call->successors[2]];
+    uint32_t cancel_start = callee->parameter_count + point->live_value_count;
+    uint32_t trap_start = cancel_start + cancel->argument_count;
+    REQUIRE(call->operand_count == 7u && cancel_start == 4u && trap_start == 5u);
+    REQUIRE(cancel->argument_count == 1u && trap->argument_count == 2u);
+    XrBackendInstruction saved_call = *call;
+    uint32_t operands[8];
+    memcpy(operands, call->operands, call->operand_count * sizeof(*operands));
+    uint32_t owner = operands[trap_start];
+    uint32_t snapshot = operands[trap_start + 1u];
+    REQUIRE(function->value_ownerships[owner] == XR_CORE_IR_OWNER);
+    REQUIRE(function->value_types[snapshot] == XR_CORE_TYPE_I64);
+    REQUIRE(function->value_types[operands[0]] == XR_CORE_TYPE_I64);
+    REQUIRE(operands[0] != owner && operands[0] != snapshot);
+
+    call->operands = operands;
+    operands[trap_start + 1u] = operands[0];
+    require_coroutine_backend_rejected(ir, "non-live trap input");
+    operands[trap_start + 1u] = snapshot;
+    require_coroutine_backend_restored(ir);
+
+    operands[trap_start + 1u] = owner;
+    require_coroutine_backend_rejected(ir, "duplicate trap owner");
+    operands[trap_start + 1u] = snapshot;
+    require_coroutine_backend_restored(ir);
+
+    XrBackendBlock saved_trap = *trap;
+    trap->argument_count = 1u;
+    trap->argument_ids = saved_trap.argument_ids + 1u;
+    trap->argument_types = saved_trap.argument_types + 1u;
+    trap->argument_categories = saved_trap.argument_categories + 1u;
+    trap->argument_ownerships = saved_trap.argument_ownerships + 1u;
+    operands[trap_start] = snapshot;
+    call->operand_count = 6u;
+    require_coroutine_backend_rejected(ir, "missing trap owner");
+    *trap = saved_trap;
+    operands[trap_start] = owner;
+    call->operand_count = saved_call.operand_count;
+    require_coroutine_backend_restored(ir);
+
+    call->operand_count = 6u;
+    require_coroutine_backend_rejected(ir, "truncated trap payload");
+    call->operand_count = saved_call.operand_count;
+    require_coroutine_backend_restored(ir);
+
+    operands[7] = snapshot;
+    call->operand_count = 8u;
+    require_coroutine_backend_rejected(ir, "extra trap payload");
+    call->operand_count = saved_call.operand_count;
+    require_coroutine_backend_restored(ir);
+
+    XrBackendBlock saved_cancel = *cancel;
+    uint32_t cancel_ids[] = {cancel->argument_ids[0], cancel->argument_ids[0]};
+    uint16_t cancel_types[] = {cancel->argument_types[0], cancel->argument_types[0]};
+    XrCoreIrValueCategory cancel_categories[] = {XR_CORE_IR_VALUE, XR_CORE_IR_VALUE};
+    XrCoreIrOwnershipDisposition cancel_ownerships[] = {XR_CORE_IR_OWNER, XR_CORE_IR_OWNER};
+    cancel->argument_count = 2u;
+    cancel->argument_ids = cancel_ids;
+    cancel->argument_types = cancel_types;
+    cancel->argument_categories = cancel_categories;
+    cancel->argument_ownerships = cancel_ownerships;
+    operands[cancel_start + 1u] = owner;
+    operands[cancel_start + 2u] = owner;
+    operands[cancel_start + 3u] = snapshot;
+    call->operand_count = 8u;
+    require_coroutine_backend_rejected(ir, "duplicate cancel owner");
+    *cancel = saved_cancel;
+    *call = saved_call;
+    require_coroutine_backend_restored(ir);
+}
+
+static void test_coroutine_backend_trap_target_mutations(XrBackendIR *ir,
+                                                         XrBackendFunction *function,
+                                                         XrBackendInstruction *call) {
+    XrBackendBlock *trap = &function->blocks[call->successors[2]];
+    REQUIRE(trap->argument_count == 2u && trap->instruction_count != 0u);
+    uint32_t snapshot = trap->argument_ids[1];
+    uint16_t saved_type = function->value_types[snapshot];
+    uint8_t saved_representation = function->value_representations[snapshot];
+    trap->argument_types[1] = XR_CORE_TYPE_BOOL;
+    function->value_types[snapshot] = XR_CORE_TYPE_BOOL;
+    function->value_representations[snapshot] = XR_BACKEND_VALUE_BOOL_U8;
+    require_coroutine_backend_rejected(ir, "trap argument type");
+    trap->argument_types[1] = saved_type;
+    function->value_types[snapshot] = saved_type;
+    function->value_representations[snapshot] = saved_representation;
+    require_coroutine_backend_restored(ir);
+
+    XrCoreIrValueCategory saved_category = function->value_categories[snapshot];
+    trap->argument_categories[1] = XR_CORE_IR_PLACE;
+    function->value_categories[snapshot] = XR_CORE_IR_PLACE;
+    require_coroutine_backend_rejected(ir, "trap argument category");
+    trap->argument_categories[1] = saved_category;
+    function->value_categories[snapshot] = saved_category;
+    require_coroutine_backend_restored(ir);
+
+    uint32_t owner = trap->argument_ids[0];
+    XrCoreIrOwnershipDisposition saved_ownership = function->value_ownerships[owner];
+    trap->argument_ownerships[0] = XR_CORE_IR_NON_OWNER;
+    function->value_ownerships[owner] = XR_CORE_IR_NON_OWNER;
+    require_coroutine_backend_rejected(ir, "trap argument ownership");
+    trap->argument_ownerships[0] = saved_ownership;
+    function->value_ownerships[owner] = saved_ownership;
+    require_coroutine_backend_restored(ir);
+
+    XrBackendInstruction *terminal = &trap->instructions[trap->instruction_count - 1u];
+    REQUIRE(terminal->operation_id == XR_CORE_OP_CORE_TRAP && terminal->immediate.u32 == 7u);
+    terminal->immediate.u32 = 4u;
+    require_backend_operation_rejected(ir, "non-provider trap terminal", XR_CORE_OP_CORE_TRAP);
+    terminal->immediate.u32 = 7u;
+    require_coroutine_backend_restored(ir);
+
+    uint32_t saved_successor = call->successors[2];
+    call->successors[2] = call->successors[1];
+    require_coroutine_backend_rejected(ir, "trap targets cancellation");
+    call->successors[2] = saved_successor;
+    require_coroutine_backend_restored(ir);
+
+    call->successor_count = 2u;
+    require_coroutine_backend_rejected(ir, "trap payload without edge");
+    call->successor_count = 3u;
+    require_coroutine_backend_restored(ir);
+}
+
+static const char *require_coroutine_c_fragment(const char *text, const char *fragment) {
+    const char *found = strstr(text, fragment);
+    if (!found)
+        fprintf(stderr, "missing generated coroutine C fragment: %s\n", fragment);
+    REQUIRE(found != NULL);
+    return found;
+}
+
+static void require_coroutine_trap_c_edges(const XrGeneratedC *generated,
+                                           const XrBackendInstruction *call, uint32_t function_id,
+                                           uint32_t instruction_id) {
+    char fragment[128];
+    int count = snprintf(fragment, sizeof(fragment),
+                         "if (child_%u.kind == UINT32_C(1) && child_%u.trap == 7)", instruction_id,
+                         instruction_id);
+    REQUIRE(count > 0 && (size_t) count < sizeof(fragment));
+    (void) require_coroutine_c_fragment(generated->bytes, fragment);
+    uint32_t safepoint = call->immediate.coroutine_call.safepoint_id;
+    count =
+        snprintf(fragment, sizeof(fragment),
+                 "if (cancel_%u.kind == UINT32_C(1) && cancel_%u.trap == 7)", safepoint, safepoint);
+    REQUIRE(count > 0 && (size_t) count < sizeof(fragment));
+    (void) require_coroutine_c_fragment(generated->bytes, fragment);
+    for (uint32_t edge = 0u; edge < 3u; ++edge) {
+        count = snprintf(fragment, sizeof(fragment), "goto xr_f%u_b%u;", function_id,
+                         call->successors[edge]);
+        REQUIRE(count > 0 && (size_t) count < sizeof(fragment));
+        const char *first = require_coroutine_c_fragment(generated->bytes, fragment);
+        if (edge == 2u) {
+            const char *second = require_coroutine_c_fragment(first + (size_t) count, fragment);
+            const char *extra = strstr(second + (size_t) count, fragment);
+            if (extra)
+                fprintf(stderr, "expected exactly two generated coroutine C fragments: %s\n",
+                        fragment);
+            REQUIRE(extra == NULL);
+        }
+    }
+    REQUIRE(strstr(generated->bytes, "provider_call_i64_unary") != NULL);
+    REQUIRE(strstr(generated->bytes, "return xr_aot_make(1, 0, 7)") != NULL);
+    REQUIRE(strstr(generated->bytes, "XrVm") == NULL);
+    REQUIRE(strstr(generated->bytes, "TargetPlan") == NULL);
+}
+
+static void test_coroutine_trap_continuation_lowering_and_mutation(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED, XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    REQUIRE(profile != NULL);
+    const XrTargetProviderContract *contract = NULL;
+    for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
+        const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
+        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+            REQUIRE(contract == NULL);
+            contract = candidate;
+        }
+    }
+    REQUIRE(contract != NULL && contract->operation_count == 1u);
+    XrProgramArtifact artifact = {0};
+    char build_diagnostic[256] = {0};
+    REQUIRE(xr_program_coroutine_trap_fixture_write_with_ids(
+                contract->contract_id, contract->operations[0].stable_id,
+                XR_PROGRAM_COROUTINE_TRAP_VALID, &artifact, build_diagnostic,
+                sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendFunction *function = &ir->functions[ir->entry_function];
+    XrBackendInstruction *call = NULL;
+    uint32_t call_index = 0u;
+    uint32_t instruction_base = 0u;
+    for (uint32_t block = 0u; block < function->block_count; ++block) {
+        XrBackendBlock *row = &function->blocks[block];
+        for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
+            if (row->instructions[instruction].operation_id ==
+                XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+                REQUIRE(call == NULL);
+                call = &row->instructions[instruction];
+                call_index = instruction_base + instruction;
+            }
+        }
+        instruction_base += row->instruction_count;
+    }
+    REQUIRE(call != NULL && call->successor_count == 3u);
+    REQUIRE(call->successors[0] != call->successors[1] &&
+            call->successors[0] != call->successors[2] &&
+            call->successors[1] != call->successors[2]);
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    require_coroutine_trap_c_edges(&generated, call, ir->entry_function, call_index);
+    XrBackendIR *rebuilt = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    REQUIRE(xr_backend_ir_emit_c(rebuilt, false, &repeated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(generated.size != 0u && generated.size == repeated.size);
+    REQUIRE(memcmp(generated.bytes, repeated.bytes, generated.size) == 0);
+    REQUIRE(xr_fingerprint_equal(generated.source_digest, repeated.source_digest));
+    test_coroutine_backend_trap_payload_mutations(ir, function, call);
+    test_coroutine_backend_trap_target_mutations(ir, function, call);
+    xr_backend_ir_free(rebuilt);
+    xr_generated_c_free(&repeated);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
     xr_validated_program_free(program);
@@ -2304,7 +2971,10 @@ int main(int argc, char **argv) {
         test_callable_pack_and_indirect_call_lowering();
         test_callable_invoke_trap_continuation_lowering_and_mutation();
         test_coroutine_private_state_machine_lowering();
+        test_coroutine_self_loop_parallel_edges_lowering();
         test_coroutine_owner_cancel_cleanup_lowering();
+        test_coroutine_trap_continuation_lowering_and_mutation();
+        test_cleanup_reason_graph_lowering_and_mutation();
         test_foreign_profile_and_translation_mutation();
         test_provider_call_lowering_and_mutation();
         test_provider_trap_continuation_lowering_and_mutation();

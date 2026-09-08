@@ -119,6 +119,11 @@ SLOW_EXTERNAL = ("aot_standalone_suite|asan_focused|lsan_strict|aot_ubsan|"
                  "test_string_native_error_abi|test_crypto_native_error_abi|"
                  "test_param_contract_aot|test_compress_native_error_abi")
 
+# Exhaustive mutation suites consume wall time without saturating the machine.
+# Keep their bounded fast profiles in edit/pre-commit tiers and reserve the
+# complete inventories for the periodic/release tier.
+SLOW_EXHAUSTIVE = "xi_generator_self_test"
+
 # QEMU-backed cross targets: slow, and unavailable on most developer machines.
 SLOW_QEMU = ("aot_freestanding_qemu_smoke|aot_freestanding_riscv_qemu_smoke|"
              "aot_freestanding_thumb_qemu_smoke|aot_cross_smoke|"
@@ -132,17 +137,20 @@ T0_INCLUDE = (r"^(test_|.*_residue$|.*_convergence.*|.*_sync$|.*_inventory.*|"
 
 TIERS: Dict[str, Tuple[str, str, str]] = {
     # tier: (include, exclude, not_covered)
-    "t0": (T0_INCLUDE, f"{SLOW_EXTERNAL}|{SLOW_QEMU}",
-           "VM/AOT differential, regression corpus, AOT suites, sanitizers"),
+    "t0": (T0_INCLUDE, f"{SLOW_EXTERNAL}|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}",
+           "exhaustive Xi generator mutations, VM/AOT differential, regression corpus, "
+           "AOT suites, sanitizers"),
     # + the VM-executed corpora: regression, syntax, bytecode, stdlib.
-    "t1": ("", f"{SLOW_EXTERNAL}|{SLOW_QEMU}|^backend_diff|^task190_|^aot_|"
+    "t1": ("", f"{SLOW_EXTERNAL}|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}|^backend_diff|^task190_|^aot_|"
            "^ffi_|^install_|^native_output|^binary_|^dap_|^raw_scalar|"
            "^global_evidence|^byte_array_aot",
-           "VM/AOT differential, AOT suites, sanitizers, QEMU cross"),
+           "exhaustive Xi generator mutations, VM/AOT differential, AOT suites, "
+           "sanitizers, QEMU cross"),
     # + differential and AOT, including the generated-C UBSan lane. This is the
     # tier that can actually catch a backend divergence.
-    "t2": ("", f"aot_standalone_suite|asan_focused|lsan_strict|{SLOW_QEMU}",
-           "ASan/LSan lanes, aot_standalone_suite, QEMU cross targets"),
+    "t2": ("", f"aot_standalone_suite|asan_focused|lsan_strict|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}",
+           "exhaustive Xi generator mutations, ASan/LSan lanes, "
+           "aot_standalone_suite, QEMU cross targets"),
     "t3": ("", "", ""),
 }
 

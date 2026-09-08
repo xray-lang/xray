@@ -15,6 +15,7 @@
 #include "xi_evidence.h"
 #include "xi_effect.h"
 #include "xi_backend.h"
+#include "xi_cleanup.h"
 #include "xi_coro_analyze.h"
 #include "xi_coro_exception_verify.h"
 #include "xi_coro_lower.h"
@@ -3748,6 +3749,10 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     if (!ctx.failed) {
         verify_unique_ids(&ctx, f);
     }
+
+    /* Cleanup identity is mandatory even before stage-specific lowering. */
+    if (!ctx.failed && !xi_cleanup_verify(f, errbuf, (size_t) errbuf_size))
+        return false;
 
     /* Operand arity (static table check, fast) */
     if (!ctx.failed) {

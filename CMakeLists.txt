@@ -734,6 +734,7 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_verify.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_copy.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_native_artifact.c
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.c
@@ -5440,16 +5441,29 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME xi_generator_fast_self_test
+        COMMAND ${XRAY_PYTHON} -B
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/xisagen/xisagen.py test-fast
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xi_generator_fast_self_test PROPERTIES
+        LABELS "meta;xi;generator;target-machine;fast"
+        PROCESSORS 1
+        COST 30
+        TIMEOUT 120
+    )
+
+    add_test(
         NAME xi_generator_self_test
         COMMAND ${XRAY_PYTHON} -B
                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/xisagen/xisagen.py test
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(xi_generator_self_test PROPERTIES
-        LABELS "meta;xi;generator;target-machine"
+        LABELS "meta;xi;generator;target-machine;slow;exhaustive"
         PROCESSORS 1
-        COST 515
-        TIMEOUT 600
+        COST 700
+        TIMEOUT 1200
     )
 
     add_test(

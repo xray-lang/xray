@@ -1412,7 +1412,7 @@
       "materialization": "call",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "callee-declared normal or typed-panic outcome under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
+        "allowed_trace": "callee-declared normal or typed-panic outcome under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "sealed-call",
       "coverage": {
@@ -1495,7 +1495,7 @@
       "materialization": "call-terminator",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "exactly one normal, typed-error, or typed-panic continuation under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
+        "allowed_trace": "exactly one normal, typed-error, or typed-panic continuation under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "sealed-invoke",
       "coverage": {
@@ -1568,7 +1568,7 @@
       "materialization": "executor-private-callable-dispatch",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the packed closed target trace under the callable signature; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
+        "allowed_trace": "the packed closed target trace under the callable signature; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "indirect-call",
       "coverage": {
@@ -1647,7 +1647,7 @@
       "materialization": "executor-private-callable-dispatch-terminator",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the packed closed target selects one normal, typed-error, or typed-panic continuation; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
+        "allowed_trace": "the packed closed target selects one normal, typed-error, or typed-panic continuation; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "indirect-invoke",
       "coverage": {
@@ -1722,7 +1722,7 @@
       "materialization": "executor-private-witness-dispatch",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the exact conformance slot target trace under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
+        "allowed_trace": "the exact conformance slot target trace under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "witness-call",
       "coverage": {
@@ -1803,7 +1803,7 @@
       "materialization": "executor-private-witness-dispatch-terminator",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the exact conformance slot target selects one normal, typed-error, or typed-panic continuation; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation"
+        "allowed_trace": "the exact conformance slot target selects one normal, typed-error, or typed-panic continuation; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "witness-invoke",
       "coverage": {
@@ -2076,7 +2076,7 @@
       "materialization": "cancel",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one terminal cancellation outcome after the selected cleanup continuation"
+        "allowed_trace": "one terminal cancellation outcome after the selected cleanup continuation; cancellation enters a separate reason-preserving subgraph whose ordinary edges retain cancellation and whose explicit exits publish cancellation; an exact provider-refusal edge may enter a separate trap-7 subgraph, but ordinary execution cannot enter cancellation blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "cancel-publish",
       "coverage": {
@@ -2475,9 +2475,19 @@
       "capability_requirements": [],
       "ownership": {
         "operands": [
-          "copy-value"
+          "copy-trivial-value-or-transfer-affine-owner"
         ],
-        "result": "owned-value"
+        "result": "owner-if-affine-type-otherwise-non-owner",
+        "preconditions": [
+          "each-field-matches-its-declared-type-ownership",
+          "every-operand-is-available-before-use",
+          "each-affine-owner-is-transferred-exactly-once"
+        ],
+        "postconditions": [
+          "only-affine-operands-become-consumed",
+          "trivial-operands-remain-available",
+          "copy-contract-does-not-turn-transfer-into-implicit-copy"
+        ]
       },
       "profile_dependency": "none",
       "materialization": "logical-aggregate",
@@ -2684,9 +2694,19 @@
       "capability_requirements": [],
       "ownership": {
         "operands": [
-          "copy-value"
+          "copy-trivial-value-or-transfer-affine-owner"
         ],
-        "result": "owned-value"
+        "result": "owner-if-affine-type-otherwise-non-owner",
+        "preconditions": [
+          "each-field-matches-its-declared-type-ownership",
+          "every-operand-is-available-before-use",
+          "each-affine-owner-is-transferred-exactly-once"
+        ],
+        "postconditions": [
+          "only-affine-operands-become-consumed",
+          "trivial-operands-remain-available",
+          "copy-contract-does-not-turn-transfer-into-implicit-copy"
+        ]
       },
       "profile_dependency": "none",
       "materialization": "logical-variant",
@@ -3862,7 +3882,7 @@
       "materialization": "logical-coroutine-control",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one suspend at the named safepoint followed by exactly one resume or one terminal cancellation continuation"
+        "allowed_trace": "one suspend at the named safepoint followed by exactly one resume or one terminal cancellation continuation; cancellation enters a separate reason-preserving subgraph whose ordinary edges retain cancellation and whose explicit exits publish cancellation; an exact provider-refusal edge may enter a separate trap-7 subgraph, but ordinary execution cannot enter cancellation blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "coroutine-yield",
       "coverage": {
@@ -3940,7 +3960,7 @@
       "materialization": "instance-provider-trampoline-with-optional-explicit-trap-continuation",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one exact provider operation event; success produces the declared result and continues in the current block, while normalized failure either traps immediately or transfers every declared live value to the sole provider-call-failed trap continuation"
+        "allowed_trace": "one exact provider operation event; success produces the declared result and continues in the current block, while normalized failure either traps immediately or transfers every declared live value to the sole provider-call-failed trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "provider-call",
       "coverage": {
@@ -4055,7 +4075,8 @@
         "operands": [
           "P...",
           "suspend-edge-values...",
-          "cancel-edge-values..."
+          "cancel-edge-values...",
+          "trap-edge-values..."
         ],
         "result": "void",
         "immediates": {
@@ -4068,7 +4089,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": true,
         "suspend": true
       },
@@ -4094,7 +4115,7 @@
       "materialization": "logical-child-coroutine-control",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends, then takes exactly one normal continuation after return or one cancellation continuation after child cancellation"
+        "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends; it takes the normal continuation after return, the cancel continuation after child cancellation, or its optional provider-failed continuation on trap 7 from child step or cancellation cleanup; each continuation has a separate operand segment and only the selected segment transfers its owners; normal, cancellation and provider-failed continuation domains have distinct blocks; ordinary edges preserve the selected reason, every explicit cleanup exit preserves that reason, and only an exact provider-refusal edge may change cancellation into trap 7; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "coroutine-call",
       "coverage": {

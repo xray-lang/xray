@@ -16,6 +16,7 @@ HEADER = Path("src/aot/program/xr_backend_ir.h")
 LOWERING = Path("src/aot/program/xr_backend_ir.c")
 VERIFY = Path("src/aot/program/xr_backend_ir_verify.c")
 EMITTER = Path("src/aot/program/xr_backend_ir_emit_c.c")
+COPY_EMITTER = Path("src/aot/program/xr_backend_ir_emit_copy.inc.c")
 ARTIFACT = Path("src/aot/program/xr_native_artifact.c")
 TEST = Path("tests/unit/aot/test_xr_program_aot.c")
 CMAKE = Path("CMakeLists.txt")
@@ -111,7 +112,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
 
 
 def sources(root: Path, overrides: dict[Path, str] | None = None) -> dict[Path, str]:
-    paths = (HEADER, LOWERING, VERIFY, EMITTER, ARTIFACT, TEST, CMAKE, TEST_CMAKE,
+    paths = (HEADER, LOWERING, VERIFY, EMITTER, COPY_EMITTER, ARTIFACT, TEST, CMAKE, TEST_CMAKE,
              IDENTITY, EXECUTION_IDENTITY_HEADER, EXECUTION_IDENTITY_SOURCE)
     return {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
@@ -126,6 +127,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     lowering = text[LOWERING]
     verifier = text[VERIFY]
     emitter = text[EMITTER]
+    emission = emitter + text[COPY_EMITTER]
     artifact = text[ARTIFACT]
     test = text[TEST]
     cmake = text[CMAKE]
@@ -142,7 +144,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
         "XrOptimizationPolicyId",
     ):
         require(token in header, f"missing AOT contract type {token}")
-    aot_sources = header + lowering + verifier + emitter + artifact
+    aot_sources = header + lowering + verifier + emission + artifact
     for forbidden in (
         "XrInstance",
         "XrExecutionLease",
@@ -169,15 +171,15 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     require("xi_cgen_verify_output" in emitter,
             "generated C is not protected by the always-on output verifier")
     for forbidden in ("TargetPlan", "XrVmCode", "xr_vm_", "xvm_", "AstNode", "XiValue"):
-        require(forbidden not in lowering and forbidden not in verifier,
+        require(forbidden not in aot_sources,
                 f"BackendIR depends on forbidden semantic/private owner {forbidden}")
-    require("xr_reference_" not in lowering and "xr_reference_" not in emitter,
+    require("xr_reference_" not in aot_sources,
             "AOT implementation calls the reference evaluator")
-    require("sizeof(void" not in emitter,
+    require("sizeof(void" not in emission,
             "target query is inferred from the host compiler")
-    require("int64_t v%u" not in emitter,
+    require("int64_t v%u" not in emission,
             "typed local spelling must come from BackendIR representation")
-    require("XrAotValue" not in emitter,
+    require("XrAotValue" not in emission,
             "generated local values use a systematic tagged representation")
     require(re.search(
         r"case\s+XR_CORE_TYPE_U16\s*:\s*"
@@ -234,6 +236,15 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
             "real pointer-width generated-C/native gate is missing")
     require("xray_program_aot_compiler" in cmake and "-Wall -Wextra -Werror" in cmake,
             "private AOT compiler warning target is missing")
+    contract_command = re.search(
+        r"add_custom_command\(\s*OUTPUT\s+\$\{XRAY_PROGRAM_AOT_CONTRACT_CHECK_STAMP\}"
+        r"(?P<body>.*?)\n\)", cmake, re.DOTALL)
+    dependencies = re.search(r"\bDEPENDS\b(?P<paths>.*?)\bCOMMENT\b",
+                             contract_command.group("body") if contract_command else "",
+                             re.DOTALL)
+    require(dependencies is not None and
+            "${CMAKE_SOURCE_DIR}/" + COPY_EMITTER.as_posix() in dependencies.group("paths"),
+            "AOT contract stamp does not depend on the copy emitter")
     require("src/execution/xr_execution_identity.c" in cmake,
             "pure execution identity is absent from the canonical product closure")
     require("include/xr_backend_ir.h" not in cmake and
@@ -279,6 +290,28 @@ def self_test(root: Path) -> None:
         pass
     else:
         raise GateError("live XrInstance AOT input was accepted")
+
+    copy_emitter = (root / COPY_EMITTER).read_text(encoding="utf-8")
+    for forbidden in ("XrInstance", "XrExecutionLease", "xr_execution_instance_",
+                      "xr_execution_lease_", "TargetPlan", "XrVmCode", "xr_vm_",
+                      "xvm_", "AstNode", "XiValue", "xr_reference_", "sizeof(void",
+                      "int64_t v%u", "XrAotValue"):
+        try:
+            validate_sources(root, {COPY_EMITTER: copy_emitter + f"\n/* {forbidden} */\n"})
+        except GateError:
+            pass
+        else:
+            raise GateError(f"copy emitter accepted forbidden authority/representation {forbidden}")
+
+    cmake = (root / CMAKE).read_text(encoding="utf-8")
+    dependency = "            ${CMAKE_SOURCE_DIR}/" + COPY_EMITTER.as_posix() + "\n"
+    require(cmake.count(dependency) == 1, "copy emitter dependency mutation is ambiguous")
+    try:
+        validate_sources(root, {CMAKE: cmake.replace(dependency, "", 1)})
+    except GateError:
+        pass
+    else:
+        raise GateError("missing copy emitter contract dependency was accepted")
 
     mutated, mutation_count = re.subn(
         r"(case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:\s*"

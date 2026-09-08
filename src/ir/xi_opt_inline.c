@@ -30,6 +30,7 @@
 #include "xi_opt_inline.h"
 #include "xi_evidence.h"
 #include "xi_cfg_edit.h"
+#include "xi_cleanup.h"
 #include "xi_tbaa.h"
 #include "xi_ops_gen.h"
 #include "xi_own.h"
@@ -569,9 +570,63 @@ static bool inline_value_has_structural_use(const XiFunc *func, const XiValue *t
 
 /* ========== Single Call Site Inlining ========== */
 
+/* All callee blocks are cloned. Verify the identity graph before splitting
+ * the caller; unlike
+ * operands, cleanup relations cannot refer outside it. */
+static bool inline_cleanup_is_valid(const XiFunc *callee) {
+    for (uint32_t bi = 0u; bi < callee->nblocks; ++bi) {
+        const XiBlock *block = callee->blocks[bi];
+        for (uint32_t vi = 0u; vi < block->nvalues; ++vi) {
+            const XiValue *value = block->values[vi];
+            if (value && (value->cleanup_boundary || value->op == XI_CLEANUP_ENTER ||
+                          value->op == XI_CLEANUP_LEAVE))
+                return xi_cleanup_verify(callee, NULL, 0u);
+        }
+    }
+    return true;
+}
+
+static void inline_remap_cleanup(XiFunc *caller, const XiFunc *callee, XiValue *const *value_map,
+                                 uint32_t map_size) {
+    uint32_t count = 0u;
+    for (uint32_t bi = 0u; bi < callee->nblocks; ++bi) {
+        const XiBlock *block = callee->blocks[bi];
+        for (uint32_t vi = 0u; vi < block->nvalues; ++vi) {
+            const XiValue *value = block->values[vi];
+            if (value && value->cleanup_boundary)
+                ++count;
+        }
+    }
+    if (count == 0u)
+        return;
+    XiCleanupValueMapping *values = xr_calloc(count, sizeof(*values));
+    XR_CHECK(values != NULL, "inline cleanup mapping allocation failed after cloning");
+    uint32_t cursor = 0u;
+    for (uint32_t bi = 0u; bi < callee->nblocks; ++bi) {
+        const XiBlock *block = callee->blocks[bi];
+        for (uint32_t vi = 0u; vi < block->nvalues; ++vi) {
+            const XiValue *value = block->values[vi];
+            if (value && value->cleanup_boundary) {
+                XiValue *mapped = value->id < map_size ? value_map[value->id] : NULL;
+                values[cursor++] = (XiCleanupValueMapping) {value, mapped};
+            }
+        }
+    }
+    XiCleanupRemap remap = {values, count};
+    char error[192] = {0};
+    bool remapped = xi_cleanup_remap(caller, callee, &remap, error, sizeof(error));
+    xr_free(values);
+    /* The caller is already split. Failure cannot be reported as an optional
+     * optimization
+     * miss while leaving live clones without owned identities. */
+    XR_CHECK(remapped, error);
+}
+
 static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_idx,
                              XiValue *call_val, XiFunc *callee) {
     if (callee->entry && callee->entry->npreds != 0)
+        return false;
+    if (!inline_cleanup_is_valid(callee))
         return false;
 
     uint16_t shape_elems = 0;
@@ -801,6 +856,8 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
                 value_map[src_phi->value.id] = &phi_clone->value;
         }
     }
+
+    inline_remap_cleanup(caller, callee, value_map, callee_max_id);
 
     /* Wire call_blk → callee entry block. */
     call_blk->kind = XI_BLOCK_PLAIN;

@@ -92,6 +92,21 @@ void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
 }
 
+XR_FUNC bool xi_func_arena_contains(const XiFunc *f, const void *pointer, uint32_t size) {
+    if (!f || !pointer || size == 0u)
+        return false;
+    uintptr_t address = (uintptr_t) pointer;
+    for (const XiArenaChunk *chunk = f->arena_head; chunk; chunk = chunk->next) {
+        if (chunk->used > chunk->cap)
+            return false;
+        uintptr_t start = (uintptr_t) (chunk + 1);
+        if (address >= start && address - start <= chunk->used &&
+            size <= chunk->used - (address - start))
+            return true;
+    }
+    return false;
+}
+
 static void xi_value_clear_view_evidence(XiValue *value) {
     if (value)
         value->view_evidence = (XiViewEvidence) {0};

@@ -54,6 +54,15 @@ class FocusedSelectionTest(unittest.TestCase):
             with self.subTest(arguments=arguments):
                 self.assertTrue(runner.has_explicit_ctest_selection(arguments))
 
+    def test_exhaustive_generator_is_reserved_for_t3(self):
+        for tier in ("t0", "t1", "t2"):
+            with self.subTest(tier=tier):
+                _, exclude, not_covered = runner.TIERS[tier]
+                self.assertRegex("xi_generator_self_test", exclude)
+                self.assertNotRegex("xi_generator_fast_self_test", exclude)
+                self.assertIn("exhaustive Xi generator mutations", not_covered)
+        self.assertEqual(runner.TIERS["t3"][1], "")
+
 
 class PhaseTimingTest(unittest.TestCase):
     def test_timer_reports_elapsed_time_and_propagates_failure(self):

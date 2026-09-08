@@ -504,9 +504,121 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
     raise CoreSpecError(f"KAT {case['id']} has no scalar oracle for {spelling}")
 
 
+def construct_ownership_valid(actual: dict[str, Any], field_types: Any,
+                              field_ownerships: Any) -> bool:
+    """Check a construct's explicit owner-state transition, never an implicit copy."""
+    values = actual.get("operand_values")
+    dispositions = actual.get("operand_ownerships")
+    before = actual.get("consumed_before")
+    after = actual.get("consumed_after")
+    type_ownership = actual.get("type_ownership")
+    if (not isinstance(field_types, list) or not isinstance(field_ownerships, list)
+            or not isinstance(values, list) or not isinstance(dispositions, list)
+            or not isinstance(before, list) or not isinstance(after, list)
+            or len({len(field_types), len(field_ownerships), len(values), len(dispositions)}) != 1
+            or any(not isinstance(name, str) or not name for name in field_types)
+            or any(ownership not in ("trivial", "affine") for ownership in field_ownerships)
+            or type_ownership not in ("trivial", "affine")
+            or ("affine" in field_ownerships and type_ownership != "affine")
+            or actual.get("result_ownership") !=
+                ("owner" if type_ownership == "affine" else "non-owner")):
+        return False
+    if any(not isinstance(value, str) or not value or value.strip() != value
+           for value in values + before + after):
+        return False
+    if len(set(before)) != len(before) or len(set(after)) != len(after):
+        return False
+    consumed = set(before)
+    identities: dict[str, tuple[str, str]] = {}
+    for value, field_type, ownership, disposition in zip(
+            values, field_types, field_ownerships, dispositions):
+        if value in consumed or disposition != ("owner" if ownership == "affine" else "non-owner"):
+            return False
+        identity = (field_type, ownership)
+        if value in identities and identities[value] != identity:
+            return False
+        identities[value] = identity
+        if ownership == "affine":
+            consumed.add(value)
+    return consumed == set(after)
+
+
+def continuation_graph_valid(actual: dict[str, Any], *, cancel: bool, trap: bool) -> bool:
+    """Check explicit KAT edge facts, never a claimed cleanup-valid boolean.
+
+    These are finite control-flow test inputs, not another executable format.
+    Refusal edges change the pending reason; ordinary edges preserve it. Cycles
+    are legal: this proves exit closure, not termination of arbitrary bodies.
+    """
+    if "cancel_terminal" in actual or "trap_terminal" in actual:
+        return False
+    graph = actual.get("continuation_graph")
+    if not isinstance(graph, dict) or set(graph) != {"entries", "blocks"}:
+        return False
+    entries, blocks = graph["entries"], graph["blocks"]
+    reasons = {"normal"} | ({"cancel"} if cancel else set()) | ({"trap7"} if trap else set())
+    if (not isinstance(entries, dict) or set(entries) != reasons
+            or not isinstance(blocks, list) or not blocks):
+        return False
+
+    def valid_target(value: Any) -> bool:
+        return type(value) is int and 0 <= value < len(blocks)
+
+    exits = {"branch", "return", "error", "panic", "cancel", "trap7", "trap-other", "suspend"}
+    for block in blocks:
+        if (not isinstance(block, dict) or set(block) != {"exit", "flow", "refusal"}
+                or not isinstance(block["exit"], str) or block["exit"] not in exits
+                or not isinstance(block["flow"], list)
+                or not isinstance(block["refusal"], list)
+                or any(not valid_target(target) for target in block["flow"] + block["refusal"])
+                or bool(block["flow"]) != (block["exit"] == "branch")):
+            return False
+    pending: list[int] = []
+    incoming: dict[int, str] = {}
+
+    def admit(target: int, reason: str) -> bool:
+        if not valid_target(target):
+            return False
+        if target in incoming:
+            return incoming[target] == reason
+        incoming[target] = reason
+        pending.append(target)
+        return True
+
+    for reason, target in entries.items():
+        if not admit(target, reason):
+            return False
+    while pending:
+        target = pending.pop()
+        reason, block = incoming[target], blocks[target]
+        exit_kind = block["exit"]
+        if exit_kind != "branch":
+            if ((reason == "cancel" and exit_kind != "cancel")
+                    or (reason == "trap7" and exit_kind != "trap7")
+                    or (reason == "normal" and exit_kind == "cancel")):
+                return False
+        for successor in block["flow"]:
+            if not admit(successor, reason):
+                return False
+        for successor in block["refusal"]:
+            if not admit(successor, "trap7"):
+                return False
+    return len(incoming) == len(blocks)
+
+
 def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     actual = case.get("actual")
     require(isinstance(actual, dict), f"KAT {case['id']} actual contract must be an object")
+    if validator in {"provider-call", "sealed-call", "sealed-invoke", "indirect-call",
+                     "indirect-invoke", "witness-call", "witness-invoke"}:
+        typed_successors = 0
+        if validator.endswith("-invoke"):
+            prefix = "callable" if validator == "indirect-invoke" else "callee"
+            typed_successors = (1 + int(actual.get(f"{prefix}_error_type") not in {None, "void"})
+                                + int(actual.get(f"{prefix}_panic_type") not in {None, "void"}))
+        if (actual.get("successor_count", typed_successors) != typed_successors
+                and not continuation_graph_valid(actual, cancel=False, trap=True)):
+            return False
     if validator == "provider-call":
         operand_count = actual.get("provider_operand_count", actual.get("operand_count"))
         operand_types = actual.get("provider_operand_types", actual.get("operand_types"))
@@ -696,7 +808,11 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and (not has_trap_edge or trap_edge_valid))
     if validator == "aggregate-construct":
         return (actual.get("operand_types") == actual.get("field_types")
-                and actual.get("result_type") == actual.get("aggregate_type"))
+                and isinstance(actual.get("aggregate_type"), str)
+                and bool(actual["aggregate_type"])
+                and actual.get("result_type") == actual["aggregate_type"]
+                and construct_ownership_valid(actual, actual.get("field_types"),
+                                              actual.get("field_type_ownerships")))
     if validator == "aggregate-project":
         fields = actual.get("field_types")
         ordinal = actual.get("field_ordinal")
@@ -712,11 +828,22 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and 0 <= ordinal < len(fields) and actual.get("value_type") == fields[ordinal])
     if validator == "variant-construct":
         payloads = actual.get("variant_payload_types")
+        ownerships = actual.get("variant_payload_type_ownerships")
         ordinal = actual.get("variant_ordinal")
-        return (isinstance(payloads, list) and isinstance(ordinal, int)
+        return (isinstance(payloads, list) and isinstance(ownerships, list)
+                and len(payloads) == len(ownerships) and type(ordinal) is int
+                and all(isinstance(types, list) and isinstance(owners, list)
+                        and len(types) == len(owners)
+                        and all(isinstance(name, str) and bool(name) for name in types)
+                        and all(owner in ("trivial", "affine") for owner in owners)
+                        for types, owners in zip(payloads, ownerships))
                 and 0 <= ordinal < len(payloads)
                 and actual.get("operand_types") == payloads[ordinal]
-                and actual.get("result_type") == actual.get("variant_type"))
+                and isinstance(actual.get("variant_type"), str) and bool(actual["variant_type"])
+                and actual.get("result_type") == actual["variant_type"]
+                and actual.get("type_ownership") ==
+                    ("affine" if any("affine" in owners for owners in ownerships) else "trivial")
+                and construct_ownership_valid(actual, payloads[ordinal], ownerships[ordinal]))
     if validator == "variant-test":
         count = actual.get("variant_count")
         ordinal = actual.get("variant_ordinal")
@@ -855,14 +982,33 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("result_type") == "void"
                 and actual.get("successor_count") == 2
                 and actual.get("resume_state") == actual.get("continuation_state")
-                and actual.get("cancel_terminal") is True
+                and continuation_graph_valid(actual, cancel=True, trap=False)
                 and isinstance(actual.get("live_values"), list)
                 and actual.get("live_values") == actual.get("resume_edge_values"))
     if validator == "coroutine-call":
+        live = actual.get("live_values")
+        owners = actual.get("owner_values", [])
+        cancel_values = actual.get("cancel_edge_values", [])
+        trap_values = actual.get("trap_edge_values", [])
+        successor_count = actual.get("successor_count")
+        trap_valid = (
+            successor_count == 2 and trap_values == []
+        ) or (
+            successor_count == 3
+            and actual.get("trap") == "provider-call-failed"
+            and isinstance(live, list) and isinstance(owners, list)
+            and isinstance(trap_values, list)
+            and isinstance(cancel_values, list)
+            and all(live.count(owner) == 1 and owners.count(owner) == 1 for owner in owners)
+            and all(value in owners for value in cancel_values)
+            and all(cancel_values.count(owner) == 1 for owner in owners)
+            and all(value in live for value in trap_values)
+            and all(trap_values.count(owner) == 1 for owner in owners)
+        )
         return (actual.get("result_type") == "void"
-                and actual.get("successor_count") == 2
+                and trap_valid
                 and actual.get("resume_state") == actual.get("continuation_state")
-                and actual.get("cancel_terminal") is True
+                and continuation_graph_valid(actual, cancel=True, trap=successor_count == 3)
                 and actual.get("callee_coroutine") is True
                 and actual.get("callee_suspend_kind") == "cooperative-yield"
                 and actual.get("callee_error_type") == "void"
@@ -990,6 +1136,16 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         lines.append(f"    XR_CORE_OP_{c_identifier(row['spelling'])} = {row['stable_id']},")
     lines.extend([
         "} XrCoreOperationId;",
+        "",
+        "typedef enum XrCoreSuccessorMask {",
+        "    XR_CORE_SUCCESSOR_NORMAL = UINT8_C(1),",
+        "    XR_CORE_SUCCESSOR_ERROR = UINT8_C(2),",
+        "    XR_CORE_SUCCESSOR_PANIC = UINT8_C(4),",
+        "    XR_CORE_SUCCESSOR_TRAP = UINT8_C(8),",
+        "    XR_CORE_SUCCESSOR_CANCEL = UINT8_C(16),",
+        "    XR_CORE_SUCCESSOR_SUSPEND = UINT8_C(32),",
+        "} XrCoreSuccessorMask;",
+        "#define XR_CORE_SUCCESSOR_ALL UINT8_C(63)",
         "",
         "typedef enum XrCoreCoverageStatus {",
         "    XR_CORE_COVERAGE_COMPLETE = 1,",
@@ -1271,6 +1427,65 @@ def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
     kat_mutation = copy.deepcopy(kats)
     kat_mutation["cases"][0]["operation"] = "core.unknown"
     expect_invalid("KAT with unknown operation", registry, kat_mutation)
+
+    for validator in ("aggregate-construct", "variant-construct"):
+        positive = next(case for case in kats["cases"]
+                        if case["id"] == f"{validator}-affine-transfer")
+        ownership_field = ("field_type_ownerships" if validator == "aggregate-construct"
+                           else "variant_payload_type_ownerships")
+        for field in (ownership_field, "operand_values", "operand_ownerships", "type_ownership",
+                      "result_ownership", "consumed_before", "consumed_after"):
+            missing = copy.deepcopy(positive)
+            del missing["actual"][field]
+            require(not contract_oracle(missing, validator),
+                    f"{validator} accepted missing ownership fact: {field}")
+        for field, value in (("operand_values", [True, "scalar"]),
+                             ("operand_values", ["owner", "owner"]),
+                             ("operand_ownerships", ["owner"]),
+                             ("type_ownership", "unknown"),
+                             ("consumed_before", ["earlier-owner", "earlier-owner"]),
+                             ("consumed_after", ["earlier-owner", "owner", "owner"])):
+            malformed = copy.deepcopy(positive)
+            malformed["actual"][field] = value
+            require(not contract_oracle(malformed, validator),
+                    f"{validator} accepted malformed ownership fact: {field}")
+
+    for case_id, validator in (
+            ("coroutine-yield-valid", "coroutine-yield"),
+            ("coroutine-call-provider-trap-continuation-valid", "coroutine-call"),
+            ("provider-call-trap-continuation-valid", "provider-call"),
+            ("sealed-call-trap-continuation-valid", "sealed-call"),
+            ("sealed-invoke-provider-trap-continuation", "sealed-invoke"),
+            ("indirect-call-trap-continuation-valid", "indirect-call"),
+            ("indirect-invoke-provider-trap-continuation", "indirect-invoke"),
+            ("witness-direct-trap-continuation-valid", "witness-call"),
+            ("witness-invoke-provider-trap-continuation", "witness-invoke")):
+        positive = next(case for case in kats["cases"] if case["id"] == case_id)
+        for field in ("entries", "blocks"):
+            missing = copy.deepcopy(positive)
+            del missing["actual"]["continuation_graph"][field]
+            require(not contract_oracle(missing, validator),
+                    f"{validator} accepted missing cleanup graph fact: {field}")
+        for field in ("cancel_terminal", "trap_terminal"):
+            legacy = copy.deepcopy(positive)
+            del legacy["actual"]["continuation_graph"]
+            legacy["actual"][field] = True
+            require(not contract_oracle(legacy, validator),
+                    f"{validator} accepted a terminal claim instead of edge facts")
+        malformed = copy.deepcopy(positive)
+        malformed["actual"]["continuation_graph"]["entries"]["normal"] = True
+        require(not contract_oracle(malformed, validator),
+                f"{validator} accepted a boolean block identity")
+
+    positive = next(case for case in kats["cases"]
+                    if case["id"] == "cleanup-graph-multiblock-reason-exits")
+    for field, value in (("exit", ["trap7"]), ("exit", "unknown"),
+                         ("flow", [True]), ("flow", [-1]), ("flow", [999]),
+                         ("flow", None), ("refusal", [999]), ("refusal", {})):
+        malformed = copy.deepcopy(positive)
+        malformed["actual"]["continuation_graph"]["blocks"][2][field] = value
+        require(not contract_oracle(malformed, "coroutine-call"),
+                f"cleanup oracle accepted malformed {field}: {value!r}")
 
 
 def main() -> int:

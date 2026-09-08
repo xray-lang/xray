@@ -1,9 +1,9 @@
 {
   "schema": "xray-core-spec-coverage/1",
-  "semantic_sha256": "978790b12da16331eee4f85d2d401ff265150a24cdc84625d1f8be34e56e017c",
+  "semantic_sha256": "bbdc091fa321bd9c70c5937f417ddfc6ba510476552baae4bec7560567bba87a",
   "epoch": 1,
   "operation_count": 55,
-  "normative_kat_count": 166,
+  "normative_kat_count": 224,
   "operations": [
     {
       "stable_id": 1,

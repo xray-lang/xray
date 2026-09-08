@@ -1256,10 +1256,10 @@ XR_FUNC bool xi_coro_value_live_across_proven_suspend(const XiFunc *f, const XiL
 }
 
 /* A call-bound place is itself a raw pointer, so ordinary SSA liveness keeps
- * the pointer but cannot express that its pointee must also have a stable
- * address.  When XI_LOCAL_ADDR crosses a suspension, lift its source into the
- * logical frame as well; the emitted address then points into the heap frame
- * instead of a vanished resume-stack local. */
+ * the pointer but
+ * cannot express that its pointee must also have a stable address.  When XI_LOCAL_ADDR crosses a
+ * suspension, lift its source into the logical frame as well; the emitted address then points into
+ * the heap frame instead of a vanished resume-stack local. */
 static bool xi_coro_value_address_live_across_suspend(const XiFunc *f, const XiLiveness *live,
                                                       const XiValue *target,
                                                       const XiCoroResolver *resolver) {

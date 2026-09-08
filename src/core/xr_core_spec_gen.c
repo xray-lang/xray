@@ -1035,7 +1035,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         138u,
         255u,
         0u,
-        49u,
+        57u,
         UINT32_C(164),
         UINT32_C(64),
         "core.coroutine.call.sealed",

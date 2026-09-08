@@ -110,6 +110,15 @@ compatibility opcode, reserved hole, or second bounds owner.
     There is no Xi defer-push/pop/invoke operation, closure or callback
     representation, dynamic cleanup stack, or backend reconstruction. Panic and
     coroutine-cancellation paths dispatch to the same static regions.
+    Each emitted boundary has an arena-owned identity shared by its enter and
+    leave, its frontier head, and the next remaining boundary with a strictly
+    decreasing rank. A statically fatal body has no fabricated normal leave.
+    Lowering records identities after the complete frontier exists. Verification
+    checks record ownership before dereferencing it, then validates live marker
+    membership and every relation. Cloning remaps complete frontiers and pairs;
+    it never retains source-arena identity pointers. Cleanup edits participate in
+    both value and CFG fingerprints and invalidate dependent ownership and effect
+    evidence. These identity checks do not prove arbitrary cleanup CFG termination.
 14. Every Xi operation is listed exactly once in one of four owner groups:
     `declarative-primitive`, `shared-semantic-kernel`, `capability-provider`,
     or `generated-specialization`. Missing categories, missing operations,
@@ -161,3 +170,9 @@ compatibility opcode, reserved hole, or second bounds owner.
 
 anchor-sha256: xisa/xi/ops.def 35dd3030a7fd4b40c8f3b76e053cea5202b9e21418c3b7af51c0715dde586cef
 anchor-sha256: xisa/xi/lowering.def 2a5a75b893790028f75fb5b61d11a8c0e6a085ea52f9af4776e646e95fb45c1e
+anchor-sha256: src/ir/xi_cleanup.c c6fb49d7e811f54637160b605a79c5301a528085d24ecca9c690820290e6fd83
+anchor-sha256: src/ir/xi_cleanup.h 7149fdf5ffcfed5c6904882f5e06889368bd1a6912db5580c65486c280279a0e
+anchor-sha256: tests/unit/ir/test_xi_cleanup.c 01b4edf0bf215e3099c1157f7282c7bb4d4cd72e54133c50eaabda5218210d51
+anchor-sha256: tests/unit/ir/test_xi_cleanup_lower.c 7d7c78e6eac5b2e4a4403a24874817d96c71a597e469587e32b234ea07334a85
+anchor-sha256: tests/unit/ir/test_xi_cleanup_clone.c 4d35d1c83c13a8ad46192caaf2ca6b3a5b4337b7ea469590bd06ecf30d7dc813
+anchor-sha256: tests/unit/ir/test_xi_cleanup_integration.c 4d556382f904301ca58218e46b266b25f42565fff4950d7c41d7ee4b902ab7b3

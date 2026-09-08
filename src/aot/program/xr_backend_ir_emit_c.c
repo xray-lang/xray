@@ -139,6 +139,33 @@ static uint32_t outcome_value_kind(uint16_t type_id) {
     }
 }
 
+static bool emit_allocation_alignment(CBuffer *buffer, const char *type, const char *indent) {
+    return append_format(buffer,
+                         "%s_Static_assert(_Alignof(XrAotAllocation) >= _Alignof(%s) && "
+                         "sizeof(XrAotAllocation) %% _Alignof(%s) == 0, "
+                         "\"allocation payload alignment is unsupported\");\n",
+                         indent, type, type);
+}
+
+static bool emit_allocation_profile_abi(CBuffer *buffer, const XrBackendIR *ir) {
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(ir->profile);
+    if (!machine)
+        return false;
+    const XrTargetDataLayout *layout = &machine->data_layout;
+    const char *types[] = {"uint8_t", "uint16_t", "uint32_t", "int64_t", "void *"};
+    const XrTargetTypeLayout *facts[] = {&layout->u8, &layout->u16, &layout->u32, &layout->i64,
+                                         &layout->pointer};
+    for (size_t index = 0u; index < sizeof(types) / sizeof(types[0]); ++index) {
+        if (!append_format(buffer,
+                           "_Static_assert(sizeof(%s) == UINT32_C(%u) && "
+                           "_Alignof(%s) == UINT32_C(%u), "
+                           "\"allocation ABI disagrees with TargetProfile\");\n",
+                           types[index], facts[index]->size, types[index], facts[index]->align))
+            return false;
+    }
+    return append_text(buffer, "\n");
+}
+
 static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_t index,
                                  uint8_t *state) {
     if (state[index] == 2u)
@@ -376,11 +403,16 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                     "requirement, uint32_t operation, const uint8_t *bytes, size_t size);\n\n"))
         return false;
     if (arena) {
-        if (!append_text(buffer,
+        if (!emit_allocation_profile_abi(buffer, ir) ||
+            !append_text(buffer,
                          "typedef union XrAotAllocation XrAotAllocation;\n"
                          "union XrAotAllocation {\n"
                          "    struct { XrAotAllocation *next; } link;\n"
-                         "    max_align_t alignment;\n"
+                         "    uint8_t align_u8;\n"
+                         "    uint16_t align_u16;\n"
+                         "    uint32_t align_u32;\n"
+                         "    int64_t align_i64;\n"
+                         "    void *align_pointer;\n"
                          "};\n"
                          "typedef struct XrAotContext {\n"
                          "    XrAotAllocation *allocations;\n"
@@ -1313,6 +1345,8 @@ static bool callable_type_can_target(const XrBackendIR *ir, uint16_t callable_ty
     return false;
 }
 
+#include "xr_backend_ir_emit_copy.inc.c"
+
 static bool emit_callable_call_cases(CBuffer *buffer, const XrBackendIR *ir,
                                      const XrBackendFunction *caller,
                                      const XrBackendInstruction *instruction,
@@ -1708,51 +1742,6 @@ static bool emit_callable_invoke(CBuffer *buffer, const XrBackendIR *ir,
     return append_format(buffer, "        return call_%u;\n", instruction_id);
 }
 
-static bool emit_callable_copy(CBuffer *buffer, const XrBackendIR *ir,
-                               const XrBackendInstruction *instruction) {
-    uint16_t callable_type = instruction->result_type_id;
-    uint32_t source_value = instruction->operands[0];
-    uint32_t result_value = instruction->result_id;
-    if (!append_format(buffer,
-                       "        v%u = v%u;\n"
-                       "        switch (v%u.function_id) {\n",
-                       result_value, source_value, source_value))
-        return false;
-    for (uint32_t target_id = 0; target_id < ir->function_count; ++target_id) {
-        if (!callable_type_can_target(ir, callable_type, target_id))
-            continue;
-        const XrValidatedFunction *target = &ir->program->functions[target_id];
-        if (!append_format(buffer, "            case UINT32_C(%u):\n", target_id))
-            return false;
-        if (!target->has_receiver) {
-            if (!append_format(buffer,
-                               "                v%u.capture = NULL;\n"
-                               "                break;\n",
-                               result_value))
-                return false;
-            continue;
-        }
-        char storage[32];
-        const char *capture_type = type_c_name(target->parameter_types[0], storage);
-        if (!capture_type ||
-            !append_format(buffer,
-                           "                { %s *callable_capture_%u = "
-                           "(%s *)xr_aot_alloc(xr_ctx, sizeof(%s));\n"
-                           "                  if (!callable_capture_%u) return "
-                           "xr_aot_make(4, 0, 0);\n"
-                           "                  *callable_capture_%u = "
-                           "*(const %s *)v%u.capture;\n"
-                           "                  v%u.capture = (void *)callable_capture_%u; }\n"
-                           "                break;\n",
-                           capture_type, result_value, capture_type, capture_type, result_value,
-                           result_value, capture_type, source_value, result_value, result_value))
-            return false;
-    }
-    return append_text(buffer, "            default:\n"
-                               "                return xr_aot_make(4, 0, 0);\n"
-                               "        }\n");
-}
-
 static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
                                 const XrBackendFunction *function,
                                 const XrBackendInstruction *instruction, uint32_t function_id,
@@ -1814,13 +1803,24 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
                        "            frame->state = UINT32_C(%u);\n"
                        "            return xr_aot_make(5, UINT32_C(%u), 0);\n"
                        "        }\n"
+                       "        frame->child_active_%u = UINT8_C(0);\n",
+                       point->resume_state_id, safepoint_id, safepoint_id))
+        return false;
+    if (instruction->successor_count == 3u) {
+        uint32_t trap_start = callee->parameter_count + point->live_value_count +
+                              function->blocks[instruction->successors[1]].argument_count;
+        if (!append_format(buffer,
+                           "        if (child_%u.kind == UINT32_C(1) && child_%u.trap == 7) ",
+                           instruction_id, instruction_id) ||
+            !emit_parallel_edge(buffer, function, instruction, 2u, trap_start, function_id))
+            return false;
+    }
+    if (!append_format(buffer,
                        "        if (child_%u.kind != UINT32_C(0)) {\n"
                        "            frame->state = UINT32_MAX;\n"
                        "            return child_%u;\n"
-                       "        }\n"
-                       "        frame->child_active_%u = UINT8_C(0);\n",
-                       point->resume_state_id, safepoint_id, instruction_id, instruction_id,
-                       safepoint_id))
+                       "        }\n",
+                       instruction_id, instruction_id))
         return false;
     char result_expression[64];
     const char *result = NULL;
@@ -2129,7 +2129,7 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             uint16_t capture_type = function->value_types[instruction->operands[0]];
             char storage[32];
             const char *name = type_c_name(capture_type, storage);
-            if (!name ||
+            if (!name || !emit_allocation_alignment(buffer, name, "        ") ||
                 !append_format(buffer,
                                "        %s *callable_capture_%u = "
                                "(%s *)xr_aot_alloc(xr_ctx, sizeof(%s));\n",
@@ -2147,14 +2147,8 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  instruction->result_id, instruction->result_type_id, target_id,
                                  instruction->result_id);
         }
-        case XR_CORE_OP_CORE_OWNER_COPY: {
-            const XrValidatedType *type =
-                xr_validated_program_type(ir->program, instruction->result_type_id);
-            if (type && type->kind == XR_CORE_IR_TYPE_CALLABLE)
-                return emit_callable_copy(buffer, ir, instruction);
-            return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
-                                 instruction->operands[0]);
-        }
+        case XR_CORE_OP_CORE_OWNER_COPY:
+            return emit_owner_copy(buffer, ir, instruction);
         case XR_CORE_OP_CORE_OWNER_MOVE:
             return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
                                  instruction->operands[0]);
@@ -2243,7 +2237,7 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                     instruction->operands[0]);
             char storage[32];
             const char *name = type_c_name(concrete_type, storage);
-            if (!name ||
+            if (!name || !emit_allocation_alignment(buffer, name, "        ") ||
                 !append_format(buffer,
                                "        %s *existential_payload_%u = "
                                "(%s *)xr_aot_alloc(xr_ctx, sizeof(%s));\n",
@@ -2307,7 +2301,10 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
         }
         const XrBackendInstruction *suspension =
             point ? coroutine_suspension_instruction(function, safepoint_id, NULL) : NULL;
-        if (!suspension || suspension->successor_count != 2u ||
+        if (!suspension ||
+            (suspension->successor_count != 2u &&
+             !(suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+               suspension->successor_count == 3u)) ||
             !append_format(buffer, "            case UINT32_C(%u):\n", state))
             return false;
         if (suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
@@ -2333,10 +2330,8 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
             }
             if (!append_format(buffer,
                                ");\n"
-                               "                if (cancel_%u.kind != UINT32_C(6)) "
-                               "return xr_aot_make(4, 0, 0);\n"
                                "                frame->child_active_%u = UINT8_C(0);\n",
-                               safepoint_id, safepoint_id))
+                               safepoint_id))
                 return false;
         }
         const XrBackendBlock *cancel = &function->blocks[suspension->successors[1]];
@@ -2346,11 +2341,28 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
                 : 0u;
         uint32_t cancel_operand_start = live_operand_start + point->live_value_count;
         if (cancel_operand_start > suspension->operand_count ||
-            cancel->argument_count != suspension->operand_count - cancel_operand_start)
+            cancel->argument_count > suspension->operand_count - cancel_operand_start)
             return false;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
             if (!append_format(buffer, "                v%u = frame->live_%u_%u;\n",
                                point->live_value_ids[live], safepoint_id, live))
+                return false;
+        }
+        if (suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+            if (suspension->successor_count == 3u &&
+                (!append_format(buffer,
+                                "                if (cancel_%u.kind == UINT32_C(1) && "
+                                "cancel_%u.trap == 7) ",
+                                safepoint_id, safepoint_id) ||
+                 !emit_parallel_edge(buffer, function, suspension, 2u,
+                                     cancel_operand_start + cancel->argument_count, function_id)))
+                return false;
+            if (!append_format(buffer,
+                               "                if (cancel_%u.kind != UINT32_C(6)) {\n"
+                               "                    frame->state = UINT32_MAX;\n"
+                               "                    return cancel_%u;\n"
+                               "                }\n",
+                               safepoint_id, safepoint_id))
                 return false;
         }
         if (!emit_parallel_edge(buffer, function, suspension, 1u, cancel_operand_start,
@@ -2552,6 +2564,11 @@ static bool emit_coroutine_entry_adapter(CBuffer *buffer, const XrBackendIR *ir)
                        "    uint32_t cancelled_state = frame->function.state;\n"
                        "    XrAotOutcome native = xr_aot_fn_%u_step(&frame->context, "
                        "&frame->function, UINT8_C(1));\n"
+                       "    if (native.kind == UINT32_C(1)) {\n"
+                       "        XrBackendNativeOutcome result = {UINT32_C(2), 0, "
+                       "frame->function.state, native.trap};\n"
+                       "        return result;\n"
+                       "    }\n"
                        "    if (native.kind != UINT32_C(6)) return invalid;\n"
                        "    XrBackendNativeOutcome result = {UINT32_C(3), 0, "
                        "cancelled_state, 0};\n"
@@ -2712,6 +2729,7 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
         }
     }
     bool emitted = emit_prelude(&buffer, ir, standalone_main);
+    emitted = emitted && emit_copy_helpers(&buffer, ir);
     emitted = emitted && emit_coroutine_frames(&buffer, ir);
     for (uint32_t function = 0; emitted && function < ir->function_count; ++function)
         emitted = emit_function_signature(&buffer, &ir->functions[function], ir, function, true);

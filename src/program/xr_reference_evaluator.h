@@ -65,10 +65,9 @@ typedef bool (*XrReferenceProviderCallI64Unary)(void *context, uint32_t requirem
                                                 int64_t *result_out);
 typedef bool (*XrReferenceProviderCallI64Nullary)(void *context, uint32_t requirement_index,
                                                   uint32_t operation_index, int64_t *result_out);
-typedef bool (*XrReferenceProviderCallBoolI64Unary)(void *context,
-                                                    uint32_t requirement_index,
-                                                    uint32_t operation_index,
-                                                    int64_t argument, bool *result_out);
+typedef bool (*XrReferenceProviderCallBoolI64Unary)(void *context, uint32_t requirement_index,
+                                                    uint32_t operation_index, int64_t argument,
+                                                    bool *result_out);
 typedef bool (*XrReferenceProviderCallOptionalI64PairNullary)(void *context,
                                                               uint32_t requirement_index,
                                                               uint32_t operation_index,
@@ -141,9 +140,10 @@ XR_FUNC XrReferenceOutcome xr_reference_evaluate_bound(
     uint32_t argument_count, const XrReferenceProfile *profile, const XrReferenceBudget *budget,
     const XrReferenceProviderBinding *providers);
 /* Aggregate values returned by the one-shot evaluator are detached from its
- * private arena. Views borrow that storage until the outcome is disposed. */
+ * private arena. Views
+ * borrow that storage until the outcome is disposed. */
 XR_FUNC bool xr_reference_value_aggregate_view(const XrReferenceValue *value,
-                                                XrReferenceAggregateView *view_out);
+                                               XrReferenceAggregateView *view_out);
 XR_FUNC void xr_reference_outcome_dispose(XrReferenceOutcome *outcome);
 XR_FUNC bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
                                            const XrReferenceValue *arguments,

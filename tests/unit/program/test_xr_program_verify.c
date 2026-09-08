@@ -15,8 +15,11 @@
 #include "xr_program_assert_fixture.h"
 #include "xr_program_coroutine_fixture.h"
 #include "xr_program_ref_coroutine_fixture.h"
+#include "xr_program_coroutine_trap_fixture.h"
+#include "xr_program_cleanup_graph_fixture.h"
 #include "xr_program_output_fixture.h"
 #include "xr_program_trap_fixture.h"
+#include "xr_program_construct_fixture.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -3798,6 +3801,370 @@ static void test_coroutine_related_field_refs_require_one_live_storage_root(void
     }
 }
 
+static void test_coroutine_child_trap_requires_recoverable_cleanup_inputs(void) {
+    const XrProgramCoroutineTrapMutation valid[] = {
+        XR_PROGRAM_COROUTINE_TRAP_VALID,
+        XR_PROGRAM_COROUTINE_TRAP_NO_TRAP_EDGE,
+        XR_PROGRAM_COROUTINE_TRAP_BEFORE_YIELD,
+        XR_PROGRAM_COROUTINE_TRAP_OTHER_CHILD_TRAP,
+    };
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    for (size_t index = 0u; index < sizeof(valid) / sizeof(valid[0]); ++index) {
+        CHECK(xr_program_coroutine_trap_fixture_write(valid[index], &artifact, diagnostic,
+                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = validate_ok(&artifact);
+        CHECK(program != NULL);
+        xr_validated_program_free(program);
+        if (index == 0u) {
+            XrProgramArtifact repeated = {0};
+            CHECK(xr_program_coroutine_trap_fixture_write(valid[index], &repeated, diagnostic,
+                                                          sizeof(diagnostic)) ==
+                  XR_PROGRAM_BUILD_OK);
+            CHECK(artifact.size != 0u && artifact.size == repeated.size);
+            CHECK(artifact.size != 0u && artifact.size == repeated.size &&
+                  memcmp(artifact.bytes, repeated.bytes, artifact.size) == 0);
+            CHECK(xr_program_id_equal(artifact.id, repeated.id));
+            xr_program_artifact_free(&repeated);
+        }
+        xr_program_artifact_free(&artifact);
+    }
+    const struct {
+        XrProgramCoroutineTrapMutation mutation;
+        XrProgramDiagnosticKind diagnostic;
+    } invalid[] = {
+        {XR_PROGRAM_COROUTINE_TRAP_MISSING_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_PROGRAM_COROUTINE_TRAP_OWNER_NOT_DROPPED, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_PROGRAM_COROUTINE_TRAP_NONLIVE_INPUT, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_COROUTINE_TRAP_WRONG_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PROGRAM_COROUTINE_TRAP_WRONG_CATEGORY, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PROGRAM_COROUTINE_TRAP_WRONG_OWNERSHIP, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PROGRAM_COROUTINE_TRAP_WRONG_TERMINAL, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {XR_PROGRAM_COROUTINE_TRAP_CANCEL_TARGET, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {XR_PROGRAM_COROUTINE_TRAP_TRUNCATED_INPUT, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
+        {XR_PROGRAM_COROUTINE_TRAP_EXTRA_INPUT, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
+        {XR_PROGRAM_COROUTINE_TRAP_PAYLOAD_WITHOUT_EDGE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_CANCEL_OWNER, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_COROUTINE_TRAP_MOVED_CALLER_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+    };
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        CHECK(xr_program_coroutine_trap_fixture_write(invalid[index].mutation, &artifact,
+                                                      diagnostic,
+                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, invalid[index].diagnostic);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+typedef enum CleanupGraphMutation {
+    CLEANUP_GRAPH_TRAP_BRANCH_RETURNS,
+    CLEANUP_GRAPH_TRAP_BRANCH_CANCELS,
+    CLEANUP_GRAPH_TRAP_BRANCH_CHANGES_TRAP,
+    CLEANUP_GRAPH_CANCEL_RETURNS,
+    CLEANUP_GRAPH_CANCEL_DIRECT_TRAP,
+    CLEANUP_GRAPH_NORMAL_ENTER_CANCEL_ADAPTER,
+    CLEANUP_GRAPH_TRAP_ENTER_CANCEL_ADAPTER,
+    CLEANUP_GRAPH_MISSING_OWNER_DROP,
+    CLEANUP_GRAPH_DUPLICATE_EDGE_OWNER,
+    CLEANUP_GRAPH_FALSE_TERMINAL,
+    CLEANUP_GRAPH_UNREACHABLE_VALID_TERMINAL,
+    CLEANUP_GRAPH_TRAP_PANIC_ESCAPE,
+} CleanupGraphMutation;
+
+static XrProgramBuildStatus write_cleanup_graph_mutation(CleanupGraphMutation mutation,
+                                                         XrProgramArtifact *artifact) {
+    XrProgramCleanupGraphFixture fixture;
+    char diagnostic[256] = {0};
+    if (!xr_program_cleanup_graph_fixture_init(&fixture))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrCoreIrInstructionInput *trap_terminal =
+        &fixture.instructions[XR_CLEANUP_GRAPH_TRAP_SECOND][2];
+    XrCoreIrInstructionInput *cancel_terminal =
+        &fixture.instructions[XR_CLEANUP_GRAPH_CANCEL_PUBLISH][2];
+    uint16_t panic_type = XR_CORE_TYPE_PANIC_INFO;
+    XrParamMode panic_mode = XR_PARAM_MOVE;
+    switch (mutation) {
+        case CLEANUP_GRAPH_TRAP_BRANCH_RETURNS:
+        case CLEANUP_GRAPH_TRAP_BRANCH_CANCELS:
+        case CLEANUP_GRAPH_FALSE_TERMINAL:
+            *trap_terminal = (XrCoreIrInstructionInput) {
+                .operation_id = mutation == CLEANUP_GRAPH_TRAP_BRANCH_RETURNS
+                                    ? XR_CORE_OP_CORE_RETURN
+                                : mutation == CLEANUP_GRAPH_TRAP_BRANCH_CANCELS
+                                    ? XR_CORE_OP_CORE_CANCEL_PUBLISH
+                                    : XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+                .result_type_id = XR_CORE_TYPE_VOID,
+            };
+            break;
+        case CLEANUP_GRAPH_TRAP_BRANCH_CHANGES_TRAP:
+            trap_terminal->immediate.u32 = 4u;
+            break;
+        case CLEANUP_GRAPH_CANCEL_RETURNS:
+            cancel_terminal->operation_id = XR_CORE_OP_CORE_RETURN;
+            break;
+        case CLEANUP_GRAPH_CANCEL_DIRECT_TRAP:
+            cancel_terminal->operation_id = XR_CORE_OP_CORE_TRAP;
+            cancel_terminal->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+            cancel_terminal->immediate.u32 = 7u;
+            break;
+        case CLEANUP_GRAPH_NORMAL_ENTER_CANCEL_ADAPTER:
+            /* Preserve the pending owner on the normal path. The intermediary
+             *
+             * adapter must not hide entry into the cancellation domain. */
+            fixture.blocks[XR_CLEANUP_GRAPH_NORMAL].instruction_count = 3u;
+            xr_program_cleanup_graph_branch(&fixture, XR_CLEANUP_GRAPH_NORMAL,
+                                            XR_CLEANUP_GRAPH_CANCEL_ADAPTER);
+            break;
+        case CLEANUP_GRAPH_TRAP_ENTER_CANCEL_ADAPTER:
+            fixture.successors[XR_CLEANUP_GRAPH_TRAP_ADAPTER][0] =
+                fixture.blocks[XR_CLEANUP_GRAPH_CANCEL_ADAPTER].key;
+            break;
+        case CLEANUP_GRAPH_MISSING_OWNER_DROP:
+            fixture.instructions[XR_CLEANUP_GRAPH_CANCEL_PUBLISH][1] = *cancel_terminal;
+            fixture.blocks[XR_CLEANUP_GRAPH_CANCEL_PUBLISH].instruction_count = 2u;
+            break;
+        case CLEANUP_GRAPH_DUPLICATE_EDGE_OWNER: {
+            uint32_t target = XR_CLEANUP_GRAPH_CANCEL_BRANCH;
+            fixture.arguments[target][1] = fixture.arguments[target][0];
+            fixture.arguments[target][1].key = key("cleanup-negative:duplicate-owner-argument");
+            fixture.argument_keys[target][1] = fixture.arguments[target][1].key;
+            fixture.blocks[target].argument_count = 2u;
+            fixture.instructions[target][0].operands = fixture.argument_keys[target];
+            fixture.instructions[target][0].operand_count = 2u;
+            uint32_t source = XR_CLEANUP_GRAPH_CANCEL_ADAPTER;
+            fixture.argument_keys[source][1] = fixture.argument_keys[source][0];
+            fixture.instructions[source][1].operands = fixture.argument_keys[source];
+            fixture.instructions[source][1].operand_count = 2u;
+            break;
+        }
+        case CLEANUP_GRAPH_UNREACHABLE_VALID_TERMINAL:
+            fixture.successors[XR_CLEANUP_GRAPH_TRAP_BRANCH][1] =
+                fixture.blocks[XR_CLEANUP_GRAPH_TRAP_FIRST].key;
+            break;
+        case CLEANUP_GRAPH_TRAP_PANIC_ESCAPE: {
+            /* Use an actual moved PanicInfo parameter, not a wrong-typed
+             * aggregate
+             * pretending to be a typed panic payload. */
+            fixture.functions[0].parameter_types = &panic_type;
+            fixture.functions[0].parameter_modes = &panic_mode;
+            fixture.functions[0].parameter_count = 1u;
+            fixture.functions[0].panic_type_id = XR_CORE_TYPE_PANIC_INFO;
+            fixture.functions[0].effect_mask |= XR_CORE_EFFECT_PANIC;
+            fixture.arguments[0][0] = (XrCoreIrValueInput) {.key = fixture.live,
+                                                            .type_id = XR_CORE_TYPE_PANIC_INFO,
+                                                            .ownership = XR_CORE_IR_OWNER};
+            fixture.argument_keys[0][0] = fixture.live;
+            fixture.blocks[0].arguments = fixture.arguments[0];
+            fixture.blocks[0].argument_count = 1u;
+            fixture.instructions[0][0] = (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+                .result_type_id = XR_CORE_TYPE_VOID,
+                .operands = fixture.argument_keys[0],
+                .operand_count = 1u,
+            };
+            fixture.instructions[0][1] = fixture.instructions[0][2];
+            fixture.blocks[0].instruction_count = 2u;
+            for (uint32_t block = 1u; block < XR_CLEANUP_GRAPH_BLOCK_COUNT; ++block)
+                fixture.arguments[block][0].type_id = XR_CORE_TYPE_PANIC_INFO;
+            uint32_t target = XR_CLEANUP_GRAPH_TRAP_SECOND;
+            fixture.instructions[target][1] = (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_PANIC_PUBLISH,
+                .result_type_id = XR_CORE_TYPE_VOID,
+                .operands = fixture.argument_keys[target],
+                .operand_count = 1u,
+            };
+            fixture.blocks[target].instruction_count = 2u;
+            break;
+        }
+    }
+    return xr_program_cleanup_graph_fixture_write_input(&fixture, artifact, diagnostic,
+                                                        sizeof(diagnostic));
+}
+
+static void test_cleanup_reason_graph_checks_all_exits_and_keeps_body_cycles(void) {
+    XrProgramArtifact artifact = {0};
+    XrProgramArtifact repeated = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_cleanup_graph_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    CHECK(xr_program_cleanup_graph_fixture_write(&repeated, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    CHECK(artifact.size != 0u && artifact.size == repeated.size);
+    CHECK(artifact.size != 0u && artifact.size == repeated.size &&
+          memcmp(artifact.bytes, repeated.bytes, artifact.size) == 0);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    if (program) {
+        uint64_t work = xr_validated_program_verifier_work(program);
+        CHECK(work > 1u);
+        XrProgramVerifyBudget budget = xr_program_verify_default_budget();
+        budget.max_work = work - 1u;
+        XrValidatedProgram *limited = NULL;
+        XrProgramDiagnostic failure = {0};
+        CHECK(xr_program_validate(artifact.bytes, artifact.size, &budget, &limited, &failure) ==
+              XR_PROGRAM_VERIFY_RESOURCE_LIMIT);
+        CHECK(limited == NULL && failure.kind == XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT);
+        xr_validated_program_free(limited);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&repeated);
+    xr_program_artifact_free(&artifact);
+    const struct {
+        CleanupGraphMutation mutation;
+        XrProgramDiagnosticKind diagnostic;
+    } invalid[] = {
+        {CLEANUP_GRAPH_TRAP_BRANCH_RETURNS, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {CLEANUP_GRAPH_TRAP_BRANCH_CANCELS, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {CLEANUP_GRAPH_TRAP_BRANCH_CHANGES_TRAP, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {CLEANUP_GRAPH_CANCEL_RETURNS, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {CLEANUP_GRAPH_CANCEL_DIRECT_TRAP, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {CLEANUP_GRAPH_NORMAL_ENTER_CANCEL_ADAPTER, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {CLEANUP_GRAPH_TRAP_ENTER_CANCEL_ADAPTER, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {CLEANUP_GRAPH_MISSING_OWNER_DROP, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {CLEANUP_GRAPH_DUPLICATE_EDGE_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {CLEANUP_GRAPH_FALSE_TERMINAL, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {CLEANUP_GRAPH_UNREACHABLE_VALID_TERMINAL, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {CLEANUP_GRAPH_TRAP_PANIC_ESCAPE, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+    };
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        CHECK(write_cleanup_graph_mutation(invalid[index].mutation, &artifact) ==
+              XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, invalid[index].diagnostic);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_cleanup_reason_graph_rejects_foreign_and_unknown_targets_before_walk(void) {
+    XrProgramCleanupGraphFixture fixture;
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    for (uint32_t foreign = 0u; foreign < 2u; ++foreign) {
+        CHECK(xr_program_cleanup_graph_fixture_init(&fixture));
+        XrCoreIrInstructionInput returned = {.operation_id = XR_CORE_OP_CORE_RETURN,
+                                             .result_type_id = XR_CORE_TYPE_VOID};
+        XrCoreIrBlockInput foreign_block = {.key = key("cleanup-negative:foreign-block"),
+                                            .instructions = &returned,
+                                            .instruction_count = 1u};
+        fixture.functions[1] = (XrCoreIrFunctionInput) {
+            .key = key("cleanup-negative:foreign-function"),
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .entry_block = foreign_block.key,
+            .blocks = &foreign_block,
+            .block_count = 1u,
+        };
+        fixture.module.function_count = foreign ? 2u : 1u;
+        fixture.successors[XR_CLEANUP_GRAPH_CANCEL_ADAPTER][0] = foreign_block.key;
+        CHECK(xr_program_cleanup_graph_fixture_write_input(&fixture, &artifact, diagnostic,
+                                                           sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE);
+        CHECK(artifact.bytes == NULL && artifact.size == 0u);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static XrProgramBuildStatus write_cleanup_graph_suspension(bool trap_domain, bool child_call,
+                                                           XrProgramArtifact *artifact) {
+    XrProgramCleanupGraphFixture fixture;
+    char diagnostic[256] = {0};
+    if (!xr_program_cleanup_graph_fixture_init(&fixture))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t source = trap_domain ? XR_CLEANUP_GRAPH_TRAP_ADAPTER : XR_CLEANUP_GRAPH_CANCEL_ADAPTER;
+    uint32_t resume = trap_domain ? XR_CLEANUP_GRAPH_TRAP_BRANCH : XR_CLEANUP_GRAPH_CANCEL_BRANCH;
+    XrCoreIrKey operands[] = {fixture.argument_keys[source][0], fixture.argument_keys[source][0]};
+    XrCoreIrKey successors[] = {fixture.blocks[resume].key,
+                                fixture.blocks[XR_CLEANUP_GRAPH_CANCEL_PUBLISH].key};
+    XrCoreIrCoroutineStateInput states[] = {
+        fixture.states[0],
+        fixture.states[1],
+        {.state_id = 2u, .continuation_block = fixture.blocks[resume].key},
+    };
+    XrCoreIrCoroutineSafepointInput safepoints[] = {
+        fixture.safepoint,
+        {.safepoint_id = 1u,
+         .resume_state_id = 2u,
+         .live_values = operands,
+         .live_value_count = 1u},
+    };
+    fixture.functions[0].coroutine_states = states;
+    fixture.functions[0].coroutine_state_count = 3u;
+    fixture.functions[0].coroutine_safepoints = safepoints;
+    fixture.functions[0].coroutine_safepoint_count = 2u;
+    XrCoreIrInstructionInput *suspension = &fixture.instructions[source][1];
+    *suspension = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_COROUTINE_YIELD,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = operands,
+        .operand_count = 2u,
+        .successors = successors,
+        .successor_count = 2u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+        .immediate.u32 = 1u,
+    };
+    /* This complete child is independently valid. Its only purpose is to keep
+     * the caller's
+     * suspension negative from failing on callee metadata first. */
+    XrCoreIrKey child_targets[] = {key("cleanup-suspend:child-resume"),
+                                   key("cleanup-suspend:child-cancel")};
+    XrCoreIrInstructionInput child_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_COROUTINE_YIELD,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .successors = child_targets,
+         .successor_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = 0u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN, .result_type_id = XR_CORE_TYPE_VOID},
+        {.operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH, .result_type_id = XR_CORE_TYPE_VOID},
+    };
+    XrCoreIrBlockInput child_blocks[] = {
+        {.key = key("cleanup-suspend:child-entry"),
+         .instructions = &child_instructions[0],
+         .instruction_count = 1u},
+        {.key = child_targets[0], .instructions = &child_instructions[1], .instruction_count = 1u},
+        {.key = child_targets[1], .instructions = &child_instructions[2], .instruction_count = 1u},
+    };
+    XrCoreIrCoroutineStateInput child_states[] = {
+        {.state_id = 0u, .continuation_block = child_blocks[0].key},
+        {.state_id = 1u, .continuation_block = child_blocks[1].key},
+    };
+    XrCoreIrCoroutineSafepointInput child_safepoint = {.safepoint_id = 0u, .resume_state_id = 1u};
+    if (child_call) {
+        states[2].continuation_block = fixture.blocks[source].key;
+        fixture.functions[1] = (XrCoreIrFunctionInput) {
+            .key = key("cleanup-suspend:child-function"),
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .effect_mask = XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND,
+            .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD,
+            .entry_block = child_blocks[0].key,
+            .blocks = child_blocks,
+            .block_count = 3u,
+            .coroutine_states = child_states,
+            .coroutine_state_count = 2u,
+            .coroutine_safepoints = &child_safepoint,
+            .coroutine_safepoint_count = 1u,
+        };
+        fixture.module.function_count = 2u;
+        suspension->operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
+        suspension->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
+        suspension->immediate.coroutine_call.callee = fixture.functions[1].key;
+        suspension->immediate.coroutine_call.safepoint_id = 1u;
+    }
+    return xr_program_cleanup_graph_fixture_write_input(&fixture, artifact, diagnostic,
+                                                        sizeof(diagnostic));
+}
+
+static void test_cleanup_reason_graph_cannot_suspend(void) {
+    for (uint32_t trap = 0u; trap < 2u; ++trap) {
+        for (uint32_t child = 0u; child < 2u; ++child) {
+            XrProgramArtifact artifact = {0};
+            CHECK(write_cleanup_graph_suspension(trap != 0u, child != 0u, &artifact) ==
+                  XR_PROGRAM_BUILD_OK);
+            expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+            xr_program_artifact_free(&artifact);
+        }
+    }
+}
+
 static void test_condition_assert_panic_cleanup_cfg(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -4022,7 +4389,47 @@ static void test_provider_trap_continuation_semantics(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_aggregate_construct_owner_transfers(void) {
+    uint32_t accepted = 0u, rejected = 0u;
+    for (size_t index = 0u; index < XR_PROGRAM_CONSTRUCT_CASE_COUNT; ++index) {
+        const XrProgramConstructCase *test = &xr_program_construct_cases[index];
+        fprintf(stderr, "aggregate owner transfer: %s\n", test->name);
+        CHECK(test->kind == (XrProgramConstructCaseKind) index);
+        XrProgramArtifact artifact = {0};
+        char diagnostic[256] = {0};
+        XrProgramBuildStatus status = xr_program_construct_fixture_write(
+            test->kind, &artifact, diagnostic, sizeof(diagnostic));
+        if (status != XR_PROGRAM_BUILD_OK)
+            fprintf(stderr, "construct fixture build failed: %s\n", diagnostic);
+        CHECK(status == XR_PROGRAM_BUILD_OK);
+        if (status != XR_PROGRAM_BUILD_OK) {
+            xr_program_artifact_free(&artifact);
+            continue;
+        }
+        if (test->diagnostic != XR_PROGRAM_DIAGNOSTIC_NONE) {
+            expect_semantic_reject(&artifact, test->diagnostic);
+            ++rejected;
+        } else {
+            XrValidatedProgram *program = validate_ok(&artifact);
+            if (program) {
+                XrReferenceOutcome result = xr_reference_evaluate(
+                    program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+                CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+                CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+                CHECK(result.value.as.i64 == 42);
+                xr_reference_outcome_dispose(&result);
+                xr_validated_program_free(program);
+                ++accepted;
+            }
+        }
+        xr_program_artifact_free(&artifact);
+    }
+    CHECK(accepted > 0u && rejected > 0u);
+    CHECK(accepted + rejected == XR_PROGRAM_CONSTRUCT_CASE_COUNT);
+}
+
 int main(void) {
+    test_aggregate_construct_owner_transfers();
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
     test_scalar_operations();
@@ -4050,6 +4457,10 @@ int main(void) {
     test_coroutine_state_and_exact_liveness();
     test_coroutine_cancel_cleanup_requires_exact_owner_transfer();
     test_coroutine_related_field_refs_require_one_live_storage_root();
+    test_coroutine_child_trap_requires_recoverable_cleanup_inputs();
+    test_cleanup_reason_graph_checks_all_exits_and_keeps_body_cycles();
+    test_cleanup_reason_graph_rejects_foreign_and_unknown_targets_before_walk();
+    test_cleanup_reason_graph_cannot_suspend();
     test_provider_output_semantics();
     test_provider_trap_continuation_semantics();
     if (failures != 0) {

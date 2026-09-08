@@ -37,9 +37,11 @@
 
 #include "xi_opt_loop_unroll.h"
 #include "xi_cfg_edit.h"
+#include "xi_cleanup.h"
 #include "xi_loop.h"
 #include "xi_analysis.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 
 #define UNROLL_FULL_MAX_TRIP 16
@@ -182,6 +184,76 @@ static bool has_unrollable_side_effects(const XiLoop *loop) {
     return false;
 }
 
+static bool unroll_cleanup_member_is_cloned(const XiLoop *loop, const XiValue *value) {
+    return !value || (value->block != loop->header && xi_loop_contains_block(loop, value->block));
+}
+
+static uint32_t unroll_cleanup_position(XiBlock *const *body_order, uint32_t body_count,
+                                        const XiValue *value) {
+    uint32_t position = 0u;
+    for (uint32_t bi = 0u; bi < body_count; ++bi) {
+        const XiBlock *block = body_order[bi];
+        for (uint32_t vi = 0u; vi < block->nvalues; ++vi, ++position) {
+            if (block->values[vi] == value)
+                return position;
+        }
+    }
+    return UINT32_MAX;
+}
+
+/* Flattening introduces same-block ordering constraints. Prove them against
+ * the exact
+ * CFG-ordered clone sequence, not source block storage order. */
+static bool unroll_cleanup_order_is_supported(XiBlock *const *body_order, uint32_t body_count,
+                                              const XiCleanupBoundary *boundary) {
+    uint32_t enter = unroll_cleanup_position(body_order, body_count, boundary->enter);
+    uint32_t head = unroll_cleanup_position(body_order, body_count, boundary->frontier);
+    if (enter == UINT32_MAX || head > enter)
+        return false;
+    uint32_t completion = enter;
+    if (boundary->leave) {
+        completion = unroll_cleanup_position(body_order, body_count, boundary->leave);
+        if (completion == UINT32_MAX || enter >= completion)
+            return false;
+    }
+    if (boundary->remaining) {
+        uint32_t remaining = unroll_cleanup_position(body_order, body_count, boundary->remaining);
+        if (remaining == UINT32_MAX || completion >= remaining)
+            return false;
+    }
+    return true;
+}
+
+/* A full unroll retires the header as well as the body, but clones only the
+ * body. Every
+ * surviving identity must form a complete per-iteration frontier;
+ * a header boundary or a
+ * relation outside that subset cannot be duplicated. */
+static bool unroll_cleanup_frontiers_are_closed(XiFunc *f, const XiLoop *loop,
+                                                XiBlock *const *body_order, uint32_t body_count) {
+    bool verified = false;
+    for (uint32_t bi = 0u; bi < loop->nbody; ++bi) {
+        const XiBlock *block = loop->body[bi];
+        for (uint32_t vi = 0u; vi < block->nvalues; ++vi) {
+            const XiValue *value = block->values[vi];
+            if (!value || (!value->cleanup_boundary && value->op != XI_CLEANUP_ENTER &&
+                           value->op != XI_CLEANUP_LEAVE))
+                continue;
+            if (!verified && !xi_cleanup_verify(f, NULL, 0u))
+                return false;
+            verified = true;
+            const XiCleanupBoundary *boundary = value->cleanup_boundary;
+            if (!unroll_cleanup_member_is_cloned(loop, boundary->enter) ||
+                !unroll_cleanup_member_is_cloned(loop, boundary->leave) ||
+                !unroll_cleanup_member_is_cloned(loop, boundary->remaining) ||
+                !unroll_cleanup_member_is_cloned(loop, boundary->frontier) ||
+                !unroll_cleanup_order_is_supported(body_order, body_count, boundary))
+                return false;
+        }
+    }
+    return true;
+}
+
 /* Trip count is now computed centrally by xi_loop_trip_count()
  * and cached on XiLoop.trip_count / has_trip_count during loop
  * analysis.  The unroll pass reads the cached value directly. */
@@ -219,6 +291,26 @@ static XiValue *resolve_arg(const UnrollMap *map, XiValue *arg) {
         return NULL;
     XiValue *mapped = umap_find(map, arg);
     return mapped ? mapped : arg;
+}
+
+static void unroll_remap_cleanup(XiFunc *f, const UnrollMap *map) {
+    uint32_t count = 0u;
+    for (uint32_t index = 0u; index < map->count; ++index)
+        count += map->old_vals[index]->cleanup_boundary != NULL;
+    if (count == 0u)
+        return;
+    XiCleanupValueMapping *values = xr_calloc(count, sizeof(*values));
+    XR_CHECK(values != NULL, "unroll cleanup mapping allocation failed after cloning");
+    uint32_t cursor = 0u;
+    for (uint32_t index = 0u; index < map->count; ++index) {
+        if (map->old_vals[index]->cleanup_boundary)
+            values[cursor++] = (XiCleanupValueMapping) {map->old_vals[index], map->new_vals[index]};
+    }
+    XiCleanupRemap remap = {values, count};
+    char error[192] = {0};
+    bool remapped = xi_cleanup_remap(f, f, &remap, error, sizeof(error));
+    xr_free(values);
+    XR_CHECK(remapped, error);
 }
 
 /* Emit one unrolled iteration into `dst_blk`. The IV is replaced by
@@ -274,12 +366,17 @@ static bool emit_unrolled_body(XiFunc *f, XiBlock **body_order, uint32_t body_co
             return false;
     }
 
+    /* Forward enter/leave/remaining identities are available only after the
+     * entire iteration
+     * has its own value namespace. */
+    unroll_remap_cleanup(f, map);
     return true;
 }
 
 /* Check if exit block uses header-defined values directly (not through
- * exit phis).  Such usage patterns are unsafe for full unrolling because
- * the header values become unreachable after unrolling. */
+ * exit phis).  Such usage
+ * patterns are unsafe for full unrolling because the header values become unreachable after
+ * unrolling. */
 static bool exit_uses_header_directly(const XiLoop *loop, const XiBlock *exit_blk) {
     XiBlock *header = loop->header;
     /* Check control value. */
@@ -298,6 +395,55 @@ static bool exit_uses_header_directly(const XiLoop *loop, const XiBlock *exit_bl
     /* Phi args that reference header values through the header pred slot
      * are fine — they get rewritten.  But non-phi direct refs are unsafe. */
     return false;
+}
+
+static bool unroll_exit_phis_are_supported(const XiLoop *loop, const XiBlock *exit_block) {
+    uint16_t exit_index = xi_cfg_pred_index(exit_block, loop->header);
+    uint16_t latch_index = xi_cfg_pred_index(loop->header, loop->latch);
+    if (exit_index >= exit_block->npreds || latch_index >= loop->header->npreds)
+        return false;
+    for (const XiPhi *phi = exit_block->phis; phi; phi = phi->next) {
+        if (phi->value.nargs != exit_block->npreds)
+            return false;
+        const XiValue *source = phi->value.args[exit_index];
+        if (!source)
+            return false;
+        if (source->block == loop->header &&
+            (source->op != XI_PHI || latch_index >= source->nargs || !source->args[latch_index]))
+            return false;
+    }
+    return true;
+}
+
+static bool unroll_append_exit_edge(XiFunc *f, const XiLoop *loop, XiBlock *iteration,
+                                    XiBlock *exit_block, const UnrollMap *map) {
+    uint16_t exit_index = xi_cfg_pred_index(exit_block, loop->header);
+    uint16_t latch_index = xi_cfg_pred_index(loop->header, loop->latch);
+    uint32_t count = xi_cfg_phi_count(exit_block);
+    XiValue **args = count ? xi_func_arena_alloc(f, count * sizeof(*args)) : NULL;
+    if (count && !args)
+        return false;
+    uint32_t index = 0u;
+    for (XiPhi *phi = exit_block->phis; phi; phi = phi->next) {
+        XiValue *source = phi->value.args[exit_index];
+        /* The exiting header observes the final latch inputs, not the values
+         * with which
+         * the last unrolled body iteration began. */
+        if (source->block == loop->header)
+            source = source->args[latch_index];
+        args[index++] = resolve_arg(map, source);
+    }
+    /* append_pred owns both predecessor and phi payload growth. set_jump
+     * would append the
+     * predecessor a second time without a matching payload. */
+    if (!xi_cfg_append_pred(exit_block, iteration, args, count))
+        return false;
+    iteration->kind = XI_BLOCK_PLAIN;
+    iteration->control = NULL;
+    iteration->line = 0u;
+    iteration->succs[0] = exit_block;
+    iteration->succs[1] = NULL;
+    return true;
 }
 
 /* Retire a fully-unrolled loop's original blocks: mark them unreachable and
@@ -334,13 +480,16 @@ static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
 
     /* Reject when exit block directly uses header-defined values
      * (e.g. return iphi without going through an exit phi). */
-    if (exit_uses_header_directly(loop, exit_blk))
+    if (exit_uses_header_directly(loop, exit_blk) ||
+        !unroll_exit_phis_are_supported(loop, exit_blk))
         return false;
 
     XiBlock **body_order = NULL;
     uint32_t body_block_count = 0;
     uint32_t body_values = 0;
     if (!collect_linear_body_order(f, loop, &body_order, &body_block_count, &body_values))
+        return false;
+    if (!unroll_cleanup_frontiers_are_closed(f, loop, body_order, body_block_count))
         return false;
 
     /* Create one unroll block per iteration, chained linearly. */
@@ -407,29 +556,8 @@ static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
             /* Save last iteration's map for exit phi rewriting. */
             last_map = iter_map;
 
-            /* Last iteration: jump to exit. */
-            uint16_t header_exit_idx = xi_cfg_pred_index(exit_blk, header);
-            uint32_t exit_phi_count = xi_cfg_phi_count(exit_blk);
-            XiValue **exit_args = NULL;
-            if (exit_phi_count > 0 && header_exit_idx < exit_blk->npreds) {
-                exit_args = (XiValue **) xi_func_arena_alloc(f, exit_phi_count * sizeof(XiValue *));
-                if (!exit_args)
-                    return false;
-                uint32_t ei = 0;
-                for (XiPhi *phi = exit_blk->phis; phi; phi = phi->next, ei++) {
-                    if (header_exit_idx < phi->value.nargs) {
-                        XiValue *orig = phi->value.args[header_exit_idx];
-                        XiValue *mapped = resolve_arg(&iter_map, orig);
-                        exit_args[ei] = mapped;
-                    } else {
-                        exit_args[ei] = phi->value.args[0];
-                    }
-                }
-            }
-            xi_block_set_jump(iter_blocks[iter], exit_blk);
-            if (exit_args) {
-                xi_cfg_append_pred(exit_blk, iter_blocks[iter], exit_args, exit_phi_count);
-            }
+            if (!unroll_append_exit_edge(f, loop, iter_blocks[iter], exit_blk, &iter_map))
+                return false;
         }
         iter_blocks[iter]->sealed = true;
 

@@ -13,6 +13,7 @@
 
 #include "xi_lower_internal.h"
 #include "xi.h"
+#include "xi_cleanup.h"
 #include "xi_effect.h"
 #include "xi_builtin_map_entry_iterator_shape.h"
 #include "xi_own.h"
@@ -199,35 +200,65 @@ static void lower_cleanup_frontier(XiLower *l, XiCleanupScope *scope, uint16_t c
         return;
     if (count > scope->site_count)
         count = scope->site_count;
+    if (count == 0u)
+        return;
+    XiCleanupBoundary *boundaries = xr_calloc(count, sizeof(*boundaries));
+    if (!boundaries) {
+        l->had_error = true;
+        return;
+    }
+    uint32_t emitted = 0u;
     for (uint16_t i = count; i > 0 && l->cur_block; i--) {
-        XiCleanupSite *site = &scope->sites[i - 1];
+        /* Lowering a body can grow nested cleanup storage. Keep the site
+         * value, never an
+         * array-element pointer, across that work. */
+        XiCleanupSite site = scope->sites[i - 1];
         XiValue *enter = xi_value_new(l->func, l->cur_block, XI_CLEANUP_ENTER, l->type_unit, 0);
         if (!enter) {
             l->had_error = true;
-            return;
+            break;
         }
         enter->flags |= XI_FLAG_SIDE_EFFECT;
-        enter->line = site->line;
+        enter->line = site.line;
+        XiCleanupBoundary *boundary = &boundaries[emitted++];
+        boundary->enter = enter;
+        boundary->kind = XI_CLEANUP_BOUNDARY_FATAL;
         int saved_try_base = l->cleanup_body_try_base_depth;
         if (l->cleanup_body_depth == 0)
             l->cleanup_body_try_base_depth = l->try_depth;
         l->cleanup_body_depth++;
-        if (site->kind == XI_CLEANUP_SITE_BLOCK && site->statement)
-            xi_lower_stmt(l, site->statement->as.defer_stmt.body);
-        else if (site->kind == XI_CLEANUP_SITE_PARALLEL_PLAN_END && site->value)
-            (void) xi_lower_parallel_plan_lifecycle_call(l, NULL, site->value, "_end");
+        if (site.kind == XI_CLEANUP_SITE_BLOCK && site.statement)
+            xi_lower_stmt(l, site.statement->as.defer_stmt.body);
+        else if (site.kind == XI_CLEANUP_SITE_PARALLEL_PLAN_END && site.value)
+            (void) xi_lower_parallel_plan_lifecycle_call(l, NULL, site.value, "_end");
         l->cleanup_body_depth--;
         l->cleanup_body_try_base_depth = saved_try_base;
         if (l->cur_block) {
             XiValue *leave = xi_value_new(l->func, l->cur_block, XI_CLEANUP_LEAVE, l->type_unit, 0);
             if (!leave) {
                 l->had_error = true;
-                return;
+                break;
             }
             leave->flags |= XI_FLAG_SIDE_EFFECT;
-            leave->line = site->line;
+            leave->line = site.line;
+            boundary->leave = leave;
+            boundary->kind = XI_CLEANUP_BOUNDARY_CLOSED;
         }
     }
+    /* Forward identities exist before any record is published. A statically
+     * fatal body ends
+     * this emitted frontier and has no normal leave. */
+    for (uint32_t index = 0u; index < emitted && !l->had_error; ++index) {
+        XiCleanupBoundary *boundary = &boundaries[index];
+        boundary->frontier = boundaries[0].enter;
+        boundary->remaining = index + 1u < emitted ? boundaries[index + 1u].enter : NULL;
+        boundary->rank = emitted - index;
+        if (!xi_cleanup_boundary_attach(l->func, boundary, NULL, 0u)) {
+            l->had_error = true;
+            break;
+        }
+    }
+    xr_free(boundaries);
 }
 
 static void lower_cleanup_compile_panic_edges(XiLower *l, XiCleanupScope *scope) {
@@ -236,27 +267,27 @@ static void lower_cleanup_compile_panic_edges(XiLower *l, XiCleanupScope *scope)
     XiBlock *saved_block = l->cur_block;
     bool saved_dead_after_throw = l->dead_after_throw;
     for (uint16_t i = 0; i < scope->panic_edge_count; i++) {
-        XiCleanupPanicEdge *edge = &scope->panic_edges[i];
-        if (!edge->block || !edge->try_op)
+        XiCleanupPanicEdge edge = scope->panic_edges[i];
+        if (!edge.block || !edge.try_op)
             continue;
-        if (edge->block->npreds == 0 && edge->try_op->block)
-            xi_block_add_pred(edge->block, edge->try_op->block);
-        xi_lower_braun_seal(l, edge->block);
-        l->cur_block = edge->block;
+        if (edge.block->npreds == 0 && edge.try_op->block)
+            xi_block_add_pred(edge.block, edge.try_op->block);
+        xi_lower_braun_seal(l, edge.block);
+        l->cur_block = edge.block;
         l->dead_after_throw = false;
 
         XiValue *caught =
             xi_value_new(l->func, l->cur_block, XI_CATCH,
                          xi_lower_type_or_any(l, NULL, "cleanup panic propagation",
-                                              edge->try_op ? (int) edge->try_op->line : 0),
+                                              edge.try_op ? (int) edge.try_op->line : 0),
                          0);
         if (!caught)
             continue;
-        caught->aux = (void *) edge->try_op;
+        caught->aux = (void *) edge.try_op;
         caught->flags |= XI_FLAG_SIDE_EFFECT;
-        caught->line = edge->try_op->line;
+        caught->line = edge.try_op->line;
 
-        lower_cleanup_frontier(l, scope, edge->frontier_count);
+        lower_cleanup_frontier(l, scope, edge.frontier_count);
         if (l->cur_block) {
             XiValue *rethrow = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
             if (rethrow) {

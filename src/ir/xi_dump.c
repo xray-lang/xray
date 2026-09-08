@@ -202,11 +202,9 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out,
                 " [target-query id=%u source=%u ordinal=%u namespace=%u query=%u native=%u "
                 "complete=%u]",
-                v->xg_target_query_use_id, v->xg_target_source_node_id,
-                v->xg_target_body_ordinal, (unsigned) v->xg_target_namespace_id,
-                (unsigned) v->xg_target_query_kind,
-                (unsigned) v->xg_target_result_native_type,
-                (unsigned) v->xg_target_query_complete);
+                v->xg_target_query_use_id, v->xg_target_source_node_id, v->xg_target_body_ordinal,
+                (unsigned) v->xg_target_namespace_id, (unsigned) v->xg_target_query_kind,
+                (unsigned) v->xg_target_result_native_type, (unsigned) v->xg_target_query_complete);
     } else if (v->op == XI_YIELD) {
         fprintf(out,
                 " [suspend-point id=%u source=%u ordinal=%u kind=%u may_suspend=%u "

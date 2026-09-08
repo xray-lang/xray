@@ -173,8 +173,7 @@ typedef struct XrNativeArtifact {
 XR_FUNC XrBackendOptions xr_backend_default_options(void);
 XR_FUNC XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
                                             const XrTargetProfile *profile,
-                                            const XrBackendOptions *options,
-                                            XrBackendIR **ir_out,
+                                            const XrBackendOptions *options, XrBackendIR **ir_out,
                                             XrBackendDiagnostic *diagnostic_out);
 XR_FUNC void xr_backend_ir_free(XrBackendIR *ir);
 XR_FUNC XrBackendIR *xr_backend_ir_retain(const XrBackendIR *ir);

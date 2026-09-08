@@ -8,6 +8,7 @@
     {"name": "source_owner_function_parameter_callable_has_one_program_and_private_executors", "fixture": {"id": "function_parameter", "expected_exit": 48, "labels": ["closure", "callable", "call"]}},
     {"name": "source_owner_clock_provider_is_exact_across_private_executors", "fixture": {"id": "clock_provider", "expected_exit": 1, "labels": ["provider", "clock"]}},
     {"name": "source_owner_provider_refusal_runs_nested_explicit_trap_cleanup", "fixture": {"id": "provider_trap_cleanup", "expected_exit": 207, "labels": ["provider", "clock", "refusal", "cleanup", "trap"]}},
+    {"name": "source_owner_child_coroutine_provider_failure_composes_static_cleanup", "fixture": {"id": "child_coroutine_trap_cleanup", "expected_exit": 232, "labels": ["provider", "clock", "pipe", "coroutine", "cancel", "refusal", "cleanup", "trap"]}},
     {"name": "source_owner_pipe_provider_and_fieldwise_constructor_are_canonical", "fixture": {"id": "pipe_provider", "expected_exit": 1, "labels": ["provider", "pipe"]}},
     {"name": "source_owner_pipe_failed_close_consumes_endpoints_once", "fixture": {"id": "pipe_close_failure", "expected_exit": 1, "labels": ["provider", "pipe", "cleanup", "failure"]}},
     {"name": "source_owner_pipe_uncaught_error_runs_cleanup", "fixture": {"id": "pipe_uncaught_error", "expected_exit": 220, "labels": ["provider", "pipe", "cleanup", "error"]}},

@@ -148,9 +148,9 @@ XR_FUNC XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instanc
                                        uint32_t function_id, const XrVmValue *arguments,
                                        uint32_t argument_count);
 /* Aggregate values returned by one-shot execution own an executor-private
- * detached tree. Views borrow that tree until the outcome is disposed. */
-XR_FUNC bool xr_vm_value_aggregate_view(const XrVmValue *value,
-                                        XrVmAggregateView *view_out);
+ * detached tree. Views
+ * borrow that tree until the outcome is disposed. */
+XR_FUNC bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out);
 XR_FUNC void xr_vm_outcome_dispose(XrVmOutcome *outcome);
 XR_FUNC bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance,
                                     uint32_t function_id, const XrVmValue *arguments,

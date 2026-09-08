@@ -200,14 +200,13 @@ static XrProto *compile_source_with_module_graph(const char *namespace_id, const
     char *error = NULL;
 
     if (!graph || xr_module_graph_build_source(graph, &authority, source, &error) != 0) {
-        fprintf(stderr, "module graph build failed: %s\n",
-                error ? error : "unknown graph error");
+        fprintf(stderr, "module graph build failed: %s\n", error ? error : "unknown graph error");
         goto cleanup;
     }
     xr_free(error);
     error = NULL;
-    if (xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle ||
-        !graph->topo_order || graph->topo_count <= 0 || graph->entry_index < 0)
+    if (xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle || !graph->topo_order ||
+        graph->topo_count <= 0 || graph->entry_index < 0)
         goto cleanup;
 
     analyzer = xa_analyzer_new(session);
@@ -221,8 +220,7 @@ static XrProto *compile_source_with_module_graph(const char *namespace_id, const
             continue;
         xa_analyzer_analyze(analyzer, spec->source_path, spec->ast);
         int diagnostic_count = 0;
-        for (XaDiagnostic *diagnostic =
-                 xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+        for (XaDiagnostic *diagnostic = xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
              diagnostic; diagnostic = diagnostic->next) {
             if (diagnostic->severity == XR_DIAG_SEV_ERROR) {
                 fprintf(stderr, "%s:%d:%d: error: %s\n", spec->source_path,
@@ -234,8 +232,7 @@ static XrProto *compile_source_with_module_graph(const char *namespace_id, const
         if (spec->export_symbols)
             xr_hashmap_free(spec->export_symbols);
         spec->export_symbols = NULL;
-        if (!xa_analyzer_collect_export_symbols_checked(analyzer, spec->ast,
-                                                        &spec->export_symbols))
+        if (!xa_analyzer_collect_export_symbols_checked(analyzer, spec->ast, &spec->export_symbols))
             goto cleanup;
         spec->status = XR_MODSPEC_ANALYZED;
         xa_analyzer_clear_diagnostics(analyzer);
@@ -394,8 +391,7 @@ static XiFunc *xi_pipeline_find_function_by_xg_id(XiFunc *root, XgFuncId func_id
     if (root->xg_body_func_id == func_id)
         return root;
     for (uint16_t child_index = 0u; child_index < root->nchildren; ++child_index) {
-        XiFunc *found =
-            xi_pipeline_find_function_by_xg_id(root->children[child_index], func_id);
+        XiFunc *found = xi_pipeline_find_function_by_xg_id(root->children[child_index], func_id);
         if (found)
             return found;
     }
@@ -1016,8 +1012,7 @@ static char *gen_large_sequential(int nstmts) {
         return NULL;
     size_t pos = 0;
     for (int i = 0; i < nstmts; i++)
-        pos += (size_t) PIPELINE_SNPRINTF(buf + pos, cap - pos, "var v%d = %d + %d\n", i, i,
-                                         i * 2);
+        pos += (size_t) PIPELINE_SNPRINTF(buf + pos, cap - pos, "var v%d = %d + %d\n", i, i, i * 2);
     pos += (size_t) snprintf(buf + pos, cap - pos, "print(v%d)\n", nstmts - 1);
     return buf;
 }
@@ -1230,10 +1225,11 @@ TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
     PIPELINE_TEST_REQUIRE(accepted.ir->module->scalar_call_decision != NULL);
     PIPELINE_TEST_REQUIRE(accepted.ir->semantic_plan != NULL);
     XrSemanticOperationRecord *scalar_call = NULL;
-    for (size_t index = 0;
-         index < xr_semantic_plan_operation_count(accepted.ir->semantic_plan); ++index) {
-        XrSemanticOperationRecord *operation = (XrSemanticOperationRecord *)
-            xr_semantic_plan_operation(accepted.ir->semantic_plan, index);
+    for (size_t index = 0; index < xr_semantic_plan_operation_count(accepted.ir->semantic_plan);
+         ++index) {
+        XrSemanticOperationRecord *operation =
+            (XrSemanticOperationRecord *) xr_semantic_plan_operation(accepted.ir->semantic_plan,
+                                                                     index);
         if (!operation || operation->opcode != XI_CALL)
             continue;
         PIPELINE_TEST_REQUIRE(scalar_call == NULL);
@@ -1248,11 +1244,11 @@ TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
         xi_program_semantic_verify(accepted.ir->module, profile, error, sizeof(error)));
     uint8_t saved_result_ownership = scalar_call->result_ownership;
     scalar_call->result_ownership = XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
-    PIPELINE_TEST_REQUIRE(!xi_program_semantic_plan_verify(
-        accepted.ir, accepted.ir->semantic_plan, profile, error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(!xi_program_semantic_plan_verify(accepted.ir, accepted.ir->semantic_plan,
+                                                           profile, error, sizeof(error)));
     scalar_call->result_ownership = saved_result_ownership;
-    PIPELINE_TEST_REQUIRE(xi_program_semantic_plan_verify(
-        accepted.ir, accepted.ir->semantic_plan, profile, error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(xi_program_semantic_plan_verify(accepted.ir, accepted.ir->semantic_plan,
+                                                          profile, error, sizeof(error)));
     xi_pipeline_result_free(&accepted);
     xi_pipeline_scalar_fixture_cleanup(&exact_profile);
     xr_target_profile_free(profile);
@@ -1399,7 +1395,7 @@ static void require_program_input_tree(const XiFunc *function) {
 }
 
 static bool validated_program_has_operation(const XrValidatedProgram *program,
-                                             uint16_t operation_id) {
+                                            uint16_t operation_id) {
     for (uint32_t function_index = 0; function_index < program->function_count; ++function_index) {
         const XrValidatedFunction *function = &program->functions[function_index];
         for (uint32_t block_index = 0; block_index < function->block_count; ++block_index) {
@@ -1435,8 +1431,8 @@ static bool validated_program_has_owned_storage_copy_pack(const XrValidatedProgr
         const XrValidatedFunction *function = &program->functions[function_index];
         for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
             const XrValidatedBlock *block = &function->blocks[block_index];
-            for (uint32_t instruction_index = 1u;
-                 instruction_index < block->instruction_count; ++instruction_index) {
+            for (uint32_t instruction_index = 1u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
                 const XrValidatedInstruction *pack = &block->instructions[instruction_index];
                 const XrValidatedType *existential =
                     xr_validated_program_type(program, pack->result_type_id);
@@ -1446,8 +1442,7 @@ static bool validated_program_has_owned_storage_copy_pack(const XrValidatedProgr
                         XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE ||
                     pack->operand_count != 1u || !pack->operands)
                     continue;
-                const XrValidatedInstruction *copy =
-                    &block->instructions[instruction_index - 1u];
+                const XrValidatedInstruction *copy = &block->instructions[instruction_index - 1u];
                 if (copy->operation_id == XR_CORE_OP_CORE_OWNER_COPY &&
                     copy->result_id != XR_PROGRAM_LOCATION_NONE &&
                     copy->result_ownership == XR_CORE_IR_OWNER &&
@@ -1470,9 +1465,10 @@ static bool xi_function_has_operation(const XiFunc *function, uint16_t operation
     return false;
 }
 
-static bool unreachable_callable_return_preserves_program(
-    XiFunc *function, XiValue *conflicting_return, const XrProgramFromXiInput *input,
-    const XrProgramArtifact *baseline) {
+static bool unreachable_callable_return_preserves_program(XiFunc *function,
+                                                          XiValue *conflicting_return,
+                                                          const XrProgramFromXiInput *input,
+                                                          const XrProgramArtifact *baseline) {
     if (!function || !conflicting_return || !input || !baseline || !baseline->bytes ||
         baseline->size == 0u || !function->blocks || function->nblocks == 0u ||
         function->nblocks == UINT32_MAX || function->next_block_id == UINT32_MAX)
@@ -1482,8 +1478,7 @@ static bool unreachable_callable_return_preserves_program(
     uint32_t saved_next_block_id = function->next_block_id;
     uint32_t saved_block_capacity = function->blocks_cap;
     XiBlock **saved_blocks = function->blocks;
-    XiBlock **scoped_blocks =
-        xr_malloc(((size_t) saved_block_count + 1u) * sizeof(*scoped_blocks));
+    XiBlock **scoped_blocks = xr_malloc(((size_t) saved_block_count + 1u) * sizeof(*scoped_blocks));
     if (!scoped_blocks)
         return false;
     memcpy(scoped_blocks, saved_blocks, (size_t) saved_block_count * sizeof(*scoped_blocks));
@@ -1540,8 +1535,7 @@ static bool xi_pipeline_program_write_has_status(const XrProgramFromXiInput *inp
     return matches;
 }
 
-static XiValue *xi_pipeline_error_check_for_region(XiFunc *function,
-                                                   const XiErrorRegion *region) {
+static XiValue *xi_pipeline_error_check_for_region(XiFunc *function, const XiErrorRegion *region) {
     XiValue *found = NULL;
     for (uint32_t block_index = 0u; function && block_index < function->nblocks; ++block_index) {
         XiBlock *block = function->blocks[block_index];
@@ -1607,8 +1601,7 @@ static bool xi_pipeline_block_reaches(const XiFunc *function, const XiBlock *sta
     while (head < tail && !found) {
         const XiBlock *block = work[head++];
         found = block == target;
-        for (uint32_t successor_index = 0u; successor_index < 2u && !found;
-             ++successor_index) {
+        for (uint32_t successor_index = 0u; successor_index < 2u && !found; ++successor_index) {
             const XiBlock *successor = block->succs[successor_index];
             for (uint32_t index = 0u; successor && index < function->nblocks; ++index) {
                 if (function->blocks[index] != successor || seen[index])
@@ -1679,16 +1672,15 @@ static bool xi_pipeline_hostile_lexical_error_regions_are_fail_closed(
     XiBlock *saved_earlier_merge = earlier->merge_block;
     earlier->merge_block = later->merge_block;
     bool overlap_rejected = xi_pipeline_program_write_has_status(
-        input, XR_PROGRAM_BUILD_INVALID_INPUT,
-        "overlap without a lexical nesting relation", NULL);
+        input, XR_PROGRAM_BUILD_INVALID_INPUT, "overlap without a lexical nesting relation", NULL);
     earlier->merge_block = saved_earlier_merge;
     if (!overlap_rejected)
         return false;
 
     earlier->merge_block = later->merge_block;
     later->parent = earlier;
-    bool nested_accepted = xi_pipeline_program_write_has_status(
-        input, XR_PROGRAM_BUILD_OK, NULL, baseline);
+    bool nested_accepted =
+        xi_pipeline_program_write_has_status(input, XR_PROGRAM_BUILD_OK, NULL, baseline);
     later->parent = saved_parent;
     earlier->merge_block = saved_earlier_merge;
     return nested_accepted;
@@ -1714,8 +1706,8 @@ static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
         return false;
     XiBlock *target = branch->succs[0];
     XiBlock *dead = branch->succs[1];
-    if (!target || !dead || target->npreds != 1u || !target->preds ||
-        target->preds[0] != branch || target->phis)
+    if (!target || !dead || target->npreds != 1u || !target->preds || target->preds[0] != branch ||
+        target->phis)
         return false;
 
     XrProgramFromXiInput scoped_input = *input;
@@ -1770,6 +1762,10 @@ static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
     XrProgramBuildStatus status =
         xr_program_write_from_xi(&scoped_input, &candidate, diagnostic, sizeof(diagnostic));
 
+    if (status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "same-successor producer failed: %s: %s\n",
+                xr_program_build_status_name(status), diagnostic);
+
     dead->values = saved_dead_values;
     dead->nvalues = saved_dead_value_count;
     dead->values_cap = saved_dead_value_capacity;
@@ -1783,11 +1779,22 @@ static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
     edge_function->next_value_id = saved_next_value_id;
 
     XrValidatedProgram *validated = NULL;
-    XrProgramDiagnostic verify_diagnostic;
+    XrProgramDiagnostic verify_diagnostic = {0};
+    XrProgramVerifyStatus verify_status = XR_PROGRAM_VERIFY_INVALID_INPUT;
+    if (status == XR_PROGRAM_BUILD_OK && candidate.bytes && candidate.size != 0u)
+        verify_status = xr_program_validate(candidate.bytes, candidate.size, NULL, &validated,
+                                            &verify_diagnostic);
     bool valid = status == XR_PROGRAM_BUILD_OK && candidate.bytes && candidate.size != 0u &&
-                 xr_program_validate(candidate.bytes, candidate.size, NULL, &validated,
-                                     &verify_diagnostic) == XR_PROGRAM_VERIFY_OK &&
-                 validated != NULL;
+                 verify_status == XR_PROGRAM_VERIFY_OK && validated != NULL;
+    if (!valid && status == XR_PROGRAM_BUILD_OK)
+        fprintf(stderr,
+                "same-successor verifier failed: %s: kind=%s decode=%u function=%u block=%u "
+                "instruction=%u value=%u\n",
+                xr_program_verify_status_name(verify_status),
+                xr_program_diagnostic_kind_name(verify_diagnostic.kind),
+                (unsigned) verify_diagnostic.decode_status, verify_diagnostic.location.function_id,
+                verify_diagnostic.location.block_id, verify_diagnostic.location.instruction_id,
+                verify_diagnostic.location.value_id);
     if (valid) {
         XrReferenceOutcome reference = xr_reference_evaluate(
             validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
@@ -1825,8 +1832,7 @@ static void xi_canonical_program_test_fixture_cleanup(XiCanonicalProgramTestFixt
 }
 
 static bool xi_canonical_program_test_fixture_build(XiCanonicalProgramTestFixture *fixture,
-                                                    const char *namespace_id,
-                                                    const char *source) {
+                                                    const char *namespace_id, const char *source) {
     if (!fixture || !namespace_id || !source || !g_iso)
         return false;
     memset(fixture, 0, sizeof(*fixture));
@@ -1835,12 +1841,11 @@ static bool xi_canonical_program_test_fixture_build(XiCanonicalProgramTestFixtur
     fixture->session = xr_compiler_session_new(&session_config);
     if (!fixture->session)
         goto fail;
-    if (xr_compiler_session_attach_isolate(g_iso, fixture->session) !=
-        fixture->original_session)
+    if (xr_compiler_session_attach_isolate(g_iso, fixture->session) != fixture->original_session)
         goto fail;
     char diagnostic[512] = {0};
     if (!xr_runtime_target_profile_build_native_hosted(&fixture->profile, diagnostic,
-                                                        sizeof(diagnostic)) ||
+                                                       sizeof(diagnostic)) ||
         !xr_compiler_session_set_target_profile(fixture->session, fixture->profile) ||
         !xi_pipeline_fixture_analyze_source(&fixture->source, fixture->session, namespace_id,
                                             source) ||
@@ -1891,8 +1896,8 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
                           evidence->kind == XG_SUSPEND_POINT_COOPERATIVE_YIELD &&
                           evidence->may_suspend == 1u && evidence->contract_complete == 1u);
 
-    XrCoreIrKey semantic_profile = xr_core_ir_key(
-        "cooperative-yield-profile", strlen("cooperative-yield-profile"));
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("cooperative-yield-profile", strlen("cooperative-yield-profile"));
     const XiFunc *module_roots[] = {entry};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
@@ -1920,14 +1925,11 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     uint32_t entry_function = xr_validated_program_entry_function(validated);
     PIPELINE_TEST_REQUIRE(entry_function < validated->function_count);
     const XrValidatedFunction *function = &validated->functions[entry_function];
-    PIPELINE_TEST_REQUIRE(function->coroutine_state_count == 2u &&
-                          function->coroutine_safepoint_count == 1u &&
-                          function->effect_mask ==
-                              (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
-                          function->capability_mask ==
-                              XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
-                          validated_program_has_operation(validated,
-                                                          XR_CORE_OP_CORE_COROUTINE_YIELD));
+    PIPELINE_TEST_REQUIRE(
+        function->coroutine_state_count == 2u && function->coroutine_safepoint_count == 1u &&
+        function->effect_mask == (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
+        function->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
+        validated_program_has_operation(validated, XR_CORE_OP_CORE_COROUTINE_YIELD));
 
     XrExecutionBindingInput execution_input = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -1945,8 +1947,7 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
         xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference));
     XrReferenceOutcome reference_yield = xr_reference_execution_step(reference);
     PIPELINE_TEST_REQUIRE(reference_yield.kind == XR_REFERENCE_OUTCOME_SUSPENDED &&
-                          reference_yield.safepoint_id == 0u &&
-                          reference_yield.state_id == 1u);
+                          reference_yield.safepoint_id == 0u && reference_yield.state_id == 1u);
     XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
     PIPELINE_TEST_REQUIRE(reference_return.kind == XR_REFERENCE_OUTCOME_RETURN &&
                           reference_return.value.kind == XR_REFERENCE_VALUE_VOID &&
@@ -1954,8 +1955,8 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     xr_reference_execution_free(reference);
 
     XrReferenceExecution *reference_cancel = NULL;
-    PIPELINE_TEST_REQUIRE(xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL,
-                                                        &reference_cancel));
+    PIPELINE_TEST_REQUIRE(
+        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference_cancel));
     PIPELINE_TEST_REQUIRE(xr_reference_execution_step(reference_cancel).kind ==
                           XR_REFERENCE_OUTCOME_SUSPENDED);
     PIPELINE_TEST_REQUIRE(xr_reference_execution_cancel(reference_cancel).kind ==
@@ -1990,8 +1991,7 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
-                                              &backend_ir,
-                                              &backend_diagnostic) == XR_BACKEND_OK);
+                                              &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
@@ -2045,22 +2045,21 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
 }
 
 TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
-    static const char source[] =
-        "fn child(value: i64) -> i64 {\n"
-        "  Coro.yield()\n"
-        "  return value\n"
-        "}\n"
-        "fn parent() -> i64 {\n"
-        "  return child(7)\n"
-        "}\n";
+    static const char source[] = "fn child(value: i64) -> i64 {\n"
+                                 "  Coro.yield()\n"
+                                 "  return value\n"
+                                 "}\n"
+                                 "fn parent() -> i64 {\n"
+                                 "  return child(7)\n"
+                                 "}\n";
     XiCanonicalProgramTestFixture fixture = {0};
     PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
         &fixture, "xi-program-sealed-coroutine-call", source));
 
     XiFunc *parent = NULL;
     XiFunc *child = NULL;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < fixture.pipeline.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
         if (function && function->name && strcmp(function->name, "parent") == 0)
             parent = function;
@@ -2076,16 +2075,16 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
                           child->coro_plan->nstates == 1u && child->coro_plan->points != NULL);
     XiCoroSuspendPoint *parent_point = &parent->coro_plan->points[0];
     XiCoroSuspendPoint *child_point = &child->coro_plan->points[0];
-    PIPELINE_TEST_REQUIRE(parent_point->kind == XI_CORO_SUSP_CALL &&
-                          parent_point->op != NULL && parent_point->op->op == XI_CALL &&
+    PIPELINE_TEST_REQUIRE(parent_point->kind == XI_CORO_SUSP_CALL && parent_point->op != NULL &&
+                          parent_point->op->op == XI_CALL &&
                           parent_point->resolved_callee == child &&
                           parent_point->result_slot == parent_point->op &&
                           parent_point->nlive == 1u && parent_point->live[0] == parent_point->op);
-    PIPELINE_TEST_REQUIRE(child_point->kind == XI_CORO_SUSP_YIELD &&
-                          child_point->op != NULL && child_point->op->op == XI_YIELD);
+    PIPELINE_TEST_REQUIRE(child_point->kind == XI_CORO_SUSP_YIELD && child_point->op != NULL &&
+                          child_point->op->op == XI_YIELD);
 
-    XrCoreIrKey semantic_profile = xr_core_ir_key(
-        "sealed-coroutine-call-profile", strlen("sealed-coroutine-call-profile"));
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("sealed-coroutine-call-profile", strlen("sealed-coroutine-call-profile"));
     const XiFunc *module_roots[] = {fixture.pipeline.ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
@@ -2101,8 +2100,8 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     if (build_status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "sealed coroutine call Program build failed: %s\n", diagnostic);
     PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
-    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
-        &input, XR_PROGRAM_BUILD_OK, NULL, &artifact));
+    PIPELINE_TEST_REQUIRE(
+        xi_pipeline_program_write_has_status(&input, XR_PROGRAM_BUILD_OK, NULL, &artifact));
 
     XrValidatedProgram *validated = NULL;
     XrProgramDiagnostic verify_diagnostic;
@@ -2117,14 +2116,13 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
                           entry->coroutine_safepoint_count == 1u &&
                           entry->effect_mask == (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL |
                                                  XR_CORE_EFFECT_SUSPEND) &&
-                          entry->capability_mask ==
-                              XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+                          entry->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
 
     const XrValidatedInstruction *coroutine_call = NULL;
     for (uint32_t block_index = 0u; block_index < entry->block_count; ++block_index) {
         const XrValidatedBlock *block = &entry->blocks[block_index];
-        for (uint32_t instruction_index = 0u;
-             instruction_index < block->instruction_count; ++instruction_index) {
+        for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+             ++instruction_index) {
             const XrValidatedInstruction *candidate = &block->instructions[instruction_index];
             if (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
                 PIPELINE_TEST_REQUIRE(coroutine_call == NULL);
@@ -2133,8 +2131,7 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
         }
     }
     PIPELINE_TEST_REQUIRE(coroutine_call != NULL &&
-                          coroutine_call->immediate_kind ==
-                              XR_CORE_IR_IMMEDIATE_COROUTINE_CALL &&
+                          coroutine_call->immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL &&
                           coroutine_call->immediate.coroutine_call.safepoint_id == 0u &&
                           coroutine_call->successor_count == 2u &&
                           coroutine_call->operand_count == 1u);
@@ -2142,18 +2139,16 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(child_function < validated->function_count &&
                           child_function != entry_function);
     const XrValidatedFunction *validated_child = &validated->functions[child_function];
-    PIPELINE_TEST_REQUIRE(validated_child->parameter_count == 1u &&
-                          validated_child->parameter_types[0] == XR_CORE_TYPE_I64 &&
-                          validated_child->parameter_modes[0] == XR_PARAM_READ &&
-                          validated_child->result_type_id == XR_CORE_TYPE_I64 &&
-                          validated_child->coroutine_state_count == 2u &&
-                          validated_child->coroutine_safepoint_count == 1u &&
-                          validated_child->effect_mask ==
-                              (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
-                          validated_child->capability_mask ==
-                              XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
-                          validated_program_has_operation(
-                              validated, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED));
+    PIPELINE_TEST_REQUIRE(
+        validated_child->parameter_count == 1u &&
+        validated_child->parameter_types[0] == XR_CORE_TYPE_I64 &&
+        validated_child->parameter_modes[0] == XR_PARAM_READ &&
+        validated_child->result_type_id == XR_CORE_TYPE_I64 &&
+        validated_child->coroutine_state_count == 2u &&
+        validated_child->coroutine_safepoint_count == 1u &&
+        validated_child->effect_mask == (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
+        validated_child->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
+        validated_program_has_operation(validated, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED));
 
     XrExecutionBindingInput execution_input = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -2171,18 +2166,16 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
         xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference));
     XrReferenceOutcome reference_suspend = xr_reference_execution_step(reference);
     PIPELINE_TEST_REQUIRE(reference_suspend.kind == XR_REFERENCE_OUTCOME_SUSPENDED &&
-                          reference_suspend.safepoint_id == 0u &&
-                          reference_suspend.state_id == 1u);
+                          reference_suspend.safepoint_id == 0u && reference_suspend.state_id == 1u);
     XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
     PIPELINE_TEST_REQUIRE(reference_return.kind == XR_REFERENCE_OUTCOME_RETURN &&
                           reference_return.value.kind == XR_REFERENCE_VALUE_I64 &&
-                          reference_return.value.as.i64 == 7 &&
-                          reference_return.state_id == 1u);
+                          reference_return.value.as.i64 == 7 && reference_return.state_id == 1u);
     xr_reference_execution_free(reference);
 
     XrReferenceExecution *reference_cancel = NULL;
-    PIPELINE_TEST_REQUIRE(xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL,
-                                                        &reference_cancel));
+    PIPELINE_TEST_REQUIRE(
+        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference_cancel));
     PIPELINE_TEST_REQUIRE(xr_reference_execution_step(reference_cancel).kind ==
                           XR_REFERENCE_OUTCOME_SUSPENDED);
     PIPELINE_TEST_REQUIRE(xr_reference_execution_cancel(reference_cancel).kind ==
@@ -2218,8 +2211,7 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
-                                              &backend_ir,
-                                              &backend_diagnostic) == XR_BACKEND_OK);
+                                              &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
@@ -2274,11 +2266,10 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
 }
 
 TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
-    static const char source[] =
-        "fn pointer_bits() -> u16 {\n"
-        "  if (true) { return target.pointerBits }\n"
-        "  return target.pointerBits\n"
-        "}\n";
+    static const char source[] = "fn pointer_bits() -> u16 {\n"
+                                 "  if (true) { return target.pointerBits }\n"
+                                 "  return target.pointerBits\n"
+                                 "}\n";
     XiCanonicalProgramTestFixture fixture = {0};
     PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
         &fixture, "xi-program-target-pointer-bits", source));
@@ -2286,14 +2277,13 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     XiFunc *entry = NULL;
     XiValue *queries[2] = {0};
     size_t query_count = 0u;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < fixture.pipeline.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
         for (uint32_t block_index = 0u; function && block_index < function->nblocks;
              ++block_index) {
             XiBlock *block = function->blocks[block_index];
-            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
-                 ++value_index) {
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
                 XiValue *value = block->values[value_index];
                 if (!value || value->op != XI_TARGET_POINTER_BITS)
                     continue;
@@ -2318,8 +2308,8 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
         PIPELINE_TEST_REQUIRE(query->xg_target_query_complete == 1u);
     }
 
-    XrCoreIrKey semantic_profile = xr_core_ir_key(
-        "target-pointer-bits-profile", strlen("target-pointer-bits-profile"));
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("target-pointer-bits-profile", strlen("target-pointer-bits-profile"));
     const XiFunc *module_roots[] = {fixture.pipeline.ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
@@ -2338,11 +2328,10 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     XrValidatedProgram *validated = NULL;
     XrProgramDiagnostic verify_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
-                                              &verify_diagnostic) ==
-                          XR_PROGRAM_VERIFY_OK);
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
-    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
-        validated, XR_CORE_OP_CORE_TARGET_POINTER_WIDTH));
+    PIPELINE_TEST_REQUIRE(
+        validated_program_has_operation(validated, XR_CORE_OP_CORE_TARGET_POINTER_WIDTH));
     uint32_t entry_function = xr_validated_program_entry_function(validated);
     PIPELINE_TEST_REQUIRE(entry_function < validated->function_count);
     PIPELINE_TEST_REQUIRE(validated->functions[entry_function].effect_mask ==
@@ -2387,9 +2376,9 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     XrBoundaryMaterializationDiagnostic boundary_diagnostic;
     XrBoundaryCallLayout *boundary_call = NULL;
     PIPELINE_TEST_REQUIRE(xr_execution_materialize_boundary_call(
-                              instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL, entry_function,
-                              NULL, &boundary_call, &boundary_diagnostic) ==
-                          XR_BOUNDARY_MATERIALIZATION_OK);
+                              instance, XR_MATERIALIZED_BOUNDARY_PUBLIC_CALL, entry_function, NULL,
+                              &boundary_call,
+                              &boundary_diagnostic) == XR_BOUNDARY_MATERIALIZATION_OK);
     PIPELINE_TEST_REQUIRE(boundary_call != NULL);
     PIPELINE_TEST_REQUIRE(boundary_call->argument_count == 0u);
     PIPELINE_TEST_REQUIRE(boundary_call->result.type_id == XR_CORE_TYPE_U16);
@@ -2401,13 +2390,12 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
-                                              &backend_ir,
-                                              &backend_diagnostic) == XR_BACKEND_OK);
+                                              &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated,
-                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
+                          XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u);
     char pointer_constant[32];
     PIPELINE_SNPRINTF(pointer_constant, sizeof(pointer_constant), "UINT16_C(%u)",
@@ -2446,8 +2434,8 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
         &input, XR_PROGRAM_BUILD_INVALID_INPUT, "exact Xglobal contract", NULL));
     queries[0]->xg_target_query_complete = saved_complete;
-    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
-        &input, XR_PROGRAM_BUILD_OK, NULL, &artifact));
+    PIPELINE_TEST_REQUIRE(
+        xi_pipeline_program_write_has_status(&input, XR_PROGRAM_BUILD_OK, NULL, &artifact));
 
     xr_validated_program_free(validated);
     xr_program_artifact_free(&artifact);
@@ -2455,41 +2443,40 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
 }
 
 TEST(e2e_program_target_os_member_equality_is_executable) {
-    static const char source[] =
-        "fn is_darwin() -> bool { return target.os == TargetOs.Darwin }\n";
+    static const char source[] = "fn is_darwin() -> bool { return target.os == TargetOs.Darwin }\n";
     XiCanonicalProgramTestFixture fixture = {0};
-    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
-        &fixture, "xi-program-target-os-equality", source));
+    PIPELINE_TEST_REQUIRE(
+        xi_canonical_program_test_fixture_build(&fixture, "xi-program-target-os-equality", source));
 
     XiFunc *entry = NULL;
     bool saw_query = false;
     bool saw_member = false;
     bool saw_equal = false;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < fixture.pipeline.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
         if (function && !function->has_receiver && function->nparams == 0u)
             entry = function;
         for (uint32_t block_index = 0u; function && block_index < function->nblocks;
              ++block_index) {
             XiBlock *block = function->blocks[block_index];
-            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
-                 ++value_index) {
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
                 XiValue *value = block->values[value_index];
                 saw_query = saw_query || (value && value->op == XI_TARGET_OPERATING_SYSTEM);
-                saw_member = saw_member ||
-                             (value && value->op == XI_CONST && value->type &&
-                              value->type->kind == XR_KIND_ENUM && value->type->enum_type.enum_name &&
-                              strcmp(value->type->enum_type.enum_name, "TargetOs") == 0 &&
-                              value->aux == NULL && value->aux_int == XR_TARGET_OS_MACOS);
+                saw_member =
+                    saw_member ||
+                    (value && value->op == XI_CONST && value->type &&
+                     value->type->kind == XR_KIND_ENUM && value->type->enum_type.enum_name &&
+                     strcmp(value->type->enum_type.enum_name, "TargetOs") == 0 &&
+                     value->aux == NULL && value->aux_int == XR_TARGET_OS_MACOS);
                 saw_equal = saw_equal || (value && value->op == XI_EQ);
             }
         }
     }
     PIPELINE_TEST_REQUIRE(entry != NULL && saw_query && saw_member && saw_equal);
 
-    XrCoreIrKey semantic_profile = xr_core_ir_key(
-        "target-os-equality-profile", strlen("target-os-equality-profile"));
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("target-os-equality-profile", strlen("target-os-equality-profile"));
     const XiFunc *module_roots[] = {fixture.pipeline.ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
@@ -2506,12 +2493,12 @@ TEST(e2e_program_target_os_member_equality_is_executable) {
     XrProgramDiagnostic verify_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
                                               &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
-    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
-        validated, XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM));
-    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
-        validated, XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM));
-    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
-        validated, XR_CORE_OP_CORE_COMPARE_TARGET_ENUM));
+    PIPELINE_TEST_REQUIRE(
+        validated_program_has_operation(validated, XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM));
+    PIPELINE_TEST_REQUIRE(
+        validated_program_has_operation(validated, XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM));
+    PIPELINE_TEST_REQUIRE(
+        validated_program_has_operation(validated, XR_CORE_OP_CORE_COMPARE_TARGET_ENUM));
 
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(fixture.profile);
     PIPELINE_TEST_REQUIRE(machine != NULL);
@@ -2554,12 +2541,11 @@ TEST(e2e_program_target_os_member_equality_is_executable) {
     XrBackendDiagnostic backend_diagnostic;
     XrBackendOptions backend_options = xr_backend_default_options();
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
-                                              &backend_ir,
-                                              &backend_diagnostic) == XR_BACKEND_OK);
+                                              &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated,
-                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
+                          XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "UINT16_C(3)") != NULL);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, " == ") != NULL);
     xr_generated_c_free(&generated);
@@ -2589,8 +2575,8 @@ TEST(e2e_program_target_query_closes_interface_slot_contract) {
         &fixture, "xi-program-target-query-interface", source));
 
     XiFunc *entry = NULL;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < fixture.pipeline.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
         if (!function || function->has_receiver || function->nparams != 0u)
             continue;
@@ -2604,8 +2590,8 @@ TEST(e2e_program_target_query_closes_interface_slot_contract) {
     PIPELINE_TEST_REQUIRE(fixture.evidence.interface_methods[0].capability_bits ==
                           XG_CAP_PROFILE_POINTER_WIDTH);
 
-    XrCoreIrKey semantic_profile = xr_core_ir_key(
-        "target-query-interface-profile", strlen("target-query-interface-profile"));
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("target-query-interface-profile", strlen("target-query-interface-profile"));
     const XiFunc *module_roots[] = {fixture.pipeline.ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
@@ -2655,9 +2641,9 @@ static const XgBodySummary *xi_pipeline_find_xg_body(const XgGlobalEvidence *evi
     return found;
 }
 
-static const XgInterfaceMethodSummary *xi_pipeline_find_xg_interface_method(
-    const XgGlobalEvidence *evidence, XgInterfaceId interface_id,
-    XgInterfaceMethodId method_id) {
+static const XgInterfaceMethodSummary *
+xi_pipeline_find_xg_interface_method(const XgGlobalEvidence *evidence, XgInterfaceId interface_id,
+                                     XgInterfaceMethodId method_id) {
     const XgInterfaceMethodSummary *found = NULL;
     for (uint32_t index = 0u; evidence && index < evidence->ninterface_methods; ++index) {
         const XgInterfaceMethodSummary *candidate = &evidence->interface_methods[index];
@@ -2681,8 +2667,8 @@ static uint32_t xi_pipeline_count_xg_direct_targets(const XiFunc *function,
             const XiValue *value = block->values[value_index];
             const XgCallsiteSummary *callsite =
                 value && value->xg_callsite_id != XG_NO_ID
-                    ? xg_global_evidence_find_callsite(
-                          evidence, (XgCallsiteId) value->xg_callsite_id)
+                    ? xg_global_evidence_find_callsite(evidence,
+                                                       (XgCallsiteId) value->xg_callsite_id)
                     : NULL;
             count += callsite && callsite->kind == XG_CALL_DIRECT_FUNC &&
                      callsite->static_target_func_id == target_func_id;
@@ -2691,9 +2677,10 @@ static uint32_t xi_pipeline_count_xg_direct_targets(const XiFunc *function,
     return count;
 }
 
-static const XrValidatedInstruction *xi_pipeline_find_unique_validated_operation(
-    const XrValidatedProgram *program, uint16_t operation_id,
-    const XrValidatedFunction **owner_out) {
+static const XrValidatedInstruction *
+xi_pipeline_find_unique_validated_operation(const XrValidatedProgram *program,
+                                            uint16_t operation_id,
+                                            const XrValidatedFunction **owner_out) {
     const XrValidatedInstruction *found = NULL;
     const XrValidatedFunction *owner = NULL;
     for (uint32_t function_index = 0u; program && function_index < program->function_count;
@@ -2701,10 +2688,9 @@ static const XrValidatedInstruction *xi_pipeline_find_unique_validated_operation
         const XrValidatedFunction *function = &program->functions[function_index];
         for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
             const XrValidatedBlock *block = &function->blocks[block_index];
-            for (uint32_t instruction_index = 0u;
-                 instruction_index < block->instruction_count; ++instruction_index) {
-                const XrValidatedInstruction *instruction =
-                    &block->instructions[instruction_index];
+            for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
+                const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
                 if (instruction->operation_id != operation_id)
                     continue;
                 if (found)
@@ -2801,22 +2787,19 @@ static bool xi_move_module_fixture_analyze(XiMoveModuleFixture *fixture) {
     return true;
 }
 
-static bool xi_move_module_fixture_build(XiMoveModuleFixture *fixture,
-                                         XrCompilerSession *session) {
+static bool xi_move_module_fixture_build(XiMoveModuleFixture *fixture, XrCompilerSession *session) {
     static unsigned int serial;
-    static const char library_source[] =
-        "export fn imported_move_target(value: i64) -> i64 {\n"
-        "  return value + 1\n"
-        "}\n";
-    static const char consumer_source[] =
-        "import { imported_move_target } from \"./library\"\n"
-        "fn root() -> i64 {\n"
-        "  var seed = 41\n"
-        "  return later_forward(seed)\n"
-        "}\n"
-        "fn later_forward(value: i64) -> i64 {\n"
-        "  return imported_move_target(value)\n"
-        "}\n";
+    static const char library_source[] = "export fn imported_move_target(value: i64) -> i64 {\n"
+                                         "  return value + 1\n"
+                                         "}\n";
+    static const char consumer_source[] = "import { imported_move_target } from \"./library\"\n"
+                                          "fn root() -> i64 {\n"
+                                          "  var seed = 41\n"
+                                          "  return later_forward(seed)\n"
+                                          "}\n"
+                                          "fn later_forward(value: i64) -> i64 {\n"
+                                          "  return imported_move_target(value)\n"
+                                          "}\n";
     if (!fixture || !session)
         return false;
     memset(fixture, 0, sizeof(*fixture));
@@ -2825,16 +2808,13 @@ static bool xi_move_module_fixture_build(XiMoveModuleFixture *fixture,
     if (!xr_test_mkdtemp(fixture->directory))
         goto fail;
     char absolute_directory[XR_TEST_PATH_MAX] = {0};
-    if (!xr_test_realpath_buf(fixture->directory, absolute_directory,
-                              sizeof(absolute_directory)))
+    if (!xr_test_realpath_buf(fixture->directory, absolute_directory, sizeof(absolute_directory)))
         goto fail;
     memcpy(fixture->directory, absolute_directory, strlen(absolute_directory) + 1u);
-    int library_length = PIPELINE_SNPRINTF(fixture->library_path,
-                                           sizeof(fixture->library_path), "%s/library.xr",
-                                           fixture->directory);
-    int consumer_length = PIPELINE_SNPRINTF(fixture->consumer_path,
-                                            sizeof(fixture->consumer_path), "%s/consumer.xr",
-                                            fixture->directory);
+    int library_length = PIPELINE_SNPRINTF(fixture->library_path, sizeof(fixture->library_path),
+                                           "%s/library.xr", fixture->directory);
+    int consumer_length = PIPELINE_SNPRINTF(fixture->consumer_path, sizeof(fixture->consumer_path),
+                                            "%s/consumer.xr", fixture->directory);
     if (library_length < 0 || (size_t) library_length >= sizeof(fixture->library_path) ||
         consumer_length < 0 || (size_t) consumer_length >= sizeof(fixture->consumer_path) ||
         !xi_pipeline_write_source_file(fixture->library_path, library_source) ||
@@ -2875,8 +2855,7 @@ static bool xi_move_module_fixture_build(XiMoveModuleFixture *fixture,
     for (int topo = 0; topo < fixture->graph->topo_count; ++topo)
         roots[topo] = fixture->graph->specs[fixture->graph->topo_order[topo]].ast;
     for (int topo = 0; topo < fixture->graph->topo_count; ++topo)
-        if (!xa_mono_pass(roots[topo], roots, fixture->graph->topo_count, g_iso,
-                          fixture->analyzer))
+        if (!xa_mono_pass(roots[topo], roots, fixture->graph->topo_count, g_iso, fixture->analyzer))
             goto fail;
     for (int topo = 0; topo < fixture->graph->topo_count; ++topo) {
         XrModuleSpec *spec = &fixture->graph->specs[fixture->graph->topo_order[topo]];
@@ -2907,9 +2886,8 @@ static bool xi_move_module_fixture_build(XiMoveModuleFixture *fixture,
         XrModuleSpec *spec = &fixture->graph->specs[spec_index];
         config.source_file = spec->source_path;
         config.module_identity = spec->canonical;
-        config.module_name = spec_index == fixture->graph->entry_index
-                                 ? "move_consumer"
-                                 : "move_library";
+        config.module_name =
+            spec_index == fixture->graph->entry_index ? "move_consumer" : "move_library";
         config.global_evidence_module_id = topo + 1u;
         fixture->pipelines[topo] =
             xi_pipeline_compile_program(spec->ast, fixture->analyzer, g_iso, &config);
@@ -2960,18 +2938,17 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
     for (uint16_t function_index = 0u; function_index < consumer->nfuncs; ++function_index) {
         XiFunc *function = consumer->functions[function_index];
         const XgBodySummary *owner_body =
-            function ? xi_pipeline_find_xg_body(&fixture.evidence, function->xg_body_func_id) : NULL;
-        for (uint32_t block_index = 0u; function && owner_body &&
-                                         block_index < function->nblocks;
+            function ? xi_pipeline_find_xg_body(&fixture.evidence, function->xg_body_func_id)
+                     : NULL;
+        for (uint32_t block_index = 0u; function && owner_body && block_index < function->nblocks;
              ++block_index) {
             XiBlock *block = function->blocks[block_index];
-            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
-                 ++value_index) {
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
                 XiValue *value = block->values[value_index];
                 const XgCallsiteSummary *callsite =
                     value && value->xg_callsite_id != XG_NO_ID
-                        ? xg_global_evidence_find_callsite(
-                              &fixture.evidence, (XgCallsiteId) value->xg_callsite_id)
+                        ? xg_global_evidence_find_callsite(&fixture.evidence,
+                                                           (XgCallsiteId) value->xg_callsite_id)
                         : NULL;
                 const XgBodySummary *target_body =
                     callsite && callsite->kind == XG_CALL_DIRECT_FUNC
@@ -2985,8 +2962,7 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
                 cross_module_caller = function;
                 cross_module_call = value;
                 cross_module_target = xi_pipeline_find_module_function_by_xg_id(
-                    fixture.pipelines[fixture.library_index].ir,
-                    callsite->static_target_func_id);
+                    fixture.pipelines[fixture.library_index].ir, callsite->static_target_func_id);
             }
         }
     }
@@ -3022,8 +2998,8 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
     PIPELINE_TEST_REQUIRE(entry != NULL);
     PIPELINE_TEST_REQUIRE(entry_index < forward_target_index);
 
-    XrCoreIrKey semantic_profile = xr_core_ir_key(
-        "move-direct-signature-profile", strlen("move-direct-signature-profile"));
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("move-direct-signature-profile", strlen("move-direct-signature-profile"));
     const XiFunc *module_roots[2] = {fixture.pipelines[0].ir, fixture.pipelines[1].ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
@@ -3038,8 +3014,8 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
     if (first_status != XR_PROGRAM_BUILD_OK) {
         fprintf(stderr, "MOVE direct Program build failed: %s\n", diagnostic);
         fprintf(stderr, "target xg=%u consumer=%u library=%u\n",
-                (unsigned) cross_module_target->xg_body_func_id,
-                (unsigned) fixture.consumer_index, (unsigned) fixture.library_index);
+                (unsigned) cross_module_target->xg_body_func_id, (unsigned) fixture.consumer_index,
+                (unsigned) fixture.library_index);
         for (uint32_t callsite_index = 0u; callsite_index < fixture.evidence.ncallsites;
              ++callsite_index) {
             const XgCallsiteSummary *callsite = &fixture.evidence.callsites[callsite_index];
@@ -3059,9 +3035,8 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
     PIPELINE_TEST_REQUIRE(memcmp(first.bytes, repeated.bytes, first.size) == 0);
     XrValidatedProgram *validated = NULL;
     XrProgramDiagnostic verify_diagnostic;
-    PIPELINE_TEST_REQUIRE(xr_program_validate(first.bytes, first.size, NULL,
-                                              &validated, &verify_diagnostic) ==
-                          XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(xr_program_validate(first.bytes, first.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
 
     xr_validated_program_free(validated);
@@ -3089,28 +3064,26 @@ TEST(e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in) {
         "  catch (error) { return 42 }\n"
         "}\n";
     XiCanonicalProgramTestFixture fixture = {0};
-    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
-        &fixture, "xi-program-cleanup-trampoline", source));
+    PIPELINE_TEST_REQUIRE(
+        xi_canonical_program_test_fixture_build(&fixture, "xi-program-cleanup-trampoline", source));
 
     XiFunc *entry = NULL;
     XiValue *fallible_call = NULL;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < fixture.pipeline.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
         for (uint32_t block_index = 0u; function && block_index < function->nblocks;
              ++block_index) {
             XiBlock *block = function->blocks[block_index];
-            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
-                 ++value_index) {
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
                 XiValue *value = block->values[value_index];
                 const XgCallsiteSummary *callsite =
                     value && value->xg_callsite_id != XG_NO_ID
-                        ? xg_global_evidence_find_callsite(
-                              &fixture.evidence, (XgCallsiteId) value->xg_callsite_id)
+                        ? xg_global_evidence_find_callsite(&fixture.evidence,
+                                                           (XgCallsiteId) value->xg_callsite_id)
                         : NULL;
                 if (!callsite || callsite->kind != XG_CALL_DIRECT_FUNC ||
-                    (callsite->flags &
-                     (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR)) !=
+                    (callsite->flags & (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR)) !=
                         (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR))
                     continue;
                 PIPELINE_TEST_REQUIRE(fallible_call == NULL);
@@ -3157,8 +3130,8 @@ TEST(e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in) {
     PIPELINE_TEST_REQUIRE(caught != NULL);
     PIPELINE_TEST_REQUIRE(caught->error_region == fallible_call->block->control->error_region);
 
-    XrCoreIrKey semantic_profile = xr_core_ir_key(
-        "typed-error-cleanup-profile", strlen("typed-error-cleanup-profile"));
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("typed-error-cleanup-profile", strlen("typed-error-cleanup-profile"));
     const XiFunc *module_roots[] = {fixture.pipeline.ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
@@ -3177,11 +3150,10 @@ TEST(e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in) {
     XrValidatedProgram *validated = NULL;
     XrProgramDiagnostic verify_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
-                                              &verify_diagnostic) ==
-                          XR_PROGRAM_VERIFY_OK);
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
-    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
-        validated, XR_CORE_OP_CORE_CALL_SEALED_INVOKE));
+    PIPELINE_TEST_REQUIRE(
+        validated_program_has_operation(validated, XR_CORE_OP_CORE_CALL_SEALED_INVOKE));
 
     xr_validated_program_free(validated);
     xr_program_artifact_free(&artifact);
@@ -3189,51 +3161,48 @@ TEST(e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in) {
 }
 
 TEST(e2e_program_witness_move_operands_are_consumed_once) {
-    static const char source[] =
-        "interface MoveDirect { move consume() -> i64 }\n"
-        "class DirectConsumer implements MoveDirect {\n"
-        "  move consume() -> i64 { return 1 }\n"
-        "}\n"
-        "enum DispatchFailure { Failed }\n"
-        "interface MoveInvoke { move consume() -> i64 }\n"
-        "class InvokeConsumer implements MoveInvoke {\n"
-        "  move consume() -> i64 {\n"
-        "    throw DispatchFailure.Failed\n"
-        "  }\n"
-        "}\n"
-        "fn direct_dispatch(receiver: move MoveDirect) -> i64 {\n"
-        "  return (move receiver).consume()\n"
-        "}\n"
-        "fn invoke_dispatch(receiver: move MoveInvoke) -> i64 {\n"
-        "  try { return (move receiver).consume() }\n"
-        "  catch (error) { return 2 }\n"
-        "}\n"
-        "fn root() -> i64 {\n"
-        "  return 0\n"
-        "}\n";
+    static const char source[] = "interface MoveDirect { move consume() -> i64 }\n"
+                                 "class DirectConsumer implements MoveDirect {\n"
+                                 "  move consume() -> i64 { return 1 }\n"
+                                 "}\n"
+                                 "enum DispatchFailure { Failed }\n"
+                                 "interface MoveInvoke { move consume() -> i64 }\n"
+                                 "class InvokeConsumer implements MoveInvoke {\n"
+                                 "  move consume() -> i64 {\n"
+                                 "    throw DispatchFailure.Failed\n"
+                                 "  }\n"
+                                 "}\n"
+                                 "fn direct_dispatch(receiver: move MoveDirect) -> i64 {\n"
+                                 "  return (move receiver).consume()\n"
+                                 "}\n"
+                                 "fn invoke_dispatch(receiver: move MoveInvoke) -> i64 {\n"
+                                 "  try { return (move receiver).consume() }\n"
+                                 "  catch (error) { return 2 }\n"
+                                 "}\n"
+                                 "fn root() -> i64 {\n"
+                                 "  return 0\n"
+                                 "}\n";
     XiCanonicalProgramTestFixture fixture = {0};
-    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
-        &fixture, "xi-program-witness-move", source));
+    PIPELINE_TEST_REQUIRE(
+        xi_canonical_program_test_fixture_build(&fixture, "xi-program-witness-move", source));
 
     XiFunc *direct_owner = NULL;
     XiFunc *invoke_owner = NULL;
     XiValue *direct_call = NULL;
     XiValue *invoke_call = NULL;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < fixture.pipeline.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
         for (uint32_t block_index = 0u; function && block_index < function->nblocks;
              ++block_index) {
             XiBlock *block = function->blocks[block_index];
-            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
-                 ++value_index) {
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
                 XiValue *value = block->values[value_index];
                 if (!value || (value->xg_existential_kind != XI_EXISTENTIAL_WITNESS_DIRECT &&
                                value->xg_existential_kind != XI_EXISTENTIAL_WITNESS_INVOKE))
                     continue;
-                const XgCallsiteSummary *callsite =
-                    xg_global_evidence_find_callsite(
-                        &fixture.evidence, (XgCallsiteId) value->xg_callsite_id);
+                const XgCallsiteSummary *callsite = xg_global_evidence_find_callsite(
+                    &fixture.evidence, (XgCallsiteId) value->xg_callsite_id);
                 const XgInterfaceMethodSummary *method =
                     callsite && callsite->kind == XG_CALL_INTERFACE
                         ? xi_pipeline_find_xg_interface_method(
@@ -3284,8 +3253,7 @@ TEST(e2e_program_witness_move_operands_are_consumed_once) {
     XrValidatedProgram *validated = NULL;
     XrProgramDiagnostic verify_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
-                                              &verify_diagnostic) ==
-                          XR_PROGRAM_VERIFY_OK);
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
 
     const XrValidatedFunction *direct_validated_owner = NULL;
@@ -3315,8 +3283,7 @@ TEST(e2e_program_witness_move_operands_are_consumed_once) {
     PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
     validated = NULL;
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
-                                              &verify_diagnostic) ==
-                          XR_PROGRAM_VERIFY_OK);
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
 
     const XrValidatedFunction *invoke_validated_owner = NULL;
@@ -3351,215 +3318,216 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xr_compiler_session_set_target_profile(session, profile));
 
     XiPipelineScalarFixture fixture = {0};
-    static const char program_source[] = "interface ReadValue { read() -> i64 }\n"
-                                         "class ReadClass implements ReadValue {\n"
-                                         "  read() -> i64 { return 1 }\n"
-                                         "}\n"
-                                         "struct ReadStruct implements ReadValue {\n"
-                                         "  read() -> i64 { return 2 }\n"
-                                         "}\n"
-                                         "enum ReadEnum implements ReadValue {\n"
-                                         "  One, Two\n"
-                                         "  read() -> i64 { return 3 }\n"
-                                         "}\n"
-                                         "fn read_class(value: ReadClass) -> i64 {\n"
-                                         "  var erased: ReadValue = value\n"
-                                         "  return erased.read()\n"
-                                         "}\n"
-                                         "fn read_struct(value: ReadStruct) -> i64 {\n"
-                                         "  var erased: ReadValue = value\n"
-                                         "  return erased.read()\n"
-                                         "}\n"
-                                         "fn read_enum(value: ReadEnum) -> i64 {\n"
-                                         "  var erased: ReadValue = value\n"
-                                         "  return erased.read()\n"
-                                         "}\n"
-                                         "fn witness_only(value: ReadValue) -> i64 {\n"
-                                         "  return value.read()\n"
-                                         "}\n"
-                                         "fn is_read_class(value: ReadValue) -> bool {\n"
-                                         "  return value is ReadClass\n"
-                                         "}\n"
-                                         "fn project_read_class(value: ReadValue) -> ReadClass? {\n"
-                                         "  return value as ReadClass?\n"
-                                         "}\n"
-                                         "fn existential_value() -> i64 {\n"
-                                         "  return read_class(ReadClass()) + "
-                                         "read_struct(ReadStruct{}) + read_enum(ReadEnum.One)\n"
-                                         "}\n"
-                                         "enum ReadFailure { Failed }\n"
-                                         "interface FallibleRead { read_fallible() -> i64 }\n"
-                                         "class FallibleReader implements FallibleRead {\n"
-                                         "  read_fallible() -> i64 { throw ReadFailure.Failed }\n"
-                                         "}\n"
-                                         "fn witness_invoke(value: FallibleRead) -> i64 {\n"
-                                         "  try { return value.read_fallible() }\n"
-                                         "  catch (error: ReadFailure) { return 4 }\n"
-                                         "}\n"
-                                         "fn witness_invoke_value() -> i64 {\n"
-                                         "  return witness_invoke(FallibleReader())\n"
-                                         "}\n"
-                                         "struct Point {\n"
-                                         "  x: i64\n"
-                                         "  y: i64\n"
-                                         "}\n"
-                                         "enum Packet { Data { code: i64, flag: bool }, Empty }\n"
-                                         "enum Nested<T> { Value { pair: (T, bool) }, Empty }\n"
-                                         "enum ComputeError { Negative { code: i64 } }\n"
-                                         "fn maybe_error(value: i64) -> i64 {\n"
-                                         "  if (value < 0) {\n"
-                                         "    throw ComputeError.Negative { code: value }\n"
-                                         "  }\n"
-                                         "  return value + 1\n"
-                                         "}\n"
-                                         "fn invoke_value() -> i64 {\n"
-                                         "  return maybe_error(4)\n"
-                                         "}\n"
-                                         "fn sum_to(limit: i64) -> i64 {\n"
-                                         "  var index: i64 = 0\n"
-                                         "  var total: i64 = 0\n"
-                                         "  while (index < limit) {\n"
-                                         "    total = total + index\n"
-                                         "    index = index + 1\n"
-                                         "  }\n"
-                                         "  return total\n"
-                                         "}\n"
-                                         "fn choose(value: i64) -> i64 {\n"
-                                         "  if (value < 0) { return 0 - value }\n"
-                                         "  return sum_to(value)\n"
-                                         "}\n"
-                                         "fn scalar_matrix(left: i64, right: i64) -> i64 {\n"
-                                         "  var value: i64 = (left * right) / right\n"
-                                         "  if (left == right) { value = value + 100 }\n"
-                                         "  if (left != right) { value = value + 1 }\n"
-                                         "  if (left <= right) { value = value + 2 }\n"
-                                         "  if (left > right) { value = value + 4 }\n"
-                                         "  if (left >= right) { value = value + 8 }\n"
-                                         "  return copy(value)\n"
-                                         "}\n"
-                                         "fn choose_bool(flag: bool) -> i64 {\n"
-                                         "  if (flag) { return 1 }\n"
-                                         "  return 2\n"
-                                         "}\n"
-                                         "fn make_pair(value: i64, flag: bool) -> (i64, bool) {\n"
-                                         "  return (value, flag)\n"
-                                         "}\n"
-                                         "fn pair_value() -> i64 {\n"
-                                         "  var pair = make_pair(40, true)\n"
-                                         "  return pair.0\n"
-                                         "}\n"
-                                         "fn packet_value() -> i64 {\n"
-                                         "  var packet = Packet.Data { flag: true, code: 29 }\n"
-                                         "  return match (packet) {\n"
-                                         "    Packet.Data { code } -> code,\n"
-                                         "    Packet.Empty -> 0\n"
-                                         "  }\n"
-                                         "}\n"
-                                         "fn accepts_nested(value: Nested<i64>) -> i64 {\n"
-                                         "  return 1\n"
-                                         "}\n"
-                                         "fn update_point(input: Point) -> i64 {\n"
-                                         "  var point = input\n"
-                                         "  point.x = point.x + 2\n"
-                                         "  return point.x\n"
-                                         "}\n"
-                                         "fn write_ref(value: ref i64) -> i64 {\n"
-                                         "  value = 42\n"
-                                         "  return value\n"
-                                         "}\n"
-                                         "fn ref_value() -> i64 {\n"
-                                         "  var value: i64 = 40\n"
-                                         "  write_ref(ref value)\n"
-                                         "  return value\n"
-                                         "}\n"
-                                         "fn make_adder(base: i64) -> fn(i64) -> i64 {\n"
-                                         "  return fn(value: i64) -> i64 { return base + value }\n"
-                                         "}\n"
-                                         "fn escaped_callable_value() -> i64 {\n"
-                                         "  var action = make_adder(40)\n"
-                                         "  return action(2)\n"
-                                         "}\n"
-                                         "fn callable_multiuse() -> i64 {\n"
-                                         "  var base = 10\n"
-                                         "  var action = fn(value: i64) -> i64 { return base + value }\n"
-                                         "  return action(1) + action(2)\n"
-                                         "}\n"
-                                         "fn callable_cross_cfg(flag: bool) -> i64 {\n"
-                                         "  var base = 10\n"
-                                         "  var action = fn(value: i64) -> i64 { return base + value }\n"
-                                         "  var selected: i64 = 0\n"
-                                         "  if (flag) { selected = action(1) }\n"
-                                         "  else { selected = action(2) }\n"
-                                         "  return selected + action(3)\n"
-                                         "}\n"
-                                         "fn callable_loop() -> i64 {\n"
-                                         "  var base = 10\n"
-                                         "  var action = fn(value: i64) -> i64 { return base + value }\n"
-                                         "  var index: i64 = 0\n"
-                                         "  var total: i64 = 0\n"
-                                         "  while (index < 3) {\n"
-                                         "    total = total + action(index)\n"
-                                         "    index = index + 1\n"
-                                         "  }\n"
-                                         "  return total + action(3)\n"
-                                         "}\n"
-                                         "fn callable_copy() -> i64 {\n"
-                                         "  var base = 10\n"
-                                         "  var action = fn(value: i64) -> i64 { return base + value }\n"
-                                         "  var duplicate = copy(action)\n"
-                                         "  return action(1) + duplicate(2)\n"
-                                         "}\n"
-                                         "fn callable_value() -> i64 {\n"
-                                         "  var captured = 5\n"
-                                         "  var action = fn() -> i64 { return captured + 42 }\n"
-                                         "  return action()\n"
-                                         "}\n"
-                                         "fn callable_error_value(value: i64) -> i64 {\n"
-                                         "  var delta = 1\n"
-                                         "  var action = fn(value: i64) -> i64 {\n"
-                                         "    return maybe_error(value + delta)\n"
-                                         "  }\n"
-                                         "  try {\n"
-                                         "    return action(value)\n"
-                                         "  } catch (e: ComputeError) {\n"
-                                         "    return 70\n"
-                                         "  }\n"
-                                         "}\n"
-                                         "fn sibling_error_regions(value: i64) -> i64 {\n"
-                                         "  var current = value\n"
-                                         "  try {\n"
-                                         "    current = maybe_error(current)\n"
-                                         "  } catch (first: ComputeError) {\n"
-                                         "    current = 1\n"
-                                         "  }\n"
-                                         "  try {\n"
-                                         "    current = maybe_error(current)\n"
-                                         "  } catch (second: ComputeError) {\n"
-                                         "    current = 2\n"
-                                         "  }\n"
-                                         "  return current\n"
-                                         "}\n"
-                                         "fn edge_choice(flag: bool, left: i64, right: i64) -> i64 {\n"
-                                         "  if (flag) { return left }\n"
-                                         "  return right\n"
-                                         "}\n"
-                                         "fn edge_choice_entry() -> i64 {\n"
-                                         "  return edge_choice(true, 7, 9) + edge_choice(false, 7, 9)\n"
-                                         "}\n"
-                                         "fn nested_value() -> i64 {\n"
-                                         "  return accepts_nested(Nested.Value { pair: (7, true) })\n"
-                                         "}\n"
-                                         "fn root() -> i64 {\n"
-                                         "  return choose(10) + scalar_matrix(10, 2) + "
-                                         "choose_bool(true) + choose_bool(false) + pair_value() + "
-                                         "packet_value() + ref_value()\n"
-                                         "    + invoke_value() + callable_value() + "
-                                         "callable_error_value(3) + callable_error_value(-2)\n"
-                                         "    + escaped_callable_value() + callable_multiuse()\n"
-                                         "    + callable_cross_cfg(true) + callable_loop() + "
-                                         "callable_copy() + existential_value() + "
-                                         "witness_invoke_value() + nested_value()\n"
-                                         "}\n";
+    static const char program_source[] =
+        "interface ReadValue { read() -> i64 }\n"
+        "class ReadClass implements ReadValue {\n"
+        "  read() -> i64 { return 1 }\n"
+        "}\n"
+        "struct ReadStruct implements ReadValue {\n"
+        "  read() -> i64 { return 2 }\n"
+        "}\n"
+        "enum ReadEnum implements ReadValue {\n"
+        "  One, Two\n"
+        "  read() -> i64 { return 3 }\n"
+        "}\n"
+        "fn read_class(value: ReadClass) -> i64 {\n"
+        "  var erased: ReadValue = value\n"
+        "  return erased.read()\n"
+        "}\n"
+        "fn read_struct(value: ReadStruct) -> i64 {\n"
+        "  var erased: ReadValue = value\n"
+        "  return erased.read()\n"
+        "}\n"
+        "fn read_enum(value: ReadEnum) -> i64 {\n"
+        "  var erased: ReadValue = value\n"
+        "  return erased.read()\n"
+        "}\n"
+        "fn witness_only(value: ReadValue) -> i64 {\n"
+        "  return value.read()\n"
+        "}\n"
+        "fn is_read_class(value: ReadValue) -> bool {\n"
+        "  return value is ReadClass\n"
+        "}\n"
+        "fn project_read_class(value: ReadValue) -> ReadClass? {\n"
+        "  return value as ReadClass?\n"
+        "}\n"
+        "fn existential_value() -> i64 {\n"
+        "  return read_class(ReadClass()) + "
+        "read_struct(ReadStruct{}) + read_enum(ReadEnum.One)\n"
+        "}\n"
+        "enum ReadFailure { Failed }\n"
+        "interface FallibleRead { read_fallible() -> i64 }\n"
+        "class FallibleReader implements FallibleRead {\n"
+        "  read_fallible() -> i64 { throw ReadFailure.Failed }\n"
+        "}\n"
+        "fn witness_invoke(value: FallibleRead) -> i64 {\n"
+        "  try { return value.read_fallible() }\n"
+        "  catch (error: ReadFailure) { return 4 }\n"
+        "}\n"
+        "fn witness_invoke_value() -> i64 {\n"
+        "  return witness_invoke(FallibleReader())\n"
+        "}\n"
+        "struct Point {\n"
+        "  x: i64\n"
+        "  y: i64\n"
+        "}\n"
+        "enum Packet { Data { code: i64, flag: bool }, Empty }\n"
+        "enum Nested<T> { Value { pair: (T, bool) }, Empty }\n"
+        "enum ComputeError { Negative { code: i64 } }\n"
+        "fn maybe_error(value: i64) -> i64 {\n"
+        "  if (value < 0) {\n"
+        "    throw ComputeError.Negative { code: value }\n"
+        "  }\n"
+        "  return value + 1\n"
+        "}\n"
+        "fn invoke_value() -> i64 {\n"
+        "  return maybe_error(4)\n"
+        "}\n"
+        "fn sum_to(limit: i64) -> i64 {\n"
+        "  var index: i64 = 0\n"
+        "  var total: i64 = 0\n"
+        "  while (index < limit) {\n"
+        "    total = total + index\n"
+        "    index = index + 1\n"
+        "  }\n"
+        "  return total\n"
+        "}\n"
+        "fn choose(value: i64) -> i64 {\n"
+        "  if (value < 0) { return 0 - value }\n"
+        "  return sum_to(value)\n"
+        "}\n"
+        "fn scalar_matrix(left: i64, right: i64) -> i64 {\n"
+        "  var value: i64 = (left * right) / right\n"
+        "  if (left == right) { value = value + 100 }\n"
+        "  if (left != right) { value = value + 1 }\n"
+        "  if (left <= right) { value = value + 2 }\n"
+        "  if (left > right) { value = value + 4 }\n"
+        "  if (left >= right) { value = value + 8 }\n"
+        "  return copy(value)\n"
+        "}\n"
+        "fn choose_bool(flag: bool) -> i64 {\n"
+        "  if (flag) { return 1 }\n"
+        "  return 2\n"
+        "}\n"
+        "fn make_pair(value: i64, flag: bool) -> (i64, bool) {\n"
+        "  return (value, flag)\n"
+        "}\n"
+        "fn pair_value() -> i64 {\n"
+        "  var pair = make_pair(40, true)\n"
+        "  return pair.0\n"
+        "}\n"
+        "fn packet_value() -> i64 {\n"
+        "  var packet = Packet.Data { flag: true, code: 29 }\n"
+        "  return match (packet) {\n"
+        "    Packet.Data { code } -> code,\n"
+        "    Packet.Empty -> 0\n"
+        "  }\n"
+        "}\n"
+        "fn accepts_nested(value: Nested<i64>) -> i64 {\n"
+        "  return 1\n"
+        "}\n"
+        "fn update_point(input: Point) -> i64 {\n"
+        "  var point = input\n"
+        "  point.x = point.x + 2\n"
+        "  return point.x\n"
+        "}\n"
+        "fn write_ref(value: ref i64) -> i64 {\n"
+        "  value = 42\n"
+        "  return value\n"
+        "}\n"
+        "fn ref_value() -> i64 {\n"
+        "  var value: i64 = 40\n"
+        "  write_ref(ref value)\n"
+        "  return value\n"
+        "}\n"
+        "fn make_adder(base: i64) -> fn(i64) -> i64 {\n"
+        "  return fn(value: i64) -> i64 { return base + value }\n"
+        "}\n"
+        "fn escaped_callable_value() -> i64 {\n"
+        "  var action = make_adder(40)\n"
+        "  return action(2)\n"
+        "}\n"
+        "fn callable_multiuse() -> i64 {\n"
+        "  var base = 10\n"
+        "  var action = fn(value: i64) -> i64 { return base + value }\n"
+        "  return action(1) + action(2)\n"
+        "}\n"
+        "fn callable_cross_cfg(flag: bool) -> i64 {\n"
+        "  var base = 10\n"
+        "  var action = fn(value: i64) -> i64 { return base + value }\n"
+        "  var selected: i64 = 0\n"
+        "  if (flag) { selected = action(1) }\n"
+        "  else { selected = action(2) }\n"
+        "  return selected + action(3)\n"
+        "}\n"
+        "fn callable_loop() -> i64 {\n"
+        "  var base = 10\n"
+        "  var action = fn(value: i64) -> i64 { return base + value }\n"
+        "  var index: i64 = 0\n"
+        "  var total: i64 = 0\n"
+        "  while (index < 3) {\n"
+        "    total = total + action(index)\n"
+        "    index = index + 1\n"
+        "  }\n"
+        "  return total + action(3)\n"
+        "}\n"
+        "fn callable_copy() -> i64 {\n"
+        "  var base = 10\n"
+        "  var action = fn(value: i64) -> i64 { return base + value }\n"
+        "  var duplicate = copy(action)\n"
+        "  return action(1) + duplicate(2)\n"
+        "}\n"
+        "fn callable_value() -> i64 {\n"
+        "  var captured = 5\n"
+        "  var action = fn() -> i64 { return captured + 42 }\n"
+        "  return action()\n"
+        "}\n"
+        "fn callable_error_value(value: i64) -> i64 {\n"
+        "  var delta = 1\n"
+        "  var action = fn(value: i64) -> i64 {\n"
+        "    return maybe_error(value + delta)\n"
+        "  }\n"
+        "  try {\n"
+        "    return action(value)\n"
+        "  } catch (e: ComputeError) {\n"
+        "    return 70\n"
+        "  }\n"
+        "}\n"
+        "fn sibling_error_regions(value: i64) -> i64 {\n"
+        "  var current = value\n"
+        "  try {\n"
+        "    current = maybe_error(current)\n"
+        "  } catch (first: ComputeError) {\n"
+        "    current = 1\n"
+        "  }\n"
+        "  try {\n"
+        "    current = maybe_error(current)\n"
+        "  } catch (second: ComputeError) {\n"
+        "    current = 2\n"
+        "  }\n"
+        "  return current\n"
+        "}\n"
+        "fn edge_choice(flag: bool, left: i64, right: i64) -> i64 {\n"
+        "  if (flag) { return left }\n"
+        "  return right\n"
+        "}\n"
+        "fn edge_choice_entry() -> i64 {\n"
+        "  return edge_choice(true, 7, 9) + edge_choice(false, 7, 9)\n"
+        "}\n"
+        "fn nested_value() -> i64 {\n"
+        "  return accepts_nested(Nested.Value { pair: (7, true) })\n"
+        "}\n"
+        "fn root() -> i64 {\n"
+        "  return choose(10) + scalar_matrix(10, 2) + "
+        "choose_bool(true) + choose_bool(false) + pair_value() + "
+        "packet_value() + ref_value()\n"
+        "    + invoke_value() + callable_value() + "
+        "callable_error_value(3) + callable_error_value(-2)\n"
+        "    + escaped_callable_value() + callable_multiuse()\n"
+        "    + callable_cross_cfg(true) + callable_loop() + "
+        "callable_copy() + existential_value() + "
+        "witness_invoke_value() + nested_value()\n"
+        "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
 
@@ -3622,13 +3590,11 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             maybe_error_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "callable_value") == 0)
             callable_function = candidate;
-        if (candidate && candidate->name &&
-            strcmp(candidate->name, "callable_error_value") == 0)
+        if (candidate && candidate->name && strcmp(candidate->name, "callable_error_value") == 0)
             callable_error_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "make_adder") == 0)
             make_adder_function = candidate;
-        if (candidate && candidate->name &&
-            strcmp(candidate->name, "escaped_callable_value") == 0)
+        if (candidate && candidate->name && strcmp(candidate->name, "escaped_callable_value") == 0)
             escaped_callable_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "callable_multiuse") == 0)
             multiuse_callable_function = candidate;
@@ -3640,8 +3606,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             copy_callable_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "existential_value") == 0)
             existential_function = candidate;
-        if (candidate && candidate->name &&
-            strcmp(candidate->name, "sibling_error_regions") == 0)
+        if (candidate && candidate->name && strcmp(candidate->name, "sibling_error_regions") == 0)
             sibling_error_regions_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "edge_choice") == 0)
             edge_choice_function = candidate;
@@ -3692,14 +3657,12 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(read_enum_conformance->implementor_decl_id != XG_NO_ID);
     PIPELINE_TEST_REQUIRE(read_enum_conformance->nominal_key != 0u);
 
-    const XgInterfaceWitnessSummary *read_enum_witness =
-        xg_global_evidence_find_interface_witness(
-            &global_evidence, read_enum_conformance->conformance_id, 0u);
-    XiFunc *read_enum_target =
-        read_enum_witness
-            ? xi_pipeline_find_module_function_by_xg_id(
-                  result.ir, read_enum_witness->implementation_func_id)
-            : NULL;
+    const XgInterfaceWitnessSummary *read_enum_witness = xg_global_evidence_find_interface_witness(
+        &global_evidence, read_enum_conformance->conformance_id, 0u);
+    XiFunc *read_enum_target = read_enum_witness
+                                   ? xi_pipeline_find_module_function_by_xg_id(
+                                         result.ir, read_enum_witness->implementation_func_id)
+                                   : NULL;
     PIPELINE_TEST_REQUIRE(read_enum_target != NULL);
     PIPELINE_TEST_REQUIRE(read_enum_target->analyzer_effect_id != XA_EFFECT_NONE);
     const XaEffectSummary *read_enum_effect = xa_effect_db_get(
@@ -3722,10 +3685,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                           read_enum_receiver_type->enum_type.layout->layout_id);
     XrClassInfo *read_enum_info = read_enum_receiver_type->enum_type.nominal_ref;
     PIPELINE_TEST_REQUIRE(read_enum_info != NULL);
-    PIPELINE_TEST_REQUIRE(read_enum_info->xg_decl_id ==
-                          read_enum_conformance->implementor_decl_id);
-    PIPELINE_TEST_REQUIRE(read_enum_info->xg_nominal_key ==
-                          read_enum_conformance->nominal_key);
+    PIPELINE_TEST_REQUIRE(read_enum_info->xg_decl_id == read_enum_conformance->implementor_decl_id);
+    PIPELINE_TEST_REQUIRE(read_enum_info->xg_nominal_key == read_enum_conformance->nominal_key);
 
     const XgDeclSummary *read_enum_decl = NULL;
     for (uint32_t index = 0u; index < global_evidence.ndecls; ++index) {
@@ -3781,24 +3742,22 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(fallible_reader_conformance->nominal_key != 0u);
 
     const XgInterfaceWitnessSummary *fallible_reader_witness =
-        xg_global_evidence_find_interface_witness(
-            &global_evidence, fallible_reader_conformance->conformance_id, 0u);
+        xg_global_evidence_find_interface_witness(&global_evidence,
+                                                  fallible_reader_conformance->conformance_id, 0u);
     XiFunc *fallible_reader_target =
-        fallible_reader_witness
-            ? xi_pipeline_find_module_function_by_xg_id(
-                  result.ir, fallible_reader_witness->implementation_func_id)
-            : NULL;
+        fallible_reader_witness ? xi_pipeline_find_module_function_by_xg_id(
+                                      result.ir, fallible_reader_witness->implementation_func_id)
+                                : NULL;
     PIPELINE_TEST_REQUIRE(fallible_reader_target != NULL);
-    const XaEffectSummary *fallible_reader_effect =
-        xa_effect_db_get(fallible_reader_target->analyzer->effect_db,
-                         fallible_reader_target->analyzer_effect_id);
+    const XaEffectSummary *fallible_reader_effect = xa_effect_db_get(
+        fallible_reader_target->analyzer->effect_db, fallible_reader_target->analyzer_effect_id);
     PIPELINE_TEST_REQUIRE(fallible_reader_effect != NULL);
     PIPELINE_TEST_REQUIRE(fallible_reader_effect->error_set_completeness == XA_EFFECT_COMPLETE);
     PIPELINE_TEST_REQUIRE(fallible_reader_effect->error_unknown_reasons == XA_UNKNOWN_NONE);
     PIPELINE_TEST_REQUIRE(fallible_reader_effect->escaping.count == 1u);
-    XrType *fallible_error_type = xa_effect_db_error_type_handle(
-        fallible_reader_target->analyzer->effect_db,
-        fallible_reader_effect->escaping.types[0].type_id);
+    XrType *fallible_error_type =
+        xa_effect_db_error_type_handle(fallible_reader_target->analyzer->effect_db,
+                                       fallible_reader_effect->escaping.types[0].type_id);
     PIPELINE_TEST_REQUIRE(fallible_error_type != NULL);
     PIPELINE_TEST_REQUIRE(fallible_error_type->kind == XR_KIND_ENUM);
     PIPELINE_TEST_REQUIRE(fallible_error_type->enum_type.layout != NULL);
@@ -3821,8 +3780,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     }
     PIPELINE_TEST_REQUIRE(fallible_error_decl != NULL);
     PIPELINE_TEST_REQUIRE(fallible_error_decl->kind == XG_DECL_ENUM);
-    PIPELINE_TEST_REQUIRE(fallible_error_decl->nominal_key ==
-                          fallible_error_info->xg_nominal_key);
+    PIPELINE_TEST_REQUIRE(fallible_error_decl->nominal_key == fallible_error_info->xg_nominal_key);
     PIPELINE_TEST_REQUIRE(fallible_error_decl->type_key ==
                           fallible_interface_method->error_type_key);
     PIPELINE_TEST_REQUIRE(fallible_reader_target->has_receiver);
@@ -3879,8 +3837,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact sibling_error_regions_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&sibling_error_regions_input, &sibling_error_regions_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_OK);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(xi_pipeline_hostile_lexical_error_regions_are_fail_closed(
         sibling_error_regions_function, &sibling_error_regions_input,
         &sibling_error_regions_artifact));
@@ -3897,8 +3855,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_read_enum_effect_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_read_enum_effect_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_read_enum_effect_artifact.bytes == NULL);
     read_enum_target->analyzer_effect_id = saved_read_enum_effect_id;
     read_enum_target->analyzer_effect_complete = saved_read_enum_effect_complete;
@@ -3909,8 +3867,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_fallible_error_layout_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_fallible_error_layout_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_error_layout_artifact.bytes == NULL);
     fallible_error_type->enum_type.layout = saved_fallible_error_layout;
 
@@ -3918,8 +3876,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_fallible_error_nominal_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_fallible_error_nominal_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_error_nominal_artifact.bytes == NULL);
     fallible_error_type->enum_type.nominal_ref = fallible_error_info;
 
@@ -3928,8 +3886,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_read_enum_schema_identity_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_read_enum_schema_identity_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) !=
-        XR_PROGRAM_BUILD_OK);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_read_enum_schema_identity_artifact.bytes == NULL);
     read_enum_schema->layout_id = saved_read_enum_layout_id;
 
@@ -3937,8 +3895,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_read_enum_nominal_identity_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_read_enum_nominal_identity_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_read_enum_nominal_identity_artifact.bytes == NULL);
     read_enum_receiver_type->enum_type.nominal_ref = read_enum_info;
 
@@ -3947,8 +3905,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_read_enum_receiver_layout_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_read_enum_receiver_layout_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_read_enum_receiver_layout_artifact.bytes == NULL);
     read_enum_receiver_type->enum_type.layout = saved_read_enum_layout;
 
@@ -3956,10 +3914,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     fallible_reader_schema->xg_class_id = XG_NO_ID;
     XrProgramArtifact missing_fallible_reader_schema_identity_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input,
-                                 &missing_fallible_reader_schema_identity_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) !=
-        XR_PROGRAM_BUILD_OK);
+        xr_program_write_from_xi(&producer_input, &missing_fallible_reader_schema_identity_artifact,
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_fallible_reader_schema_identity_artifact.bytes == NULL);
     fallible_reader_schema->xg_class_id = saved_fallible_reader_class_id;
 
@@ -3979,8 +3936,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                 empty_struct_literal = value;
             if (value && value->op == XI_LOAD_FIELD && value->nargs == 1u && value->args &&
                 value->args[0] && value->args[0]->op == XI_GET_SHARED &&
-                value->args[0]->aux_int >= 0 && value->type &&
-                value->type->kind == XR_KIND_ENUM && result.ir->module->slot_enums &&
+                value->args[0]->aux_int >= 0 && value->type && value->type->kind == XR_KIND_ENUM &&
+                result.ir->module->slot_enums &&
                 value->args[0]->aux_int < result.ir->module->nslots &&
                 result.ir->module->slot_enums[value->args[0]->aux_int])
                 unit_enum_literal = value;
@@ -4015,8 +3972,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_allocation_identity_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_allocation_identity_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) !=
-        XR_PROGRAM_BUILD_OK);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_allocation_identity_artifact.bytes == NULL);
     empty_class_callsite->receiver_static_class_id = saved_allocation_class_id;
 
@@ -4025,8 +3982,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact nonmechanical_allocation_error_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &nonmechanical_allocation_error_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) !=
-        XR_PROGRAM_BUILD_OK);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(nonmechanical_allocation_error_artifact.bytes == NULL);
     empty_class_error_block->kind = saved_error_block_kind;
 
@@ -4035,8 +3992,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_struct_constructor_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_struct_constructor_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) !=
-        XR_PROGRAM_BUILD_OK);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_struct_constructor_artifact.bytes == NULL);
     empty_struct_literal->lowering_flags = saved_struct_lowering_flags;
 
@@ -4045,19 +4002,17 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_unit_enum_symbol_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_unit_enum_symbol_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) !=
-        XR_PROGRAM_BUILD_OK);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_unit_enum_symbol_artifact.bytes == NULL);
     unit_enum_literal->aux_int = saved_unit_enum_symbol;
 
     XiValue *source_existential_pack = NULL;
     for (uint16_t function_index = 0u;
-         function_index < result.ir->module->nfuncs && !source_existential_pack;
-         ++function_index) {
+         function_index < result.ir->module->nfuncs && !source_existential_pack; ++function_index) {
         XiFunc *source_function = result.ir->module->functions[function_index];
         for (uint32_t block_index = 0u;
-             source_function && block_index < source_function->nblocks &&
-             !source_existential_pack;
+             source_function && block_index < source_function->nblocks && !source_existential_pack;
              ++block_index) {
             XiBlock *source_block = source_function->blocks[block_index];
             for (uint32_t value_index = 0u; source_block && value_index < source_block->nvalues;
@@ -4077,14 +4032,13 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
 
     uint8_t saved_frozen_ownership = source_existential_pack->xg_implementor_ownership;
     source_existential_pack->xg_implementor_ownership =
-        saved_frozen_ownership == XG_NOMINAL_OWNERSHIP_AFFINE
-            ? XG_NOMINAL_OWNERSHIP_TRIVIAL
-            : XG_NOMINAL_OWNERSHIP_AFFINE;
+        saved_frozen_ownership == XG_NOMINAL_OWNERSHIP_AFFINE ? XG_NOMINAL_OWNERSHIP_TRIVIAL
+                                                              : XG_NOMINAL_OWNERSHIP_AFFINE;
     XrProgramArtifact mismatched_frozen_contract_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &mismatched_frozen_contract_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_frozen_contract_artifact.bytes == NULL);
     source_existential_pack->xg_implementor_ownership = saved_frozen_ownership;
 
@@ -4092,9 +4046,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     source_existential_pack->xg_interface_object_use_id = XG_NO_ID;
     XrProgramArtifact missing_object_use_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_object_use_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_program_write_from_xi(&producer_input, &missing_object_use_artifact, producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_object_use_artifact.bytes == NULL);
     source_existential_pack->xg_interface_object_use_id = saved_object_use_id;
 
@@ -4107,13 +4060,12 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         }
     }
     PIPELINE_TEST_REQUIRE(source_conformance != NULL);
-    const XgInterfaceWitnessSummary *source_witness =
-        xg_global_evidence_find_interface_witness(&global_evidence,
-                                                  source_conformance->conformance_id, 0u);
-    XiFunc *source_witness_target =
-        source_witness ? xi_pipeline_find_module_function_by_xg_id(
-                             result.ir, source_witness->implementation_func_id)
-                       : NULL;
+    const XgInterfaceWitnessSummary *source_witness = xg_global_evidence_find_interface_witness(
+        &global_evidence, source_conformance->conformance_id, 0u);
+    XiFunc *source_witness_target = source_witness
+                                        ? xi_pipeline_find_module_function_by_xg_id(
+                                              result.ir, source_witness->implementation_func_id)
+                                        : NULL;
     XgInterfaceMethodSummary *source_interface_method = NULL;
     for (uint32_t index = 0u; source_witness && index < global_evidence.ninterface_methods;
          ++index) {
@@ -4142,15 +4094,13 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(source_receiver_type->kind == XR_KIND_CLASS ||
                           source_receiver_type->kind == XR_KIND_INSTANCE ||
                           source_receiver_type->kind == XR_KIND_ENUM);
-    XrClassInfo *source_receiver_info =
-        source_receiver_type->kind == XR_KIND_ENUM
-            ? source_receiver_type->enum_type.nominal_ref
-            : source_receiver_type->instance.class_ref;
+    XrClassInfo *source_receiver_info = source_receiver_type->kind == XR_KIND_ENUM
+                                            ? source_receiver_type->enum_type.nominal_ref
+                                            : source_receiver_type->instance.class_ref;
     PIPELINE_TEST_REQUIRE(source_receiver_info != NULL);
     PIPELINE_TEST_REQUIRE(source_receiver_info->xg_decl_id ==
                           source_conformance->implementor_decl_id);
-    PIPELINE_TEST_REQUIRE(source_receiver_info->xg_nominal_key ==
-                          source_conformance->nominal_key);
+    PIPELINE_TEST_REQUIRE(source_receiver_info->xg_nominal_key == source_conformance->nominal_key);
 
     if (source_receiver_type->kind == XR_KIND_CLASS ||
         source_receiver_type->kind == XR_KIND_INSTANCE) {
@@ -4179,8 +4129,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact incomplete_type_contract_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &incomplete_type_contract_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(incomplete_type_contract_artifact.bytes == NULL);
     source_conformance->type_contract_complete = saved_type_contract_complete;
 
@@ -4190,8 +4140,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_witness_target_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_witness_target_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) !=
-        XR_PROGRAM_BUILD_OK);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_witness_target_artifact.bytes == NULL);
     global_evidence.interface_witnesses[0].implementation_func_id = saved_witness_target;
 
@@ -4201,8 +4151,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact mismatched_method_result_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &mismatched_method_result_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_method_result_artifact.bytes == NULL);
     global_evidence.interface_methods[0].result_type_key = saved_method_result_key;
 
@@ -4211,8 +4161,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact mismatched_method_ownership_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &mismatched_method_ownership_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_method_ownership_artifact.bytes == NULL);
     source_interface_method->result_ownership.kind = saved_method_result_ownership;
 
@@ -4308,18 +4258,17 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact unverified_callsite_artifact = {0};
     PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
                               &producer_input, &unverified_callsite_artifact, producer_diagnostic,
-                              sizeof(producer_diagnostic)) ==
-                          XR_PROGRAM_BUILD_INVALID_INPUT);
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(unverified_callsite_artifact.bytes == NULL);
     indirect_callsite->flags = saved_callsite_flags;
 
     uint32_t saved_fallible_callsite_flags = fallible_indirect_callsite->flags;
     fallible_indirect_callsite->flags &= ~XG_CALL_MAY_ERROR;
     XrProgramArtifact missing_fallible_effect_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
-                              &producer_input, &missing_fallible_effect_artifact,
-                              producer_diagnostic, sizeof(producer_diagnostic)) ==
-                          XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&producer_input, &missing_fallible_effect_artifact,
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_effect_artifact.bytes == NULL);
     fallible_indirect_callsite->flags = saved_fallible_callsite_flags;
 
@@ -4328,8 +4277,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact missing_fallible_target_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &missing_fallible_target_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_target_artifact.bytes == NULL);
     fallible_indirect_call->xg_callable_target_count = saved_fallible_target_count;
 
@@ -4338,8 +4287,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact rebound_fallible_target_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &rebound_fallible_target_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(rebound_fallible_target_artifact.bytes == NULL);
     fallible_indirect_callsite->flags = saved_fallible_target_flags;
 
@@ -4349,8 +4298,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(fallible_error_check->error_region != NULL);
     XiValue *fallible_error_catch = NULL;
     XiValue *fallible_error_type_test = NULL;
-    for (uint32_t block_index = 0u; block_index < callable_error_function->nblocks;
-         ++block_index) {
+    for (uint32_t block_index = 0u; block_index < callable_error_function->nblocks; ++block_index) {
         XiBlock *block = callable_error_function->blocks[block_index];
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             XiValue *value = block->values[value_index];
@@ -4360,9 +4308,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                 fallible_error_catch = value;
                 continue;
             }
-            if (value && value->op == XI_IS &&
-                value->xg_existential_kind == XI_EXISTENTIAL_NONE && value->nargs == 2u &&
-                value->args && value->args[0] == fallible_error_catch)
+            if (value && value->op == XI_IS && value->xg_existential_kind == XI_EXISTENTIAL_NONE &&
+                value->nargs == 2u && value->args && value->args[0] == fallible_error_catch)
                 fallible_error_type_test = value;
         }
     }
@@ -4376,8 +4323,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(fallible_error_type_test->args[1]->aux_int >= 0);
     PIPELINE_TEST_REQUIRE(fallible_error_type_test->aux != NULL);
 
-    PIPELINE_TEST_REQUIRE(fallible_error_catch->error_region ==
-                          fallible_error_check->error_region);
+    PIPELINE_TEST_REQUIRE(fallible_error_catch->error_region == fallible_error_check->error_region);
     XiErrorRegion *saved_fallible_error_region = fallible_error_check->error_region;
     XiErrorRegion mismatched_fallible_error_region = *saved_fallible_error_region;
     fallible_error_check->error_region = &mismatched_fallible_error_region;
@@ -4385,8 +4331,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact mismatched_fallible_error_region_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &mismatched_fallible_error_region_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_fallible_error_region_artifact.bytes == NULL);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "error region") != NULL);
     fallible_error_check->error_region = saved_fallible_error_region;
@@ -4398,8 +4344,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact mismatched_fallible_error_token_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &mismatched_fallible_error_token_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_fallible_error_token_artifact.bytes == NULL);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "typed catch") != NULL);
     fallible_error_type_test->aux = (void *) saved_fallible_error_test_nominal;
@@ -4410,16 +4356,15 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact mismatched_fallible_error_artifact = {0};
     PIPELINE_TEST_REQUIRE(
         xr_program_write_from_xi(&producer_input, &mismatched_fallible_error_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_INVALID_INPUT);
+                                 producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_fallible_error_artifact.bytes == NULL);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "block argument") != NULL);
     fallible_error_catch->type = saved_fallible_error_type;
 
     XiValue *conflicting_callable_return = NULL;
     for (uint32_t block_index = 0u;
-         block_index < callable_function->nblocks && !conflicting_callable_return;
-         ++block_index) {
+         block_index < callable_function->nblocks && !conflicting_callable_return; ++block_index) {
         XiBlock *block = callable_function->blocks[block_index];
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             XiValue *value = block->values[value_index];
@@ -4506,10 +4451,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     int64_t saved_update_ordinal = aggregate_update->aux_int;
     aggregate_update->aux_int = INT64_C(99);
     XrProgramArtifact unreachable_update_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
-                              &producer_input, &unreachable_update_artifact,
-                              producer_diagnostic, sizeof(producer_diagnostic)) ==
-                          XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&producer_input, &unreachable_update_artifact, producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(unreachable_update_artifact.size == artifact.size);
     PIPELINE_TEST_REQUIRE(xr_program_id_equal(unreachable_update_artifact.id, artifact.id));
     PIPELINE_TEST_REQUIRE(
@@ -4645,8 +4589,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     }
     PIPELINE_TEST_REQUIRE(
         validated_program_operation_count(validated, XR_CORE_OP_CORE_CALLABLE_PACK) >= 7u);
-    PIPELINE_TEST_REQUIRE(validated_program_operation_count(
-                              validated, XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT) >= 11u);
+    PIPELINE_TEST_REQUIRE(
+        validated_program_operation_count(validated, XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT) >= 11u);
     PIPELINE_TEST_REQUIRE(
         validated_program_operation_count(validated, XR_CORE_OP_CORE_OWNER_COPY) >= 2u);
     PIPELINE_TEST_REQUIRE(validated_program_has_owned_storage_copy_pack(validated));
@@ -4729,8 +4673,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xi_pipeline_fixture_analyze_source(
         &witness_only_fixture, session, "xi-witness-only-program", witness_only_source));
     XgGlobalEvidence witness_only_evidence = {0};
-    PIPELINE_TEST_REQUIRE(xi_pipeline_fixture_build_global_evidence(
-        &witness_only_fixture, session, &witness_only_evidence));
+    PIPELINE_TEST_REQUIRE(xi_pipeline_fixture_build_global_evidence(&witness_only_fixture, session,
+                                                                    &witness_only_evidence));
     XiPipelineConfig witness_only_config = xi_pipeline_program_input_config();
     witness_only_config.run_canonicalize = false;
     witness_only_config.source_file = "scalar-binding.xr";
@@ -4739,8 +4683,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     witness_only_config.global_evidence = &witness_only_evidence;
     witness_only_config.global_evidence_module_id = 1u;
     XiPipelineResult witness_only_result = xi_pipeline_compile_program(
-        witness_only_fixture.spec->ast, witness_only_fixture.analyzer, g_iso,
-        &witness_only_config);
+        witness_only_fixture.spec->ast, witness_only_fixture.analyzer, g_iso, &witness_only_config);
     if (witness_only_result.status != XI_PIPE_OK)
         fprintf(stderr, "witness-only Xi failed at %s: %s\n",
                 xi_pipeline_stage_str(witness_only_result.error.stage),
@@ -4750,23 +4693,21 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     const XiFunc *witness_only_entry = NULL;
     bool witness_only_has_call = false;
     bool witness_only_has_pack = false;
-    for (uint16_t function_index = 0u;
-         function_index < witness_only_result.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < witness_only_result.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *candidate = witness_only_result.ir->module->functions[function_index];
         if (candidate && candidate->name && strcmp(candidate->name, "root") == 0)
             witness_only_entry = candidate;
-        witness_only_has_call |=
-            xi_function_has_operation(candidate, XI_CALL_METHOD) ||
-            xi_function_has_operation(candidate, XI_CALL_METHOD_DIRECT);
+        witness_only_has_call |= xi_function_has_operation(candidate, XI_CALL_METHOD) ||
+                                 xi_function_has_operation(candidate, XI_CALL_METHOD_DIRECT);
         for (uint32_t block_index = 0u; candidate && block_index < candidate->nblocks;
              ++block_index) {
             XiBlock *candidate_block = candidate->blocks[block_index];
             for (uint32_t value_index = 0u;
                  candidate_block && value_index < candidate_block->nvalues; ++value_index) {
                 XiValue *candidate_value = candidate_block->values[value_index];
-                witness_only_has_pack |= candidate_value &&
-                                         candidate_value->xg_existential_kind ==
-                                             XI_EXISTENTIAL_PACK;
+                witness_only_has_pack |=
+                    candidate_value && candidate_value->xg_existential_kind == XI_EXISTENTIAL_PACK;
             }
         }
     }
@@ -4783,9 +4724,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     };
     XrProgramArtifact witness_only_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&witness_only_input, &witness_only_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
-        XR_PROGRAM_BUILD_OK);
+        xr_program_write_from_xi(&witness_only_input, &witness_only_artifact, producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *witness_only_validated = NULL;
     PIPELINE_TEST_REQUIRE(
         xr_program_validate(witness_only_artifact.bytes, witness_only_artifact.size, NULL,
@@ -4793,10 +4733,10 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(witness_only_validated != NULL);
     PIPELINE_TEST_REQUIRE(witness_only_validated->interface_count == 0u);
     PIPELINE_TEST_REQUIRE(witness_only_validated->conformance_count == 0u);
-    PIPELINE_TEST_REQUIRE(!validated_program_has_operation(
-        witness_only_validated, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT));
-    PIPELINE_TEST_REQUIRE(!validated_program_has_operation(
-        witness_only_validated, XR_CORE_OP_CORE_EXISTENTIAL_PACK));
+    PIPELINE_TEST_REQUIRE(!validated_program_has_operation(witness_only_validated,
+                                                           XR_CORE_OP_CORE_CALL_WITNESS_DIRECT));
+    PIPELINE_TEST_REQUIRE(
+        !validated_program_has_operation(witness_only_validated, XR_CORE_OP_CORE_EXISTENTIAL_PACK));
     xr_validated_program_free(witness_only_validated);
     xr_program_artifact_free(&witness_only_artifact);
     xi_pipeline_result_free(&witness_only_result);
@@ -4922,8 +4862,7 @@ TEST(e2e_print_group_without_write_is_refused) {
 
 int main(int argc, char **argv) {
     if (argc == 9 && strcmp(argv[1], "--source-aot-c") == 0 &&
-        strcmp(argv[3], "--pointer-aot-c") == 0 &&
-        strcmp(argv[5], "--yield-aot-c") == 0 &&
+        strcmp(argv[3], "--pointer-aot-c") == 0 && strcmp(argv[5], "--yield-aot-c") == 0 &&
         strcmp(argv[7], "--coroutine-call-aot-c") == 0) {
         g_source_aot_output_path = argv[2];
         g_pointer_aot_output_path = argv[4];
@@ -4937,13 +4876,17 @@ int main(int argc, char **argv) {
     setup();
 
     /* The first pipeline KAT installs the exact session profile consumed by
-     * every later source compilation in this process. */
+     * every later
+     * source compilation in this process. */
     run_e2e_scalar_authority_requires_and_uses_session_profile();
 
     /* Generated-C build dependencies need only the four canonical Program
-     * fixtures.  Keep that deterministic producer route independent from the
-     * legacy bytecode E2E suite: an unrelated emitter capability must neither
-     * block nor silently change a canonical native artifact. */
+     * fixtures.  Keep
+     * that deterministic producer route independent from the
+     * legacy bytecode E2E suite: an
+     * unrelated emitter capability must neither
+     * block nor silently change a canonical native
+     * artifact. */
     if (g_source_aot_output_path) {
         run_e2e_program_cooperative_yield_closes_source_reference_vm_and_aot();
         run_e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot();

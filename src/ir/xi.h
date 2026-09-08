@@ -720,7 +720,6 @@ typedef enum {
      * aux_int = resolved shared index (set by driver post-lowering, -1 if unresolved). */
     XI_IMPORT_REF,
 
-
     /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
     XI_RETAIN,        /* args[0]=value; increment refcount (no-op for scalars) */
     XI_RELEASE,       /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
@@ -1326,6 +1325,10 @@ typedef struct XiValue {
     XiCallPlan *call_plan;          /* verified read/ref/move call contract */
     XiViewEvidence view_evidence;   /* Slice origin/range lifetime proof */
     XiErrorRegion *error_region;    /* exact source error region, or NULL */
+    /* Function-arena-owned cleanup occurrence. Graph cloning must explicitly
+     * remap its
+     * marker relations after creating the complete value namespace. */
+    struct XiCleanupBoundary *cleanup_boundary;
     /* Exact pending-error producer for XI_ERR_CHECK/XI_CLEANUP_ERR_CHECK.
      * This is a
      * non-owning graph relation, not an SSA operand: ARC cleanup
@@ -1362,23 +1365,23 @@ typedef struct XiValue {
     uint8_t array_element_storage; /* exact XrArrayElemType for a frozen Array operation */
     uint8_t array_result_element_storage; /* exact scalar storage returned by an Array HOF */
     uint32_t xg_method_id; /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
-    uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
-    uint32_t xg_interface_object_use_id; /* exact XgInterfaceObjectUseId for this carrier */
-    uint32_t xg_interface_id;            /* declaration-backed XgInterfaceId, or 0 */
-    uint32_t xg_conformance_id;          /* exact XgInterfaceConformanceId for a pack, or 0 */
-    uint32_t xg_implementor_decl_id;     /* exact nominal XgDeclId, or 0 */
-    uint64_t xg_nominal_key;             /* exact declaration-backed nominal key, or 0 */
-    uint8_t xg_implementor_kind;         /* XgDeclKind for exact nominal evidence */
-    uint8_t xg_existential_kind;         /* XiExistentialKind */
-    uint8_t xg_interface_use_kind;       /* XiInterfaceUseKind */
-    uint8_t xg_implementor_ownership;    /* XgNominalOwnership */
+    uint32_t xg_interface_dispatch_slot;  /* interface slot; UINT32_MAX means none */
+    uint32_t xg_interface_object_use_id;  /* exact XgInterfaceObjectUseId for this carrier */
+    uint32_t xg_interface_id;             /* declaration-backed XgInterfaceId, or 0 */
+    uint32_t xg_conformance_id;           /* exact XgInterfaceConformanceId for a pack, or 0 */
+    uint32_t xg_implementor_decl_id;      /* exact nominal XgDeclId, or 0 */
+    uint64_t xg_nominal_key;              /* exact declaration-backed nominal key, or 0 */
+    uint8_t xg_implementor_kind;          /* XgDeclKind for exact nominal evidence */
+    uint8_t xg_existential_kind;          /* XiExistentialKind */
+    uint8_t xg_interface_use_kind;        /* XiInterfaceUseKind */
+    uint8_t xg_implementor_ownership;     /* XgNominalOwnership */
     uint8_t xg_implementor_copy_contract; /* XgNominalCopyContract */
     uint8_t xg_type_contract_complete;    /* exact conformance type contract is frozen */
-    uint32_t xg_target_query_use_id;    /* exact XgTargetQueryUseId, or 0 */
-    uint32_t xg_target_source_node_id;  /* exact stable source occurrence, or 0 */
-    uint32_t xg_target_body_ordinal;    /* exact body occurrence ordinal, or 0 */
-    uint8_t xg_target_namespace_id;     /* XgTargetNamespaceId */
-    uint8_t xg_target_query_kind;    /* XgTargetQueryKind */
+    uint32_t xg_target_query_use_id;      /* exact XgTargetQueryUseId, or 0 */
+    uint32_t xg_target_source_node_id;    /* exact stable source occurrence, or 0 */
+    uint32_t xg_target_body_ordinal;      /* exact body occurrence ordinal, or 0 */
+    uint8_t xg_target_namespace_id;       /* XgTargetNamespaceId */
+    uint8_t xg_target_query_kind;         /* XgTargetQueryKind */
     uint8_t xg_target_result_native_type; /* XrNativeType */
     uint8_t xg_target_query_complete;     /* exact analyzer/Xglobal join is frozen */
     uint32_t xg_suspend_point_use_id;     /* exact XgSuspendPointUseId, or 0 */
@@ -1477,6 +1480,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux = src->aux;
     dst->conversion = src->conversion;
     dst->error_region = src->error_region;
+    dst->cleanup_boundary = NULL;
     /* error_producer is deliberately not shallow-copied.  Graph cloning must
      * remap the
      * relation through its value map; leaving NULL fails closed if a

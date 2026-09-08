@@ -16,6 +16,13 @@ policy. Execution pins the active generation and refuses retired or successor in
 view can always be discarded and rebuilt from `XrValidatedProgram`; corruption or mismatch cannot
 fall back to an older executor.
 
+Coroutine execution preserves the same boolean constants, selected conditional edges, and
+parallel block-argument assignment as ordinary execution. Each execution owns bounded temporary
+edge storage: it snapshots the selected payload and any implicit result before overwriting target
+arguments, including on a self-loop. That storage is private to the parent or child execution and
+is released with it. Multi-block cancellation and provider-failure cleanup follow only validated
+reason-private edges; no executor-local search for a convenient terminal is permitted.
+
 The `xray_program_vm_runtime` archive is the embeddable product boundary for this stage. Its exact
 source closure contains the CoreSpec projection, XrProgram decoder/verifier, immutable target
 profile, BoundaryABI/runtime contracts, execution instance, and typed VM. It excludes frontend,
@@ -98,20 +105,22 @@ coroutine cases have independent native outputs and checks. Registry identity, d
 and projection checks reject missing or mismatched evidence rather than silently narrowing the
 canonical preflight. This test-build decomposition changes no VM semantics or supported capability.
 
-anchor-sha256: CMakeLists.txt 675e1585a34cb3d1e345c99083b6a753e76cdff55ae9986a34977f48106e2a8f
-anchor-sha256: xisa/core/registry.json c38744bb33a8f77f47c4668a6b09a8e1335b8bfbbb244fab1eb756aca2bc4a34
-anchor-sha256: src/vm/xr_program_vm.h 39db3f37a2da2c3c16688f97a29ef880d08a1216ed3fe10eb1b24795a55d0acc
-anchor-sha256: src/vm/xr_program_vm.c 168294144313141805f4430a97266a55d3d9d559c9eed6f32e5058334819b26d
+anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h a964247d2aacfd087417bc19ad30e2c81c870cb5a28521bb953b2dc8d84d2f1f
+anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h c51ff9a5892b84710d42cd5eceab4fc7f2887ed37062dd28b3a2f0bc68fc00ca
+anchor-sha256: CMakeLists.txt 24ef3583c9df1d17d0d44ce5ede860b2acf6b70544facc5f05d5dbe8c600788d
+anchor-sha256: xisa/core/registry.json 1066fb08ca4dae249c7fc59d26e1ce4f6c387fbbdd16d31480c72badb109483f
+anchor-sha256: src/vm/xr_program_vm.h 2576452ee188a355ebf60ec19e405a95200304c5ce733c72aa623855640f6c7a
+anchor-sha256: src/vm/xr_program_vm.c ed45b5dce766dfae80042e886e9b46816dc374ac3c68768fd2fee8bc0bd4c0c8
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 99efe6163cc2289ec2d5a0e50c18a63e6377c1217c428df03145be82c74bf265
+anchor-sha256: src/program/xr_program_verify.c 776c482fd6f097ca061bea98de6a8ed12d517ee3c4a91953abd2b90177fb690c
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf
 anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390b981e9d78b0801da4b550a5fc6b5be90893a7c72
 anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json dd8b3088756d093a260be71a4663e4e5942153ec98369aedf9de42c9fb32bdaf
-anchor-sha256: tests/unit/vm/test_xr_program_vm.c d4aa6a03210602f15baa4c045becaf33e5219402a1c765caa42610305abc6291
+anchor-sha256: tests/unit/vm/test_xr_program_vm.c f866d42cee7666adf3637762d27514f4424cdb494c670290bf3fe8a99e373d48
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
-anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h ae4d353f5950dd9e3e4ad29d587edbe2b8254e1a0abaaba639d0e2d744411423
+anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 0e4d14ac337b31262cf3c2e6a51f7d8381c1164962dd81247a7e4cd748ee0695
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 24637f1d26beb58eb4a01461d8e61e35b95fe99b43a9320d5f95bf8d477fb62d
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 938b04802603328b720dbf9bf64ee0d5ddfc4ace5b7f758115d90d82fbffbba2

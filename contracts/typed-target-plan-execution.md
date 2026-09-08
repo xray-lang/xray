@@ -745,6 +745,20 @@ a new lookup; eviction may repeat work but cannot alter acceptance. The
 generator self-test checks cross-context reuse, changed-content invalidation,
 exact error context and exit status, capacity, and recomputation after eviction.
 
+Terminal-selector discovery may likewise cache only immutable per-function route
+evidence keyed by the function's exact parsed metadata and text. Every caller
+still recomposes the complete source census and reruns the governed binding and
+acceptance rules; a cached PASS/FAIL verdict is forbidden. The default generator
+self-test remains exhaustive: all sixteen suites and all ninety-two registered
+lowering negative cases execute, and the case manifest rejects an omitted,
+duplicated, or unregistered case. `test-fast` is a separate edit-feedback profile
+which runs the real positive baseline, canonical-output stability/staleness checks, all other
+non-Ninja suites, and an exact cross-category subset of four real lowering
+mutations. Its JSON record
+names the profile and selected cases. The fast profile cannot replace the
+exhaustive test in periodic or release qualification, and neither profile may
+change acceptance semantics, cache a validation verdict, or weaken failure retry.
+
 Evidence:
 
 - `test_typed_dispatch` proves zero-row rejection, wrapping scalar execution,
@@ -937,9 +951,9 @@ anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 8e8a3b
 anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
 anchor-sha256: src/runtime/xr_module_generation.c 886223fc052e2acd3114a2a78567603b853881de7887f495109a568934da149a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 0332f8c2423f606919ffab298a69ee14b863c4f5e590b5d51aa3c39f9344f14c
-anchor-sha256: CMakeLists.txt 675e1585a34cb3d1e345c99083b6a753e76cdff55ae9986a34977f48106e2a8f
+anchor-sha256: CMakeLists.txt 24ef3583c9df1d17d0d44ce5ede860b2acf6b70544facc5f05d5dbe8c600788d
 anchor-sha256: xisa/target/vm_ops.def 7e9eed652ab8823fac2db508123ce84d754d8cfa95fc4344cf13ec1f0e38e4b4
-anchor-sha256: tools/xisagen/xisagen.py 8cd3b6f51e9d70f1506e69d03ecbd02bbaac63c5e8ac988e6fc214fa99f6353f
+anchor-sha256: tools/xisagen/xisagen.py 8f033f9a5987d035aee6dccd9fba72994bfebc8a9bc43b598b8786cddbad2a45
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
 anchor-sha256: src/plan/target/xr_target_entry_abi.c cb5cd57a0b8f3bbfe2123a07f583da997d7d2989e5158fd241406b96ce433b12
 anchor-sha256: src/plan/target/xr_target_instruction_gen.h 47b57f29f2a0880b48ae49fb8eb2e941c267be727b866d821be99a87e7293e51
@@ -958,7 +972,7 @@ anchor-sha256: tests/unit/plan/test_target_plan.c c1237baa6a16a896f9ead9e0672987
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680
-anchor-sha256: tests/unit/CMakeLists.txt 65df892c19406ffc2884c10a0c7b38a41239843d799f9a678986e4ac0d0e2ec7
+anchor-sha256: tests/unit/CMakeLists.txt 37c7d17d4cf391031ba0d3d71017d9c6b78bc8580e8bac1055a46a9910c132d7
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
 anchor-sha256: src/aot/xaot_bundle.c ba841869547bc2d2cbc463ecab796b84213c4408a078e47b9759f6a7f6e01f69

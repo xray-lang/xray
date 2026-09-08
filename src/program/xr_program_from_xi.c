@@ -19,6 +19,7 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi.h"
+#include "../ir/xi_cleanup.h"
 #include "../ir/xi_coro_analyze.h"
 #include "../ir/xi_coro_lower.h"
 #include "../ir/xi_core_api.h"
@@ -58,6 +59,55 @@ typedef struct XrXiReconstructedPlaceStorage {
     uint32_t field_ordinal;
 } XrXiReconstructedPlaceStorage;
 
+typedef struct XrXiEmissionSpan {
+    uint32_t begin;
+    uint32_t end;
+} XrXiEmissionSpan;
+
+typedef struct XrXiCleanupPointStorage {
+    const XiCleanupBoundary *boundary;
+    const XiBlock *enter_block;
+    const XiBlock *leave_block;
+    uint32_t enter_value_index;
+    uint32_t leave_value_index;
+    uint32_t enter_gap;
+    uint32_t leave_gap;
+    bool enter_emitted;
+    bool leave_emitted;
+} XrXiCleanupPointStorage;
+
+typedef struct XrXiCleanupProjectionStorage {
+    XrXiCleanupPointStorage *point;
+    uint32_t begin_gap;
+    uint32_t end_gap;
+    bool ends_in_trap;
+    uint8_t argument_state;
+    XrCoreIrKey *trap_argument_sources;
+    XrCoreIrValueInput *trap_arguments;
+    uint32_t trap_argument_count;
+    XrCoreIrInstructionInput *trap_instructions;
+    uint32_t trap_instruction_count;
+} XrXiCleanupProjectionStorage;
+
+typedef struct XrXiCleanupChainNode {
+    const XiCleanupBoundary *boundary;
+    uint32_t parent;
+} XrXiCleanupChainNode;
+
+typedef struct XrXiCleanupHandlerChainNode {
+    const XiValue *registration;
+    uint32_t parent;
+} XrXiCleanupHandlerChainNode;
+
+typedef struct XrXiCleanupRegistrationStorage {
+    const XiValue *registration;
+    const XiBlock *handler;
+    const XiValue *outer_registration;
+    uint32_t cleanup_state;
+    uint32_t outer_handler_state;
+    bool context_ready;
+} XrXiCleanupRegistrationStorage;
+
 enum {
     XR_XI_INVOKE_ARGUMENT_NONE = 0,
     XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT = 1,
@@ -86,6 +136,12 @@ typedef struct XrXiBlockStorage {
     XrCoreIrValueInput *arguments;
     XrCoreIrInstructionInput *instructions;
     uint32_t instruction_count;
+    XrXiEmissionSpan *emission_spans;
+    uint32_t emission_span_count;
+    uint32_t cleanup_entry_state;
+    uint32_t cleanup_handler_entry_state;
+    bool emission_ready;
+    bool cleanup_entry_ready;
     uint8_t static_branch_outcome;
 } XrXiBlockStorage;
 
@@ -128,6 +184,19 @@ typedef struct XrXiFunctionStorage {
     XrCoreIrBlockInput *blocks;
     XrXiCancelBlockStorage *cancel_blocks;
     XrXiBlockStorage *block_storage;
+    XrXiCleanupPointStorage *cleanup_points;
+    uint32_t cleanup_point_count;
+    XrXiCleanupProjectionStorage *cleanup_projections;
+    uint32_t cleanup_projection_count;
+    uint32_t cleanup_projection_capacity;
+    XrXiCleanupChainNode *cleanup_chain_nodes;
+    uint32_t cleanup_chain_node_count;
+    XrXiCleanupHandlerChainNode *cleanup_handler_chain_nodes;
+    XrXiCleanupRegistrationStorage *cleanup_registrations;
+    uint32_t *cleanup_registration_by_value;
+    uint32_t *cleanup_state_before_value;
+    uint32_t *cleanup_handler_state_before_value;
+    uint32_t cleanup_registration_count;
     XrCoreIrCoroutineStateInput *coroutine_states;
     XrCoreIrCoroutineSafepointInput *coroutine_safepoints;
     uint32_t local_effect_mask;
@@ -226,6 +295,7 @@ static bool canonical_block_is_panic_cleanup(const XrXiBuildContext *context,
                                              const XiFunc *function, const XiBlock *block);
 static bool canonical_block_is_cancel_cleanup(const XrXiBuildContext *context,
                                               const XiFunc *function, const XiBlock *block);
+static bool cleanup_trap_capable_operation(uint16_t operation_id);
 static const XrXiPanicEdge *find_panic_edge(const XrXiBuildContext *context, const XiFunc *function,
                                             const XiValue *point);
 static const XrXiCancelEdge *find_cancel_edge(const XrXiBuildContext *context,
@@ -413,6 +483,31 @@ static XrCoreIrKey cancel_argument_key(const XrXiFunctionStorage *function, uint
 static XrCoreIrKey cancel_result_key(const XrXiFunctionStorage *function, uint32_t safepoint_id,
                                      uint32_t instruction) {
     return key_from_key_and_u32(UINT8_C(0x5b), cancel_block_key(function, safepoint_id),
+                                instruction);
+}
+
+static XrCoreIrKey cleanup_trap_block_key(const XrXiFunctionStorage *function,
+                                          const XrXiCleanupProjectionStorage *projection) {
+    const XrXiCleanupPointStorage *point = projection ? projection->point : NULL;
+    uint32_t identity = point && point->boundary && point->boundary->enter
+                            ? point->boundary->enter->id
+                            : UINT32_MAX;
+    XrCoreIrKey boundary_key = key_from_key_and_u32(UINT8_C(0x5c), function->key, identity);
+    return key_from_key_and_u32(UINT8_C(0x5f), boundary_key,
+                                projection ? projection->begin_gap : UINT32_MAX);
+}
+
+static XrCoreIrKey cleanup_trap_argument_key(const XrXiFunctionStorage *function,
+                                             const XrXiCleanupProjectionStorage *projection,
+                                             uint32_t argument) {
+    return key_from_key_and_u32(UINT8_C(0x5d), cleanup_trap_block_key(function, projection),
+                                argument);
+}
+
+static XrCoreIrKey cleanup_trap_result_key(const XrXiFunctionStorage *function,
+                                           const XrXiCleanupProjectionStorage *projection,
+                                           uint32_t instruction) {
+    return key_from_key_and_u32(UINT8_C(0x5e), cleanup_trap_block_key(function, projection),
                                 instruction);
 }
 
@@ -1587,6 +1682,8 @@ static bool exact_static_cleanup_end(const XiFunc *function, const XiValue *valu
     return value && value->nargs == 0u && (value->flags & XI_FLAG_SIDE_EFFECT) != 0u &&
            exact_static_cleanup_try(function, registration);
 }
+
+static bool exact_static_cleanup_handler(const XiFunc *function, const XiValue *registration);
 
 static bool exact_cleanup_boundary_marker(const XiValue *value) {
     return value && (value->op == XI_CLEANUP_ENTER || value->op == XI_CLEANUP_LEAVE) &&
@@ -5531,7 +5628,34 @@ static bool edge_value_operand_key(const XrXiBuildContext *context,
                                    const XrXiFunctionStorage *function,
                                    const XrXiBlockStorage *block, const XiValue *value,
                                    const XiValue *edge_point, XrCoreIrKey *key_out) {
-    (void) edge_point;
+    if (edge_point) {
+        if (!function || !block || !block->xi || !value)
+            return false;
+        if (edge_point->block != block->xi)
+            return value->block != block->xi &&
+                   value_operand_key(context, function, block, value, key_out);
+        if (value->block == block->xi) {
+            bool entry_value = value == &function->capture_receiver;
+            for (uint16_t parameter = 0u;
+                 !entry_value && function->xi->params && parameter < function->xi->nparams;
+                 ++parameter)
+                entry_value = function->xi->params[parameter] == value;
+            for (const XiPhi *phi = block->xi->phis; !entry_value && phi; phi = phi->next)
+                entry_value = &phi->value == value;
+            uint32_t point_index = UINT32_MAX;
+            uint32_t value_index = UINT32_MAX;
+            for (uint32_t index = 0u; index < block->xi->nvalues; ++index) {
+                const XiValue *candidate = block->xi->values[index];
+                if (candidate == edge_point)
+                    point_index = index;
+                if (candidate == value)
+                    value_index = index;
+            }
+            if (!entry_value && (point_index == UINT32_MAX || value_index == UINT32_MAX ||
+                                 value_index >= point_index))
+                return false;
+        }
+    }
     return value_operand_key(context, function, block, value, key_out);
 }
 
@@ -5604,6 +5728,7 @@ static void free_context(XrXiBuildContext *context) {
                 xr_free(block->arguments);
                 xr_free(block->argument_storage);
                 xr_free(block->reconstructed_places);
+                xr_free(block->emission_spans);
             }
             xr_free(function->block_storage);
             for (uint32_t safepoint = 0u;
@@ -5619,6 +5744,26 @@ static void free_context(XrXiBuildContext *context) {
             }
             xr_free(function->cancel_blocks);
             xr_free(function->blocks);
+            for (uint32_t projection_index = 0u;
+                 projection_index < function->cleanup_projection_count; ++projection_index) {
+                XrXiCleanupProjectionStorage *cleanup =
+                    &function->cleanup_projections[projection_index];
+                for (uint32_t instruction = 0u;
+                     cleanup->trap_instructions && instruction < cleanup->trap_instruction_count;
+                     ++instruction)
+                    free_instruction_input(&cleanup->trap_instructions[instruction]);
+                xr_free(cleanup->trap_instructions);
+                xr_free(cleanup->trap_arguments);
+                xr_free(cleanup->trap_argument_sources);
+            }
+            xr_free(function->cleanup_projections);
+            xr_free(function->cleanup_points);
+            xr_free(function->cleanup_chain_nodes);
+            xr_free(function->cleanup_handler_chain_nodes);
+            xr_free(function->cleanup_registrations);
+            xr_free(function->cleanup_registration_by_value);
+            xr_free(function->cleanup_state_before_value);
+            xr_free(function->cleanup_handler_state_before_value);
             xr_free(function->parameter_types);
             xr_free(function->parameter_modes);
             for (uint32_t safepoint = 0u;
@@ -7207,6 +7352,597 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
            value_is_only_elided_operand(context, function, value);
 }
 
+/* Projection splits use instruction gaps rather than Xi indices because one Xi
+ * value can emit
+ * several CoreIR instructions. Cleanup markers are zero-width
+ * gaps, so a body can be sliced
+ * without manufacturing or dropping an emitted
+ * operation. */
+static bool emission_spans_are_exact(const XrXiBuildContext *context, const XiFunc *function,
+                                     const XrXiBlockStorage *block,
+                                     const XiCoroSuspendPoint *suspend_point, uint32_t body_end) {
+    if (!function || !block || !block->xi || block->xi->func != function ||
+        block->emission_span_count != block->xi->nvalues ||
+        (block->emission_span_count != 0u && !block->emission_spans))
+        return false;
+    uint32_t previous_end = 0u;
+    for (uint32_t index = 0u; index < block->emission_span_count; ++index) {
+        const XiValue *value = block->xi->values[index];
+        const XrXiEmissionSpan *span = &block->emission_spans[index];
+        if (!value || span->begin < previous_end || span->begin > span->end || span->end > body_end)
+            return false;
+        bool zero_width = value_is_skipped(context, function, value) ||
+                          (suspend_point && value == suspend_point->op);
+        if ((zero_width && span->begin != span->end) || (!zero_width && span->begin == span->end) ||
+            (exact_cleanup_boundary_marker(value) && span->begin != span->end))
+            return false;
+        previous_end = span->end;
+    }
+    return true;
+}
+
+static XrXiCleanupPointStorage *find_cleanup_point(XrXiFunctionStorage *function,
+                                                   const XiCleanupBoundary *boundary) {
+    for (uint32_t index = 0u; function && index < function->cleanup_point_count; ++index) {
+        if (function->cleanup_points[index].boundary == boundary)
+            return &function->cleanup_points[index];
+    }
+    return NULL;
+}
+
+static XrProgramBuildStatus collect_cleanup_program_identities(XrXiFunctionStorage *function,
+                                                               char *diagnostic,
+                                                               size_t diagnostic_size) {
+    if (!function || !function->xi || function->cleanup_points)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t count = 0u;
+    for (uint32_t block = 0u; block < function->xi->nblocks; ++block) {
+        const XiBlock *source = function->xi->blocks[block];
+        for (uint32_t value = 0u; source && value < source->nvalues; ++value) {
+            if (source->values[value] && source->values[value]->op == XI_CLEANUP_ENTER) {
+                if (count == UINT32_MAX)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                ++count;
+            }
+        }
+    }
+    function->cleanup_point_count = count;
+    function->cleanup_points = count ? xr_calloc(count, sizeof(*function->cleanup_points)) : NULL;
+    if (count && !function->cleanup_points)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t cursor = 0u;
+    for (uint32_t block = 0u; block < function->xi->nblocks; ++block) {
+        const XiBlock *source = function->xi->blocks[block];
+        for (uint32_t value = 0u; source && value < source->nvalues; ++value) {
+            const XiValue *marker = source->values[value];
+            if (!marker || marker->op != XI_CLEANUP_ENTER)
+                continue;
+            if (cursor >= count || !marker->cleanup_boundary ||
+                find_cleanup_point(function, marker->cleanup_boundary))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi cleanup enter in b%u has no unique program point", source->id);
+            XrXiCleanupPointStorage *point = &function->cleanup_points[cursor++];
+            point->boundary = marker->cleanup_boundary;
+            point->enter_block = source;
+            point->enter_value_index = value;
+        }
+    }
+    if (cursor != count)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    for (uint32_t block = 0u; block < function->xi->nblocks; ++block) {
+        const XiBlock *source = function->xi->blocks[block];
+        for (uint32_t value = 0u; source && value < source->nvalues; ++value) {
+            const XiValue *marker = source->values[value];
+            if (!marker || marker->op != XI_CLEANUP_LEAVE)
+                continue;
+            XrXiCleanupPointStorage *point = find_cleanup_point(function, marker->cleanup_boundary);
+            if (!point || point->leave_block)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi cleanup leave in b%u has no unique enter", source->id);
+            point->leave_block = source;
+            point->leave_value_index = value;
+        }
+    }
+    for (uint32_t index = 0u; index < count; ++index) {
+        XrXiCleanupPointStorage *point = &function->cleanup_points[index];
+        bool closed = point->boundary->kind == XI_CLEANUP_BOUNDARY_CLOSED;
+        if ((closed && !point->leave_block) || (!closed && point->leave_block))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cleanup boundary %u has incomplete program points", index);
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus bind_cleanup_program_points(XrXiFunctionStorage *function,
+                                                        char *diagnostic, size_t diagnostic_size) {
+    if (!function || !function->xi ||
+        (function->cleanup_point_count != 0u && !function->cleanup_points))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    for (uint32_t index = 0u; index < function->cleanup_point_count; ++index) {
+        XrXiCleanupPointStorage *point = &function->cleanup_points[index];
+        XrXiBlockStorage *enter = find_block_storage(function, point->enter_block);
+        XrXiBlockStorage *leave = find_block_storage(function, point->leave_block);
+        if (!enter)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cleanup enter in b%u has no block storage",
+                        point->enter_block ? point->enter_block->id : UINT32_MAX);
+        if (enter->emission_ready) {
+            if (point->enter_value_index >= enter->emission_span_count)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi cleanup enter in b%u has no emission span", point->enter_block->id);
+            const XrXiEmissionSpan *enter_span = &enter->emission_spans[point->enter_value_index];
+            if (enter_span->begin != enter_span->end)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi cleanup enter in b%u is not an exact CoreIR gap",
+                            point->enter_block->id);
+            point->enter_gap = enter_span->begin;
+            point->enter_emitted = true;
+        } else if (enter->reachable) {
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "reachable Xi cleanup enter in b%u has no CoreIR location",
+                        point->enter_block->id);
+        }
+        if (point->leave_block) {
+            if (!leave)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi cleanup leave in b%u has no block storage", point->leave_block->id);
+            if (leave->emission_ready) {
+                if (point->leave_value_index >= leave->emission_span_count)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi cleanup leave in b%u has no emission span",
+                                point->leave_block->id);
+                const XrXiEmissionSpan *leave_span =
+                    &leave->emission_spans[point->leave_value_index];
+                if (leave_span->begin != leave_span->end)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi cleanup leave in b%u is not an exact CoreIR gap",
+                                point->leave_block->id);
+                point->leave_gap = leave_span->begin;
+                point->leave_emitted = true;
+            } else if (leave->reachable) {
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "reachable Xi cleanup leave in b%u has no CoreIR location",
+                            point->leave_block->id);
+            }
+        }
+        if (point->boundary->kind == XI_CLEANUP_BOUNDARY_CLOSED &&
+            point->enter_emitted != point->leave_emitted)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cleanup boundary %u has incomplete CoreIR program points", index);
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+typedef struct XrXiCleanupFlowState {
+    uint32_t cleanup;
+    uint32_t handler;
+} XrXiCleanupFlowState;
+
+static bool cleanup_flow_state_equal(XrXiCleanupFlowState left, XrXiCleanupFlowState right) {
+    return left.cleanup == right.cleanup && left.handler == right.handler;
+}
+
+static XrProgramBuildStatus merge_cleanup_flow_state(const XiFunc *function,
+                                                     XrXiCleanupFlowState *states, uint32_t *queue,
+                                                     uint32_t *tail, const XiBlock *successor,
+                                                     XrXiCleanupFlowState incoming,
+                                                     char *diagnostic, size_t diagnostic_size) {
+    if (!function || !states || !queue || !tail || !successor || successor->func != function ||
+        successor->id >= function->nblocks || function->blocks[successor->id] != successor)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrXiCleanupFlowState *current = &states[successor->id];
+    if (current->cleanup == UINT32_MAX && current->handler == UINT32_MAX) {
+        if (*tail >= function->nblocks)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cleanup control-flow queue overflowed");
+        *current = incoming;
+        queue[(*tail)++] = successor->id;
+        return XR_PROGRAM_BUILD_OK;
+    }
+    if (!cleanup_flow_state_equal(*current, incoming))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi block b%u merges different cleanup or panic-handler stacks", successor->id);
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus verify_cleanup_control_flow(XrXiFunctionStorage *function,
+                                                        char *diagnostic, size_t diagnostic_size) {
+    const XiFunc *xi = function ? function->xi : NULL;
+    if (!xi || (xi->nblocks != 0u && !xi->blocks) || !xi->entry || xi->entry->id >= xi->nblocks ||
+        xi->blocks[xi->entry->id] != xi->entry || function->cleanup_chain_nodes ||
+        function->cleanup_handler_chain_nodes || function->cleanup_registrations ||
+        function->cleanup_registration_by_value || function->cleanup_state_before_value ||
+        function->cleanup_handler_state_before_value)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+
+    uint32_t registration_count = 0u;
+    for (uint32_t block_index = 0u; block_index < xi->nblocks; ++block_index) {
+        const XiBlock *block = xi->blocks[block_index];
+        const XrXiBlockStorage *storage = find_block_storage(function, block);
+        if (!storage || !storage->reachable)
+            continue;
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            if (exact_static_cleanup_try(xi, block->values[value_index])) {
+                if (registration_count == UINT32_MAX)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                ++registration_count;
+            }
+        }
+    }
+
+    XrXiCleanupFlowState *states =
+        xi->nblocks ? xr_malloc((size_t) xi->nblocks * sizeof(*states)) : NULL;
+    uint32_t *queue = xi->nblocks ? xr_malloc((size_t) xi->nblocks * sizeof(*queue)) : NULL;
+    uint8_t *processed = xi->nblocks ? xr_calloc(xi->nblocks, sizeof(*processed)) : NULL;
+    uint32_t *handler_by_block =
+        xi->nblocks ? xr_malloc((size_t) xi->nblocks * sizeof(*handler_by_block)) : NULL;
+    function->cleanup_registration_by_value =
+        xi->next_value_id ? xr_malloc((size_t) xi->next_value_id *
+                                      sizeof(*function->cleanup_registration_by_value))
+                          : NULL;
+    function->cleanup_state_before_value =
+        xi->next_value_id
+            ? xr_malloc((size_t) xi->next_value_id * sizeof(*function->cleanup_state_before_value))
+            : NULL;
+    function->cleanup_handler_state_before_value =
+        xi->next_value_id ? xr_malloc((size_t) xi->next_value_id *
+                                      sizeof(*function->cleanup_handler_state_before_value))
+                          : NULL;
+    function->cleanup_chain_nodes =
+        function->cleanup_point_count
+            ? xr_calloc(function->cleanup_point_count, sizeof(*function->cleanup_chain_nodes))
+            : NULL;
+    function->cleanup_handler_chain_nodes =
+        registration_count
+            ? xr_calloc(registration_count, sizeof(*function->cleanup_handler_chain_nodes))
+            : NULL;
+    function->cleanup_registrations =
+        registration_count ? xr_calloc(registration_count, sizeof(*function->cleanup_registrations))
+                           : NULL;
+    function->cleanup_registration_count = registration_count;
+    if ((xi->nblocks && (!states || !queue || !processed || !handler_by_block)) ||
+        (xi->next_value_id &&
+         (!function->cleanup_registration_by_value || !function->cleanup_state_before_value ||
+          !function->cleanup_handler_state_before_value)) ||
+        (function->cleanup_point_count && !function->cleanup_chain_nodes) ||
+        (registration_count &&
+         (!function->cleanup_handler_chain_nodes || !function->cleanup_registrations))) {
+        xr_free(handler_by_block);
+        xr_free(processed);
+        xr_free(queue);
+        xr_free(states);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    for (uint32_t block_index = 0u; block_index < xi->nblocks; ++block_index) {
+        states[block_index] = (XrXiCleanupFlowState) {.cleanup = UINT32_MAX, .handler = UINT32_MAX};
+        handler_by_block[block_index] = UINT32_MAX;
+    }
+    for (uint32_t value_id = 0u; value_id < xi->next_value_id; ++value_id) {
+        function->cleanup_registration_by_value[value_id] = UINT32_MAX;
+        function->cleanup_state_before_value[value_id] = UINT32_MAX;
+        function->cleanup_handler_state_before_value[value_id] = UINT32_MAX;
+    }
+
+    uint32_t registration_cursor = 0u;
+    XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
+    for (uint32_t block_index = 0u; block_index < xi->nblocks && status == XR_PROGRAM_BUILD_OK;
+         ++block_index) {
+        const XiBlock *block = xi->blocks[block_index];
+        const XrXiBlockStorage *storage = find_block_storage(function, block);
+        if (!storage || !storage->reachable)
+            continue;
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *registration = block->values[value_index];
+            if (!exact_static_cleanup_try(xi, registration))
+                continue;
+            const XiBlock *handler = (const XiBlock *) registration->aux;
+            if (registration_cursor >= registration_count ||
+                registration->id >= xi->next_value_id || !handler || handler == block ||
+                handler->id >= xi->nblocks || xi->blocks[handler->id] != handler ||
+                function->cleanup_registration_by_value[registration->id] != UINT32_MAX ||
+                handler_by_block[handler->id] != UINT32_MAX) {
+                status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                              "Xi static cleanup registration v%u has no unique cold handler",
+                              registration ? registration->id : UINT32_MAX);
+                break;
+            }
+            uint32_t registration_index = registration_cursor++;
+            function->cleanup_registration_by_value[registration->id] = registration_index;
+            handler_by_block[handler->id] = registration_index;
+            function->cleanup_registrations[registration_index].registration = registration;
+            function->cleanup_registrations[registration_index].handler = handler;
+            function->cleanup_handler_chain_nodes[registration_index].registration = registration;
+        }
+    }
+    if (status == XR_PROGRAM_BUILD_OK && registration_cursor != registration_count)
+        status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                      "Xi reachable cleanup registration census is inconsistent");
+
+    uint32_t cleanup_node_count = 0u;
+    states[xi->entry->id] = (XrXiCleanupFlowState) {.cleanup = 0u, .handler = 0u};
+    /* Execution state is entry-scoped.  Registration edges pull private
+     * cleanup handlers and
+     * their successors into this one traversal; an
+     * unrelated disconnected Xi component is
+     * never seeded as executable. */
+    do {
+        if (status != XR_PROGRAM_BUILD_OK)
+            break;
+        uint32_t seed = xi->entry->id;
+        if (handler_by_block[seed] != UINT32_MAX) {
+            status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                          "Xi function entry cannot be a static cleanup handler");
+            break;
+        }
+        while (seed < xi->nblocks && (processed[seed] || handler_by_block[seed] != UINT32_MAX))
+            ++seed;
+        if (seed == xi->nblocks) {
+            status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                          "Xi static cleanup handler has no registration-derived entry state");
+            break;
+        }
+        if (states[seed].cleanup == UINT32_MAX && states[seed].handler == UINT32_MAX) {
+            if (handler_by_block[seed] != UINT32_MAX) {
+                status =
+                    fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                         "Xi static cleanup handler b%u was seeded as an empty component", seed);
+                break;
+            }
+            states[seed] = (XrXiCleanupFlowState) {.cleanup = 0u, .handler = 0u};
+        }
+        uint32_t head = 0u;
+        uint32_t tail = 0u;
+        queue[tail++] = seed;
+        while (head < tail && status == XR_PROGRAM_BUILD_OK) {
+            uint32_t block_index = queue[head++];
+            if (processed[block_index])
+                continue;
+            processed[block_index] = 1u;
+            const XiBlock *block = xi->blocks[block_index];
+            XrXiCleanupFlowState state = states[block_index];
+            XrXiBlockStorage *block_storage = &function->block_storage[block_index];
+            if (!block || block->func != xi || block->id != block_index ||
+                block_storage->xi != block || state.cleanup == UINT32_MAX ||
+                state.handler == UINT32_MAX || block_storage->cleanup_entry_ready) {
+                status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                              "Xi cleanup traversal has invalid state at b%u", block_index);
+                break;
+            }
+            block_storage->cleanup_entry_state = state.cleanup;
+            block_storage->cleanup_handler_entry_state = state.handler;
+            block_storage->cleanup_entry_ready = true;
+            bool has_throw = false;
+            for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
+                const XiValue *value = block->values[value_index];
+                if (!value)
+                    continue;
+                if (value->id >= xi->next_value_id ||
+                    function->cleanup_state_before_value[value->id] != UINT32_MAX ||
+                    function->cleanup_handler_state_before_value[value->id] != UINT32_MAX) {
+                    status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                  "Xi value v%u has no unique cleanup program point", value->id);
+                    break;
+                }
+                function->cleanup_state_before_value[value->id] = state.cleanup;
+                function->cleanup_handler_state_before_value[value->id] = state.handler;
+                has_throw |= value->op == XI_THROW;
+                if (value->op == XI_CLEANUP_ENTER) {
+                    if (cleanup_node_count >= function->cleanup_point_count) {
+                        status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                      "Xi cleanup enter v%u is outside the collected Program graph",
+                                      value->id);
+                        break;
+                    }
+                    function->cleanup_chain_nodes[cleanup_node_count] = (XrXiCleanupChainNode) {
+                        .boundary = value->cleanup_boundary, .parent = state.cleanup};
+                    state.cleanup = ++cleanup_node_count;
+                    continue;
+                }
+                if (value->op == XI_CLEANUP_LEAVE) {
+                    if (state.cleanup == 0u ||
+                        function->cleanup_chain_nodes[state.cleanup - 1u].boundary !=
+                            value->cleanup_boundary) {
+                        status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                      "Xi cleanup leave in b%u does not close the active boundary",
+                                      block->id);
+                        break;
+                    }
+                    state.cleanup = function->cleanup_chain_nodes[state.cleanup - 1u].parent;
+                    continue;
+                }
+                if (exact_static_cleanup_try(xi, value)) {
+                    uint32_t registration_index =
+                        value->id < xi->next_value_id
+                            ? function->cleanup_registration_by_value[value->id]
+                            : UINT32_MAX;
+                    if (registration_index >= registration_count ||
+                        function->cleanup_registrations[registration_index].context_ready) {
+                        status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                      "Xi static cleanup registration v%u is outside the collected "
+                                      "Program graph",
+                                      value->id);
+                        break;
+                    }
+                    XrXiCleanupRegistrationStorage *registration =
+                        &function->cleanup_registrations[registration_index];
+                    registration->cleanup_state = state.cleanup;
+                    registration->outer_handler_state = state.handler;
+                    registration->outer_registration =
+                        state.handler == 0u
+                            ? NULL
+                            : function->cleanup_handler_chain_nodes[state.handler - 1u]
+                                  .registration;
+                    registration->context_ready = true;
+                    XrXiCleanupFlowState handler_state = state;
+                    status =
+                        merge_cleanup_flow_state(xi, states, queue, &tail, registration->handler,
+                                                 handler_state, diagnostic, diagnostic_size);
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        break;
+                    function->cleanup_handler_chain_nodes[registration_index].parent =
+                        state.handler;
+                    state.handler = registration_index + 1u;
+                    continue;
+                }
+                if (exact_static_cleanup_end(xi, value)) {
+                    const XiValue *registration = (const XiValue *) value->aux;
+                    uint32_t registration_index =
+                        registration->id < xi->next_value_id
+                            ? function->cleanup_registration_by_value[registration->id]
+                            : UINT32_MAX;
+                    if (registration_index >= registration_count ||
+                        state.handler != registration_index + 1u) {
+                        status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                      "Xi end-try v%u does not close the active cleanup handler",
+                                      value->id);
+                        break;
+                    }
+                    state.handler =
+                        function->cleanup_handler_chain_nodes[registration_index].parent;
+                }
+            }
+            bool has_normal_successor = block->succs[0] || block->succs[1];
+            uint8_t active_cleanup_kind =
+                state.cleanup == 0u
+                    ? 0u
+                    : function->cleanup_chain_nodes[state.cleanup - 1u].boundary->kind;
+            if (status == XR_PROGRAM_BUILD_OK && state.cleanup != 0u &&
+                ((!has_normal_successor && active_cleanup_kind == XI_CLEANUP_BOUNDARY_CLOSED) ||
+                 (has_normal_successor && active_cleanup_kind == XI_CLEANUP_BOUNDARY_FATAL)))
+                status =
+                    fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                         "Xi cleanup boundary exits b%u without its exact completion", block->id);
+            for (uint32_t edge = 0u; status == XR_PROGRAM_BUILD_OK && edge < 2u; ++edge) {
+                if (!block->succs[edge])
+                    continue;
+                status = merge_cleanup_flow_state(xi, states, queue, &tail, block->succs[edge],
+                                                  state, diagnostic, diagnostic_size);
+            }
+            bool fatal_cleanup =
+                state.cleanup != 0u && active_cleanup_kind == XI_CLEANUP_BOUNDARY_FATAL;
+            if (status == XR_PROGRAM_BUILD_OK && !has_normal_successor && has_throw &&
+                state.handler != 0u && !fatal_cleanup) {
+                uint32_t registration_index = state.handler - 1u;
+                if (registration_index >= registration_count) {
+                    status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                  "Xi block b%u has an unknown active cleanup handler", block->id);
+                    break;
+                }
+                XrXiCleanupFlowState outer = {
+                    .cleanup = state.cleanup,
+                    .handler = function->cleanup_handler_chain_nodes[registration_index].parent,
+                };
+                status = merge_cleanup_flow_state(
+                    xi, states, queue, &tail,
+                    function->cleanup_registrations[registration_index].handler, outer, diagnostic,
+                    diagnostic_size);
+            } else if (status == XR_PROGRAM_BUILD_OK && !has_normal_successor &&
+                       state.handler != 0u && !fatal_cleanup) {
+                status =
+                    fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                         "Xi block b%u exits with an active static cleanup handler", block->id);
+            }
+        }
+    } while (false);
+    if (status == XR_PROGRAM_BUILD_OK && cleanup_node_count != function->cleanup_point_count)
+        status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                      "Xi reachable cleanup boundary census is inconsistent");
+    for (uint32_t registration = 0u;
+         status == XR_PROGRAM_BUILD_OK && registration < registration_count; ++registration) {
+        if (!function->cleanup_registrations[registration].context_ready)
+            status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                          "Xi static cleanup registration v%u has no control-flow context",
+                          function->cleanup_registrations[registration].registration->id);
+    }
+    if (status == XR_PROGRAM_BUILD_OK)
+        function->cleanup_chain_node_count = cleanup_node_count;
+    xr_free(handler_by_block);
+    xr_free(processed);
+    xr_free(queue);
+    xr_free(states);
+    return status;
+}
+
+static const XrXiCleanupRegistrationStorage *
+cleanup_registration_storage(const XrXiFunctionStorage *function, const XiValue *registration) {
+    if (!function || !function->xi || !registration ||
+        registration->id >= function->xi->next_value_id || !function->cleanup_registration_by_value)
+        return NULL;
+    uint32_t index = function->cleanup_registration_by_value[registration->id];
+    if (index >= function->cleanup_registration_count ||
+        function->cleanup_registrations[index].registration != registration)
+        return NULL;
+    return &function->cleanup_registrations[index];
+}
+
+static bool
+active_cleanup_registration_at_program_point(const XrXiFunctionStorage *function,
+                                             const XiValue *point,
+                                             const XrXiCleanupRegistrationStorage **registration) {
+    if (registration)
+        *registration = NULL;
+    if (!function || !function->xi || !point || point->block == NULL ||
+        point->block->func != function->xi || point->id >= function->xi->next_value_id ||
+        !function->cleanup_handler_state_before_value || !registration)
+        return false;
+    uint32_t state = function->cleanup_handler_state_before_value[point->id];
+    if (state == UINT32_MAX)
+        return false;
+    if (state == 0u)
+        return true;
+    uint32_t index = state - 1u;
+    if (index >= function->cleanup_registration_count ||
+        function->cleanup_handler_chain_nodes[index].registration !=
+            function->cleanup_registrations[index].registration ||
+        !function->cleanup_registrations[index].context_ready)
+        return false;
+    *registration = &function->cleanup_registrations[index];
+    return true;
+}
+
+static bool active_cleanup_boundary_at_program_point(const XrXiFunctionStorage *function,
+                                                     const XiValue *point,
+                                                     const XiCleanupBoundary **boundary) {
+    if (boundary)
+        *boundary = NULL;
+    if (!function || !function->xi || !point || !point->block ||
+        point->block->func != function->xi || point->id >= function->xi->next_value_id ||
+        !function->cleanup_state_before_value || !boundary)
+        return false;
+    uint32_t state = function->cleanup_state_before_value[point->id];
+    if (state == UINT32_MAX)
+        return false;
+    if (state == 0u)
+        return true;
+    uint32_t index = state - 1u;
+    if (index >= function->cleanup_chain_node_count ||
+        !function->cleanup_chain_nodes[index].boundary)
+        return false;
+    *boundary = function->cleanup_chain_nodes[index].boundary;
+    return true;
+}
+
+static XrProgramBuildStatus prepare_cleanup_control_flow(XrXiBuildContext *context,
+                                                         char *diagnostic, size_t diagnostic_size) {
+    if (!context || !context->source || !context->storage)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0u; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *function = &module->function_storage[function_index];
+            XrProgramBuildStatus status =
+                collect_cleanup_program_identities(function, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+            status = verify_cleanup_control_flow(function, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
                                                     XrXiFunctionStorage *function,
                                                     XrXiBlockStorage *block, const XiValue *value,
@@ -7774,104 +8510,6 @@ static XrProgramBuildStatus mark_reachable_blocks(const XrXiBuildContext *contex
                 "Xi function block reachability did not converge");
 }
 
-static uint32_t xi_function_block_index(const XiFunc *function, const XiBlock *block) {
-    for (uint32_t index = 0u; function && index < function->nblocks; ++index)
-        if (function->blocks[index] == block)
-            return index;
-    return UINT32_MAX;
-}
-
-static XrProgramBuildStatus static_try_contains_value(const XiFunc *function,
-                                                      const XiValue *registration,
-                                                      const XiValue *point, bool *contains,
-                                                      char *diagnostic, size_t diagnostic_size) {
-    if (contains)
-        *contains = false;
-    if (!function || !registration || !registration->block || !point || !point->block || !contains)
-        return XR_PROGRAM_BUILD_INVALID_INPUT;
-    uint32_t registration_index = registration->block->nvalues;
-    for (uint32_t index = 0u; index < registration->block->nvalues; ++index) {
-        if (registration->block->values[index] == registration) {
-            registration_index = index;
-            break;
-        }
-    }
-    uint32_t registration_block = xi_function_block_index(function, registration->block);
-    if (registration_index == registration->block->nvalues || registration_block == UINT32_MAX ||
-        xi_function_block_index(function, point->block) == UINT32_MAX)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi static cleanup region is not owned by its function");
-
-    uint8_t *visited = xr_calloc(function->nblocks, sizeof(*visited));
-    const XiBlock **queue = xr_calloc(function->nblocks, sizeof(*queue));
-    if (!visited || !queue) {
-        xr_free(queue);
-        xr_free(visited);
-        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    }
-    visited[registration_block] = 1u;
-    uint32_t head = 0u;
-    uint32_t tail = 0u;
-    bool region_ended = false;
-    for (uint32_t index = registration_index + 1u; index < registration->block->nvalues; ++index) {
-        const XiValue *value = registration->block->values[index];
-        if (value == point) {
-            *contains = true;
-            goto done;
-        }
-        if (value && value->op == XI_END_TRY && value->aux == registration) {
-            region_ended = true;
-            break;
-        }
-    }
-    if (!region_ended) {
-        for (uint32_t successor = 0u; successor < 2u; ++successor) {
-            const XiBlock *target = registration->block->succs[successor];
-            uint32_t target_index = xi_function_block_index(function, target);
-            if (target && target_index != UINT32_MAX && !visited[target_index]) {
-                visited[target_index] = 1u;
-                queue[tail++] = target;
-            }
-        }
-    }
-    while (head < tail && !*contains) {
-        const XiBlock *block = queue[head++];
-        bool ends_region = false;
-        for (uint32_t index = 0u; index < block->nvalues; ++index) {
-            const XiValue *value = block->values[index];
-            if (value == point) {
-                *contains = true;
-                break;
-            }
-            if (value && value->op == XI_END_TRY && value->aux == registration) {
-                ends_region = true;
-                break;
-            }
-        }
-        if (*contains || ends_region)
-            continue;
-        for (uint32_t successor = 0u; successor < 2u; ++successor) {
-            const XiBlock *target = block->succs[successor];
-            uint32_t target_index = xi_function_block_index(function, target);
-            if (target && target_index != UINT32_MAX && !visited[target_index]) {
-                if (tail == function->nblocks) {
-                    xr_free(queue);
-                    xr_free(visited);
-                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                "Xi static cleanup reachability queue overflowed");
-                }
-                visited[target_index] = 1u;
-                queue[tail++] = target;
-            }
-        }
-    }
-
-done:
-    xr_free(queue);
-    xr_free(visited);
-    return XR_PROGRAM_BUILD_OK;
-}
-
 static bool exact_static_cleanup_handler(const XiFunc *function, const XiValue *registration) {
     if (!exact_static_cleanup_try(function, registration))
         return false;
@@ -7882,6 +8520,7 @@ static bool exact_static_cleanup_handler(const XiFunc *function, const XiValue *
     const XiValue *throw_value = NULL;
     uint32_t enter_count = 0u;
     uint32_t leave_count = 0u;
+    bool in_cleanup = false;
     for (uint32_t index = 0u; index < handler->nvalues; ++index) {
         const XiValue *value = handler->values[index];
         if (!value)
@@ -7895,13 +8534,20 @@ static bool exact_static_cleanup_handler(const XiFunc *function, const XiValue *
                 return false;
             throw_value = value;
         } else if (value->op == XI_CLEANUP_ENTER) {
+            if (in_cleanup || !exact_cleanup_boundary_marker(value))
+                return false;
+            in_cleanup = true;
             ++enter_count;
         } else if (value->op == XI_CLEANUP_LEAVE) {
+            if (!in_cleanup || !exact_cleanup_boundary_marker(value))
+                return false;
+            in_cleanup = false;
             ++leave_count;
         }
     }
     return caught && throw_value && throw_value->nargs == 1u && throw_value->args &&
-           throw_value->args[0] == caught && enter_count == 1u && leave_count == 1u;
+           throw_value->args[0] == caught && enter_count != 0u && enter_count == leave_count &&
+           !in_cleanup;
 }
 
 static XrProgramBuildStatus append_trap_edge(XrXiBuildContext *context, const XiFunc *function,
@@ -8043,32 +8689,19 @@ static XrProgramBuildStatus prepare_trap_continuations(XrXiBuildContext *context
                          !witness_invoke && !sealed_invoke && !indirect_invoke) ||
                         resolved_canonical_class_construction(context, function, call, NULL, NULL))
                         continue;
-                    const XiValue *active = NULL;
-                    for (uint32_t try_block = 0u; try_block < function->nblocks; ++try_block) {
-                        const XiBlock *row = function->blocks[try_block];
-                        for (uint32_t try_index = 0u; try_index < row->nvalues; ++try_index) {
-                            const XiValue *registration = row->values[try_index];
-                            if (!exact_static_cleanup_try(function, registration))
-                                continue;
-                            bool contains = false;
-                            XrProgramBuildStatus status =
-                                static_try_contains_value(function, registration, call, &contains,
-                                                          diagnostic, diagnostic_size);
-                            if (status != XR_PROGRAM_BUILD_OK)
-                                return status;
-                            if (!contains)
-                                continue;
-                            if (active)
-                                return fail(
-                                    diagnostic, diagnostic_size,
-                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                    "Xi trap-capable call v%u has nested static cleanup regions",
+                    const XrXiCleanupRegistrationStorage *active_context = NULL;
+                    if (!active_cleanup_registration_at_program_point(storage, call,
+                                                                      &active_context))
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "Xi trap-capable call v%u has no exact cleanup program point",
                                     call->id);
-                            active = registration;
-                        }
-                    }
-                    if (!active)
+                    if (!active_context)
                         continue;
+                    if (active_context->outer_handler_state != 0u)
+                        return fail(
+                            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi trap-capable call v%u has nested static cleanup regions", call->id);
+                    const XiValue *active = active_context->registration;
                     const XiBlock *handler = (const XiBlock *) active->aux;
                     XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
                     if (!handler_storage || handler_storage->reachable ||
@@ -8116,31 +8749,19 @@ static XrProgramBuildStatus prepare_panic_continuations(XrXiBuildContext *contex
                     const XiValue *point = block->values[value_index];
                     if (!exact_condition_assertion(point))
                         continue;
-                    const XiValue *active = NULL;
-                    for (uint32_t try_block = 0u; try_block < function->nblocks; ++try_block) {
-                        const XiBlock *row = function->blocks[try_block];
-                        for (uint32_t try_index = 0u; try_index < row->nvalues; ++try_index) {
-                            const XiValue *registration = row->values[try_index];
-                            if (!exact_static_cleanup_try(function, registration))
-                                continue;
-                            bool contains = false;
-                            XrProgramBuildStatus status =
-                                static_try_contains_value(function, registration, point, &contains,
-                                                          diagnostic, diagnostic_size);
-                            if (status != XR_PROGRAM_BUILD_OK)
-                                return status;
-                            if (!contains)
-                                continue;
-                            if (active)
-                                return fail(diagnostic, diagnostic_size,
-                                            XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                            "Xi assertion v%u has nested static cleanup regions",
-                                            point->id);
-                            active = registration;
-                        }
-                    }
-                    if (!active)
+                    const XrXiCleanupRegistrationStorage *active_context = NULL;
+                    if (!active_cleanup_registration_at_program_point(storage, point,
+                                                                      &active_context))
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "Xi assertion v%u has no exact cleanup program point",
+                                    point->id);
+                    if (!active_context)
                         continue;
+                    if (active_context->outer_handler_state != 0u)
+                        return fail(
+                            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi assertion v%u has nested static cleanup regions", point->id);
+                    const XiValue *active = active_context->registration;
                     const XiBlock *handler = (const XiBlock *) active->aux;
                     XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
                     if (!handler_storage || handler_storage->reachable ||
@@ -8192,31 +8813,41 @@ static XrProgramBuildStatus prepare_cancel_continuations(XrXiBuildContext *conte
                 continue;
             for (uint32_t point_index = 0u; point_index < plan->nstates; ++point_index) {
                 const XiCoroSuspendPoint *point = &plan->points[point_index];
-                if (point->active_handler_count == 0u)
+                const XrXiCleanupRegistrationStorage *active_context = NULL;
+                if (!active_cleanup_registration_at_program_point(storage, point->op,
+                                                                  &active_context))
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi suspension v%u has no exact cleanup program point",
+                                point->op ? point->op->id : UINT32_MAX);
+                if (point->active_handler_count == 0u) {
+                    if (active_context)
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "Xi suspension v%u omitted its active cleanup handler",
+                                    point->op ? point->op->id : UINT32_MAX);
                     continue;
+                }
                 if (point->active_handler_count != 1u || !point->active_handlers ||
-                    !point->active_handlers[0])
+                    !point->active_handlers[0] || !active_context ||
+                    active_context->registration != point->active_handlers[0] ||
+                    active_context->outer_handler_state != 0u)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi suspension v%u has nested cancellation cleanup",
                                 point->op ? point->op->id : UINT32_MAX);
                 const XiValue *registration = point->active_handlers[0];
-                bool contains = false;
-                XrProgramBuildStatus status = static_try_contains_value(
-                    function, registration, point->op, &contains, diagnostic, diagnostic_size);
+                const XrXiCleanupRegistrationStorage *registration_context =
+                    cleanup_registration_storage(storage, registration);
                 const XiBlock *handler = (const XiBlock *) registration->aux;
                 XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
-                if (status != XR_PROGRAM_BUILD_OK)
-                    return status;
                 bool private_projection = handler_storage && (handler_storage->trap_cleanup ||
                                                               handler_storage->cancel_cleanup);
-                if (!contains || !handler_storage ||
-                    (handler_storage->reachable && !private_projection) ||
+                if (!registration_context || registration_context != active_context ||
+                    !handler_storage || (handler_storage->reachable && !private_projection) ||
                     handler_storage->panic_cleanup ||
                     !exact_static_cleanup_handler(function, registration))
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi suspension v%u has no exact private cancel cleanup",
                                 point->op ? point->op->id : UINT32_MAX);
-                status =
+                XrProgramBuildStatus status =
                     append_cancel_edge(context, function, point, registration, private_projection);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
@@ -8275,6 +8906,11 @@ static XrProgramBuildStatus initialize_canonical_reachability(XrXiBuildContext *
             if (entry_count != 1u)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi function %u must contain its entry exactly once", function_index);
+            char cleanup_error[192];
+            if (!xi_cleanup_verify(function, cleanup_error, sizeof(cleanup_error)))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi function %u has invalid cleanup identities: %s", function_index,
+                            cleanup_error);
             XrProgramBuildStatus status =
                 mark_reachable_blocks(context, storage, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
@@ -9694,7 +10330,8 @@ clone_cancel_cleanup_block(const XrXiBuildContext *context, XrXiFunctionStorage 
             };
             continue;
         }
-        if (from->successor_count != 0u) {
+        if (from->successor_count != 0u &&
+            (!cleanup_trap_capable_operation(from->operation_id) || from->successor_count != 1u)) {
             xr_free(source_keys);
             xr_free(target_keys);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -9733,6 +10370,17 @@ clone_cancel_cleanup_block(const XrXiBuildContext *context, XrXiFunctionStorage 
                 operands[operand] = from->operands[operand];
             }
             to->operands = operands;
+        }
+        if (from->successor_count != 0u) {
+            XrCoreIrKey *successors = xr_calloc(from->successor_count, sizeof(*successors));
+            if (!successors) {
+                xr_free(source_keys);
+                xr_free(target_keys);
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            }
+            memcpy(successors, from->successors,
+                   (size_t) from->successor_count * sizeof(*successors));
+            to->successors = successors;
         }
     }
     xr_free(source_keys);
@@ -9954,6 +10602,41 @@ static const char *coroutine_call_live_set_mismatch(XrXiBuildContext *context,
     return NULL;
 }
 
+static XrProgramBuildStatus append_coroutine_trap_operands(XrCoreIrInstructionInput *instruction,
+                                                           const XrCoreIrInstructionInput *call,
+                                                           uint32_t parameter_count,
+                                                           uint32_t live_count, char *diagnostic,
+                                                           size_t diagnostic_size) {
+    if (call->successor_count == 0u)
+        return XR_PROGRAM_BUILD_OK;
+    uint32_t trap_count = call->operand_count - parameter_count;
+    if (trap_count > UINT32_MAX - instruction->operand_count)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    for (uint32_t argument = 0u; argument < trap_count; ++argument) {
+        uint32_t occurrences = 0u;
+        for (uint32_t live = 0u; live < live_count; ++live)
+            occurrences += xr_core_ir_key_equal(call->operands[parameter_count + argument],
+                                                instruction->operands[parameter_count + live]);
+        if (occurrences != 1u)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi coroutine trap argument %u has no unique safepoint carrier", argument);
+    }
+    uint32_t count = instruction->operand_count + trap_count;
+    XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
+    if (count && !operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (instruction->operand_count != 0u)
+        memcpy(operands, instruction->operands,
+               (size_t) instruction->operand_count * sizeof(*operands));
+    if (trap_count != 0u)
+        memcpy(operands + instruction->operand_count, call->operands + parameter_count,
+               (size_t) trap_count * sizeof(*operands));
+    xr_free((void *) instruction->operands);
+    instruction->operands = operands;
+    instruction->operand_count = count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus translate_coroutine_call_terminator(
     XrXiBuildContext *context, XrXiModuleStorage *module, XrXiFunctionStorage *function,
     XrXiBlockStorage *block, const XiCoroSuspendPoint *point, XrCoreIrInstructionInput *instruction,
@@ -9972,6 +10655,10 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     uint32_t implicit_result = call.result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
     const XrXiFunctionStorage *callee =
         point ? find_xi_function(context, point->resolved_callee, NULL, NULL) : NULL;
+    const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, point->op);
+    const XrXiBlockStorage *trap_handler =
+        trap_edge ? find_block_storage(function, trap_edge->handler) : NULL;
+    uint32_t parameter_count = callee && callee->xi ? callee->xi->nparams : 0u;
     const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
     const char *live_set_failure =
         coroutine_call_live_set_mismatch(context, function, resume, point, implicit_result);
@@ -9997,8 +10684,15 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         closure_failure = "call target is not a function key";
     else if (!xr_core_ir_key_equal(call.immediate.key, callee->key))
         closure_failure = "call target disagrees with the sealed callee";
-    else if (call.successor_count != 0u)
-        closure_failure = "call retained a non-canonical successor";
+    else if (call.successor_count != (trap_edge ? 1u : 0u) ||
+             (trap_edge &&
+              (!trap_handler || !call.successors ||
+               !xr_core_ir_key_equal(call.successors[0], block_key(function, trap_edge->handler)))))
+        closure_failure = "call retained a non-canonical trap successor";
+    else if (call.operand_count < parameter_count ||
+             call.operand_count - parameter_count !=
+                 (trap_handler ? trap_handler->argument_count : 0u))
+        closure_failure = "call parameter and trap operand segments disagree";
     if (closure_failure) {
         xr_free((void *) call.operands);
         xr_free((void *) call.successors);
@@ -10007,43 +10701,50 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
                     block && block->xi ? block->xi->id : UINT32_MAX, closure_failure);
     }
     uint32_t live_count = resume->argument_count - implicit_result;
-    if (call.operand_count > UINT32_MAX - live_count) {
+    if (parameter_count > UINT32_MAX - live_count) {
         xr_free((void *) call.operands);
+        xr_free((void *) call.successors);
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
     }
-    uint32_t operand_count = call.operand_count + live_count;
+    uint32_t operand_count = parameter_count + live_count;
     XrCoreIrKey *operands = operand_count ? xr_calloc(operand_count, sizeof(*operands)) : NULL;
     if (operand_count && !operands) {
         xr_free((void *) call.operands);
+        xr_free((void *) call.successors);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
-    if (call.operand_count)
-        memcpy(operands, call.operands, (size_t) call.operand_count * sizeof(*operands));
-    xr_free((void *) call.operands);
+    if (parameter_count)
+        memcpy(operands, call.operands, (size_t) parameter_count * sizeof(*operands));
     for (uint32_t live = 0u; live < live_count; ++live) {
         const XiValue *incoming = resume->argument_storage[implicit_result + live].source;
         if (!edge_value_operand_key(context, function, block, incoming, point->op,
-                                    &operands[call.operand_count + live])) {
+                                    &operands[parameter_count + live])) {
             xr_free(operands);
+            xr_free((void *) call.operands);
+            xr_free((void *) call.successors);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi coroutine call live value is unavailable");
         }
     }
-    XrCoreIrKey *successors = xr_calloc(2u, sizeof(*successors));
+    uint32_t successor_count = trap_edge ? 3u : 2u;
+    XrCoreIrKey *successors = xr_calloc(successor_count, sizeof(*successors));
     XrCoreIrKey *live_values = live_count ? xr_calloc(live_count, sizeof(*live_values)) : NULL;
     if (!successors || (live_count && !live_values)) {
         xr_free(live_values);
         xr_free(successors);
         xr_free(operands);
+        xr_free((void *) call.operands);
+        xr_free((void *) call.successors);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     if (live_count)
-        memcpy(live_values, operands + call.operand_count,
-               (size_t) live_count * sizeof(*live_values));
+        memcpy(live_values, operands + parameter_count, (size_t) live_count * sizeof(*live_values));
     successors[0] = block_key(function, point->resume_block);
     successors[1] = cancel_edge && !cancel_edge->private_projection
                         ? block_key(function, cancel_edge->handler)
                         : cancel_block_key(function, safepoint_id);
+    if (trap_edge)
+        successors[2] = call.successors[0];
     instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
     instruction->result_type_id = XR_CORE_TYPE_VOID;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
@@ -10052,23 +10753,31 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     instruction->operands = operands;
     instruction->operand_count = operand_count;
     instruction->successors = successors;
-    instruction->successor_count = 2u;
+    instruction->successor_count = successor_count;
     function->coroutine_safepoints[safepoint_id].live_values = live_values;
     function->coroutine_safepoints[safepoint_id].live_value_count = live_count;
     if (cancel_edge) {
         if (!coroutine_cancel_drop_set_matches(context, function, resume, implicit_result,
                                                live_count, point))
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi coroutine call has no exact cancellation owner set");
-        return append_cancel_handler_operands(context, instruction, function, block, cancel_handler,
-                                              point, diagnostic, diagnostic_size);
+            status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                          "Xi coroutine call has no exact cancellation owner set");
+        else
+            status =
+                append_cancel_handler_operands(context, instruction, function, block,
+                                               cancel_handler, point, diagnostic, diagnostic_size);
+    } else {
+        status = prepare_cancel_block(context, function, resume, implicit_result, live_count, point,
+                                      safepoint_id, diagnostic, diagnostic_size);
+        if (status == XR_PROGRAM_BUILD_OK)
+            status = append_cancel_drop_operands(context, instruction, function, block, point,
+                                                 diagnostic, diagnostic_size);
     }
-    status = prepare_cancel_block(context, function, resume, implicit_result, live_count, point,
-                                  safepoint_id, diagnostic, diagnostic_size);
-    if (status != XR_PROGRAM_BUILD_OK)
-        return status;
-    return append_cancel_drop_operands(context, instruction, function, block, point, diagnostic,
-                                       diagnostic_size);
+    if (status == XR_PROGRAM_BUILD_OK)
+        status = append_coroutine_trap_operands(instruction, &call, parameter_count, live_count,
+                                                diagnostic, diagnostic_size);
+    xr_free((void *) call.operands);
+    xr_free((void *) call.successors);
+    return status;
 }
 
 static const XrCoreIrFunctionInput *input_function_by_key(const XrXiBuildContext *context,
@@ -10119,7 +10828,8 @@ static bool input_operation_consumes_operand(const XrXiBuildContext *context,
         return true;
     if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE && operand_index == 1u)
         return true;
-    if (instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT) {
+    if (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
+        instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT) {
         uint16_t operand_type = XR_CORE_TYPE_VOID;
         return input_value_type(block, instruction_count, instruction->operands[operand_index],
                                 &operand_type) &&
@@ -10338,6 +11048,946 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
     xr_free(drop_operands);
     xr_free(drops);
     xr_free(owners);
+    return XR_PROGRAM_BUILD_OK;
+}
+
+typedef struct XrXiCleanupProjectionValueInfo {
+    uint16_t type_id;
+    XrCoreIrValueCategory category;
+    XrCoreIrOwnershipDisposition ownership;
+    uint32_t instruction;
+    bool argument;
+} XrXiCleanupProjectionValueInfo;
+
+static bool cleanup_trap_capable_operation(uint16_t operation_id) {
+    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(operation_id);
+    return operation && (operation->successor_mask & XR_CORE_SUCCESSOR_TRAP) != 0u;
+}
+
+static XrCoreIrBlockInput *find_input_block(XrXiFunctionStorage *function, uint32_t block_count,
+                                            XrCoreIrKey key) {
+    for (uint32_t block = 0u; function && block < block_count; ++block)
+        if (xr_core_ir_key_equal(function->blocks[block].key, key))
+            return &function->blocks[block];
+    return NULL;
+}
+
+static XrXiCleanupProjectionStorage *find_cleanup_projection(XrXiFunctionStorage *function,
+                                                             const XrXiCleanupPointStorage *point,
+                                                             uint32_t begin_gap) {
+    for (uint32_t index = 0u; function && index < function->cleanup_projection_count; ++index) {
+        XrXiCleanupProjectionStorage *projection = &function->cleanup_projections[index];
+        if (projection->point == point && projection->begin_gap == begin_gap)
+            return projection;
+    }
+    return NULL;
+}
+
+static XrProgramBuildStatus
+ensure_cleanup_projection(XrXiFunctionStorage *function, XrXiCleanupPointStorage *point,
+                          uint32_t begin_gap, XrXiCleanupProjectionStorage **projection_out) {
+    if (projection_out)
+        *projection_out = NULL;
+    if (!function || !point || !projection_out || begin_gap < point->enter_gap ||
+        begin_gap > point->leave_gap)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrXiCleanupProjectionStorage *existing = find_cleanup_projection(function, point, begin_gap);
+    if (existing) {
+        *projection_out = existing;
+        return XR_PROGRAM_BUILD_OK;
+    }
+    if (function->cleanup_projection_count == function->cleanup_projection_capacity) {
+        uint32_t capacity =
+            function->cleanup_projection_capacity ? function->cleanup_projection_capacity * 2u : 8u;
+        if (capacity < function->cleanup_projection_capacity ||
+            capacity > UINT32_MAX / sizeof(*function->cleanup_projections))
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        XrXiCleanupProjectionStorage *projections =
+            xr_realloc(function->cleanup_projections, (size_t) capacity * sizeof(*projections));
+        if (!projections)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        memset(projections + function->cleanup_projection_capacity, 0,
+               (size_t) (capacity - function->cleanup_projection_capacity) * sizeof(*projections));
+        function->cleanup_projections = projections;
+        function->cleanup_projection_capacity = capacity;
+    }
+    XrXiCleanupProjectionStorage *projection =
+        &function->cleanup_projections[function->cleanup_projection_count++];
+    projection->point = point;
+    projection->begin_gap = begin_gap;
+    projection->end_gap = begin_gap;
+    *projection_out = projection;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool cleanup_projection_value_info(const XrCoreIrBlockInput *block, XrCoreIrKey key,
+                                          XrXiCleanupProjectionValueInfo *info) {
+    if (info)
+        memset(info, 0, sizeof(*info));
+    if (!block || !info)
+        return false;
+    for (uint32_t argument = 0u; argument < block->argument_count; ++argument) {
+        if (!xr_core_ir_key_equal(block->arguments[argument].key, key))
+            continue;
+        *info = (XrXiCleanupProjectionValueInfo) {
+            .type_id = block->arguments[argument].type_id,
+            .category = block->arguments[argument].category,
+            .ownership = block->arguments[argument].ownership,
+            .instruction = UINT32_MAX,
+            .argument = true,
+        };
+        return true;
+    }
+    for (uint32_t instruction = 0u; instruction < block->instruction_count; ++instruction) {
+        const XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
+        if (candidate->result_type_id == XR_CORE_TYPE_VOID ||
+            !xr_core_ir_key_equal(candidate->result, key))
+            continue;
+        *info = (XrXiCleanupProjectionValueInfo) {
+            .type_id = candidate->result_type_id,
+            .category = candidate->result_category,
+            .ownership = candidate->result_ownership,
+            .instruction = instruction,
+            .argument = false,
+        };
+        return true;
+    }
+    return false;
+}
+
+static bool cleanup_projection_key_is_internal(const XrCoreIrBlockInput *block, XrCoreIrKey key,
+                                               uint32_t begin, uint32_t end) {
+    XrXiCleanupProjectionValueInfo info;
+    return cleanup_projection_value_info(block, key, &info) && !info.argument &&
+           info.instruction >= begin && info.instruction < end;
+}
+
+static bool cleanup_projection_place_root(const XrCoreIrBlockInput *block, XrCoreIrKey place,
+                                          uint32_t before, XrCoreIrKey *root) {
+    for (uint32_t depth = 0u; block && depth < block->instruction_count; ++depth) {
+        XrXiCleanupProjectionValueInfo info;
+        if (!cleanup_projection_value_info(block, place, &info) || info.argument ||
+            info.instruction >= before || info.category != XR_CORE_IR_PLACE)
+            return false;
+        const XrCoreIrInstructionInput *definition = &block->instructions[info.instruction];
+        if (definition->operand_count != 1u || definition->successor_count != 0u)
+            return false;
+        if (definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL) {
+            *root = definition->operands[0];
+            return true;
+        }
+        if (definition->operation_id != XR_CORE_OP_CORE_PLACE_PROJECT)
+            return false;
+        place = definition->operands[0];
+    }
+    return false;
+}
+
+static bool cleanup_projection_affine_owner(const XrXiBuildContext *context,
+                                            const XrCoreIrBlockInput *block, XrCoreIrKey value,
+                                            uint32_t before, XrCoreIrKey *owner) {
+    if (owner)
+        memset(owner, 0, sizeof(*owner));
+    for (uint32_t depth = 0u; context && block && owner && depth <= block->instruction_count;
+         ++depth) {
+        XrXiCleanupProjectionValueInfo info;
+        if (!cleanup_projection_value_info(block, value, &info) ||
+            (!info.argument && info.instruction >= before))
+            return false;
+        if (info.ownership == XR_CORE_IR_OWNER) {
+            *owner = value;
+            return true;
+        }
+        if (info.category == XR_CORE_IR_PLACE)
+            return cleanup_projection_place_root(block, value, before, owner);
+        if (logical_ownership_for_type(context, info.type_id) != XR_CORE_IR_OWNER || info.argument)
+            return false;
+        const XrCoreIrInstructionInput *definition = &block->instructions[info.instruction];
+        if (definition->operand_count != 1u)
+            return false;
+        if (definition->operation_id == XR_CORE_OP_CORE_PLACE_LOAD) {
+            return cleanup_projection_place_root(block, definition->operands[0], info.instruction,
+                                                 owner);
+        }
+        if (definition->operation_id != XR_CORE_OP_CORE_AGGREGATE_PROJECT &&
+            definition->operation_id != XR_CORE_OP_CORE_VARIANT_PROJECT &&
+            definition->operation_id != XR_CORE_OP_CORE_EXISTENTIAL_PROJECT)
+            return false;
+        value = definition->operands[0];
+    }
+    return false;
+}
+
+static bool cleanup_projection_operand_consumes_owner(const XrXiBuildContext *context,
+                                                      const XrXiBlockStorage *source_storage,
+                                                      const XrCoreIrBlockInput *source,
+                                                      const XrCoreIrInstructionInput *instruction,
+                                                      uint32_t instruction_index,
+                                                      uint32_t operand_index, XrCoreIrKey owner) {
+    if (!input_operation_consumes_operand(context, source_storage, source->instruction_count,
+                                          instruction, operand_index))
+        return false;
+    XrCoreIrKey consumed = {{0}};
+    return cleanup_projection_affine_owner(context, source, instruction->operands[operand_index],
+                                           instruction_index, &consumed) &&
+           xr_core_ir_key_equal(consumed, owner);
+}
+
+static XrProgramBuildStatus
+cleanup_projection_add_argument(XrXiFunctionStorage *function,
+                                XrXiCleanupProjectionStorage *projection,
+                                const XrCoreIrBlockInput *source, XrCoreIrKey source_key,
+                                char *diagnostic, size_t diagnostic_size) {
+    for (uint32_t argument = 0u; argument < projection->trap_argument_count; ++argument)
+        if (xr_core_ir_key_equal(projection->trap_argument_sources[argument], source_key))
+            return XR_PROGRAM_BUILD_OK;
+    XrXiCleanupProjectionValueInfo info;
+    if (!cleanup_projection_value_info(source, source_key, &info) ||
+        info.category == XR_CORE_IR_PLACE)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "cleanup trap projection requires an unavailable non-place input");
+    if (projection->trap_argument_count == UINT32_MAX)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t count = projection->trap_argument_count + 1u;
+    if ((size_t) count > SIZE_MAX / sizeof(*projection->trap_argument_sources) ||
+        (size_t) count > SIZE_MAX / sizeof(*projection->trap_arguments))
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    XrCoreIrKey *sources =
+        xr_realloc(projection->trap_argument_sources, (size_t) count * sizeof(*sources));
+    if (!sources)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    projection->trap_argument_sources = sources;
+    XrCoreIrValueInput *arguments =
+        xr_realloc(projection->trap_arguments, (size_t) count * sizeof(*arguments));
+    if (!arguments)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    projection->trap_arguments = arguments;
+    projection->trap_argument_sources[count - 1u] = source_key;
+    projection->trap_arguments[count - 1u] = (XrCoreIrValueInput) {
+        .key = cleanup_trap_argument_key(function, projection, count - 1u),
+        .type_id = info.type_id,
+        .category = info.category,
+        .ownership = info.ownership,
+    };
+    projection->trap_argument_count = count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus mark_cleanup_trap_projection_chain(XrXiFunctionStorage *function,
+                                                               const XiValue *remaining,
+                                                               char *diagnostic,
+                                                               size_t diagnostic_size) {
+    for (uint32_t steps = 0u; remaining && steps < function->cleanup_point_count; ++steps) {
+        const XiCleanupBoundary *boundary = remaining->cleanup_boundary;
+        XrXiCleanupPointStorage *point = find_cleanup_point(function, boundary);
+        if (!point || boundary->enter != remaining ||
+            boundary->kind != XI_CLEANUP_BOUNDARY_CLOSED || !point->enter_emitted ||
+            !point->leave_emitted || point->enter_block != point->leave_block ||
+            point->enter_gap > point->leave_gap)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "cleanup remaining v%u is not a closed single-block Program slice",
+                        remaining->id);
+        XrXiCleanupProjectionStorage *projection = NULL;
+        XrProgramBuildStatus status =
+            ensure_cleanup_projection(function, point, point->enter_gap, &projection);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+        remaining = boundary->remaining;
+    }
+    if (remaining)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "cleanup remaining chain exceeds its verified boundary count");
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus prepare_cleanup_trap_projection_arguments(
+    const XrXiBuildContext *context, XrXiFunctionStorage *function,
+    XrXiCleanupProjectionStorage *projection, uint32_t original_block_count, char *diagnostic,
+    size_t diagnostic_size) {
+    XrXiCleanupPointStorage *point = projection ? projection->point : NULL;
+    if (!point)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrXiBlockStorage *source_storage = find_block_storage(function, point->enter_block);
+    XrCoreIrBlockInput *source =
+        find_input_block(function, original_block_count, block_key(function, point->enter_block));
+    if (!source_storage || !source || projection->begin_gap < point->enter_gap ||
+        projection->begin_gap > point->leave_gap || point->enter_gap > point->leave_gap ||
+        point->leave_gap > source->instruction_count ||
+        point->enter_value_index >= point->leave_value_index ||
+        point->leave_value_index >= point->enter_block->nvalues)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    projection->end_gap = point->leave_gap;
+    projection->ends_in_trap = false;
+    for (uint32_t instruction = projection->begin_gap; instruction < point->leave_gap;
+         ++instruction) {
+        if (!cleanup_trap_capable_operation(source->instructions[instruction].operation_id))
+            continue;
+        projection->end_gap = instruction + 1u;
+        projection->ends_in_trap = true;
+        break;
+    }
+    for (uint32_t value = point->enter_value_index + 1u; value < point->leave_value_index; ++value)
+        if (point->enter_block->values[value] &&
+            point->enter_block->values[value]->op == XI_CLEANUP_ENTER)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "cleanup trap projection contains a nested cleanup boundary");
+
+    uint32_t owner_definition_limit = projection->begin_gap;
+    if (owner_definition_limit > point->enter_gap &&
+        cleanup_trap_capable_operation(
+            source->instructions[owner_definition_limit - 1u].operation_id))
+        --owner_definition_limit;
+    uint64_t owner_capacity_wide = (uint64_t) source->argument_count + owner_definition_limit;
+    if (owner_capacity_wide > UINT32_MAX || owner_capacity_wide > SIZE_MAX / sizeof(XrCoreIrKey))
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t owner_capacity = (uint32_t) owner_capacity_wide;
+    XrCoreIrKey *owners = owner_capacity ? xr_calloc(owner_capacity, sizeof(*owners)) : NULL;
+    if (owner_capacity && !owners)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t owner_count = 0u;
+    for (uint32_t argument = 0u; argument < source->argument_count; ++argument)
+        if (source->arguments[argument].ownership == XR_CORE_IR_OWNER)
+            owners[owner_count++] = source->arguments[argument].key;
+    for (uint32_t instruction = 0u; instruction < owner_definition_limit; ++instruction) {
+        const XrCoreIrInstructionInput *candidate = &source->instructions[instruction];
+        if (candidate->result_type_id == XR_CORE_TYPE_VOID ||
+            candidate->result_ownership != XR_CORE_IR_OWNER)
+            continue;
+        bool duplicate = false;
+        for (uint32_t owner = 0u; owner < owner_count; ++owner)
+            duplicate |= xr_core_ir_key_equal(owners[owner], candidate->result);
+        if (!duplicate)
+            owners[owner_count++] = candidate->result;
+    }
+    XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
+    for (uint32_t owner = 0u; owner < owner_count && status == XR_PROGRAM_BUILD_OK; ++owner) {
+        uint32_t consumes = 0u;
+        for (uint32_t instruction = 0u; instruction < projection->begin_gap; ++instruction) {
+            const XrCoreIrInstructionInput *candidate = &source->instructions[instruction];
+            for (uint32_t operand = 0u; operand < candidate->operand_count; ++operand)
+                if (cleanup_projection_operand_consumes_owner(context, source_storage, source,
+                                                              candidate, instruction, operand,
+                                                              owners[owner]))
+                    ++consumes;
+        }
+        if (consumes > 1u) {
+            status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                          "cleanup projection owner is consumed more than once before its body");
+        } else if (consumes == 0u) {
+            status = cleanup_projection_add_argument(function, projection, source, owners[owner],
+                                                     diagnostic, diagnostic_size);
+        }
+    }
+    xr_free(owners);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+
+    for (uint32_t instruction = projection->begin_gap; instruction < projection->end_gap;
+         ++instruction) {
+        const XrCoreIrInstructionInput *candidate = &source->instructions[instruction];
+        if (candidate->successor_count != 0u)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "cleanup trap projection body already owns a control-flow edge");
+        for (uint32_t operand = 0u; operand < candidate->operand_count; ++operand) {
+            XrCoreIrKey dependency = candidate->operands[operand];
+            if (cleanup_projection_key_is_internal(source, dependency, projection->begin_gap,
+                                                   instruction))
+                continue;
+            XrXiCleanupProjectionValueInfo info;
+            if (!cleanup_projection_value_info(source, dependency, &info))
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            if (info.category == XR_CORE_IR_PLACE) {
+                XrCoreIrKey root = {{0}};
+                if (!cleanup_projection_place_root(source, dependency, projection->begin_gap,
+                                                   &root))
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "cleanup trap projection cannot reconstruct a borrowed place");
+                dependency = root;
+            }
+            status = cleanup_projection_add_argument(function, projection, source, dependency,
+                                                     diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrXiCleanupProjectionStorage *
+cleanup_projection_successor(XrXiFunctionStorage *function,
+                             const XrXiCleanupProjectionStorage *projection,
+                             bool *successor_expected) {
+    if (successor_expected)
+        *successor_expected = false;
+    if (!function || !projection || !projection->point)
+        return NULL;
+    if (projection->ends_in_trap) {
+        if (successor_expected)
+            *successor_expected = true;
+        return find_cleanup_projection(function, projection->point, projection->end_gap);
+    }
+    const XiCleanupBoundary *boundary = projection->point->boundary;
+    if (!boundary || !boundary->remaining)
+        return NULL;
+    if (successor_expected)
+        *successor_expected = true;
+    XrXiCleanupPointStorage *next_point =
+        find_cleanup_point(function, boundary->remaining->cleanup_boundary);
+    return next_point ? find_cleanup_projection(function, next_point, next_point->enter_gap) : NULL;
+}
+
+static XrProgramBuildStatus close_cleanup_projection_arguments(
+    XrXiFunctionStorage *function, XrXiCleanupProjectionStorage *projection,
+    uint32_t original_block_count, uint32_t depth, char *diagnostic, size_t diagnostic_size) {
+    if (!function || !projection || !projection->point ||
+        depth > function->cleanup_projection_count)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (projection->argument_state == 2u)
+        return XR_PROGRAM_BUILD_OK;
+    if (projection->argument_state != 0u)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "cleanup projection continuation graph contains a cycle");
+    projection->argument_state = 1u;
+    bool successor_expected = false;
+    XrXiCleanupProjectionStorage *next =
+        cleanup_projection_successor(function, projection, &successor_expected);
+    if (successor_expected && !next)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "cleanup projection has no exact next program point");
+    if (next) {
+        XrProgramBuildStatus status = close_cleanup_projection_arguments(
+            function, next, original_block_count, depth + 1u, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+        XrCoreIrBlockInput *source = find_input_block(
+            function, original_block_count, block_key(function, projection->point->enter_block));
+        if (!source)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        for (uint32_t argument = 0u; argument < next->trap_argument_count; ++argument) {
+            XrCoreIrKey dependency = next->trap_argument_sources[argument];
+            if (cleanup_projection_key_is_internal(source, dependency, projection->begin_gap,
+                                                   projection->end_gap))
+                continue;
+            status = cleanup_projection_add_argument(function, projection, source, dependency,
+                                                     diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+    }
+    projection->argument_state = 2u;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool cleanup_projection_remap_key(const XrCoreIrKey *source_keys,
+                                         const XrCoreIrKey *target_keys, uint32_t key_count,
+                                         XrCoreIrKey source, XrCoreIrKey *target) {
+    for (uint32_t index = 0u; index < key_count; ++index) {
+        if (!xr_core_ir_key_equal(source_keys[index], source))
+            continue;
+        *target = target_keys[index];
+        return true;
+    }
+    return false;
+}
+
+static XrProgramBuildStatus append_cleanup_trap_successor(
+    XrCoreIrInstructionInput *instruction, const XrXiFunctionStorage *function,
+    const XrXiCleanupProjectionStorage *target, const XrCoreIrKey *source_keys,
+    const XrCoreIrKey *target_keys, uint32_t key_count, char *diagnostic, size_t diagnostic_size) {
+    if (!instruction || !target || instruction->successor_count != 0u ||
+        !cleanup_trap_capable_operation(instruction->operation_id) ||
+        target->trap_argument_count > UINT32_MAX - instruction->operand_count)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t operand_count = instruction->operand_count + target->trap_argument_count;
+    XrCoreIrKey *operands = operand_count ? xr_calloc(operand_count, sizeof(*operands)) : NULL;
+    XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+    if ((operand_count && !operands) || !successors) {
+        xr_free(operands);
+        xr_free(successors);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (instruction->operand_count)
+        memcpy(operands, instruction->operands,
+               (size_t) instruction->operand_count * sizeof(*operands));
+    for (uint32_t argument = 0u; argument < target->trap_argument_count; ++argument) {
+        XrCoreIrKey mapped = target->trap_argument_sources[argument];
+        if (source_keys &&
+            !cleanup_projection_remap_key(source_keys, target_keys, key_count, mapped, &mapped)) {
+            xr_free(successors);
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "cleanup trap edge cannot supply remaining argument %u", argument);
+        }
+        if (!xr_core_ir_key_is_zero(instruction->result) &&
+            xr_core_ir_key_equal(mapped, instruction->result)) {
+            xr_free(successors);
+            xr_free(operands);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "cleanup failure suffix depends on the failed operation result");
+        }
+        operands[instruction->operand_count + argument] = mapped;
+    }
+    *successors = cleanup_trap_block_key(function, target);
+    xr_free((void *) instruction->operands);
+    instruction->operands = operands;
+    instruction->operand_count = operand_count;
+    instruction->successors = successors;
+    instruction->successor_count = 1u;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool cleanup_projection_key_array_contains(const XrCoreIrKey *keys, uint32_t count,
+                                                  XrCoreIrKey key) {
+    for (uint32_t index = 0u; index < count; ++index)
+        if (xr_core_ir_key_equal(keys[index], key))
+            return true;
+    return false;
+}
+
+static XrProgramBuildStatus
+materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctionStorage *function,
+                                    XrXiCleanupProjectionStorage *projection,
+                                    uint32_t original_block_count, XrCoreIrBlockInput *output,
+                                    char *diagnostic, size_t diagnostic_size) {
+    XrXiCleanupPointStorage *point = projection ? projection->point : NULL;
+    if (!point)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrXiBlockStorage *source_storage = find_block_storage(function, point->enter_block);
+    XrCoreIrBlockInput *source =
+        find_input_block(function, original_block_count, block_key(function, point->enter_block));
+    if (!source_storage || !source || !output || projection->trap_instructions ||
+        projection->begin_gap < point->enter_gap || projection->begin_gap > projection->end_gap ||
+        projection->end_gap > point->leave_gap || point->enter_gap > point->leave_gap ||
+        point->leave_gap > source->instruction_count || projection->argument_state != 2u)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+
+    uint32_t body_count = projection->end_gap - projection->begin_gap;
+    XrCoreIrKey *places =
+        projection->begin_gap ? xr_calloc(projection->begin_gap, sizeof(*places)) : NULL;
+    if (projection->begin_gap && !places)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t place_count = 0u;
+    for (uint32_t instruction = projection->begin_gap; instruction < projection->end_gap;
+         ++instruction) {
+        const XrCoreIrInstructionInput *candidate = &source->instructions[instruction];
+        for (uint32_t operand = 0u; operand < candidate->operand_count; ++operand) {
+            XrCoreIrKey key = candidate->operands[operand];
+            if (cleanup_projection_key_is_internal(source, key, projection->begin_gap, instruction))
+                continue;
+            XrXiCleanupProjectionValueInfo info;
+            if (!cleanup_projection_value_info(source, key, &info)) {
+                xr_free(places);
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
+            if (info.category == XR_CORE_IR_PLACE &&
+                !cleanup_projection_key_array_contains(places, place_count, key)) {
+                if (place_count >= projection->begin_gap) {
+                    xr_free(places);
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                }
+                places[place_count++] = key;
+            }
+        }
+    }
+    for (uint32_t cursor = 0u; cursor < place_count; ++cursor) {
+        XrXiCleanupProjectionValueInfo info;
+        if (!cleanup_projection_value_info(source, places[cursor], &info) || info.argument ||
+            info.instruction >= projection->begin_gap) {
+            xr_free(places);
+            return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
+        }
+        const XrCoreIrInstructionInput *definition = &source->instructions[info.instruction];
+        if (definition->operand_count != 1u || definition->successor_count != 0u ||
+            (definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL &&
+             definition->operation_id != XR_CORE_OP_CORE_PLACE_PROJECT)) {
+            xr_free(places);
+            return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
+        }
+        XrXiCleanupProjectionValueInfo dependency;
+        if (!cleanup_projection_value_info(source, definition->operands[0], &dependency)) {
+            xr_free(places);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        if (dependency.category == XR_CORE_IR_PLACE &&
+            !cleanup_projection_key_array_contains(places, place_count, definition->operands[0])) {
+            if (place_count >= projection->begin_gap) {
+                xr_free(places);
+                return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+            }
+            places[place_count++] = definition->operands[0];
+        }
+    }
+
+    uint64_t map_capacity_wide =
+        (uint64_t) projection->trap_argument_count + place_count + body_count;
+    uint64_t instruction_capacity_wide = (projection->trap_argument_count ? 1u : 0u) +
+                                         (uint64_t) place_count + body_count +
+                                         projection->trap_argument_count + body_count + 1u;
+    if (map_capacity_wide > UINT32_MAX || instruction_capacity_wide > UINT32_MAX) {
+        xr_free(places);
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    }
+    uint32_t map_capacity = (uint32_t) map_capacity_wide;
+    uint32_t instruction_capacity = (uint32_t) instruction_capacity_wide;
+    XrCoreIrKey *source_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*source_keys)) : NULL;
+    XrCoreIrKey *target_keys = map_capacity ? xr_calloc(map_capacity, sizeof(*target_keys)) : NULL;
+    projection->trap_instructions =
+        instruction_capacity
+            ? xr_calloc(instruction_capacity, sizeof(*projection->trap_instructions))
+            : NULL;
+    if ((map_capacity && (!source_keys || !target_keys)) ||
+        (instruction_capacity && !projection->trap_instructions)) {
+        xr_free(target_keys);
+        xr_free(source_keys);
+        xr_free(places);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    /* Publish initialized storage length immediately so free_context() can
+     * reclaim every
+     * operand allocated below if materialization fails. */
+    projection->trap_instruction_count = instruction_capacity;
+    uint32_t map_count = 0u;
+    for (uint32_t argument = 0u; argument < projection->trap_argument_count; ++argument) {
+        source_keys[map_count] = projection->trap_argument_sources[argument];
+        target_keys[map_count++] = projection->trap_arguments[argument].key;
+    }
+    uint32_t target_instruction = 0u;
+    if (projection->trap_argument_count) {
+        XrCoreIrKey *operands = xr_calloc(projection->trap_argument_count, sizeof(*operands));
+        if (!operands) {
+            xr_free(target_keys);
+            xr_free(source_keys);
+            xr_free(places);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t argument = 0u; argument < projection->trap_argument_count; ++argument)
+            operands[argument] = projection->trap_arguments[argument].key;
+        projection->trap_instructions[target_instruction++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .operands = operands,
+            .operand_count = projection->trap_argument_count,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+    }
+
+    for (uint32_t instruction = 0u; instruction < projection->begin_gap; ++instruction) {
+        const XrCoreIrInstructionInput *from = &source->instructions[instruction];
+        if (xr_core_ir_key_is_zero(from->result) ||
+            !cleanup_projection_key_array_contains(places, place_count, from->result))
+            continue;
+        XrCoreIrInstructionInput *to = &projection->trap_instructions[target_instruction];
+        *to = *from;
+        to->operands = NULL;
+        to->successors = NULL;
+        to->result = cleanup_trap_result_key(function, projection, target_instruction);
+        source_keys[map_count] = from->result;
+        target_keys[map_count++] = to->result;
+        if (from->operand_count != 1u) {
+            xr_free(target_keys);
+            xr_free(source_keys);
+            xr_free(places);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+        if (!operand) {
+            xr_free(target_keys);
+            xr_free(source_keys);
+            xr_free(places);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        if (!cleanup_projection_remap_key(source_keys, target_keys, map_count, from->operands[0],
+                                          operand)) {
+            xr_free(operand);
+            xr_free(target_keys);
+            xr_free(source_keys);
+            xr_free(places);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "cleanup trap projection place dependency is unavailable");
+        }
+        to->operands = operand;
+        ++target_instruction;
+    }
+
+    for (uint32_t instruction = projection->begin_gap; instruction < projection->end_gap;
+         ++instruction) {
+        const XrCoreIrInstructionInput *from = &source->instructions[instruction];
+        XrCoreIrInstructionInput *to = &projection->trap_instructions[target_instruction];
+        *to = *from;
+        to->operands = NULL;
+        to->successors = NULL;
+        if (!xr_core_ir_key_is_zero(from->result)) {
+            to->result = cleanup_trap_result_key(function, projection, target_instruction);
+            source_keys[map_count] = from->result;
+            target_keys[map_count++] = to->result;
+        }
+        if (from->operand_count) {
+            XrCoreIrKey *operands = xr_calloc(from->operand_count, sizeof(*operands));
+            if (!operands) {
+                xr_free(target_keys);
+                xr_free(source_keys);
+                xr_free(places);
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            }
+            for (uint32_t operand = 0u; operand < from->operand_count; ++operand) {
+                if (!cleanup_projection_remap_key(source_keys, target_keys, map_count,
+                                                  from->operands[operand], &operands[operand])) {
+                    xr_free(operands);
+                    xr_free(target_keys);
+                    xr_free(source_keys);
+                    xr_free(places);
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "cleanup trap projection operand is not closed over its slice");
+                }
+            }
+            to->operands = operands;
+        }
+        ++target_instruction;
+    }
+    xr_free(places);
+
+    bool successor_expected = false;
+    XrXiCleanupProjectionStorage *next =
+        cleanup_projection_successor(function, projection, &successor_expected);
+    if (successor_expected && !next) {
+        xr_free(target_keys);
+        xr_free(source_keys);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "cleanup projection has no exact materialized successor");
+    }
+    for (uint32_t instruction = 0u; instruction < body_count; ++instruction) {
+        uint32_t source_instruction = projection->begin_gap + instruction;
+        XrCoreIrInstructionInput *candidate =
+            &projection->trap_instructions[target_instruction - body_count + instruction];
+        if (!cleanup_trap_capable_operation(candidate->operation_id))
+            continue;
+        if (!next || !projection->ends_in_trap || source_instruction + 1u != projection->end_gap) {
+            xr_free(target_keys);
+            xr_free(source_keys);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "cleanup trap instruction has no exact segment successor");
+        }
+        XrProgramBuildStatus status =
+            append_cleanup_trap_successor(candidate, function, next, source_keys, target_keys,
+                                          map_count, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK) {
+            xr_free(target_keys);
+            xr_free(source_keys);
+            return status;
+        }
+    }
+
+    XrCoreIrKey *terminal_operands = NULL;
+    uint32_t terminal_operand_count = 0u;
+    uint16_t terminal_operation = XR_CORE_OP_CORE_TRAP;
+    if (next) {
+        terminal_operation = XR_CORE_OP_CORE_BRANCH;
+        terminal_operand_count = next->trap_argument_count;
+        terminal_operands = terminal_operand_count
+                                ? xr_calloc(terminal_operand_count, sizeof(*terminal_operands))
+                                : NULL;
+        if (terminal_operand_count && !terminal_operands) {
+            xr_free(target_keys);
+            xr_free(source_keys);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t argument = 0u; argument < terminal_operand_count; ++argument) {
+            if (!cleanup_projection_remap_key(source_keys, target_keys, map_count,
+                                              next->trap_argument_sources[argument],
+                                              &terminal_operands[argument])) {
+                xr_free(terminal_operands);
+                xr_free(target_keys);
+                xr_free(source_keys);
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "cleanup trap projection cannot continue to its remaining item");
+            }
+        }
+    }
+
+    for (uint32_t mapped = 0u; mapped < map_count; ++mapped) {
+        XrXiCleanupProjectionValueInfo info;
+        if (!cleanup_projection_value_info(source, source_keys[mapped], &info) ||
+            info.ownership != XR_CORE_IR_OWNER)
+            continue;
+        uint32_t consumes = 0u;
+        for (uint32_t instruction = projection->begin_gap; instruction < projection->end_gap;
+             ++instruction) {
+            const XrCoreIrInstructionInput *candidate = &source->instructions[instruction];
+            for (uint32_t operand = 0u; operand < candidate->operand_count; ++operand)
+                if (cleanup_projection_operand_consumes_owner(context, source_storage, source,
+                                                              candidate, instruction, operand,
+                                                              source_keys[mapped]))
+                    ++consumes;
+        }
+        uint32_t transfers = 0u;
+        for (uint32_t operand = 0u; operand < terminal_operand_count; ++operand)
+            transfers += xr_core_ir_key_equal(terminal_operands[operand], target_keys[mapped]);
+        if (consumes > 1u || (consumes != 0u && transfers != 0u) || transfers > 1u) {
+            xr_free(terminal_operands);
+            xr_free(target_keys);
+            xr_free(source_keys);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "cleanup trap projection has an unbalanced affine owner");
+        }
+        if (consumes == 0u && transfers == 0u) {
+            XrCoreIrKey *drop = xr_calloc(1u, sizeof(*drop));
+            if (!drop) {
+                xr_free(terminal_operands);
+                xr_free(target_keys);
+                xr_free(source_keys);
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            }
+            *drop = target_keys[mapped];
+            projection->trap_instructions[target_instruction++] = (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+                .result_type_id = XR_CORE_TYPE_VOID,
+                .operands = drop,
+                .operand_count = 1u,
+                .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+            };
+        }
+    }
+    XrCoreIrInstructionInput *terminal = &projection->trap_instructions[target_instruction++];
+    terminal->operation_id = terminal_operation;
+    terminal->result_type_id = XR_CORE_TYPE_VOID;
+    terminal->operands = terminal_operands;
+    terminal->operand_count = terminal_operand_count;
+    terminal->immediate_kind = terminal_operation == XR_CORE_OP_CORE_TRAP
+                                   ? XR_CORE_IR_IMMEDIATE_U32
+                                   : XR_CORE_IR_IMMEDIATE_NONE;
+    if (terminal_operation == XR_CORE_OP_CORE_TRAP)
+        terminal->immediate.u32 = 7u;
+    else {
+        XrCoreIrKey *successor = xr_calloc(1u, sizeof(*successor));
+        if (!successor) {
+            xr_free(target_keys);
+            xr_free(source_keys);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        *successor = cleanup_trap_block_key(function, next);
+        terminal->successors = successor;
+        terminal->successor_count = 1u;
+    }
+    projection->trap_instruction_count = target_instruction;
+    output->key = cleanup_trap_block_key(function, projection);
+    output->arguments = projection->trap_arguments;
+    output->argument_count = projection->trap_argument_count;
+    output->instructions = projection->trap_instructions;
+    output->instruction_count = projection->trap_instruction_count;
+    xr_free(target_keys);
+    xr_free(source_keys);
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus
+materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFunctionStorage *function,
+                                     uint32_t original_block_count, uint32_t block_capacity,
+                                     uint32_t *output_block_index, uint32_t *projection_count,
+                                     char *diagnostic, size_t diagnostic_size) {
+    if (!context || !function || !output_block_index || !projection_count ||
+        *output_block_index != original_block_count || function->cleanup_projection_count != 0u ||
+        function->cleanup_projections)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *projection_count = 0u;
+    for (uint32_t block_index = 0u; block_index < function->xi->nblocks; ++block_index) {
+        XrXiBlockStorage *block = &function->block_storage[block_index];
+        if (!block->reachable || !block->emission_ready)
+            continue;
+        for (uint32_t value_index = 0u; value_index < block->xi->nvalues; ++value_index) {
+            const XiValue *value = block->xi->values[value_index];
+            const XiCleanupBoundary *boundary = NULL;
+            if (!value || !active_cleanup_boundary_at_program_point(function, value, &boundary))
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            if (!boundary)
+                continue;
+            if (value_index >= block->emission_span_count)
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            const XrXiEmissionSpan *span = &block->emission_spans[value_index];
+            uint32_t trap_instruction_count = 0u;
+            for (uint32_t instruction = span->begin; instruction < span->end; ++instruction) {
+                XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
+                if (!cleanup_trap_capable_operation(candidate->operation_id))
+                    continue;
+                if (++trap_instruction_count != 1u)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "cleanup value v%u emits multiple trap-capable operations",
+                                value->id);
+                XrXiCleanupPointStorage *active = find_cleanup_point(function, boundary);
+                if (!active || boundary->kind != XI_CLEANUP_BOUNDARY_CLOSED ||
+                    !active->enter_emitted || !active->leave_emitted ||
+                    active->enter_block != block->xi || active->leave_block != block->xi ||
+                    instruction < active->enter_gap || instruction >= active->leave_gap)
+                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                uint32_t handler_state = function->cleanup_handler_state_before_value[value->id];
+                if (handler_state != 0u || candidate->successor_count != 0u)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "cleanup call v%u requires composition with an outer handler",
+                                value->id);
+                XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
+                XrXiCleanupProjectionStorage *projection = NULL;
+                status = ensure_cleanup_projection(function, active, instruction + 1u, &projection);
+                if (status == XR_PROGRAM_BUILD_OK && boundary->remaining)
+                    status = mark_cleanup_trap_projection_chain(function, boundary->remaining,
+                                                                diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+        }
+    }
+    *projection_count = function->cleanup_projection_count;
+    if (*projection_count > block_capacity - *output_block_index)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    for (uint32_t projection_index = 0u; projection_index < *projection_count; ++projection_index) {
+        XrXiCleanupProjectionStorage *projection = &function->cleanup_projections[projection_index];
+        XrProgramBuildStatus status = prepare_cleanup_trap_projection_arguments(
+            context, function, projection, original_block_count, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    for (uint32_t projection_index = 0u; projection_index < *projection_count; ++projection_index) {
+        XrXiCleanupProjectionStorage *projection = &function->cleanup_projections[projection_index];
+        XrProgramBuildStatus status = close_cleanup_projection_arguments(
+            function, projection, original_block_count, 0u, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    for (uint32_t projection_index = 0u; projection_index < *projection_count; ++projection_index) {
+        XrXiCleanupProjectionStorage *projection = &function->cleanup_projections[projection_index];
+        XrProgramBuildStatus status = materialize_cleanup_trap_projection(
+            context, function, projection, original_block_count,
+            &function->blocks[(*output_block_index)++], diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    for (uint32_t block_index = 0u; block_index < function->xi->nblocks; ++block_index) {
+        XrXiBlockStorage *block = &function->block_storage[block_index];
+        if (!block->reachable || !block->emission_ready)
+            continue;
+        for (uint32_t value_index = 0u; value_index < block->xi->nvalues; ++value_index) {
+            const XiValue *value = block->xi->values[value_index];
+            const XiCleanupBoundary *boundary = NULL;
+            if (!value || !active_cleanup_boundary_at_program_point(function, value, &boundary))
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            if (!boundary)
+                continue;
+            const XrXiEmissionSpan *span = &block->emission_spans[value_index];
+            for (uint32_t instruction = span->begin; instruction < span->end; ++instruction) {
+                XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
+                if (!cleanup_trap_capable_operation(candidate->operation_id))
+                    continue;
+                XrXiCleanupPointStorage *active = find_cleanup_point(function, boundary);
+                XrXiCleanupProjectionStorage *target =
+                    active ? find_cleanup_projection(function, active, instruction + 1u) : NULL;
+                if (!target)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "cleanup refusal edge has no exact projected successor");
+                XrProgramBuildStatus status = append_cleanup_trap_successor(
+                    candidate, function, target, NULL, NULL, 0u, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+        }
+    }
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -10687,6 +12337,16 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
     uint32_t closed_capability_mask = storage->closed_capability_mask;
     bool closed_contract_ready = storage->closed_contract_ready;
     XrXiBlockStorage *block_storage = storage->block_storage;
+    XrXiCleanupPointStorage *cleanup_points = storage->cleanup_points;
+    uint32_t cleanup_point_count = storage->cleanup_point_count;
+    XrXiCleanupChainNode *cleanup_chain_nodes = storage->cleanup_chain_nodes;
+    uint32_t cleanup_chain_node_count = storage->cleanup_chain_node_count;
+    XrXiCleanupHandlerChainNode *cleanup_handler_chain_nodes = storage->cleanup_handler_chain_nodes;
+    XrXiCleanupRegistrationStorage *cleanup_registrations = storage->cleanup_registrations;
+    uint32_t *cleanup_registration_by_value = storage->cleanup_registration_by_value;
+    uint32_t *cleanup_state_before_value = storage->cleanup_state_before_value;
+    uint32_t *cleanup_handler_state_before_value = storage->cleanup_handler_state_before_value;
+    uint32_t cleanup_registration_count = storage->cleanup_registration_count;
     memset(output, 0, sizeof(*output));
     memset(storage, 0, sizeof(*storage));
     storage->xi = xi;
@@ -10695,6 +12355,16 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
     storage->closed_capability_mask = closed_capability_mask;
     storage->closed_contract_ready = closed_contract_ready;
     storage->block_storage = block_storage;
+    storage->cleanup_points = cleanup_points;
+    storage->cleanup_point_count = cleanup_point_count;
+    storage->cleanup_chain_nodes = cleanup_chain_nodes;
+    storage->cleanup_chain_node_count = cleanup_chain_node_count;
+    storage->cleanup_handler_chain_nodes = cleanup_handler_chain_nodes;
+    storage->cleanup_registrations = cleanup_registrations;
+    storage->cleanup_registration_by_value = cleanup_registration_by_value;
+    storage->cleanup_state_before_value = cleanup_state_before_value;
+    storage->cleanup_handler_state_before_value = cleanup_handler_state_before_value;
+    storage->cleanup_registration_count = cleanup_registration_count;
     if (!xi || xi->stage != XI_STAGE_OPTIMIZED || xi->semantic_plan || xi->nblocks == 0u ||
         !xi->entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -10832,9 +12502,30 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         const XrXiCancelEdge *edge = find_cancel_edge(context, xi, point);
         synthetic_cancel_count += !edge || edge->private_projection;
     }
-    if (synthetic_cancel_count > UINT32_MAX - xi->nblocks)
+    uint32_t cleanup_projection_upper_bound = storage->cleanup_point_count;
+    for (uint32_t block = 0u; block < xi->nblocks; ++block) {
+        const XiBlock *source_block = xi->blocks[block];
+        const XrXiBlockStorage *source_storage = find_block_storage(storage, source_block);
+        if (!source_storage || !source_storage->reachable)
+            continue;
+        for (uint32_t value = 0u; source_block && value < source_block->nvalues; ++value) {
+            const XiCleanupBoundary *boundary = NULL;
+            if (!source_block->values[value] ||
+                !active_cleanup_boundary_at_program_point(storage, source_block->values[value],
+                                                          &boundary))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "reachable Xi value has no cleanup projection bound");
+            if (!boundary)
+                continue;
+            if (cleanup_projection_upper_bound == UINT32_MAX)
+                return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+            ++cleanup_projection_upper_bound;
+        }
+    }
+    if (synthetic_cancel_count > UINT32_MAX - xi->nblocks ||
+        cleanup_projection_upper_bound > UINT32_MAX - xi->nblocks - synthetic_cancel_count)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-    uint32_t block_capacity = xi->nblocks + synthetic_cancel_count;
+    uint32_t block_capacity = xi->nblocks + synthetic_cancel_count + cleanup_projection_upper_bound;
     storage->blocks = xr_calloc(block_capacity, sizeof(*storage->blocks));
     if (!storage->blocks)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -10894,6 +12585,12 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             xr_calloc(instruction_capacity, sizeof(*block_storage->instructions));
         if (!block_storage->instructions)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        block_storage->emission_span_count = xi_block->nvalues;
+        block_storage->emission_spans =
+            xi_block->nvalues ? xr_calloc(xi_block->nvalues, sizeof(*block_storage->emission_spans))
+                              : NULL;
+        if (xi_block->nvalues && !block_storage->emission_spans)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         block_storage->instruction_count = instruction_capacity;
         block_output->instructions = block_storage->instructions;
         block_output->instruction_count = instruction_capacity;
@@ -10935,10 +12632,16 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         }
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
-            if (value_is_skipped(context, xi, value))
+            XrXiEmissionSpan *span = &block_storage->emission_spans[value_index];
+            span->begin = instruction_index;
+            if (value_is_skipped(context, xi, value)) {
+                span->end = instruction_index;
                 continue;
-            if (suspend_point && value == suspend_point->op)
+            }
+            if (suspend_point && value == suspend_point->op) {
+                span->end = instruction_index;
                 continue;
+            }
             uint32_t direct_field = UINT32_MAX;
             const XiValue *direct_base =
                 direct_projection_base_place(context, xi, value, &direct_field);
@@ -10971,6 +12674,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     storage->local_effect_mask |= operation->effect_mask;
                     storage->local_capability_mask |= operation->capability_mask;
                 }
+                span->end = instruction_index;
                 continue;
             }
             bool aggregate_place_access =
@@ -11000,6 +12704,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     storage->local_capability_mask |= operation->capability_mask;
                 }
                 instruction_index += 2u;
+                span->end = instruction_index;
                 continue;
             }
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u) {
@@ -11049,7 +12754,11 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             }
             storage->local_effect_mask |= operation->effect_mask;
             storage->local_capability_mask |= operation->capability_mask;
+            span->end = instruction_index;
         }
+        if (!emission_spans_are_exact(context, xi, block_storage, suspend_point, instruction_index))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi block b%u has no exact CoreIR emission spans", xi_block->id);
 
         XrCoreIrInstructionInput *terminator = &block_storage->instructions[instruction_index++];
         terminator->result_type_id = XR_CORE_TYPE_VOID;
@@ -11263,7 +12972,21 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                         "Xi block b%u has no CoreSpec terminal operation", xi_block->id);
         storage->local_effect_mask |= terminal_operation->effect_mask;
         storage->local_capability_mask |= terminal_operation->capability_mask;
+        block_storage->emission_ready = true;
     }
+    status = bind_cleanup_program_points(storage, diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    uint32_t original_block_count = output_block_index;
+    uint32_t cleanup_trap_projection_count = 0u;
+    status = materialize_cleanup_trap_projections(
+        context, storage, original_block_count, block_capacity, &output_block_index,
+        &cleanup_trap_projection_count, diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    if (cleanup_trap_projection_count > UINT32_MAX - output->block_count)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    output->block_count += cleanup_trap_projection_count;
     if (output->coroutine_safepoint_count != 0u) {
         for (uint32_t safepoint = 0u; safepoint < output->coroutine_safepoint_count; ++safepoint) {
             const XiCoroSuspendPoint *point = coroutine_point_for_safepoint(storage, safepoint);
@@ -11875,6 +13598,10 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
         initialize_canonical_reachability(context, diagnostic, diagnostic_size);
     if (reachability_status != XR_PROGRAM_BUILD_OK)
         return reachability_status;
+    XrProgramBuildStatus cleanup_status =
+        prepare_cleanup_control_flow(context, diagnostic, diagnostic_size);
+    if (cleanup_status != XR_PROGRAM_BUILD_OK)
+        return cleanup_status;
     XrProgramBuildStatus trap_status =
         prepare_trap_continuations(context, diagnostic, diagnostic_size);
     if (trap_status != XR_PROGRAM_BUILD_OK)

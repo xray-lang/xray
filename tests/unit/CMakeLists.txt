@@ -839,6 +839,75 @@ endif()
 set_tests_properties(test_xr_program_aot PROPERTIES
     LABELS "unit;aot;canonical-program;backendir;translation-validation;task-300")
 
+add_executable(xr_program_allocation_fixture_writer
+    aot/xr_program_allocation_fixture_writer.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+target_include_directories(xr_program_allocation_fixture_writer PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(xr_program_allocation_fixture_writer PRIVATE
+    xr_program_test_core xray_program_vm_runtime xray_program_aot_compiler)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(xr_program_allocation_fixture_writer PRIVATE /W4 /WX)
+else()
+    target_compile_options(xr_program_allocation_fixture_writer PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME xr_program_allocation_native_self_test
+    COMMAND ${XRAY_PYTHON} -m unittest discover
+        -s ${CMAKE_SOURCE_DIR}/tests/lib/tests -p test_program_allocation_native.py)
+set_tests_properties(xr_program_allocation_native_self_test PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    LABELS "unit;aot;generated-c;allocation;self-test")
+if(WIN32)
+    add_custom_target(test_xr_program_allocation_aot_native
+        DEPENDS xr_program_allocation_fixture_writer)
+    add_test(NAME test_xr_program_allocation_aot_native
+        COMMAND ${XRAY_PYTHON}
+            ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_allocation_native.py
+            --writer $<TARGET_FILE:xr_program_allocation_fixture_writer>)
+    set_tests_properties(test_xr_program_allocation_aot_native PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        LABELS "unit;aot;generated-c;allocation;msvc;portable-c11"
+        TIMEOUT 120 PROCESSORS 1)
+endif()
+
+add_executable(xr_program_coroutine_graph_fixture_writer
+    aot/xr_program_coroutine_graph_fixture_writer.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+target_include_directories(xr_program_coroutine_graph_fixture_writer PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(xr_program_coroutine_graph_fixture_writer PRIVATE
+    xr_program_test_core xray_program_aot_compiler)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(xr_program_coroutine_graph_fixture_writer PRIVATE /W4 /WX)
+else()
+    target_compile_options(xr_program_coroutine_graph_fixture_writer PRIVATE
+        -Wall -Wextra -Werror)
+endif()
+add_test(NAME xr_program_coroutine_graph_native_self_test
+    COMMAND ${XRAY_PYTHON} -m unittest discover
+        -s ${CMAKE_SOURCE_DIR}/tests/lib/tests -p test_program_coroutine_graph_native.py)
+set_tests_properties(xr_program_coroutine_graph_native_self_test PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    LABELS "unit;aot;generated-c;coroutine;self-test")
+if(WIN32)
+    add_custom_target(test_xr_program_coroutine_graph_aot_native
+        DEPENDS xr_program_coroutine_graph_fixture_writer)
+    add_test(NAME test_xr_program_coroutine_graph_aot_native
+        COMMAND ${XRAY_PYTHON}
+            ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_coroutine_graph_native.py
+            --writer $<TARGET_FILE:xr_program_coroutine_graph_fixture_writer>)
+    set_tests_properties(test_xr_program_coroutine_graph_aot_native PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        LABELS "unit;aot;generated-c;coroutine;msvc;portable-c11"
+        TIMEOUT 120 PROCESSORS 1)
+endif()
+
 set(XR_PROGRAM_AOT_FIXTURE_DIR
     ${CMAKE_CURRENT_BINARY_DIR}/generated/task-300)
 set(XR_PROGRAM_AOT_GENERATED_C
@@ -1509,6 +1578,10 @@ add_xray_unit_test(test_xi_ivsr ir/test_xi_ivsr.c)
 add_xray_unit_test(test_xi_inline ir/test_xi_inline.c)
 add_xray_unit_test(test_xi_tail_call ir/test_xi_tail_call.c)
 add_xray_unit_test(test_xi_verify_ext ir/test_xi_verify_ext.c)
+add_xray_unit_test(test_xi_cleanup ir/test_xi_cleanup.c)
+add_xray_unit_test(test_xi_cleanup_lower ir/test_xi_cleanup_lower.c)
+add_xray_unit_test(test_xi_cleanup_clone ir/test_xi_cleanup_clone.c)
+add_xray_unit_test(test_xi_cleanup_integration ir/test_xi_cleanup_integration.c)
 add_xray_unit_test(test_xi_shuffle ir/test_xi_shuffle.c)
 
 # ============================================================================

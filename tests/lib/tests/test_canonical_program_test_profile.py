@@ -26,8 +26,8 @@ SPEC.loader.exec_module(profile)
 
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
-        self.assertEqual(len(profile.CTEST_NAMES), 46)
-        self.assertEqual(len(profile.BUILD_TARGETS), 22)
+        self.assertEqual(len(profile.CTEST_NAMES), 47)
+        self.assertEqual(len(profile.BUILD_TARGETS), 23)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
         self.assertLessEqual(set(profile.BUILD_TARGETS), set(profile.CTEST_NAMES))
@@ -129,6 +129,7 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_ref_parameter_coroutine_aot_native",
             "test_xr_program_read_existential_coroutine_aot_native",
             "test_xr_program_provider_trap_cleanup_aot_native",
+            "test_xr_program_child_coroutine_trap_cleanup_aot_native",
             "meta_ownership_inventory",
             "contract_freeze",
             "contract_freeze_injection",

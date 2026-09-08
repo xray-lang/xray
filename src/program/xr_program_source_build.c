@@ -127,15 +127,14 @@ static void build_context_free(XrProgramSourceBuildContext *context) {
     memset(context, 0, sizeof(*context));
 }
 
-static XrProgramSourceBuildStatus allocate_module_storage(
-    XrProgramSourceBuildContext *context, XrProgramSourceDiagnostic *diagnostic) {
+static XrProgramSourceBuildStatus allocate_module_storage(XrProgramSourceBuildContext *context,
+                                                          XrProgramSourceDiagnostic *diagnostic) {
     size_t count = context->module_count;
     context->ast_roots = xr_calloc(count, sizeof(*context->ast_roots));
     context->pipelines = xr_calloc(count, sizeof(*context->pipelines));
     context->modules = xr_calloc(count, sizeof(*context->modules));
     context->module_roots = xr_calloc(count, sizeof(*context->module_roots));
-    if (!context->ast_roots || !context->pipelines || !context->modules ||
-        !context->module_roots)
+    if (!context->ast_roots || !context->pipelines || !context->modules || !context->module_roots)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
                       XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX, 0u, 0u,
                       "module build storage allocation failed");
@@ -154,10 +153,10 @@ static XrProgramSourceBuildStatus build_module_graph(XrProgramSourceBuildContext
     int graph_status = xr_module_graph_build(context->graph, input->entry_source_path,
                                              input->entry_authority, &graph_error);
     if (graph_status != 0) {
-        XrProgramSourceBuildStatus status = reject(
-            diagnostic, XR_PROGRAM_SOURCE_BUILD_GRAPH_REJECTED,
-            XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX, 0u, (uint32_t) graph_status,
-            "%s", graph_error ? graph_error : "module graph build failed");
+        XrProgramSourceBuildStatus status =
+            reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_GRAPH_REJECTED,
+                   XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX, 0u, (uint32_t) graph_status,
+                   "%s", graph_error ? graph_error : "module graph build failed");
         xr_free(graph_error);
         return status;
     }
@@ -193,26 +192,23 @@ static XrProgramSourceBuildStatus build_module_graph(XrProgramSourceBuildContext
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
-static XrProgramSourceBuildStatus validate_entry_identity(
-    XrProgramSourceBuildContext *context, XrProgramSourceDiagnostic *diagnostic) {
+static XrProgramSourceBuildStatus validate_entry_identity(XrProgramSourceBuildContext *context,
+                                                          XrProgramSourceDiagnostic *diagnostic) {
     const XrProgramSourceEntryIdentity *entry = &context->input->entry;
     const XrModuleSpec *spec = &context->graph->specs[context->graph->entry_index];
     if (!spec->canonical || strcmp(spec->canonical, entry->module_identity) != 0)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
-                      context->entry_topological_index, 0u, 0u,
-                      "entry module identity does not match the authoritative graph");
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
+                      0u, "entry module identity does not match the authoritative graph");
     if (memcmp(spec->source_content_fingerprint.bytes, entry->source_content_fingerprint.bytes,
                sizeof(entry->source_content_fingerprint.bytes)) != 0)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
-                      context->entry_topological_index, 0u, 0u,
-                      "entry source fingerprint does not match the authoritative graph");
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
+                      0u, "entry source fingerprint does not match the authoritative graph");
     if (!spec->ast || spec->ast->type != AST_PROGRAM)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
-                      context->entry_topological_index, 0u, 0u,
-                      "entry module has no exact source program");
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
+                      0u, "entry module has no exact source program");
     if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER) {
         context->entry_syntax = spec->ast;
         return XR_PROGRAM_SOURCE_BUILD_OK;
@@ -230,9 +226,8 @@ static XrProgramSourceBuildStatus validate_entry_identity(
     }
     if (matches != 1u)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
-                      context->entry_topological_index, source_line, matches,
-                      "entry function '%s' has %u exact source declarations",
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index,
+                      source_line, matches, "entry function '%s' has %u exact source declarations",
                       entry->function_name, matches);
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
@@ -314,17 +309,16 @@ static XrProgramSourceBuildStatus analyze_modules(XrProgramSourceBuildContext *c
         XrModuleSpec *spec = &context->graph->specs[spec_index];
         xa_analyzer_analyze(context->analyzer, spec->source_path, spec->ast);
         int diagnostic_count = 0;
-        XaDiagnostic *analysis =
-            xa_analyzer_get_diagnostics(context->analyzer, &diagnostic_count);
+        XaDiagnostic *analysis = xa_analyzer_get_diagnostics(context->analyzer, &diagnostic_count);
         for (; analysis; analysis = analysis->next) {
             if (analysis->severity != XR_DIAG_SEV_ERROR)
                 continue;
-            XrProgramSourceBuildStatus status = reject(
-                diagnostic, XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED,
-                XR_PROGRAM_SOURCE_STAGE_ANALYSIS, topo,
-                analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
-                analysis->code >= 0 ? (uint32_t) analysis->code : 0u, "%s",
-                analysis->message ? analysis->message : "source analysis failed");
+            XrProgramSourceBuildStatus status =
+                reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED,
+                       XR_PROGRAM_SOURCE_STAGE_ANALYSIS, topo,
+                       analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
+                       analysis->code >= 0 ? (uint32_t) analysis->code : 0u, "%s",
+                       analysis->message ? analysis->message : "source analysis failed");
             xa_analyzer_clear_diagnostics(context->analyzer);
             return status;
         }
@@ -344,26 +338,25 @@ static XrProgramSourceBuildStatus analyze_modules(XrProgramSourceBuildContext *c
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
-static XrProgramSourceBuildStatus prepare_semantic_graph(
-    XrProgramSourceBuildContext *context, XrProgramSourceDiagnostic *diagnostic) {
+static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildContext *context,
+                                                         XrProgramSourceDiagnostic *diagnostic) {
     context->analyzer = xa_analyzer_new(context->input->session);
     if (!context->analyzer)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
                       XR_PROGRAM_SOURCE_STAGE_ANALYSIS, UINT32_MAX, 0u, 0u,
                       "analyzer allocation failed");
-    xa_analyzer_set_build_profile(
-        context->analyzer,
-        context->input->source_profile == XR_PROGRAM_SOURCE_PROFILE_FREESTANDING
-            ? XA_ANALYZER_BUILD_PROFILE_FREESTANDING
-            : XA_ANALYZER_BUILD_PROFILE_HOSTED);
+    xa_analyzer_set_build_profile(context->analyzer, context->input->source_profile ==
+                                                             XR_PROGRAM_SOURCE_PROFILE_FREESTANDING
+                                                         ? XA_ANALYZER_BUILD_PROFILE_FREESTANDING
+                                                         : XA_ANALYZER_BUILD_PROFILE_HOSTED);
     xa_analyzer_set_graph(context->analyzer, context->graph);
     XrProgramSourceBuildStatus status = analyze_modules(context, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK)
         return status;
     XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
-        if (!xa_mono_pass(context->ast_roots[topo], context->ast_roots,
-                          (int) context->module_count, isolate, context->analyzer))
+        if (!xa_mono_pass(context->ast_roots[topo], context->ast_roots, (int) context->module_count,
+                          isolate, context->analyzer))
             return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED,
                           XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo, 0u, 0u,
                           "module monomorphization failed");
@@ -383,16 +376,15 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(
         xr_compiler_session_pop_arena(&scope);
         if (canonical != XR_CANON_OK)
             return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_CANONICALIZATION_REJECTED,
-                          XR_PROGRAM_SOURCE_STAGE_CANONICALIZATION, topo, 0u,
-                          (uint32_t) canonical, "module canonicalization failed");
+                          XR_PROGRAM_SOURCE_STAGE_CANONICALIZATION, topo, 0u, (uint32_t) canonical,
+                          "module canonicalization failed");
     }
     status = analyze_modules(context, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK)
         return status;
     if (!xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
-            &context->evidence, context->graph,
-            evidence_profile(context->input->source_profile), 0u, NULL, 0u,
-            context->analyzer))
+            &context->evidence, context->graph, evidence_profile(context->input->source_profile),
+            0u, NULL, 0u, context->analyzer))
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
                       XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
                       "global evidence construction failed");
@@ -460,9 +452,8 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
     }
     if (matches != 1u)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
-                      context->entry_topological_index, 0u, 0u,
-                      "entry identity resolved to %u Xi functions", matches);
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
+                      0u, "entry identity resolved to %u Xi functions", matches);
     XrProgramFromXiInput writer_input = {
         .module_roots = context->module_roots,
         .module_count = context->module_count,
@@ -477,8 +468,8 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
         if (diagnostic)
             diagnostic->writer_status = writer;
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE,
-                      context->entry_topological_index, 0u, (uint32_t) writer, "%s",
+                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, context->entry_topological_index, 0u,
+                      (uint32_t) writer, "%s",
                       writer_diagnostic[0] ? writer_diagnostic
                                            : xr_program_build_status_name(writer));
     }
@@ -490,9 +481,8 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
         if (diagnostic)
             diagnostic->verifier_status = verifier;
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_VALIDATE,
-                      context->entry_topological_index, 0u, (uint32_t) verifier,
-                      "canonical program validation failed: %s",
+                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_VALIDATE, context->entry_topological_index,
+                      0u, (uint32_t) verifier, "canonical program validation failed: %s",
                       xr_program_verify_status_name(verifier));
     }
     return XR_PROGRAM_SOURCE_BUILD_OK;
@@ -505,9 +495,9 @@ static bool input_valid(const XrProgramSourceBuildInput *input) {
     if (!input || input->schema_version != XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION ||
         input->max_modules == 0u || !input->session || !input->resolver ||
         !input->entry_source_path || !input->entry_authority ||
-        (!function_entry && !initializer_entry) ||
-        input->entry.reserved8[0] != 0u || input->entry.reserved8[1] != 0u ||
-        input->entry.reserved8[2] != 0u || !input->entry.module_identity ||
+        (!function_entry && !initializer_entry) || input->entry.reserved8[0] != 0u ||
+        input->entry.reserved8[1] != 0u || input->entry.reserved8[2] != 0u ||
+        !input->entry.module_identity ||
         (function_entry &&
          (!input->entry.function_name || input->entry.function_name[0] == '\0')) ||
         (initializer_entry && input->entry.function_name != NULL) ||
@@ -524,9 +514,9 @@ static bool input_valid(const XrProgramSourceBuildInput *input) {
     return true;
 }
 
-XrProgramSourceBuildStatus xr_program_source_build(
-    const XrProgramSourceBuildInput *input, XrProgramSourceProduct *product_out,
-    XrProgramSourceDiagnostic *diagnostic_out) {
+XrProgramSourceBuildStatus xr_program_source_build(const XrProgramSourceBuildInput *input,
+                                                   XrProgramSourceProduct *product_out,
+                                                   XrProgramSourceDiagnostic *diagnostic_out) {
     if (product_out)
         memset(product_out, 0, sizeof(*product_out));
     clear_diagnostic(diagnostic_out);
@@ -558,8 +548,8 @@ XrProgramSourceBuildStatus xr_program_source_build(
     if (status != XR_PROGRAM_SOURCE_BUILD_OK) {
         xr_program_source_product_free(&product);
         if (operation.active)
-            (void) xr_compiler_session_operation_fail(
-                &operation, XR_COMPILER_SESSION_OPERATION_FATAL);
+            (void) xr_compiler_session_operation_fail(&operation,
+                                                      XR_COMPILER_SESSION_OPERATION_FATAL);
         return status;
     }
     if (!xr_compiler_session_operation_succeed(&operation)) {

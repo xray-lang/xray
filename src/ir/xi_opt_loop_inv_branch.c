@@ -29,8 +29,10 @@
 #include "xi_opt_loop_inv_branch.h"
 #include "xi_analysis.h"
 #include "xi_cfg_edit.h"
+#include "xi_cleanup.h"
 #include "xi_loop.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 
 #define LOOP_UNSWITCH_MAX_VALUES 48
 
@@ -265,6 +267,66 @@ static bool version_uses_are_supported(const XiLoop *loop, XiBlock *branch_block
     return true;
 }
 
+static bool version_cleanup_member_is_cloned(const XiLoop *loop, const bool *reachable,
+                                             const XiValue *value) {
+    if (!value)
+        return true;
+    int index = loop_block_index(loop, value->block);
+    return index >= 0 && reachable[index];
+}
+
+/* Specialization may erase a whole frontier on an untaken branch, but never
+ * only one of its
+ * pairs or remaining obligations. Check both versions before
+ * appending any blocks, while all
+ * source identities still denote live values. */
+static bool version_cleanup_frontiers_are_closed(XiFunc *f, const XiLoop *loop,
+                                                 const bool *reachable) {
+    bool verified = false;
+    for (uint32_t bi = 0u; bi < loop->nbody; ++bi) {
+        if (!reachable[bi])
+            continue;
+        const XiBlock *block = loop->body[bi];
+        for (uint32_t vi = 0u; vi < block->nvalues; ++vi) {
+            const XiValue *value = block->values[vi];
+            if (!value || (!value->cleanup_boundary && value->op != XI_CLEANUP_ENTER &&
+                           value->op != XI_CLEANUP_LEAVE))
+                continue;
+            if (!verified && !xi_cleanup_verify(f, NULL, 0u))
+                return false;
+            verified = true;
+            const XiCleanupBoundary *boundary = value->cleanup_boundary;
+            if (!version_cleanup_member_is_cloned(loop, reachable, boundary->enter) ||
+                !version_cleanup_member_is_cloned(loop, reachable, boundary->leave) ||
+                !version_cleanup_member_is_cloned(loop, reachable, boundary->remaining) ||
+                !version_cleanup_member_is_cloned(loop, reachable, boundary->frontier))
+                return false;
+        }
+    }
+    return true;
+}
+
+static void version_remap_cleanup(XiFunc *f, const UnswitchMap *map) {
+    uint32_t count = 0u;
+    for (uint32_t index = 0u; index < map->count; ++index)
+        count += map->old_values[index]->cleanup_boundary != NULL;
+    if (count == 0u)
+        return;
+    XiCleanupValueMapping *values = xr_calloc(count, sizeof(*values));
+    XR_CHECK(values != NULL, "unswitch cleanup mapping allocation failed after cloning");
+    uint32_t cursor = 0u;
+    for (uint32_t index = 0u; index < map->count; ++index) {
+        if (map->old_values[index]->cleanup_boundary)
+            values[cursor++] =
+                (XiCleanupValueMapping) {map->old_values[index], map->new_values[index]};
+    }
+    XiCleanupRemap remap = {values, count};
+    char error[192] = {0};
+    bool remapped = xi_cleanup_remap(f, f, &remap, error, sizeof(error));
+    xr_free(values);
+    XR_CHECK(remapped, error);
+}
+
 static bool create_version(XiFunc *f, const XiLoop *loop, XiBlock *branch_block, bool take_true,
                            bool *reachable, UnswitchVersion *version) {
     version->blocks = (XiBlock **) xi_func_arena_alloc(f, loop->nbody * sizeof(XiBlock *));
@@ -329,6 +391,8 @@ static bool create_version(XiFunc *f, const XiLoop *loop, XiBlock *branch_block,
         if (!xi_value_clone_call_plan(f, clone, source))
             return false;
     }
+
+    version_remap_cleanup(f, &version->values);
 
     /* Clone terminators.  The selected invariant branch becomes a jump. */
     for (uint32_t bi = 0; bi < loop->nbody; bi++) {
@@ -611,6 +675,8 @@ static bool unswitch_loop(XiFunc *f, XiLoop *loop, XiBlock *branch_block,
         !mark_version_reachable(f, loop, branch_block, false, &false_reachable) ||
         !version_uses_are_supported(loop, branch_block, true_reachable) ||
         !version_uses_are_supported(loop, branch_block, false_reachable) ||
+        !version_cleanup_frontiers_are_closed(f, loop, true_reachable) ||
+        !version_cleanup_frontiers_are_closed(f, loop, false_reachable) ||
         !collect_direct_exit_values(f, loop, &direct_exit_values, &direct_exit_value_count))
         return false;
 

@@ -298,9 +298,12 @@ static int xi_pipeline_coro_func_suspendability(void *ud, const XiFunc *func) {
     if (!func || func->analyzer_effect_fingerprint == 0)
         return -1;
     /* Effect-summary completeness is dimensional.  An unresolved error or
-     * native-allocation contract must not turn a function into a coroutine
-     * when the analyzer has nevertheless closed the scheduler/generator
-     * suspension dimensions.  Conversely, an unknown suspension bit is not a
+     * native-allocation
+     * contract must not turn a function into a coroutine
+     * when the analyzer has nevertheless
+     * closed the scheduler/generator
+     * suspension dimensions.  Conversely, an unknown
+     * suspension bit is not a
      * synchronous proof and remains fail-closed. */
     if ((func->unknown_semantic_effects & XA_SEM_EFFECT_ANY_SUSPEND) != 0)
         return -1;
@@ -580,12 +583,18 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
         function->parameter_count != call->nargs)
         return -1;
     /* A dependency's VM emission detaches its Xi children, including generic
-     * template methods.  The verified SemanticPlan deliberately retains the
-     * exact source-class/member/function relation and the template's closed
-     * local call graph.  That relation is sufficient to classify suspension;
-     * it is not used as an executable direct-call target.  Rejecting generic
-     * classes here discarded the only surviving authority for compiler-made
-     * calls on imported generic instances (for example lifecycle calls
+     * template
+     * methods.  The verified SemanticPlan deliberately retains the
+     * exact
+     * source-class/member/function relation and the template's closed
+     * local call graph. That
+     * relation is sufficient to classify suspension;
+     * it is not used as an executable
+     * direct-call target.  Rejecting generic
+     * classes here discarded the only surviving
+     * authority for compiler-made
+     * calls on imported generic instances (for example lifecycle
+     * calls
      * introduced by a semantic intrinsic). */
     return xi_pipeline_coro_plan_function_suspendability(plan, method->function);
 }

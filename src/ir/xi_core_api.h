@@ -10,6 +10,7 @@
 XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
 XR_FUNC void xi_func_free(XiFunc *f);
 XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
+XR_FUNC bool xi_func_arena_contains(const XiFunc *f, const void *pointer, uint32_t size);
 XR_FUNC bool xi_value_set_view_evidence(XiFunc *f, XiValue *value,
                                         const XiViewSourceEvidence *sources, uint16_t source_count,
                                         uint32_t element_type_id, uint32_t invalidation_set_id,

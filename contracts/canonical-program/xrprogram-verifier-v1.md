@@ -30,10 +30,32 @@ cycles are rejected. No offset, alignment, slot, register class or target ABI fa
 Every type has an explicit logical ownership class (`TRIVIAL` or `AFFINE`) and copy contract
 (`TRIVIAL`, `EXPLICIT` or `FORBIDDEN`). Every SSA definition carries `NON_OWNER` or `OWNER`.
 `core.owner.copy` admits only a permitted copy contract and creates an independent affine owner;
-move, drop, MOVE calls and affine returns consume owners. In this slice affine aggregate/variant
-payloads and local places are intentionally restricted to trivial child types, so nested managed
-storage cannot acquire hidden obligations. Sealed-invoke cleanup, coroutine, import and boundary
-rows remain inactive and must be rejected rather than treated as verified.
+move, drop, MOVE calls and affine returns consume owners. Aggregate and variant construction copy
+trivial operands and consume each affine operand once into the result. Nested ownership and copy
+contracts propagate through the logical type graph. A non-owner affine operand cannot become an
+owning field implicitly; repeated transfer or use after construction is rejected. Copy-forbidden
+values can move into containers whose derived contract remains forbidden, but explicit copy of
+either the value or such a container is rejected. Calls, cleanup, coroutine and boundary rows must
+satisfy their explicit active operation contracts; supported opcode spelling is not a substitute
+for those semantic checks.
+
+Provider-failed and cancellation successors enter reason-preserving control-flow subgraphs, not
+necessarily terminal blocks. Reason is derived from the exact operation and successor ordinal;
+there is no serialized reason flag or runtime cleanup stack. A bounded per-function traversal
+propagates normal execution, provider-failed trap 7, and cancellation independently. Ordinary
+branches and locally handled typed invoke outcomes preserve the incoming reason. An exact
+provider/call refusal edge enters the trap-7 domain, including from cancellation. Distinct reason
+domains cannot share blocks, and a normal path cannot enter cancellation through an intermediate
+adapter. Every explicit cleanup exit preserves its reason: trap 7 cannot return or publish error,
+panic, or cancellation; cancellation cannot become an explicit trap along an ordinary edge.
+Existing edge types, exact operand segments, unique owner transfers, and safepoint facts are still
+verified. An adapter may drop owners not used by the remaining cleanup and branch onward, but may
+not omit or duplicate an incoming owner. Loops inside a cleanup body are legal; finite graph
+validation proves explicit exit closure, not termination of arbitrary language programs. Coroutine
+yield or a suspending child call inside cleanup is rejected even when its resume edge would
+eventually return to the same reason domain. Escaping language error/panic during a defer retains
+the separate fatal E0443 rule and is not converted into
+provider refusal or cancellation recovery.
 
 Diagnostics have a stable kind plus section/function/block/instruction/value coordinates. They do
 not expose compiler pointers, source paths or backend implementation details. Every allocation,
