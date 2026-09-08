@@ -81,9 +81,45 @@ set_tests_properties(test_xr_program_verify PROPERTIES
     LABELS "unit;canonical-program;semantic-verifier;reference-evaluator;task-297"
 )
 
+set(XR_PROGRAM_SOURCE_FIXTURE_SCRIPT
+    ${CMAKE_SOURCE_DIR}/scripts/program_source_fixtures.py)
+set(XR_PROGRAM_SOURCE_FIXTURE_MANIFEST
+    ${CMAKE_CURRENT_SOURCE_DIR}/program/xr_program_source_cases.json)
+set(XR_PROGRAM_SOURCE_FIXTURE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/program-source-fixtures)
+set(XR_PROGRAM_SOURCE_FIXTURE_HEADER
+    ${XR_PROGRAM_SOURCE_FIXTURE_DIR}/xr_program_source_cases.gen.h)
+set(XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION
+    ${XR_PROGRAM_SOURCE_FIXTURE_DIR}/xr_program_source_fixtures.gen.cmake)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT}
+    ${XR_PROGRAM_SOURCE_FIXTURE_MANIFEST})
+execute_process(
+    COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} project
+        --header ${XR_PROGRAM_SOURCE_FIXTURE_HEADER}
+        --cmake ${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION}
+    COMMAND_ERROR_IS_FATAL ANY)
+
 add_xray_unit_test(test_xr_program_source_build
     program/test_xr_program_source_build.c
     plan/target_profile_test_fixture.c)
+target_include_directories(test_xr_program_source_build PRIVATE
+    ${XR_PROGRAM_SOURCE_FIXTURE_DIR})
+add_custom_command(TARGET test_xr_program_source_build PRE_LINK
+    COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} check
+        --header ${XR_PROGRAM_SOURCE_FIXTURE_HEADER}
+        --cmake ${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION}
+    COMMENT "Checking source case census and native fixture projections"
+    VERBATIM)
+add_test(NAME xr_program_source_fixtures_self_test
+    COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} self-test)
+set_tests_properties(xr_program_source_fixtures_self_test PROPERTIES
+    LABELS "unit;canonical-program;source-owner;generator;self-test")
+add_test(NAME xr_program_source_fixtures_build_self_test
+    COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} self-test-build)
+set_tests_properties(xr_program_source_fixtures_build_self_test PROPERTIES
+    LABELS "unit;source-owner;generator;build-graph;self-test"
+    TIMEOUT 60 PROCESSORS 1)
 set_tests_properties(test_xr_program_source_build PROPERTIES
     LABELS "unit;canonical-program;source-owner;module-graph;task-302")
 
@@ -499,314 +535,40 @@ add_test(NAME test_xr_program_coroutine_call_aot_native
 set_tests_properties(test_xr_program_coroutine_call_aot_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;coroutine;call;generated-c;native;task-293")
 
-set(XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/task-293-cross-module-coroutine)
-set(XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/cross_module_coroutine_native.c)
-set(XR_PROGRAM_FUNCTION_PARAMETER_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/function_parameter_native.c)
-set(XR_PROGRAM_CLOCK_PROVIDER_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/clock_provider_native.c)
-set(XR_PROGRAM_PROVIDER_TRAP_CLEANUP_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/provider_trap_cleanup_native.c)
-set(XR_PROGRAM_PIPE_PROVIDER_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/pipe_provider_native.c)
-set(XR_PROGRAM_PIPE_CLOSE_FAILURE_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/pipe_close_failure_native.c)
-set(XR_PROGRAM_PIPE_UNCAUGHT_ERROR_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/pipe_uncaught_error_native.c)
-set(XR_PROGRAM_PIPE_CANCEL_CLEANUP_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/pipe_cancel_cleanup_native.c)
-set(XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/multi_safepoint_native.c)
-set(XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/affine_coroutine_result_native.c)
-set(XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/ref_parameter_coroutine_native.c)
-set(XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/read_existential_coroutine_native.c)
-add_custom_command(
-    OUTPUT ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_GENERATED_C}
-        ${XR_PROGRAM_FUNCTION_PARAMETER_AOT_GENERATED_C}
-        ${XR_PROGRAM_CLOCK_PROVIDER_AOT_GENERATED_C}
-        ${XR_PROGRAM_PROVIDER_TRAP_CLEANUP_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_PROVIDER_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_CLOSE_FAILURE_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_UNCAUGHT_ERROR_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_CANCEL_CLEANUP_AOT_GENERATED_C}
-        ${XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C}
-        ${XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C}
-        ${XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C}
-        ${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}
-    COMMAND $<TARGET_FILE:test_xr_program_source_build>
-        ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_GENERATED_C}
-        ${XR_PROGRAM_FUNCTION_PARAMETER_AOT_GENERATED_C}
-        ${XR_PROGRAM_CLOCK_PROVIDER_AOT_GENERATED_C}
-        ${XR_PROGRAM_PROVIDER_TRAP_CLEANUP_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_PROVIDER_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_CLOSE_FAILURE_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_UNCAUGHT_ERROR_AOT_GENERATED_C}
-        ${XR_PROGRAM_PIPE_CANCEL_CLEANUP_AOT_GENERATED_C}
-        ${XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C}
-        ${XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C}
-        ${XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C}
-        ${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C}
-    DEPENDS test_xr_program_source_build
-    COMMENT "Generating callable canonical-program C fixtures"
-    VERBATIM)
-set_source_files_properties(${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_FUNCTION_PARAMETER_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_CLOCK_PROVIDER_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_PROVIDER_TRAP_CLEANUP_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_PIPE_PROVIDER_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_PIPE_CLOSE_FAILURE_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_PIPE_UNCAUGHT_ERROR_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_PIPE_CANCEL_CLEANUP_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-set_source_files_properties(${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C}
-    PROPERTIES GENERATED TRUE)
-add_executable(test_xr_program_cross_module_coroutine_aot_native
-    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_cross_module_coroutine_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_cross_module_coroutine_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_cross_module_coroutine_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_cross_module_coroutine_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_cross_module_coroutine_aot_native>
-        --expected-exit 7)
-set_tests_properties(test_xr_program_cross_module_coroutine_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;module-graph;coroutine;call;generated-c;native;task-293")
-
-add_executable(test_xr_program_function_parameter_aot_native
-    ${XR_PROGRAM_FUNCTION_PARAMETER_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_function_parameter_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_function_parameter_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_function_parameter_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_function_parameter_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_function_parameter_aot_native>
-        --expected-exit 48)
-set_tests_properties(test_xr_program_function_parameter_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;closure;callable;call;generated-c;native;task-293")
-
-add_executable(test_xr_program_clock_provider_aot_native
-    ${XR_PROGRAM_CLOCK_PROVIDER_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_clock_provider_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_clock_provider_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_clock_provider_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_clock_provider_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_clock_provider_aot_native>
-        --expected-exit 1)
-set_tests_properties(test_xr_program_clock_provider_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;provider;clock;generated-c;native;task-293")
-
-add_executable(test_xr_program_provider_trap_cleanup_aot_native
-    ${XR_PROGRAM_PROVIDER_TRAP_CLEANUP_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_provider_trap_cleanup_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_provider_trap_cleanup_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_provider_trap_cleanup_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_provider_trap_cleanup_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_provider_trap_cleanup_aot_native>
-        --expected-exit 207)
-set_tests_properties(test_xr_program_provider_trap_cleanup_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;provider;clock;refusal;cleanup;trap;generated-c;native;task-293")
-
-add_executable(test_xr_program_pipe_provider_aot_native
-    ${XR_PROGRAM_PIPE_PROVIDER_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_pipe_provider_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_pipe_provider_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_pipe_provider_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_pipe_provider_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_pipe_provider_aot_native>
-        --expected-exit 1)
-set_tests_properties(test_xr_program_pipe_provider_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;provider;pipe;generated-c;native;task-293")
-
-add_executable(test_xr_program_pipe_close_failure_aot_native
-    ${XR_PROGRAM_PIPE_CLOSE_FAILURE_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_pipe_close_failure_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_pipe_close_failure_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_pipe_close_failure_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_pipe_close_failure_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_pipe_close_failure_aot_native>
-        --expected-exit 1)
-set_tests_properties(test_xr_program_pipe_close_failure_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;provider;pipe;cleanup;failure;generated-c;native;task-293")
-
-add_executable(test_xr_program_pipe_uncaught_error_aot_native
-    ${XR_PROGRAM_PIPE_UNCAUGHT_ERROR_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_pipe_uncaught_error_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_pipe_uncaught_error_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_pipe_uncaught_error_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_pipe_uncaught_error_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_pipe_uncaught_error_aot_native>
-        --expected-exit 220)
-set_tests_properties(test_xr_program_pipe_uncaught_error_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;provider;pipe;cleanup;error;generated-c;native;task-293")
-
-add_executable(test_xr_program_pipe_cancel_cleanup_aot_native
-    ${XR_PROGRAM_PIPE_CANCEL_CLEANUP_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_pipe_cancel_cleanup_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_pipe_cancel_cleanup_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_pipe_cancel_cleanup_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_pipe_cancel_cleanup_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_pipe_cancel_cleanup_aot_native>
-        --expected-exit 226)
-set_tests_properties(test_xr_program_pipe_cancel_cleanup_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;provider;pipe;coroutine;cancel;cleanup;generated-c;native;task-293")
-
-add_executable(test_xr_program_multi_safepoint_aot_native
-    ${XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_multi_safepoint_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_multi_safepoint_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_multi_safepoint_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_multi_safepoint_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_multi_safepoint_aot_native>
-        --expected-exit 227)
-set_tests_properties(test_xr_program_multi_safepoint_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;coroutine;multi-safepoint;cancel;generated-c;native;task-293")
-
-add_executable(test_xr_program_affine_coroutine_result_aot_native
-    ${XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_affine_coroutine_result_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_affine_coroutine_result_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_affine_coroutine_result_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_affine_coroutine_result_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_affine_coroutine_result_aot_native>
-        --expected-exit 229)
-set_tests_properties(test_xr_program_affine_coroutine_result_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;module-graph;provider;pipe;coroutine;affine;cancel;generated-c;native;task-293")
-
-add_executable(test_xr_program_ref_parameter_coroutine_aot_native
-    ${XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_ref_parameter_coroutine_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_ref_parameter_coroutine_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_ref_parameter_coroutine_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_ref_parameter_coroutine_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_ref_parameter_coroutine_aot_native>
-        --expected-exit 230)
-set_tests_properties(test_xr_program_ref_parameter_coroutine_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;ref;coroutine;cancel;generated-c;native;task-293")
-
-add_executable(test_xr_program_read_existential_coroutine_aot_native
-    ${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C})
-xr_enable_pure_aot_symbol_map(test_xr_program_read_existential_coroutine_aot_native)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_xr_program_read_existential_coroutine_aot_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xr_program_read_existential_coroutine_aot_native PRIVATE
-        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xr_program_read_existential_coroutine_aot_native
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
-        --executable $<TARGET_FILE:test_xr_program_read_existential_coroutine_aot_native>
-        --expected-exit 231)
-set_tests_properties(test_xr_program_read_existential_coroutine_aot_native PROPERTIES
-    LABELS "unit;aot;canonical-program;source;interface;read;coroutine;cancel;generated-c;native;task-293")
+# Each manifest fixture has one producer and one independent native qualification.
+function(add_xr_program_source_native_fixture fixture_id native_target expected_exit fixture_labels)
+    set(generated_c "${XR_PROGRAM_SOURCE_FIXTURE_DIR}/${fixture_id}_native.c")
+    add_custom_command(
+        OUTPUT "${generated_c}"
+        COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} generate
+            --fixture "${fixture_id}"
+            --producer $<TARGET_FILE:test_xr_program_source_build>
+            --output "${generated_c}"
+        DEPENDS test_xr_program_source_build
+            ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT}
+            ${XR_PROGRAM_SOURCE_FIXTURE_MANIFEST}
+        COMMENT "Generating canonical-program native fixture ${fixture_id}"
+        VERBATIM)
+    set_source_files_properties("${generated_c}" PROPERTIES GENERATED TRUE)
+    add_executable(${native_target} "${generated_c}")
+    xr_enable_pure_aot_symbol_map(${native_target})
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+            OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+                AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+        target_compile_options(${native_target} PRIVATE /W4 /WX)
+    else()
+        target_compile_options(${native_target} PRIVATE
+            -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${native_target}
+        COMMAND ${XRAY_PYTHON}
+            ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+            --executable $<TARGET_FILE:${native_target}>
+            --expected-exit ${expected_exit})
+    set_tests_properties(${native_target} PROPERTIES
+        LABELS "unit;aot;canonical-program;source;${fixture_labels};generated-c;native;task-293")
+endfunction()
+include(${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION})
 
 add_xray_unit_test(test_xr_program_imported_callable
     ir/test_xr_program_imported_callable.c)

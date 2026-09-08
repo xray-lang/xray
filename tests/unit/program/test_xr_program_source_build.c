@@ -28,6 +28,7 @@
 #include "vm/xr_program_vm.h"
 #include "xray_vm.h"
 #include "plan/target_profile_test_fixture.h"
+#include "xr_program_source_cases.gen.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -46,18 +47,12 @@ typedef struct SourceBuildFixture {
     XrProgramSourceBuildInput input;
 } SourceBuildFixture;
 
-static const char *cross_module_coroutine_aot_output_path;
-static const char *function_parameter_aot_output_path;
-static const char *clock_provider_aot_output_path;
-static const char *provider_trap_cleanup_aot_output_path;
-static const char *pipe_provider_aot_output_path;
-static const char *pipe_close_failure_aot_output_path;
-static const char *pipe_uncaught_error_aot_output_path;
-static const char *pipe_cancel_cleanup_aot_output_path;
-static const char *multi_safepoint_aot_output_path;
-static const char *affine_coroutine_result_aot_output_path;
-static const char *ref_parameter_coroutine_aot_output_path;
-static const char *read_existential_coroutine_aot_output_path;
+static XrSourceFixtureId selected_source_fixture;
+static const char *selected_source_output;
+
+static const char *source_fixture_output_path(XrSourceFixtureId fixture) {
+    return selected_source_fixture == fixture ? selected_source_output : NULL;
+}
 
 typedef struct ClockProviderProbe {
     uint32_t calls;
@@ -503,7 +498,8 @@ TEST(source_owner_module_initializer_is_a_canonical_entry) {
 }
 
 static void assert_cross_module_coroutine_program(const char *entry_source,
-                                                  const char *library_source) {
+                                                  const char *library_source,
+                                                  XrSourceFixtureId fixture_id) {
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
     XrTargetProfile *profile =
@@ -660,8 +656,9 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_entry_coroutine_cancel"));
     ASSERT_NULL(strstr(generated.bytes, "XrProto"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
-    if (cross_module_coroutine_aot_output_path) {
-        FILE *output = fopen(cross_module_coroutine_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(fixture_id);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_EQ_INT(fclose(output), 0);
@@ -688,7 +685,8 @@ TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_execut
                                          "}\n";
     static const char entry_source[] = "import { child } from \"./library\"\n"
                                        "fn answer() -> i64 { return child(7) }\n";
-    assert_cross_module_coroutine_program(entry_source, library_source);
+    assert_cross_module_coroutine_program(entry_source, library_source,
+                                          XR_SOURCE_FIXTURE_CROSS_MODULE_COROUTINE);
 }
 
 TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors) {
@@ -701,7 +699,8 @@ TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_priva
                                          "}\n";
     static const char entry_source[] = "import \"./library\" as library\n"
                                        "fn answer() -> i64 { return library.Worker.child(7) }\n";
-    assert_cross_module_coroutine_program(entry_source, library_source);
+    assert_cross_module_coroutine_program(entry_source, library_source,
+                                          XR_SOURCE_FIXTURE_CROSS_MODULE_STATIC_METHOD_COROUTINE);
 }
 
 TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors) {
@@ -777,8 +776,9 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, ".function_id)"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
-    if (function_parameter_aot_output_path) {
-        FILE *output = fopen(function_parameter_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_FUNCTION_PARAMETER);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_EQ_INT(fclose(output), 0);
@@ -957,8 +957,9 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_clock_nullary"));
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_realtime_nanos"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
-    if (clock_provider_aot_output_path) {
-        FILE *output = fopen(clock_provider_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_CLOCK_PROVIDER);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_EQ_INT(fclose(output), 0);
@@ -1174,8 +1175,9 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_i64_nullary"));
     ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
     ASSERT_NOT_NULL(strstr(generated.bytes, ".trap == 7"));
-    if (provider_trap_cleanup_aot_output_path) {
-        FILE *output = fopen(provider_trap_cleanup_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_PROVIDER_TRAP_CLEANUP);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_TRUE(
@@ -1483,8 +1485,9 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_open"));
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_close"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
-    if (pipe_provider_aot_output_path) {
-        FILE *output = fopen(pipe_provider_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_PROVIDER);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_EQ_INT(fclose(output), 0);
@@ -1648,8 +1651,9 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     ASSERT_NOT_NULL(strstr(generated.bytes, "out_error"));
     ASSERT_NULL(strstr(generated.bytes, "xr_aot_host_pipe_open"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
-    if (pipe_close_failure_aot_output_path) {
-        FILE *output = fopen(pipe_close_failure_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_CLOSE_FAILURE);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_EQ_INT(fclose(output), 0);
@@ -1857,7 +1861,7 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
                                     &probe);
     assert_uncaught_vm_error(instance, entry, entry_function->error_type_id, &probe);
     write_uncaught_error_aot(first.program, profile, entry, entry_function->error_type_id,
-                             pipe_uncaught_error_aot_output_path);
+                             source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_UNCAUGHT_ERROR));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -2221,8 +2225,9 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_entry_coroutine_cancel"));
     ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
-    if (pipe_cancel_cleanup_aot_output_path) {
-        FILE *output = fopen(pipe_cancel_cleanup_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_CANCEL_CLEANUP);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_TRUE(
@@ -2408,8 +2413,9 @@ TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors) {
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "case UINT32_C(2)"));
     ASSERT_NOT_NULL(strstr(generated.bytes, "return xr_aot_make(5, UINT32_C(1), 0)"));
-    if (multi_safepoint_aot_output_path) {
-        FILE *output = fopen(multi_safepoint_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_MULTI_SAFEPOINT);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_TRUE(
@@ -2706,8 +2712,9 @@ TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspens
     backend_project->immediate.field_ordinal = saved_ordinal;
     ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
-    if (ref_parameter_coroutine_aot_output_path) {
-        FILE *output = fopen(ref_parameter_coroutine_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_REF_PARAMETER_COROUTINE);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_TRUE(
@@ -2894,10 +2901,11 @@ cleanup:
     return ok && lifecycle_ok;
 }
 
-static bool write_read_existential_coroutine_aot(const XrGeneratedC *generated) {
-    if (!read_existential_coroutine_aot_output_path)
+static bool write_read_existential_coroutine_aot(const XrGeneratedC *generated,
+                                                 XrSourceFixtureId fixture_id) {
+    if (!source_fixture_output_path(fixture_id))
         return true;
-    FILE *output = fopen(read_existential_coroutine_aot_output_path, "wb");
+    FILE *output = fopen(source_fixture_output_path(fixture_id), "wb");
     if (!output)
         return false;
     bool ok =
@@ -2928,7 +2936,8 @@ static bool write_read_existential_coroutine_aot(const XrGeneratedC *generated) 
 
 static bool emit_read_existential_coroutine_aot(const XrValidatedProgram *program,
                                                 const XrTargetProfile *profile,
-                                                const ReadExistentialCoroutineProbe *probe) {
+                                                const ReadExistentialCoroutineProbe *probe,
+                                                XrSourceFixtureId fixture_id) {
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic diagnostic;
     XrBackendIR *ir = NULL;
@@ -2973,7 +2982,7 @@ static bool emit_read_existential_coroutine_aot(const XrValidatedProgram *progra
     point->live_value_ids[0] = saved_live;
     call->operands[parameter_count] = saved_operand;
     ok = rejected && xr_backend_ir_verify(ir, &diagnostic) &&
-         write_read_existential_coroutine_aot(&generated);
+         write_read_existential_coroutine_aot(&generated, fixture_id);
 cleanup:
     xr_generated_c_free(&repeated);
     xr_generated_c_free(&generated);
@@ -3013,7 +3022,8 @@ TEST(source_owner_keeps_read_existential_root_across_child_suspension) {
     ReadExistentialCoroutineProbe probe;
     ASSERT_TRUE(inspect_read_existential_coroutine(first.program, &probe));
     ASSERT_TRUE(run_read_existential_coroutine_executors(first.program, profile, probe.entry));
-    ASSERT_TRUE(emit_read_existential_coroutine_aot(first.program, profile, &probe));
+    ASSERT_TRUE(emit_read_existential_coroutine_aot(first.program, profile, &probe,
+                                                    XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE));
 cleanup:
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
@@ -3257,8 +3267,9 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
     ASSERT_NOT_NULL(strstr(generated.bytes, "child_active_"));
     ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
     ASSERT_NULL(strstr(generated.bytes, "xr_place_"));
-    if (affine_coroutine_result_aot_output_path) {
-        FILE *output = fopen(affine_coroutine_result_aot_output_path, "wb");
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_AFFINE_COROUTINE_RESULT);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
         ASSERT_TRUE(
@@ -3462,51 +3473,36 @@ TEST(source_owner_reports_structured_analysis_failure) {
 }
 
 TEST_MAIN_BEGIN()
-if (argc >= 2)
-    cross_module_coroutine_aot_output_path = argv[1];
-if (argc >= 3)
-    function_parameter_aot_output_path = argv[2];
-if (argc >= 4)
-    clock_provider_aot_output_path = argv[3];
-if (argc >= 5)
-    provider_trap_cleanup_aot_output_path = argv[4];
-if (argc >= 6)
-    pipe_provider_aot_output_path = argv[5];
-if (argc >= 7)
-    pipe_close_failure_aot_output_path = argv[6];
-if (argc >= 8)
-    pipe_uncaught_error_aot_output_path = argv[7];
-if (argc >= 9)
-    pipe_cancel_cleanup_aot_output_path = argv[8];
-if (argc >= 10)
-    multi_safepoint_aot_output_path = argv[9];
-if (argc >= 11)
-    affine_coroutine_result_aot_output_path = argv[10];
-if (argc >= 12)
-    ref_parameter_coroutine_aot_output_path = argv[11];
-if (argc >= 13)
-    read_existential_coroutine_aot_output_path = argv[12];
-if (argc > 13)
+if (argc != 1) {
+    if (argc != 7 || strcmp(argv[1], "--emit-fixture") != 0 || strcmp(argv[3], "--registry") != 0 ||
+        strcmp(argv[4], XR_SOURCE_REGISTRY_ID) != 0 || strcmp(argv[5], "--output") != 0 ||
+        argv[6][0] == '\0') {
+        fprintf(stderr, "expected --emit-fixture ID --registry DIGEST --output PATH\n");
+        return 2;
+    }
+#define SELECT_SOURCE_FIXTURE(id, fixture)                                                         \
+    if (strcmp(argv[2], #id) == 0)                                                                 \
+        selected_source_fixture = fixture;
+    XR_SOURCE_FIXTURES(SELECT_SOURCE_FIXTURE)
+#undef SELECT_SOURCE_FIXTURE
+    if (selected_source_fixture == XR_SOURCE_FIXTURE_NONE) {
+        fprintf(stderr, "unknown source fixture: %s\n", argv[2]);
+        return 2;
+    }
+    selected_source_output = argv[6];
+}
+#define RUN_SOURCE_CASE(name, fixture)                                                             \
+    do {                                                                                           \
+        if (selected_source_fixture == XR_SOURCE_FIXTURE_NONE ||                                   \
+            selected_source_fixture == fixture) {                                                  \
+            RUN_TEST(name);                                                                        \
+        }                                                                                          \
+    } while (0);
+XR_SOURCE_CASES(RUN_SOURCE_CASE)
+#undef RUN_SOURCE_CASE
+if ((unsigned int) xr_tests_run !=
+    (selected_source_fixture == XR_SOURCE_FIXTURE_NONE ? XR_SOURCE_CASE_COUNT : 1u)) {
+    fprintf(stderr, "source case registry did not select exactly the expected cases\n");
     return 2;
-RUN_TEST(source_owner_single_module_is_deterministic_and_detached);
-RUN_TEST(source_owner_two_module_graph_is_deterministic);
-RUN_TEST(source_owner_cross_module_coroutine_call_has_one_program_and_private_executors);
-RUN_TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors);
-RUN_TEST(source_owner_function_parameter_callable_has_one_program_and_private_executors);
-RUN_TEST(source_owner_clock_provider_is_exact_across_private_executors);
-RUN_TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup);
-RUN_TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical);
-RUN_TEST(source_owner_pipe_failed_close_consumes_endpoints_once);
-RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);
-RUN_TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors);
-RUN_TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel);
-RUN_TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors);
-RUN_TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspension);
-RUN_TEST(source_owner_keeps_read_existential_root_across_child_suspension);
-RUN_TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result);
-RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);
-RUN_TEST(source_owner_module_initializer_is_a_canonical_entry);
-RUN_TEST(source_owner_rejects_non_authoritative_entry_identity);
-RUN_TEST(source_owner_rejects_module_budget_before_analysis);
-RUN_TEST(source_owner_reports_structured_analysis_failure);
+}
 TEST_MAIN_END()
