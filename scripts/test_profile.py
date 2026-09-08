@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report where test and build wall time actually goes.
+"""Report historical test scheduling costs and recorded build durations.
 
 Two questions decide how long an edit-test cycle takes, and neither is answered
 by a pass/fail summary:
@@ -12,9 +12,13 @@ by a pass/fail summary:
      sets a floor that no -j value can lower, so it stays invisible in a
      "total build time" number.
 
-Both answers are already on disk after any run: CTest writes per-test cost to
-CTestCostData.txt, and Ninja writes per-edge start/end times to .ninja_log.
-This reads them, so it costs nothing to run and needs no instrumentation.
+CTestCostData.txt holds scheduling estimates, not the last run's test times.
+Only entries with previous runs are included; declared COST entries with zero
+runs are not measurements. Ninja's .ninja_log retains the latest recorded
+duration of each output, potentially from different builds. It has no invocation
+identity, and compaction can reorder outputs. These files cannot establish the
+latest invocation, its wall time, or its critical path. This report reads their
+historical evidence without running tests or builds.
 
 Usage:
     python3 scripts/test_profile.py                  # build/ tests + build
@@ -27,61 +31,70 @@ Works on Windows and POSIX: it only reads text files.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
 
 def read_test_costs(build_dir: Path) -> list[tuple[str, float]]:
-    """Per-test cost from CTestCostData.txt: '<name> <runs> <seconds>'."""
+    """Historical scheduling costs with previous runs, not current wall times."""
     path = build_dir / "Testing" / "Temporary" / "CTestCostData.txt"
     if not path.is_file():
         return []
-    rows: list[tuple[str, float]] = []
+    costs: dict[str, float] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip() == "---":
+            break  # the remainder lists failed test names, not costs
         parts = line.split()
         if len(parts) != 3:
-            continue  # the file ends with a non-cost section
+            continue
         try:
-            rows.append((parts[0], float(parts[2])))
+            runs = int(parts[1])
+            cost = float(parts[2])
         except ValueError:
             continue
-    rows.sort(key=lambda r: r[1], reverse=True)
-    return rows
+        if runs < 0 or not math.isfinite(cost) or cost < 0:
+            continue
+        if runs == 0:
+            costs.pop(parts[0], None)
+        else:
+            costs[parts[0]] = cost
+    return sorted(costs.items(), key=lambda row: (-row[1], row[0]))
 
 
 def read_build_edges(build_dir: Path) -> list[tuple[str, float]]:
-    """Per-edge duration from .ninja_log: '<start_ms> <end_ms> <mtime> <out> <hash>'.
+    """Last recorded duration per exact Ninja output key, across build history.
 
-    The log accumulates across builds, so the same output appears once per
-    rebuild; the most recent entry wins. Absolute and relative spellings of one
-    output are separate rows in the log but the same edge, so the longer-named
-    duplicate is dropped.
+    Rows are '<start_ms> <end_ms> <mtime> <out> <hash>'. Ninja overwrites the
+    record for the same output while loading its log and may recompact the
+    resulting map in a different order. Cross-output row order, timestamps and
+    command hashes therefore cannot identify an invocation or a unique edge.
+    Preserve output spelling, including directories and absolute/relative keys.
     """
     path = build_dir / ".ninja_log"
     if not path.is_file():
         return []
     latest: dict[str, float] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+        if not line.endswith("\n"):
+            continue  # a concurrent writer may not have finished the last row
         if line.startswith("#"):
             continue
-        parts = line.split("\t")
-        if len(parts) < 5:
+        parts = line.rstrip("\r\n").split("\t")
+        if len(parts) != 5 or not parts[3]:
             continue
         try:
-            seconds = (int(parts[1]) - int(parts[0])) / 1000.0
-        except ValueError:
+            start = int(parts[0])
+            end = int(parts[1])
+            int(parts[2])
+            int(parts[4], 16)
+            seconds = (end - start) / 1000.0
+        except (ValueError, OverflowError):
             continue
-        if seconds <= 0:
+        if start < 0 or end < start or not math.isfinite(seconds):
             continue
-        out = parts[3]
-        key = Path(out).name
-        # Several outputs share one custom command; they report identical
-        # durations. Keep the shortest spelling as the representative.
-        prev = latest.get(key)
-        if prev is None or seconds > prev:
-            latest[key] = seconds
-    rows = sorted(latest.items(), key=lambda r: r[1], reverse=True)
-    return rows
+        latest[parts[3]] = seconds
+    return sorted(latest.items(), key=lambda row: (-row[1], row[0]))
 
 
 def bar(fraction: float, width: int = 28) -> str:
@@ -91,10 +104,12 @@ def bar(fraction: float, width: int = 28) -> str:
 
 def report_tests(rows: list[tuple[str, float]], top: int) -> None:
     if not rows:
-        print("no CTestCostData.txt -- run ctest once in this build dir first\n")
+        print("no recorded CTest costs with previous runs (missing, empty, or unrun data)\n")
         return
     total = sum(c for _, c in rows)
-    print(f"TEST LANES  ({len(rows)} tests, {total:.0f}s if run serially)")
+    print(f"TEST COST HISTORY  ({len(rows)} tests with previous runs)")
+    print("  Scheduling estimates, not the latest run's measured wall times.")
+    print("  Zero-run declarations are excluded.")
     print("-" * 72)
     shown = rows[:top]
     for name, cost in shown:
@@ -103,29 +118,27 @@ def report_tests(rows: list[tuple[str, float]], top: int) -> None:
         print(f"  {cost:8.1f}s  {bar(cost / rows[0][1])}  {name}")
     head = sum(c for _, c in rows[:5])
     if total > 0:
-        print(f"\n  top 5 lanes = {head:.0f}s = {100 * head / total:.0f}% of serial cost")
-        print(f"  the other {len(rows) - 5} tests = {total - head:.0f}s")
+        print(f"\n  top {min(5, len(rows))} lanes = {head:.0f}s = "
+              f"{100 * head / total:.0f}% of summed historical cost")
+        print(f"  the other {max(0, len(rows) - 5)} tests = {total - head:.0f}s")
     print()
 
 
 def report_build(rows: list[tuple[str, float]], top: int) -> None:
     if not rows:
-        print("no .ninja_log -- this build dir is not a Ninja tree\n")
-        print("  A Makefiles tree cannot report per-edge cost, and CMake's")
-        print("  recursive make parallelizes far worse than Ninja. Reconfigure")
-        print("  with -G Ninja if you care about build wall time.\n")
+        print("no recorded Ninja durations (missing, empty, or incomplete log)\n")
         return
-    print(f"BUILD STEPS  (slowest edge of each output, {len(rows)} edges recorded)")
+    print(f"BUILD OUTPUT HISTORY  ({len(rows)} output keys)")
+    print("  Latest recorded duration per output, not the latest invocation.")
+    print("  Multiple outputs may repeat one command's time; rows are not unique edges.")
     print("-" * 72)
     for name, cost in rows[:top]:
         if cost < 0.2:
             break
         print(f"  {cost:8.1f}s  {bar(cost / rows[0][1])}  {name}")
     slowest = rows[0][1] if rows else 0.0
-    print(f"\n  slowest single edge = {slowest:.1f}s")
-    print("  A single edge is a floor no -j can lower: while it runs, nothing")
-    print("  downstream of it can start. Edges far above the rest are the ones")
-    print("  worth splitting or making conditional.\n")
+    print(f"\n  longest recorded output duration = {slowest:.1f}s")
+    print("  No invocation boundary or current critical path is inferred.\n")
 
 
 def main() -> int:
