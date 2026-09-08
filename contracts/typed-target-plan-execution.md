@@ -736,6 +736,15 @@ root-map, cleanup, and coroutine rows before creating any frame and repeats
 zero lifecycle bytes before destruction. This adds no child-frame, scheduler,
 arbitrary spill type, or general coroutine execution authority.
 
+Generator preprocessing caches only immutable lexical content and lexical error
+reasons keyed by the exact source string, with at most 1024 retained entries.
+Diagnostic context is attached by the current caller after lookup. Neither
+file identity, include resolution, governed bindings, semantic validation nor
+successful proof publication is a cache result. Changing source content requires
+a new lookup; eviction may repeat work but cannot alter acceptance. The
+generator self-test checks cross-context reuse, changed-content invalidation,
+exact error context and exit status, capacity, and recomputation after eviction.
+
 Evidence:
 
 - `test_typed_dispatch` proves zero-row rejection, wrapping scalar execution,
@@ -930,7 +939,7 @@ anchor-sha256: src/runtime/xr_module_generation.c 886223fc052e2acd3114a2a7856760
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 0332f8c2423f606919ffab298a69ee14b863c4f5e590b5d51aa3c39f9344f14c
 anchor-sha256: CMakeLists.txt 675e1585a34cb3d1e345c99083b6a753e76cdff55ae9986a34977f48106e2a8f
 anchor-sha256: xisa/target/vm_ops.def 7e9eed652ab8823fac2db508123ce84d754d8cfa95fc4344cf13ec1f0e38e4b4
-anchor-sha256: tools/xisagen/xisagen.py 8ed5e206c7aceb00652c71ea64018105f30497259860522c09bdce7e3e28428a
+anchor-sha256: tools/xisagen/xisagen.py 8cd3b6f51e9d70f1506e69d03ecbd02bbaac63c5e8ac988e6fc214fa99f6353f
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
 anchor-sha256: src/plan/target/xr_target_entry_abi.c cb5cd57a0b8f3bbfe2123a07f583da997d7d2989e5158fd241406b96ce433b12
 anchor-sha256: src/plan/target/xr_target_instruction_gen.h 47b57f29f2a0880b48ae49fb8eb2e941c267be727b866d821be99a87e7293e51

@@ -4002,8 +4002,8 @@ def _xi_capture_aot_discovery_census(
 
 
 @functools.lru_cache(maxsize=1024)
-def _xi_preprocessor_logical_source(source: str, context: str) -> str:
-    """Apply the preprocessing phases needed to identify include directives."""
+def _xi_preprocessor_logical_content(source: str) -> tuple[str, str]:
+    """Cache immutable lexical content or its error, never a caller's context."""
     source = _xi_c_translation_phase_1_2(source)
     output = []
     index = 0
@@ -4050,10 +4050,18 @@ def _xi_preprocessor_logical_source(source: str, context: str) -> str:
                 state = 'normal'
         index += 1
     if state == 'block-comment':
-        die(f"{context}: unterminated preprocessing comment")
+        return '', 'unterminated preprocessing comment'
     if state in {'string', 'char'}:
-        die(f"{context}: unterminated preprocessing literal")
-    return ''.join(output)
+        return '', 'unterminated preprocessing literal'
+    return ''.join(output), ''
+
+
+def _xi_preprocessor_logical_source(source: str, context: str) -> str:
+    """Apply preprocessing and attach the current caller's diagnostic context."""
+    logical, error = _xi_preprocessor_logical_content(source)
+    if error:
+        die(f"{context}: {error}")
+    return logical
 
 
 def _xi_literal_c_includes(source: str, context: str
@@ -9248,6 +9256,7 @@ def cmd_test(args: list[str]):
     _test_sexpr_parser()
     _test_xi_ops_parser()
     _test_xi_semantic_ops_parser()
+    _test_xi_preprocessor_content_cache()
     _test_xi_lowering_parser()
     _test_xi_lowering_build_artifacts()
     _test_xi_lowering_ninja_failed_edge()
@@ -9792,6 +9801,63 @@ def _test_xi_semantic_ops_parser():
         assert False, "non-canonical observable contract path should be rejected"
     except SystemExit:
         pass
+    print(" PASS", file=sys.stderr)
+
+
+def _test_xi_preprocessor_content_cache() -> None:
+    print("  test_xi_preprocessor_content_cache...", end='', file=sys.stderr)
+    cache = _xi_preprocessor_logical_content
+    cache.cache_clear()
+    try:
+        source = '??=inc??/\nlude "tri.h" /* removed */\n'
+        expected = '#include "tri.h"   \n'
+        assert _xi_preprocessor_logical_source(source, 'capture: a.c') == expected
+        first = cache.cache_info()
+        assert (first.hits, first.misses, first.currsize) == (0, 1, 1)
+        assert _xi_preprocessor_logical_source(source, 'mutation: b.c') == expected
+        reused = cache.cache_info()
+        assert (reused.hits, reused.misses, reused.currsize) == (1, 1, 1)
+        assert _xi_literal_c_includes(source, 'includes: c.c') == [('quoted', 'tri.h')]
+
+        changed = source.replace('tri.h', 'new.h')
+        assert _xi_literal_c_includes(changed, 'includes: c.c') == [('quoted', 'new.h')]
+        assert cache.cache_info().misses == 2
+        assert _xi_literal_c_includes(source, 'includes: c.c') == [('quoted', 'tri.h')]
+        assert _xi_preprocessor_logical_source('', 'empty') == ''
+
+        for malformed, reason in (
+                ('/* unterminated', 'unterminated preprocessing comment'),
+                ('"unterminated', 'unterminated preprocessing literal'),
+                ("'unterminated", 'unterminated preprocessing literal')):
+            before = cache.cache_info()
+            for context in ('first capture: a.c', 'second capture: b.c'):
+                diagnostic = io.StringIO()
+                with contextlib.redirect_stderr(diagnostic):
+                    try:
+                        _xi_preprocessor_logical_source(malformed, context)
+                        assert False, "cached malformed content must fail closed"
+                    except SystemExit as error:
+                        assert error.code == 1
+                assert diagnostic.getvalue() == f'xisagen: error: {context}: {reason}\n'
+            after = cache.cache_info()
+            assert after.misses == before.misses + 1
+            assert after.hits == before.hits + 1
+
+        cache.cache_clear()
+        limit = cache.cache_parameters()['maxsize']
+        assert limit == 1024
+        for ordinal in range(limit + 1):
+            text = f'#include "header_{ordinal}.h"\n'
+            assert _xi_preprocessor_logical_source(text, 'capacity') == text
+        bounded = cache.cache_info()
+        assert bounded.currsize == limit
+        assert bounded.misses == limit + 1
+        assert _xi_literal_c_includes('#include "header_0.h"\n', 'evicted') == [
+            ('quoted', 'header_0.h')]
+        assert cache.cache_info().misses == bounded.misses + 1
+        assert cache.cache_info().currsize == limit
+    finally:
+        cache.cache_clear()
     print(" PASS", file=sys.stderr)
 
 
