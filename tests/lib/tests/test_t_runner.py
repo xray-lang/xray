@@ -1,8 +1,10 @@
 """Tests for focused selection in the tiered test runner."""
 
+import io
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -51,6 +53,64 @@ class FocusedSelectionTest(unittest.TestCase):
                           ["--rerun-failed"], ["--tests-from-file", "tests.txt"]):
             with self.subTest(arguments=arguments):
                 self.assertTrue(runner.has_explicit_ctest_selection(arguments))
+
+
+class PhaseTimingTest(unittest.TestCase):
+    def test_timer_reports_elapsed_time_and_propagates_failure(self):
+        for fails in (False, True):
+            with self.subTest(fails=fails):
+                output = io.StringIO()
+                with redirect_stdout(output), mock.patch.object(
+                        runner.time, "perf_counter", side_effect=[10.0, 12.5]):
+                    if fails:
+                        with self.assertRaisesRegex(ValueError, "phase failure"):
+                            with runner.timed_phase("probe"):
+                                raise ValueError("phase failure")
+                    else:
+                        with runner.timed_phase("probe"):
+                            pass
+                self.assertIn("timing: probe=2.500s", output.getvalue())
+
+    def run_focused(self, build, *, build_ok=True, ctest_code=0):
+        output = io.StringIO()
+        with ExitStack() as stack:
+            stack.enter_context(redirect_stdout(output))
+            stack.enter_context(mock.patch.dict(runner.os.environ,
+                                               {"XR_BUILD_DIR": str(build)}, clear=True))
+            stack.enter_context(mock.patch.object(runner.sanitizer,
+                                                 "activate_windows_msvc_environment",
+                                                 return_value=True))
+            stack.enter_context(mock.patch.object(runner, "refresh_cmake_manifest",
+                                                 return_value=True))
+            stack.enter_context(mock.patch.object(runner, "ctest_names",
+                                                 return_value=["test_xr_program_source_build"]))
+            stack.enter_context(mock.patch.object(runner, "build_selected",
+                                                 return_value=build_ok))
+            ctest = stack.enter_context(mock.patch.object(runner.subprocess, "call",
+                                                         return_value=ctest_code))
+            corpus = stack.enter_context(mock.patch.object(runner, "run_regression_corpus"))
+            result = runner.main(["t.py", "t0", "-R", "^test_xr_program_source_build$"])
+            corpus.assert_not_called()
+        return result, output.getvalue(), ctest
+
+    def test_timing_keeps_focused_selection_and_test_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for code in (0, 8):
+                with self.subTest(code=code):
+                    result, output, ctest = self.run_focused(Path(directory), ctest_code=code)
+                    self.assertEqual(result, code)
+                    self.assertIn("timing: toolchain setup=", output)
+                    self.assertIn("timing: ctest=", output)
+                    self.assertIn("unselected t0 tests and auxiliary corpora", output)
+                    self.assertEqual(ctest.call_args.args[0][-2:],
+                                     ["-R", "^test_xr_program_source_build$"])
+
+    def test_failed_build_never_runs_ctest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, output, ctest = self.run_focused(Path(directory), build_ok=False)
+        self.assertEqual(result, 1)
+        ctest.assert_not_called()
+        self.assertNotIn("timing: ctest=", output)
 
 
 if __name__ == "__main__":

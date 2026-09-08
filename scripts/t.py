@@ -43,6 +43,12 @@ Extra arguments are forwarded to ctest, e.g.
     scripts/t.py t1 --rerun-failed
     scripts/t.py t0 -R parser
 
+Each run reports toolchain setup, configure/manifest, incremental build, CTest,
+and auxiliary-corpus wall times separately. Build time includes generated-source
+validation; use .ninja_log to distinguish those checks from compile/link time.
+The total includes toolchain setup and fast-tree configuration, but not Python
+process startup. A skipped or unreached phase has no timing record.
+
 Environment:
     XR_BUILD_DIR   build directory (default: build)
     XR_JOBS        parallelism (default: cores - 2)
@@ -72,6 +78,7 @@ import re
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -206,6 +213,16 @@ def ctest_names(build_dir: Path, args: Sequence[str]) -> List[str]:
     return names
 
 
+@contextmanager
+def timed_phase(name: str):
+    """Report wall time even on failure without changing the phase outcome."""
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        print(f"{BLUE}==>{NC} timing: {name}={time.perf_counter() - started:.3f}s")
+
+
 def has_explicit_ctest_selection(args: Sequence[str]) -> bool:
     """Return whether forwarded ctest arguments intentionally narrow the run."""
     for argument in args:
@@ -228,6 +245,7 @@ def cache_contains_all(build_dir: Path, entries: Sequence[str]) -> bool:
     return all(entry in text for entry in entries)
 
 
+@timed_phase("manifest/configure")
 def refresh_cmake_manifest(build_dir: Path, jobs: int) -> bool:
     """Refresh Ninja's CMake/CTest inventory before selecting build targets.
 
@@ -248,6 +266,7 @@ def refresh_cmake_manifest(build_dir: Path, jobs: int) -> bool:
     return False
 
 
+@timed_phase("build (dependency checks + compile + link)")
 def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
                    include_xray: bool = True,
                    required_targets: Sequence[str] = ()) -> bool:
@@ -306,6 +325,7 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
     return False
 
 
+@timed_phase("regression corpus")
 def run_regression_corpus(build_dir: Path, skip_diff: bool) -> bool:
     """Gate the tests/regression corpus against an only-shrink ratchet.
 
@@ -377,13 +397,16 @@ def main(argv: List[str]) -> int:
         print(f"Unknown tier '{tier}'")
         return usage(1)
 
+    started = time.perf_counter()
+
     def toolchain_log(message: str, *, error: bool = False) -> None:
         stream = sys.stderr if error else sys.stdout
         color = RED if error else BLUE
         print(f"{color}==>{NC} {message}", file=stream)
 
-    if not sanitizer.activate_windows_msvc_environment(toolchain_log):
-        return 1
+    with timed_phase("toolchain setup"):
+        if not sanitizer.activate_windows_msvc_environment(toolchain_log):
+            return 1
 
     build_dir = Path(os.environ.get("XR_BUILD_DIR", "build"))
     jobs = platform.env_int("XR_JOBS", default_jobs())
@@ -407,11 +430,12 @@ def main(argv: List[str]) -> int:
         )
         if not cache_contains_all(build_dir, fast_cache):
             print(f"{BLUE}==>{NC} configuring {build_dir} (source stdlib, no VM fastpaths)")
-            configure = proc.run(["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
-                                  "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
-                                  "-DXR_STDLIB_FROM_FILE=ON",
-                                  "-DXRAY_STDLIB_VM_FASTPATHS=OFF",
-                                  "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"])
+            with timed_phase("fast-tree configure"):
+                configure = proc.run(["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
+                                      "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
+                                      "-DXR_STDLIB_FROM_FILE=ON",
+                                      "-DXRAY_STDLIB_VM_FASTPATHS=OFF",
+                                      "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"])
             if not configure.ok:
                 sys.stdout.write(configure.combined_text())
                 return 1
@@ -443,7 +467,6 @@ def main(argv: List[str]) -> int:
     kind = "profile" if canonical_preflight else "tier"
     print(f"{BOLD}{kind} {tier}{NC}  build={build_dir}  jobs={jobs}")
     print("=" * 72)
-    started = time.time()
 
     if not refresh_cmake_manifest(build_dir, jobs):
         return 1
@@ -525,8 +548,9 @@ def main(argv: List[str]) -> int:
         dropped = f"{100 - 100 // shards}% of the backend-diff and AOT filetest cases (XR_SHARDS={shards})"
         not_covered = f"{not_covered}, {dropped}" if not_covered else dropped
 
-    code = subprocess.call(["ctest", *ctest_args, *extra],
-                           cwd=str(build_dir), env=env)
+    with timed_phase("ctest"):
+        code = subprocess.call(["ctest", *ctest_args, *extra],
+                               cwd=str(build_dir), env=env)
 
     if not focused_selection:
         if tier == "t1" and not run_regression_corpus(build_dir, True):
@@ -539,14 +563,15 @@ def main(argv: List[str]) -> int:
     if tier == "t0" and code == 0 and not focused_selection:
         print(f"{BLUE}==>{NC} compile-error corpus")
         env["XRAY_BIN"] = str(build_dir / platform.exe_name("xray"))
-        corpus = proc.run([sys.executable, REPO_ROOT / "tests" / "compile_errors"
-                           / "run_compile_error_tests.py"], env=env, cwd=REPO_ROOT)
+        with timed_phase("compile-error corpus"):
+            corpus = proc.run([sys.executable, REPO_ROOT / "tests" / "compile_errors"
+                               / "run_compile_error_tests.py"], env=env, cwd=REPO_ROOT)
         for line in corpus.combined_text().splitlines()[-6:]:
             print(line)
         if not corpus.ok:
             code = 1
 
-    elapsed = int(time.time() - started)
+    elapsed = int(time.perf_counter() - started)
     print("=" * 72)
     verdict = f"{GREEN}PASS{NC}" if code == 0 else f"{RED}FAIL{NC}"
     print(f"{kind} {BOLD}{tier}{NC}  {verdict}  {elapsed // 60}m{elapsed % 60:02d}s")
