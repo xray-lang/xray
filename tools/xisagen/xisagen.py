@@ -17,6 +17,7 @@ Usage:
   python3 xisagen.py xi-ops  <ops.def>     <output.h>
   <python-3.11+> xisagen.py semantic-ops <ops.def> <output-root>
   python3 xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>
+  python3 xisagen.py xi-lowering-input-fingerprint <source-root> <output> <stamp> <depfile>
   python3 xisagen.py xi-lowering-verify <ops.def> <lowering.def> <output-root> <stamp> <depfile>
   python3 xisagen.py xi-verify <ops.def> <verifier.def> <output.h>
   python3 xisagen.py aot-rep <rep.def>     <output.h>
@@ -4371,8 +4372,20 @@ def xi_lowering_validation_dependency_paths(
         entries: list[XiLoweringDef], source_root: Path,
         snapshot: XiLoweringValidationSnapshot,
         discovery_snapshot: XiAotDiscoverySnapshot) -> list[Path]:
-    """Return closure and discovery inputs without creating a second owner list."""
+    """Return file inputs; the always-run fingerprint owns namespace changes."""
     xi_lowering_aot_validation_paths(entries, source_root, snapshot)
+    relatives = {relative for relative, _ in snapshot.sources}
+    relatives.update(relative for relative, _ in discovery_snapshot.sources)
+    if (source_root / 'CMakeLists.txt').exists():
+        relatives.add('CMakeLists.txt')
+    return [source_root / relative for relative in sorted(relatives)]
+
+
+def xi_lowering_input_watch_paths(
+        source_root: Path, snapshot: XiLoweringValidationSnapshot,
+        discovery_snapshot: XiAotDiscoverySnapshot) -> list[Path]:
+    """Return the broad cheap-scan invalidation set, including namespaces."""
+    source_root = Path(os.path.abspath(os.fspath(source_root)))
     relatives = {relative for relative, _ in snapshot.sources}
     relatives.update(relative for relative, _ in snapshot.directories)
     relatives.update(relative for relative, _ in discovery_snapshot.sources)
@@ -7673,6 +7686,46 @@ def cmd_xi_lowering(args: list[str]):
         print(f"xisagen: generated {path}", file=sys.stderr)
 
 
+def _xi_lowering_input_fingerprint_content(
+        snapshot: XiLoweringValidationSnapshot,
+        discovery_snapshot: XiAotDiscoverySnapshot) -> str:
+    """Return the semantic input identity used to schedule full validation."""
+    return (
+        "xi-lowering-input-fingerprint/1\n"
+        f"compile_closure_sha256={snapshot.fingerprint()}\n"
+        f"aot_discovery_sha256={discovery_snapshot.fingerprint()}\n"
+    )
+
+
+def cmd_xi_lowering_input_fingerprint(args: list[str]) -> None:
+    """Refresh a cheap exact key without publishing a semantic proof."""
+    if len(args) != 4:
+        die("usage: xisagen.py xi-lowering-input-fingerprint "
+            "<source-root> <output> <stamp> <depfile>")
+    source_root = Path(os.path.abspath(args[0]))
+    output = Path(os.path.abspath(args[1]))
+    stamp = Path(os.path.abspath(args[2]))
+    depfile = Path(os.path.abspath(args[3]))
+    snapshot = capture_xi_lowering_validation_snapshot(source_root)
+    discovery_snapshot = _xi_capture_aot_discovery_census(source_root)
+    content = _xi_lowering_input_fingerprint_content(snapshot, discovery_snapshot)
+    if (capture_xi_lowering_validation_snapshot(source_root) != snapshot or
+            _xi_capture_aot_discovery_census(source_root) != discovery_snapshot):
+        die("xi-lowering-input-fingerprint: compile closure or discovery "
+            "changed before publication")
+    dependencies = xi_lowering_input_watch_paths(
+        source_root, snapshot, discovery_snapshot)
+    dependency_text = ' '.join(
+        _xi_depfile_escape(path.as_posix()) for path in dependencies)
+    depfile_content = (
+        f"{_xi_depfile_escape(stamp.as_posix())}: {dependency_text}\n")
+    _xi_atomic_write_if_different(depfile, depfile_content)
+    changed = _xi_atomic_write_if_different(output, content)
+    _xi_atomic_write(stamp, "xi-lowering-input-scan/1\n")
+    state = "changed" if changed else "unchanged"
+    print(f"xisagen: Xi lowering input fingerprint {state}", file=sys.stderr)
+
+
 def _xi_run_lowering_verification(
         ops_path: Path, lowering_path: Path, output_root: Path, stamp: Path,
         depfile: Path, *, after_validation_hook=None,
@@ -7738,8 +7791,7 @@ def _xi_run_lowering_verification(
             "or projection snapshot changed before publication")
     dependencies = xi_lowering_validation_dependency_paths(
         entries, source_root, closure, discovery)
-    dependencies.extend((ops_path, lowering_path, ops_path.parent,
-                         lowering_path.parent, Path(generator.path)))
+    dependencies.extend((ops_path, lowering_path, Path(generator.path)))
     dependencies.extend(output_root / relative for relative, _ in expected_outputs)
     dependency_text = ' '.join(
         _xi_depfile_escape(path.as_posix()) for path in sorted(set(dependencies)))
@@ -7922,6 +7974,23 @@ def _xi_atomic_write(path: Path, content: str) -> None:
         except FileNotFoundError:
             pass
         raise
+
+
+def _xi_atomic_write_if_different(path: Path, content: str) -> bool:
+    """Atomically publish canonical text while preserving a stable mtime."""
+    canonical = content.replace('\r\n', '\n').replace('\r', '\n')
+    expected = canonical.encode('utf-8')
+    try:
+        previous = path.read_bytes()
+        previous.decode('utf-8')
+        if previous == expected:
+            return False
+    except FileNotFoundError:
+        pass
+    except (OSError, UnicodeError) as error:
+        die(f"cannot compare generated output {path}: {error}")
+    _xi_atomic_write(path, canonical)
+    return True
 
 
 def _xi_publish_lowering_validation_artifacts(
@@ -8382,16 +8451,43 @@ def _test_xi_lowering_build_artifacts() -> None:
         fixture_relatives = {
             path.relative_to(root).as_posix() for path in fixture_dependencies}
         assert fixture_relatives == {
-            'CMakeLists.txt', 'include', 'src', 'src/base', 'src/aot',
-            'src/aot/nested',
-            'src/aot/nested/unrelated.c', 'src/aot/owner.c',
+            'CMakeLists.txt', 'src/aot/nested/unrelated.c', 'src/aot/owner.c',
             'src/aot/router.c', 'src/aot/xi_cgen.c'}
         assert 'src/aot/nested/unrelated.c' not in fixture_snapshot.source_bytes()
+
+        fingerprint = root / 'build/xi-lowering-inputs.fingerprint'
+        fingerprint_scan_stamp = root / 'build/xi-lowering-inputs.scanned'
+        fingerprint_depfile = root / 'build/xi-lowering-inputs.d'
+        fingerprint_args = [
+            os.fspath(root), os.fspath(fingerprint),
+            os.fspath(fingerprint_scan_stamp), os.fspath(fingerprint_depfile)]
+        cmd_xi_lowering_input_fingerprint(fingerprint_args)
+        expected_fingerprint = _xi_lowering_input_fingerprint_content(
+            fixture_snapshot, fixture_discovery).encode('utf-8')
+        assert fingerprint.read_bytes() == expected_fingerprint
+        assert fingerprint_scan_stamp.read_text(encoding='utf-8') == \
+            'xi-lowering-input-scan/1\n'
+        assert _xi_depfile_escape(fingerprint_scan_stamp.as_posix()).encode('utf-8') in \
+            fingerprint_depfile.read_bytes()
+        marker = 1700000000000000000
+        os.utime(fingerprint, ns=(marker, marker))
+        cmd_xi_lowering_input_fingerprint(fingerprint_args)
+        assert fingerprint.stat().st_mtime_ns == marker
+        unrelated_header = base_directory / 'ordered_owner.h'
+        unrelated_header.write_text(
+            'static void unrelated_content_edit(void) {}\n', encoding='utf-8')
+        cmd_xi_lowering_input_fingerprint(fingerprint_args)
+        assert fingerprint.read_bytes() == expected_fingerprint
+        assert fingerprint.stat().st_mtime_ns == marker
+
         (nested / 'unrelated.c').write_text(
             'static void unrelated(void) { /* discovery content drift */ }\n',
             encoding='utf-8')
         assert capture_xi_lowering_validation_snapshot(root) == fixture_snapshot
-        assert _xi_capture_aot_discovery_census(root) != fixture_discovery
+        drifted_discovery = _xi_capture_aot_discovery_census(root)
+        assert drifted_discovery != fixture_discovery
+        assert _xi_lowering_input_fingerprint_content(
+            fixture_snapshot, drifted_discovery) != expected_fingerprint.decode('utf-8')
         (nested / 'unrelated.c').write_text(
             'static void unrelated(void) {}\n', encoding='utf-8')
         restored_discovery = _xi_capture_aot_discovery_census(root)
@@ -8931,7 +9027,9 @@ def _test_xi_lowering_actual_ninja_edge() -> None:
     validation_dependency_marker = (
         '${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}')
     assert generated_closure_marker in repository_cmake
-    assert repository_cmake.count(validation_dependency_marker) == 1
+    assert repository_cmake.count(validation_dependency_marker) == 2
+    assert repository_cmake.count(
+        '${XISAGEN} xi-lowering-input-fingerprint') == 1
     assert repository_cmake.count('${XISAGEN} xi-lowering-verify') == 1
     ops_source = (repository_root / 'xisa/xi/ops.def').read_bytes()
     lowering_source = (repository_root / 'xisa/xi/lowering.def').read_bytes()
@@ -9056,6 +9154,10 @@ record('verification-success')
             '${CMAKE_CURRENT_SOURCE_DIR}/xaot_rep_gen.seed)\n'
             'set(STAMP ${CMAKE_CURRENT_BINARY_DIR}/xi.validated)\n'
             'set(DEPFILE ${CMAKE_CURRENT_BINARY_DIR}/xi.d)\n'
+            'set(FINGERPRINT ${CMAKE_CURRENT_BINARY_DIR}/xi.inputs)\n'
+            'set(FINGERPRINT_SCAN_STAMP '
+            '${CMAKE_CURRENT_BINARY_DIR}/xi.inputs.scanned)\n'
+            'set(FINGERPRINT_DEPFILE ${CMAKE_CURRENT_BINARY_DIR}/xi.inputs.d)\n'
             'set(PROJECTIONS\n' + projection_lines + ')\n'
             'add_custom_command(\n'
             '  OUTPUT ${GENERATED_CLOSURE}\n'
@@ -9064,14 +9166,27 @@ record('verification-success')
             '  DEPENDS ${GENERATED_CLOSURE_SEED}\n'
             '  VERBATIM)\n'
             'add_custom_command(\n'
+            '  OUTPUT ${FINGERPRINT_SCAN_STAMP}\n'
+            f'  COMMAND "{python_executable}" -B ${{XISAGEN}} '
+            'xi-lowering-input-fingerprint '
+            '${CMAKE_CURRENT_SOURCE_DIR} ${FINGERPRINT} '
+            '${FINGERPRINT_SCAN_STAMP} ${FINGERPRINT_DEPFILE}\n'
+            '  BYPRODUCTS ${FINGERPRINT} ${FINGERPRINT_DEPFILE}\n'
+            '  DEPENDS ${XISAGEN} ${GENERATED_CLOSURE} ${PROJECTIONS} ${CENSUS}\n'
+            '  DEPFILE ${FINGERPRINT_DEPFILE}\n'
+            '  VERBATIM)\n'
+            'add_custom_target(refresh-xi-lowering-input-fingerprint '
+            'DEPENDS ${FINGERPRINT_SCAN_STAMP})\n'
+            'add_custom_command(\n'
             '  OUTPUT ${STAMP}\n'
             f'  COMMAND "{python_executable}" -B ${{VALIDATOR}} ${{XISAGEN}} '
             '${CMAKE_CURRENT_SOURCE_DIR} ${MODE} ${STAMP} ${DEPFILE}\n'
             '  BYPRODUCTS ${DEPFILE}\n'
-            '  DEPENDS ${XISAGEN} ${VALIDATOR} ${MODE} '
+            '  DEPENDS refresh-xi-lowering-input-fingerprint '
+            '${XISAGEN} ${VALIDATOR} ${MODE} '
             '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/ops.def '
             '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/lowering.def '
-            '${GENERATED_CLOSURE} ${PROJECTIONS} ${CENSUS}\n'
+            '${GENERATED_CLOSURE} ${PROJECTIONS} ${CENSUS} ${FINGERPRINT}\n'
             '  DEPFILE ${DEPFILE}\n'
             '  VERBATIM)\n'
             'add_custom_target(gen-xi-lowering DEPENDS ${STAMP})\n'
@@ -9118,6 +9233,15 @@ record('verification-success')
         unchanged_events = events()
         unchanged = run_target()
         assert unchanged.returncode == 0, unchanged.stdout
+        assert events() == unchanged_events
+
+        unrelated = root / 'src/ir/xi_verify.c'
+        replacement = build / 'xi_verify.replacement'
+        replacement.write_bytes(
+            unrelated.read_bytes() + b'/* unrelated content edit */\n')
+        replacement.replace(unrelated)
+        unrelated_edit = run_target()
+        assert unrelated_edit.returncode == 0, unrelated_edit.stdout
         assert events() == unchanged_events
 
         hostile_directory = root / 'src/aot/unregistered_namespace'
@@ -12041,6 +12165,7 @@ def main():
         'xi-ops': cmd_xi_ops,
         'semantic-ops': cmd_semantic_ops,
         'xi-lowering': cmd_xi_lowering,
+        'xi-lowering-input-fingerprint': cmd_xi_lowering_input_fingerprint,
         'xi-lowering-verify': cmd_xi_lowering_verify,
         'xi-verify': cmd_xi_verify,
         'aot-rep': cmd_aot_rep,

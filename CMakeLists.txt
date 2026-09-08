@@ -371,6 +371,15 @@ set(XRAY_XI_LOWERING_VERIFICATION_STAMP
 set(XRAY_XI_LOWERING_VALIDATION_DEPFILE
     ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_sources.d
 )
+set(XRAY_XI_LOWERING_INPUT_FINGERPRINT
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_inputs.fingerprint
+)
+set(XRAY_XI_LOWERING_INPUT_DEPFILE
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_inputs.d
+)
+set(XRAY_XI_LOWERING_INPUT_SCAN_STAMP
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_inputs.scanned
+)
 set(XRAY_XI_LOWERING_NAMESPACE_CENSUS
     ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_namespace.txt
 )
@@ -531,6 +540,34 @@ add_custom_target(gen-xi-verify DEPENDS
     ${XRAY_GEN_XI_VERIFY_DEPS}
 )
 
+# Directory and file changes first refresh this exact content key. The command
+# preserves the output mtime when the compile closure, AOT discovery sources,
+# and namespace membership are unchanged, so Ninja can keep the costly semantic
+# proof while still rejecting additions, removals, path substitution, and
+# actual consumer changes before compilation. The generated depfile deliberately
+# owns the broad directory watches; the full proof depends only on this key and
+# its exact file inputs.
+add_custom_command(
+    OUTPUT ${XRAY_XI_LOWERING_INPUT_SCAN_STAMP}
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-input-fingerprint
+            ${CMAKE_SOURCE_DIR}
+            ${XRAY_XI_LOWERING_INPUT_FINGERPRINT}
+            ${XRAY_XI_LOWERING_INPUT_SCAN_STAMP}
+            ${XRAY_XI_LOWERING_INPUT_DEPFILE}
+    BYPRODUCTS ${XRAY_XI_LOWERING_INPUT_FINGERPRINT}
+               ${XRAY_XI_LOWERING_INPUT_DEPFILE}
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/CMakeLists.txt
+            ${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}
+            ${XRAY_GEN_XI_LOWERING_DEPS}
+            ${XRAY_XI_LOWERING_NAMESPACE_CENSUS}
+    DEPFILE ${XRAY_XI_LOWERING_INPUT_DEPFILE}
+    COMMENT "xisagen: refreshing exact Xi lowering input fingerprint"
+    VERBATIM
+)
+add_custom_target(refresh-xi-lowering-input-fingerprint
+    DEPENDS ${XRAY_XI_LOWERING_INPUT_SCAN_STAMP})
+
 add_custom_command(
     OUTPUT ${XRAY_XI_LOWERING_VERIFICATION_STAMP}
     COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-verify
@@ -540,12 +577,14 @@ add_custom_command(
             ${XRAY_XI_LOWERING_VERIFICATION_STAMP}
             ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
     BYPRODUCTS ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
-    DEPENDS ${XISAGEN}
+    DEPENDS refresh-xi-lowering-input-fingerprint
+            ${XISAGEN}
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
             ${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}
             ${XRAY_GEN_XI_LOWERING_DEPS}
             ${XRAY_XI_LOWERING_NAMESPACE_CENSUS}
+            ${XRAY_XI_LOWERING_INPUT_FINGERPRINT}
     DEPFILE ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
     COMMENT "xisagen: verifying source-current Xi lowering consumers and projections"
     VERBATIM

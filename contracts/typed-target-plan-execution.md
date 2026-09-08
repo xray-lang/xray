@@ -759,6 +759,19 @@ names the profile and selected cases. The fast profile cannot replace the
 exhaustive test in periodic or release qualification, and neither profile may
 change acceptance semantics, cache a validation verdict, or weaken failure retry.
 
+Xi lowering build scheduling uses a separate exact input fingerprint, not a
+cached validation result. A broad depfile watches the governed include
+namespaces, compile closure, and every AOT discovery source. When one of those
+paths changes, a descriptor-bound scan captures the closure and discovery set
+twice, rejects concurrent or unsafe path substitution, and atomically publishes
+the fingerprint plus its completed-scan stamp. The full semantic validator
+depends on that fingerprint and its exact file inputs, so an unrelated content
+edit may leave the semantic proof intact while an addition, removal, include
+shadow, projection change, or actual consumer change invalidates it. A scan
+failure publishes no completed stamp. The fingerprint is only a scheduling key:
+it grants no lowering acceptance and cannot replace the exhaustive validator or
+either generator self-test profile.
+
 Evidence:
 
 - `test_typed_dispatch` proves zero-row rejection, wrapping scalar execution,
@@ -951,9 +964,9 @@ anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 8e8a3b
 anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
 anchor-sha256: src/runtime/xr_module_generation.c 886223fc052e2acd3114a2a78567603b853881de7887f495109a568934da149a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 0332f8c2423f606919ffab298a69ee14b863c4f5e590b5d51aa3c39f9344f14c
-anchor-sha256: CMakeLists.txt 24ef3583c9df1d17d0d44ce5ede860b2acf6b70544facc5f05d5dbe8c600788d
+anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
 anchor-sha256: xisa/target/vm_ops.def 7e9eed652ab8823fac2db508123ce84d754d8cfa95fc4344cf13ec1f0e38e4b4
-anchor-sha256: tools/xisagen/xisagen.py 8f033f9a5987d035aee6dccd9fba72994bfebc8a9bc43b598b8786cddbad2a45
+anchor-sha256: tools/xisagen/xisagen.py 4f32a4a1ecbfa09288b9eece26f19b934649a6839613c7fb58bd9bd48d5e5b9c
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
 anchor-sha256: src/plan/target/xr_target_entry_abi.c cb5cd57a0b8f3bbfe2123a07f583da997d7d2989e5158fd241406b96ce433b12
 anchor-sha256: src/plan/target/xr_target_instruction_gen.h 47b57f29f2a0880b48ae49fb8eb2e941c267be727b866d821be99a87e7293e51
