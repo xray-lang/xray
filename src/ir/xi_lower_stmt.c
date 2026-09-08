@@ -3237,11 +3237,15 @@ XR_FUNC bool xi_lower_cleanup_symbol_needs_place(const XiLower *l, uint32_t symb
 XR_FUNC bool xi_lower_cleanup_bind_place(XiLower *l, int var_id, XiValue *initial_value, int line) {
     if (!l || var_id < 0 || var_id >= l->var_count || !initial_value)
         return false;
-    if (l->vars[var_id].call_place ||
-        !xi_lower_cleanup_symbol_needs_place(l, l->vars[var_id].symbol_id))
+    if (!xi_lower_cleanup_symbol_needs_place(l, l->vars[var_id].symbol_id))
         return true;
     if (l->is_program && l->shared_map && l->shared_map[var_id] >= 0)
         return true;
+    /* A cleanup-local declaration needs a distinct place in every statically emitted reason path.
+
+     * * Reusing call_place from a sibling emission creates a non-dominating address. Captured
+     * outer
+     * bindings are promoted separately and intentionally retain one stable place. */
     XiValue *place =
         xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR,
                      l->vars[var_id].type ? l->vars[var_id].type : initial_value->type, 1);

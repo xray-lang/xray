@@ -106,8 +106,10 @@ coroutine cases have independent native outputs and checks. Registry identity, d
 and projection checks reject missing or mismatched evidence rather than silently narrowing the
 canonical preflight. A branching deferred-Pipe fixture proves that provider failure can use the
 shared cleanup graph while cancellation receives a private copy of the complete multi-block graph,
-including the non-owner branch condition. This test-build decomposition changes no VM semantics or
-supported capability.
+including the non-owner branch condition. A nested deferred-Pipe fixture additionally proves that
+an inner registration discovered from a cold outer handler keeps its outer-handler failure edge,
+closed owner payload, and cleanup-local branch place across Reference and both VM decode policies.
+This test-build decomposition changes no VM semantics or supported capability.
 
 anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h a964247d2aacfd087417bc19ad30e2c81c870cb5a28521bb953b2dc8d84d2f1f
 anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h c51ff9a5892b84710d42cd5eceab4fc7f2887ed37062dd28b3a2f0bc68fc00ca
@@ -127,4 +129,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c 28164a25784dd5f1b3b0c3397b10ed
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 0e4d14ac337b31262cf3c2e6a51f7d8381c1164962dd81247a7e4cd748ee0695
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1857b41614f1d73cecf86dcd4c36d63e1c3ad2d9f9cfc7a72ec5f6224a728e6c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1a80ce097d6f1fc24d6891b06c236f54727605b0a6c0a977fb94333d1956d3b9

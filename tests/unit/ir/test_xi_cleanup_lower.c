@@ -17,6 +17,7 @@
 #include "frontend/parser/xparse.h"
 #include "ir/xi_cleanup.h"
 #include "ir/xi_lower.h"
+#include "ir/xi_verify.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
 
@@ -68,8 +69,11 @@ typedef struct CleanupSourceCounts {
 
 static bool inspect_cleanup_tree(const XiFunc *function, CleanupSourceCounts *counts) {
     char error[192];
-    if (!function || !xi_cleanup_verify(function, error, sizeof(error))) {
+    if (!function || !xi_cleanup_verify(function, error, sizeof(error)) ||
+        !xi_verify_stage(function, function->stage, error, sizeof(error))) {
         fprintf(stderr, "cleanup source identity rejected: %s\n", function ? error : "no Xi");
+        if (function)
+            xi_func_dump(function, stderr);
         return false;
     }
     for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
@@ -160,6 +164,25 @@ TEST(nested_cleanup_bodies_keep_independent_frontier_occurrences) {
     ASSERT(counts.lifo_lines);
 }
 
+TEST(nested_cleanup_can_read_outer_cleanup_local) {
+    CleanupSourceCounts counts;
+    bool valid = inspect_source("fn run(flag: bool) {\n"
+                                "  var value = 0\n"
+                                "  defer {\n"
+                                "    var inner = 2\n"
+                                "    defer {\n"
+                                "      if (flag) { value = inner } else { value = inner + 1 }\n"
+                                "    }\n"
+                                "    value = value + 3\n"
+                                "  }\n"
+                                "  value = 42\n"
+                                "}\n",
+                                &counts);
+    ASSERT(valid);
+    ASSERT(counts.heads >= 3u);
+    ASSERT(counts.lifo_lines);
+}
+
 TEST(possible_cleanup_panic_does_not_erase_the_normal_boundary) {
     CleanupSourceCounts counts;
     bool valid = inspect_source("fn run(condition: bool) {\n"
@@ -178,5 +201,6 @@ RUN_TEST_SUITE("Xi cleanup source identities");
 RUN_TEST(three_source_defers_keep_distinct_lifo_frontiers);
 RUN_TEST(branching_cleanup_pairs_are_not_confused_with_block_layout);
 RUN_TEST(nested_cleanup_bodies_keep_independent_frontier_occurrences);
+RUN_TEST(nested_cleanup_can_read_outer_cleanup_local);
 RUN_TEST(possible_cleanup_panic_does_not_erase_the_normal_boundary);
 TEST_MAIN_END()

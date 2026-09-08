@@ -121,7 +121,7 @@ typedef struct ChildCleanupProbe {
 typedef struct BranchingCleanupProbe {
     uint32_t calls;
     uint32_t refuse_call;
-    int64_t events[8];
+    int64_t events[16];
 } BranchingCleanupProbe;
 
 typedef struct BranchingCleanupScenario {
@@ -137,6 +137,31 @@ static const BranchingCleanupScenario branching_cleanup_scenarios[] = {
     {1u, 0u, XR_BACKEND_EXECUTION_CANCELLED, 4u},
     {UINT32_MAX, 1u, XR_BACKEND_EXECUTION_TRAP, 3u},
     {UINT32_MAX, 4u, XR_BACKEND_EXECUTION_TRAP, 5u},
+};
+
+typedef enum NestedCleanupTrace {
+    NESTED_CLEANUP_TRACE_TRUE = 0,
+    NESTED_CLEANUP_TRACE_BOTH,
+    NESTED_CLEANUP_TRACE_TRUE_PRELUDE_RETRY,
+    NESTED_CLEANUP_TRACE_BOTH_FALSE_WRITE_RETRY,
+} NestedCleanupTrace;
+
+typedef struct NestedCleanupScenario {
+    uint32_t cancel_suspension;
+    uint32_t refuse_call;
+    XrBackendExecutionOutcomeKind expected;
+    NestedCleanupTrace trace;
+} NestedCleanupScenario;
+
+static const NestedCleanupScenario nested_cleanup_scenarios[] = {
+    {UINT32_MAX, 0u, XR_BACKEND_EXECUTION_RETURN, NESTED_CLEANUP_TRACE_BOTH},
+    {0u, 0u, XR_BACKEND_EXECUTION_CANCELLED, NESTED_CLEANUP_TRACE_TRUE},
+    {1u, 0u, XR_BACKEND_EXECUTION_CANCELLED, NESTED_CLEANUP_TRACE_BOTH},
+    {UINT32_MAX, 1u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_TRUE_PRELUDE_RETRY},
+    {UINT32_MAX, 2u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_TRUE},
+    {UINT32_MAX, 4u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_TRUE},
+    {UINT32_MAX, 7u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_BOTH_FALSE_WRITE_RETRY},
+    {UINT32_MAX, 8u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_BOTH},
 };
 
 static XrProviderCallStatus child_cleanup_clock_probe(void *context, int64_t *result_out) {
@@ -165,7 +190,7 @@ static XrProviderCallStatus child_cleanup_close_probe(void *context, int64_t han
 static XrProviderCallStatus branching_cleanup_close_probe(void *context, int64_t handle,
                                                           bool *result_out) {
     BranchingCleanupProbe *probe = context;
-    if (!probe || !result_out || probe->calls >= 8u)
+    if (!probe || !result_out || probe->calls >= 16u)
         return XR_PROVIDER_CALL_FAILED;
     probe->events[probe->calls++] = handle;
     if (probe->refuse_call != 0u && probe->calls == probe->refuse_call)
@@ -258,6 +283,121 @@ static void branching_cleanup_check_vm(XrInstance *instance, uint32_t entry,
             ASSERT_EQ_INT(outcome.trap, XR_VM_TRAP_PROVIDER_CALL_FAILED);
         }
         branching_cleanup_assert_trace(probe, row->expected_calls);
+    }
+    xr_vm_code_free(code);
+}
+
+static void nested_cleanup_assert_trace(const BranchingCleanupProbe *probe,
+                                        NestedCleanupTrace trace) {
+    static const int64_t expected[][9] = {
+        [NESTED_CLEANUP_TRACE_TRUE] = {INT64_C(2147483642), INT64_C(2147483643),
+                                       INT64_C(2147483638), INT64_C(2147483639)},
+        [NESTED_CLEANUP_TRACE_BOTH] =
+            {
+                INT64_C(2147483642),
+                INT64_C(2147483643),
+                INT64_C(2147483638),
+                INT64_C(2147483639),
+                INT64_C(2147483642),
+                INT64_C(2147483643),
+                INT64_C(2147483639),
+                INT64_C(2147483638),
+            },
+        [NESTED_CLEANUP_TRACE_TRUE_PRELUDE_RETRY] =
+            {
+                INT64_C(2147483642),
+                INT64_C(2147483642),
+                INT64_C(2147483643),
+                INT64_C(2147483638),
+                INT64_C(2147483639),
+            },
+        [NESTED_CLEANUP_TRACE_BOTH_FALSE_WRITE_RETRY] =
+            {
+                INT64_C(2147483642),
+                INT64_C(2147483643),
+                INT64_C(2147483638),
+                INT64_C(2147483639),
+                INT64_C(2147483642),
+                INT64_C(2147483643),
+                INT64_C(2147483639),
+                INT64_C(2147483638),
+                INT64_C(2147483639),
+            },
+    };
+    static const uint32_t expected_counts[] = {4u, 8u, 5u, 9u};
+    ASSERT_LT(trace, sizeof(expected_counts) / sizeof(expected_counts[0]));
+    ASSERT_EQ_UINT(probe->calls, expected_counts[trace]);
+    for (uint32_t event = 0u; event < probe->calls; ++event)
+        ASSERT_EQ_INT(probe->events[event], expected[trace][event]);
+}
+
+static void nested_cleanup_check_reference(XrInstance *instance, uint32_t entry,
+                                           BranchingCleanupProbe *probe) {
+    for (uint32_t scenario = 0u;
+         scenario < sizeof(nested_cleanup_scenarios) / sizeof(nested_cleanup_scenarios[0]);
+         ++scenario) {
+        const NestedCleanupScenario *row = &nested_cleanup_scenarios[scenario];
+        *probe = (BranchingCleanupProbe) {.refuse_call = row->refuse_call};
+        XrReferenceExecution *execution = NULL;
+        ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &execution));
+        XrReferenceOutcome outcome = xr_reference_execution_step(execution);
+        uint32_t suspension = 0u;
+        while (outcome.kind == XR_REFERENCE_OUTCOME_SUSPENDED && suspension < 3u) {
+            ASSERT_EQ_UINT(outcome.safepoint_id, suspension);
+            outcome = row->cancel_suspension == suspension
+                          ? xr_reference_execution_cancel(execution)
+                          : xr_reference_execution_step(execution);
+            ++suspension;
+        }
+        xr_reference_execution_free(execution);
+        if (row->expected == XR_BACKEND_EXECUTION_RETURN) {
+            ASSERT_EQ_INT(outcome.kind, XR_REFERENCE_OUTCOME_RETURN);
+            ASSERT_EQ_INT(outcome.value.kind, XR_REFERENCE_VALUE_I64);
+            ASSERT_EQ_INT(outcome.value.as.i64, 84);
+        } else if (row->expected == XR_BACKEND_EXECUTION_CANCELLED) {
+            ASSERT_EQ_INT(outcome.kind, XR_REFERENCE_OUTCOME_CANCELLED);
+        } else {
+            ASSERT_EQ_INT(outcome.kind, XR_REFERENCE_OUTCOME_TRAP);
+            ASSERT_EQ_INT(outcome.trap, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+        }
+        nested_cleanup_assert_trace(probe, row->trace);
+    }
+}
+
+static void nested_cleanup_check_vm(XrInstance *instance, uint32_t entry,
+                                    BranchingCleanupProbe *probe, XrVmDecodePolicy policy) {
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    options.decode_policy = (uint8_t) policy;
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+    for (uint32_t scenario = 0u;
+         scenario < sizeof(nested_cleanup_scenarios) / sizeof(nested_cleanup_scenarios[0]);
+         ++scenario) {
+        const NestedCleanupScenario *row = &nested_cleanup_scenarios[scenario];
+        *probe = (BranchingCleanupProbe) {.refuse_call = row->refuse_call};
+        XrVmExecution *execution = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
+        XrVmOutcome outcome = xr_vm_execution_step(execution);
+        uint32_t suspension = 0u;
+        while (outcome.kind == XR_VM_OUTCOME_SUSPENDED && suspension < 3u) {
+            ASSERT_EQ_UINT(outcome.safepoint_id, suspension);
+            outcome = row->cancel_suspension == suspension ? xr_vm_execution_cancel(execution)
+                                                           : xr_vm_execution_step(execution);
+            ++suspension;
+        }
+        xr_vm_execution_free(execution);
+        if (row->expected == XR_BACKEND_EXECUTION_RETURN) {
+            ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_RETURN);
+            ASSERT_EQ_INT(outcome.value.kind, XR_VM_VALUE_I64);
+            ASSERT_EQ_INT(outcome.value.as.i64, 84);
+        } else if (row->expected == XR_BACKEND_EXECUTION_CANCELLED) {
+            ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_CANCELLED);
+        } else {
+            ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_TRAP);
+            ASSERT_EQ_INT(outcome.trap, XR_VM_TRAP_PROVIDER_CALL_FAILED);
+        }
+        nested_cleanup_assert_trace(probe, row->trace);
     }
     xr_vm_code_free(code);
 }
@@ -1984,6 +2124,185 @@ TEST(source_owner_shared_branching_cleanup_projects_private_cancel_graph) {
                 "if (xr_probe_events[event] != events[event]) return 251;\n"
                 "    }\n"
                 "    return 233;\n"
+                "}\n") > 0);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_nested_cleanup_projects_reason_chain) {
+    static const char nested_cleanup[] =
+        "import sys\n"
+        "fn nested(flag: bool) -> i64 {\n"
+        "  var outer = sys.Pipe(2147483642, 2147483643)\n"
+        "  var inner = sys.Pipe(2147483638, 2147483639)\n"
+        "  defer {\n"
+        "    var choose = flag\n"
+        "    defer {\n"
+        "      if (choose) { inner.closeRead() } else { inner.closeWrite() }\n"
+        "      inner.closeRead()\n"
+        "      inner.closeWrite()\n"
+        "    }\n"
+        "    outer.closeRead()\n"
+        "    outer.closeWrite()\n"
+        "  }\n"
+        "  var primed = outer.closeRead()\n"
+        "  if (primed) {\n"
+        "    Coro.yield()\n"
+        "    return 42\n"
+        "  }\n"
+        "  return 41\n"
+        "}\n"
+        "fn answer() -> i64 { return nested(true) + nested(false) }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, nested_cleanup, NULL));
+    XrTargetProfile *profile = NULL;
+    char profile_error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
+                                                              sizeof(profile_error)));
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    ASSERT_NOT_NULL(product.program);
+    ASSERT_EQ_UINT(program_operation_count(product.program, XR_CORE_OP_CORE_COROUTINE_YIELD), 1u);
+    ASSERT_EQ_UINT(program_operation_count(product.program, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED),
+                   2u);
+    ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(product.program), 1u);
+    XrStableId io_contract = {{0}};
+    XrStableId close_operation = {{0}};
+    XrFingerprint key_digest;
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &io_contract, &key_digest));
+    ASSERT_TRUE(xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY, &close_operation,
+                                      &key_digest));
+    XrProgramProviderRequirementView requirement = {0};
+    ASSERT_TRUE(xr_validated_program_provider_requirement(product.program, 0u, &requirement));
+    ASSERT_TRUE(stable_id_equal(requirement.contract_id, io_contract));
+    ASSERT_EQ_UINT(requirement.operation_count, 1u);
+    ASSERT_TRUE(stable_id_equal(requirement.operation_ids[0], close_operation));
+    const XrTargetProviderContract *contract = find_profile_provider(profile, io_contract);
+    ASSERT_NOT_NULL(contract);
+    BranchingCleanupProbe probe = {0};
+    XrProviderOperationBinding operation = {
+        .operation_id = close_operation,
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
+        .context = &probe,
+        .entry.bool_i64_unary = branching_cleanup_close_probe,
+    };
+    XrProviderBinding provider = {
+        .contract_id = io_contract,
+        .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
+        .operations = &operation,
+        .operation_count = 1u,
+    };
+    ASSERT_EQ_INT(xr_target_provider_contract_fingerprint(contract, &provider.contract_fingerprint),
+                  XR_RUNTIME_ABI_OK);
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = product.program,
+        .profile = profile,
+        .providers = &provider,
+        .provider_count = 1u,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    uint32_t entry = xr_validated_program_entry_function(product.program);
+    nested_cleanup_check_reference(instance, entry, &probe);
+    nested_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_BASELINE_VIEW);
+    nested_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_FIXED_ROWS);
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(product.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_NESTED_CLEANUP);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_TRUE(
+            fprintf(
+                output,
+                "\nstatic uint32_t xr_probe_count;\n"
+                "static uint32_t xr_probe_refuse_call;\n"
+                "static int64_t xr_probe_events[16];\n"
+                "static int xr_probe_close(void *context, uint32_t requirement, uint32_t "
+                "operation, int64_t handle, uint8_t *result) {\n"
+                "    (void)context;\n"
+                "    if (requirement != UINT32_C(0) || operation != 0 || !result || "
+                "xr_probe_count >= 16) return 1;\n"
+                "    xr_probe_events[xr_probe_count++] = handle;\n"
+                "    if (xr_probe_refuse_call != 0 && xr_probe_count == xr_probe_refuse_call) "
+                "return 1;\n"
+                "    *result = UINT8_C(1);\n"
+                "    return 0;\n"
+                "}\n"
+                "int main(void) {\n"
+                "    static const int32_t cancel_at[8] = {-1, 0, 1, -1, -1, -1, -1, -1};\n"
+                "    static const uint32_t refuse_call[8] = {0, 0, 0, 1, 2, 4, 7, 8};\n"
+                "    static const uint32_t expected_kind[8] = {0, 3, 3, 2, 2, 2, 2, 2};\n"
+                "    static const uint32_t expected_calls[8] = {8, 4, 8, 5, 4, 4, 9, 8};\n"
+                "    static const int64_t expected[8][9] = {\n"
+                "        {2147483642,2147483643,2147483638,2147483639,"
+                "2147483642,2147483643,2147483639,2147483638},\n"
+                "        {2147483642,2147483643,2147483638,2147483639},\n"
+                "        {2147483642,2147483643,2147483638,2147483639,"
+                "2147483642,2147483643,2147483639,2147483638},\n"
+                "        {2147483642,2147483642,2147483643,2147483638,2147483639},\n"
+                "        {2147483642,2147483643,2147483638,2147483639},\n"
+                "        {2147483642,2147483643,2147483638,2147483639},\n"
+                "        {2147483642,2147483643,2147483638,2147483639,"
+                "2147483642,2147483643,2147483639,2147483638,2147483639},\n"
+                "        {2147483642,2147483643,2147483638,2147483639,"
+                "2147483642,2147483643,2147483639,2147483638}\n"
+                "    };\n"
+                "    for (uint32_t mode = 0; mode < 8; ++mode) {\n"
+                "        xr_probe_count = 0;\n"
+                "        xr_probe_refuse_call = refuse_call[mode];\n"
+                "        XrAotEntryCoroutineFrame frame;\n"
+                "        xr_aot_entry_coroutine_frame_initialize(&frame);\n"
+                "        frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "        XrBackendNativeOutcome outcome = xr_aot_entry_coroutine_step(&frame);\n"
+                "        uint32_t suspension = 0;\n"
+                "        while (outcome.kind == 1 && suspension < 3) {\n"
+                "            outcome = cancel_at[mode] == (int32_t)suspension "
+                "? xr_aot_entry_coroutine_cancel(&frame) "
+                ": xr_aot_entry_coroutine_step(&frame);\n"
+                "            ++suspension;\n"
+                "        }\n"
+                "        xr_aot_entry_coroutine_frame_dispose(&frame);\n"
+                "        if (outcome.kind != expected_kind[mode]) return 255;\n"
+                "        if (outcome.kind == 0 && outcome.value != INT64_C(84)) return 254;\n"
+                "        if (outcome.kind == 2 && outcome.safepoint_id != 7) return 253;\n"
+                "        if (xr_probe_count != expected_calls[mode]) return 252;\n"
+                "        for (uint32_t event = 0; event < xr_probe_count; ++event) "
+                "if (xr_probe_events[event] != expected[mode][event]) return 251;\n"
+                "    }\n"
+                "    return 234;\n"
                 "}\n") > 0);
         ASSERT_EQ_INT(fclose(output), 0);
     }

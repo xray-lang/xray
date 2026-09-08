@@ -7585,12 +7585,14 @@ static XrProgramBuildStatus verify_cleanup_control_flow(XrXiFunctionStorage *fun
         function->cleanup_handler_state_before_value)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
 
+    /* Hidden handlers can contain registrations. Initial canonical reachability includes only the
+
+     * * normal graph, so census the complete Xi table and let registration-derived traversal prove
+
+     * * that every entry is connected to the executable cleanup graph. */
     uint32_t registration_count = 0u;
     for (uint32_t block_index = 0u; block_index < xi->nblocks; ++block_index) {
         const XiBlock *block = xi->blocks[block_index];
-        const XrXiBlockStorage *storage = find_block_storage(function, block);
-        if (!storage || !storage->reachable)
-            continue;
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             if (exact_static_cleanup_try(xi, block->values[value_index])) {
                 if (registration_count == UINT32_MAX)
@@ -7658,9 +7660,6 @@ static XrProgramBuildStatus verify_cleanup_control_flow(XrXiFunctionStorage *fun
     for (uint32_t block_index = 0u; block_index < xi->nblocks && status == XR_PROGRAM_BUILD_OK;
          ++block_index) {
         const XiBlock *block = xi->blocks[block_index];
-        const XrXiBlockStorage *storage = find_block_storage(function, block);
-        if (!storage || !storage->reachable)
-            continue;
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             const XiValue *registration = block->values[value_index];
             if (!exact_static_cleanup_try(xi, registration))
@@ -7836,8 +7835,14 @@ static XrProgramBuildStatus verify_cleanup_control_flow(XrXiFunctionStorage *fun
                 state.cleanup == 0u
                     ? 0u
                     : function->cleanup_chain_nodes[state.cleanup - 1u].boundary->kind;
+            /* A closed boundary must complete on every normal exit. XI_THROW can explicitly
+
+             * * abandon an outer closed boundary because it carries the fatal cleanup reason to
+             * the
+             * next handler or out of the function. */
             if (status == XR_PROGRAM_BUILD_OK && state.cleanup != 0u &&
-                ((!has_normal_successor && active_cleanup_kind == XI_CLEANUP_BOUNDARY_CLOSED) ||
+                ((!has_normal_successor && !has_throw &&
+                  active_cleanup_kind == XI_CLEANUP_BOUNDARY_CLOSED) ||
                  (has_normal_successor && active_cleanup_kind == XI_CLEANUP_BOUNDARY_FATAL)))
                 status =
                     fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -8863,7 +8868,8 @@ static XrProgramBuildStatus prepare_trap_continuations(XrXiBuildContext *context
             const XiFunc *function = storage->xi;
             for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
                 const XiBlock *block = function->blocks[block_index];
-                if (!storage->block_storage[block_index].reachable)
+                if (!storage->block_storage[block_index].reachable &&
+                    !storage->block_storage[block_index].cleanup_entry_ready)
                     continue;
                 for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
                     const XiValue *call = block->values[value_index];
@@ -8955,7 +8961,8 @@ static XrProgramBuildStatus prepare_panic_continuations(XrXiBuildContext *contex
             const XiFunc *function = storage->xi;
             for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
                 const XiBlock *block = function->blocks[block_index];
-                if (!storage->block_storage[block_index].reachable)
+                if (!storage->block_storage[block_index].reachable &&
+                    !storage->block_storage[block_index].cleanup_entry_ready)
                     continue;
                 for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
                     const XiValue *point = block->values[value_index];
@@ -9631,9 +9638,6 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (!source || !handler || !edge->point)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi cancel continuation endpoint is absent");
-            if (!cancel_handler_payload_is_exact(context, function, handler, edge->point))
-                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "Xi cancel continuation has no exact owner payload");
             for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
                 XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
                 if (edge_argument->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC)
@@ -9700,6 +9704,21 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         if (iteration == limit)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi block-parameter closure did not converge");
+    }
+    /* Cancellation exactness is a property of the closed live-in graph. Owners used only by an
+
+     * * inner handler can arrive after the first propagation round, so checking inside the fixed
+
+     * * point observes a valid payload while it is still incomplete. */
+    for (uint32_t edge_index = 0u; edge_index < context->cancel_edge_count; ++edge_index) {
+        const XrXiCancelEdge *edge = &context->cancel_edges[edge_index];
+        if (edge->function != function->xi)
+            continue;
+        const XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
+        if (!handler || !edge->point ||
+            !cancel_handler_payload_is_exact(context, function, handler, edge->point))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi cancel continuation has no exact owner payload");
     }
     XrProgramBuildStatus coroutine_argument_status =
         prepare_coroutine_call_arguments(context, function, diagnostic, diagnostic_size);
@@ -11435,6 +11454,21 @@ static bool cleanup_trap_capable_operation(uint16_t operation_id) {
     return operation && (operation->successor_mask & XR_CORE_SUCCESSOR_TRAP) != 0u;
 }
 
+static bool cleanup_call_has_exact_active_handler_edge(const XrXiBuildContext *context,
+                                                       const XrXiFunctionStorage *function,
+                                                       const XiValue *call,
+                                                       const XrCoreIrInstructionInput *instruction,
+                                                       uint32_t handler_state) {
+    if (!context || !function || !call || !instruction || handler_state == 0u ||
+        handler_state > function->cleanup_registration_count ||
+        instruction->successor_count != 1u || !instruction->successors)
+        return false;
+    const XrXiTrapEdge *edge = find_trap_edge(context, function->xi, call);
+    const XiValue *active = function->cleanup_handler_chain_nodes[handler_state - 1u].registration;
+    return edge && edge->registration == active && edge->handler &&
+           xr_core_ir_key_equal(instruction->successors[0], block_key(function, edge->handler));
+}
+
 static XrCoreIrBlockInput *find_input_block(XrXiFunctionStorage *function, uint32_t block_count,
                                             XrCoreIrKey key) {
     for (uint32_t block = 0u; function && block < block_count; ++block)
@@ -12534,10 +12568,16 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                 "cleanup call v%u is outside a closed Program graph", value->id);
                 uint32_t handler_state = function->cleanup_handler_state_before_value[value->id];
-                if (handler_state != 0u || candidate->successor_count != 0u)
+                if (handler_state != 0u) {
+                    if (!cleanup_call_has_exact_active_handler_edge(context, function, value,
+                                                                    candidate, handler_state))
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "cleanup call v%u has a stale outer-handler edge", value->id);
+                    continue;
+                }
+                if (candidate->successor_count != 0u)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                "cleanup call v%u requires composition with an outer handler",
-                                value->id);
+                                "cleanup call v%u already owns a non-handler trap edge", value->id);
                 XrProgramBuildStatus status = mark_cleanup_trap_projection_graph(
                     function, active, block->xi, instruction + 1u, original_block_count, diagnostic,
                     diagnostic_size);
@@ -12587,6 +12627,14 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
                 XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
                 if (!cleanup_trap_capable_operation(candidate->operation_id))
                     continue;
+                uint32_t handler_state = function->cleanup_handler_state_before_value[value->id];
+                if (handler_state != 0u) {
+                    if (!cleanup_call_has_exact_active_handler_edge(context, function, value,
+                                                                    candidate, handler_state))
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "cleanup call v%u lost its outer-handler edge", value->id);
+                    continue;
+                }
                 XrXiCleanupPointStorage *active = find_cleanup_point(function, boundary);
                 XrXiCleanupProjectionStorage *target =
                     active ? find_cleanup_projection(function, active, block->xi, instruction + 1u)

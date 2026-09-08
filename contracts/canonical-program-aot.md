@@ -114,7 +114,11 @@ cleanup order without an AOT-only unwind rule.
 The source declaration census and both generated registration projections are checked before every
 producer relink. A test-body edit alone does not reconfigure CMake. A new unregistered case fails
 before linking and fails again on retry; unchanged builds need no new check. A real CMake/Ninja
-self-test covers these dependencies independently of the lightweight preflight.
+self-test covers these dependencies independently of the lightweight preflight. The registered
+nested deferred-Pipe fixture compiles the same Program to native C and checks normal completion,
+cancellation at both suspension points, and provider refusal in outer and inner cleanup regions.
+Its exact provider trace matches Reference and VM, including consumed endpoints and retry after a
+refused close; AOT has no private unwind or cleanup-stack reconstruction.
 
 Explicit owner copy materializes independent owning aggregate, active variant payload, and
 callable capture values through type-specific private C helpers. Their dependency closure starts
@@ -157,4 +161,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c ea9d5fb6c739ec615a2064f6e8bb83d14ba2566e0b92989f6c3a77f3570ee240
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1857b41614f1d73cecf86dcd4c36d63e1c3ad2d9f9cfc7a72ec5f6224a728e6c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1a80ce097d6f1fc24d6891b06c236f54727605b0a6c0a977fb94333d1956d3b9

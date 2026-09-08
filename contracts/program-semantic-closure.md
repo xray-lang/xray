@@ -361,6 +361,11 @@ require the independently verified program authority frozen above.
 
 ## Digest anchors
 
+Static cleanup closure is computed over the complete registration-derived Xi graph, including
+registrations inside cold handlers. Normal exits close active boundaries; an explicit fatal throw
+may abandon an outer closed boundary and must preserve its reason. Cancellation owner payload
+exactness is checked only after live-in propagation reaches its fixed point.
+
 anchor-sha256: CMakeLists.txt 24ef3583c9df1d17d0d44ce5ede860b2acf6b70544facc5f05d5dbe8c600788d
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
@@ -406,7 +411,7 @@ anchor-sha256: src/ir/xi_module.h 2ee8794e21ef18162b5c045e795a62a952762829c19af7
 anchor-sha256: src/ir/xi_lower.h ba8c1a0eef0e45942451d32441eff7242bf542600f58d379c3f1e2a11ce4da33
 anchor-sha256: src/ir/xi_lower.c 696eb5c728804b8ee815cbeb682f76dc7f4ecbaaa4cfde3ae8be1a436edf79f8
 anchor-sha256: src/ir/xi_lower_expr.c ff6bd7899f5205b35f1b82bcc2574888c2e1678f744fcc6fa4af6acbdb8d4d6b
-anchor-sha256: src/ir/xi_lower_stmt.c bd807d780a3bb3aebe08fde2ce7e778445e1473d8c254e39f549d15def88a4b4
+anchor-sha256: src/ir/xi_lower_stmt.c 200ae8d41af8b03427e07d35115b1dd8519724ec2a947b16e6b92935fd349d5d
 anchor-sha256: src/ir/xi_pipeline.c 45afdf9d9623e0ee81c9b2e2fbab24d94ae37bd5c168396cb21568b7d574c508
 anchor-sha256: src/ir/xi_program_semantic.h 090db1d96c7fe1d2102c24293669ea1bee060a390fa8bfcb9cc63985a8c4955e
 anchor-sha256: src/ir/xi_program_semantic.c b36f1a96c046a1e065bf3d3973dfa5c1826dc21af660ad274c306d5751422885
