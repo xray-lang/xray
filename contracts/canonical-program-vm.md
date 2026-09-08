@@ -89,8 +89,11 @@ its own checked ordinal, but the parent safepoint carries the aggregate owner ex
 reconstructs the field addresses from that root. A separately observed scalar field snapshot stays
 a distinct live value: modifying the referenced field after suspension cannot change the snapshot.
 The source fixture proves two fields of one affine aggregate together with an independent scalar
-reference under normal resume and cancellation. This does not qualify their combination with
-deferred provider cleanup, escaped views, or arbitrary nested projections.
+reference while the aggregate is captured by static deferred provider cleanup. Normal resume
+closes the post-resume field values, child provider refusal reaches the same parent cleanup through
+the sealed call's exact trap successor, and parent cancellation closes the pre-resume values.
+Reference and both VM decode policies agree on the outcome and exact provider trace. Escaped views
+and arbitrary nested projections remain outside this proof.
 
 A sealed child `READ` existential parameter receives only an explicit read-reborrow. The caller
 safepoint must carry the unique affine existential owner exactly once, and the child frame keeps
@@ -129,4 +132,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c 28164a25784dd5f1b3b0c3397b10ed
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 0e4d14ac337b31262cf3c2e6a51f7d8381c1164962dd81247a7e4cd748ee0695
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1a80ce097d6f1fc24d6891b06c236f54727605b0a6c0a977fb94333d1956d3b9
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 7d7cec3199041b72f10405b1fc881c66c6542665dc32247b387f0b6220f1c066

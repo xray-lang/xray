@@ -5332,31 +5332,54 @@ static XiValue *lower_call_projection_base(XiValue *value) {
     return value;
 }
 
+/* A REF projection uses a call-bound scalar copy, but a PLACE_LOAD is only a borrowed snapshot. */
+/* Reload a place-backed aggregate for copy-out so it never crosses suspension as that snapshot. */
+/* Sequential reloads also preserve earlier copy-outs into other fields of the same aggregate. */
+static XiValue *lower_call_refresh_place_backed_receiver(XiLower *l, XiValue *receiver, int line) {
+    if (!l || !receiver || receiver->op != XI_PLACE_LOAD || receiver->nargs != 1 ||
+        !receiver->args[0])
+        return receiver;
+    XiValue *load = xi_value_new(l->func, l->cur_block, XI_PLACE_LOAD, receiver->type, 1);
+    if (!load)
+        return NULL;
+    load->args[0] = receiver->args[0];
+    load->line = (uint32_t) line;
+    return load;
+}
+
 static bool lower_call_store_projection(XiLower *l, XiValue *source, XiValue *updated, int line) {
     XiValue *base = lower_call_projection_base(source);
     if (!l || !base || !updated)
         return false;
     XiValue *store = NULL;
     switch (base->op) {
-        case XI_LOAD_FIELD:
+        case XI_LOAD_FIELD: {
+            XiValue *receiver = lower_call_refresh_place_backed_receiver(l, base->args[0], line);
+            if (!receiver)
+                return false;
             store = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD, l->type_unit, 2);
             if (store) {
-                store->args[0] = base->args[0];
+                store->args[0] = receiver;
                 store->args[1] = updated;
                 store->aux = base->aux;
                 store->aux_int = base->aux_int;
                 store->xg_class_field_id = base->xg_class_field_id;
             }
             break;
-        case XI_AGG_GET:
+        }
+        case XI_AGG_GET: {
+            XiValue *receiver = lower_call_refresh_place_backed_receiver(l, base->args[0], line);
+            if (!receiver)
+                return false;
             store = xi_value_new(l->func, l->cur_block, XI_AGG_SET, l->type_unit, 2);
             if (store) {
-                store->args[0] = base->args[0];
+                store->args[0] = receiver;
                 store->args[1] = updated;
                 store->aux = base->aux;
                 store->aux_int = base->aux_int;
             }
             break;
+        }
         case XI_INDEX_GET:
             store = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
             if (store) {

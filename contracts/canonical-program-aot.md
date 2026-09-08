@@ -88,8 +88,11 @@ chain and proves that its unique value root occurs once in the caller safepoint.
 and restores each distinct root once, and binds each child pointer to its own field inside that
 parent-frame root. Scalar field snapshots remain separate live values rather than aliases. The
 source fixture covers two fields sharing one affine aggregate, an independent scalar reference,
-and a pre-suspension snapshot, with normal resume and cancellation. Deferred provider cleanup,
-escaped views, and arbitrary source-level nested projections remain outside that fixture's proof.
+and a pre-suspension snapshot while the aggregate is captured by static deferred provider cleanup.
+The sealed call has exact normal, cancel, and child-trap successors. Generated C closes post-resume
+field values on normal completion and child provider refusal, closes pre-resume values on parent
+cancellation, and matches Reference and both VM decode policies without an AOT-only unwind rule.
+Escaped views and arbitrary source-level nested projections remain outside that fixture's proof.
 
 An exact `READ` existential crossing a sealed child suspension is represented by two distinct
 values: the non-owner reborrow passed to the child and the unique affine existential owner stored
@@ -146,7 +149,7 @@ anchor-sha256: CMakeLists.txt 24ef3583c9df1d17d0d44ce5ede860b2acf6b70544facc5f05
 anchor-sha256: tests/unit/CMakeLists.txt 37c7d17d4cf391031ba0d3d71017d9c6b78bc8580e8bac1055a46a9910c132d7
 anchor-sha256: xisa/core/registry.json 1066fb08ca4dae249c7fc59d26e1ce4f6c387fbbdd16d31480c72badb109483f
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
-anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 5554779cd3ab5d8a1ead2ab78d6ba135a1bdab269dfb9f998ab043fb149f7d48
+anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 68c13c4ee82d25c007508ef3ec3b2084a7439c4e5db025c08d670bcb33f5c9f8
 anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 81bb6fb3456dbc45d6bd4d81b672a296e9c2990cf846a2c8ed72a2a2b45fa6da
 anchor-sha256: src/aot/program/xr_backend_ir.h af75b1247f80f1b3132d71b65774b05f6c99d4bfbcab3e9fd097911f7694a799
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
@@ -161,4 +164,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c ea9d5fb6c739ec615a2064f6e8bb83d14ba2566e0b92989f6c3a77f3570ee240
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 1a80ce097d6f1fc24d6891b06c236f54727605b0a6c0a977fb94333d1956d3b9
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 7d7cec3199041b72f10405b1fc881c66c6542665dc32247b387f0b6220f1c066
