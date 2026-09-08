@@ -365,11 +365,14 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_lowering_gen.c
 )
 
-set(XRAY_XI_LOWERING_VALIDATION_STAMP
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_sources.validated
+set(XRAY_XI_LOWERING_VERIFICATION_STAMP
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering.verified
 )
 set(XRAY_XI_LOWERING_VALIDATION_DEPFILE
     ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_sources.d
+)
+set(XRAY_XI_LOWERING_NAMESPACE_CENSUS
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_namespace.txt
 )
 
 set(XRAY_GEN_AOT_METADATA_DEPS
@@ -529,40 +532,25 @@ add_custom_target(gen-xi-verify DEPENDS
 )
 
 add_custom_command(
-    OUTPUT ${XRAY_XI_LOWERING_VALIDATION_STAMP}
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-validate
+    OUTPUT ${XRAY_XI_LOWERING_VERIFICATION_STAMP}
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-verify
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
-            ${XRAY_XI_LOWERING_VALIDATION_STAMP}
+            ${CMAKE_SOURCE_DIR}
+            ${XRAY_XI_LOWERING_VERIFICATION_STAMP}
             ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
     BYPRODUCTS ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
     DEPENDS ${XISAGEN}
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
             ${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}
-    DEPFILE ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
-    COMMENT "xisagen: validating source-current Xi lowering consumers"
-    VERBATIM
-)
-
-set(XRAY_XI_LOWERING_CHECK_STAMP
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xi-lowering.check.stamp")
-add_custom_command(
-    OUTPUT ${XRAY_XI_LOWERING_CHECK_STAMP}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-check
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
-            ${CMAKE_SOURCE_DIR}
-            ${XRAY_XI_LOWERING_VALIDATION_STAMP}
-    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_XI_LOWERING_CHECK_STAMP}
-    DEPENDS ${XRAY_XI_LOWERING_VALIDATION_STAMP}
             ${XRAY_GEN_XI_LOWERING_DEPS}
-    COMMENT "xisagen: verifying checked-in Xi lowering projections"
+            ${XRAY_XI_LOWERING_NAMESPACE_CENSUS}
+    DEPFILE ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
+    COMMENT "xisagen: verifying source-current Xi lowering consumers and projections"
     VERBATIM
 )
-add_custom_target(gen-xi-lowering DEPENDS ${XRAY_XI_LOWERING_CHECK_STAMP})
+add_custom_target(gen-xi-lowering DEPENDS ${XRAY_XI_LOWERING_VERIFICATION_STAMP})
 
 add_custom_target(gen-aot-metadata DEPENDS
     ${XRAY_GEN_AOT_METADATA_DEPS}
@@ -1419,6 +1407,50 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/net
 )
+
+# Directory timestamps alone can hide immediate additions from Ninja on Windows.
+# This namespace census only invalidates the verifier; Python still captures and
+# validates every compiler-visible input and every AOT discovery source itself.
+function(xray_configure_xi_lowering_namespace_census output)
+    set(_roots)
+    foreach(_include IN LISTS ARGN)
+        get_filename_component(_root "${_include}" ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+        file(TO_CMAKE_PATH "${_root}" _root)
+        list(APPEND _roots "${_root}")
+    endforeach()
+    list(REMOVE_DUPLICATES _roots)
+    list(SORT _roots)
+    set(_patterns)
+    set(_retained_roots)
+    foreach(_root IN LISTS _roots)
+        set(_covered FALSE)
+        foreach(_ancestor IN LISTS _retained_roots)
+            string(FIND "${_root}/" "${_ancestor}/" _prefix)
+            if(_prefix EQUAL 0)
+                set(_covered TRUE)
+                break()
+            endif()
+        endforeach()
+        if(NOT _covered)
+            list(APPEND _retained_roots "${_root}")
+            list(APPEND _patterns "${_root}/*")
+        endif()
+    endforeach()
+    file(GLOB_RECURSE _entries LIST_DIRECTORIES TRUE CONFIGURE_DEPENDS ${_patterns})
+    list(REMOVE_DUPLICATES _entries)
+    list(SORT _entries)
+    set(_content "xi-lowering-namespace/1\n")
+    foreach(_entry IN LISTS _retained_roots _entries)
+        string(HEX "${_entry}" _encoded)
+        string(LENGTH "${_entry}" _length)
+        string(APPEND _content "${_length}:${_encoded}\n")
+    endforeach()
+    file(CONFIGURE OUTPUT "${output}" CONTENT "${_content}" @ONLY NEWLINE_STYLE UNIX)
+endfunction()
+
+xray_configure_xi_lowering_namespace_census(
+    "${XRAY_XI_LOWERING_NAMESPACE_CENSUS}" ${XRAY_COMMON_INCLUDES})
 
 set_source_files_properties(
     src/plan/format/xr_xtp_instruction_stream.c

@@ -2458,15 +2458,23 @@ TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors) {
     source_build_fixture_free(&fixture);
 }
 
-TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
-    static const char source[] = "fn bump(value: ref i64) {\n"
+TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspension) {
+    static const char source[] = "import sys\n"
+                                 "fn bump(value: ref i64, left: ref i64, right: ref i64) {\n"
+                                 "  value = value + 4\n"
+                                 "  left = left + 5\n"
+                                 "  right = right + 6\n"
                                  "  Coro.yield()\n"
                                  "  value = value + 1\n"
+                                 "  left = left + 2\n"
+                                 "  right = right + 3\n"
                                  "}\n"
                                  "fn answer() -> i64 {\n"
-                                 "  var value = 41\n"
-                                 "  bump(ref value)\n"
-                                 "  return value\n"
+                                 "  var value = 10\n"
+                                 "  var live = sys.Pipe(-20, -30)\n"
+                                 "  const snapshot = live._readHandle\n"
+                                 "  bump(ref value, ref live._readHandle, ref live._writeHandle)\n"
+                                 "  return value + live.readEnd() + live.writeEnd() + snapshot\n"
                                  "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -2508,14 +2516,77 @@ TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
     uint32_t child_id = coroutine_call->immediate.coroutine_call.function_id;
     ASSERT_LT(child_id, first.program->function_count);
     const XrValidatedFunction *child = &first.program->functions[child_id];
-    ASSERT_EQ_UINT(child->parameter_count, 1u);
-    ASSERT_EQ_INT(child->parameter_modes[0], XR_PARAM_REF);
+    ASSERT_EQ_UINT(child->parameter_count, 3u);
+    for (uint32_t parameter = 0u; parameter < child->parameter_count; ++parameter)
+        ASSERT_EQ_INT(child->parameter_modes[parameter], XR_PARAM_REF);
     ASSERT_EQ_UINT(child->coroutine_safepoint_count, 1u);
-    ASSERT_EQ_UINT(child->coroutine_safepoints[0].live_value_count, 1u);
-    uint32_t child_live = child->coroutine_safepoints[0].live_value_ids[0];
-    ASSERT_LT(child_live, child->value_count);
-    ASSERT_EQ_INT(child->value_categories[child_live], XR_CORE_IR_PLACE);
-    ASSERT_EQ_INT(child->value_ownerships[child_live], XR_CORE_IR_NON_OWNER);
+    ASSERT_EQ_UINT(child->coroutine_safepoints[0].live_value_count, 3u);
+    for (uint32_t live = 0u; live < child->coroutine_safepoints[0].live_value_count; ++live) {
+        uint32_t child_live = child->coroutine_safepoints[0].live_value_ids[live];
+        ASSERT_LT(child_live, child->value_count);
+        ASSERT_EQ_INT(child->value_categories[child_live], XR_CORE_IR_PLACE);
+        ASSERT_EQ_INT(child->value_ownerships[child_live], XR_CORE_IR_NON_OWNER);
+    }
+    const XrValidatedCoroutineSafepoint *parent_point = &function->coroutine_safepoints[0];
+    ASSERT_EQ_UINT(parent_point->live_value_count, 3u);
+    ASSERT_EQ_UINT(coroutine_call->operand_count,
+                   child->parameter_count + parent_point->live_value_count + 1u);
+    uint32_t storage_roots[3] = {0};
+    uint32_t field_ordinals[2] = {0};
+    for (uint32_t parameter = 0u; parameter < child->parameter_count; ++parameter) {
+        uint32_t place = coroutine_call->operands[parameter];
+        uint32_t projection_count = parameter == 0u ? 0u : 1u;
+        for (uint32_t depth = 0u; depth <= projection_count; ++depth) {
+            ASSERT_LT(place, function->value_count);
+            ASSERT_EQ_INT(function->value_categories[place], XR_CORE_IR_PLACE);
+            ASSERT_EQ_INT(function->value_ownerships[place], XR_CORE_IR_NON_OWNER);
+            ASSERT_NE(function->value_positions[place], 0u);
+            uint32_t block = function->value_blocks[place];
+            uint32_t position = function->value_positions[place] - 1u;
+            ASSERT_LT(block, function->block_count);
+            ASSERT_LT(position, function->blocks[block].instruction_count);
+            const XrValidatedInstruction *definition =
+                &function->blocks[block].instructions[position];
+            ASSERT_EQ_UINT(definition->result_id, place);
+            ASSERT_EQ_UINT(definition->operand_count, 1u);
+            if (depth < projection_count) {
+                ASSERT_EQ_UINT(definition->operation_id, XR_CORE_OP_CORE_PLACE_PROJECT);
+                ASSERT_EQ_INT(definition->immediate_kind, XR_CORE_IR_IMMEDIATE_FIELD);
+                field_ordinals[parameter - 1u] = definition->immediate.field_ordinal;
+            } else {
+                ASSERT_EQ_UINT(definition->operation_id, XR_CORE_OP_CORE_PLACE_LOCAL);
+            }
+            place = definition->operands[0];
+        }
+        ASSERT_LT(place, function->value_count);
+        ASSERT_EQ_INT(function->value_categories[place], XR_CORE_IR_VALUE);
+        storage_roots[parameter] = place;
+        uint32_t live_occurrences = 0u;
+        for (uint32_t live = 0u; live < parent_point->live_value_count; ++live)
+            live_occurrences += parent_point->live_value_ids[live] == place;
+        ASSERT_EQ_UINT(live_occurrences, 1u);
+    }
+    ASSERT_NE(field_ordinals[0], field_ordinals[1]);
+    ASSERT_EQ_UINT(storage_roots[1], storage_roots[2]);
+    ASSERT_NE(storage_roots[0], storage_roots[1]);
+    ASSERT_EQ_UINT(function->value_types[storage_roots[0]], XR_CORE_TYPE_I64);
+    const XrValidatedType *aggregate =
+        xr_validated_program_type(first.program, function->value_types[storage_roots[1]]);
+    ASSERT_NOT_NULL(aggregate);
+    ASSERT_EQ_INT(aggregate->kind, XR_CORE_IR_TYPE_AGGREGATE);
+    ASSERT_LT(field_ordinals[0], aggregate->field_count);
+    ASSERT_LT(field_ordinals[1], aggregate->field_count);
+    uint32_t snapshot_count = 0u;
+    for (uint32_t live = 0u; live < parent_point->live_value_count; ++live) {
+        uint32_t value = parent_point->live_value_ids[live];
+        ASSERT_LT(value, function->value_count);
+        ASSERT_EQ_INT(function->value_categories[value], XR_CORE_IR_VALUE);
+        if (value != storage_roots[0] && value != storage_roots[1]) {
+            ASSERT_EQ_UINT(function->value_types[value], XR_CORE_TYPE_I64);
+            ++snapshot_count;
+        }
+    }
+    ASSERT_EQ_UINT(snapshot_count, 1u);
 
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -2538,7 +2609,7 @@ TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
     reference_outcome = xr_reference_execution_step(reference);
     ASSERT_EQ_INT(reference_outcome.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference_outcome.value.kind, XR_REFERENCE_VALUE_I64);
-    ASSERT_EQ_INT(reference_outcome.value.as.i64, 42);
+    ASSERT_EQ_INT(reference_outcome.value.as.i64, -39);
     xr_reference_execution_free(reference);
 
     XrReferenceExecution *reference_cancel = NULL;
@@ -2561,7 +2632,7 @@ TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
     vm_outcome = xr_vm_execution_step(vm);
     ASSERT_EQ_INT(vm_outcome.kind, XR_VM_OUTCOME_RETURN);
     ASSERT_EQ_INT(vm_outcome.value.kind, XR_VM_VALUE_I64);
-    ASSERT_EQ_INT(vm_outcome.value.as.i64, 42);
+    ASSERT_EQ_INT(vm_outcome.value.as.i64, -39);
     xr_vm_execution_free(vm);
 
     XrVmExecution *vm_cancel = NULL;
@@ -2587,6 +2658,8 @@ TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "int64_t * parameter_0"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int64_t * parameter_1"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int64_t * parameter_2"));
     XrBackendFunction *backend_parent = &backend_ir->functions[entry];
     XrBackendInstruction *backend_call = NULL;
     for (uint32_t block = 0u; block < backend_parent->block_count; ++block)
@@ -2600,12 +2673,12 @@ TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
     ASSERT_NOT_NULL(backend_call);
     ASSERT_EQ_UINT(backend_parent->coroutine_safepoint_count, 1u);
     XrBackendCoroutineSafepoint *backend_point = &backend_parent->coroutine_safepoints[0];
-    ASSERT_EQ_UINT(backend_point->live_value_count, 1u);
+    ASSERT_EQ_UINT(backend_point->live_value_count, 3u);
     uint32_t backend_child_id = backend_call->immediate.coroutine_call.function_id;
     ASSERT_LT(backend_child_id, backend_ir->function_count);
     uint32_t backend_parameter_count = backend_ir->functions[backend_child_id].parameter_count;
-    ASSERT_EQ_UINT(backend_parameter_count, 1u);
-    ASSERT_LT(backend_parameter_count, backend_call->operand_count);
+    ASSERT_EQ_UINT(backend_parameter_count, 3u);
+    ASSERT_LT(backend_parameter_count + 1u, backend_call->operand_count);
     uint32_t saved_live = backend_point->live_value_ids[0];
     uint32_t saved_operand = backend_call->operands[backend_parameter_count];
     backend_point->live_value_ids[0] = backend_call->operands[0];
@@ -2614,6 +2687,23 @@ TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
     ASSERT_EQ_INT(backend_diagnostic.status, XR_BACKEND_INVARIANT_REJECTED);
     backend_point->live_value_ids[0] = saved_live;
     backend_call->operands[backend_parameter_count] = saved_operand;
+    ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    uint32_t projected_place = backend_call->operands[1];
+    ASSERT_LT(projected_place, function->value_count);
+    ASSERT_NE(function->value_positions[projected_place], 0u);
+    uint32_t project_block = function->value_blocks[projected_place];
+    uint32_t project_position = function->value_positions[projected_place] - 1u;
+    ASSERT_LT(project_block, backend_parent->block_count);
+    ASSERT_LT(project_position, backend_parent->blocks[project_block].instruction_count);
+    XrBackendInstruction *backend_project =
+        &backend_parent->blocks[project_block].instructions[project_position];
+    ASSERT_EQ_UINT(backend_project->result_id, projected_place);
+    ASSERT_EQ_UINT(backend_project->operation_id, XR_CORE_OP_CORE_PLACE_PROJECT);
+    uint32_t saved_ordinal = backend_project->immediate.field_ordinal;
+    backend_project->immediate.field_ordinal = aggregate->field_count;
+    ASSERT_FALSE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    ASSERT_EQ_INT(backend_diagnostic.status, XR_BACKEND_INVARIANT_REJECTED);
+    backend_project->immediate.field_ordinal = saved_ordinal;
     ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
     if (ref_parameter_coroutine_aot_output_path) {
@@ -2630,7 +2720,7 @@ TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension) {
                     "    if (outcome.kind != UINT32_C(1) || outcome.state_id != UINT32_C(1) || "
                     "outcome.safepoint_id != UINT32_C(0)) return 255;\n"
                     "    outcome = xr_aot_entry_coroutine_step(&resumed);\n"
-                    "    if (outcome.kind != UINT32_C(0) || outcome.value != INT64_C(42)) "
+                    "    if (outcome.kind != UINT32_C(0) || outcome.value != -INT64_C(39)) "
                     "return 254;\n"
                     "    xr_aot_entry_coroutine_frame_dispose(&resumed);\n"
                     "    XrAotEntryCoroutineFrame cancelled;\n"
@@ -3411,7 +3501,7 @@ RUN_TEST(source_owner_pipe_uncaught_error_runs_cleanup);
 RUN_TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors);
 RUN_TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel);
 RUN_TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors);
-RUN_TEST(source_owner_keeps_ref_parameter_place_stable_across_child_suspension);
+RUN_TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspension);
 RUN_TEST(source_owner_keeps_read_existential_root_across_child_suspension);
 RUN_TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result);
 RUN_TEST(source_owner_keeps_reachable_unlowered_sleep_fail_closed);

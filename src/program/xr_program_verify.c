@@ -3561,15 +3561,16 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                         : NULL;
                 bool stable_ref = mode != XR_PARAM_REF || !place_definition;
                 if (place_definition &&
-                    place_definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL &&
+                    (place_definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+                     place_definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT) &&
                     place_definition->operand_count == 1u) {
-                    uint32_t owner = place_definition->operands[0];
+                    uint32_t owner =
+                        scoped_place_root(function, instruction->operands[parameter], block_id);
                     uint32_t owner_live_count = 0u;
                     for (uint32_t live = 0u; live < safepoint->live_value_count; ++live)
                         owner_live_count += safepoint->live_value_ids[live] == owner;
                     stable_ref = owner < function->value_count && owner_live_count == 1u &&
-                                 function->value_categories[owner] == XR_CORE_IR_VALUE &&
-                                 function->value_types[owner] == callee->parameter_types[parameter];
+                                 function->value_categories[owner] == XR_CORE_IR_VALUE;
                 }
                 if ((!supported_read && mode != XR_PARAM_REF) || !stable_ref ||
                     !operand_type_is(function, instruction, parameter,

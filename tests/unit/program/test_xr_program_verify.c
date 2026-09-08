@@ -14,6 +14,7 @@
 #include "xr_program_panic_fixture.h"
 #include "xr_program_assert_fixture.h"
 #include "xr_program_coroutine_fixture.h"
+#include "xr_program_ref_coroutine_fixture.h"
 #include "xr_program_output_fixture.h"
 #include "xr_program_trap_fixture.h"
 
@@ -3767,6 +3768,36 @@ static void test_coroutine_cancel_cleanup_requires_exact_owner_transfer(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_coroutine_related_field_refs_require_one_live_storage_root(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_ref_coroutine_fixture_write(XR_PROGRAM_REF_COROUTINE_VALID, &artifact,
+                                                 diagnostic,
+                                                 sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    const struct {
+        XrProgramRefCoroutineMutation mutation;
+        XrProgramDiagnosticKind diagnostic;
+    } invalid[] = {
+        {XR_PROGRAM_REF_COROUTINE_MISSING_ROOT, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_REF_COROUTINE_DUPLICATE_CANCEL_ROOT, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_REF_COROUTINE_RAW_PLACE_LIVE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_REF_COROUTINE_VALUE_PROJECTION_BASE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PROGRAM_REF_COROUTINE_SCALAR_PROJECTION_BASE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PROGRAM_REF_COROUTINE_INVALID_FIELD, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+    };
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        CHECK(xr_program_ref_coroutine_fixture_write(invalid[index].mutation, &artifact, diagnostic,
+                                                     sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, invalid[index].diagnostic);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 static void test_condition_assert_panic_cleanup_cfg(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -4018,6 +4049,7 @@ int main(void) {
     test_callable_pack_and_indirect_calls();
     test_coroutine_state_and_exact_liveness();
     test_coroutine_cancel_cleanup_requires_exact_owner_transfer();
+    test_coroutine_related_field_refs_require_one_live_storage_root();
     test_provider_output_semantics();
     test_provider_trap_continuation_semantics();
     if (failures != 0) {

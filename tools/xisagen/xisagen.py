@@ -17,8 +17,7 @@ Usage:
   python3 xisagen.py xi-ops  <ops.def>     <output.h>
   <python-3.11+> xisagen.py semantic-ops <ops.def> <output-root>
   python3 xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>
-  python3 xisagen.py xi-lowering-check <ops.def> <lowering.def> <output-root> <validation-stamp>
-  python3 xisagen.py xi-lowering-validate <ops.def> <lowering.def> <stamp> <depfile>
+  python3 xisagen.py xi-lowering-verify <ops.def> <lowering.def> <output-root> <stamp> <depfile>
   python3 xisagen.py xi-verify <ops.def> <verifier.def> <output.h>
   python3 xisagen.py aot-rep <rep.def>     <output.h>
   python3 xisagen.py aot-abi <rep.def> <abi.def> <output.h>
@@ -64,22 +63,25 @@ def read_file(path: str) -> str:
     except OSError as e:
         die(f"cannot read {path}: {e}")
 
-def write_file(path: str, content: str):
-    os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(content)
-
-def write_file_if_changed(path: str, content: str) -> bool:
-    """Publish generated text only when its canonical content changed."""
+def write_file(path: str, content: str) -> bool:
+    """Publish canonical UTF-8/LF bytes only when those exact bytes changed."""
+    expected = content.replace('\r\n', '\n').replace('\r', '\n').encode('utf-8')
     try:
-        with open(path, 'r', encoding='utf-8') as stream:
-            if stream.read() == content:
-                return False
+        with open(path, 'rb') as stream:
+            previous = stream.read()
+        previous.decode('utf-8')
+        if previous == expected:
+            return False
     except FileNotFoundError:
         pass
-    except OSError as error:
+    except (OSError, UnicodeError) as error:
         die(f"cannot compare generated output {path}: {error}")
-    write_file(path, content)
+    try:
+        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        with open(path, 'wb') as stream:
+            stream.write(expected)
+    except OSError as error:
+        die(f"cannot write generated output {path}: {error}")
     return True
 
 # ============================================================
@@ -6306,16 +6308,25 @@ def check_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef],
     root = Path(os.path.abspath(output_root))
     expected = _xi_lowering_output_contents(entries, ops)
     initial = _xi_capture_lowering_projection_snapshot(root, expected)
-    for index, ((relpath, content), actual) in enumerate(zip(expected, initial)):
-        if actual.data != content.encode('utf-8'):
-            die("xi-lowering: checked-in projection differs from canonical "
-                f"content: {relpath}; regenerate it before building")
-        if index == 0 and after_first_compare_hook is not None:
-            after_first_compare_hook()
+    _xi_compare_lowering_projection_snapshot(
+        expected, initial, after_first_compare_hook)
     if _xi_capture_lowering_projection_snapshot(root, expected) != initial:
         die("xi-lowering: checked-in projection identity, bytes, or output set "
             "changed while the complete projection snapshot was checked")
     return [os.fspath(root / relative) for relative, _ in expected]
+
+
+def _xi_compare_lowering_projection_snapshot(
+        expected: list[tuple[str, str]], initial: tuple[XiFileSnapshot, ...],
+        after_first_compare_hook=None) -> None:
+    if len(expected) != len(initial):
+        die("xi-lowering: projection snapshot does not cover every expected output")
+    for index, ((relpath, content), actual) in enumerate(zip(expected, initial)):
+        if actual.path != relpath or actual.data != content.encode('utf-8'):
+            die("xi-lowering: checked-in projection differs from canonical "
+                f"content: {relpath}; regenerate it before building")
+        if index == 0 and after_first_compare_hook is not None:
+            after_first_compare_hook()
 
 
 # ============================================================
@@ -7598,12 +7609,6 @@ def cmd_xi_lowering(args: list[str]):
     discovery_snapshot = _xi_capture_aot_discovery_census(source_root)
     validate_xi_lowering_consumer_sources(
         entries, source_root, args[1], snapshot, discovery_snapshot)
-    expected_stamp = _xi_lowering_validation_stamp_content(
-        ops_source, lowering_source, snapshot, discovery_snapshot)
-    validation_stamp = os.environ.get('XRAY_XI_LOWERING_VALIDATION_STAMP')
-    if validation_stamp:
-        _xi_require_lowering_validation_stamp(
-            Path(validation_stamp), expected_stamp)
     if (_xi_secure_repository_file_bytes(
             source_root, ops_relative,
             'xi-lowering: ops schema') != ops_source or
@@ -7619,26 +7624,34 @@ def cmd_xi_lowering(args: list[str]):
         print(f"xisagen: generated {path}", file=sys.stderr)
 
 
-def _xi_run_lowering_check(
+def _xi_run_lowering_verification(
         ops_path: Path, lowering_path: Path, output_root: Path, stamp: Path,
-        *, after_validation_hook=None, after_first_projection_hook=None
+        depfile: Path, *, after_validation_hook=None,
+        after_first_projection_hook=None, before_stamp_hook=None,
+        after_stamp_hook=None
 ) -> list[str]:
+    """Validate consumers and projections once against one immutable input set."""
     ops_path = Path(os.path.abspath(ops_path))
     lowering_path = Path(os.path.abspath(lowering_path))
+    output_root = Path(os.path.abspath(output_root))
+    stamp.unlink(missing_ok=True)
+    depfile.unlink(missing_ok=True)
     source_root = ops_path.parents[2]
     ops_relative = _xi_repository_relative_name(
-        source_root, ops_path, 'xi-lowering-check: ops schema')
+        source_root, ops_path, 'xi-lowering-verify: ops schema')
     lowering_relative = _xi_repository_relative_name(
-        source_root, lowering_path, 'xi-lowering-check: lowering schema')
+        source_root, lowering_path, 'xi-lowering-verify: lowering schema')
     ops_snapshot = _xi_capture_repository_file(
-        source_root, ops_relative, 'xi-lowering-check: ops schema')
+        source_root, ops_relative, 'xi-lowering-verify: ops schema')
     lowering_snapshot = _xi_capture_repository_file(
-        source_root, lowering_relative, 'xi-lowering-check: lowering schema')
+        source_root, lowering_relative, 'xi-lowering-verify: lowering schema')
+    generator = _xi_capture_regular_file_snapshot(
+        Path(__file__).resolve(), 'xi-lowering-verify: generator')
     try:
         ops_text = ops_snapshot.data.decode('utf-8', errors='strict')
         lowering_text = lowering_snapshot.data.decode('utf-8', errors='strict')
     except UnicodeDecodeError as error:
-        die(f"xi-lowering-check: schema input is not UTF-8: {error}")
+        die(f"xi-lowering-verify: schema input is not UTF-8: {error}")
     ops = parse_xi_ops_def(ops_text, os.fspath(ops_path))
     entries = parse_xi_lowering_def(
         lowering_text, ops, os.fspath(lowering_path))
@@ -7646,46 +7659,73 @@ def _xi_run_lowering_check(
         die(f"no Xi lowering entries parsed from {lowering_path}")
     closure = capture_xi_lowering_validation_snapshot(source_root)
     discovery = _xi_capture_aot_discovery_census(source_root)
+    expected_outputs = _xi_lowering_output_contents(entries, ops)
+    projections = _xi_capture_lowering_projection_snapshot(
+        output_root, expected_outputs)
     validate_xi_lowering_consumer_sources(
         entries, source_root, os.fspath(lowering_path), closure, discovery)
-    expected_stamp = _xi_lowering_validation_stamp_content(
-        ops_snapshot.data, lowering_snapshot.data, closure, discovery)
-    stamp_snapshot = _xi_require_lowering_validation_stamp(stamp, expected_stamp)
     if after_validation_hook is not None:
         after_validation_hook()
-    expected_outputs = _xi_lowering_output_contents(entries, ops)
-    projection_snapshot = _xi_capture_lowering_projection_snapshot(
-        output_root, expected_outputs)
-    outputs = check_xi_lowering_outputs(
-        os.fspath(output_root), entries, ops,
-        after_first_compare_hook=after_first_projection_hook)
-    unchanged = (
-        _xi_capture_repository_file(
-            source_root, ops_relative,
-            'xi-lowering-check: ops schema') == ops_snapshot and
-        _xi_capture_repository_file(
-            source_root, lowering_relative,
-            'xi-lowering-check: lowering schema') == lowering_snapshot and
-        capture_xi_lowering_validation_snapshot(source_root) == closure and
-        _xi_capture_aot_discovery_census(source_root) == discovery and
-        _xi_require_lowering_validation_stamp(stamp, expected_stamp) ==
-            stamp_snapshot and
-        _xi_capture_lowering_projection_snapshot(
-            output_root, expected_outputs) == projection_snapshot)
-    if not unchanged:
-        die("xi-lowering-check: schema, proof stamp, compile closure, discovery, "
-            "or projection snapshot changed before final success")
-    return outputs
+    _xi_compare_lowering_projection_snapshot(
+        expected_outputs, projections, after_first_projection_hook)
+
+    def additional_inputs_unchanged() -> bool:
+        return (
+            _xi_capture_repository_file(
+                source_root, ops_relative,
+                'xi-lowering-verify: ops schema') == ops_snapshot and
+            _xi_capture_repository_file(
+                source_root, lowering_relative,
+                'xi-lowering-verify: lowering schema') == lowering_snapshot and
+            _xi_capture_regular_file_snapshot(
+                Path(generator.path), 'xi-lowering-verify: generator') == generator and
+            _xi_capture_lowering_projection_snapshot(
+                output_root, expected_outputs) == projections)
+
+    if (not additional_inputs_unchanged() or
+            capture_xi_lowering_validation_snapshot(source_root) != closure or
+            _xi_capture_aot_discovery_census(source_root) != discovery):
+        die("xi-lowering-verify: schema, generator, compile closure, discovery, "
+            "or projection snapshot changed before publication")
+    dependencies = xi_lowering_validation_dependency_paths(
+        entries, source_root, closure, discovery)
+    dependencies.extend((ops_path, lowering_path, ops_path.parent,
+                         lowering_path.parent, Path(generator.path)))
+    dependencies.extend(output_root / relative for relative, _ in expected_outputs)
+    dependency_text = ' '.join(
+        _xi_depfile_escape(path.as_posix()) for path in sorted(set(dependencies)))
+    depfile_content = f"{_xi_depfile_escape(stamp.as_posix())}: {dependency_text}\n"
+    projection_digest = hashlib.sha256()
+    for projection in projections:
+        projection_digest.update(projection.path.encode('utf-8') + b'\0')
+        projection_digest.update(len(projection.data).to_bytes(8, 'big'))
+        projection_digest.update(projection.data)
+    stamp_content = _xi_lowering_validation_stamp_content(
+        ops_snapshot.data, lowering_snapshot.data, closure, discovery)
+    stamp_content += (
+        f"generator_sha256={hashlib.sha256(generator.data).hexdigest()}\n"
+        f"projections={len(projections)}\n"
+        f"projections_sha256={projection_digest.hexdigest()}\n")
+    _xi_publish_lowering_validation_artifacts(
+        ops_path=ops_path, ops_source=ops_snapshot.data,
+        lowering_path=lowering_path, lowering_source=lowering_snapshot.data,
+        source_root=source_root, snapshot=closure, discovery_snapshot=discovery,
+        depfile=depfile, depfile_content=depfile_content,
+        stamp=stamp, stamp_content=stamp_content,
+        before_stamp_hook=before_stamp_hook, after_stamp_hook=after_stamp_hook,
+        additional_inputs_unchanged=additional_inputs_unchanged)
+    return [os.fspath(output_root / relative) for relative, _ in expected_outputs]
 
 
-def cmd_xi_lowering_check(args: list[str]):
-    if len(args) != 4:
-        die("usage: xisagen.py xi-lowering-check "
-            "<ops.def> <lowering.def> <output-root> <validation-stamp>")
-    outputs = _xi_run_lowering_check(
+def cmd_xi_lowering_verify(args: list[str]):
+    if len(args) != 5:
+        die("usage: xisagen.py xi-lowering-verify "
+            "<ops.def> <lowering.def> <output-root> <stamp> <depfile>")
+    outputs = _xi_run_lowering_verification(
         Path(args[0]), Path(args[1]), Path(os.path.abspath(args[2])),
-        Path(args[3]).resolve())
-    print(f"xisagen: verified {len(outputs)} checked-in Xi lowering projections",
+        Path(args[3]).resolve(), Path(args[4]).resolve())
+    print(f"xisagen: validated Xi lowering consumers once and verified "
+          f"{len(outputs)} checked-in projections",
           file=sys.stderr)
 
 
@@ -7708,7 +7748,7 @@ def _xi_lowering_validation_stamp_content(
         snapshot: XiLoweringValidationSnapshot,
         discovery_snapshot: XiAotDiscoverySnapshot) -> str:
     return (
-        "xi-lowering-source-validation/3\n"
+        "xi-lowering-verification/1\n"
         f"ops_sha256={hashlib.sha256(ops_source).hexdigest()}\n"
         f"lowering_sha256={hashlib.sha256(lowering_source).hexdigest()}\n"
         f"aot_sources={len(snapshot.sources)}\n"
@@ -7842,7 +7882,8 @@ def _xi_publish_lowering_validation_artifacts(
         discovery_snapshot: XiAotDiscoverySnapshot,
         depfile: Path, depfile_content: str,
         stamp: Path, stamp_content: str,
-        before_stamp_hook=None, after_stamp_hook=None) -> None:
+        before_stamp_hook=None, after_stamp_hook=None,
+        additional_inputs_unchanged=None) -> None:
     """Publish an exact proof, then fail closed unless its inputs recapture."""
     try:
         stamp.unlink()
@@ -7873,7 +7914,8 @@ def _xi_publish_lowering_validation_artifacts(
             capture_xi_lowering_validation_snapshot(source_root) == snapshot and
             _xi_capture_aot_discovery_census(source_root) == discovery_snapshot and
             _xi_require_lowering_validation_stamp(
-                stamp, stamp_content) == published_stamp)
+                stamp, stamp_content) == published_stamp and
+            (additional_inputs_unchanged is None or additional_inputs_unchanged()))
         if not unchanged:
             die("xi-lowering: validation inputs changed after the proof stamp "
                 "was published")
@@ -8559,19 +8601,24 @@ module._xi_publish_lowering_validation_artifacts(
     print(" PASS", file=sys.stderr)
 
 
+def _xi_lowering_namespace_cmake() -> str:
+    """Reuse the production namespace invalidation algorithm in native fixtures."""
+    cmake = (Path(__file__).resolve().parents[2] / 'CMakeLists.txt').read_text(
+        encoding='utf-8')
+    start = cmake.index('function(xray_configure_xi_lowering_namespace_census output)')
+    end = cmake.index('\nendfunction()', start) + len('\nendfunction()')
+    return cmake[start:end] + '\n'
+
+
 def _test_xi_lowering_ninja_failed_edge() -> None:
     print("  test_xi_lowering_ninja_failed_edge...", end='', file=sys.stderr)
     ninja = shutil.which('ninja')
+    cmake = shutil.which('cmake')
     if ninja is None:
         die("xisagen self-test requires Ninja; install ninja and retry")
 
-    def ninja_command(arguments: list[object]) -> str:
-        values = [os.fspath(value) for value in arguments]
-        if os.name == 'nt':
-            command = subprocess.list2cmdline(values)
-        else:
-            command = shlex.join(values)
-        return command.replace('$', '$$')
+    if cmake is None:
+        die("xisagen self-test requires CMake; install cmake and retry")
 
     validator_source = r'''
 import importlib.util
@@ -8609,9 +8656,15 @@ dependencies.extend((ops_path, lowering_path))
 dependency_text = ' '.join(
     module._xi_depfile_escape(path.as_posix())
     for path in sorted(set(dependencies)))
-depfile_content = 'build/proof.stamp: ' + dependency_text + '\n'
+depfile_content = module._xi_depfile_escape(stamp.as_posix()) + ': ' + dependency_text + '\n'
 proof = module._xi_lowering_validation_stamp_content(
     ops_source, lowering_source, snapshot, discovery)
+projection = root / 'tracked_projection.txt'
+projection_snapshot = module._xi_capture_regular_file_snapshot(
+    projection, 'synthetic checked-in projection')
+if projection_snapshot.data != b'canonical\n':
+    print('checked-in projection mismatch', file=sys.stderr)
+    sys.exit(2)
 
 def after_publish():
     record('validation-published-' + mode_path.read_text(encoding='utf-8').strip())
@@ -8625,24 +8678,11 @@ module._xi_publish_lowering_validation_artifacts(
     lowering_path=lowering_path, lowering_source=lowering_source,
     source_root=root, snapshot=snapshot, discovery_snapshot=discovery,
     depfile=depfile, depfile_content=depfile_content,
-    stamp=stamp, stamp_content=proof, after_stamp_hook=after_publish)
+    stamp=stamp, stamp_content=proof, after_stamp_hook=after_publish,
+    additional_inputs_unchanged=lambda: module._xi_capture_regular_file_snapshot(
+        projection, 'synthetic checked-in projection') == projection_snapshot)
 record('validation-success')
-'''
-    checker_source = r'''
-import os
-import pathlib
-import sys
-
-root = pathlib.Path(sys.argv[1])
-projection = root / 'tracked_projection.txt'
-events = root / 'build/events.log'
-if projection.read_bytes() != b'canonical\n':
-    print('checked-in projection mismatch', file=sys.stderr)
-    sys.exit(2)
-with events.open('a', encoding='utf-8') as stream:
-    stream.write('verification-success\n')
-    stream.flush()
-    os.fsync(stream.fileno())
+record('verification-success')
 '''
 
     with tempfile.TemporaryDirectory(
@@ -8654,12 +8694,6 @@ with events.open('a', encoding='utf-8') as stream:
         aot.mkdir(parents=True)
         schema.mkdir(parents=True)
         build.mkdir()
-        (root / 'CMakeLists.txt').write_text(
-            'set(XRAY_COMMON_INCLUDES\n'
-            '    ${CMAKE_CURRENT_SOURCE_DIR}/include\n'
-            '    ${CMAKE_CURRENT_SOURCE_DIR}/src\n'
-            '    ${CMAKE_CURRENT_SOURCE_DIR}/src/aot\n'
-            ')\n', encoding='utf-8')
         (root / 'include').mkdir()
         (aot / 'xi_cgen.c').write_text(
             '#include "owner.c"\n', encoding='utf-8')
@@ -8670,32 +8704,49 @@ with events.open('a', encoding='utf-8') as stream:
         mode = root / 'mode.txt'
         mode.write_text('pass\n', encoding='utf-8')
         projection = root / 'tracked_projection.txt'
-        projection.write_text('canonical\n', encoding='utf-8')
+        projection.write_bytes(b'canonical\n')
         validator = root / 'validator.py'
-        checker = root / 'checker.py'
         validator.write_text(validator_source, encoding='utf-8')
-        checker.write_text(checker_source, encoding='utf-8')
         module_path = Path(__file__).resolve()
-        build_file = root / 'build.ninja'
-        build_file.write_text(
-            'ninja_required_version = 1.10\n'
-            'rule validate\n'
-            f'  command = {ninja_command([sys.executable, "-B", validator, module_path, root, mode])}\n'
-            '  depfile = build/proof.d\n'
-            '  deps = gcc\n'
-            'rule verify\n'
-            f'  command = {ninja_command([sys.executable, "-B", checker, root])}\n'
-            'build build/proof.stamp: validate xisa/xi/ops.def xisa/xi/lowering.def\n'
-            'build force: phony\n'
-            'build build/verify: verify build/proof.stamp tracked_projection.txt | force\n'
-            'default build/verify\n',
+        (root / 'CMakeLists.txt').write_text(
+            'cmake_minimum_required(VERSION 3.20)\n'
+            'project(xisagen_failed_edge NONE)\n'
+            'set(XRAY_COMMON_INCLUDES\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/include\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/src\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/src/aot\n'
+            ')\n' + _xi_lowering_namespace_cmake() +
+            'set(CENSUS ${CMAKE_CURRENT_BINARY_DIR}/namespace.txt)\n'
+            'xray_configure_xi_lowering_namespace_census('
+            '${CENSUS} ${XRAY_COMMON_INCLUDES})\n'
+            'add_custom_command(\n'
+            '  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/proof.stamp\n'
+            f'  COMMAND "{Path(sys.executable).as_posix()}" -B '
+            f'"{validator.as_posix()}" "{module_path.as_posix()}" '
+            f'"{root.as_posix()}" "{mode.as_posix()}"\n'
+            '  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/ops.def '
+            '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/lowering.def '
+            '${CMAKE_CURRENT_SOURCE_DIR}/tracked_projection.txt '
+            '${CMAKE_CURRENT_SOURCE_DIR}/mode.txt '
+            '${CMAKE_CURRENT_SOURCE_DIR}/validator.py ${CENSUS}\n'
+            '  BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/proof.d\n'
+            '  DEPFILE ${CMAKE_CURRENT_BINARY_DIR}/proof.d\n'
+            '  VERBATIM)\n'
+            'add_custom_target(verify DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/proof.stamp)\n',
             encoding='utf-8')
+        configured = subprocess.run(
+            [cmake, '-S', root, '-B', build, '-G', 'Ninja'],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding='utf-8', errors='backslashreplace',
+            timeout=30, check=False)
+        assert configured.returncode == 0, configured.stdout
 
         def run_ninja() -> subprocess.CompletedProcess[str]:
             return subprocess.run(
-                [ninja, '-f', build_file.name, '-v'], cwd=root,
+                [cmake, '--build', build, '--target', 'verify'],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, timeout=30, check=False)
+                text=True, encoding='utf-8', errors='backslashreplace',
+                timeout=30, check=False)
 
         initial = run_ninja()
         assert initial.returncode == 0, initial.stdout
@@ -8711,7 +8762,7 @@ with events.open('a', encoding='utf-8') as stream:
         unchanged_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
         assert unchanged_events.count('validation-success') == 1
-        assert unchanged_events.count('verification-success') == 2
+        assert unchanged_events == initial_events
         assert _xi_stable_file_identity(projection.stat()) == initial_identity
 
         added = aot / 'added.c'
@@ -8722,30 +8773,53 @@ with events.open('a', encoding='utf-8') as stream:
         added_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
         assert added_events.count('validation-success') == 2
-        assert added_events.count('verification-success') == 3
+        assert added_events.count('verification-success') == 2
         added.unlink()
         deleted_result = run_ninja()
         assert deleted_result.returncode == 0, deleted_result.stdout
         deleted_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
         assert deleted_events.count('validation-success') == 3
-        assert deleted_events.count('verification-success') == 4
+        assert deleted_events.count('verification-success') == 3
 
-        projection.write_text('corrupt\n', encoding='utf-8')
+        namespace_baseline = deleted_events.count('verification-success')
+        new_directory = aot / 'new_discovery_directory'
+        unknown_include = root / 'include' / 'probe.unknown-extension'
+        variable_name = root / 'include' / 'a@FOO@.h'
+        renamed_variable = root / 'include' / 'a@BAR@.h'
+        changes = (
+            lambda: new_directory.mkdir(),
+            lambda: unknown_include.write_bytes(b'/* namespace input */\n'),
+            unknown_include.unlink,
+            new_directory.rmdir,
+            lambda: variable_name.write_bytes(b'/* literal at-sign path */\n'),
+            lambda: variable_name.rename(renamed_variable),
+            renamed_variable.unlink,
+        )
+        for index, mutate in enumerate(changes, 1):
+            mutate()
+            changed_namespace = run_ninja()
+            assert changed_namespace.returncode == 0, changed_namespace.stdout
+            namespace_events = (build / 'events.log').read_text(
+                encoding='utf-8').splitlines()
+            assert namespace_events.count('verification-success') == namespace_baseline + index
+        namespace_extra = len(changes)
+
+        projection.write_bytes(b'corrupt\n')
         corrupt = run_ninja()
         assert corrupt.returncode != 0, corrupt.stdout
         assert 'checked-in projection mismatch' in corrupt.stdout
         corrupt_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
-        assert corrupt_events.count('validation-success') == 3
-        assert corrupt_events.count('verification-success') == 4
-        projection.write_text('canonical\n', encoding='utf-8')
+        assert corrupt_events.count('validation-success') == 3 + namespace_extra
+        assert corrupt_events.count('verification-success') == 3 + namespace_extra
+        projection.write_bytes(b'canonical\n')
         repaired = run_ninja()
         assert repaired.returncode == 0, repaired.stdout
         repaired_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
-        assert repaired_events.count('validation-success') == 3
-        assert repaired_events.count('verification-success') == 5
+        assert repaired_events.count('validation-success') == 4 + namespace_extra
+        assert repaired_events.count('verification-success') == 4 + namespace_extra
 
         owner.write_text(
             'static void owner(void) { /* changed input */ }\n',
@@ -8756,28 +8830,28 @@ with events.open('a', encoding='utf-8') as stream:
         killed_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
         assert 'validation-published-kill' in killed_events
-        assert killed_events.count('validation-success') == 3
-        assert killed_events.count('verification-success') == 5
+        assert killed_events.count('validation-success') == 4 + namespace_extra
+        assert killed_events.count('verification-success') == 4 + namespace_extra
 
         failed_retry = run_ninja()
         assert failed_retry.returncode != 0, failed_retry.stdout
         retry_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
         assert retry_events.count('validation-published-kill') == 2
-        assert retry_events.count('validation-success') == 3
-        assert retry_events.count('verification-success') == 5
+        assert retry_events.count('validation-success') == 4 + namespace_extra
+        assert retry_events.count('verification-success') == 4 + namespace_extra
 
         mode.write_text('pass\n', encoding='utf-8')
         recovered = run_ninja()
         assert recovered.returncode == 0, recovered.stdout
         recovered_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
-        assert recovered_events.count('validation-success') == 4
-        assert recovered_events.count('verification-success') == 6
+        assert recovered_events.count('validation-success') == 5 + namespace_extra
+        assert recovered_events.count('verification-success') == 5 + namespace_extra
         assert (build / 'proof.stamp').read_text(encoding='utf-8') != first_proof
 
         cleaned = subprocess.run(
-            [ninja, '-f', build_file.name, '-t', 'clean'], cwd=root,
+            [cmake, '--build', build, '--target', 'clean'],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, timeout=30, check=False)
         assert cleaned.returncode == 0, cleaned.stdout
@@ -8787,8 +8861,8 @@ with events.open('a', encoding='utf-8') as stream:
         assert rebuilt.returncode == 0, rebuilt.stdout
         rebuilt_events = (build / 'events.log').read_text(
             encoding='utf-8').splitlines()
-        assert rebuilt_events.count('validation-success') == 5
-        assert rebuilt_events.count('verification-success') == 7
+        assert rebuilt_events.count('validation-success') == 6 + namespace_extra
+        assert rebuilt_events.count('verification-success') == 6 + namespace_extra
     print(" PASS", file=sys.stderr)
 
 
@@ -8809,6 +8883,7 @@ def _test_xi_lowering_actual_ninja_edge() -> None:
         '${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}')
     assert generated_closure_marker in repository_cmake
     assert repository_cmake.count(validation_dependency_marker) == 1
+    assert repository_cmake.count('${XISAGEN} xi-lowering-verify') == 1
     ops_source = (repository_root / 'xisa/xi/ops.def').read_bytes()
     lowering_source = (repository_root / 'xisa/xi/lowering.def').read_bytes()
     ops = parse_xi_ops_def(ops_source.decode('utf-8'), 'actual-edge ops')
@@ -8835,6 +8910,31 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 mode = mode_path.read_text(encoding='utf-8').strip()
+
+def record(event):
+    with events.open('a', encoding='utf-8') as stream:
+        stream.write(event + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+
+original_validate = module.validate_xi_lowering_consumer_sources
+def counted_validate(*args, **kwargs):
+    record('semantic-validation')
+    result = original_validate(*args, **kwargs)
+    record('semantic-validation-success')
+    if mode == 'post-validation-mutate':
+        owner = root / 'src/aot/xi_cgen_coro.inc.c'
+        preserved = owner.stat().st_mtime_ns
+        owner.write_bytes(owner.read_bytes() + b'/* post-validation drift */\n')
+        os.utime(owner, ns=(preserved, preserved))
+    return result
+module.validate_xi_lowering_consumer_sources = counted_validate
+original_compare = module._xi_compare_lowering_projection_snapshot
+def counted_compare(expected, captured, *args, **kwargs):
+    result = original_compare(expected, captured, *args, **kwargs)
+    record('projection-comparison-' + str(len(captured)))
+    return result
+module._xi_compare_lowering_projection_snapshot = counted_compare
 original_publish = module._xi_publish_lowering_validation_artifacts
 if mode == 'kill':
     def killed_publish(**kwargs):
@@ -8845,40 +8945,10 @@ if mode == 'kill':
         kwargs['after_stamp_hook'] = kill_after_publication
         return original_publish(**kwargs)
     module._xi_publish_lowering_validation_artifacts = killed_publish
-module.cmd_xi_lowering_validate([
+module.cmd_xi_lowering_verify([
     str(root / 'xisa/xi/ops.def'), str(root / 'xisa/xi/lowering.def'),
-    str(stamp), str(depfile)])
-if mode == 'post-validation-mutate':
-    owner = root / 'src/aot/xi_cgen_coro.inc.c'
-    preserved = owner.stat().st_mtime_ns
-    owner.write_bytes(owner.read_bytes() + b'/* post-validation drift */\n')
-    os.utime(owner, ns=(preserved, preserved))
-with events.open('a', encoding='utf-8') as stream:
-    stream.write('validation-success-' + mode + '\n')
-    stream.flush()
-    os.fsync(stream.fileno())
-'''
-    checker_source = r'''
-import importlib.util
-import os
-import pathlib
-import sys
-
-module_path = pathlib.Path(sys.argv[1])
-root = pathlib.Path(sys.argv[2])
-stamp = pathlib.Path(sys.argv[3])
-events = root / 'build/events.log'
-spec = importlib.util.spec_from_file_location('xisagen_actual_checker', module_path)
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
-module.cmd_xi_lowering_check([
-    str(root / 'xisa/xi/ops.def'), str(root / 'xisa/xi/lowering.def'),
-    str(root), str(stamp)])
-with events.open('a', encoding='utf-8') as stream:
-    stream.write('verification-success\n')
-    stream.flush()
-    os.fsync(stream.fileno())
+    str(root), str(stamp), str(depfile)])
+record('verification-success')
 '''
     with tempfile.TemporaryDirectory(
             prefix='xisagen-actual-ninja-edge-') as directory:
@@ -8907,9 +8977,7 @@ with events.open('a', encoding='utf-8') as stream:
         mode = root / 'mode.txt'
         mode.write_text('pass\n', encoding='utf-8')
         validator = root / 'validator.py'
-        checker = root / 'checker.py'
         validator.write_text(validator_source, encoding='utf-8')
-        checker.write_text(checker_source, encoding='utf-8')
         module_path = Path(__file__).resolve()
         python_executable = Path(sys.executable).resolve().as_posix()
         include_lines = ''.join(
@@ -8922,10 +8990,16 @@ with events.open('a', encoding='utf-8') as stream:
             'cmake_minimum_required(VERSION 3.20)\n'
             'project(xisagen_actual_edge C)\n'
             'set(CMAKE_C_STANDARD 11)\n'
+            'if(MSVC)\n'
+            '  add_compile_options(/utf-8 /experimental:c11atomics)\n'
+            'endif()\n'
             'set(XRAY_COMMON_INCLUDES\n' + include_lines + ')\n'
+            + _xi_lowering_namespace_cmake() +
+            'set(CENSUS ${CMAKE_CURRENT_BINARY_DIR}/namespace.txt)\n'
+            'xray_configure_xi_lowering_namespace_census('
+            '${CENSUS} ${XRAY_COMMON_INCLUDES})\n'
             f'set(XISAGEN "{module_path.as_posix()}")\n'
             f'set(VALIDATOR "{validator.as_posix()}")\n'
-            f'set(CHECKER "{checker.as_posix()}")\n'
             f'set(MODE "{mode.as_posix()}")\n'
             'set(GENERATED_CLOSURE '
             '${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xaot_rep_gen.h)\n'
@@ -8948,14 +9022,10 @@ with events.open('a', encoding='utf-8') as stream:
             '  DEPENDS ${XISAGEN} ${VALIDATOR} ${MODE} '
             '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/ops.def '
             '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/lowering.def '
-            '${GENERATED_CLOSURE}\n'
+            '${GENERATED_CLOSURE} ${PROJECTIONS} ${CENSUS}\n'
             '  DEPFILE ${DEPFILE}\n'
             '  VERBATIM)\n'
-            'add_custom_target(gen-xi-lowering\n'
-            f'  COMMAND "{python_executable}" -B ${{CHECKER}} ${{XISAGEN}} '
-            '${CMAKE_CURRENT_SOURCE_DIR} ${STAMP}\n'
-            '  DEPENDS ${STAMP} ${PROJECTIONS}\n'
-            '  VERBATIM)\n'
+            'add_custom_target(gen-xi-lowering DEPENDS ${STAMP})\n'
             'add_executable(test_xi_lowering_gen '
             'tests/unit/ir/test_xi_lowering_gen.c)\n'
             'target_include_directories(test_xi_lowering_gen PRIVATE '
@@ -8966,7 +9036,8 @@ with events.open('a', encoding='utf-8') as stream:
             [cmake, '-S', root, '-B', build, '-G', 'Ninja',
              '-DCMAKE_BUILD_TYPE=Release'],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, timeout=60, check=False)
+            text=True, encoding='utf-8', errors='backslashreplace',
+            timeout=60, check=False)
         assert configured.returncode == 0, configured.stdout
 
         def run_target() -> subprocess.CompletedProcess[str]:
@@ -8974,7 +9045,8 @@ with events.open('a', encoding='utf-8') as stream:
                 [cmake, '--build', build, '--parallel', '16',
                  '--target', 'test_xi_lowering_gen'],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, timeout=120, check=False)
+                text=True, encoding='utf-8', errors='backslashreplace',
+                timeout=120, check=False)
 
         def events() -> list[str]:
             path = build / 'events.log'
@@ -8983,10 +9055,25 @@ with events.open('a', encoding='utf-8') as stream:
 
         initial = run_target()
         assert initial.returncode == 0, initial.stdout
-        assert events().count('validation-success-pass') == 1
+        assert events().count('semantic-validation') == 1
+        assert events().count('semantic-validation-success') == 1
+        assert events().count('projection-comparison-12') == 1
         assert events().count('verification-success') == 1
+        # The cold producer created a previously absent namespace member. Its
+        # first reconfigure must invalidate the proof; the next build is stable.
+        bootstrapped = run_target()
+        assert bootstrapped.returncode == 0, bootstrapped.stdout
+        assert events().count('semantic-validation') == 2
+        assert events().count('verification-success') == 2
+        success_baseline = 2
+        unchanged_events = events()
+        unchanged = run_target()
+        assert unchanged.returncode == 0, unchanged.stdout
+        assert events() == unchanged_events
 
-        hostile = root / 'src/aot/hostile_selector.c'
+        hostile_directory = root / 'src/aot/unregistered_namespace'
+        hostile_directory.mkdir()
+        hostile = hostile_directory / 'hostile_selector.c'
         hostile.write_text(
             'static void hostile_selector(const XiValue *v, XiCgenCtx *ctx, '
             'FILE *out, const XiFunc *f, const char *prefix) { '
@@ -8995,8 +9082,9 @@ with events.open('a', encoding='utf-8') as stream:
         added = run_target()
         assert added.returncode != 0, added.stdout
         assert 'direct-consumer router census mismatch' in added.stdout
-        assert events().count('verification-success') == 1
+        assert events().count('verification-success') == success_baseline
         hostile.unlink()
+        hostile_directory.rmdir()
 
         deleted_path = root / 'include/xray_value_abi.h'
         deleted_bytes = deleted_path.read_bytes()
@@ -9005,7 +9093,7 @@ with events.open('a', encoding='utf-8') as stream:
         assert deleted.returncode != 0, deleted.stdout
         assert ('cannot open' in deleted.stdout or
                 'cannot be resolved in-repository' in deleted.stdout), deleted.stdout
-        assert events().count('verification-success') == 1
+        assert events().count('verification-success') == success_baseline
         deleted_path.write_bytes(deleted_bytes)
 
         projection = root / projections[0][0]
@@ -9014,7 +9102,7 @@ with events.open('a', encoding='utf-8') as stream:
         corrupt = run_target()
         assert corrupt.returncode != 0, corrupt.stdout
         assert 'checked-in projection differs from canonical content' in corrupt.stdout
-        assert events().count('verification-success') == 1
+        assert events().count('verification-success') == success_baseline
         projection.write_bytes(projection_bytes)
 
         owner = root / 'src/aot/xi_cgen_coro.inc.c'
@@ -9023,24 +9111,24 @@ with events.open('a', encoding='utf-8') as stream:
         owner.write_bytes(owner_bytes + b'/* trigger killed validation */\n')
         killed = run_target()
         assert killed.returncode != 0, killed.stdout
-        assert events().count('verification-success') == 1
+        assert events().count('verification-success') == success_baseline
         killed_retry = run_target()
         assert killed_retry.returncode != 0, killed_retry.stdout
-        assert events().count('verification-success') == 1
+        assert events().count('verification-success') == success_baseline
         owner.write_bytes(owner_bytes)
         mode.write_text('post-validation-mutate\n', encoding='utf-8')
         between_edges = run_target()
         assert between_edges.returncode != 0, between_edges.stdout
-        assert ('validation stamp does not match' in between_edges.stdout or
-                'changed before final success' in between_edges.stdout)
-        assert events().count('verification-success') == 1
+        assert 'changed before publication' in between_edges.stdout
+        assert events().count('verification-success') == success_baseline
         owner.write_bytes(owner_bytes)
         mode.write_text('pass\n', encoding='utf-8')
 
         cleaned = subprocess.run(
             [cmake, '--build', build, '--target', 'clean'],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, timeout=60, check=False)
+            text=True, encoding='utf-8', errors='backslashreplace',
+            timeout=60, check=False)
         assert cleaned.returncode == 0, cleaned.stdout
         test_projection = root / 'tests/unit/ir/test_xi_lowering_gen.c'
         test_projection_bytes = test_projection.read_bytes()
@@ -9053,71 +9141,25 @@ with events.open('a', encoding='utf-8') as stream:
         test_projection.write_bytes(test_projection_bytes)
         ordering_recovered = run_target()
         assert ordering_recovered.returncode == 0, ordering_recovered.stdout
-        assert events().count('verification-success') == 2
+        assert events().count('verification-success') == success_baseline + 1
+
+        unknown_directory = root / 'include/unregistered_namespace'
+        unknown_directory.mkdir()
+        unknown_include = unknown_directory / 'probe.unknown-extension'
+        unknown_include.write_bytes(b'/* new namespace member */\n')
+        added_namespace = run_target()
+        assert added_namespace.returncode == 0, added_namespace.stdout
+        assert events().count('verification-success') == success_baseline + 2
+        unknown_include.unlink()
+        unknown_directory.rmdir()
+        deleted_namespace = run_target()
+        assert deleted_namespace.returncode == 0, deleted_namespace.stdout
+        assert events().count('verification-success') == success_baseline + 3
+        final_events = events()
+        final_unchanged = run_target()
+        assert final_unchanged.returncode == 0, final_unchanged.stdout
+        assert events() == final_events
     print(" PASS", file=sys.stderr)
-
-
-def cmd_xi_lowering_validate(args: list[str]):
-    if len(args) != 4:
-        die("usage: xisagen.py xi-lowering-validate "
-            "<ops.def> <lowering.def> <stamp> <depfile>")
-    ops_path = Path(os.path.abspath(args[0]))
-    lowering_path = Path(os.path.abspath(args[1]))
-    stamp = Path(args[2]).resolve()
-    depfile = Path(args[3]).resolve()
-    source_root = ops_path.parents[2]
-    ops_relative = _xi_repository_relative_name(
-        source_root, ops_path, 'xi-lowering: ops schema')
-    lowering_relative = _xi_repository_relative_name(
-        source_root, lowering_path, 'xi-lowering: lowering schema')
-    ops_source = _xi_secure_repository_file_bytes(
-        source_root, ops_relative, 'xi-lowering: ops schema')
-    lowering_source = _xi_secure_repository_file_bytes(
-        source_root, lowering_relative, 'xi-lowering: lowering schema')
-    try:
-        ops_text = ops_source.decode('utf-8', errors='strict')
-        lowering_text = lowering_source.decode('utf-8', errors='strict')
-    except UnicodeDecodeError as error:
-        die(f"xi-lowering: schema input is not UTF-8: {error}")
-    ops = parse_xi_ops_def(ops_text, str(ops_path))
-    entries = parse_xi_lowering_def(
-        lowering_text, ops, str(lowering_path))
-    if not entries:
-        die(f"no Xi lowering entries parsed from {lowering_path}")
-    snapshot = capture_xi_lowering_validation_snapshot(source_root)
-    discovery_snapshot = _xi_capture_aot_discovery_census(source_root)
-    validate_xi_lowering_consumer_sources(
-        entries, source_root, str(lowering_path), snapshot, discovery_snapshot)
-    if (_xi_secure_repository_file_bytes(
-            source_root, ops_relative,
-            'xi-lowering: ops schema') != ops_source or
-            _xi_secure_repository_file_bytes(
-                source_root, lowering_relative,
-                'xi-lowering: lowering schema') != lowering_source or
-            capture_xi_lowering_validation_snapshot(source_root) != snapshot or
-            _xi_capture_aot_discovery_census(source_root) != discovery_snapshot):
-        die("xi-lowering: validation inputs changed while the snapshot was being verified")
-    dependencies = xi_lowering_validation_dependency_paths(
-        entries, source_root, snapshot, discovery_snapshot)
-    dependencies.extend({ops_path.parent, lowering_path.parent})
-    dependencies = sorted(set(dependencies))
-    dependency_text = ' '.join(
-        _xi_depfile_escape(path.as_posix()) for path in dependencies)
-    depfile_content = f"{_xi_depfile_escape(stamp.as_posix())}: {dependency_text}\n"
-    stamp_content = _xi_lowering_validation_stamp_content(
-        ops_source, lowering_source, snapshot, discovery_snapshot)
-    _xi_publish_lowering_validation_artifacts(
-        ops_path=ops_path, ops_source=ops_source,
-        lowering_path=lowering_path, lowering_source=lowering_source,
-        source_root=source_root, snapshot=snapshot,
-        discovery_snapshot=discovery_snapshot, depfile=depfile,
-        depfile_content=depfile_content, stamp=stamp,
-        stamp_content=stamp_content)
-    print(f"xisagen: validated {len(entries)} Xi lowering entries; "
-          f"tracked {len(snapshot.sources)} AOT source inputs and "
-          f"{len(snapshot.directories)} include directories and "
-          f"{len(discovery_snapshot.directories)} discovery directories",
-          file=sys.stderr)
 
 
 def cmd_xi_verify(args: list[str]):
@@ -9202,11 +9244,13 @@ def cmd_test(args: list[str]):
 
     """Run self-tests."""
     print("xisagen self-test:", file=sys.stderr)
+    _test_generated_file_writes()
     _test_sexpr_parser()
     _test_xi_ops_parser()
     _test_xi_semantic_ops_parser()
     _test_xi_lowering_parser()
     _test_xi_lowering_build_artifacts()
+    _test_xi_lowering_ninja_failed_edge()
     _test_xi_lowering_actual_ninja_edge()
     _test_xi_verifier_parser()
     _test_aot_rep_parser()
@@ -9216,6 +9260,67 @@ def cmd_test(args: list[str]):
     _test_target_instruction_parser()
     _test_error_paths()
     print("All xisagen self-tests passed.", file=sys.stderr)
+
+def _test_generated_file_writes() -> None:
+    from unittest import mock
+
+    print("  test_generated_file_writes...", end='', file=sys.stderr)
+    with tempfile.TemporaryDirectory(prefix='xisagen-stable-output-') as tmp:
+        output = Path(tmp) / 'nested' / 'output.h'
+        content = '// Generated Unicode: \u03c0\n#define VALUE 1\n'
+        expected = content.encode('utf-8')
+        assert write_file(str(output), content)
+        assert output.read_bytes() == expected
+
+        marker = 1700000000000000000
+        os.utime(output, ns=(marker, marker))
+        original = _xi_stable_file_identity(output.stat())
+        assert not write_file(str(output), content)
+        assert _xi_stable_file_identity(output.stat()) == original
+        assert output.read_bytes() == expected
+
+        changed = content.replace('VALUE 1', 'VALUE 2')
+        assert write_file(str(output), changed)
+        assert output.read_bytes() == changed.encode('utf-8')
+        assert output.stat().st_mtime_ns != marker
+
+        for noncanonical in (content.replace('\n', '\r\n'),
+                             content.replace('\n', '\r')):
+            output.write_bytes(noncanonical.encode('utf-8'))
+            assert write_file(str(output), content)
+            assert output.read_bytes() == expected
+            identity = _xi_stable_file_identity(output.stat())
+            assert not write_file(str(output), content)
+            assert _xi_stable_file_identity(output.stat()) == identity
+
+        original_open = open
+
+        def refuse_read(path, mode='r', *args, **kwargs):
+            if os.fspath(path) == str(output) and mode == 'rb':
+                raise PermissionError('injected generated-output read failure')
+            return original_open(path, mode, *args, **kwargs)
+
+        with mock.patch('builtins.open', side_effect=refuse_read):
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    write_file(str(output), changed)
+                except SystemExit:
+                    pass
+                else:
+                    raise AssertionError('generated-output read failure accepted')
+        assert output.read_bytes() == expected
+
+        invalid = b'\xffinvalid UTF-8\n'
+        output.write_bytes(invalid)
+        with contextlib.redirect_stderr(io.StringIO()):
+            try:
+                write_file(str(output), content)
+            except SystemExit:
+                pass
+            else:
+                raise AssertionError('invalid generated-output UTF-8 accepted')
+        assert output.read_bytes() == invalid
+    print(" PASS", file=sys.stderr)
 
 def _test_sexpr_parser():
     print("  test_sexpr_parser...", end='', file=sys.stderr)
@@ -10343,6 +10448,7 @@ def _test_xi_lowering_parser():
         assert check_xi_lowering_outputs(
             directory, real_entries, real_ops) == first_outputs
         proof_stamp = Path(directory) / 'validation.stamp'
+        proof_depfile = Path(directory) / 'verification.d'
         proof_content = _xi_lowering_validation_stamp_content(
             real_ops_path.read_bytes(), real_lowering_path.read_bytes(),
             real_snapshot, real_discovery)
@@ -10354,8 +10460,9 @@ def _test_xi_lowering_parser():
             early_projection.write_bytes(early_content + b'/* pre-check drift */\n')
 
         try:
-            _xi_run_lowering_check(
+            _xi_run_lowering_verification(
                 real_ops_path, real_lowering_path, Path(directory), proof_stamp,
+                proof_depfile,
                 after_validation_hook=mutate_before_projection_check)
             assert False, "post-validation pre-check mutation must fail closed"
         except SystemExit:
@@ -10366,24 +10473,27 @@ def _test_xi_lowering_parser():
             early_projection.write_bytes(early_content + b'/* mid-check drift */\n')
 
         try:
-            _xi_run_lowering_check(
+            _xi_run_lowering_verification(
                 real_ops_path, real_lowering_path, Path(directory), proof_stamp,
+                proof_depfile,
                 after_first_projection_hook=mutate_early_projection_after_compare)
             assert False, "an early projection changed after comparison must fail closed"
         except SystemExit:
             pass
         early_projection.write_bytes(early_content)
 
-        def replace_proof_after_validation() -> None:
-            _xi_atomic_write(proof_stamp, proof_content)
+        def replace_proof_after_publication() -> None:
+            _xi_atomic_write(proof_stamp, proof_stamp.read_text(encoding='utf-8'))
 
         try:
-            _xi_run_lowering_check(
+            _xi_run_lowering_verification(
                 real_ops_path, real_lowering_path, Path(directory), proof_stamp,
-                after_validation_hook=replace_proof_after_validation)
-            assert False, "proof stamp identity drift before checking must fail closed"
+                proof_depfile, after_stamp_hook=replace_proof_after_publication)
+            assert False, "proof stamp identity drift after publication must fail closed"
         except SystemExit:
             pass
+        assert not proof_stamp.exists()
+        assert not proof_depfile.exists()
         stale_output = Path(first_outputs[0])
         stale_output.write_text(
             stale_output.read_text(encoding='utf-8') + '/* stale */\n',
@@ -11577,8 +11687,7 @@ def main():
         'xi-ops': cmd_xi_ops,
         'semantic-ops': cmd_semantic_ops,
         'xi-lowering': cmd_xi_lowering,
-        'xi-lowering-check': cmd_xi_lowering_check,
-        'xi-lowering-validate': cmd_xi_lowering_validate,
+        'xi-lowering-verify': cmd_xi_lowering_verify,
         'xi-verify': cmd_xi_verify,
         'aot-rep': cmd_aot_rep,
         'aot-abi': cmd_aot_abi,

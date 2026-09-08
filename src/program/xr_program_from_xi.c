@@ -52,8 +52,10 @@ typedef struct XrXiBlockArgumentStorage {
 typedef struct XrXiReconstructedPlaceStorage {
     const XiValue *place;
     const XiValue *owner;
+    const XiValue *base_place;
     XrCoreIrKey key;
     uint16_t type_id;
+    uint32_t field_ordinal;
 } XrXiReconstructedPlaceStorage;
 
 enum {
@@ -2679,11 +2681,82 @@ static bool logical_value_is_place(const XiFunc *function, const XiValue *value)
                      value->op == XI_LOCAL_ADDR);
 }
 
+static const XiValue *direct_projection_base_place(const XrXiBuildContext *context,
+                                                   const XiFunc *function, const XiValue *candidate,
+                                                   uint32_t *field_ordinal_out) {
+    if (field_ordinal_out)
+        *field_ordinal_out = UINT32_MAX;
+    const XiValue *place = logical_value_identity(candidate);
+    if (!place || place->op != XI_LOCAL_ADDR || place->nargs != 1u || !place->args ||
+        !place->args[0] || (place->aux_int & XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION) == 0u)
+        return NULL;
+    const XiValue *projection = logical_value_identity(place->args[0]);
+    uint32_t field_ordinal = UINT32_MAX;
+    if (!resolved_aggregate_field_projection(context, projection, &field_ordinal) ||
+        !projection->type || !place->type || !xr_type_equals(projection->type, place->type))
+        return NULL;
+    const XiValue *receiver = logical_value_identity(projection->args[0]);
+    if (!receiver || !xi_own_type_may_be_ref(receiver->type))
+        return NULL;
+    if (receiver->op == XI_PLACE_LOAD) {
+        if (receiver->nargs != 1u || !receiver->args || !receiver->args[0] ||
+            !logical_value_is_place(function, receiver->args[0]))
+            return NULL;
+        receiver = logical_value_identity(receiver->args[0]);
+    }
+    if (field_ordinal_out)
+        *field_ordinal_out = field_ordinal;
+    return receiver;
+}
+
+/* Direct field references mutate the field itself. Xi's subsequent writeback
+ * stores a load from
+ * that same place to that same field and has no further
+ * semantic effect. Match both declaration
+ * identity and receiver identity. */
+static bool direct_projection_writeback_is_exact(const XrXiBuildContext *context,
+                                                 const XiFunc *function, const XiValue *value) {
+    uint32_t ordinal = UINT32_MAX;
+    if (!resolved_aggregate_field_access(context, value, XI_STORE_FIELD, &ordinal))
+        return false;
+    const XiValue *load = logical_value_identity(value->args[1]);
+    if (!load || load->op != XI_PLACE_LOAD || load->nargs != 1u || !load->args || !value->block ||
+        load->block != value->block)
+        return false;
+    bool adjacent = false;
+    for (uint32_t index = 1u; index < value->block->nvalues; ++index)
+        adjacent |=
+            value->block->values[index] == value && value->block->values[index - 1u] == load;
+    if (!adjacent)
+        return false;
+    const XiValue *place = logical_value_identity(load->args[0]);
+    uint32_t projected = UINT32_MAX;
+    if (!direct_projection_base_place(context, function, place, &projected) || ordinal != projected)
+        return false;
+    const XiValue *field = logical_value_identity(place->args[0]);
+    return field->xg_class_field_id == value->xg_class_field_id &&
+           logical_value_identity(field->args[0]) == logical_value_identity(value->args[0]);
+}
+
+static const XiValue *aggregate_field_store_place(const XiFunc *function, const XiValue *access) {
+    if (!access || access->op != XI_STORE_FIELD || access->nargs != 2u || !access->args ||
+        !access->args[0])
+        return NULL;
+    const XiValue *receiver = logical_value_identity(access->args[0]);
+    if (logical_value_is_place(function, receiver))
+        return receiver;
+    if (!receiver || receiver->op != XI_PLACE_LOAD || receiver->nargs != 1u || !receiver->args ||
+        !receiver->args[0] || !xi_own_type_may_be_ref(receiver->type) ||
+        !logical_value_is_place(function, receiver->args[0]))
+        return NULL;
+    return logical_value_identity(receiver->args[0]);
+}
+
 static bool resolved_aggregate_field_store(const XrXiBuildContext *context, const XiFunc *function,
                                            const XiValue *access, uint32_t *field_ordinal_out) {
     if (!resolved_aggregate_field_access(context, access, XI_STORE_FIELD, field_ordinal_out))
         return false;
-    return logical_value_is_place(function, access->args[0]);
+    return aggregate_field_store_place(function, access) != NULL;
 }
 /* A const binding changes access through an instance but not the instance's
  * nominal runtime
@@ -4671,16 +4744,11 @@ static uint32_t coroutine_point_value_occurrences(const XrXiBuildContext *contex
     return occurrences;
 }
 
-/* A call-bound local place aliases the storage named by its operand.  Xi may
- * form another local
- * place from a non-owning load of that same storage while
- * threading a mutated value through
- * consecutive ref calls.  Collapse only
- * that exact LOCAL_ADDR(PLACE_LOAD(LOCAL_ADDR(...)))
- * chain: projection places
- * deliberately keep their own provenance because a local initialized
- * from a
- * field is a value copy, not an alias of the field. */
+/* A call-bound place aliases its operand storage or an explicitly marked field
+ * projection.
+ * Repeated LOCAL_ADDR(PLACE_LOAD(...)) chains retain that root.
+ * An ordinary local initialized
+ * from a field remains an independent value copy. */
 static const XiValue *local_place_storage_root(const XrXiBuildContext *context,
                                                const XiFunc *function, const XiValue *candidate) {
     const XiValue *place = exact_logical_value_identity(context, function, candidate);
@@ -4688,6 +4756,14 @@ static const XiValue *local_place_storage_root(const XrXiBuildContext *context,
     for (uint32_t block = 0u; function && block < function->nblocks; ++block)
         remaining += function->blocks[block] ? function->blocks[block]->nvalues : 0u;
     while (remaining-- != 0u) {
+        const XiValue *projection_base =
+            direct_projection_base_place(context, function, place, NULL);
+        if (projection_base) {
+            place = exact_logical_value_identity(context, function, projection_base);
+            if (!logical_value_is_place(function, place))
+                return place;
+            continue;
+        }
         if (!place || place->op != XI_LOCAL_ADDR || place->nargs != 1u || !place->args ||
             !place->args[0] || !xi_local_addr_names_operand_storage(place->aux_int))
             return NULL;
@@ -5236,6 +5312,17 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
     if (type_id == XR_CORE_TYPE_VOID)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi live-in v%u has no active CoreSpec value type", source->id);
+    if (!phi && implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NONE && source->op == XI_PLACE_LOAD &&
+        logical_ownership_for_type(context, type_id) == XR_CORE_IR_OWNER) {
+        const XiValue *storage_owner = canonical_owner_storage_identity(context, function, source);
+        uint16_t storage_type = XR_CORE_TYPE_VOID;
+        if (!storage_owner || storage_owner == source ||
+            !map_logical_value_type(context, function->xi, storage_owner, &storage_type) ||
+            storage_type != type_id)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi affine place load v%u has no exact storage owner", source->id);
+        source = storage_owner;
+    }
     XrCoreIrValueCategory category = logical_value_category(function ? function->xi : NULL, source);
     XrCoreIrOwnershipDisposition ownership =
         implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
@@ -5323,7 +5410,8 @@ static XrXiReconstructedPlaceStorage *find_reconstructed_place(XrXiBlockStorage 
     return NULL;
 }
 
-static XrProgramBuildStatus add_reconstructed_place(XrXiFunctionStorage *function,
+static XrProgramBuildStatus add_reconstructed_place(XrXiBuildContext *context,
+                                                    XrXiFunctionStorage *function,
                                                     XrXiBlockStorage *block, const XiValue *place,
                                                     const XiValue *owner, uint16_t type_id) {
     XrXiReconstructedPlaceStorage *existing = find_reconstructed_place(block, place);
@@ -5331,11 +5419,28 @@ static XrProgramBuildStatus add_reconstructed_place(XrXiFunctionStorage *functio
         return existing->owner == owner && existing->type_id == type_id
                    ? XR_PROGRAM_BUILD_OK
                    : XR_PROGRAM_BUILD_INVALID_INPUT;
-    for (uint32_t index = 0u; block && index < block->reconstructed_place_count; ++index)
-        if (block->reconstructed_places[index].owner == owner)
-            return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
     if (!function || !block || !block->xi || !place || !owner || type_id == XR_CORE_TYPE_VOID)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t field_ordinal = UINT32_MAX;
+    const XiValue *base_place =
+        direct_projection_base_place(context, function->xi, place, &field_ordinal);
+    if (base_place) {
+        uint16_t base_type = XR_CORE_TYPE_VOID;
+        const XiValue *base_owner =
+            logical_value_is_place(function->xi, base_place)
+                ? local_place_storage_root(context, function->xi, base_place)
+                : base_place;
+        if (base_owner != owner ||
+            !map_logical_value_type(context, function->xi, base_place, &base_type) ||
+            base_type == XR_CORE_TYPE_VOID)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        if (logical_value_is_place(function->xi, base_place)) {
+            XrProgramBuildStatus base_status =
+                add_reconstructed_place(context, function, block, base_place, owner, base_type);
+            if (base_status != XR_PROGRAM_BUILD_OK)
+                return base_status;
+        }
+    }
     if (block->reconstructed_place_count == block->reconstructed_place_capacity) {
         uint32_t capacity =
             block->reconstructed_place_capacity ? block->reconstructed_place_capacity * 2u : 2u;
@@ -5352,8 +5457,10 @@ static XrProgramBuildStatus add_reconstructed_place(XrXiFunctionStorage *functio
         (XrXiReconstructedPlaceStorage) {
             .place = place,
             .owner = owner,
+            .base_place = base_place,
             .key = imported_value_key(function, block->xi, place),
             .type_id = type_id,
+            .field_ordinal = field_ordinal,
         };
     return XR_PROGRAM_BUILD_OK;
 }
@@ -6209,6 +6316,69 @@ translate_existential_owner_copy(XrXiBuildContext *context, XrXiFunctionStorage 
 }
 
 static XrProgramBuildStatus
+translate_reconstructed_place(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                              const XrXiBlockStorage *block,
+                              const XrXiReconstructedPlaceStorage *place,
+                              XrCoreIrInstructionInput instructions[2], uint32_t *count) {
+    if (!context || !function || !block || !place || !instructions || !count)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *count = 0u;
+    bool project = place->base_place != NULL;
+    bool local_base = project && !logical_value_is_place(function->xi, place->base_place);
+    if (project) {
+        uint16_t aggregate_type = XR_CORE_TYPE_VOID;
+        if (!map_logical_value_type(context, function->xi, place->base_place, &aggregate_type))
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        const XrXiTypeStorage *aggregate = find_dynamic_type_by_id(context, aggregate_type);
+        if (!aggregate || aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
+            place->field_ordinal >= aggregate->input.field_count ||
+            aggregate->input.field_types[place->field_ordinal] != place->type_id)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+    if (!operand)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    const XiValue *source = project && !local_base ? place->base_place : place->owner;
+    if (!value_operand_key(context, function, block, source, operand)) {
+        xr_free(operand);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (local_base) {
+        uint16_t owner_type = XR_CORE_TYPE_VOID;
+        if (!map_logical_value_type(context, function->xi, source, &owner_type)) {
+            xr_free(operand);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        instructions[0] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+            .result = key_from_key_and_u32(UINT8_C(0x5a), place->key, 0u),
+            .result_type_id = owner_type,
+            .result_category = XR_CORE_IR_PLACE,
+            .operands = operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+        *count = 1u;
+        operand = xr_calloc(1u, sizeof(*operand));
+        if (!operand)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *operand = instructions[0].result;
+    }
+    instructions[(*count)++] = (XrCoreIrInstructionInput) {
+        .operation_id = project ? XR_CORE_OP_CORE_PLACE_PROJECT : XR_CORE_OP_CORE_PLACE_LOCAL,
+        .result = place->key,
+        .result_type_id = place->type_id,
+        .result_category = XR_CORE_IR_PLACE,
+        .operands = operand,
+        .operand_count = 1u,
+        .immediate_kind = project ? XR_CORE_IR_IMMEDIATE_FIELD : XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    if (project)
+        instructions[*count - 1u].immediate.field_ordinal = place->field_ordinal;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus
 translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage *function,
                                  const XiValue *value, const XrXiBlockStorage *block,
                                  XrCoreIrInstructionInput instructions[2], char *diagnostic,
@@ -6217,8 +6387,10 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
     bool load = resolved_aggregate_field_projection(context, value, &field_ordinal);
     bool store =
         !load && resolved_aggregate_field_store(context, function->xi, value, &field_ordinal);
-    if ((!load && !store) ||
-        logical_value_category(function->xi, value->args[0]) != XR_CORE_IR_PLACE)
+    const XiValue *place_source = load ? logical_value_identity(value->args[0])
+                                       : aggregate_field_store_place(function->xi, value);
+    if ((!load && !store) || !place_source ||
+        logical_value_category(function->xi, place_source) != XR_CORE_IR_PLACE)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi field access v%u is not an exact aggregate place access", value->id);
 
@@ -6236,8 +6408,7 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi field access v%u has an invalid declaration ordinal or type", value->id);
 
-    const XiValue *place_source =
-        exact_logical_value_identity(context, function->xi, value->args[0]);
+    place_source = exact_logical_value_identity(context, function->xi, place_source);
     const XrXiReconstructedPlaceStorage *reconstructed =
         find_reconstructed_place((XrXiBlockStorage *) block, place_source);
     if (reconstructed && reconstructed->type_id != aggregate_type_id)
@@ -6254,8 +6425,9 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
     project->result_category = XR_CORE_IR_PLACE;
     project->immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD;
     project->immediate.field_ordinal = field_ordinal;
-    XrProgramBuildStatus status = set_operands(context, project, function, block, value->args, 1u,
-                                               diagnostic, diagnostic_size);
+    XiValue *place_operand = (XiValue *) place_source;
+    XrProgramBuildStatus status = set_operands(context, project, function, block, &place_operand,
+                                               1u, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
 
@@ -6982,6 +7154,8 @@ static bool static_import_publication_is_exact(const XrXiBuildContext *context,
 
 static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *function,
                              const XiValue *value) {
+    if (direct_projection_writeback_is_exact(context, function, value))
+        return true;
     const XrXiFunctionStorage *function_storage =
         value && value->block ? find_xi_function(context, function, NULL, NULL) : NULL;
     const XrXiBlockStorage *block_storage =
@@ -7056,8 +7230,8 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
                 context, function, block, local_frame_owner, changed, diagnostic, diagnostic_size);
             if (owner_status != XR_PROGRAM_BUILD_OK)
                 return owner_status;
-            XrProgramBuildStatus place_status =
-                add_reconstructed_place(function, block, value, local_frame_owner, type_id);
+            XrProgramBuildStatus place_status = add_reconstructed_place(
+                context, function, block, value, local_frame_owner, type_id);
             if (place_status != XR_PROGRAM_BUILD_OK)
                 return fail(diagnostic, diagnostic_size, place_status,
                             "Xi frame place v%u cannot be reconstructed exactly once in b%u",
@@ -7119,7 +7293,7 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
             current_owner = frame_owner;
         }
         XrProgramBuildStatus place_status =
-            add_reconstructed_place(function, block, value, current_owner, type_id);
+            add_reconstructed_place(context, function, block, value, current_owner, type_id);
         if (place_status != XR_PROGRAM_BUILD_OK)
             return fail(diagnostic, diagnostic_size, place_status,
                         "Xi frame place v%u cannot be reconstructed exactly once in b%u", value->id,
@@ -9115,6 +9289,67 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
+/* A scalar field load is normally a snapshot. Only address-construction
+ * scaffolding with no
+ * independent value use can share the aggregate live row. */
+static bool direct_projection_has_only_address_uses(const XrXiBuildContext *context,
+                                                    const XiFunc *function, const XiValue *value) {
+    for (uint32_t index = 0u; function && index < function->nblocks; ++index) {
+        const XiBlock *block = function->blocks[index];
+        if (!block)
+            continue;
+        if (block->control &&
+            exact_logical_value_identity(context, function, block->control) == value)
+            return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            for (uint32_t operand = 0u; phi->value.args && operand < phi->value.nargs; ++operand) {
+                if (exact_logical_value_identity(context, function, phi->value.args[operand]) ==
+                    value)
+                    return false;
+            }
+        }
+        for (uint32_t index_value = 0u; index_value < block->nvalues; ++index_value) {
+            const XiValue *consumer = block->values[index_value];
+            if (!consumer || exact_logical_value_identity(context, function, consumer) == value)
+                continue;
+            for (uint32_t operand = 0u; consumer->args && operand < consumer->nargs; ++operand) {
+                if (exact_logical_value_identity(context, function, consumer->args[operand]) !=
+                    value)
+                    continue;
+                if (operand != 0u ||
+                    !direct_projection_base_place(context, function, consumer, NULL))
+                    return false;
+            }
+        }
+    }
+    return function != NULL;
+}
+
+static const XiValue *coroutine_direct_projection_storage_owner(const XrXiBuildContext *context,
+                                                                const XrXiFunctionStorage *function,
+                                                                const XiCoroSuspendPoint *point,
+                                                                const XiValue *value) {
+    const XiFunc *xi = function ? function->xi : NULL;
+    value = exact_logical_value_identity(context, xi, value);
+    if (!value || !resolved_aggregate_field_projection(context, value, NULL) ||
+        !direct_projection_has_only_address_uses(context, xi, value))
+        return NULL;
+    const XiValue *owner = NULL;
+    for (uint32_t live = 0u; value && point && point->live && live < point->nlive; ++live) {
+        const XiValue *place = exact_logical_value_identity(context, xi, point->live[live]);
+        if (!place || place->op != XI_LOCAL_ADDR || place->nargs != 1u || !place->args ||
+            exact_logical_value_identity(context, xi, place->args[0]) != value)
+            continue;
+        const XiValue *base = direct_projection_base_place(context, xi, place, NULL);
+        const XiValue *candidate =
+            logical_value_is_place(xi, base) ? local_place_storage_root(context, xi, base) : base;
+        if (!candidate || (owner && owner != candidate))
+            return NULL;
+        owner = candidate;
+    }
+    return owner;
+}
+
 static const XiValue *canonical_coroutine_live_identity(const XrXiBuildContext *context,
                                                         const XrXiFunctionStorage *function,
                                                         const XiCoroSuspendPoint *point,
@@ -9125,6 +9360,8 @@ static const XiValue *canonical_coroutine_live_identity(const XrXiBuildContext *
     if (!frame_owner && value && value->op == XI_PLACE_LOAD && value->nargs == 1u && value->args &&
         value->args[0] && xi_own_type_may_be_ref(value->type))
         frame_owner = local_place_storage_root(context, xi, value->args[0]);
+    if (!frame_owner)
+        frame_owner = coroutine_direct_projection_storage_owner(context, function, point, value);
     value = exact_logical_value_identity(context, xi, frame_owner ? frame_owner : value);
     const XiValue *successor = canonical_coroutine_owner_successor(context, xi, point, value);
     return exact_logical_value_identity(context, xi, successor ? successor : value);
@@ -9166,7 +9403,7 @@ static uint32_t canonical_coroutine_live_occurrences(const XrXiBuildContext *con
     return occurrences;
 }
 
-static bool coroutine_live_set_matches(const XrXiBuildContext *context,
+static bool coroutine_live_set_matches(XrXiBuildContext *context,
                                        const XrXiFunctionStorage *function,
                                        const XrXiBlockStorage *predecessor,
                                        const XrXiBlockStorage *successor,
@@ -9179,14 +9416,24 @@ static bool coroutine_live_set_matches(const XrXiBuildContext *context,
                                                       predecessor->xi, successor->xi, 0u);
         const XiValue *logical_incoming =
             canonical_coroutine_live_identity(context, function, point, incoming);
+        uint16_t type_id = XR_CORE_TYPE_VOID;
         XrCoreIrValueCategory category = logical_value_category(function->xi, logical_incoming);
         if (!logical_incoming || category > XR_CORE_IR_PLACE ||
+            !map_logical_value_type(context, function->xi, logical_incoming, &type_id) ||
+            type_id != successor->argument_storage[argument].type_id ||
             canonical_coroutine_live_occurrences(context, function, point, logical_incoming) !=
                 1u ||
             successor->argument_storage[argument].category != category ||
             successor->argument_storage[argument].ownership !=
                 logical_ownership_for_type(context, successor->argument_storage[argument].type_id))
             return false;
+        for (uint32_t prior = 0u; prior < argument; ++prior) {
+            const XiValue *prior_incoming = edge_argument_value(&successor->argument_storage[prior],
+                                                                predecessor->xi, successor->xi, 0u);
+            if (canonical_coroutine_live_identity(context, function, point, prior_incoming) ==
+                logical_incoming)
+                return false;
+        }
     }
     return true;
 }
@@ -9667,34 +9914,44 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
                                        diagnostic_size);
 }
 
-static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
-                                            const XrXiFunctionStorage *function,
-                                            const XrXiBlockStorage *resume,
-                                            const XiCoroSuspendPoint *point,
-                                            uint32_t implicit_result_count) {
-    uint32_t canonical_live_count = canonical_coroutine_live_count(context, function, point);
-    if (!context || !function || !resume || !point || canonical_live_count == UINT32_MAX ||
-        resume->argument_count < implicit_result_count ||
-        canonical_live_count != resume->argument_count)
-        return false;
+static const char *coroutine_call_live_set_mismatch(XrXiBuildContext *context,
+                                                    const XrXiFunctionStorage *function,
+                                                    const XrXiBlockStorage *resume,
+                                                    const XiCoroSuspendPoint *point,
+                                                    uint32_t implicit_result_count) {
+    uint32_t live_count = canonical_coroutine_live_count(context, function, point);
+    if (!context || !function || !resume || !point || live_count == UINT32_MAX ||
+        resume->argument_count < implicit_result_count)
+        return "live-set input is incomplete";
+    if (live_count != resume->argument_count)
+        return "canonical live count disagrees with resume arguments";
     if (implicit_result_count != 0u &&
         (resume->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
          exact_logical_value_identity(context, function->xi, resume->argument_storage[0].source) !=
-             exact_logical_value_identity(context, function->xi, point->op)))
-        return false;
-    for (uint32_t argument = implicit_result_count; argument < resume->argument_count; ++argument) {
-        const XiValue *logical = canonical_coroutine_live_identity(
-            context, function, point, resume->argument_storage[argument].source);
+             exact_logical_value_identity(context, function->xi, point->op) ||
+         canonical_coroutine_live_occurrences(context, function, point, point->op) != 1u))
+        return "implicit result identity disagrees with the call";
+    for (uint32_t index = implicit_result_count; index < resume->argument_count; ++index) {
+        const XrXiBlockArgumentStorage *argument = &resume->argument_storage[index];
+        const XiValue *logical =
+            canonical_coroutine_live_identity(context, function, point, argument->source);
+        uint16_t type_id = XR_CORE_TYPE_VOID;
+        if (!logical || !map_logical_value_type(context, function->xi, logical, &type_id) ||
+            type_id != argument->type_id)
+            return "resume value has no matching canonical type";
         XrCoreIrValueCategory category = logical_value_category(function->xi, logical);
-        if (!logical || category > XR_CORE_IR_PLACE ||
-            canonical_coroutine_live_occurrences(context, function, point, logical) != 1u ||
-            resume->argument_storage[argument].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
-            resume->argument_storage[argument].category != category ||
-            resume->argument_storage[argument].ownership !=
-                logical_ownership_for_type(context, resume->argument_storage[argument].type_id))
-            return false;
+        if (category > XR_CORE_IR_PLACE || argument->category != category ||
+            argument->ownership != logical_ownership_for_type(context, type_id))
+            return "resume value category or ownership disagrees";
+        if (canonical_coroutine_live_occurrences(context, function, point, logical) != 1u ||
+            argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
+            return "resume value does not name an exact live operand";
+        for (uint32_t prior = implicit_result_count; prior < index; ++prior)
+            if (canonical_coroutine_live_identity(
+                    context, function, point, resume->argument_storage[prior].source) == logical)
+                return "resume values repeat one canonical identity";
     }
-    return true;
+    return NULL;
 }
 
 static XrProgramBuildStatus translate_coroutine_call_terminator(
@@ -9716,16 +9973,38 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     const XrXiFunctionStorage *callee =
         point ? find_xi_function(context, point->resolved_callee, NULL, NULL) : NULL;
     const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
-    bool live_set_matches = resume && coroutine_call_live_set_matches(context, function, resume,
-                                                                      point, implicit_result);
-    if (!resume || !callee || !plan || safepoint_id >= plan->nstates ||
-        (cancel_edge && !cancel_handler) || call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
-        !xr_core_ir_key_equal(call.immediate.key, callee->key) || call.successor_count != 0u ||
-        !live_set_matches) {
+    const char *live_set_failure =
+        coroutine_call_live_set_mismatch(context, function, resume, point, implicit_result);
+    if (live_set_failure) {
         xr_free((void *) call.operands);
+        xr_free((void *) call.successors);
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi coroutine call in b%u has no exact sealed child continuation",
-                    block && block->xi ? block->xi->id : UINT32_MAX);
+                    "Xi coroutine call in b%u has no exact sealed child continuation: %s",
+                    block && block->xi ? block->xi->id : UINT32_MAX, live_set_failure);
+    }
+    const char *closure_failure = NULL;
+    if (!resume)
+        closure_failure = "resume block is absent";
+    else if (!callee)
+        closure_failure = "sealed callee is absent";
+    else if (!plan)
+        closure_failure = "coroutine plan is absent";
+    else if (safepoint_id >= plan->nstates)
+        closure_failure = "safepoint is outside the coroutine plan";
+    else if (cancel_edge && !cancel_handler)
+        closure_failure = "cancel handler is absent";
+    else if (call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION)
+        closure_failure = "call target is not a function key";
+    else if (!xr_core_ir_key_equal(call.immediate.key, callee->key))
+        closure_failure = "call target disagrees with the sealed callee";
+    else if (call.successor_count != 0u)
+        closure_failure = "call retained a non-canonical successor";
+    if (closure_failure) {
+        xr_free((void *) call.operands);
+        xr_free((void *) call.successors);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi coroutine call in b%u has no exact sealed child continuation: %s",
+                    block && block->xi ? block->xi->id : UINT32_MAX, closure_failure);
     }
     uint32_t live_count = resume->argument_count - implicit_result;
     if (call.operand_count > UINT32_MAX - live_count) {
@@ -10637,30 +10916,22 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
              ++place_index) {
             const XrXiReconstructedPlaceStorage *place =
                 &block_storage->reconstructed_places[place_index];
-            XrCoreIrInstructionInput *instruction =
-                &block_storage->instructions[instruction_index++];
-            XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
-            if (!operand)
-                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-            if (!value_operand_key(context, storage, block_storage, place->owner, operand)) {
-                xr_free(operand);
-                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "Xi frame place owner is unavailable in b%u", xi_block->id);
+            uint32_t count = 0u;
+            status = translate_reconstructed_place(context, storage, block_storage, place,
+                                                   &block_storage->instructions[instruction_index],
+                                                   &count);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return fail(diagnostic, diagnostic_size, status,
+                            "Xi frame place cannot be reconstructed in b%u", xi_block->id);
+            for (uint32_t emitted = 0u; emitted < count; ++emitted) {
+                const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
+                    block_storage->instructions[instruction_index++].operation_id);
+                if (!operation)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "reconstructed frame place has no CoreSpec operation");
+                storage->local_effect_mask |= operation->effect_mask;
+                storage->local_capability_mask |= operation->capability_mask;
             }
-            instruction->operation_id = XR_CORE_OP_CORE_PLACE_LOCAL;
-            instruction->result = place->key;
-            instruction->result_type_id = place->type_id;
-            instruction->result_category = XR_CORE_IR_PLACE;
-            instruction->operands = operand;
-            instruction->operand_count = 1u;
-            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-            const XrCoreOperationSpec *operation =
-                xr_core_spec_operation_by_id(instruction->operation_id);
-            if (!operation)
-                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "reconstructed frame place has no CoreSpec operation");
-            storage->local_effect_mask |= operation->effect_mask;
-            storage->local_capability_mask |= operation->capability_mask;
         }
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
@@ -10668,6 +10939,40 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 continue;
             if (suspend_point && value == suspend_point->op)
                 continue;
+            uint32_t direct_field = UINT32_MAX;
+            const XiValue *direct_base =
+                direct_projection_base_place(context, xi, value, &direct_field);
+            if (direct_base) {
+                uint16_t place_type = XR_CORE_TYPE_VOID;
+                if (!map_logical_value_type(context, xi, value, &place_type))
+                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                XrXiReconstructedPlaceStorage place = {
+                    .place = value,
+                    .owner = local_place_storage_root(context, xi, value),
+                    .base_place = direct_base,
+                    .field_ordinal = direct_field,
+                    .key = value_key(storage, value),
+                    .type_id = place_type,
+                };
+                uint32_t count = 0u;
+                status = translate_reconstructed_place(
+                    context, storage, block_storage, &place,
+                    &block_storage->instructions[instruction_index], &count);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return fail(diagnostic, diagnostic_size, status,
+                                "Xi projected address v%u has no exact storage root", value->id);
+                for (uint32_t emitted_instruction = 0u; emitted_instruction < count;
+                     ++emitted_instruction) {
+                    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
+                        block_storage->instructions[instruction_index++].operation_id);
+                    if (!operation)
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "projected address has no CoreSpec operation");
+                    storage->local_effect_mask |= operation->effect_mask;
+                    storage->local_capability_mask |= operation->capability_mask;
+                }
+                continue;
+            }
             bool aggregate_place_access =
                 resolved_aggregate_field_store(context, xi, value, NULL) ||
                 (resolved_aggregate_field_projection(context, value, NULL) && value->args &&

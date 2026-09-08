@@ -134,25 +134,50 @@ static const XrBackendInstruction *backend_value_instruction(const XrBackendFunc
     return found;
 }
 
-static bool coroutine_ref_argument_is_frame_stable(const XrBackendFunction *function,
+static bool coroutine_ref_argument_is_frame_stable(const XrBackendIR *ir,
+                                                   const XrBackendFunction *function,
                                                    const XrBackendInstruction *call,
                                                    const XrBackendCoroutineSafepoint *point,
                                                    uint32_t parameter) {
-    if (!function || !call || !point || parameter >= call->operand_count)
+    if (!ir || !function || !call || !point || parameter >= call->operand_count)
         return false;
     uint32_t place = call->operands[parameter];
-    const XrBackendInstruction *definition = backend_value_instruction(function, place);
-    if (!definition)
-        return true;
-    if (definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL || definition->operand_count != 1u)
-        return false;
-    uint32_t owner = definition->operands[0];
-    uint32_t live_count = 0u;
-    for (uint32_t live = 0u; live < point->live_value_count; ++live)
-        live_count += point->live_value_ids[live] == owner;
-    return owner < function->value_count && place < function->value_count && live_count == 1u &&
-           function->value_categories[owner] == XR_CORE_IR_VALUE &&
-           function->value_types[owner] == function->value_types[place];
+    for (uint32_t depth = 0u; depth < function->value_count; ++depth) {
+        if (place >= function->value_count ||
+            function->value_categories[place] != XR_CORE_IR_PLACE ||
+            function->value_ownerships[place] != XR_CORE_IR_NON_OWNER)
+            return false;
+        const XrBackendInstruction *definition = backend_value_instruction(function, place);
+        if (!definition)
+            return depth == 0u;
+        if (definition->operand_count != 1u || !definition->operands ||
+            definition->operands[0] >= function->value_count ||
+            definition->result_type_id != function->value_types[place])
+            return false;
+        uint32_t base = definition->operands[0];
+        if (definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT) {
+            const XrValidatedType *aggregate =
+                xr_validated_program_type(ir->program, function->value_types[base]);
+            if (definition->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD || !aggregate ||
+                aggregate->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                definition->immediate.field_ordinal >= aggregate->field_count ||
+                aggregate->field_types[definition->immediate.field_ordinal] !=
+                    function->value_types[place])
+                return false;
+            place = base;
+            continue;
+        }
+        if (definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL ||
+            definition->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+            function->value_categories[base] != XR_CORE_IR_VALUE ||
+            function->value_types[base] != function->value_types[place])
+            return false;
+        uint32_t live_count = 0u;
+        for (uint32_t live = 0u; live < point->live_value_count; ++live)
+            live_count += point->live_value_ids[live] == base;
+        return live_count == 1u;
+    }
+    return false;
 }
 
 static bool coroutine_read_argument_is_frame_stable(const XrBackendIR *ir,
@@ -651,8 +676,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                              !coroutine_read_argument_is_frame_stable(
                                  ir, function, instruction, point, block_id, parameter)) ||
                             (mode == XR_PARAM_REF &&
-                             !coroutine_ref_argument_is_frame_stable(function, instruction, point,
-                                                                     parameter)) ||
+                             !coroutine_ref_argument_is_frame_stable(ir, function, instruction,
+                                                                     point, parameter)) ||
                             function->value_types[value] != callee->parameter_types[parameter] ||
                             function->value_categories[value] != category ||
                             function->value_ownerships[value] != XR_CORE_IR_NON_OWNER) {

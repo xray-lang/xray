@@ -1056,11 +1056,11 @@
     {
       "id": "core.coroutine.call.sealed",
       "core_spec_contract": "poll one sealed child coroutine; suspend the parent at one caller-local safepoint whenever the child suspends, then transfer the child result and preserved live values to the single normal successor",
-      "program_encoding": "combined (FunctionId,SafepointId) immediate, exact child READ value or REF place operands followed by caller live-across storage owners, and one typed normal successor",
-      "decoder_verifier_evaluator": "bounded combined-immediate decode; exact sealed child, coroutine shape, scalar READ or frame-stable non-owner REF boundary, caller state, safepoint, live-set, effect, and capability closure; instruction-defined places cannot be serialized as raw live pointers; reference execution owns a private child session",
+      "program_encoding": "combined (FunctionId,SafepointId) immediate, exact child READ value or REF place operands followed by distinct caller live values and the exact live-owner cancel suffix, with separate typed normal and cancellation successors",
+      "decoder_verifier_evaluator": "bounded combined-immediate decode; exact sealed child, coroutine shape, typed READ/reborrow or frame-stable non-owner REF boundary, caller state, safepoint, live-set, effect, and capability closure; related field places must resolve to a unique live storage root and instruction-defined places cannot be serialized as raw live pointers; reference execution owns a private child session",
       "vm_implementation": "the parent VM session retains one private child session, keeps ref places backed by execution-owned storage, and exposes only caller-local suspend/return outcomes",
-      "aot_lowering": "the parent native coroutine frame embeds the sealed child frame and active bit; a local ref argument is rebound to its unique parent-frame live owner before child polling, so resume and cancellation never retain an automatic C address; generated C contains no VM or compiler runtime dependency",
-      "source_producer": "a current Xi direct-call suspension point and its exact sealed one-yield child plan project atomically into the combined canonical coroutine-call terminator; local places collapse to their storage owner across the caller suspension and are reconstructed in the continuation, while call-bound ref parameters remain frame-stable places in the child; indirect, fallible, owner-carrying, multi-state, and incomplete-evidence children fail closed",
+      "aot_lowering": "the parent native coroutine frame embeds the sealed child frame and active bit; each distinct REF storage root is saved and restored once and each local or field reference is rebound into that parent-frame root before child polling; independent scalar snapshots remain distinct live values, so resume and cancellation never retain an automatic C address or merge a snapshot into mutable storage; generated C contains no VM or compiler runtime dependency",
+      "source_producer": "current Xi direct-call suspension points and exact sealed cooperative-yield child plans project atomically into canonical coroutine-call terminators; existing dense states, affine results, scoped READ existential reborrows, and static cleanup retain their focused proofs; local places and two one-level aggregate-field REF arguments sharing one root are reconstructed from distinct caller live values while independent field snapshots remain live; call-bound REF parameters stay non-owner places in the child; field REF combined with defer/provider-trap cleanup, escaped views, arbitrary nested projections, indirect suspension, and other incomplete-evidence forms remain open",
       "old_owner_deletion": "no TargetPlan, executor frame, VM opcode, or compatibility call path is serialized into Program or reachable from generated AOT C",
       "status": "COROUTINE_CALL_CANONICAL_ONLY",
       "evidence": [
@@ -1073,6 +1073,8 @@
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
         "tests/unit/ir/test_xi_verify_ext.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/program/xr_program_ref_coroutine_fixture.h",
         "tests/unit/program/test_xr_program_source_build.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/CMakeLists.txt"
