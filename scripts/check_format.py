@@ -153,7 +153,9 @@ def formatted_text(binary: str, path: Path,
     for start, end in line_ranges or []:
         command.append(f"--lines={start}:{end}")
     command.append(str(path))
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(
+        command, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     if result.returncode != 0:
         raise RuntimeError(
             f"clang-format failed on {path}: {result.stderr.strip()}")
@@ -203,8 +205,14 @@ def git_changed_line_ranges(base: str) -> dict[Path, list[tuple[int, int]]]:
     """
     command = ["git", "diff", "-U0", f"{base}...HEAD", "--"]
     command += [f"*{suffix}" for suffix in SOURCE_SUFFIXES]
-    result = subprocess.run(command, capture_output=True, text=True,
-                            cwd=REPO_ROOT)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=REPO_ROOT,
+    )
     if result.returncode != 0:
         raise RuntimeError(
             f"`git diff` against {base} failed: {result.stderr.strip()}")

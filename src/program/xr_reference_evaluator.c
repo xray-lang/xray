@@ -1453,8 +1453,11 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_SUB_I64 ||
            operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+           operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
            operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
            operation_id == XR_CORE_OP_CORE_AGGREGATE_PROJECT ||
+           operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
+           operation_id == XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ ||
            operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
@@ -1795,6 +1798,71 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->initialized[instruction->result_id] = true;
                 break;
             }
+            case XR_CORE_OP_CORE_EXISTENTIAL_PACK: {
+                const XrValidatedType *existential = xr_validated_program_type(
+                    execution->context->program, instruction->result_type_id);
+                uint16_t concrete_type = function->value_types[instruction->operands[0]];
+                XrReferenceExistentialValue *carrier = allocate_existential(execution->context);
+                uint32_t conformance =
+                    existential ? conformance_id(execution->context->program, concrete_type,
+                                                 existential->interface_id)
+                                : XR_PROGRAM_LOCATION_NONE;
+                if (!carrier || conformance == XR_PROGRAM_LOCATION_NONE) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+                }
+                carrier->existential_type_id = instruction->result_type_id;
+                carrier->concrete_type_id = concrete_type;
+                carrier->conformance_id = conformance;
+                if (existential->interface_use_kind ==
+                    XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) {
+                    carrier->owned_storage.value =
+                        execution->values[instruction->operands[0]].as.value;
+                    carrier->owned_storage.initialized = true;
+                    carrier->payload.category = XR_CORE_IR_PLACE;
+                    carrier->payload.as.place = &carrier->owned_storage;
+                } else {
+                    carrier->payload = execution->values[instruction->operands[0]];
+                }
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        {
+                            .kind = XR_REFERENCE_VALUE_EXISTENTIAL,
+                            .as.existential = carrier,
+                        },
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ: {
+                const XrReferenceExistentialValue *source =
+                    execution->values[instruction->operands[0]].as.value.as.existential;
+                XrReferenceExistentialValue *carrier = allocate_existential(execution->context);
+                if (!source || !carrier) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+                }
+                carrier->existential_type_id = instruction->result_type_id;
+                carrier->concrete_type_id = source->concrete_type_id;
+                carrier->conformance_id = source->conformance_id;
+                carrier->payload.category = XR_CORE_IR_VALUE;
+                carrier->payload.as.value = source->payload.category == XR_CORE_IR_PLACE
+                                                ? *eval_place_value_const(source->payload.as.place)
+                                                : source->payload.as.value;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        {
+                            .kind = XR_REFERENCE_VALUE_EXISTENTIAL,
+                            .as.existential = carrier,
+                        },
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
             case XR_CORE_OP_CORE_OWNER_MOVE:
                 execution->values[instruction->result_id] =
                     execution->values[instruction->operands[0]];
@@ -1846,15 +1914,29 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->values[instruction->operands[0]].as.place->initialized = false;
                 execution->initialized[instruction->result_id] = true;
                 break;
-            case XR_CORE_OP_CORE_CALL_SEALED_DIRECT: {
-                uint32_t target_function = instruction->immediate.function_id;
+            case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
+            case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT: {
+                uint32_t target_function =
+                    instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT
+                        ? instruction->immediate.function_id
+                        : XR_PROGRAM_LOCATION_NONE;
                 const XrValidatedFunction *callee =
-                    &execution->context->program->functions[target_function];
+                    target_function == XR_PROGRAM_LOCATION_NONE
+                        ? NULL
+                        : &execution->context->program->functions[target_function];
                 uint32_t call_operand_count = instruction->operand_count;
                 if (instruction->successor_count == 1u)
                     call_operand_count -=
                         function->blocks[instruction->successors[0]].argument_count;
-                if (call_operand_count != callee->parameter_count) {
+                if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT) {
+                    const XrReferenceExistentialValue *carrier =
+                        execution->values[instruction->operands[0]].as.value.as.existential;
+                    target_function = witness_function_id(execution->context->program, carrier,
+                                                          instruction->immediate.u32);
+                    if (target_function != XR_PROGRAM_LOCATION_NONE)
+                        callee = &execution->context->program->functions[target_function];
+                }
+                if (!callee || call_operand_count != callee->parameter_count) {
                     execution->finished = true;
                     reference_execution_release_lease(execution);
                     return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
@@ -1866,7 +1948,20 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     reference_execution_release_lease(execution);
                     return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
                 }
-                for (uint32_t argument = 0u; argument < callee->parameter_count; ++argument)
+                uint32_t argument = 0u;
+                if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT) {
+                    const XrReferenceExistentialValue *carrier =
+                        execution->values[instruction->operands[0]].as.value.as.existential;
+                    if (!witness_receiver_argument(carrier, callee->receiver_mode, &arguments[0])) {
+                        xr_free(arguments);
+                        execution->finished = true;
+                        reference_execution_release_lease(execution);
+                        return execution_outcome(execution,
+                                                 XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+                    }
+                    argument = 1u;
+                }
+                for (; argument < callee->parameter_count; ++argument)
                     arguments[argument] = execution->values[instruction->operands[argument]];
                 XrReferenceOutcome nested =
                     evaluate_function(execution->context, target_function, arguments,

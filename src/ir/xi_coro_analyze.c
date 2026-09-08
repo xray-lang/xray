@@ -1486,9 +1486,18 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
  * Treating the alias as an independent frame root/release both double-counts
  * it and, on cancellation, can release the same object twice.  VALUE_CLONE is
  * the one COPY form that allocates an independent owner. */
-static bool xi_coro_slot_is_borrowed_alias(const XiValue *v) {
-    return v && !xi_copy_is_value_clone(v) &&
-           xi_generated_op_result_ownership(v->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+static bool xi_coro_slot_is_borrowed_parameter(const XiFunc *f, const XiValue *v) {
+    if (!f || !v || v->op != XI_PARAM || v->aux_int < 0 || v->aux_int >= f->nparams || !f->params ||
+        f->params[v->aux_int] != v)
+        return false;
+    XrParamMode mode = xi_func_param_passing_mode(f, (uint16_t) v->aux_int);
+    return mode == XR_PARAM_READ || mode == XR_PARAM_REF;
+}
+
+static bool xi_coro_slot_is_borrowed_alias(const XiFunc *f, const XiValue *v) {
+    return v && (xi_coro_slot_is_borrowed_parameter(f, v) ||
+                 (!xi_copy_is_value_clone(v) &&
+                  xi_generated_op_result_ownership(v->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED));
 }
 
 static const XiValue *xi_coro_slot_owner(const XiValue *v) {
@@ -1499,10 +1508,10 @@ static const XiValue *xi_coro_slot_owner(const XiValue *v) {
 /* A representation alias of a freshly owned value becomes the physical owner
  * carrier when the original SSA name no longer crosses the suspension.  The
  * stable owner id keeps that decision independent of the target representation. */
-static bool xi_coro_slot_can_carry_owner(const XiCoroSlot *slot) {
+static bool xi_coro_slot_can_carry_owner(const XiFunc *f, const XiCoroSlot *slot) {
     if (!slot || !slot->value)
         return false;
-    if (!xi_coro_slot_is_borrowed_alias(slot->value))
+    if (!xi_coro_slot_is_borrowed_alias(f, slot->value))
         return true;
     const XiValue *owner = xi_coro_slot_owner(slot->value);
     return owner && owner != slot->value && xi_coro_value_needs_arc_release(owner);
@@ -1518,9 +1527,9 @@ static bool xi_coro_slot_carries_owner_at_point(const XiFunc *f, const XiLivenes
      * receive it, but cancellation at this point
      * must neither trace nor release an owner the
      * child has not returned. */
-    if (!xi_coro_slot_can_carry_owner(slot) || slot->value == point)
+    if (!xi_coro_slot_can_carry_owner(f, slot) || slot->value == point)
         return false;
-    if (!xi_coro_slot_is_borrowed_alias(slot->value))
+    if (!xi_coro_slot_is_borrowed_alias(f, slot->value))
         return true;
     const XiValue *owner = xi_coro_slot_owner(slot->value);
     bool owner_live = split ? xi_coro_value_live_at_split_point(f, live, point, owner)
@@ -1541,9 +1550,9 @@ static void xi_coro_fill_slot(XiCoroSlot *slot, const XiFunc *f, XiValue *v, XiC
     slot->logical_rep = (uint8_t) xi_coro_rep(v);
     slot->kind = (uint8_t) kind;
     slot->is_root = xi_coro_value_is_logical_root(v);
-    bool borrowed_alias = xi_coro_slot_is_borrowed_alias(v);
+    bool borrowed_alias = xi_coro_slot_is_borrowed_alias(f, v);
     slot->needs_release = xi_coro_value_needs_arc_release(v) &&
-                          (!borrowed_alias || xi_coro_slot_can_carry_owner(slot));
+                          (!borrowed_alias || xi_coro_slot_can_carry_owner(f, slot));
     slot->needs_runtime_slot = xi_coro_value_needs_runtime_slot(v);
     slot->needs_boundary_clone = xi_coro_value_needs_boundary_clone(v);
     slot->live_across = xi_coro_value_live_across_suspend(f, live, v, resolver) ||

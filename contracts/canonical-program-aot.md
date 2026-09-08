@@ -72,8 +72,16 @@ places in live rows, missing frame owners, extra or undropped cancel values, and
 continuations; generated C does not treat frame disposal, place-address reconstruction, error,
 panic, or trap as a cancellation alias.
 
+An exact `READ` existential crossing a sealed child suspension is represented by two distinct
+values: the non-owner reborrow passed to the child and the unique affine existential owner stored
+once in the caller safepoint. BackendIR independently re-proves the scoped reborrow/owner relation,
+interface identity, ownership categories, and live-row multiplicity before emission. Generated C
+keeps the owner carrier alive across child polling, executes witness-direct dispatch through the
+borrowed carrier, and releases only the owner on cancellation. A missing, duplicate, ambiguous, or
+interface-mismatched owner is not lowered.
+
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
-anchor-sha256: tests/unit/CMakeLists.txt 1d2ca8d59f7d7ee55b2d9dfdf8f20cc0c3964f6b5d3358ee28b7cb564e4d09ab
+anchor-sha256: tests/unit/CMakeLists.txt c9b43468b944b6d0b81ffa64b38c6944c327b2ee2e63aa6f2b1cabf461ec0b04
 anchor-sha256: xisa/core/registry.json c38744bb33a8f77f47c4668a6b09a8e1335b8bfbbb244fab1eb756aca2bc4a34
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 5728f9489695018f1e957d8309569d4d5cb128383e24cc25b07dfdff3139ae8d
@@ -81,7 +89,7 @@ anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 81bb6fb34
 anchor-sha256: src/aot/program/xr_backend_ir.h 5da7eb88ceb96551a2132873920f03163a0575fce45214b8750df7248b95bcaf
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
 anchor-sha256: src/aot/program/xr_backend_ir.c d2f80522ab5b2907551229d5efd615c6be04bb7ce6ba6e6a40eae40cdb6c0c3d
-anchor-sha256: src/aot/program/xr_backend_ir_verify.c d0d5029acedc8ee69591d4d3339768a79d58ff85d358030c3723fc6536f9813c
+anchor-sha256: src/aot/program/xr_backend_ir_verify.c 43458cb3c732364767ad0f73e05b87c7e42abb3ae0055001cc621679ee6d3ee7
 anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 237f598d4b557cd3efbf64fd09cde7c6905a25df9061f50915b0c165d854e9e2
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -90,4 +98,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py dd313ca4ba67c8c24a285f3
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c 7d6b7a4a4d15e87a190d847a69debeda3f1f04f5d11b64dd4444bcbe4dc594b7
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c b012c57b4dc93b3e9e4f2681cc2645fe3c7ce7421a38ae4b91b1a628c36f6973
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 91d7488cfd68d2c9e87ec482c34a63eb6f3a70ea871a644f16647e23a86f79d9

@@ -283,4 +283,11 @@ xr_validated_program_provider_call_kind(const XrValidatedProgram *program, uint1
     return XR_PROVIDER_LOGICAL_CALL_INVALID;
 }
 
+/* Private query for an affine READ existential's exact owner. */
+/* It follows canonical block arguments and explicit reborrow anchors. */
+/* Missing or ambiguous ownership returns NONE. */
+XR_FUNC uint32_t xr_validated_function_scoped_affine_borrow_owner(
+    const XrValidatedProgram *program, const XrValidatedFunction *function, uint32_t value_id,
+    uint32_t block_id);
+
 #endif /* XR_VALIDATED_PROGRAM_INTERNAL_H */

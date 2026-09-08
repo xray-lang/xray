@@ -23,6 +23,7 @@
 #include "../ir/xi_coro_lower.h"
 #include "../ir/xi_core_api.h"
 #include "../ir/xi_module.h"
+#include "../ir/xi_own.h"
 #include "../plan/semantic/xr_semantic_ids.h"
 #include "../runtime/abi/xr_builtin_provider_contract.h"
 #include "../runtime/class/xclass_info.h"
@@ -5159,6 +5160,42 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
             strcmp((const char *) value->aux, "copy") == 0);
 }
 
+/* The existential pack replaces its consumed owner as the frame carrier. */
+/* Its representation and witness survive suspension and cancellation. */
+/* Only a unique consuming pack is accepted; ambiguity fails closed. */
+static const XiValue *canonical_coroutine_owner_successor(const XrXiBuildContext *context,
+                                                          const XiFunc *function,
+                                                          const XiCoroSuspendPoint *point,
+                                                          const XiValue *source) {
+    source = exact_logical_value_identity(context, function, source);
+    if (!source ||
+        !logical_value_produces_owner((XrXiBuildContext *) context, function, source, 0u))
+        return NULL;
+    const XiValue *successor = NULL;
+    for (uint32_t block = 0u; function && block < function->nblocks; ++block) {
+        const XiBlock *row = function->blocks[block];
+        for (uint32_t value = 0u; row && value < row->nvalues; ++value) {
+            const XiValue *candidate = row->values[value];
+            bool live_at_point = false;
+            for (uint32_t live = 0u; point && live < point->nlive; ++live)
+                live_at_point |= point->live[live] == candidate;
+            if (!candidate || candidate->xg_existential_kind != XI_EXISTENTIAL_PACK ||
+                !live_at_point ||
+                (candidate->xg_interface_use_kind != XI_INTERFACE_USE_MOVE &&
+                 candidate->xg_interface_use_kind != XI_INTERFACE_USE_OWNED_STORAGE) ||
+                candidate->nargs != 1u || !candidate->args || !candidate->args[0] ||
+                exact_logical_value_identity(context, function, candidate->args[0]) != source ||
+                !logical_value_produces_owner((XrXiBuildContext *) context, function, candidate,
+                                              0u))
+                continue;
+            if (successor && successor != candidate)
+                return NULL;
+            successor = candidate;
+        }
+    }
+    return successor;
+}
+
 static XrCoreIrValueCategory logical_value_category(const XiFunc *function, const XiValue *value) {
     return logical_value_is_place(function, value) ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
 }
@@ -8295,8 +8332,10 @@ static const XiValue *canonical_cancel_drop_identity(const XrXiBuildContext *con
                                                      const XrXiFunctionStorage *function,
                                                      const XiCoroSuspendPoint *point,
                                                      const XiValue *drop) {
-    (void) point;
-    return canonical_owner_storage_identity(context, function, drop);
+    drop = canonical_owner_storage_identity(context, function, drop);
+    const XiValue *successor =
+        canonical_coroutine_owner_successor(context, function ? function->xi : NULL, point, drop);
+    return canonical_owner_storage_identity(context, function, successor ? successor : drop);
 }
 
 static XrProgramBuildStatus prepare_cancel_arguments(XrXiBuildContext *context,
@@ -9078,11 +9117,17 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
 
 static const XiValue *canonical_coroutine_live_identity(const XrXiBuildContext *context,
                                                         const XrXiFunctionStorage *function,
+                                                        const XiCoroSuspendPoint *point,
                                                         const XiValue *value) {
-    const XiValue *frame_owner =
-        local_place_storage_root(context, function ? function->xi : NULL, value);
-    return exact_logical_value_identity(context, function ? function->xi : NULL,
-                                        frame_owner ? frame_owner : value);
+    const XiFunc *xi = function ? function->xi : NULL;
+    value = exact_logical_value_identity(context, xi, value);
+    const XiValue *frame_owner = local_place_storage_root(context, xi, value);
+    if (!frame_owner && value && value->op == XI_PLACE_LOAD && value->nargs == 1u && value->args &&
+        value->args[0] && xi_own_type_may_be_ref(value->type))
+        frame_owner = local_place_storage_root(context, xi, value->args[0]);
+    value = exact_logical_value_identity(context, xi, frame_owner ? frame_owner : value);
+    const XiValue *successor = canonical_coroutine_owner_successor(context, xi, point, value);
+    return exact_logical_value_identity(context, xi, successor ? successor : value);
 }
 
 static uint32_t canonical_coroutine_live_count(const XrXiBuildContext *context,
@@ -9091,13 +9136,13 @@ static uint32_t canonical_coroutine_live_count(const XrXiBuildContext *context,
     uint32_t count = 0u;
     for (uint32_t live = 0u; point && point->live && live < point->nlive; ++live) {
         const XiValue *identity =
-            canonical_coroutine_live_identity(context, function, point->live[live]);
+            canonical_coroutine_live_identity(context, function, point, point->live[live]);
         if (!identity)
             return UINT32_MAX;
         bool duplicate = false;
         for (uint32_t prior = 0u; prior < live; ++prior)
-            duplicate |= canonical_coroutine_live_identity(context, function, point->live[prior]) ==
-                         identity;
+            duplicate |= canonical_coroutine_live_identity(context, function, point,
+                                                           point->live[prior]) == identity;
         count += duplicate ? 0u : 1u;
     }
     return point && (point->nlive == 0u || point->live) ? count : UINT32_MAX;
@@ -9108,14 +9153,14 @@ static uint32_t canonical_coroutine_live_occurrences(const XrXiBuildContext *con
                                                      const XiCoroSuspendPoint *point,
                                                      const XiValue *target) {
     uint32_t occurrences = 0u;
-    target = canonical_coroutine_live_identity(context, function, target);
+    target = canonical_coroutine_live_identity(context, function, point, target);
     for (uint32_t live = 0u; target && point && point->live && live < point->nlive; ++live) {
         const XiValue *identity =
-            canonical_coroutine_live_identity(context, function, point->live[live]);
+            canonical_coroutine_live_identity(context, function, point, point->live[live]);
         bool duplicate = false;
         for (uint32_t prior = 0u; prior < live; ++prior)
-            duplicate |= canonical_coroutine_live_identity(context, function, point->live[prior]) ==
-                         identity;
+            duplicate |= canonical_coroutine_live_identity(context, function, point,
+                                                           point->live[prior]) == identity;
         occurrences += !duplicate && identity == target ? 1u : 0u;
     }
     return occurrences;
@@ -9133,7 +9178,7 @@ static bool coroutine_live_set_matches(const XrXiBuildContext *context,
         const XiValue *incoming = edge_argument_value(&successor->argument_storage[argument],
                                                       predecessor->xi, successor->xi, 0u);
         const XiValue *logical_incoming =
-            canonical_coroutine_live_identity(context, function, incoming);
+            canonical_coroutine_live_identity(context, function, point, incoming);
         XrCoreIrValueCategory category = logical_value_category(function->xi, logical_incoming);
         if (!logical_incoming || category > XR_CORE_IR_PLACE ||
             canonical_coroutine_live_occurrences(context, function, point, logical_incoming) !=
@@ -9162,7 +9207,7 @@ static bool coroutine_cancel_drop_set_matches(const XrXiBuildContext *context,
         bool owner = argument->ownership == XR_CORE_IR_OWNER;
         const XiValue *logical =
             owner ? canonical_owner_storage_identity(context, function, argument->source)
-                  : canonical_coroutine_live_identity(context, function, argument->source);
+                  : canonical_coroutine_live_identity(context, function, point, argument->source);
         uint32_t drop_matches = 0u;
         for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
             drop_matches += canonical_cancel_drop_identity(context, function, point,
@@ -9493,7 +9538,10 @@ static XrProgramBuildStatus append_cancel_drop_operands(const XrXiBuildContext *
         memcpy(operands, instruction->operands,
                (size_t) instruction->operand_count * sizeof(*operands));
     for (uint32_t drop = 0u; drop < point->ndrops; ++drop) {
-        if (!edge_value_operand_key(context, function, source, point->drops[drop], point->op,
+        const XiValue *logical_drop =
+            canonical_cancel_drop_identity(context, function, point, point->drops[drop]);
+        if (!logical_drop ||
+            !edge_value_operand_key(context, function, source, logical_drop, point->op,
                                     &operands[instruction->operand_count + drop])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -9636,7 +9684,7 @@ static bool coroutine_call_live_set_matches(const XrXiBuildContext *context,
         return false;
     for (uint32_t argument = implicit_result_count; argument < resume->argument_count; ++argument) {
         const XiValue *logical = canonical_coroutine_live_identity(
-            context, function, resume->argument_storage[argument].source);
+            context, function, point, resume->argument_storage[argument].source);
         XrCoreIrValueCategory category = logical_value_category(function->xi, logical);
         if (!logical || category > XR_CORE_IR_PLACE ||
             canonical_coroutine_live_occurrences(context, function, point, logical) != 1u ||

@@ -1,8 +1,11 @@
 """Tests for focused selection in the tiered test runner."""
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from _support import bootstrap_xraytest, load_module
 
@@ -25,6 +28,23 @@ class FocusedSelectionTest(unittest.TestCase):
                           ["--label-regex", "unit"]):
             with self.subTest(arguments=arguments):
                 self.assertTrue(runner.has_explicit_ctest_selection(arguments))
+
+    def test_ninja_manifest_is_refreshed_before_test_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory)
+            (build / "build.ninja").write_text("# ninja\n", encoding="utf-8")
+            completed = SimpleNamespace(ok=True, combined_text=lambda: "")
+            with mock.patch.object(runner.proc, "run", return_value=completed) as run:
+                self.assertTrue(runner.refresh_cmake_manifest(build, 7))
+            run.assert_called_once_with([
+                "cmake", "--build", str(build), "-j", "7", "--target", "build.ninja"
+            ])
+
+    def test_non_ninja_manifest_needs_no_refresh(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(runner.proc, "run") as run:
+                self.assertTrue(runner.refresh_cmake_manifest(Path(directory), 3))
+            run.assert_not_called()
 
     def test_stateful_ctest_selectors_are_focused(self):
         for arguments in (["-I", "1,1"], ["--tests-information", "1,1"],

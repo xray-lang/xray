@@ -2898,9 +2898,19 @@ static bool coro_point_has_required_spill(const XiCoroPlan *plan, const XiCoroSu
            coro_value_array_contains(point->live, point->nlive, value);
 }
 
-static bool coro_verify_borrowed_alias(const XiValue *value) {
-    return value && !xi_copy_is_value_clone(value) &&
-           xi_generated_op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+static bool coro_verify_borrowed_parameter(const XiFunc *f, const XiValue *value) {
+    if (!f || !value || value->op != XI_PARAM || value->aux_int < 0 ||
+        value->aux_int >= f->nparams || !f->params || f->params[value->aux_int] != value)
+        return false;
+    XrParamMode mode = xi_func_param_passing_mode(f, (uint16_t) value->aux_int);
+    return mode == XR_PARAM_READ || mode == XR_PARAM_REF;
+}
+
+static bool coro_verify_borrowed_alias(const XiFunc *f, const XiValue *value) {
+    return value &&
+           (coro_verify_borrowed_parameter(f, value) ||
+            (!xi_copy_is_value_clone(value) &&
+             xi_generated_op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED));
 }
 
 static const XiValue *coro_verify_slot_owner(const XiValue *value) {
@@ -2913,7 +2923,7 @@ static bool coro_verify_slot_carries_owner(const XiFunc *f, const XiLiveness *li
                                            bool live_here) {
     if (!live_here || !slot || !slot->value || slot->value == point->op)
         return false;
-    if (!coro_verify_borrowed_alias(slot->value))
+    if (!coro_verify_borrowed_alias(f, slot->value))
         return true;
     const XiValue *owner = coro_verify_slot_owner(slot->value);
     return owner && owner != slot->value && xi_coro_value_needs_arc_release(owner) &&
@@ -3587,7 +3597,7 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
             return;
         }
         const XiValue *owner = coro_verify_slot_owner(slot->value);
-        bool borrowed_alias = coro_verify_borrowed_alias(slot->value);
+        bool borrowed_alias = coro_verify_borrowed_alias(f, slot->value);
         bool expected_is_root = slot->value->type && xi_own_type_is_rc(slot->value->type);
         bool expected_release = xi_coro_value_needs_arc_release(slot->value) &&
                                 (!borrowed_alias || (owner && owner != slot->value &&

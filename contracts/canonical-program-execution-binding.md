@@ -25,10 +25,11 @@ and releases the lease only after canonical cancellation publication. A suspensi
 separate resume and cancel operand segments. The cancel segment transfers every live affine owner
 exactly once into its statically selected cleanup block; missing owners, extra values, and cleanup
 blocks that fail to consume an owner are invalid. Executors materialize only the selected edge, so
-resume never pre-consumes cancellation resources. Place-backed cleanup that would require a stable
-frame address remains rejected until the canonical frame model represents that address without
-duplicating its owner. Disposing a frame is not an implicit cancellation operation, and no error,
-panic, or trap outcome aliases cancellation.
+resume never pre-consumes cancellation resources. Exact caller-local `REF` places and scoped
+`READ` existential reborrows are admitted only when the Program safepoint carries their unique
+owner exactly once; ambiguous projections, missing owners, and duplicate owner paths remain
+rejected. Disposing a frame is not an implicit cancellation operation, and no error, panic, or
+trap outcome aliases cancellation.
 
 Callable dispatch is program-owned rather than provider-owned. An indirect call performs a
 non-consuming `READ` of its affine callable operand, so an owned pack and a borrowed non-owner
@@ -80,8 +81,8 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 91267c89b65b3d4a019e3b1a3c6e52ff0b048eb42544f484d2b604bc1449213a
-anchor-sha256: src/program/xr_validated_program_internal.h 5732d42e183594f3103b9a092d37dd17e4d4cd6d2bbeebaa0657b64f8f706a07
+anchor-sha256: src/program/xr_program_verify.c 3efdf479e0f568c32c424976fb30aa31f2a07df9782d7dcde7b3b4e2828bedf5
+anchor-sha256: src/program/xr_validated_program_internal.h 1cd61fb3b536b3414091d39919ff909e6b12710387438a89303cf1e5c66e78c8
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97

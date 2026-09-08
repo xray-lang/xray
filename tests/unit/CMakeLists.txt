@@ -523,6 +523,8 @@ set(XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C
     ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/affine_coroutine_result_native.c)
 set(XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C
     ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/ref_parameter_coroutine_native.c)
+set(XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C
+    ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}/read_existential_coroutine_native.c)
 add_custom_command(
     OUTPUT ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_GENERATED_C}
         ${XR_PROGRAM_FUNCTION_PARAMETER_AOT_GENERATED_C}
@@ -535,6 +537,7 @@ add_custom_command(
         ${XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C}
         ${XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C}
         ${XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C}
+        ${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C}
     COMMAND ${CMAKE_COMMAND} -E make_directory
         ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_FIXTURE_DIR}
     COMMAND $<TARGET_FILE:test_xr_program_source_build>
@@ -549,6 +552,7 @@ add_custom_command(
         ${XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C}
         ${XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C}
         ${XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C}
+        ${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C}
     DEPENDS test_xr_program_source_build
     COMMENT "Generating callable canonical-program C fixtures"
     VERBATIM)
@@ -573,6 +577,8 @@ set_source_files_properties(${XR_PROGRAM_MULTI_SAFEPOINT_AOT_GENERATED_C}
 set_source_files_properties(${XR_PROGRAM_AFFINE_COROUTINE_RESULT_AOT_GENERATED_C}
     PROPERTIES GENERATED TRUE)
 set_source_files_properties(${XR_PROGRAM_REF_PARAMETER_COROUTINE_AOT_GENERATED_C}
+    PROPERTIES GENERATED TRUE)
+set_source_files_properties(${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C}
     PROPERTIES GENERATED TRUE)
 add_executable(test_xr_program_cross_module_coroutine_aot_native
     ${XR_PROGRAM_CROSS_MODULE_COROUTINE_AOT_GENERATED_C})
@@ -782,6 +788,25 @@ add_test(NAME test_xr_program_ref_parameter_coroutine_aot_native
         --expected-exit 230)
 set_tests_properties(test_xr_program_ref_parameter_coroutine_aot_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;ref;coroutine;cancel;generated-c;native;task-293")
+
+add_executable(test_xr_program_read_existential_coroutine_aot_native
+    ${XR_PROGRAM_READ_EXISTENTIAL_COROUTINE_AOT_GENERATED_C})
+xr_enable_pure_aot_symbol_map(test_xr_program_read_existential_coroutine_aot_native)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_read_existential_coroutine_aot_native PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_read_existential_coroutine_aot_native PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_read_existential_coroutine_aot_native
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+        --executable $<TARGET_FILE:test_xr_program_read_existential_coroutine_aot_native>
+        --expected-exit 231)
+set_tests_properties(test_xr_program_read_existential_coroutine_aot_native PROPERTIES
+    LABELS "unit;aot;canonical-program;source;interface;read;coroutine;cancel;generated-c;native;task-293")
 
 add_xray_unit_test(test_xr_program_imported_callable
     ir/test_xr_program_imported_callable.c)
@@ -993,34 +1018,24 @@ add_test(NAME test_xr_program_vm COMMAND $<TARGET_FILE:test_xr_program_vm>)
 set_tests_properties(test_xr_program_vm PROPERTIES
     LABELS "unit;vm;canonical-program;differential;target-machine;generation;task-299")
 
-add_executable(xr_program_vm_fixture_writer
+# This opt-in tool refreshes the checked-in runtime fixture when the canonical
+# artifact schema changes. It is intentionally excluded from normal builds and
+# is not a dependency of the runtime-only consumer below.
+add_executable(xr_program_vm_fixture_writer EXCLUDE_FROM_ALL
     program/xr_program_vm_fixture_writer.c)
 target_include_directories(xr_program_vm_fixture_writer PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(xr_program_vm_fixture_writer PRIVATE xr_program_test_core)
-set(XR_PROGRAM_VM_FIXTURE_DIR
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/task-299)
-set(XR_PROGRAM_VM_FIXTURE_HEADER
-    ${XR_PROGRAM_VM_FIXTURE_DIR}/xr_program_vm_embedded_fixture.h)
-add_custom_command(
-    OUTPUT ${XR_PROGRAM_VM_FIXTURE_HEADER}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${XR_PROGRAM_VM_FIXTURE_DIR}
-    COMMAND $<TARGET_FILE:xr_program_vm_fixture_writer>
-            ${XR_PROGRAM_VM_FIXTURE_HEADER}
-    DEPENDS xr_program_vm_fixture_writer
-    COMMENT "Generating runtime-only XrProgram embedding fixture"
-    VERBATIM)
+
 add_executable(test_xr_program_vm_runtime
     vm/test_xr_program_vm_runtime.c
-    ${XR_TARGET_PROFILE_TEST_FIXTURE}
-    ${XR_PROGRAM_VM_FIXTURE_HEADER})
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 target_compile_definitions(test_xr_program_vm_runtime PRIVATE
     XR_TEST_HAS_PROCESS_SHUTDOWN=1)
 target_include_directories(test_xr_program_vm_runtime PRIVATE
     ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${XR_PROGRAM_VM_FIXTURE_DIR})
+    ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(test_xr_program_vm_runtime PRIVATE
     xray_program_vm_runtime)
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"

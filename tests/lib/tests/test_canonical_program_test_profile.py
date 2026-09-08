@@ -47,6 +47,7 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_aot",
             "test_xr_program_multi_safepoint_aot_native",
             "test_xr_program_ref_parameter_coroutine_aot_native",
+            "test_xr_program_read_existential_coroutine_aot_native",
             "test_xr_program_provider_trap_cleanup_aot_native",
             "meta_ownership_inventory",
             "contract_freeze",

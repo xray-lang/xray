@@ -228,6 +228,26 @@ def cache_contains_all(build_dir: Path, entries: Sequence[str]) -> bool:
     return all(entry in text for entry in entries)
 
 
+def refresh_cmake_manifest(build_dir: Path, jobs: int) -> bool:
+    """Refresh Ninja's CMake/CTest inventory before selecting build targets.
+
+    `ninja -t targets` and `ctest -N` do not trigger Ninja's automatic CMake
+    regeneration.  Without this preflight a newly registered test appears only
+    during the subsequent build, after target selection, and CTest then reports
+    a missing executable.  Building the `build.ninja` manifest is a no-op on an
+    up-to-date tree and performs only the required reconfigure on a stale one.
+    """
+    if not (build_dir / "build.ninja").is_file():
+        return True
+    result = proc.run(["cmake", "--build", str(build_dir), "-j", str(jobs),
+                       "--target", "build.ninja"])
+    if result.ok:
+        return True
+    print(f"{RED}CMAKE MANIFEST REFRESH FAILED{NC}")
+    sys.stdout.write(result.combined_text())
+    return False
+
+
 def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
                    include_xray: bool = True,
                    required_targets: Sequence[str] = ()) -> bool:
@@ -425,6 +445,9 @@ def main(argv: List[str]) -> int:
     print("=" * 72)
     started = time.time()
 
+    if not refresh_cmake_manifest(build_dir, jobs):
+        return 1
+
     if canonical_preflight:
         include = canonical_profile.ctest_regex()
         exclude = ""
@@ -447,6 +470,33 @@ def main(argv: List[str]) -> int:
     total = len(ctest_names(build_dir, []))
     print(f"{BLUE}==>{NC} ctest: {len(selected)}/{total} tests")
 
+    if not platform.env_flag("XR_NO_BUILD"):
+        if not build_selected(
+            build_dir,
+            selected,
+            jobs,
+            include_xray=not canonical_preflight,
+            required_targets=(canonical_profile.BUILD_TARGETS
+                              if canonical_preflight else ()),
+        ):
+            return 1
+        refreshed = ctest_names(build_dir, ctest_args + extra)
+        if refreshed != selected:
+            print(f"{YELLOW}==>{NC} CTest inventory changed during build; rebuilding exact "
+                  "selection")
+            selected = refreshed
+            total = len(ctest_names(build_dir, []))
+            print(f"{BLUE}==>{NC} ctest: {len(selected)}/{total} tests (refreshed)")
+            if not build_selected(
+                build_dir,
+                selected,
+                jobs,
+                include_xray=not canonical_preflight,
+                required_targets=(canonical_profile.BUILD_TARGETS
+                                  if canonical_preflight else ()),
+            ):
+                return 1
+
     if canonical_preflight:
         selected_set = set(selected)
         expected_set = set(canonical_profile.CTEST_NAMES)
@@ -458,17 +508,6 @@ def main(argv: List[str]) -> int:
                 print(f"    missing: {name}")
             for name in unexpected:
                 print(f"    unexpected: {name}")
-            return 1
-
-    if not platform.env_flag("XR_NO_BUILD"):
-        if not build_selected(
-            build_dir,
-            selected,
-            jobs,
-            include_xray=not canonical_preflight,
-            required_targets=(canonical_profile.BUILD_TARGETS
-                              if canonical_preflight else ()),
-        ):
             return 1
 
     env = dict(os.environ)

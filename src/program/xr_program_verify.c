@@ -2048,6 +2048,16 @@ operation_call_signature(const XrValidatedProgram *program, const XrValidatedFun
     if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
         instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE)
         return witness_call_signature(program, caller, instruction);
+    if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+        if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_COROUTINE_CALL ||
+            instruction->immediate.coroutine_call.function_id >= program->function_count)
+            return NULL;
+        const XrValidatedFunction *callee =
+            &program->functions[instruction->immediate.coroutine_call.function_id];
+        return callee->signature_id < program->signature_count
+                   ? &program->signatures[callee->signature_id]
+                   : NULL;
+    }
     if ((instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT &&
          instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_INVOKE) ||
         instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
@@ -2803,6 +2813,18 @@ static uint32_t scoped_affine_borrow_owner(VerifyContext *context,
     return XR_PROGRAM_LOCATION_NONE;
 }
 
+XR_FUNC uint32_t xr_validated_function_scoped_affine_borrow_owner(
+    const XrValidatedProgram *program, const XrValidatedFunction *function, uint32_t value_id,
+    uint32_t block_id) {
+    if (!program)
+        return XR_PROGRAM_LOCATION_NONE;
+    VerifyContext context = {
+        .budget = {.max_work = UINT64_MAX},
+        .program = (XrValidatedProgram *) program,
+    };
+    return scoped_affine_borrow_owner(&context, function, value_id, block_id);
+}
+
 static bool instruction_forwards_value_to_successor(const VerifyContext *context,
                                                     const XrValidatedFunction *function,
                                                     const XrValidatedInstruction *instruction,
@@ -3479,6 +3501,10 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 &function->coroutine_safepoints[safepoint_id];
             const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
             uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+            bool cancel_valid = verify_cancel_continuation(
+                context, function, instruction, 1u, callee->parameter_count,
+                safepoint->live_value_count, callee->parameter_count + safepoint->live_value_count,
+                safepoint, location);
             uint32_t child_suspensions = 0u;
             for (uint32_t child_block = 0u; child_block < callee->block_count; ++child_block)
                 for (uint32_t child_instruction = 0u;
@@ -3501,10 +3527,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 instruction->operand_count <
                     callee->parameter_count + safepoint->live_value_count ||
                 normal->argument_count != implicit_result + safepoint->live_value_count ||
-                !verify_cancel_continuation(context, function, instruction, 1u,
-                                            callee->parameter_count, safepoint->live_value_count,
-                                            callee->parameter_count + safepoint->live_value_count,
-                                            safepoint, location) ||
+                !cancel_valid ||
                 (implicit_result != 0u &&
                  (normal->argument_types[0] != callee->result_type_id ||
                   normal->argument_categories[0] != XR_CORE_IR_VALUE ||
@@ -3522,6 +3545,16 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     callee->parameter_types[parameter] <= XR_CORE_TYPE_TARGET_ENDIAN &&
                     callee->parameter_types[parameter] != XR_CORE_TYPE_ERROR &&
                     callee->parameter_types[parameter] != XR_CORE_TYPE_PANIC_INFO;
+                if (mode == XR_PARAM_READ && !supported_read) {
+                    uint32_t owner = scoped_affine_borrow_owner(
+                        context, function, instruction->operands[parameter], block_id);
+                    uint32_t owner_live_count = 0u;
+                    for (uint32_t live = 0u;
+                         owner != XR_PROGRAM_LOCATION_NONE && live < safepoint->live_value_count;
+                         ++live)
+                        owner_live_count += safepoint->live_value_ids[live] == owner;
+                    supported_read = owner != XR_PROGRAM_LOCATION_NONE && owner_live_count == 1u;
+                }
                 const XrValidatedInstruction *place_definition =
                     mode == XR_PARAM_REF
                         ? affine_borrow_definition(function, instruction->operands[parameter])

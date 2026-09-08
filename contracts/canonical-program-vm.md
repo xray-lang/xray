@@ -20,8 +20,12 @@ The `xray_program_vm_runtime` archive is the embeddable product boundary for thi
 source closure contains the CoreSpec projection, XrProgram decoder/verifier, immutable target
 profile, BoundaryABI/runtime contracts, execution instance, and typed VM. It excludes frontend,
 CoreIR writer, reference evaluator, TargetPlan, legacy Proto VM, and AOT. The runtime-only test
-links a build-produced XrProgram byte array against this archive and verifies the resulting symbol
-closure.
+links a source-committed canonical XrProgram artifact against this archive and verifies the
+resulting symbol closure. The artifact is deliberately outside the executor build graph: schema or
+CoreSpec drift fails closed during validation instead of rebuilding and executing a compiler-side
+fixture writer whenever VM or verifier sources change. An excluded, opt-in writer remains available
+to regenerate the committed artifact when its schema intentionally changes; it is never a runtime
+test dependency.
 
 The executor covers all fifty-five current CoreSpec operations. `core.logical.not`,
 `core.logical.and`, and `core.logical.or` operate only on canonical `bool` SSA values. The binary
@@ -72,12 +76,19 @@ retains the cancelled safepoint state for cross-executor comparison, and release
 generation lease; there is no frame-dispose fallback, raw stack-address spill, or
 cancellation-as-error compatibility path.
 
+A sealed child `READ` existential parameter receives only an explicit read-reborrow. The caller
+safepoint must carry the unique affine existential owner exactly once, and the child frame keeps
+the borrowed carrier as a non-owner across suspension. Witness-direct calls inside that child use
+the same conformance row as synchronous execution. Normal resume leaves the caller owner live;
+cancellation consumes only the verified owner suffix. Missing, duplicate, ambiguous, or
+interface-mismatched owners are rejected before VM code construction.
+
 anchor-sha256: CMakeLists.txt a91db5257863b84ca8e55cd78ba0cd2623db866f1a3def15d2a4af972cec4c66
 anchor-sha256: xisa/core/registry.json c38744bb33a8f77f47c4668a6b09a8e1335b8bfbbb244fab1eb756aca2bc4a34
 anchor-sha256: src/vm/xr_program_vm.h 39db3f37a2da2c3c16688f97a29ef880d08a1216ed3fe10eb1b24795a55d0acc
-anchor-sha256: src/vm/xr_program_vm.c 783b6bae2ae20a85a004ffb986df8fc427d8c3dc0b60a4ff868ee2af7681bb1a
+anchor-sha256: src/vm/xr_program_vm.c 168294144313141805f4430a97266a55d3d9d559c9eed6f32e5058334819b26d
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 91267c89b65b3d4a019e3b1a3c6e52ff0b048eb42544f484d2b604bc1449213a
+anchor-sha256: src/program/xr_program_verify.c 3efdf479e0f568c32c424976fb30aa31f2a07df9782d7dcde7b3b4e2828bedf5
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -86,4 +97,6 @@ anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390
 anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json dd8b3088756d093a260be71a4663e4e5942153ec98369aedf9de42c9fb32bdaf
 anchor-sha256: tests/unit/vm/test_xr_program_vm.c d4aa6a03210602f15baa4c045becaf33e5219402a1c765caa42610305abc6291
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c b012c57b4dc93b3e9e4f2681cc2645fe3c7ce7421a38ae4b91b1a628c36f6973
+anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h ae4d353f5950dd9e3e4ad29d587edbe2b8254e1a0abaaba639d0e2d744411423
+anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 91d7488cfd68d2c9e87ec482c34a63eb6f3a70ea871a644f16647e23a86f79d9

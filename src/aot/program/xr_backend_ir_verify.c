@@ -155,6 +155,47 @@ static bool coroutine_ref_argument_is_frame_stable(const XrBackendFunction *func
            function->value_types[owner] == function->value_types[place];
 }
 
+static bool coroutine_read_argument_is_frame_stable(const XrBackendIR *ir,
+                                                    const XrBackendFunction *function,
+                                                    const XrBackendInstruction *call,
+                                                    const XrBackendCoroutineSafepoint *point,
+                                                    uint32_t block_id, uint32_t parameter) {
+    if (!ir || !function || !call || !point || parameter >= call->operand_count)
+        return false;
+    uint32_t function_id = (uint32_t) (function - ir->functions);
+    if (function_id >= ir->function_count || function_id >= ir->program->function_count)
+        return false;
+    uint32_t borrow = call->operands[parameter];
+    if (borrow >= function->value_count)
+        return false;
+    uint16_t borrow_type_id = function->value_types[borrow];
+    bool scalar = borrow_type_id >= XR_CORE_TYPE_BOOL &&
+                  borrow_type_id <= XR_CORE_TYPE_TARGET_ENDIAN &&
+                  borrow_type_id != XR_CORE_TYPE_ERROR && borrow_type_id != XR_CORE_TYPE_PANIC_INFO;
+    if (scalar)
+        return true;
+    const XrValidatedFunction *validated = &ir->program->functions[function_id];
+    uint32_t owner =
+        xr_validated_function_scoped_affine_borrow_owner(ir->program, validated, borrow, block_id);
+    if (owner >= function->value_count || function->value_categories[borrow] != XR_CORE_IR_VALUE ||
+        function->value_ownerships[borrow] != XR_CORE_IR_NON_OWNER ||
+        function->value_categories[owner] != XR_CORE_IR_VALUE ||
+        function->value_ownerships[owner] != XR_CORE_IR_OWNER)
+        return false;
+    const XrValidatedType *borrow_type = xr_validated_program_type(ir->program, borrow_type_id);
+    const XrValidatedType *owner_type =
+        xr_validated_program_type(ir->program, function->value_types[owner]);
+    uint32_t owner_live_count = 0u;
+    for (uint32_t live = 0u; live < point->live_value_count; ++live)
+        owner_live_count += point->live_value_ids[live] == owner;
+    return borrow_type && owner_type && borrow_type->kind == XR_CORE_IR_TYPE_EXISTENTIAL &&
+           owner_type->kind == XR_CORE_IR_TYPE_EXISTENTIAL &&
+           borrow_type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_READ &&
+           (owner_type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE ||
+            owner_type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) &&
+           borrow_type->interface_id == owner_type->interface_id && owner_live_count == 1u;
+}
+
 static bool cancel_continuation_matches(const XrBackendFunction *function,
                                         const XrBackendInstruction *instruction,
                                         const XrBackendCoroutineSafepoint *point,
@@ -606,6 +647,9 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                         XrCoreIrValueCategory category =
                             mode == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
                         if ((mode != XR_PARAM_READ && mode != XR_PARAM_REF) ||
+                            (mode == XR_PARAM_READ &&
+                             !coroutine_read_argument_is_frame_stable(
+                                 ir, function, instruction, point, block_id, parameter)) ||
                             (mode == XR_PARAM_REF &&
                              !coroutine_ref_argument_is_frame_stable(function, instruction, point,
                                                                      parameter)) ||

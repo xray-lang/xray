@@ -848,6 +848,8 @@ CONTRACT_SPECS = (
             "contracts/canonical-program/xrprogram-vm-coverage.json",
             "tests/unit/vm/test_xr_program_vm.c",
             "tests/unit/vm/test_xr_program_vm_runtime.c",
+            "tests/unit/vm/xr_program_vm_embedded_fixture.h",
+            "tests/unit/program/xr_program_vm_fixture_writer.c",
             "tests/unit/program/test_xr_program_source_build.c",
         ),
     ),

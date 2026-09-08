@@ -2012,6 +2012,70 @@ TEST(coro_plan_does_not_own_borrowed_place_load) {
     xi_func_free(f);
 }
 
+static XiFunc *make_parameter_coro(const char *name, XrParamMode mode) {
+    XiFunc *f = make_func(name);
+    if (!f)
+        return NULL;
+    f->nparams = 1;
+    f->params = (XiValue **) xr_calloc(1, sizeof(*f->params));
+    if (!f->params) {
+        xi_func_free(f);
+        return NULL;
+    }
+    XiValue *parameter = xi_param(f, f->entry, 0, &stub_array_i8);
+    XiValue *suspend = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *loaded =
+        mode == XR_PARAM_REF ? xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_array_i8, 1) : NULL;
+    XiValue *use = xi_value_new(f, f->entry, XI_PRINT, &stub_unit, 1);
+    XiValue *result = xi_const_int(f, f->entry, 0, &stub_int);
+    if (!parameter || !suspend || (mode == XR_PARAM_REF && !loaded) || !use || !result) {
+        xi_func_free(f);
+        return NULL;
+    }
+    f->params[0] = parameter;
+    if (!xi_func_set_param_passing_mode(f, 0, mode)) {
+        xi_func_free(f);
+        return NULL;
+    }
+    if (loaded)
+        loaded->args[0] = parameter;
+    use->args[0] = loaded ? loaded : parameter;
+    xi_block_set_return(f->entry, result);
+    return f;
+}
+
+static void assert_parameter_coro_ownership(XrParamMode mode, bool owns_frame_slot) {
+    XiFunc *f = make_parameter_coro("coro_parameter_ownership", mode);
+    ASSERT(f != NULL);
+    mark_coro_lower_input(f);
+    ASSERT(xi_coro_lower(f, NULL));
+    ASSERT(f->coro_plan != NULL && f->coro_plan->nstates == 1);
+    XiValue *parameter = f->params[0];
+    const XiCoroSlot *slot = xi_coro_plan_find_slot(f->coro_plan, parameter);
+    const XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    ASSERT(slot != NULL && slot->live_across && slot->is_root);
+    ASSERT(slot->needs_release == owns_frame_slot);
+    ASSERT(slot->frame_root == owns_frame_slot);
+    ASSERT(slot->frame_release == owns_frame_slot);
+    ASSERT(coro_point_has_live_value(point, parameter));
+    ASSERT(point->nroots == (owns_frame_slot ? 1u : 0u));
+    ASSERT(point->ndrops == (owns_frame_slot ? 1u : 0u));
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(coro_plan_treats_read_parameter_as_borrowed_frame_slot) {
+    assert_parameter_coro_ownership(XR_PARAM_READ, false);
+}
+
+TEST(coro_plan_treats_ref_parameter_as_borrowed_frame_slot) {
+    assert_parameter_coro_ownership(XR_PARAM_REF, false);
+}
+
+TEST(coro_plan_treats_move_parameter_as_owned_frame_slot) {
+    assert_parameter_coro_ownership(XR_PARAM_MOVE, true);
+}
+
 TEST(coro_plan_records_go_as_scheduler_reduction_point) {
     XiFunc *f = xi_func_new("coro_go_scheduler_reduction", &stub_unit);
     ASSERT(f != NULL);
@@ -3215,6 +3279,9 @@ int main(void) {
     run_coro_plan_rejects_stale_point_op();
     run_coro_plan_rejects_root_count_mismatch();
     run_coro_plan_does_not_own_borrowed_place_load();
+    run_coro_plan_treats_read_parameter_as_borrowed_frame_slot();
+    run_coro_plan_treats_ref_parameter_as_borrowed_frame_slot();
+    run_coro_plan_treats_move_parameter_as_owned_frame_slot();
     run_coro_plan_records_go_as_scheduler_reduction_point();
     run_coro_plan_transfers_owned_rep_alias_into_frame();
     run_coro_lower_does_not_cancel_unproduced_owned_call_result();
