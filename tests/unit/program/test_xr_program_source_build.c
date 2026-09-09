@@ -1349,6 +1349,166 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     source_build_fixture_free(&fixture);
 }
 
+TEST(source_owner_generic_specializations_are_exact_program_functions) {
+    static const char source[] = "fn identity<T>(value: T) -> T { return value }\n"
+                                 "fn answer() -> i64 {\n"
+                                 "  const explicit = identity<i64>(40)\n"
+                                 "  const inferred = identity(1)\n"
+                                 "  if (identity<bool>(true)) {\n"
+                                 "    return explicit + inferred + 1\n"
+                                 "  }\n"
+                                 "  return 0\n"
+                                 "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct first = {0};
+    XrProgramSourceProduct second = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &first, &diagnostic);
+    assert_source_build_ok(&fixture.input, &second, &diagnostic);
+    ASSERT_NOT_NULL(first.program);
+    ASSERT_NOT_NULL(second.program);
+    assert_products_equal(&first, &second);
+
+    XrProgramSourceBuildInput open_entry_input = fixture.input;
+    open_entry_input.entry.function_name = "identity";
+    XrProgramSourceProduct rejected = {0};
+    ASSERT_EQ_INT(xr_program_source_build(&open_entry_input, &rejected, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE);
+    ASSERT_EQ_INT(diagnostic.writer_status, XR_PROGRAM_BUILD_INVALID_INPUT);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "canonical-program entry"));
+    ASSERT_NULL(rejected.artifact.bytes);
+    ASSERT_NULL(rejected.program);
+
+    const XrValidatedProgram *program = first.program;
+    ASSERT_EQ_UINT(program->function_count, 3u);
+    uint32_t entry = xr_validated_program_entry_function(program);
+    ASSERT_LT(entry, program->function_count);
+    const XrValidatedFunction *entry_function = &program->functions[entry];
+    ASSERT_EQ_UINT(entry_function->parameter_count, 0u);
+    ASSERT_EQ_UINT(entry_function->result_type_id, XR_CORE_TYPE_I64);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 3u);
+
+    uint32_t i64_target = UINT32_MAX;
+    uint32_t bool_target = UINT32_MAX;
+    uint32_t i64_calls = 0u;
+    uint32_t bool_calls = 0u;
+    for (uint32_t block_index = 0u; block_index < entry_function->block_count; ++block_index) {
+        const XrValidatedBlock *block = &entry_function->blocks[block_index];
+        for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+             ++instruction_index) {
+            const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
+            if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT)
+                continue;
+            ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FUNCTION);
+            ASSERT_LT(instruction->immediate.function_id, program->function_count);
+            ASSERT_TRUE(instruction->immediate.function_id != entry);
+            const XrValidatedFunction *callee =
+                &program->functions[instruction->immediate.function_id];
+            ASSERT_EQ_UINT(callee->parameter_count, 1u);
+            ASSERT_EQ_INT(callee->parameter_modes[0], XR_PARAM_READ);
+            ASSERT_EQ_UINT(callee->parameter_types[0], callee->result_type_id);
+            ASSERT_EQ_UINT(instruction->result_type_id, callee->result_type_id);
+            if (callee->result_type_id == XR_CORE_TYPE_I64) {
+                if (i64_target == UINT32_MAX)
+                    i64_target = instruction->immediate.function_id;
+                ASSERT_EQ_UINT(instruction->immediate.function_id, i64_target);
+                ++i64_calls;
+            } else {
+                ASSERT_EQ_UINT(callee->result_type_id, XR_CORE_TYPE_BOOL);
+                if (bool_target == UINT32_MAX)
+                    bool_target = instruction->immediate.function_id;
+                ASSERT_EQ_UINT(instruction->immediate.function_id, bool_target);
+                ++bool_calls;
+            }
+        }
+    }
+    ASSERT_EQ_UINT(i64_calls, 2u);
+    ASSERT_EQ_UINT(bool_calls, 1u);
+    ASSERT_TRUE(i64_target != UINT32_MAX);
+    ASSERT_TRUE(bool_target != UINT32_MAX);
+    ASSERT_TRUE(i64_target != bool_target);
+
+    XrReferenceProfile reference_profile = {.pointer_width = 64u};
+    XrReferenceOutcome reference =
+        xr_reference_evaluate(program, entry, NULL, 0u, &reference_profile, NULL);
+    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(reference.value.as.i64, 42);
+
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = first.program,
+        .profile = profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+    static const XrVmDecodePolicy policies[] = {
+        XR_VM_DECODE_BASELINE_VIEW,
+        XR_VM_DECODE_FIXED_ROWS,
+    };
+    for (uint32_t policy = 0u; policy < sizeof(policies) / sizeof(policies[0]); ++policy) {
+        XrVmCodeOptions vm_options = xr_vm_code_default_options();
+        vm_options.decode_policy = (uint8_t) policies[policy];
+        XrVmCode *vm_code = NULL;
+        XrVmCodeDiagnostic vm_diagnostic;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &vm_options, &vm_code, &vm_diagnostic),
+                      XR_VM_CODE_OK);
+        ASSERT_EQ_INT(xr_vm_code_decode_policy(vm_code), policies[policy]);
+        XrVmOutcome vm_result = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
+        ASSERT_EQ_INT(vm_result.kind, XR_VM_OUTCOME_RETURN);
+        ASSERT_EQ_INT(vm_result.value.kind, XR_VM_VALUE_I64);
+        ASSERT_EQ_INT(vm_result.value.as.i64, reference.value.as.i64);
+        xr_vm_code_free(vm_code);
+    }
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_GENERIC_SPECIALIZATION);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+    xr_program_source_product_free(&second);
+    xr_program_source_product_free(&first);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
     static const char source[] = "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
                                  "  return body(value)\n"

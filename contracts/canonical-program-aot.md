@@ -122,7 +122,12 @@ The producer accepts only an exact fixture identity and matching manifest digest
 source case, and stages its C output. Publication follows successful assertions and preserves the
 previous file's bytes, identity, and timestamp when the new bytes match. Missing, duplicate, unknown,
 or stale registration fails closed. The default source suite still executes every registered case;
-the canonical preflight mechanically includes every manifest native target and test. A branching
+the canonical preflight mechanically includes every manifest native target and test. One real-source
+generic fixture is closed before BackendIR: two i64 calls target one concrete Program FunctionId,
+the bool call targets a distinct FunctionId, and the open template is absent. Repeated C emission is
+byte-identical and strict native execution returns the same value as Reference and both VM views;
+generated C receives no erased generic body or runtime specialization policy. Generic aggregates,
+constraints, ownership cleanup, and recursive specialization remain unqualified. A branching
 deferred-Pipe fixture executes normal, cancellation-at-each-safepoint, and provider-refusal paths;
 its native output proves that the complete private cancellation graph preserves branch inputs and
 cleanup order without an AOT-only unwind rule.
@@ -177,4 +182,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 573f73906141e9a43d6e523a74ece9adf3fd38542b94d569499f422191794e88
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c ec57a0706881dcbdffba16d6c68459bdc745aa1490c6010d07e65a7fec8be790

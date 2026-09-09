@@ -588,7 +588,8 @@
       "source_test_anchors": [
         "tests/diff/cases/semantics/generic_container_type_args.xr",
         "tests/diff/cases/semantics/value_struct_generic_literal.xr",
-        "tests/compile_errors/generics/e0388_mono_breadth_budget.xr"
+        "tests/compile_errors/generics/e0388_mono_breadth_budget.xr",
+        "tests/unit/program/test_xr_program_source_build.c"
       ],
       "required_observations": [
         "value",
@@ -606,16 +607,16 @@
         "aot-semantic-fallbacks"
       ],
       "layers": {
-        "source_owner": "OPEN",
-        "producer": "OPEN",
-        "verifier": "OPEN",
-        "reference": "OPEN",
-        "vm": "OPEN",
-        "aot": "OPEN",
+        "source_owner": "PARTIAL_CANONICAL",
+        "producer": "PARTIAL_CANONICAL",
+        "verifier": "PARTIAL_CANONICAL",
+        "reference": "PARTIAL_CANONICAL",
+        "vm": "PARTIAL_CANONICAL",
+        "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
       },
       "state": "OPEN",
-      "open_reason": "Generic instance reachability, exact identity, budgets, closure, and canonical product emission are not owned by one source build."
+      "open_reason": "The shared source owner now merges pre/post-monomorphization evidence and emits exact, deduplicated i64/bool function specializations through Program, Reference, both VM views, and native C while rejecting an open generic entry. Generic aggregates, constraints, ownership/cleanup, recursive specialization, and resource-budget product diagnostics remain open."
     },
     {
       "id": "ownership-read-ref-move-copy-drop",

@@ -37,6 +37,7 @@ typedef struct XrProgramSourceBuildContext {
     const XrProgramSourceBuildInput *input;
     XrModuleGraph *graph;
     XaAnalyzer *analyzer;
+    XgGlobalEvidence pre_monomorphization_evidence;
     XgGlobalEvidence evidence;
     AstNode **ast_roots;
     XiPipelineResult *pipelines;
@@ -118,6 +119,7 @@ static void build_context_free(XrProgramSourceBuildContext *context) {
     xr_free(context->pipelines);
     xr_free(context->ast_roots);
     xr_free(context->reachable_bodies);
+    xg_global_evidence_free(&context->pre_monomorphization_evidence);
     xg_global_evidence_free(&context->evidence);
     if (context->analyzer) {
         xa_analyzer_set_graph(context->analyzer, NULL);
@@ -353,6 +355,12 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
     XrProgramSourceBuildStatus status = analyze_modules(context, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK)
         return status;
+    if (!xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+            &context->pre_monomorphization_evidence, context->graph,
+            evidence_profile(context->input->source_profile), 0u, NULL, 0u, context->analyzer))
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
+                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
+                      "pre-monomorphization generic evidence construction failed");
     XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         if (!xa_mono_pass(context->ast_roots[topo], context->ast_roots, (int) context->module_count,
@@ -388,6 +396,12 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
                       XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
                       "global evidence construction failed");
+    if (!xg_global_evidence_merge_generic_inst_roots(&context->evidence,
+                                                     &context->pre_monomorphization_evidence))
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
+                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
+                      "generic instantiation evidence merge failed");
+    xg_global_evidence_free(&context->pre_monomorphization_evidence);
     return prepare_entry_reachability(context, diagnostic);
 }
 

@@ -14439,9 +14439,33 @@ static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage,
  * here: the existing callable validation rejects them after the
  * closure has been materialized.
  */
+static bool program_function_is_open_generic(const XrXiBuildContext *context,
+                                             const XiFunc *function) {
+    const XgGlobalEvidence *evidence =
+        context && context->source ? context->source->global_evidence : NULL;
+    if (!evidence || !function || function->xg_body_func_id == XG_NO_ID)
+        return false;
+    for (uint32_t body_index = 0u; body_index < evidence->nbodies; ++body_index) {
+        const XgBodySummary *body = &evidence->bodies[body_index];
+        if (body->func_id != function->xg_body_func_id || body->owner_decl_id == XG_NO_ID)
+            continue;
+        for (uint32_t decl_index = 0u; decl_index < evidence->ndecls; ++decl_index)
+            if (evidence->decls[decl_index].decl_id == body->owner_decl_id &&
+                (evidence->decls[decl_index].flags & XG_DECL_GENERIC_TEMPLATE) != 0u)
+                return true;
+    }
+    return false;
+}
+
 static bool mark_program_function(XrXiBuildContext *context, const XiFunc *function,
                                   bool *changed) {
-    if (!context || !function)
+    /* An open generic body has no executable logical type or representation.
+     *
+     * Monomorphization must select a concrete clone before XrProgram closure;
+     * retaining the
+     * template would create an erased fallback path. */
+    if (!context || !function || function->is_generic_template ||
+        program_function_is_open_generic(context, function))
         return false;
     for (uint32_t module = 0u; module < context->source->module_count; ++module) {
         XrXiModuleStorage *storage = &context->storage[module];

@@ -121,7 +121,13 @@ executes its complete source, reference, VM, and C-emission assertions before pu
 artifact; default execution still runs the complete source suite. Free-function and static-method
 coroutine cases have independent native outputs and checks. Registry identity, declaration census,
 and projection checks reject missing or mismatched evidence rather than silently narrowing the
-canonical preflight. A branching deferred-Pipe fixture proves that provider failure can use the
+canonical preflight. The source owner retains pre-monomorphization generic roots, merges them into
+post-monomorphization evidence, and closes Program reachability over concrete instances only. A
+generic fixture proves two i64 callsites share one exact specialization, a bool callsite receives a
+distinct typed specialization, both VM decode policies return the reference value, and selecting
+the open generic template as entry fails instead of executing an erased fallback. Generic
+aggregates, constrained calls, ownership cleanup, and recursive specialization remain outside this
+bounded slice. A branching deferred-Pipe fixture proves that provider failure can use the
 shared cleanup graph while cancellation receives a private copy of the complete multi-block graph,
 including the non-owner branch condition. A nested deferred-Pipe fixture additionally proves that
 an inner registration discovered from a cold outer handler keeps its outer-handler failure edge,
@@ -146,4 +152,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 573f73906141e9a43d6e523a74ece9adf3fd38542b94d569499f422191794e88
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c ec57a0706881dcbdffba16d6c68459bdc745aa1490c6010d07e65a7fec8be790
