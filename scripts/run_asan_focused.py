@@ -32,6 +32,7 @@ Environment overrides:
     XR_ASAN_DIFF_REGEX    backend-diff subset regex
     XR_ASAN_XXHASH_MAIN   path to the xxhash port entry
     XR_ASAN_BILI_MAIN     path to the committed bili fixture
+    XR_BUILD_LOCK_TIMEOUT build-tree lease wait in seconds (default: 600)
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -49,7 +51,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import platform, proc, sanitizer  # noqa: E402
+from xraytest import buildlock, platform, proc, sanitizer  # noqa: E402
 import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -108,7 +110,7 @@ def compile_workload(log, xray: Path, main: Path, label: str,
         out.unlink(missing_ok=True)
 
 
-def main(argv: list[str]) -> int:
+def _run_main(argv: list[str]) -> int:
     log = sanitizer.LaneLog(LANE)
     profile = os.environ.get("XR_ASAN_PROFILE", "full")
     if profile not in ("full", "canonical-program"):
@@ -313,6 +315,21 @@ def main(argv: list[str]) -> int:
 
     log("PASS")
     return 0
+
+
+def main(argv: list[str]) -> int:
+    build_dir = PROJECT_DIR / os.environ.get("XR_ASAN_BUILD_DIR", "build-asan")
+    log = sanitizer.LaneLog(LANE)
+    try:
+        lease = buildlock.BuildTreeLock(build_dir)
+        started = time.perf_counter()
+        with lease:
+            log(f"build-tree lease acquired after "
+                f"{time.perf_counter() - started:.3f}s: {lease.build_dir}")
+            return _run_main(argv)
+    except (ValueError, TimeoutError) as error:
+        log(f"build-tree lease failed: {error}", error=True)
+        return 1
 
 
 if __name__ == "__main__":

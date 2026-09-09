@@ -19,6 +19,28 @@ runner = load_module("tiered_test_runner_under_test", ROOT / "scripts" / "t.py")
 
 
 class FocusedSelectionTest(unittest.TestCase):
+    def test_requested_build_dir_matches_fast_tree_selection(self):
+        with mock.patch.dict(runner.os.environ, {}, clear=True), mock.patch.object(
+                runner.platform, "IS_WINDOWS", True):
+            self.assertEqual(runner.requested_build_dir().name, "build")
+        with mock.patch.dict(runner.os.environ, {"XR_FAST": "1"}, clear=True), \
+                mock.patch.object(runner.platform, "IS_WINDOWS", True):
+            self.assertEqual(runner.requested_build_dir().name, "build-fast-clang")
+
+    def test_busy_build_tree_fails_before_runner_work(self):
+        lease = mock.Mock()
+        lease.build_dir = Path("busy-build")
+        lease.acquire.return_value = False
+        lease.owner_text.return_value = '{"pid":42}'
+        output = io.StringIO()
+        with redirect_stdout(output), mock.patch.object(
+                runner.buildlock, "BuildTreeLock", return_value=lease), \
+                mock.patch.object(runner, "_run_main") as run:
+            self.assertEqual(runner.main(["t.py", "t0"]), 1)
+        run.assert_not_called()
+        lease.release.assert_called_once()
+        self.assertIn("BUILD TREE BUSY", output.getvalue())
+
     def test_windows_ctest_parallelism_is_capped_without_throttling_builds(self):
         with mock.patch.object(runner.platform, "IS_WINDOWS", True):
             self.assertEqual(runner.default_ctest_jobs(26), 8)

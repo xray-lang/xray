@@ -21,7 +21,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests/lib"))
 
-from xraytest import sanitizer  # noqa: E402
+from xraytest import buildlock, sanitizer  # noqa: E402
 
 
 LANES = {
@@ -169,17 +169,23 @@ def main() -> int:
         return 0
     if not (build_dir / "CMakeCache.txt").is_file():
         parser.error(f"configured build tree is required: {build_dir}")
+    lock_started = time.perf_counter()
     try:
-        activate_environment(args.lane, build_dir)
-        build_seconds = run(build)
-        test_seconds = run(test)
-    except (RuntimeError, subprocess.CalledProcessError) as error:
+        lease = buildlock.BuildTreeLock(build_dir)
+        with lease:
+            lock_wait_seconds = time.perf_counter() - lock_started
+            activate_environment(args.lane, build_dir)
+            build_seconds = run(build)
+            test_seconds = run(test)
+    except (ValueError, TimeoutError, RuntimeError,
+            subprocess.CalledProcessError) as error:
         print(f"canonical Program {args.lane} gate failed: {error}", file=sys.stderr)
         return 1
     print(
         json.dumps(
             {
                 "lane": args.lane,
+                "lock_wait_seconds": round(lock_wait_seconds, 3),
                 "build_seconds": round(build_seconds, 3),
                 "test_seconds": round(test_seconds, 3),
                 "total_seconds": round(build_seconds + test_seconds, 3),

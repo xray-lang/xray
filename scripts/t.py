@@ -57,6 +57,8 @@ Environment:
     XR_JOBS        build parallelism (default: cores - 2)
     XR_CTEST_JOBS  CTest parallelism (default: XR_JOBS, capped at 8 on Windows
                    where process/toolchain contention makes higher values slower)
+    XR_BUILD_LOCK_TIMEOUT seconds to wait for exclusive ownership of the build
+                   tree (default: 600; 0 fails immediately)
     XR_NO_BUILD=1  skip the incremental build step
     XR_FAST=1      t0/t1/canonical: build in build-fast (build-fast-clang on
                    Windows), load stdlib source
@@ -96,7 +98,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import platform, proc, sanitizer, workspace  # noqa: E402
+from xraytest import buildlock, platform, proc, sanitizer, workspace  # noqa: E402
 import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 # This script narrates around children that write straight to fd 1 (ctest, the
@@ -400,7 +402,7 @@ def run_regression_corpus(build_dir: Path, skip_diff: bool) -> bool:
     return ok
 
 
-def main(argv: List[str]) -> int:
+def _run_main(argv: List[str]) -> int:
     if len(argv) < 2:
         return usage(1)
     tier = argv[1]
@@ -622,6 +624,38 @@ def main(argv: List[str]) -> int:
             print(f"  next: scripts/t.py {nxt}")
 
     return code
+
+
+def requested_build_dir() -> Path:
+    """Resolve the exact tree before configure so every writer shares a lock."""
+    if platform.env_flag("XR_FAST"):
+        default = "build-fast-clang" if platform.IS_WINDOWS else "build-fast"
+    else:
+        default = "build"
+    return Path(os.environ.get("XR_BUILD_DIR", default)).resolve()
+
+
+def main(argv: List[str]) -> int:
+    if len(argv) >= 2 and argv[1] in ("-h", "--help", "help"):
+        return _run_main(argv)
+    try:
+        lease = buildlock.BuildTreeLock(requested_build_dir())
+    except ValueError as error:
+        print(f"{RED}Error{NC}: {error}")
+        return 1
+
+    print(f"{BLUE}==>{NC} build-tree lease: {lease.build_dir}")
+    try:
+        with timed_phase("build-tree wait"):
+            if not lease.acquire():
+                owner = lease.owner_text()
+                print(f"{RED}BUILD TREE BUSY{NC}: {lease.build_dir}")
+                if owner:
+                    print(f"    owner: {owner}")
+                return 1
+        return _run_main(argv)
+    finally:
+        lease.release()
 
 
 if __name__ == "__main__":

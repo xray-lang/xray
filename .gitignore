@@ -17,6 +17,7 @@ _jit_*.bat
 _commit_msg.*
 /.tmp_*
 /tmp_probe_*
+.*.xray-build.lock*
 *.tmp
 __pycache__/
 *.py[cod]

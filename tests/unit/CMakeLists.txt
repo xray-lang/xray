@@ -26,6 +26,20 @@ macro(add_xray_unit_test name source)
     add_test(NAME ${name} COMMAND $<TARGET_FILE:${name}>)
 endmacro()
 
+function(add_xray_python_unit_test name file)
+    add_test(NAME ${name}
+        COMMAND ${XRAY_PYTHON} -m unittest discover
+            -s ${CMAKE_SOURCE_DIR}/tests/lib/tests -p ${file})
+    set_tests_properties(${name} PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        LABELS "unit;test-infrastructure;self-test")
+endfunction()
+
+add_xray_python_unit_test(test_build_tree_lock test_buildlock.py)
+add_xray_python_unit_test(test_tiered_test_runner test_t_runner.py)
+add_xray_python_unit_test(test_canonical_program_test_profile
+    test_canonical_program_test_profile.py)
+
 # ============================================================================
 # value/ — Value system
 # ============================================================================
@@ -874,6 +888,7 @@ if(WIN32)
     set_tests_properties(test_xr_program_allocation_aot_native PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         LABELS "unit;aot;generated-c;allocation;msvc;portable-c11"
+        RESOURCE_LOCK xray_native_toolchain
         TIMEOUT 120 PROCESSORS 1)
 endif()
 
@@ -909,6 +924,7 @@ if(WIN32)
     set_tests_properties(test_xr_program_coroutine_graph_aot_native PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         LABELS "unit;aot;generated-c;coroutine;msvc;portable-c11"
+        RESOURCE_LOCK xray_native_toolchain
         TIMEOUT 120 PROCESSORS 1)
 endif()
 
@@ -1092,6 +1108,7 @@ add_test(NAME test_xr_program_aot_providers
         --expected-exit 42)
 set_tests_properties(test_xr_program_aot_providers PROPERTIES
     LABELS "aot;canonical-program;generated-c;providers;portable-c11;task-300"
+    RESOURCE_LOCK xray_native_toolchain
     TIMEOUT 120)
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
