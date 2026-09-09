@@ -426,7 +426,11 @@ static void inline_remap_call_place_origins(XiFunc *caller, XiValue *cloned,
         if (place->op == XI_LOCAL_ADDR) {
             /* A callee local has no source-variable identity in the caller.  It
              * remains a call-bound temporary after inlining. */
-            arg->origin = XI_PLACE_ORIGIN_PROJECTION_TEMP;
+            arg->origin = slot != 0 && arg->param_mode == XR_PARAM_READ &&
+                                   xi_local_addr_names_operand_storage(place->aux_int) &&
+                                   place->args && xi_value_is_fresh_direct_storage(place->args[0])
+                              ? XI_PLACE_ORIGIN_DIRECT_VALUE
+                              : XI_PLACE_ORIGIN_PROJECTION_TEMP;
             arg->origin_var_id = XI_NO_VAR_ID;
             continue;
         }

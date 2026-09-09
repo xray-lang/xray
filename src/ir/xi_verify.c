@@ -2007,7 +2007,8 @@ static bool verify_call_plan_value(VerifyCtx *ctx, const XiFunc *f, const XiBloc
         if (place->op == XI_LOCAL_ADDR) {
             if (place->nargs != 1 || !place->args[0] ||
                 (arg_plan->origin != XI_PLACE_ORIGIN_STACK_LOCAL &&
-                 arg_plan->origin != XI_PLACE_ORIGIN_PROJECTION_TEMP)) {
+                 arg_plan->origin != XI_PLACE_ORIGIN_PROJECTION_TEMP &&
+                 arg_plan->origin != XI_PLACE_ORIGIN_DIRECT_VALUE)) {
                 verr(ctx, "func '%s': call v%u plan arg %u has invalid local-place origin", f->name,
                      v->id, (unsigned) a + 1);
                 return false;
@@ -2016,6 +2017,14 @@ static bool verify_call_plan_value(VerifyCtx *ctx, const XiFunc *f, const XiBloc
             if (source_var != xi_var_id_is_valid(arg_plan->origin_var_id) ||
                 (source_var && arg_plan->origin_var_id >= f->source_var_count)) {
                 verr(ctx, "func '%s': call v%u plan arg %u has inconsistent local origin variable",
+                     f->name, v->id, (unsigned) a + 1);
+                return false;
+            }
+            if (arg_plan->origin == XI_PLACE_ORIGIN_DIRECT_VALUE &&
+                (arg_plan->param_mode != XR_PARAM_READ ||
+                 !xi_local_addr_names_operand_storage(place->aux_int) ||
+                 !xi_value_is_fresh_direct_storage(place->args[0]))) {
+                verr(ctx, "func '%s': call v%u plan arg %u has invalid direct-value storage",
                      f->name, v->id, (unsigned) a + 1);
                 return false;
             }

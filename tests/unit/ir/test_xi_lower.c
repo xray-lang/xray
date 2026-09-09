@@ -3915,20 +3915,46 @@ TEST(read_value_struct_param_uses_internal_call_place) {
                              "}\n"
                              "fn exercise() -> i64 {\n"
                              "    var pair = Pair{a: 1, b: 2}\n"
-                             "    return sum(pair)\n"
+                             "    return sum(pair) + sum(Pair{a: 19, b: 20})\n"
                              "}\n"
                              "print(exercise())\n");
     assert(f != NULL);
 
     XiFunc *sum = func_tree_find_func_name(f, "sum");
     XiFunc *exercise = func_tree_find_func_name(f, "exercise");
-    XiValue *call = func_tree_find_op(exercise, XI_CALL);
     assert(sum && sum->nparams == 1 && xi_value_is_read_place_param(sum->params[0]) &&
            "semantic read value-struct parameters should publish internal place ABI evidence");
-    assert(call && call->call_plan && call->call_plan->verified && call->call_plan->nargs == 1 &&
-           call->call_plan->args[0].param_mode == XR_PARAM_READ &&
-           call->call_plan->args[0].place == call->args[1] && call->args[1]->op == XI_LOCAL_ADDR &&
-           "ordinary calls should infer a nonescaping read place without source syntax");
+    XiValue *local_call = NULL;
+    XiValue *temporary_call = NULL;
+    for (uint32_t block_index = 0u; exercise && block_index < exercise->nblocks; ++block_index) {
+        XiBlock *block = exercise->blocks[block_index];
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            XiValue *call = block->values[value_index];
+            if (!call || call->op != XI_CALL || !call->call_plan || call->call_plan->nargs != 1u)
+                continue;
+            XiPlaceOrigin origin = (XiPlaceOrigin) call->call_plan->args[0].origin;
+            if (origin == XI_PLACE_ORIGIN_STACK_LOCAL)
+                local_call = call;
+            else if (origin == XI_PLACE_ORIGIN_DIRECT_VALUE)
+                temporary_call = call;
+        }
+    }
+    assert(local_call && temporary_call &&
+           "named and direct value arguments should retain distinct place provenance");
+    XiValue *calls[] = {local_call, temporary_call};
+    for (uint32_t index = 0u; index < sizeof(calls) / sizeof(calls[0]); ++index) {
+        XiValue *call = calls[index];
+        assert(call->call_plan->verified && call->call_plan->args[0].param_mode == XR_PARAM_READ &&
+               call->call_plan->args[0].place == call->args[1] &&
+               call->call_plan->args[0].lifetime == XI_PLACE_LIFETIME_CALL_BOUND &&
+               call->call_plan->args[0].escape == XI_PLACE_ESCAPE_NONE &&
+               call->args[1]->op == XI_LOCAL_ADDR &&
+               xi_local_addr_names_operand_storage(call->args[1]->aux_int) &&
+               "READ value arguments should use nonescaping call-bound storage");
+    }
+    assert(temporary_call->call_plan->args[0].origin_var_id == XI_NO_VAR_ID &&
+           xi_value_is_fresh_direct_storage(temporary_call->args[1]->args[0]) &&
+           "a direct literal must own fresh storage rather than impersonate a projection");
 
     xi_func_free(f);
 }

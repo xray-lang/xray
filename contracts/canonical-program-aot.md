@@ -133,12 +133,14 @@ to one logical aggregate construction, and emits byte-identical C whose strict n
 The open aggregate skeleton is absent and there is no erased aggregate representation or AOT-only
 specialization policy. A bounded constraint fixture additionally proves two concrete value-struct
 implementors: each generic function clone carries its own nominal READ signature and calls one
-distinct non-generic method FunctionId. The physical Xi call-bound address and receiver load are
-erased only after their frozen non-escaping READ plans and exact struct identities agree; Program
-contains neither an interface witness table nor runtime constraint dispatch. Reference, both VM
-views, and strict native C return 42 from the same four sealed calls. Parameterized/builtin
-constraints, generic methods, generic ownership cleanup, temporary-expression READ places, and
-valid finite recursive specialization remain unqualified. Before AOT receives a validated Program,
+distinct non-generic method FunctionId. Named locals and fresh direct trivial value-struct arguments
+carry distinct verified provenance but share an exact call-bound, non-escaping READ lifetime. Their
+physical Xi addresses and receiver loads are erased only after the frozen plans and exact struct
+identities agree; Program contains neither an interface witness table nor runtime constraint
+dispatch. Reference, both VM views, and strict native C return 42 from the same four sealed calls.
+Parameterized/builtin constraints, generic methods, generic ownership cleanup, arbitrary
+returned/select/projected READ places, and valid finite recursive specialization remain unqualified.
+Before AOT receives a validated Program,
 the shared source-build request enforces one fail-closed module/depth/whole-graph-instance/final-byte
 budget. Requests may tighten but not expand the production defaults; E0388/E0389 exhaustion remains
 an exact structured source diagnostic rather than an AOT-only limit or fallback. Small injected
@@ -197,4 +199,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c eba102c90881a0d4d56575a30ec6f3d0f8244afc908b952bf3aad70d50289117
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 9eea7aa3ed5883e22487d429c1f2fbf3874e5a0985d0a8a19f364109701179bb

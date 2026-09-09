@@ -242,6 +242,7 @@ typedef enum XiPlaceOrigin {
     XI_PLACE_ORIGIN_STACK_LOCAL = 1,
     XI_PLACE_ORIGIN_PARAM = 2,
     XI_PLACE_ORIGIN_PROJECTION_TEMP = 3,
+    XI_PLACE_ORIGIN_DIRECT_VALUE = 4,
 } XiPlaceOrigin;
 
 /* XI_LOCAL_ADDR normally takes the address of args[0]'s caller-local storage.
@@ -1716,6 +1717,17 @@ static inline bool xi_err_check_has_arc_cleanups(const XiValue *v) {
 
 static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
+}
+
+/* A direct value temporary owns independent call-bound storage.  It is not a
+ * borrowed
+ * field/pointer projection even though both shapes use LOCAL_ADDR in
+ * Xi's physical call ABI. */
+static inline bool xi_value_is_fresh_direct_storage(const XiValue *v) {
+    if (!v || xi_var_id_is_valid(v->var_id))
+        return false;
+    return v->op == XI_AGG_NEW || v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST ||
+           xi_copy_is_value_clone(v);
 }
 
 static inline bool xi_copy_is_cell_read(const XiValue *v) {

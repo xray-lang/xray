@@ -1527,9 +1527,11 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "}\n"
         "fn genericRead<T: ReadCounter>(counter: T) -> i64 { return counter.current() }\n"
         "fn answer() -> i64 {\n"
-        "  var left = LeftCounter{value: 40}\n"
-        "  var right = RightCounter{value: 2}\n"
-        "  return genericRead(left) + genericRead(right)\n"
+        "  var left = LeftCounter{value: 39}\n"
+        "  var right = RightCounter{value: 1}\n"
+        "  return genericRead(left) + genericRead(right) +\n"
+        "         genericRead(LeftCounter{value: 1}) +\n"
+        "         genericRead(RightCounter{value: 1})\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
@@ -1563,7 +1565,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_EQ_UINT(program->function_count, 5u);
     ASSERT_EQ_UINT(program->interface_count, 0u);
     ASSERT_EQ_UINT(program->conformance_count, 0u);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 4u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 6u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT), 0u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_EXISTENTIAL_PACK), 0u);
 
@@ -1574,6 +1576,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_EQ_UINT(entry_function->result_type_id, XR_CORE_TYPE_I64);
     uint32_t specializations[2] = {UINT32_MAX, UINT32_MAX};
     uint32_t specialization_count = 0u;
+    uint32_t entry_call_count = 0u;
     for (uint32_t block_index = 0u; block_index < entry_function->block_count; ++block_index) {
         const XrValidatedBlock *block = &entry_function->blocks[block_index];
         for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
@@ -1581,7 +1584,6 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
             const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
             if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT)
                 continue;
-            ASSERT_LT(specialization_count, 2u);
             ASSERT_EQ_UINT(instruction->operand_count, 1u);
             ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FUNCTION);
             ASSERT_LT(instruction->immediate.function_id, program->function_count);
@@ -1596,9 +1598,18 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
                           XR_CORE_IR_VALUE);
             ASSERT_EQ_INT(entry_function->value_ownerships[instruction->operands[0]],
                           XR_CORE_IR_NON_OWNER);
-            specializations[specialization_count++] = instruction->immediate.function_id;
+            ++entry_call_count;
+            bool known = false;
+            for (uint32_t specialization = 0u; specialization < specialization_count;
+                 ++specialization)
+                known |= specializations[specialization] == instruction->immediate.function_id;
+            if (!known) {
+                ASSERT_LT(specialization_count, 2u);
+                specializations[specialization_count++] = instruction->immediate.function_id;
+            }
         }
     }
+    ASSERT_EQ_UINT(entry_call_count, 4u);
     ASSERT_EQ_UINT(specialization_count, 2u);
     ASSERT_TRUE(specializations[0] != specializations[1]);
 

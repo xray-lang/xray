@@ -449,13 +449,6 @@ XR_FUNC bool xi_lower_cleanup_register_parallel_end(XiLower *l, AstNode *node, X
     return lower_cleanup_open_panic_interval(l, scope, line);
 }
 
-static bool stmt_value_is_fresh_value_struct(XiValue *v) {
-    if (!v || xi_var_id_is_valid(v->var_id))
-        return false;
-    return v->op == XI_AGG_NEW || v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST ||
-           (v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE);
-}
-
 static void stmt_mark_value_clone_copy(XiValue *v) {
     if (v && v->op == XI_COPY)
         v->aux_int = XI_COPY_KIND_VALUE_CLONE;
@@ -3845,7 +3838,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * function return whose identity must not leak into the new binding. */
     bool value_clone_copy =
         (stmt_type_needs_value_clone(l, type) || stmt_type_needs_value_clone(l, init_val->type)) &&
-        !stmt_value_is_fresh_value_struct(init_val);
+        !xi_value_is_fresh_direct_storage(init_val);
     if (!needs_copy && value_clone_copy) {
         needs_copy = true;
     }

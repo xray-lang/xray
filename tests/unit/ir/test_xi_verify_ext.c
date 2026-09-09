@@ -748,6 +748,40 @@ static XiValue *make_move_call(XiFunc *f, XiBlock *entry) {
     return call;
 }
 
+static XiValue *make_direct_value_read_call(XiFunc *f, XiBlock *entry, XiValue **place_out) {
+    XiValue *source = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *temporary = xi_value_new(f, entry, XI_COPY, &stub_int, 1);
+    XiValue *place = xi_value_new(f, entry, XI_LOCAL_ADDR, &stub_int, 1);
+    XiValue *callee = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_func, 0);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 2);
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(f, sizeof(*plan));
+    XiCallArgPlan *arg = (XiCallArgPlan *) xi_func_arena_alloc(f, sizeof(*arg));
+    if (!source || !temporary || !place || !callee || !call || !plan || !arg)
+        return NULL;
+    temporary->args[0] = source;
+    temporary->aux_int = XI_COPY_KIND_VALUE_CLONE;
+    place->args[0] = temporary;
+    call->args[0] = callee;
+    call->args[1] = place;
+    memset(plan, 0, sizeof(*plan));
+    memset(arg, 0, sizeof(*arg));
+    arg->param_mode = XR_PARAM_READ;
+    arg->access = XR_CALL_ARG_PLAIN;
+    arg->origin = XI_PLACE_ORIGIN_DIRECT_VALUE;
+    arg->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    arg->escape = XI_PLACE_ESCAPE_NONE;
+    arg->addressable = true;
+    arg->origin_var_id = XI_NO_VAR_ID;
+    arg->place = place;
+    plan->args = arg;
+    plan->nargs = 1;
+    plan->verified = true;
+    call->call_plan = plan;
+    if (place_out)
+        *place_out = place;
+    return call;
+}
+
 static XiValue *make_place_receiver_call(XiFunc *f, XiBlock *entry, XrParamMode mode,
                                          XiValue **place_out) {
     f->source_var_count = 1;
@@ -855,6 +889,43 @@ TEST(call_plan_valid_explicit_move_passes) {
     xi_block_set_return(f->entry, call);
 
     ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_valid_direct_value_read_place_passes) {
+    XiFunc *f = make_func("call_plan_direct_value_read");
+    ASSERT(f != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_direct_value_read_call(f, f->entry, &place);
+    ASSERT(call != NULL && place != NULL && xi_local_addr_names_operand_storage(place->aux_int));
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_direct_value_rejects_projection_storage) {
+    XiFunc *f = make_func("call_plan_direct_value_projection");
+    ASSERT(f != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_direct_value_read_call(f, f->entry, &place);
+    ASSERT(call != NULL && place != NULL);
+    place->aux_int |= XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION;
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_direct_value_rejects_non_read_mode) {
+    XiFunc *f = make_func("call_plan_direct_value_non_read");
+    ASSERT(f != NULL);
+    XiValue *call = make_direct_value_read_call(f, f->entry, NULL);
+    ASSERT(call != NULL && call->call_plan != NULL && call->call_plan->args != NULL);
+    call->call_plan->args[0].param_mode = XR_PARAM_REF;
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
     xi_func_free(f);
 }
 
@@ -3330,6 +3401,9 @@ int main(void) {
     run_tail_call_with_function_callee_passes();
     run_call_plan_valid_ref_local_place_passes();
     run_call_plan_valid_explicit_move_passes();
+    run_call_plan_valid_direct_value_read_place_passes();
+    run_call_plan_direct_value_rejects_projection_storage();
+    run_call_plan_direct_value_rejects_non_read_mode();
     run_call_plan_rejects_unverified_plan();
     run_call_plan_rejects_place_mismatch();
     run_call_plan_rejects_declared_escape();

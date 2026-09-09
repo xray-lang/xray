@@ -465,7 +465,7 @@
         "product": "CURRENT_ROUTE_ONLY"
       },
       "state": "OPEN",
-      "open_reason": "Wave 4 covers a bounded existential/witness slice, and the canonical source owner now resolves one same-module value-struct generic constraint method shape to exact sealed direct calls. Parameterized and builtin constraints, generic methods, broader value and ownership modes, direct temporary READ arguments, and product routes remain open."
+      "open_reason": "Wave 4 covers a bounded existential/witness slice, and the canonical source owner now resolves one same-module value-struct generic constraint method shape to exact sealed direct calls. That bounded READ shape accepts either a named stack local or fresh non-escaping direct trivial value-struct storage. Parameterized and builtin constraints, generic methods, broader value and ownership modes, arbitrary returned/select/projected READ places, and product routes remain open."
     },
     {
       "id": "module-graph-import-export-init",
@@ -619,7 +619,7 @@
         "product": "CURRENT_ROUTE_ONLY"
       },
       "state": "OPEN",
-      "open_reason": "The shared source owner now merges pre/post-monomorphization evidence and emits exact, deduplicated primitive and value-struct function specializations through Program, Reference, both VM views, and native C while rejecting an open generic entry. One same-module user-interface constraint method shape also resolves to exact sealed direct calls. Monomorphization depth and whole-graph instance limits now produce exact E0389/E0388 resource-limit diagnostics, and the source request also bounds module count and final Program bytes without permitting limits above the production defaults. Generic heap or owned fields, parameterized and builtin constraints, generic methods, ownership cleanup, direct temporary READ arguments, and valid finite recursive-specialization semantics remain open."
+      "open_reason": "The shared source owner now merges pre/post-monomorphization evidence and emits exact, deduplicated primitive and value-struct function specializations through Program, Reference, both VM views, and native C while rejecting an open generic entry. One same-module user-interface constraint method shape also resolves named locals and fresh non-escaping direct trivial value-struct READ arguments to exact sealed direct calls. Monomorphization depth and whole-graph instance limits now produce exact E0389/E0388 resource-limit diagnostics, and the source request also bounds module count and final Program bytes without permitting limits above the production defaults. Generic heap or owned fields, parameterized and builtin constraints, generic methods, ownership cleanup, arbitrary returned/select/projected READ places, and valid finite recursive-specialization semantics remain open."
     },
     {
       "id": "ownership-read-ref-move-copy-drop",

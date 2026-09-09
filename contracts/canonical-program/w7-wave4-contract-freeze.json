@@ -22,7 +22,7 @@
     "wave_closure": "COMPLETE"
   },
   "phase_erasure": {
-    "generic_constraint_call": "monomorphized to sealed direct or sealed invoke before XrProgram",
+    "generic_constraint_call": "monomorphized to sealed direct or sealed invoke before XrProgram; the bounded trivial value-struct READ shape admits only a named stack local or fresh call-bound direct storage, never projected or escaping storage",
     "source_import_call": "whole-program link resolves the imported declaration to one canonical FunctionId before XrProgram",
     "interface_conformance_check": "verified compile-time fact; runtime operation exists only when an existential value is formed",
     "devirtualized_existential_call": "optimization of a witness call, guarded by translation validation; canonical semantics remain witness dispatch"

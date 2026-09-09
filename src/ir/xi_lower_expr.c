@@ -494,13 +494,6 @@ static bool xi_lower_value_needs_value_clone(XiLower *l, XiValue *v) {
     return v && xi_lower_type_needs_value_clone(l, v->type);
 }
 
-static bool xi_lower_value_is_fresh_value_struct(XiValue *v) {
-    if (!v || xi_var_id_is_valid(v->var_id))
-        return false;
-    return v->op == XI_AGG_NEW || v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST ||
-           (v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE);
-}
-
 static void xi_lower_mark_value_clone_copy(XiValue *v) {
     if (v && v->op == XI_COPY)
         v->aux_int = XI_COPY_KIND_VALUE_CLONE;
@@ -1646,7 +1639,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         bool need_copy = (xi_var_id_is_valid(val->var_id) && val->var_id != (XiVarId) var_id);
         /* Value types (structs and fixed arrays) need independent storage on assignment. */
         bool value_clone_copy =
-            xi_lower_value_needs_value_clone(l, val) && !xi_lower_value_is_fresh_value_struct(val);
+            xi_lower_value_needs_value_clone(l, val) && !xi_value_is_fresh_direct_storage(val);
         if (!need_copy && value_clone_copy)
             need_copy = true;
         if (need_copy) {
@@ -5267,7 +5260,7 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
             return false;
         XrParamMode mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_READ;
         bool read_place = read_places && args->count < read_place_count && read_places[args->count];
-        if (xi_lower_value_needs_value_clone(l, a) && !xi_lower_value_is_fresh_value_struct(a) &&
+        if (xi_lower_value_needs_value_clone(l, a) && !xi_value_is_fresh_direct_storage(a) &&
             mode == XR_PARAM_READ && !read_place) {
             XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
             if (cpy) {
@@ -5546,11 +5539,15 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
                 return NULL;
             place->args[0] = source;
             place->line = (uint32_t) line;
-            arg_plan->origin =
-                var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PROJECTION_TEMP;
+            arg_plan->origin = var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL
+                               : mode == XR_PARAM_READ &&
+                                       xi_value_is_fresh_direct_storage(source)
+                                   ? XI_PLACE_ORIGIN_DIRECT_VALUE
+                                   : XI_PLACE_ORIGIN_PROJECTION_TEMP;
             if (var_id >= 0)
                 arg_plan->origin_var_id = (XiVarId) var_id;
-            else if (!xi_top_binding_valid(top_binding))
+            else if (!xi_top_binding_valid(top_binding) &&
+                     arg_plan->origin == XI_PLACE_ORIGIN_PROJECTION_TEMP)
                 place->aux_int |= XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION;
             if (mode == XR_PARAM_REF) {
                 /* `ref owner[a:b]` borrows the projected element range.  The

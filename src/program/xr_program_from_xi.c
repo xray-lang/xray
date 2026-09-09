@@ -5122,12 +5122,20 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
                 uint16_t parameter = argument >= first ? (uint16_t) (argument - first) : UINT16_MAX;
                 const XiCallArgPlan *argument_plan =
                     plan && parameter < plan->nargs ? &plan->args[parameter] : NULL;
+                bool local_origin = argument_plan &&
+                                    argument_plan->origin == XI_PLACE_ORIGIN_STACK_LOCAL &&
+                                    xi_var_id_is_valid(argument_plan->origin_var_id) &&
+                                    argument_plan->origin_var_id < function->source_var_count;
+                bool direct_value_origin = argument_plan &&
+                                           argument_plan->origin == XI_PLACE_ORIGIN_DIRECT_VALUE &&
+                                           argument_plan->origin_var_id == XI_NO_VAR_ID &&
+                                           xi_value_is_fresh_direct_storage(storage);
                 if (!callee || call->op != XI_CALL || !plan || !plan->verified ||
                     plan->has_receiver || parameter >= callee->nparams || !callee->params ||
                     callee->params[parameter]->param_mode != XR_PARAM_READ || !argument_plan ||
                     argument_plan->param_mode != XR_PARAM_READ ||
                     argument_plan->access != XR_CALL_ARG_PLAIN ||
-                    argument_plan->origin != XI_PLACE_ORIGIN_STACK_LOCAL ||
+                    (!local_origin && !direct_value_origin) ||
                     argument_plan->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
                     argument_plan->escape != XI_PLACE_ESCAPE_NONE || !argument_plan->addressable ||
                     argument_plan->place != value || !callee->params[parameter]->type ||

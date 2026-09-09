@@ -134,11 +134,13 @@ initializer are phase-only and are erased, while heap classes and ordinary share
 outside that rule. Reference and both VM decode policies return 42 for field projection and update.
 One bounded user-interface constraint call is also closed before Program: two concrete trivial
 value-struct implementations produce distinct generic function clones, nominal READ signatures,
-and non-generic method FunctionIds. Exact call-bound READ addresses and receiver loads are erased
-to value operands; no interface table, conformance table, witness call, or runtime constraint
-lookup remains. Reference and both VM decode policies return 42 through the same sealed-call graph.
-Parameterized/builtin constraints, generic methods, generic ownership cleanup, direct temporary
-READ expressions, and valid finite recursive specialization remain outside this bounded slice.
+and non-generic method FunctionIds. Named locals and fresh direct trivial value-struct arguments
+carry distinct verified provenance but share an exact call-bound, non-escaping READ lifetime. Their
+physical addresses and receiver loads are erased to value operands; no interface table, conformance
+table, witness call, or runtime constraint lookup remains. Reference and both VM decode policies
+return 42 through the same four-call sealed graph. Parameterized/builtin constraints, generic
+methods, generic ownership cleanup, arbitrary returned/select/projected READ places, and valid
+finite recursive specialization remain outside this bounded slice.
 The source-build request carries one fail-closed budget for module count, monomorphization depth,
 whole-graph specialization count, and final Program bytes. A caller may tighten those limits but
 cannot raise them above the production defaults. Exhaustion stops before VM construction with the
@@ -169,4 +171,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c eba102c90881a0d4d56575a30ec6f3d0f8244afc908b952bf3aad70d50289117
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 9eea7aa3ed5883e22487d429c1f2fbf3874e5a0985d0a8a19f364109701179bb
