@@ -136,6 +136,7 @@ XR_FUNC XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *type_
 
 typedef struct {
     const char *generic_name;  // Original generic name
+    const AstNode *generic_decl;  // Exact source declaration; NULL for standalone collector use
     XrTypeRef **type_args;     // Concrete type ref arguments
     int type_arg_count;
     const char *mangled_name;  // Mangled name (heap-allocated)
@@ -155,6 +156,7 @@ typedef struct {
     int count;
     int capacity;
     XaAnalyzer *analyzer;  // borrowed; enables call-site HOF effect specialization
+    AstNode *rewrite_root;  // borrowed while rewriting compiler-owned import bindings
     /* Number of declaration type annotations rewritten from a generic instance
      * (Box<int>) to its mangled name (Box$i64). The rewrite walk snapshots this
      * around each class/struct body so a declaration whose member signatures
@@ -172,6 +174,7 @@ typedef struct {
      * still gets the rest of the program's errors, but every later
      * instantiation would report the same exhausted budget. */
     bool budget_reported;
+    bool rewrite_failed;
 } XaMonoCollector;
 
 XR_FUNC void xa_mono_collector_init(XaMonoCollector *c);
@@ -180,7 +183,7 @@ XR_FUNC void xa_mono_collector_free(XaMonoCollector *c);
 // Add a generic instantiation. Returns the mangled name (owned by collector),
 // or NULL when a budget is exhausted -- in which case a diagnostic has been
 // reported and compilation will fail.
-// Concrete type arguments define identity for function, class, and struct instances.
+// Source declaration plus concrete type arguments define compiler instance identity.
 XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
                                           XrTypeRef **type_args, int type_arg_count,
                                           bool is_class_generic, const XrLocation *loc);

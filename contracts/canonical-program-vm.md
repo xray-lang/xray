@@ -132,20 +132,21 @@ layout, field evidence, and the complete Xi allocation-and-initialization sequen
 never becomes a runtime value. Exact value-struct declaration tokens published by a module
 initializer are phase-only and are erased, while heap classes and ordinary shared state remain
 outside that rule. Reference and both VM decode policies return 42 for field projection and update.
-One bounded dependency-owned user-interface constraint family is also closed before Program. A
-namespace-qualified call with omitted type arguments publishes its complete inferred tuple to the
-source declaration owner; an exact non-implementor is rejected with the generic-constraint error
-before Program construction. Two concrete trivial value-struct implementations produce distinct
-generic function clones, nominal READ signatures, and non-generic method FunctionIds. Each concrete
-type is called once with explicit arguments and once through inference, and both forms converge on
-the same specialization. Named locals and fresh direct trivial value-struct arguments carry distinct
-verified provenance but share an exact call-bound, non-escaping READ lifetime. Their physical
-addresses and receiver loads are erased to value operands; no interface table, conformance table,
-witness call, or runtime constraint lookup remains. Reference and both VM decode policies return 42
-through the same four-call sealed graph. Selective-import specialization identity, caller-local type
-arguments, parameterized/builtin constraints, generic methods, generic ownership cleanup, arbitrary
-returned/select/projected READ places, and valid finite recursive specialization remain outside this
-bounded slice.
+One bounded dependency-owned user-interface constraint family is also closed before Program.
+Namespace-qualified inference publishes its complete tuple to the source declaration owner.
+Selective-import aliases bind two explicit concrete calls through independent compiler-private
+imports to that same dependency even when the entry declares a same-named generic; the source
+declaration and ordered concrete arguments jointly identify each specialization. An exact
+non-implementor through the selective alias is rejected with the generic-constraint error before
+Program construction. Two concrete trivial value-struct implementations produce distinct generic
+function clones, nominal READ signatures, and non-generic method FunctionIds. Named locals and fresh
+direct trivial value-struct arguments carry distinct verified provenance but share an exact
+call-bound, non-escaping READ lifetime. Their physical addresses and receiver loads are erased to
+value operands; no interface table, conformance table, witness call, or runtime constraint lookup
+remains. Reference and both VM decode policies return 42. Caller-local type arguments,
+parameterized/builtin constraints, generic methods, generic ownership cleanup, arbitrary
+returned/select/projected READ places, re-exported specialization facades, and valid finite recursive
+specialization remain outside this bounded slice.
 The source-build request carries one fail-closed budget for module count, monomorphization depth,
 whole-graph specialization count, and final Program bytes. A caller may tighten those limits but
 cannot raise them above the production defaults. Exhaustion stops before VM construction with the
@@ -176,4 +177,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 56043be006d0dbdae51cf6ea53f49237e8ab02c17780f90a57254ed2e4ce343c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 2bd090c7f2f13a2a382fad2fa6706030adf9813a96dfc06eadbda41241d75ff5

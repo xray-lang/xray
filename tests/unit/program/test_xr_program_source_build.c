@@ -1515,9 +1515,9 @@ TEST(source_owner_generic_specializations_are_exact_program_functions) {
 }
 
 TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
-    // The dependency owns the constraint, both implementors and the generic body. The entry owns
-    // only namespace-qualified calls. One inferred and one explicit call per concrete type must
-    // converge on the same two specializations in the defining module.
+    // The dependency owns the constraint, both implementors and the generic body. Selective-import
+    // aliases must retain that declaration identity even when the entry declares a same-named
+    // generic. Each concrete type gets an independently imported specialization.
     static const char library_source[] =
         "export interface ReadCounter { current() -> i64 }\n"
         "export struct LeftCounter implements ReadCounter {\n"
@@ -1532,15 +1532,12 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "  return counter.current()\n"
         "}\n";
     static const char entry_source[] =
-        "import { LeftCounter, RightCounter } from \"./library\"\n"
-        "import \"./library\" as counters\n"
+        "import { LeftCounter, RightCounter, genericRead as readCounter } from \"./library\"\n"
+        "fn genericRead<T>(_counter: T) -> i64 { return 999 }\n"
         "fn answer() -> i64 {\n"
-        "  var left = LeftCounter{value: 39}\n"
+        "  var left = LeftCounter{value: 41}\n"
         "  var right = RightCounter{value: 1}\n"
-        "  return counters.genericRead(left) +\n"
-        "         counters.genericRead<RightCounter>(right) +\n"
-        "         counters.genericRead<LeftCounter>(LeftCounter{value: 1}) +\n"
-        "         counters.genericRead(RightCounter{value: 1})\n"
+        "  return readCounter<LeftCounter>(left) + readCounter<RightCounter>(right)\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
@@ -1563,7 +1560,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_EQ_UINT(program->function_count, 5u);
     ASSERT_EQ_UINT(program->interface_count, 0u);
     ASSERT_EQ_UINT(program->conformance_count, 0u);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 6u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 4u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT), 0u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_EXISTENTIAL_PACK), 0u);
 
@@ -1607,7 +1604,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
             }
         }
     }
-    ASSERT_EQ_UINT(entry_call_count, 4u);
+    ASSERT_EQ_UINT(entry_call_count, 2u);
     ASSERT_EQ_UINT(specialization_count, 2u);
     ASSERT_TRUE(specializations[0] != specializations[1]);
 
@@ -1734,15 +1731,39 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     xr_target_profile_free(profile);
     source_build_fixture_free(&fixture);
 
+    static const char namespace_entry_source[] =
+        "import { LeftCounter, RightCounter } from \"./library\"\n"
+        "import \"./library\" as counters\n"
+        "fn answer() -> i64 {\n"
+        "  var left = LeftCounter{value: 41}\n"
+        "  var right = RightCounter{value: 1}\n"
+        "  return counters.genericRead(left) + counters.genericRead(right)\n"
+        "}\n";
+    SourceBuildFixture namespace_fixture;
+    ASSERT_TRUE(source_build_fixture_init(&namespace_fixture, namespace_entry_source,
+                                          library_source));
+    XrProgramSourceProduct namespace_product = {0};
+    XrProgramSourceDiagnostic namespace_diagnostic;
+    assert_source_build_ok(&namespace_fixture.input, &namespace_product, &namespace_diagnostic);
+    uint32_t namespace_entry = xr_validated_program_entry_function(namespace_product.program);
+    XrReferenceOutcome namespace_reference = xr_reference_evaluate(
+        namespace_product.program, namespace_entry, NULL, 0u, &reference_profile, NULL);
+    ASSERT_EQ_INT(namespace_reference.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(namespace_reference.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(namespace_reference.value.as.i64, 42);
+    xr_program_source_product_free(&namespace_product);
+    source_build_fixture_free(&namespace_fixture);
+
     static const char negative_library_source[] =
         "export interface ReadCounter { current() -> i64 }\n"
         "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
         "  return counter.current()\n"
         "}\n";
     static const char negative_entry_source[] =
-        "import \"./library\" as counters\n"
+        "import { genericRead as readCounter } from \"./library\"\n"
         "struct NotCounter { value: i64 }\n"
-        "fn answer() -> i64 { return counters.genericRead(NotCounter{value: 42}) }\n";
+        "fn genericRead<T>(_value: T) -> i64 { return 999 }\n"
+        "fn answer() -> i64 { return readCounter(NotCounter{value: 42}) }\n";
     SourceBuildFixture negative_fixture;
     ASSERT_TRUE(source_build_fixture_init(&negative_fixture, negative_entry_source,
                                           negative_library_source));
@@ -1753,7 +1774,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_EQ_INT(rejection.stage, XR_PROGRAM_SOURCE_STAGE_ANALYSIS);
     ASSERT_EQ_UINT(rejection.module_index, 1u);
     ASSERT_EQ_UINT(rejection.underlying_status, XR_ERR_ANALYZE_GENERIC_CONSTRAINT);
-    ASSERT_EQ_UINT(rejection.source_line, 3u);
+    ASSERT_EQ_UINT(rejection.source_line, 4u);
     ASSERT_NOT_NULL(strstr(rejection.source_path, "main.xr"));
     ASSERT_NOT_NULL(strstr(rejection.message, "does not satisfy constraint"));
     ASSERT_NULL(rejected.artifact.bytes);

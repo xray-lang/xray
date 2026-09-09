@@ -22,6 +22,8 @@
 
 #include "xanalyzer_mono.h"
 #include "xanalyzer.h"
+#include "xa_selection.h"
+#include "../../base/xarena.h"
 #include "../../base/xlog.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xtype.h"
@@ -1162,6 +1164,7 @@ void xa_mono_collector_init(XaMonoCollector *c) {
     c->count = 0;
     c->capacity = 0;
     c->analyzer = NULL;
+    c->rewrite_root = NULL;
     c->tref_rewrite_count = 0;
     c->expanding = -1;
     c->max_depth = XR_MONO_MAX_DEPTH;
@@ -1169,6 +1172,7 @@ void xa_mono_collector_init(XaMonoCollector *c) {
     c->instance_offset = 0u;
     c->max_observed_depth = 0u;
     c->budget_reported = false;
+    c->rewrite_failed = false;
 }
 
 void xa_mono_collector_free(XaMonoCollector *c) {
@@ -1182,8 +1186,10 @@ void xa_mono_collector_free(XaMonoCollector *c) {
     c->count = 0;
     c->capacity = 0;
     c->analyzer = NULL;
+    c->rewrite_root = NULL;
     c->expanding = -1;
     c->budget_reported = false;
+    c->rewrite_failed = false;
 }
 
 static char *mono_effect_mangle(const char *generic_name, XrTypeRef **type_args, int type_arg_count,
@@ -1257,8 +1263,8 @@ static void mono_report(XaMonoCollector *c, int code, const char *message, const
 }
 
 static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *generic_name,
-                                                XrTypeRef **type_args, int type_arg_count,
-                                                bool is_class_generic,
+                                                const AstNode *generic_decl, XrTypeRef **type_args,
+                                                int type_arg_count, bool is_class_generic,
                                                 XaMonoThrowEffect throw_effect,
                                                 const XrLocation *loc) {
     if (!c || !generic_name)
@@ -1272,7 +1278,8 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
     // Concrete type arguments define instance identity. ABI-equivalent instances
     // may share code only through explicit verified plans, not collector dedup.
     for (int i = 0; i < c->count; i++) {
-        if (strcmp(c->instances[i].generic_name, generic_name) == 0 &&
+        if ((!generic_decl || c->instances[i].generic_decl == generic_decl) &&
+            strcmp(c->instances[i].generic_name, generic_name) == 0 &&
             strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
             xr_free(candidate_mangled);
             return c->instances[i].mangled_name;  // Already registered
@@ -1322,6 +1329,7 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
 
     XaMonoInstance *inst = &c->instances[c->count++];
     inst->generic_name = xr_strdup(generic_name);
+    inst->generic_decl = generic_decl;
     inst->type_args = type_args;
     inst->type_arg_count = type_arg_count;
     inst->mangled_name = candidate_mangled;
@@ -1335,21 +1343,22 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
 const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
                                   XrTypeRef **type_args, int type_arg_count, bool is_class_generic,
                                   const XrLocation *loc) {
-    return xa_mono_collector_add_effect(c, generic_name, type_args, type_arg_count,
+    return xa_mono_collector_add_effect(c, generic_name, NULL, type_args, type_arg_count,
                                         is_class_generic, XA_MONO_EFFECT_NONE, loc);
 }
 
 // Lookup the exact concrete instance.
 static const char *xa_mono_collector_lookup(XaMonoCollector *c, const char *generic_name,
-                                            XrTypeRef **type_args, int type_arg_count,
-                                            XaMonoThrowEffect throw_effect) {
+                                            const AstNode *generic_decl, XrTypeRef **type_args,
+                                            int type_arg_count, XaMonoThrowEffect throw_effect) {
     if (!c || !generic_name)
         return NULL;
     char *candidate_mangled =
         mono_effect_mangle(generic_name, type_args, type_arg_count, throw_effect);
     const char *result = NULL;
     for (int i = 0; i < c->count; i++) {
-        if (strcmp(c->instances[i].generic_name, generic_name) != 0)
+        if ((generic_decl && c->instances[i].generic_decl != generic_decl) ||
+            strcmp(c->instances[i].generic_name, generic_name) != 0)
             continue;
         if (candidate_mangled && strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
             result = c->instances[i].mangled_name;
@@ -1371,7 +1380,7 @@ static void mono_rewrite_type_ref(XrTypeRef *tref, XaMonoCollector *collector) {
     for (int i = 0; i < tref->nchildren; i++)
         mono_rewrite_type_ref(tref->children[i], collector);
     if (tref->kind == XR_TREF_GENERIC && tref->name && tref->nchildren > 0) {
-        const char *mangled = xa_mono_collector_lookup(collector, tref->name, tref->children,
+        const char *mangled = xa_mono_collector_lookup(collector, tref->name, NULL, tref->children,
                                                        tref->nchildren, XA_MONO_EFFECT_NONE);
         if (mangled) {
             // The collector's mangled_name is freed when the mono pass ends, but
@@ -1453,6 +1462,52 @@ static XaGenericDecl *registry_find(XaGenericRegistry *r, const char *name) {
     return NULL;
 }
 
+static XaGenericDecl *registry_find_unique(XaGenericRegistry *r, const char *name) {
+    XaGenericDecl *found = NULL;
+    if (!r || !name)
+        return NULL;
+    for (int i = 0; i < r->count; i++) {
+        if (!r->decls[i].name || strcmp(r->decls[i].name, name) != 0)
+            continue;
+        if (found && found->node != r->decls[i].node)
+            return NULL;
+        found = &r->decls[i];
+    }
+    return found;
+}
+
+static XaGenericDecl *registry_find_decl(XaGenericRegistry *r, const AstNode *node) {
+    if (!r || !node)
+        return NULL;
+    for (int i = 0; i < r->count; i++) {
+        if (r->decls[i].node == node)
+            return &r->decls[i];
+    }
+    return NULL;
+}
+
+static XaGenericDecl *registry_find_call(XaGenericRegistry *registry, const CallExprNode *call,
+                                         XaAnalyzer *analyzer, const char *fallback_name) {
+    if (!registry || !call || !call->callee || !analyzer)
+        return NULL;
+
+    XaSymbol *symbol = NULL;
+    if (call->callee->type == AST_VARIABLE && call->callee->as.variable.symbol_id != 0) {
+        symbol = xa_analyzer_symbol_by_id(analyzer, call->callee->as.variable.symbol_id);
+    } else if (call->callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *selection = xa_analyzer_get_selection(analyzer, call->callee);
+        symbol = selection ? selection->target_symbol : NULL;
+    }
+
+    AstNode *declaration = symbol ? symbol->links.function_decl_node : NULL;
+    XaGenericDecl *exact = registry_find_decl(registry, declaration);
+    if (exact)
+        return exact;
+
+    /* Only unanalyzed cloned bodies use unambiguous lexical lookup. */
+    return declaration ? NULL : registry_find_unique(registry, fallback_name);
+}
+
 // External modules contribute generic value-struct templates to the using
 // module, and generic class/function names for namespace-call rewriting. Class
 // and function bodies are injected only into their defining module by scanning
@@ -1467,7 +1522,7 @@ static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *reg
         if (!stmt)
             continue;
         if (stmt->type == AST_FUNCTION_DECL && stmt->as.function_decl.type_param_count > 0) {
-            if (!registry_find(registry, stmt->as.function_decl.name)) {
+            if (!registry_find_decl(registry, stmt)) {
                 registry_add_external(registry, stmt->as.function_decl.name, stmt,
                                       stmt->as.function_decl.type_params,
                                       stmt->as.function_decl.type_param_count, false, true);
@@ -1475,7 +1530,7 @@ static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *reg
             continue;
         }
         if (stmt->type == AST_CLASS_DECL && stmt->as.class_decl.type_param_count > 0) {
-            if (!registry_find(registry, stmt->as.class_decl.name)) {
+            if (!registry_find_decl(registry, stmt)) {
                 registry_add_external(registry, stmt->as.class_decl.name, stmt,
                                       stmt->as.class_decl.type_params,
                                       stmt->as.class_decl.type_param_count, false, true);
@@ -1483,7 +1538,7 @@ static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *reg
             continue;
         }
         if (stmt->type == AST_STRUCT_DECL && stmt->as.struct_decl.type_param_count > 0) {
-            if (!registry_find(registry, stmt->as.struct_decl.name)) {
+            if (!registry_find_decl(registry, stmt)) {
                 registry_add_external(registry, stmt->as.struct_decl.name, stmt,
                                       stmt->as.struct_decl.type_params,
                                       stmt->as.struct_decl.type_param_count, true, false);
@@ -1664,25 +1719,27 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         XrLocation loc = mono_node_loc(node);
         if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_VARIABLE) {
             const char *fn_name = call->callee->as.variable.name;
-            XaGenericDecl *decl = registry_find(registry, fn_name);
+            XaGenericDecl *decl =
+                registry_find_call(registry, call, collector ? collector->analyzer : NULL, fn_name);
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == call->type_arg_count) {
                 bool is_cls =
                     (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
                 XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                xa_mono_collector_add_effect(collector, fn_name, call->type_args,
+                xa_mono_collector_add_effect(collector, decl->name, decl->node, call->type_args,
                                              call->type_arg_count, is_cls, effect, &loc);
             }
         }
         const char *member_name = NULL;
         if (mono_call_is_import_member_generic(call, import_aliases, &member_name)) {
-            XaGenericDecl *decl = registry_find(registry, member_name);
+            XaGenericDecl *decl = registry_find_call(
+                registry, call, collector ? collector->analyzer : NULL, member_name);
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == call->type_arg_count) {
                 bool is_cls =
                     (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
                 XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                xa_mono_collector_add_effect(collector, member_name, call->type_args,
+                xa_mono_collector_add_effect(collector, decl->name, decl->node, call->type_args,
                                              call->type_arg_count, is_cls, effect, &loc);
             }
         }
@@ -1705,8 +1762,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == ne->type_arg_count) {
                 XrLocation loc = mono_node_loc(node);
-                xa_mono_collector_add(collector, ne->class_name, ne->type_args, ne->type_arg_count,
-                                      true, &loc);
+                xa_mono_collector_add_effect(collector, decl->name, decl->node, ne->type_args,
+                                             ne->type_arg_count, true, XA_MONO_EFFECT_NONE, &loc);
             }
         }
         for (int i = 0; i < ne->arg_count; i++)
@@ -1723,8 +1780,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == sl->type_arg_count) {
                 XrLocation loc = mono_node_loc(node);
-                xa_mono_collector_add(collector, sl->struct_name, sl->type_args, sl->type_arg_count,
-                                      true, &loc);
+                xa_mono_collector_add_effect(collector, decl->name, decl->node, sl->type_args,
+                                             sl->type_arg_count, true, XA_MONO_EFFECT_NONE, &loc);
             }
         }
         for (int i = 0; i < sl->field_count; i++)
@@ -1995,6 +2052,74 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     }
 }
 
+static const char *mono_append_specialized_import(AstNode *root, uint32_t imported_symbol_id,
+                                                  const char *export_name) {
+    if (!root || root->type != AST_PROGRAM || imported_symbol_id == 0 || !export_name)
+        return NULL;
+    ProgramNode *program = &root->as.program;
+    XrArena *arena = program->arena;
+    if (!arena)
+        return NULL;
+
+    for (int stmt_index = 0; stmt_index < program->count; stmt_index++) {
+        AstNode *stmt = program->statements[stmt_index];
+        if (!stmt || stmt->type != AST_IMPORT_STMT)
+            continue;
+        ImportStmtNode *import = &stmt->as.import_stmt;
+        int original_index = -1;
+        for (int member_index = 0; member_index < import->member_count; member_index++) {
+            ImportMember *member = &import->members[member_index];
+            if (member->symbol_id == imported_symbol_id)
+                original_index = member_index;
+        }
+        if (original_index < 0)
+            continue;
+
+        size_t alias_size = strlen(export_name) + 48u;
+        char *alias = (char *) xr_arena_alloc(arena, alias_size);
+        if (!alias)
+            return NULL;
+        (void) snprintf(alias, alias_size, "__xr_mono_import_%" PRIu32 "_%s", imported_symbol_id,
+                        export_name);
+
+        for (int member_index = 0; member_index < import->member_count; member_index++) {
+            ImportMember *member = &import->members[member_index];
+            if (member->name && member->alias && strcmp(member->name, export_name) == 0 &&
+                strcmp(member->alias, alias) == 0)
+                return member->alias;
+        }
+
+        int grown_count = import->member_count + 1;
+        ImportMember *grown =
+            (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), grown_count);
+        if (!grown)
+            return NULL;
+        memcpy(grown, import->members, (size_t) import->member_count * sizeof(ImportMember));
+        ImportMember *specialized = &grown[import->member_count];
+        specialized->name = xr_arena_strdup(arena, export_name);
+        specialized->alias = alias;
+        specialized->symbol_id = 0;
+        import->members = grown;
+        import->member_count = grown_count;
+        return specialized->alias;
+    }
+    return NULL;
+}
+
+static void mono_report_rewrite_failure(XaMonoCollector *collector, const AstNode *node,
+                                        const char *name) {
+    if (!collector || collector->rewrite_failed)
+        return;
+    collector->rewrite_failed = true;
+    XrLocation loc = mono_node_loc(node);
+    char message[256];
+    snprintf(message, sizeof(message),
+             "compiler could not materialize the exact imported specialization for '%s'",
+             name ? name : "<generic>");
+    xa_analyzer_add_diagnostic(collector->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL, message,
+                               &loc);
+}
+
 // Phase 3: Rewrite call sites — replace callee name with mangled name
 static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                                XaMonoCollector *collector,
@@ -2006,17 +2131,31 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         CallExprNode *call = &node->as.call_expr;
         if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_VARIABLE) {
             const char *fn_name = call->callee->as.variable.name;
-            XaGenericDecl *decl = registry_find(registry, fn_name);
+            XaGenericDecl *decl = registry_find_call(registry, call, collector->analyzer, fn_name);
             if (decl) {
                 XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                const char *mangled = xa_mono_collector_lookup(collector, fn_name, call->type_args,
-                                                               call->type_arg_count, effect);
+                const char *mangled =
+                    xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
+                                             call->type_arg_count, effect);
                 if (mangled) {
-                    // Replace callee variable name.
-                    // Note: old name is arena-allocated, do not free.
-                    call->callee->as.variable.name = xr_strdup(mangled);
-                    if (decl->inject_clone)
+                    uint32_t original_symbol_id = call->callee->as.variable.symbol_id;
+                    XaSymbol *symbol =
+                        xa_analyzer_symbol_by_id(collector->analyzer, original_symbol_id);
+                    if (decl->is_external && symbol && symbol->is_imported) {
+                        const char *alias = mono_append_specialized_import(
+                            collector->rewrite_root, original_symbol_id, mangled);
+                        if (!alias) {
+                            mono_report_rewrite_failure(collector, node, decl->name);
+                            return;
+                        }
+                        call->callee->as.variable.name = (char *) alias;
                         call->callee->as.variable.symbol_id = 0;
+                    } else {
+                        // Old names are compile-lifetime allocations.
+                        call->callee->as.variable.name = xr_strdup(mangled);
+                        if (decl->inject_clone)
+                            call->callee->as.variable.symbol_id = 0;
+                    }
                     // Clear type args (no longer generic call)
                     call->type_args = NULL;
                     call->type_arg_count = 0;
@@ -2025,11 +2164,13 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         }
         const char *member_name = NULL;
         if (mono_call_is_import_member_generic(call, import_aliases, &member_name)) {
-            XaGenericDecl *decl = registry_find(registry, member_name);
+            XaGenericDecl *decl =
+                registry_find_call(registry, call, collector->analyzer, member_name);
             if (decl && decl->rewrite_member_access) {
                 XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                const char *mangled = xa_mono_collector_lookup(
-                    collector, member_name, call->type_args, call->type_arg_count, effect);
+                const char *mangled =
+                    xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
+                                             call->type_arg_count, effect);
                 if (mangled) {
                     call->callee->as.member_access.name = xr_strdup(mangled);
                     call->type_args = NULL;
@@ -2054,7 +2195,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             XaGenericDecl *decl = registry_find(registry, ne->class_name);
             if (decl) {
                 const char *mangled =
-                    xa_mono_collector_lookup(collector, ne->class_name, ne->type_args,
+                    xa_mono_collector_lookup(collector, decl->name, decl->node, ne->type_args,
                                              ne->type_arg_count, XA_MONO_EFFECT_NONE);
                 if (mangled) {
                     // Old class_name is arena-allocated, do not free.
@@ -2075,7 +2216,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             XaGenericDecl *decl = registry_find(registry, sl->struct_name);
             if (decl) {
                 const char *mangled =
-                    xa_mono_collector_lookup(collector, sl->struct_name, sl->type_args,
+                    xa_mono_collector_lookup(collector, decl->name, decl->node, sl->type_args,
                                              sl->type_arg_count, XA_MONO_EFFECT_NONE);
                 if (mangled) {
                     // Old struct_name is arena-allocated, do not free.
@@ -2378,7 +2519,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
     for (int i = 0; i < collector->count; i++) {
         XaMonoInstance *inst = &collector->instances[i];
-        XaGenericDecl *decl = registry_find(registry, inst->generic_name);
+        XaGenericDecl *decl = inst->generic_decl ? registry_find_decl(registry, inst->generic_decl)
+                                                 : registry_find(registry, inst->generic_name);
         if (!decl || !decl->node)
             continue;
         if (!decl->inject_clone)
@@ -2592,6 +2734,7 @@ static bool xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
     inject_mono_decls(root, &registry, &collector, &root_imports, isolate);
 
     // Phase 4: Rewrite call sites to use mangled names
+    collector.rewrite_root = root;
     rewrite_call_sites(root, &registry, &collector, &root_imports);
 
     // Debug: print mono stats if XRAY_MONO_DEBUG is set
@@ -2604,7 +2747,7 @@ static bool xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
 
 cleanup:
     mono_import_aliases_free(&root_imports);
-    ok = !collector.budget_reported;
+    ok = !collector.budget_reported && !collector.rewrite_failed;
     usage->instance_count += (uint32_t) collector.count;
     if (collector.max_observed_depth > usage->max_depth)
         usage->max_depth = collector.max_observed_depth;

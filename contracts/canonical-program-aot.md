@@ -132,19 +132,20 @@ to distinct nominal Program TypeIds, collapses the exact Xi allocation-and-initi
 to one logical aggregate construction, and emits byte-identical C whose strict native result is 42.
 The open aggregate skeleton is absent and there is no erased aggregate representation or AOT-only
 specialization policy. A bounded constraint fixture additionally proves two concrete value-struct
-implementors owned by a dependency module. A namespace-qualified call with omitted type arguments
-publishes its complete inferred tuple to the source declaration owner, while an exact
-non-implementor is rejected before Program construction. Each generic function clone carries its
-own nominal READ signature and calls one distinct non-generic method FunctionId. Each concrete type
-is called once with explicit arguments and once through inference, and both forms converge on the
-same specialization. Named locals and fresh direct trivial value-struct arguments carry distinct
-verified provenance but share an exact call-bound, non-escaping READ lifetime. Their physical Xi
-addresses and receiver loads are erased only after the frozen plans and exact struct identities
-agree; Program contains neither an interface witness table nor runtime constraint dispatch.
-Reference, both VM views, and strict native C return 42 from the same four sealed calls.
-Selective-import specialization identity, caller-local type arguments, parameterized/builtin
-constraints, generic methods, generic ownership cleanup, arbitrary returned/select/projected READ
-places, and valid finite recursive specialization remain unqualified.
+implementors owned by a dependency module. Namespace-qualified inference publishes its complete
+tuple to the source declaration owner. Selective-import aliases bind two explicit concrete calls
+through independent compiler-private imports to that same dependency even when the entry declares a
+same-named generic; the source declaration and ordered concrete arguments jointly identify each
+specialization. An exact non-implementor through the selective alias is rejected before Program
+construction. Each generic function clone carries its own nominal READ signature and calls one
+distinct non-generic method FunctionId. Named locals and fresh direct trivial value-struct arguments
+carry distinct verified provenance but share an exact call-bound, non-escaping READ lifetime. Their
+physical Xi addresses and receiver loads are erased only after the frozen plans and exact struct
+identities agree; Program contains neither an interface witness table nor runtime constraint
+dispatch. Reference, both VM views, and strict native C return 42. Caller-local type arguments,
+parameterized/builtin constraints, generic methods, generic ownership cleanup, arbitrary
+returned/select/projected READ places, re-exported specialization facades, and valid finite recursive
+specialization remain unqualified.
 Before AOT receives a validated Program,
 the shared source-build request enforces one fail-closed module/depth/whole-graph-instance/final-byte
 budget. Requests may tighten but not expand the production defaults; E0388/E0389 exhaustion remains
@@ -204,4 +205,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 56043be006d0dbdae51cf6ea53f49237e8ab02c17780f90a57254ed2e4ce343c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 2bd090c7f2f13a2a382fad2fa6706030adf9813a96dfc06eadbda41241d75ff5

@@ -5070,7 +5070,7 @@ var result = identity<f64>(0)            // the type argument supplies a unique 
 
 ### 9.4 Specialization and Monomorphization
 
-**Implementation strategy**: build-time monomorphization. **The concrete type-argument tuple is the instance identity**, and the same rule applies to generic functions and to generic classes / structs alike.
+**Implementation strategy**: build-time monomorphization. **The source generic declaration identity and ordered concrete type-argument tuple jointly form the instance identity**, and the same rule applies to generic functions and to generic classes / structs alike; same-named generics in different modules remain distinct even for the same arguments. Every cross-module selective-import specialization binds to the exact instance exported by the defining module, never by falling back to the local alias or bare function name.
 
 - **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. The frontend never merges by representation, because a duck-typed generic body resolves `x.foo()` against the concrete type argument: until that resolution is done, two ABI-equivalent instances are not interchangeable.
 - **Code sharing is an AOT decision, not a frontend one**: size-driven merging happens after resolution, in the backend plan (`generic-body-plan` / `generic-code-size-plan` evidence rows decide `share_canonical_body` against a size threshold), and it carries evidence. The frontend keeps identity exact; the backend owns size.

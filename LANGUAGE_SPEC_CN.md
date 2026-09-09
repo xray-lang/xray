@@ -5043,7 +5043,7 @@ var result = identity<f64>(0)            // 泛型实参提供唯一上下文，
 
 ### 9.4 特化与 monomorphization
 
-**实现策略**：构建期 monomorphization（单态化）。**具体类型实参元组即实例身份**，函数泛型与 class / struct 泛型适用同一条规则。
+**实现策略**：构建期 monomorphization（单态化）。**泛型源声明身份与有序具体类型实参元组共同构成实例身份**，函数泛型与 class / struct 泛型适用同一条规则；两个模块中同名、同实参的泛型仍是不同实例。跨模块选择性导入的每个特化绑定到定义模块导出的精确实例，不按本地别名或裸函数名回退。
 
 - **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。前端不按表示合并，因为 duck-typed 的泛型体要针对具体类型实参解析 `x.foo()`：在解析完成之前，两个 ABI 等价的实例并不可互换。
 - **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
