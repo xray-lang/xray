@@ -1353,11 +1353,15 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
     static const char source[] = "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
                                  "  return body(value)\n"
                                  "}\n"
-                                 "fn suspended(value: i64) -> i64 {\n"
-                                 "  Coro.yield()\n"
-                                 "  return value * 2\n"
-                                 "}\n"
-                                 "fn answer() -> i64 { return apply(21, suspended) }\n";
+                                 "fn answer() -> i64 {\n"
+                                 "  const factor = 2\n"
+                                 "  const body = fn(value: i64) -> i64 {\n"
+                                 "    Coro.yield()\n"
+                                 "    return value * factor\n"
+                                 "  }\n"
+                                 "  const first = apply(20, body)\n"
+                                 "  return first + body(1)\n"
+                                 "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile =
@@ -1374,11 +1378,174 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
     const XrValidatedProgram *program = product.program;
     uint32_t entry = xr_validated_program_entry_function(program);
     ASSERT_LT(entry, program->function_count);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT), 1u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT), 2u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED), 1u);
     const XrValidatedFunction *entry_function = &program->functions[entry];
-    ASSERT_EQ_UINT(entry_function->coroutine_state_count, 2u);
-    ASSERT_EQ_UINT(entry_function->coroutine_safepoint_count, 1u);
+    ASSERT_EQ_UINT(entry_function->coroutine_state_count, 3u);
+    ASSERT_EQ_UINT(entry_function->coroutine_safepoint_count, 2u);
+
+    const XrValidatedInstruction *pack = NULL;
+    const XrValidatedInstruction *sealed_call = NULL;
+    const XrValidatedInstruction *entry_indirect_call = NULL;
+    uint32_t entry_indirect_block = UINT32_MAX;
+    for (uint32_t block = 0u; block < entry_function->block_count; ++block) {
+        const XrValidatedBlock *row = &entry_function->blocks[block];
+        for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
+            const XrValidatedInstruction *candidate = &row->instructions[instruction];
+            if (candidate->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK) {
+                ASSERT_NULL(pack);
+                pack = candidate;
+            } else if (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+                ASSERT_NULL(sealed_call);
+                sealed_call = candidate;
+            } else if (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
+                ASSERT_NULL(entry_indirect_call);
+                entry_indirect_call = candidate;
+                entry_indirect_block = block;
+            }
+        }
+    }
+    ASSERT_NOT_NULL(pack);
+    ASSERT_NOT_NULL(sealed_call);
+    ASSERT_NOT_NULL(entry_indirect_call);
+    ASSERT_EQ_UINT(pack->operand_count, 1u);
+    ASSERT_EQ_INT(pack->result_ownership, XR_CORE_IR_OWNER);
+    ASSERT_EQ_INT(pack->immediate_kind, XR_CORE_IR_IMMEDIATE_FUNCTION);
+    uint32_t callable_owner = pack->result_id;
+    ASSERT_LT(callable_owner, entry_function->value_count);
+    ASSERT_EQ_INT(entry_function->value_ownerships[callable_owner], XR_CORE_IR_OWNER);
+    uint32_t sealed_safepoint_id = sealed_call->immediate.coroutine_call.safepoint_id;
+    uint32_t indirect_safepoint_id = entry_indirect_call->immediate.u32;
+    ASSERT_LT(sealed_safepoint_id, entry_function->coroutine_safepoint_count);
+    ASSERT_LT(indirect_safepoint_id, entry_function->coroutine_safepoint_count);
+    ASSERT_TRUE(sealed_safepoint_id != indirect_safepoint_id);
+    const XrValidatedCoroutineSafepoint *sealed_point =
+        &entry_function->coroutine_safepoints[sealed_safepoint_id];
+    const XrValidatedCoroutineSafepoint *indirect_point =
+        &entry_function->coroutine_safepoints[indirect_safepoint_id];
+    ASSERT_EQ_UINT(sealed_point->live_value_count, 1u);
+    uint32_t callable_frame_owner = sealed_point->live_value_ids[0];
+    ASSERT_LT(callable_frame_owner, entry_function->value_count);
+    ASSERT_EQ_INT(entry_function->value_ownerships[callable_frame_owner], XR_CORE_IR_OWNER);
+    ASSERT_EQ_UINT(entry_function->value_types[callable_frame_owner],
+                   entry_function->value_types[callable_owner]);
+
+    uint32_t apply_id = sealed_call->immediate.coroutine_call.function_id;
+    ASSERT_LT(apply_id, program->function_count);
+    const XrValidatedFunction *apply = &program->functions[apply_id];
+    ASSERT_EQ_UINT(apply->parameter_count, 2u);
+    ASSERT_EQ_INT(apply->parameter_modes[0], XR_PARAM_READ);
+    ASSERT_EQ_INT(apply->parameter_modes[1], XR_PARAM_READ);
+    ASSERT_EQ_UINT(sealed_call->operand_count, 4u);
+    ASSERT_EQ_UINT(sealed_call->operands[1], callable_frame_owner);
+    ASSERT_EQ_UINT(sealed_call->operands[2], callable_frame_owner);
+    ASSERT_EQ_UINT(sealed_call->operands[3], callable_frame_owner);
+    const XrValidatedBlock *sealed_normal = &entry_function->blocks[sealed_call->successors[0]];
+    const XrValidatedBlock *sealed_cancel = &entry_function->blocks[sealed_call->successors[1]];
+    ASSERT_EQ_UINT(sealed_normal->argument_count, 2u);
+    ASSERT_EQ_INT(sealed_normal->argument_ownerships[1], XR_CORE_IR_OWNER);
+    ASSERT_EQ_UINT(sealed_cancel->argument_count, 1u);
+    ASSERT_EQ_INT(sealed_cancel->argument_ownerships[0], XR_CORE_IR_OWNER);
+    uint32_t sealed_normal_owner = sealed_normal->argument_ids[1];
+    uint32_t normal_owner_drops = 0u;
+    const XrValidatedInstruction *owner_forward_branch = NULL;
+    for (uint32_t instruction = 0u; instruction < sealed_normal->instruction_count; ++instruction) {
+        const XrValidatedInstruction *candidate = &sealed_normal->instructions[instruction];
+        normal_owner_drops += candidate->operation_id == XR_CORE_OP_CORE_OWNER_DROP &&
+                                      candidate->operand_count == 1u &&
+                                      candidate->operands[0] == sealed_normal_owner
+                                  ? 1u
+                                  : 0u;
+        if (candidate->operation_id == XR_CORE_OP_CORE_BRANCH)
+            owner_forward_branch = candidate;
+    }
+    ASSERT_EQ_UINT(normal_owner_drops, 0u);
+    ASSERT_NOT_NULL(owner_forward_branch);
+    ASSERT_EQ_UINT(owner_forward_branch->successor_count, 1u);
+    ASSERT_EQ_UINT(owner_forward_branch->successors[0], entry_indirect_block);
+    ASSERT_EQ_UINT(owner_forward_branch->operand_count, 3u);
+    ASSERT_EQ_UINT(owner_forward_branch->operands[0], sealed_normal_owner);
+    ASSERT_EQ_UINT(sealed_cancel->instruction_count, 3u);
+    ASSERT_EQ_UINT(sealed_cancel->instructions[1].operation_id, XR_CORE_OP_CORE_OWNER_DROP);
+    ASSERT_EQ_UINT(sealed_cancel->instructions[1].operands[0], sealed_cancel->argument_ids[0]);
+    ASSERT_EQ_UINT(sealed_cancel->instructions[2].operation_id, XR_CORE_OP_CORE_CANCEL_PUBLISH);
+
+    ASSERT_EQ_UINT(entry_indirect_call->operand_count, 5u);
+    uint32_t indirect_owner = entry_indirect_call->operands[0];
+    ASSERT_LT(indirect_owner, entry_function->value_count);
+    ASSERT_EQ_INT(entry_function->value_ownerships[indirect_owner], XR_CORE_IR_OWNER);
+    ASSERT_EQ_UINT(entry_function->value_types[indirect_owner],
+                   entry_function->value_types[callable_owner]);
+    ASSERT_EQ_UINT(indirect_point->live_value_count, 2u);
+    uint32_t indirect_owner_lives = 0u;
+    uint32_t indirect_non_owner_lives = 0u;
+    for (uint32_t live = 0u; live < indirect_point->live_value_count; ++live) {
+        uint32_t value = indirect_point->live_value_ids[live];
+        ASSERT_LT(value, entry_function->value_count);
+        ASSERT_EQ_UINT(entry_indirect_call->operands[2u + live], value);
+        indirect_owner_lives +=
+            entry_function->value_ownerships[value] == XR_CORE_IR_OWNER ? 1u : 0u;
+        indirect_non_owner_lives +=
+            entry_function->value_ownerships[value] == XR_CORE_IR_NON_OWNER ? 1u : 0u;
+    }
+    ASSERT_EQ_UINT(indirect_owner_lives, 1u);
+    ASSERT_EQ_UINT(indirect_non_owner_lives, 1u);
+    ASSERT_EQ_UINT(entry_indirect_call->operands[4], indirect_owner);
+    const XrValidatedBlock *indirect_normal =
+        &entry_function->blocks[entry_indirect_call->successors[0]];
+    const XrValidatedBlock *indirect_cancel =
+        &entry_function->blocks[entry_indirect_call->successors[1]];
+    ASSERT_EQ_UINT(indirect_normal->argument_count, 3u);
+    ASSERT_EQ_INT(indirect_normal->argument_ownerships[1], XR_CORE_IR_OWNER);
+    ASSERT_EQ_UINT(indirect_cancel->argument_count, 1u);
+    ASSERT_EQ_INT(indirect_cancel->argument_ownerships[0], XR_CORE_IR_OWNER);
+    uint32_t indirect_normal_owner_drops = 0u;
+    for (uint32_t instruction = 0u; instruction < indirect_normal->instruction_count;
+         ++instruction) {
+        const XrValidatedInstruction *candidate = &indirect_normal->instructions[instruction];
+        indirect_normal_owner_drops +=
+            candidate->operation_id == XR_CORE_OP_CORE_OWNER_DROP &&
+                    candidate->operand_count == 1u &&
+                    candidate->operands[0] == indirect_normal->argument_ids[1]
+                ? 1u
+                : 0u;
+    }
+    ASSERT_EQ_UINT(indirect_normal_owner_drops, 1u);
+    ASSERT_EQ_UINT(indirect_cancel->instruction_count, 3u);
+    ASSERT_EQ_UINT(indirect_cancel->instructions[1].operation_id, XR_CORE_OP_CORE_OWNER_DROP);
+    ASSERT_EQ_UINT(indirect_cancel->instructions[1].operands[0], indirect_cancel->argument_ids[0]);
+    ASSERT_EQ_UINT(indirect_cancel->instructions[2].operation_id, XR_CORE_OP_CORE_CANCEL_PUBLISH);
+
+    const XrValidatedInstruction *indirect_call = NULL;
+    for (uint32_t block = 0u; block < apply->block_count; ++block)
+        for (uint32_t instruction = 0u; instruction < apply->blocks[block].instruction_count;
+             ++instruction)
+            if (apply->blocks[block].instructions[instruction].operation_id ==
+                XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
+                ASSERT_NULL(indirect_call);
+                indirect_call = &apply->blocks[block].instructions[instruction];
+            }
+    ASSERT_NOT_NULL(indirect_call);
+    ASSERT_EQ_UINT(apply->coroutine_safepoint_count, 1u);
+    ASSERT_EQ_UINT(apply->coroutine_safepoints[0].live_value_count, 0u);
+    ASSERT_LT(indirect_call->operands[0], apply->value_count);
+    ASSERT_EQ_INT(apply->value_ownerships[indirect_call->operands[0]], XR_CORE_IR_NON_OWNER);
+
+    uint32_t closure_id = pack->immediate.function_id;
+    ASSERT_LT(closure_id, program->function_count);
+    ASSERT_TRUE(closure_id != entry && closure_id != apply_id);
+    const XrValidatedFunction *closure = &program->functions[closure_id];
+    ASSERT_EQ_UINT(closure->parameter_count, 2u);
+    ASSERT_EQ_INT(closure->parameter_modes[0], XR_PARAM_READ);
+    ASSERT_EQ_INT(closure->parameter_modes[1], XR_PARAM_READ);
+    ASSERT_EQ_UINT(closure->coroutine_safepoint_count, 1u);
+    ASSERT_EQ_UINT(closure->coroutine_safepoints[0].live_value_count, 2u);
+    for (uint32_t live = 0u; live < closure->coroutine_safepoints[0].live_value_count; ++live) {
+        uint32_t value = closure->coroutine_safepoints[0].live_value_ids[live];
+        ASSERT_LT(value, closure->value_count);
+        ASSERT_EQ_INT(closure->value_categories[value], XR_CORE_IR_VALUE);
+        ASSERT_EQ_INT(closure->value_ownerships[value], XR_CORE_IR_NON_OWNER);
+    }
 
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -1394,10 +1561,14 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
 
     XrReferenceExecution *reference = NULL;
     ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference));
-    XrReferenceOutcome reference_suspended = xr_reference_execution_step(reference);
-    ASSERT_EQ_INT(reference_suspended.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
-    ASSERT_EQ_UINT(reference_suspended.safepoint_id, 0u);
-    ASSERT_EQ_UINT(reference_suspended.state_id, 1u);
+    XrReferenceOutcome reference_first_suspended = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_first_suspended.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(reference_first_suspended.safepoint_id, sealed_safepoint_id);
+    ASSERT_EQ_UINT(reference_first_suspended.state_id, sealed_point->resume_state_id);
+    XrReferenceOutcome reference_second_suspended = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_second_suspended.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(reference_second_suspended.safepoint_id, indirect_safepoint_id);
+    ASSERT_EQ_UINT(reference_second_suspended.state_id, indirect_point->resume_state_id);
     XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
     ASSERT_EQ_INT(reference_return.kind, XR_REFERENCE_OUTCOME_RETURN);
     ASSERT_EQ_INT(reference_return.value.kind, XR_REFERENCE_VALUE_I64);
@@ -1411,6 +1582,17 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
     ASSERT_EQ_INT(xr_reference_execution_cancel(reference_cancel).kind,
                   XR_REFERENCE_OUTCOME_CANCELLED);
     xr_reference_execution_free(reference_cancel);
+
+    XrReferenceExecution *reference_second_cancel = NULL;
+    ASSERT_TRUE(
+        xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference_second_cancel));
+    ASSERT_EQ_INT(xr_reference_execution_step(reference_second_cancel).kind,
+                  XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_INT(xr_reference_execution_step(reference_second_cancel).kind,
+                  XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_INT(xr_reference_execution_cancel(reference_second_cancel).kind,
+                  XR_REFERENCE_OUTCOME_CANCELLED);
+    xr_reference_execution_free(reference_second_cancel);
 
     const XrVmDecodePolicy policies[] = {
         XR_VM_DECODE_BASELINE_VIEW,
@@ -1428,10 +1610,14 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
 
         XrVmExecution *vm = NULL;
         ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm));
-        XrVmOutcome vm_suspended = xr_vm_execution_step(vm);
-        ASSERT_EQ_INT(vm_suspended.kind, XR_VM_OUTCOME_SUSPENDED);
-        ASSERT_EQ_UINT(vm_suspended.safepoint_id, reference_suspended.safepoint_id);
-        ASSERT_EQ_UINT(vm_suspended.state_id, reference_suspended.state_id);
+        XrVmOutcome vm_first_suspended = xr_vm_execution_step(vm);
+        ASSERT_EQ_INT(vm_first_suspended.kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_UINT(vm_first_suspended.safepoint_id, reference_first_suspended.safepoint_id);
+        ASSERT_EQ_UINT(vm_first_suspended.state_id, reference_first_suspended.state_id);
+        XrVmOutcome vm_second_suspended = xr_vm_execution_step(vm);
+        ASSERT_EQ_INT(vm_second_suspended.kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_UINT(vm_second_suspended.safepoint_id, reference_second_suspended.safepoint_id);
+        ASSERT_EQ_UINT(vm_second_suspended.state_id, reference_second_suspended.state_id);
         XrVmOutcome vm_return = xr_vm_execution_step(vm);
         ASSERT_EQ_INT(vm_return.kind, XR_VM_OUTCOME_RETURN);
         ASSERT_EQ_INT(vm_return.value.kind, XR_VM_VALUE_I64);
@@ -1443,6 +1629,13 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
         ASSERT_EQ_INT(xr_vm_execution_step(vm_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
         ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED);
         xr_vm_execution_free(vm_cancel);
+
+        XrVmExecution *vm_second_cancel = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm_second_cancel));
+        ASSERT_EQ_INT(xr_vm_execution_step(vm_second_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_INT(xr_vm_execution_step(vm_second_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_INT(xr_vm_execution_cancel(vm_second_cancel).kind, XR_VM_OUTCOME_CANCELLED);
+        xr_vm_execution_free(vm_second_cancel);
         xr_vm_code_free(code);
     }
 
@@ -1468,6 +1661,10 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
                   XR_BACKEND_OK);
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "callable_capture_"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_alloc(xr_ctx"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, ".capture = (void *)callable_capture_"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, ".capture;"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
     const char *output_path =
         source_fixture_output_path(XR_SOURCE_FIXTURE_FUNCTION_PARAMETER_SUSPENDING);

@@ -3830,6 +3830,12 @@ static void test_coroutine_cancel_cleanup_requires_exact_owner_transfer(void) {
               sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
     xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_coroutine_owner_fixture_write_mutated(
+              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_MISSING_BORROWED_CALL_OWNER_LIVE, &artifact,
+              diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+    xr_program_artifact_free(&artifact);
 }
 
 static void test_coroutine_related_field_refs_require_one_live_storage_root(void) {

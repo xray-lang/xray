@@ -3886,6 +3886,16 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             const XrValidatedCoroutineSafepoint *safepoint =
                 &function->coroutine_safepoints[safepoint_id];
+            if (function->value_ownerships[carrier] == XR_CORE_IR_OWNER) {
+                uint32_t carrier_live_count = 0u;
+                for (uint32_t live = 0u; live < safepoint->live_value_count; ++live)
+                    carrier_live_count += safepoint->live_value_ids[live] == carrier;
+                if (carrier_live_count != 1u) {
+                    location.value_id = carrier;
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                    return false;
+                }
+            }
             const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
             uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
             uint32_t live_start = 1u + callee->parameter_count;
@@ -4065,9 +4075,17 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
+                uint32_t operand_value = instruction->operands[parameter];
                 XrParamMode mode = callee->parameter_modes[parameter];
                 XrCoreIrValueCategory category =
                     mode == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+                uint32_t owned_read_live_count = 0u;
+                if (mode == XR_PARAM_READ && operand_value < function->value_count &&
+                    function->value_ownerships[operand_value] == XR_CORE_IR_OWNER)
+                    for (uint32_t live = 0u; live < safepoint->live_value_count; ++live)
+                        owned_read_live_count +=
+                            safepoint->live_value_ids[live] == operand_value ? 1u : 0u;
+                bool owned_read = owned_read_live_count == 1u;
                 bool supported_read =
                     mode == XR_PARAM_READ &&
                     callee->parameter_types[parameter] >= XR_CORE_TYPE_BOOL &&
@@ -4085,6 +4103,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     supported_read = owner != XR_PROGRAM_LOCATION_NONE && owner_live_count == 1u;
                     supported_read |= frame_stable_non_owner_callable(
                         context, function, instruction->operands[parameter]);
+                    supported_read |= owned_read;
                 }
                 const XrValidatedInstruction *place_definition =
                     mode == XR_PARAM_REF
@@ -4107,7 +4126,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     !operand_type_is(function, instruction, parameter,
                                      callee->parameter_types[parameter]) ||
                     !operand_category_is(function, instruction, parameter, category) ||
-                    !operand_ownership_is(function, instruction, parameter, XR_CORE_IR_NON_OWNER)) {
+                    (!operand_ownership_is(function, instruction, parameter,
+                                           XR_CORE_IR_NON_OWNER) &&
+                     !owned_read)) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
                     return false;
                 }

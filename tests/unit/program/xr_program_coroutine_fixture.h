@@ -337,6 +337,7 @@ typedef enum XrProgramCoroutineOwnerFixtureMutation {
     XR_PROGRAM_COROUTINE_OWNER_FIXTURE_MISSING_CANCEL_ARGUMENT,
     XR_PROGRAM_COROUTINE_OWNER_FIXTURE_CANCEL_OWNER_NOT_DROPPED,
     XR_PROGRAM_COROUTINE_OWNER_FIXTURE_EXTRA_CANCEL_ARGUMENT,
+    XR_PROGRAM_COROUTINE_OWNER_FIXTURE_MISSING_BORROWED_CALL_OWNER_LIVE,
 } XrProgramCoroutineOwnerFixtureMutation;
 
 static XrProgramBuildStatus
@@ -489,6 +490,212 @@ xr_program_coroutine_owner_fixture_write_mutated(XrProgramCoroutineOwnerFixtureM
     };
     uint16_t parameter_type = XR_CORE_TYPE_PANIC_INFO;
     XrParamMode parameter_mode = XR_PARAM_MOVE;
+
+    XrCoreIrKey borrow_child_key = xr_program_coroutine_fixture_key("owner-coro:borrow-child");
+    XrCoreIrKey borrow_child_entry =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-child:entry");
+    XrCoreIrKey borrow_child_resume =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-child:resume");
+    XrCoreIrKey borrow_child_cancel =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-child:cancel");
+    XrCoreIrKey borrow_child_parameter =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-child:parameter");
+    XrCoreIrValueInput borrow_child_argument = {
+        .key = borrow_child_parameter,
+        .type_id = XR_CORE_TYPE_PANIC_INFO,
+        .category = XR_CORE_IR_VALUE,
+        .ownership = XR_CORE_IR_NON_OWNER,
+    };
+    XrCoreIrKey borrow_child_entry_operands[] = {borrow_child_parameter};
+    XrCoreIrKey borrow_child_successors[] = {borrow_child_resume, borrow_child_cancel};
+    XrCoreIrInstructionInput borrow_child_entry_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = borrow_child_entry_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_COROUTINE_YIELD,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = 0u,
+         .successors = borrow_child_successors,
+         .successor_count = 2u},
+    };
+    XrCoreIrInstructionInput borrow_child_resume_instruction = {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    XrCoreIrInstructionInput borrow_child_cancel_instruction = {
+        .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    XrCoreIrBlockInput borrow_child_blocks[] = {
+        {.key = borrow_child_entry,
+         .arguments = &borrow_child_argument,
+         .argument_count = 1u,
+         .instructions = borrow_child_entry_instructions,
+         .instruction_count = 2u},
+        {.key = borrow_child_resume,
+         .instructions = &borrow_child_resume_instruction,
+         .instruction_count = 1u},
+        {.key = borrow_child_cancel,
+         .instructions = &borrow_child_cancel_instruction,
+         .instruction_count = 1u},
+    };
+    XrCoreIrCoroutineStateInput borrow_child_states[] = {
+        {.state_id = 0u, .continuation_block = borrow_child_entry},
+        {.state_id = 1u, .continuation_block = borrow_child_resume},
+    };
+    XrCoreIrCoroutineSafepointInput borrow_child_safepoint = {
+        .safepoint_id = 0u,
+        .resume_state_id = 1u,
+    };
+    XrParamMode borrow_mode = XR_PARAM_READ;
+    XrCoreIrFunctionInput borrow_child = {
+        .key = borrow_child_key,
+        .parameter_types = &parameter_type,
+        .parameter_modes = &borrow_mode,
+        .parameter_count = 1u,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .effect_mask = XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND,
+        .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION,
+        .entry_block = borrow_child_entry,
+        .blocks = borrow_child_blocks,
+        .block_count = 3u,
+        .coroutine_states = borrow_child_states,
+        .coroutine_state_count = 2u,
+        .coroutine_safepoints = &borrow_child_safepoint,
+        .coroutine_safepoint_count = 1u,
+    };
+
+    bool missing_borrowed_owner =
+        mutation == XR_PROGRAM_COROUTINE_OWNER_FIXTURE_MISSING_BORROWED_CALL_OWNER_LIVE;
+    XrCoreIrKey borrow_parent_entry =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-parent:entry");
+    XrCoreIrKey borrow_parent_resume =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-parent:resume");
+    XrCoreIrKey borrow_parent_cancel =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-parent:cancel");
+    XrCoreIrKey borrow_parent_owner =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-parent:owner");
+    XrCoreIrKey borrow_parent_resumed =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-parent:resumed");
+    XrCoreIrKey borrow_parent_cancelled =
+        xr_program_coroutine_fixture_key("owner-coro:borrow-parent:cancelled");
+    XrCoreIrValueInput borrow_parent_arguments[] = {
+        {.key = borrow_parent_owner,
+         .type_id = XR_CORE_TYPE_PANIC_INFO,
+         .category = XR_CORE_IR_VALUE,
+         .ownership = XR_CORE_IR_OWNER},
+        {.key = borrow_parent_resumed,
+         .type_id = XR_CORE_TYPE_PANIC_INFO,
+         .category = XR_CORE_IR_VALUE,
+         .ownership = XR_CORE_IR_OWNER},
+        {.key = borrow_parent_cancelled,
+         .type_id = XR_CORE_TYPE_PANIC_INFO,
+         .category = XR_CORE_IR_VALUE,
+         .ownership = XR_CORE_IR_OWNER},
+    };
+    XrCoreIrKey borrow_parent_entry_arguments[] = {borrow_parent_owner};
+    XrCoreIrKey borrow_parent_call_operands[] = {borrow_parent_owner, borrow_parent_owner,
+                                                 borrow_parent_owner};
+    XrCoreIrKey borrow_parent_successors[] = {borrow_parent_resume, borrow_parent_cancel};
+    XrCoreIrInstructionInput borrow_parent_entry_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = borrow_parent_entry_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = borrow_parent_call_operands,
+         .operand_count = missing_borrowed_owner ? 1u : 3u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL,
+         .immediate.coroutine_call = {.callee = borrow_child_key, .safepoint_id = 0u},
+         .successors = borrow_parent_successors,
+         .successor_count = 2u},
+    };
+    XrCoreIrKey borrow_parent_resume_arguments[] = {borrow_parent_resumed};
+    XrCoreIrInstructionInput borrow_parent_resume_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = borrow_parent_resume_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = borrow_parent_resume_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey borrow_parent_cancel_arguments[] = {borrow_parent_cancelled};
+    XrCoreIrInstructionInput borrow_parent_cancel_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = borrow_parent_cancel_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = borrow_parent_cancel_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput borrow_parent_blocks[] = {
+        {.key = borrow_parent_entry,
+         .arguments = &borrow_parent_arguments[0],
+         .argument_count = 1u,
+         .instructions = borrow_parent_entry_instructions,
+         .instruction_count = 2u},
+        {.key = borrow_parent_resume,
+         .arguments = missing_borrowed_owner ? NULL : &borrow_parent_arguments[1],
+         .argument_count = missing_borrowed_owner ? 0u : 1u,
+         .instructions = missing_borrowed_owner ? &borrow_parent_resume_instructions[2]
+                                                : borrow_parent_resume_instructions,
+         .instruction_count = missing_borrowed_owner ? 1u : 3u},
+        {.key = borrow_parent_cancel,
+         .arguments = missing_borrowed_owner ? NULL : &borrow_parent_arguments[2],
+         .argument_count = missing_borrowed_owner ? 0u : 1u,
+         .instructions = missing_borrowed_owner ? &borrow_parent_cancel_instructions[2]
+                                                : borrow_parent_cancel_instructions,
+         .instruction_count = missing_borrowed_owner ? 1u : 3u},
+    };
+    XrCoreIrCoroutineStateInput borrow_parent_states[] = {
+        {.state_id = 0u, .continuation_block = borrow_parent_entry},
+        {.state_id = 1u, .continuation_block = borrow_parent_entry},
+    };
+    XrCoreIrKey borrow_parent_live[] = {borrow_parent_owner};
+    XrCoreIrCoroutineSafepointInput borrow_parent_safepoint = {
+        .safepoint_id = 0u,
+        .resume_state_id = 1u,
+        .live_values = missing_borrowed_owner ? NULL : borrow_parent_live,
+        .live_value_count = missing_borrowed_owner ? 0u : 1u,
+    };
+    XrCoreIrFunctionInput borrow_parent = {
+        .key = xr_program_coroutine_fixture_key("owner-coro:borrow-parent"),
+        .parameter_types = &parameter_type,
+        .parameter_modes = &parameter_mode,
+        .parameter_count = 1u,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND,
+        .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION,
+        .entry_block = borrow_parent_entry,
+        .blocks = borrow_parent_blocks,
+        .block_count = 3u,
+        .coroutine_states = borrow_parent_states,
+        .coroutine_state_count = 2u,
+        .coroutine_safepoints = &borrow_parent_safepoint,
+        .coroutine_safepoint_count = 1u,
+    };
+
     XrCoreIrFunctionInput functions[] = {
         {.key = xr_program_coroutine_fixture_key("owner-coro:main"),
          .result_type_id = XR_CORE_TYPE_I64,
@@ -511,13 +718,15 @@ xr_program_coroutine_owner_fixture_write_mutated(XrProgramCoroutineOwnerFixtureM
          .coroutine_state_count = 2u,
          .coroutine_safepoints = &safepoint,
          .coroutine_safepoint_count = 1u},
+        borrow_child,
+        borrow_parent,
     };
     XrCoreIrModuleInput module = {
         .key = xr_program_coroutine_fixture_key("owner-coro:module"),
         .constants = &constant,
         .constant_count = 1u,
         .functions = functions,
-        .function_count = 2u,
+        .function_count = missing_borrowed_owner ? 4u : 2u,
     };
     uint8_t profile[XR_PROGRAM_DIGEST_SIZE] = {0};
     uint16_t feature = XR_CORE_FEATURE_CORE_BASE;

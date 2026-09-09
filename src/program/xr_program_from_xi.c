@@ -1025,14 +1025,19 @@ static bool map_callable_type_contract_recursive(XrXiBuildContext *context, cons
                                                  uint16_t error_type_id, uint16_t panic_type_id,
                                                  uint16_t *type_id, const XrType *const *stack,
                                                  uint32_t depth) {
+    /* A visible MAY_THROW type is a safe supertype for an exact closed target
+     * set that
+     * Xglobal proves cannot error.  The reverse is not safe: a visible
+     * NO_THROW contract may
+     * never admit an error-producing target set. */
     if (!context || !type || !type_id || type->kind != XR_KIND_FUNCTION || type->is_nullable ||
         type->function.param_count < 0 || type->function.param_count > UINT16_MAX ||
         (type->function.param_count != 0 && !type->function.params) ||
         !type->function.return_type || type->function.is_variadic || type->function.is_c_abi ||
         type->function.type_param_count != 0 || type->function.view_origin_count != 0 ||
         depth >= 64u || type_stack_contains(stack, depth, type) ||
-        (error_type_id == XR_CORE_TYPE_VOID &&
-         type->function.throw_effect != XR_FN_EFFECT_NO_THROW) ||
+        (type->function.throw_effect != XR_FN_EFFECT_NO_THROW &&
+         type->function.throw_effect != XR_FN_EFFECT_MAY_THROW) ||
         (error_type_id != XR_CORE_TYPE_VOID &&
          type->function.throw_effect != XR_FN_EFFECT_MAY_THROW))
         return false;
@@ -5340,6 +5345,17 @@ static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *func
             return map_callable_signature_contract(context, visible_type, signature_key, type_id,
                                                    NULL);
     }
+    /* Ownership forwarding can introduce the first typed carrier around an
+     * otherwise untyped
+     * CLOSURE_NEW node.  Preserve that visible function type
+     * and resolve its exact Xglobal
+     * target set before stripping identity ops. */
+    if (value && value->type && value->type->kind == XR_KIND_FUNCTION &&
+        xi_op_is_identity_forward(value->op)) {
+        uint64_t signature_key = 0u;
+        return callable_signature_key_for_value(context, function, value, 0u, &signature_key) &&
+               map_callable_signature_contract(context, visible_type, signature_key, type_id, NULL);
+    }
     value = logical_value_identity(value);
     if (!value || !value->type)
         return false;
@@ -5473,14 +5489,26 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
                     source->id);
     if (type_id == XR_CORE_TYPE_VOID && source_type_mapped)
         type_id = source_type_id;
-    if (type_id == XR_CORE_TYPE_VOID)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi live-in v%u op%u in b%u has no active CoreSpec value type "
-                    "(closure=%u trap=%u panic=%u cancel=%u)",
-                    source->id, (unsigned) source->op,
-                    block && block->xi ? block->xi->id : UINT32_MAX, changed ? 1u : 0u,
-                    block && block->trap_cleanup ? 1u : 0u, block && block->panic_cleanup ? 1u : 0u,
-                    block && block->cancel_cleanup ? 1u : 0u);
+    if (type_id == XR_CORE_TYPE_VOID) {
+        uint64_t callable_signature_key = 0u;
+        bool callable_signature = source->type && source->type->kind == XR_KIND_FUNCTION &&
+                                  callable_signature_key_for_value(context, function->xi, source,
+                                                                   0u, &callable_signature_key);
+        return fail(
+            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+            "Xi live-in v%u op%u type=%u nargs=%u source=%u/%u in b%u has no active "
+            "CoreSpec value type (callable=%u signature=%llu closure=%u trap=%u panic=%u "
+            "cancel=%u)",
+            source->id, (unsigned) source->op,
+            source->type ? (unsigned) source->type->kind : UINT32_MAX, (unsigned) source->nargs,
+            source->nargs && source->args && source->args[0] ? source->args[0]->id : UINT32_MAX,
+            source->nargs && source->args && source->args[0] ? (unsigned) source->args[0]->op
+                                                             : UINT32_MAX,
+            block && block->xi ? block->xi->id : UINT32_MAX, callable_signature ? 1u : 0u,
+            (unsigned long long) callable_signature_key, changed ? 1u : 0u,
+            block && block->trap_cleanup ? 1u : 0u, block && block->panic_cleanup ? 1u : 0u,
+            block && block->cancel_cleanup ? 1u : 0u);
+    }
     if (!phi && implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NONE && source->op == XI_PLACE_LOAD &&
         logical_ownership_for_type(context, type_id) == XR_CORE_IR_OWNER) {
         const XiValue *storage_owner = canonical_owner_storage_identity(context, function, source);
@@ -8155,9 +8183,14 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
     XrXiBlockArgumentStorage *available = find_block_argument(block, value);
     if (available) {
         uint16_t source_type = XR_CORE_TYPE_VOID;
-        bool source_type_mapped =
-            map_logical_value_type(context, function->xi, typed_value, &source_type) &&
-            source_type != XR_CORE_TYPE_VOID;
+        bool capture_receiver = value == &function->capture_receiver;
+        bool source_type_mapped = capture_receiver;
+        if (capture_receiver)
+            source_type = function->capture_type_id;
+        else
+            source_type_mapped =
+                map_logical_value_type(context, function->xi, typed_value, &source_type) &&
+                source_type != XR_CORE_TYPE_VOID;
         bool erased_error_catch =
             value->op == XI_ERR_CATCH && value->type && value->type->kind == XR_KIND_UNKNOWN;
         XrCoreIrOwnershipDisposition expected_ownership =
@@ -9244,6 +9277,22 @@ static XrProgramBuildStatus refine_static_typed_catch_reachability(XrXiBuildCont
     return XR_PROGRAM_BUILD_OK;
 }
 
+static const XiValue *canonical_coroutine_live_identity(const XrXiBuildContext *context,
+                                                        const XrXiFunctionStorage *function,
+                                                        const XiCoroSuspendPoint *point,
+                                                        const XiValue *value);
+
+typedef struct XrXiTrapCallContract {
+    const XrParamMode *parameter_modes;
+    uint32_t parameter_count;
+    uint32_t first_operand;
+    bool indirect;
+} XrXiTrapCallContract;
+
+static bool trap_call_contract(XrXiBuildContext *context, const XrXiFunctionStorage *function,
+                               const XiValue *call, XrXiTrapCallContract *contract);
+static bool trap_call_operand_consumes(const XrXiTrapCallContract *contract, uint32_t operand);
+
 static XrProgramBuildStatus prepare_coroutine_call_arguments(XrXiBuildContext *context,
                                                              XrXiFunctionStorage *function,
                                                              char *diagnostic,
@@ -9261,35 +9310,65 @@ static XrProgramBuildStatus prepare_coroutine_call_arguments(XrXiBuildContext *c
             !map_logical_value_type(context, function->xi, point->op, &result_type))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi coroutine call has no exact result continuation");
-        if (result_type == XR_CORE_TYPE_VOID)
-            continue;
         const XiValue *logical_result =
-            exact_logical_value_identity(context, function->xi, point->op);
-        XrXiBlockArgumentStorage *argument = find_block_argument(resume, logical_result);
-        if (!argument) {
-            XrProgramBuildStatus status = add_block_argument(
-                context, function, resume, point->op, NULL, result_type,
-                XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT, NULL, diagnostic, diagnostic_size);
-            if (status != XR_PROGRAM_BUILD_OK)
-                return status;
-            continue;
+            result_type == XR_CORE_TYPE_VOID
+                ? NULL
+                : exact_logical_value_identity(context, function->xi, point->op);
+        if (logical_result) {
+            XrXiBlockArgumentStorage *argument = find_block_argument(resume, logical_result);
+            if (!argument) {
+                XrProgramBuildStatus status = add_block_argument(
+                    context, function, resume, point->op, NULL, result_type,
+                    XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT, NULL, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            } else {
+                if (argument->phi || argument->type_id != result_type ||
+                    argument->category != XR_CORE_IR_VALUE)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi coroutine call result continuation is inconsistent");
+                argument->implicit_invoke_kind = XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT;
+                argument->ownership = logical_ownership_for_type(context, result_type);
+            }
         }
-        if (argument->phi || argument->type_id != result_type ||
-            argument->category != XR_CORE_IR_VALUE)
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi coroutine call result continuation is inconsistent");
-        argument->implicit_invoke_kind = XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT;
-        argument->ownership = logical_ownership_for_type(context, result_type);
+        /* A READ call operand can borrow an affine owner for the entire child
+         * execution
+         * without creating an ordinary post-resume Xi use.  The
+         * parent still owns that
+         * frame anchor on both normal completion and
+         * cancellation, so materialize only
+         * such cancellation-only operands on
+         * the resume edge.  MOVE operands belong to
+         * the child; unrelated drops
+         * are handled by their cleanup graph. */
+        XrXiTrapCallContract contract;
+        if (!resolved_suspension_native_call(context, function->xi, point->op) &&
+            trap_call_contract(context, function, point->op, &contract)) {
+            for (uint32_t operand = contract.first_operand; operand < point->op->nargs; ++operand) {
+                const XiValue *source =
+                    exact_logical_value_identity(context, function->xi, point->op->args[operand]);
+                if (trap_call_operand_consumes(&contract, operand) ||
+                    !logical_value_produces_owner(context, function->xi, source, 0u))
+                    continue;
+                const XiValue *logical =
+                    canonical_coroutine_live_identity(context, function, point, source);
+                uint32_t drop_matches = 0u;
+                for (uint32_t drop = 0u; logical && drop < point->ndrops; ++drop)
+                    drop_matches += canonical_coroutine_live_identity(
+                                        context, function, point, point->drops[drop]) == logical;
+                if (!logical || drop_matches != 1u)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi borrowed coroutine operand has no exact cancellation owner");
+                XrProgramBuildStatus status = add_block_argument(
+                    context, function, resume, logical, NULL, XR_CORE_TYPE_VOID,
+                    XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+        }
     }
     return XR_PROGRAM_BUILD_OK;
 }
-
-typedef struct XrXiTrapCallContract {
-    const XrParamMode *parameter_modes;
-    uint32_t parameter_count;
-    uint32_t first_operand;
-    bool indirect;
-} XrXiTrapCallContract;
 
 static bool trap_call_contract(XrXiBuildContext *context, const XrXiFunctionStorage *function,
                                const XiValue *call, XrXiTrapCallContract *contract) {
@@ -10392,6 +10471,43 @@ static const XiValue *canonical_coroutine_live_identity(const XrXiBuildContext *
     return exact_logical_value_identity(context, xi, successor ? successor : value);
 }
 
+/* Xi models LOAD_UPVAL without an explicit environment operand.  Canonical
+ * Program makes that
+ * dependency explicit as a hidden READ parameter, so the
+ * closed resume CFG—not the raw Xi spill
+ * list—owns whether the capture carrier
+ * crosses a particular safepoint. */
+static bool coroutine_capture_receiver_is_live(const XrXiFunctionStorage *function,
+                                               const XiCoroSuspendPoint *point) {
+    if (!function || function->capture_type_id == XR_CORE_TYPE_VOID || !point)
+        return false;
+    XrXiBlockStorage *resume =
+        find_block_storage((XrXiFunctionStorage *) function, point->resume_block);
+    const XrXiBlockArgumentStorage *argument =
+        resume ? find_block_argument(resume, &function->capture_receiver) : NULL;
+    return argument && !argument->phi &&
+           argument->implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NONE &&
+           argument->type_id == function->capture_type_id &&
+           argument->category == XR_CORE_IR_VALUE && argument->ownership == XR_CORE_IR_NON_OWNER;
+}
+
+static bool coroutine_live_contract(const XrXiBuildContext *context,
+                                    const XrXiFunctionStorage *function, const XiValue *logical,
+                                    uint16_t *type_id, XrCoreIrOwnershipDisposition *ownership) {
+    if (!context || !function || !logical || !type_id || !ownership)
+        return false;
+    if (logical == &function->capture_receiver) {
+        *type_id = function->capture_type_id;
+        *ownership = XR_CORE_IR_NON_OWNER;
+        return *type_id != XR_CORE_TYPE_VOID;
+    }
+    if (!map_logical_value_type((XrXiBuildContext *) context, function->xi, logical, type_id) ||
+        *type_id == XR_CORE_TYPE_VOID)
+        return false;
+    *ownership = logical_ownership_for_type(context, *type_id);
+    return true;
+}
+
 static uint32_t canonical_coroutine_live_count(const XrXiBuildContext *context,
                                                const XrXiFunctionStorage *function,
                                                const XiCoroSuspendPoint *point) {
@@ -10405,6 +10521,14 @@ static uint32_t canonical_coroutine_live_count(const XrXiBuildContext *context,
         for (uint32_t prior = 0u; prior < live; ++prior)
             duplicate |= canonical_coroutine_live_identity(context, function, point,
                                                            point->live[prior]) == identity;
+        count += duplicate ? 0u : 1u;
+    }
+    if (coroutine_capture_receiver_is_live(function, point)) {
+        bool duplicate = false;
+        for (uint32_t live = 0u; point->live && live < point->nlive; ++live)
+            duplicate |=
+                canonical_coroutine_live_identity(context, function, point, point->live[live]) ==
+                &function->capture_receiver;
         count += duplicate ? 0u : 1u;
     }
     return point && (point->nlive == 0u || point->live) ? count : UINT32_MAX;
@@ -10425,6 +10549,10 @@ static uint32_t canonical_coroutine_live_occurrences(const XrXiBuildContext *con
                                                            point->live[prior]) == identity;
         occurrences += !duplicate && identity == target ? 1u : 0u;
     }
+    occurrences +=
+        coroutine_capture_receiver_is_live(function, point) && target == &function->capture_receiver
+            ? 1u
+            : 0u;
     return occurrences;
 }
 
@@ -10442,15 +10570,15 @@ static bool coroutine_live_set_matches(XrXiBuildContext *context,
         const XiValue *logical_incoming =
             canonical_coroutine_live_identity(context, function, point, incoming);
         uint16_t type_id = XR_CORE_TYPE_VOID;
+        XrCoreIrOwnershipDisposition ownership = XR_CORE_IR_NON_OWNER;
         XrCoreIrValueCategory category = logical_value_category(function->xi, logical_incoming);
         if (!logical_incoming || category > XR_CORE_IR_PLACE ||
-            !map_logical_value_type(context, function->xi, logical_incoming, &type_id) ||
+            !coroutine_live_contract(context, function, logical_incoming, &type_id, &ownership) ||
             type_id != successor->argument_storage[argument].type_id ||
             canonical_coroutine_live_occurrences(context, function, point, logical_incoming) !=
                 1u ||
             successor->argument_storage[argument].category != category ||
-            successor->argument_storage[argument].ownership !=
-                logical_ownership_for_type(context, successor->argument_storage[argument].type_id))
+            successor->argument_storage[argument].ownership != ownership)
             return false;
         for (uint32_t prior = 0u; prior < argument; ++prior) {
             const XiValue *prior_incoming = edge_argument_value(&successor->argument_storage[prior],
@@ -10480,12 +10608,15 @@ static bool coroutine_cancel_drop_set_matches(const XrXiBuildContext *context,
         const XiValue *logical =
             owner ? canonical_owner_storage_identity(context, function, argument->source)
                   : canonical_coroutine_live_identity(context, function, point, argument->source);
+        uint16_t type_id = XR_CORE_TYPE_VOID;
+        XrCoreIrOwnershipDisposition expected_ownership = XR_CORE_IR_NON_OWNER;
         uint32_t drop_matches = 0u;
         for (uint32_t drop = 0u; drop < point->ndrops; ++drop)
             drop_matches += canonical_cancel_drop_identity(context, function, point,
                                                            point->drops[drop]) == logical;
         if (!logical || argument->category > XR_CORE_IR_PLACE ||
-            argument->ownership != logical_ownership_for_type(context, argument->type_id) ||
+            !coroutine_live_contract(context, function, logical, &type_id, &expected_ownership) ||
+            type_id != argument->type_id || argument->ownership != expected_ownership ||
             drop_matches != (owner ? 1u : 0u))
             return false;
         owner_count += owner ? 1u : 0u;
@@ -11059,9 +11190,14 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
         !exact_cooperative_yield_contract(context, function, point->op) ||
         !coroutine_live_set_matches(context, function, block, resume, point) ||
         (cancel_edge && !cancel_handler))
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi cooperative yield in b%u has no exact canonical resume/live set",
-                    block && block->xi ? block->xi->id : UINT32_MAX);
+        return fail(
+            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+            "Xi cooperative yield %s:b%u has no exact canonical resume/live set "
+            "(Xi live=%u canonical=%u resume=%u drops=%u)",
+            function->xi && function->xi->name ? function->xi->name : "<anonymous>",
+            block && block->xi ? block->xi->id : UINT32_MAX, point ? point->nlive : UINT32_MAX,
+            canonical_coroutine_live_count(context, function, point),
+            resume ? resume->argument_count : UINT32_MAX, point ? point->ndrops : UINT32_MAX);
     instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_YIELD;
     instruction->result_type_id = XR_CORE_TYPE_VOID;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
@@ -11210,12 +11346,14 @@ static const char *coroutine_call_live_set_mismatch(XrXiBuildContext *context,
         const XiValue *logical =
             canonical_coroutine_live_identity(context, function, point, argument->source);
         uint16_t type_id = XR_CORE_TYPE_VOID;
-        if (!logical || !map_logical_value_type(context, function->xi, logical, &type_id) ||
+        XrCoreIrOwnershipDisposition ownership = XR_CORE_IR_NON_OWNER;
+        if (!logical ||
+            !coroutine_live_contract(context, function, logical, &type_id, &ownership) ||
             type_id != argument->type_id)
             return "resume value has no matching canonical type";
         XrCoreIrValueCategory category = logical_value_category(function->xi, logical);
         if (category > XR_CORE_IR_PLACE || argument->category != category ||
-            argument->ownership != logical_ownership_for_type(context, type_id))
+            argument->ownership != ownership)
             return "resume value category or ownership disagrees";
         if (canonical_coroutine_live_occurrences(context, function, point, logical) != 1u ||
             argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
@@ -11318,9 +11456,17 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     if (live_set_failure) {
         xr_free((void *) call.operands);
         xr_free((void *) call.successors);
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi coroutine call in b%u has no exact child continuation: %s",
-                    block && block->xi ? block->xi->id : UINT32_MAX, live_set_failure);
+        return fail(
+            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+            "Xi coroutine call %s:b%u v%u core-op=%u callee=%s has no exact child "
+            "continuation: %s (Xi live=%u canonical=%u resume=%u drops=%u)",
+            function && function->xi && function->xi->name ? function->xi->name : "<anonymous>",
+            block && block->xi ? block->xi->id : UINT32_MAX,
+            point && point->op ? point->op->id : UINT32_MAX, (unsigned) call.operation_id,
+            callee && callee->xi && callee->xi->name ? callee->xi->name : "<indirect>",
+            live_set_failure, point ? point->nlive : UINT32_MAX,
+            canonical_coroutine_live_count(context, function, point),
+            resume ? resume->argument_count : UINT32_MAX, point ? point->ndrops : UINT32_MAX);
     }
     const char *closure_failure = NULL;
     if (!resume)

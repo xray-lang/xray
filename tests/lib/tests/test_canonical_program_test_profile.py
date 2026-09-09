@@ -26,8 +26,8 @@ SPEC.loader.exec_module(profile)
 
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
-        self.assertEqual(len(profile.CTEST_NAMES), 53)
-        self.assertEqual(len(profile.BUILD_TARGETS), 29)
+        self.assertEqual(len(profile.CTEST_NAMES), 54)
+        self.assertEqual(len(profile.BUILD_TARGETS), 30)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
         self.assertLessEqual(

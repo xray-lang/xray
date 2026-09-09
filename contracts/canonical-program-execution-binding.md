@@ -45,7 +45,11 @@ on every unknown kind, arity, or non-normalized payload.
 Callable dispatch is program-owned rather than provider-owned. An indirect call performs a
 non-consuming `READ` of its affine callable operand, so an owned pack and a borrowed non-owner
 function parameter are both valid; target identity and capture layout remain private to each
-executor and never enter the execution binding.
+executor and never enter the execution binding. If such a call suspends, an owned callable carrier
+must occur exactly once in the Program safepoint and in the cancel transfer; a borrowed carrier must
+instead have a verified frame-stable origin. A sealed suspending child that receives an affine
+callable through a `READ` parameter follows the same rule: the caller retains the unique owner on
+normal and cancel continuations rather than converting that borrow into a move.
 
 Provider invocation is available only through ABI-matched typed lease adapters. Nullary and unary
 i64 calls, unary `bool(i64)` calls, nullary optional-i64-pair calls, and byte-output writes occupy
@@ -92,7 +96,7 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 3dc11f19694d1a5c5ba84acc218d5d4364e316862aae5399971db74c343e07e2
+anchor-sha256: src/program/xr_program_verify.c 79459518933bdcb41c00e0d627b9d9cf7bfce75a225bdcf04cd874c62c4f48dc
 anchor-sha256: src/program/xr_validated_program_internal.h 1f0777fec7dc82f53bb9c97afd25d575bcba8975e9d5b8ba8798450d44cf5533
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa

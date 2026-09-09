@@ -42,6 +42,11 @@ as explicit control flow, preserving source short-circuit behavior without execu
 Indirect calls borrow an affine
 callable without consuming it, whether the current SSA value owns the callable or is a non-owner
 `READ` function parameter; the callable SignatureId remains the only visible dispatch contract.
+For a suspending indirect call, an owned carrier is admitted only when the same owner occurs exactly
+once in the safepoint and cancel segment. Captured closures keep their environment in that private
+owned carrier, while a child receiving the callable as `READ` sees only a non-owner frame-stable
+value. Normal resume can forward the owner into another suspension; the final normal or cancel path
+drops it exactly once.
 Provider calls use shape-specific lease-pinned trampolines for nullary/unary i64,
 `bool(i64)`, nullary optional-i64-pair, and byte-sink operations. The byte sink is checked
 byte-for-byte against the reference evaluator under both VM decode policies. The Pipe source
@@ -130,7 +135,7 @@ anchor-sha256: xisa/core/registry.json 3ada1fa0976aea3619134da0e559427465bf0f2b8
 anchor-sha256: src/vm/xr_program_vm.h 0bc3507d2aa429bb07579df820302acbd91d9ffb84651236955d29078b576f6d
 anchor-sha256: src/vm/xr_program_vm.c d36d2492589f2913db27a0da44ccdcfb01accc8e02671c3783a3a22cb9c66017
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c 3dc11f19694d1a5c5ba84acc218d5d4364e316862aae5399971db74c343e07e2
+anchor-sha256: src/program/xr_program_verify.c 79459518933bdcb41c00e0d627b9d9cf7bfce75a225bdcf04cd874c62c4f48dc
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -141,4 +146,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 48b2e6b7123eabf016e10001bc2b1d22199c0c97429d6fe477447d5f5bc9cc2e
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 573f73906141e9a43d6e523a74ece9adf3fd38542b94d569499f422191794e88

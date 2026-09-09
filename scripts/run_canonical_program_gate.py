@@ -69,6 +69,22 @@ LANES = {
 }
 
 
+def lane_environment(lane: str) -> tuple[str, str, str]:
+    if lane == "asan-source":
+        return "XR_ASAN_BUILD_DIR", "XR_ASAN_JOBS", "build-asan"
+    return "XR_BUILD_DIR", "XR_JOBS", "build"
+
+
+def environment_jobs(name: str, fallback: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return fallback
+    try:
+        return int(raw)
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer") from error
+
+
 def exact_regex(names: tuple[str, ...]) -> str:
     return "^(" + "|".join(re.escape(name) for name in names) + ")$"
 
@@ -131,17 +147,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--lane", choices=tuple(LANES), default="native")
     parser.add_argument("--build-dir", type=Path)
-    parser.add_argument("--jobs", type=int, default=max(1, min(os.cpu_count() or 1, 8)))
+    parser.add_argument("--jobs", type=int)
     parser.add_argument("--plan", action="store_true",
                         help="print the exact commands without executing them")
     args = parser.parse_args()
-    if args.jobs <= 0:
+    build_env, jobs_env, default_build = lane_environment(args.lane)
+    try:
+        jobs = args.jobs if args.jobs is not None else environment_jobs(
+            jobs_env, max(1, min(os.cpu_count() or 1, 8))
+        )
+    except ValueError as error:
+        parser.error(str(error))
+    if jobs <= 0:
         parser.error("--jobs must be positive")
-    build_dir = (
-        args.build_dir or ROOT / ("build-asan" if args.lane == "asan-source" else "build")
-    )
+    configured_build = args.build_dir or os.environ.get(build_env)
+    build_dir = Path(configured_build) if configured_build else ROOT / default_build
     build_dir = build_dir.resolve()
-    build, test = build_plan(args.lane, build_dir, args.jobs)
+    build, test = build_plan(args.lane, build_dir, jobs)
     if args.plan:
         print(json.dumps({"lane": args.lane, "build": build, "test": test}, indent=2))
         return 0

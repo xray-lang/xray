@@ -71,6 +71,10 @@ dispatch cancellation from the exact suspended state, recursively close an activ
 follow the verified Program cancel successor, and publish a normalized cancelled outcome that
 retains the cancelled state identity. Canonical safepoint metadata is verified as an unordered exact
 set, independently from the suspension instruction's positional resume tuple and cancel subset.
+An owned captured-callable carrier used by an indirect suspended call must appear exactly once in
+that set and in the cancel transfer; a `READ` parameter in a sealed child remains non-owning while
+the caller retains the carrier. BackendIR re-proves this relation before emission, including normal
+owner forwarding into a later suspension and exact drop on both final normal and cancel paths.
 Generated C assigns frame slots from the positional tuple, reloads the original live identities for
 cancellation, and performs the cancel edge's parallel argument transfer before the reason-private
 cleanup graph drops its owners. The cancel subset contains every required owner exactly once and may
@@ -163,7 +167,7 @@ anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 9559194c9
 anchor-sha256: src/aot/program/xr_backend_ir.h 27bbdd970f1bf1ad039af977cd395aa8609d9c02794e9a566232ba174d86b8af
 anchor-sha256: src/aot/program/xr_backend_ir_internal.h 5a33e1981425e9392eebbe80a058d3a9a8b80f221e327fd0d505a3f5ee737855
 anchor-sha256: src/aot/program/xr_backend_ir.c 0f400b1c25fba3bdd5efac6976caaedc09cb79260dfbc91c37e37a637f361f28
-anchor-sha256: src/aot/program/xr_backend_ir_verify.c e86351d8f6cd36ede4eee38440c226f82dac459b60e76adcb48e07d73498a41f
+anchor-sha256: src/aot/program/xr_backend_ir_verify.c 9c0819c55037cf4f8de7394802bb47fdd1281a96ef976b3d09d8d72a725ffa7f
 anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 9a630f11d72d9b3b4e9938b68659455fd7b3e73739c3439ede920cd967c54d5f
 anchor-sha256: src/aot/program/xr_backend_ir_emit_copy.inc.c 8c831fe2d6161dd1b9a4b86de86d9a40b4573e05985650d258772345658d78f8
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
@@ -173,4 +177,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 48b2e6b7123eabf016e10001bc2b1d22199c0c97429d6fe477447d5f5bc9cc2e
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 573f73906141e9a43d6e523a74ece9adf3fd38542b94d569499f422191794e88

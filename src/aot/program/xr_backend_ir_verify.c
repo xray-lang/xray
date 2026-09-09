@@ -807,6 +807,13 @@ static bool coroutine_read_argument_is_frame_stable(const XrBackendIR *ir,
     uint32_t borrow = call->operands[parameter];
     if (borrow >= function->value_count)
         return false;
+    if (function->value_categories[borrow] == XR_CORE_IR_VALUE &&
+        function->value_ownerships[borrow] == XR_CORE_IR_OWNER) {
+        uint32_t owner_live_count = 0u;
+        for (uint32_t live = 0u; live < point->live_value_count; ++live)
+            owner_live_count += point->live_value_ids[live] == borrow ? 1u : 0u;
+        return owner_live_count == 1u;
+    }
     uint16_t borrow_type_id = function->value_types[borrow];
     bool scalar = borrow_type_id >= XR_CORE_TYPE_BOOL &&
                   borrow_type_id <= XR_CORE_TYPE_TARGET_ENDIAN &&
@@ -1386,6 +1393,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                         XrParamMode mode = callee->parameter_modes[parameter];
                         XrCoreIrValueCategory category =
                             mode == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+                        bool owned_read = mode == XR_PARAM_READ &&
+                                          function->value_ownerships[value] == XR_CORE_IR_OWNER;
                         if ((mode != XR_PARAM_READ && mode != XR_PARAM_REF) ||
                             (mode == XR_PARAM_READ &&
                              !coroutine_read_argument_is_frame_stable(
@@ -1395,7 +1404,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                                                                      point, parameter)) ||
                             function->value_types[value] != callee->parameter_types[parameter] ||
                             function->value_categories[value] != category ||
-                            function->value_ownerships[value] != XR_CORE_IR_NON_OWNER) {
+                            (function->value_ownerships[value] != XR_CORE_IR_NON_OWNER &&
+                             !owned_read)) {
                             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                       instruction->operation_id, function_id,
                                                       block_id, instruction_id);
@@ -1431,11 +1441,18 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     uint32_t implicit_result =
                         signature && signature->result_type_id != XR_CORE_TYPE_VOID ? 1u : 0u;
                     uint32_t live_start = signature ? signature->parameter_count + 1u : UINT32_MAX;
+                    uint32_t carrier_live_count = 0u;
+                    for (uint32_t live = 0u;
+                         carrier < function->value_count && live < point->live_value_count; ++live)
+                        carrier_live_count += point->live_value_ids[live] == carrier;
+                    bool owner_carrier = carrier < function->value_count &&
+                                         function->value_ownerships[carrier] == XR_CORE_IR_OWNER;
                     bool stable_carrier =
                         carrier < function->value_count &&
-                        (function->value_ownerships[carrier] == XR_CORE_IR_OWNER ||
-                         xr_validated_function_frame_stable_callable(
-                             ir->program, &ir->program->functions[function_id], carrier));
+                        ((owner_carrier && carrier_live_count == 1u) ||
+                         (!owner_carrier &&
+                          xr_validated_function_frame_stable_callable(
+                              ir->program, &ir->program->functions[function_id], carrier)));
                     if (!signature || !stable_carrier ||
                         signature->error_type_id != XR_CORE_TYPE_VOID ||
                         signature->panic_type_id != XR_CORE_TYPE_VOID ||

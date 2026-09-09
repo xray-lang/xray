@@ -29,7 +29,7 @@ static int check_descriptor(void) {
     _Static_assert(sizeof(expected) == sizeof(descriptor->execution_id.bytes),
                    "execution identity width changed");
     CHECK(memcmp(expected, descriptor->execution_id.bytes, sizeof(expected)) == 0);
-    CHECK(descriptor->schema_version == 2u && descriptor->reserved32 == 0u);
+    CHECK(descriptor->schema_version == 3u && descriptor->reserved32 == 0u);
     CHECK(descriptor->frame_size == sizeof(XrAotEntryCoroutineFrame));
     CHECK(xr_aot_entry_coroutine_frame_size() == descriptor->frame_size);
     CHECK(descriptor->initialize && descriptor->step && descriptor->cancel && descriptor->drop);
