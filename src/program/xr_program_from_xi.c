@@ -2241,6 +2241,73 @@ static bool resolved_module_namespace_carrier(const XrXiBuildContext *context, c
     return root && root->module == ref->resolved_module && ref->resolved_module->init == root;
 }
 
+static bool resolved_namespace_reexport(const XrXiBuildContext *context,
+                                        const XiFunc *namespace_root, const char *public_name,
+                                        uint32_t *module_index_out, uint32_t *export_index_out) {
+    if (module_index_out)
+        *module_index_out = UINT32_MAX;
+    if (export_index_out)
+        *export_index_out = UINT32_MAX;
+    if (!context || !context->source || !namespace_root || !public_name ||
+        !namespace_root->reexports)
+        return false;
+
+    uint32_t selected_module = UINT32_MAX;
+    uint32_t selected_export = UINT32_MAX;
+    uint32_t selective_matches = 0u;
+    for (uint16_t index = 0u; index < namespace_root->reexport_count; ++index) {
+        const XiReexportEntry *entry = &namespace_root->reexports[index];
+        const char *visible = entry->alias ? entry->alias : entry->name;
+        if (!entry->name || !visible || strcmp(visible, public_name) != 0)
+            continue;
+        if (!entry->resolution_attempted || !entry->resolution_complete ||
+            entry->resolved_mod_index < 0 || entry->resolved_export_slot < 0)
+            return false;
+        selected_module = (uint32_t) entry->resolved_mod_index;
+        selected_export = (uint32_t) entry->resolved_export_slot;
+        ++selective_matches;
+    }
+    if (selective_matches > 1u)
+        return false;
+
+    uint32_t star_matches = 0u;
+    if (selective_matches == 0u) {
+        for (uint16_t index = 0u; index < namespace_root->reexport_count; ++index) {
+            const XiReexportEntry *entry = &namespace_root->reexports[index];
+            if (entry->name)
+                continue;
+            if (!entry->resolution_attempted || !entry->resolution_complete ||
+                (entry->resolved_member_count != 0u && !entry->resolved_members))
+                return false;
+            for (uint16_t member = 0u; member < entry->resolved_member_count; ++member) {
+                const XiResolvedReexport *resolved = &entry->resolved_members[member];
+                if (!resolved->export_name || strcmp(resolved->export_name, public_name) != 0)
+                    continue;
+                if (resolved->mod_index < 0 || resolved->export_slot < 0)
+                    return false;
+                selected_module = (uint32_t) resolved->mod_index;
+                selected_export = (uint32_t) resolved->export_slot;
+                ++star_matches;
+            }
+        }
+        if (star_matches != 1u)
+            return false;
+    }
+
+    if (selected_module >= context->source->module_count)
+        return false;
+    const XiFunc *owner_root = context->source->module_roots[selected_module];
+    const XiModule *owner_module = owner_root ? owner_root->module : NULL;
+    if (!owner_module || owner_module->init != owner_root ||
+        selected_export >= owner_module->nexports || !owner_module->exports)
+        return false;
+    if (module_index_out)
+        *module_index_out = selected_module;
+    if (export_index_out)
+        *export_index_out = selected_export;
+    return true;
+}
+
 static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context,
                                                  const XiFunc *caller, const XiValue *value,
                                                  XgClassId expected_class_id,
@@ -2255,7 +2322,7 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
         const XiValue *namespace_value = value->nargs == 1u && value->args ? value->args[0] : NULL;
         const XiImportRef *namespace_ref = xi_value_import_ref(caller, namespace_value);
         if (!resolved_module_namespace_carrier(context, caller, namespace_value) ||
-            !namespace_ref || !value->type || value->type->kind != XR_KIND_CLASS ||
+            !namespace_ref || !value->aux || !value->type || value->type->kind != XR_KIND_CLASS ||
             !value->type->instance.class_ref ||
             value->type->instance.class_ref->xg_class_id == XG_NO_ID)
             return NULL;
@@ -2263,27 +2330,32 @@ static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context
         const XiFunc *root = context->source->module_roots[module_index];
         const XiModule *module = root ? root->module : NULL;
         XgClassId class_id = value->type->instance.class_ref->xg_class_id;
-        const XiClassData *class_data = NULL;
-        for (uint16_t index = 0u; module && module->classes && index < module->nclasses; ++index) {
-            const XiClassData *candidate = module->classes[index];
-            if (!candidate || candidate->xg_class_id != class_id)
-                continue;
-            if (class_data)
-                return NULL;
-            class_data = candidate;
-        }
+        const char *public_name = (const char *) value->aux;
         const XiModuleExport *export_row = NULL;
         for (uint16_t index = 0u; module && module->exports && index < module->nexports; ++index) {
             const XiModuleExport *candidate = &module->exports[index];
-            if (candidate->class_data != class_data)
+            if (!candidate->name || strcmp(candidate->name, public_name) != 0)
                 continue;
             if (export_row)
                 return NULL;
             export_row = candidate;
         }
+        if (!export_row) {
+            uint32_t export_index = UINT32_MAX;
+            if (!resolved_namespace_reexport(context, root, public_name, &module_index,
+                                             &export_index))
+                return NULL;
+            root = context->source->module_roots[module_index];
+            module = root ? root->module : NULL;
+            export_row = module && module->exports && export_index < module->nexports
+                             ? &module->exports[export_index]
+                             : NULL;
+        }
+        const XiClassData *class_data = export_row ? export_row->class_data : NULL;
         const XgClassSummary *class_row =
             class_data ? find_xg_class_by_id(context->source->global_evidence, class_id) : NULL;
-        if (!module || module->init != root || !class_data || !export_row || export_row->function ||
+        if (!module || module->init != root || !class_data || !export_row ||
+            class_data->xg_class_id != class_id || export_row->function ||
             export_row->shared_slot >= module->nslots || !module->slot_classes ||
             module->slot_classes[export_row->shared_slot] != class_data || !class_row ||
             class_row->module_id != (XgModuleId) (module_index + 1u) ||

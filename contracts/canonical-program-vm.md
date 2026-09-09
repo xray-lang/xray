@@ -162,8 +162,15 @@ origin class, method, declaration, specialized body, callsite, body-use, and cod
 Reference and both VM decode policies return 42. Xi-only call-bound READ places for the trivial struct
 receiver and explicit argument are erased to Program values only after the receiver plan, callee ABI,
 nominal TypeIds, direct source call, nonescape, and ownership facts agree. A constraint violation and
-an uninferable method type tuple fail during analysis instead of reaching Program. Static generic
-methods, generic receiver-plus-method tuples, interface generic dispatch, parameterized and builtin
+an uninferable method type tuple fail during analysis instead of reaching Program. The same exact
+fact path admits static generic methods on concrete, nongeneric class and struct owners while keeping
+their owner and method identities; only the executable ABI omits the receiver. Direct selective
+imports and namespace access through a uniquely resolved re-export produce the same defining-module
+specialization. Two distinct owners with the same method spelling and concrete tuple produce distinct
+FunctionIds, so generic call-site resolution has no unique-name fallback. Generic template bodies record exact
+declaration facts without becoming executable roots, and clones carry the substituted tuple into the
+nested-instantiation fixpoint. Reference and both VM decode policies still return 42. Generic
+receiver-plus-method tuples, interface generic dispatch, parameterized and builtin
 constraints, generic ownership cleanup, arbitrary returned/projected READ places, and valid finite
 recursive specialization remain outside this bounded slice.
 The source-build request carries one fail-closed budget for module count, monomorphization depth,
@@ -196,4 +203,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c fc73bfeaa33ffda18d06cdf9ef5835961e1bab28ff1d639c7539a32303b5df54
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 8cff1f7258ca9acb1f6a6a4c106c17ef5af6cab7de2094eabeb8913bb4e6312c

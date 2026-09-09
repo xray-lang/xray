@@ -2631,8 +2631,9 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
 // Builds param_names from symbol links, resolves actual types (explicit or inferred),
 // then substitutes into return_type. Returns the substituted type.
 XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, XrType *callee_type,
-                                   XrType *return_type, CallExprNode *call, int arg_count,
-                                   XrType **effective_arg_types, bool writeback_inferred) {
+                                   XrType *return_type, AstNode *call_node, CallExprNode *call,
+                                   int arg_count, XrType **effective_arg_types,
+                                   bool writeback_inferred) {
     XR_DCHECK(ctx != NULL, "substitute_generic_call: NULL ctx");
     XR_DCHECK(links != NULL, "substitute_generic_call: NULL links");
     int type_param_count = xa_symbol_links_get_type_param_count(links);
@@ -2721,11 +2722,16 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
             }
         }
         if (missing >= 0) {
-            const AstNode *declaration = links->function_decl_node;
+            const AstNode *declaration =
+                links->function_decl_node ? links->function_decl_node : links->nominal_decl_node;
             const char *name = declaration && declaration->type == AST_FUNCTION_DECL
                                    ? declaration->as.function_decl.name
                                : declaration && declaration->type == AST_METHOD_DECL
                                    ? declaration->as.method_decl.name
+                               : declaration && declaration->type == AST_CLASS_DECL
+                                   ? declaration->as.class_decl.name
+                               : declaration && declaration->type == AST_STRUCT_DECL
+                                   ? declaration->as.struct_decl.name
                                    : "<generic>";
             XrLocation loc = {
                 .file = ctx->file_path,
@@ -2766,6 +2772,30 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
         }
         if (all_inferred)
             xa_writeback_inferred_type_args(ctx->analyzer, call, actual_types, actual_count);
+    }
+
+    const AstNode *generic_decl =
+        links->function_decl_node ? links->function_decl_node : links->nominal_decl_node;
+    if (writeback_inferred && call_node && call_node->type == AST_CALL_EXPR && call->type_args &&
+        call->type_arg_count == type_param_count && generic_decl &&
+        (generic_decl->type == AST_FUNCTION_DECL || generic_decl->type == AST_METHOD_DECL ||
+         generic_decl->type == AST_CLASS_DECL || generic_decl->type == AST_STRUCT_DECL)) {
+        XaGenericSpecializationFact fact = {
+            .generic_decl = generic_decl,
+            .type_args = call->type_args,
+            .type_arg_count = (uint32_t) call->type_arg_count,
+        };
+        if (!xa_analyzer_set_generic_specialization(ctx->analyzer, call_node, &fact)) {
+            XrLocation loc = {
+                .file = ctx->file_path,
+                .line = call_node->line,
+                .column = call_node->column,
+            };
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
+                                       "compiler could not preserve exact generic call identity",
+                                       &loc);
+            return_type = xr_type_new_error(ctx->analyzer->isolate);
+        }
     }
 
     xr_free(param_names);
@@ -3060,6 +3090,7 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
         info->base_name = xr_strdup(cls->super_name);
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    links->nominal_decl_node = node;
     links->class_info = info;
     links->owns_class_info = true;
     links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);

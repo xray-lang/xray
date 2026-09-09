@@ -37,7 +37,7 @@ XR_FUNC XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_typ
                                              const char *tp_name, int depth);
 XR_FUNC XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links,
                                            XrType *callee_type, XrType *return_type,
-                                           CallExprNode *call, int arg_count,
+                                           AstNode *call_node, CallExprNode *call, int arg_count,
                                            XrType **effective_arg_types, bool writeback_inferred);
 // Record inferred generic type arguments on a call node so monomorphization
 // specializes inferred generic construction, functions, and methods. Defined

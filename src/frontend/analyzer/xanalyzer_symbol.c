@@ -1134,6 +1134,7 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     }
     xa_symbol_links_copy_return_function_effect_summary(dst, src);
     dst->function_decl_node = src->function_decl_node;
+    dst->nominal_decl_node = src->nominal_decl_node;
     dst->interface_decl_node = src->interface_decl_node;
     dst->is_deprecated = src->is_deprecated;
     dst->deprecated_message = src->deprecated_message ? xr_strdup(src->deprecated_message) : NULL;

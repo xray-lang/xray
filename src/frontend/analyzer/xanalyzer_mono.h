@@ -179,6 +179,10 @@ typedef struct {
     uint32_t max_instances;
     uint32_t instance_offset;
     uint32_t max_observed_depth;
+    /* Generic template bodies are scanned once to attach exact declaration
+     * facts for later clone substitution, without treating open-template
+     * operations as executable instantiation roots. */
+    bool record_only;
     /* A budget diagnostic is reported once. The pass keeps running so the user
      * still gets the rest of the program's errors, but every later
      * instantiation would report the same exhausted budget. */

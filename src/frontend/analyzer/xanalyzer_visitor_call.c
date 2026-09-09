@@ -392,6 +392,8 @@ static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, X
 
 static bool xa_links_require_source_generic_specialization(const XaSymbolLinks *links) {
     const AstNode *declaration = links ? links->function_decl_node : NULL;
+    if (!declaration && links)
+        declaration = links->nominal_decl_node;
     if (!links || links->intrinsic_id != XA_INTRINSIC_NONE || links->type_param_count <= 0 ||
         !declaration)
         return false;
@@ -399,6 +401,10 @@ static bool xa_links_require_source_generic_specialization(const XaSymbolLinks *
         return declaration->as.function_decl.type_param_count == links->type_param_count;
     if (declaration->type == AST_METHOD_DECL)
         return declaration->as.method_decl.type_param_count == links->type_param_count;
+    if (declaration->type == AST_CLASS_DECL)
+        return declaration->as.class_decl.type_param_count == links->type_param_count;
+    if (declaration->type == AST_STRUCT_DECL)
+        return declaration->as.struct_decl.type_param_count == links->type_param_count;
     return false;
 }
 
@@ -8164,7 +8170,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // Intrinsics retain their own typed lowering and never enter this path.
     if (return_type && fn_links) {
         return_type = xa_substitute_generic_call(
-            ctx, fn_links, callee_type, return_type, call, arg_count, effective_arg_types,
+            ctx, fn_links, callee_type, return_type, node, call, arg_count, effective_arg_types,
             xa_links_require_source_generic_specialization(fn_links));
     }
 
@@ -8231,7 +8237,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         // resolved them from this receiver.
                         if (method_links != fn_links)
                             return_type = xa_substitute_generic_call(
-                                ctx, method_links, callee_type, return_type, call, arg_count,
+                                ctx, method_links, callee_type, return_type, node, call, arg_count,
                                 effective_arg_types,
                                 xa_links_require_source_generic_specialization(method_links));
 

@@ -161,7 +161,15 @@ specialized body, exact callsite, body-use, and code-size evidence. Reference, b
 native C return 42. Xi-only call-bound READ places for the trivial receiver and explicit argument are
 erased only after exact receiver-plan, callee-ABI, nominal-TypeId, direct-source-call, nonescape, and
 ownership agreement. A constraint violation and an uninferable method type tuple fail during analysis.
-Static generic methods, generic receiver-plus-method tuples, interface generic dispatch,
+The same exact fact path admits static generic methods on concrete, nongeneric class and struct owners
+while keeping their owner and method identities; only the executable ABI omits the receiver. Direct
+selective imports and namespace access through a uniquely resolved re-export produce the same
+defining-module specialization. Two distinct owners with the same method spelling and concrete tuple
+produce distinct FunctionIds, so generic call-site resolution has no unique-name fallback. Generic template bodies
+record exact declaration facts without becoming executable roots, and clones carry the substituted
+tuple into the nested-instantiation fixpoint. Repeated C emission remains byte-identical, strict native
+C and both VM views return the reference value 42, and no AOT-only lookup or specialization policy is
+introduced. Generic receiver-plus-method tuples, interface generic dispatch,
 parameterized/builtin constraints, generic ownership cleanup, arbitrary returned/projected READ
 places, and valid finite recursive specialization remain unqualified.
 Before AOT receives a validated Program,
@@ -223,4 +231,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c fc73bfeaa33ffda18d06cdf9ef5835961e1bab28ff1d639c7539a32303b5df54
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 8cff1f7258ca9acb1f6a6a4c106c17ef5af6cab7de2094eabeb8913bb4e6312c

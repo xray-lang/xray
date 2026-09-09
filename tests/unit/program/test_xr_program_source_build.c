@@ -1552,12 +1552,25 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "    return this.bias + counter.current()\n"
         "  }\n"
         "  token<T>() -> i64 { return 999 }\n"
+        "}\n"
+        "export class GenericStaticReader {\n"
+        "  static genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
+        "    return counter.current()\n"
+        "  }\n"
+        "}\n"
+        "export class OtherStaticReader {\n"
+        "  static genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
+        "    return counter.current() + 1\n"
+        "  }\n"
         "}\n";
     static const char facade_source[] =
-        "export { ReadCounter, LeftCounter, GenericReader, genericRead as readCounter } from "
+        "export { ReadCounter, LeftCounter, GenericReader, GenericStaticReader, "
+        "OtherStaticReader, "
+        "genericRead as readCounter } from "
         "\"./library\"\n";
     static const char entry_source[] =
-        "import { ReadCounter, LeftCounter, GenericReader, readCounter } from \"./facade\"\n"
+        "import { ReadCounter, LeftCounter, GenericReader, GenericStaticReader, "
+        "OtherStaticReader, readCounter } from \"./facade\"\n"
         "import \"./facade\" as counters\n"
         "struct LocalCounter implements ReadCounter {\n"
         "  value: i64\n"
@@ -1571,7 +1584,10 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "  return readCounter<LeftCounter>(left) + readCounter<LocalCounter>(local) +\n"
         "         readCounter(local) + counters.readCounter(left) +\n"
         "         counters.readCounter(local) + reader.genericRead<LeftCounter>(left) +\n"
-        "         reader.genericRead(local) - 62\n"
+        "         reader.genericRead(local) + GenericStaticReader.genericRead<LeftCounter>(left) "
+        "+\n"
+        "         counters.GenericStaticReader.genericRead(local) + "
+        "OtherStaticReader.genericRead(left) - 114\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
@@ -1592,10 +1608,10 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     assert_products_equal(&first, &second);
 
     const XrValidatedProgram *program = first.program;
-    ASSERT_EQ_UINT(program->function_count, 9u);
+    ASSERT_EQ_UINT(program->function_count, 12u);
     ASSERT_EQ_UINT(program->interface_count, 0u);
     ASSERT_EQ_UINT(program->conformance_count, 0u);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 13u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 19u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT), 0u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_EXISTENTIAL_PACK), 0u);
 
@@ -1604,7 +1620,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     const XrValidatedFunction *entry_function = &program->functions[entry];
     ASSERT_EQ_UINT(entry_function->parameter_count, 0u);
     ASSERT_EQ_UINT(entry_function->result_type_id, XR_CORE_TYPE_I64);
-    uint32_t specializations[2] = {UINT32_MAX, UINT32_MAX};
+    uint32_t specializations[5] = {UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
     uint32_t specialization_count = 0u;
     uint32_t method_specializations[2] = {UINT32_MAX, UINT32_MAX};
     uint32_t method_specialization_count = 0u;
@@ -1651,17 +1667,20 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
             for (uint32_t specialization = 0u; specialization < *instance_count; ++specialization)
                 known |= instances[specialization] == instruction->immediate.function_id;
             if (!known) {
-                ASSERT_LT(*instance_count, 2u);
+                ASSERT_LT(*instance_count, callee->has_receiver ? 2u : 5u);
                 instances[(*instance_count)++] = instruction->immediate.function_id;
             }
         }
     }
-    ASSERT_EQ_UINT(entry_call_count, 7u);
-    ASSERT_EQ_UINT(free_call_count, 5u);
+    ASSERT_EQ_UINT(entry_call_count, 10u);
+    ASSERT_EQ_UINT(free_call_count, 8u);
     ASSERT_EQ_UINT(method_call_count, 2u);
-    ASSERT_EQ_UINT(specialization_count, 2u);
+    ASSERT_EQ_UINT(specialization_count, 5u);
     ASSERT_EQ_UINT(method_specialization_count, 2u);
     ASSERT_TRUE(specializations[0] != specializations[1]);
+    ASSERT_TRUE(specializations[2] != specializations[3]);
+    ASSERT_TRUE(specializations[2] != specializations[4]);
+    ASSERT_TRUE(specializations[3] != specializations[4]);
     ASSERT_TRUE(method_specializations[0] != method_specializations[1]);
 
     uint32_t method_targets[2] = {UINT32_MAX, UINT32_MAX};
@@ -1720,6 +1739,50 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_NOT_NULL(left_type);
     ASSERT_NOT_NULL(right_type);
     ASSERT_TRUE(!xr_core_ir_key_equal(left_type->key, right_type->key));
+
+    uint32_t static_method_targets[3] = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    uint16_t static_parameter_types[3] = {XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID};
+    for (uint32_t specialization = 0u; specialization < 3u; ++specialization) {
+        const XrValidatedFunction *method =
+            &program->functions[specializations[specialization + 2u]];
+        ASSERT_FALSE(method->has_receiver);
+        ASSERT_EQ_UINT(method->parameter_count, 1u);
+        ASSERT_EQ_INT(method->parameter_modes[0], XR_PARAM_READ);
+        ASSERT_EQ_UINT(method->result_type_id, XR_CORE_TYPE_I64);
+        static_parameter_types[specialization] = method->parameter_types[0];
+        ASSERT_TRUE(static_parameter_types[specialization] == receiver_types[0] ||
+                    static_parameter_types[specialization] == receiver_types[1]);
+
+        uint32_t calls = 0u;
+        for (uint32_t block_index = 0u; block_index < method->block_count; ++block_index) {
+            const XrValidatedBlock *block = &method->blocks[block_index];
+            for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
+                const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
+                if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT)
+                    continue;
+                ASSERT_EQ_UINT(instruction->operand_count, 1u);
+                ASSERT_LT(instruction->immediate.function_id, program->function_count);
+                const XrValidatedFunction *target =
+                    &program->functions[instruction->immediate.function_id];
+                ASSERT_TRUE(target->has_receiver);
+                ASSERT_EQ_UINT(target->parameter_count, 1u);
+                ASSERT_EQ_UINT(target->parameter_types[0], static_parameter_types[specialization]);
+                ASSERT_EQ_UINT(method->value_types[instruction->operands[0]],
+                               static_parameter_types[specialization]);
+                static_method_targets[specialization] = instruction->immediate.function_id;
+                ++calls;
+            }
+        }
+        ASSERT_EQ_UINT(calls, 1u);
+    }
+    ASSERT_TRUE(static_parameter_types[0] != static_parameter_types[1]);
+    ASSERT_EQ_UINT(static_parameter_types[0], static_parameter_types[2]);
+    ASSERT_TRUE(static_method_targets[0] != static_method_targets[1]);
+    ASSERT_EQ_UINT(static_method_targets[0], static_method_targets[2]);
+    for (uint32_t specialization = 0u; specialization < 3u; ++specialization)
+        ASSERT_TRUE(static_method_targets[specialization] == method_targets[0] ||
+                    static_method_targets[specialization] == method_targets[1]);
 
     uint32_t generic_method_targets[2] = {UINT32_MAX, UINT32_MAX};
     for (uint32_t specialization = 0u; specialization < 2u; ++specialization) {
