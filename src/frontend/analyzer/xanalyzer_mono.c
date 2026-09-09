@@ -30,6 +30,7 @@
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/xerror_codes.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../module/xmodule_graph.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
 #include "xtype_ref_resolve.h"
@@ -2216,14 +2217,92 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     }
 }
 
+static bool mono_find_private_target(XaAnalyzer *analyzer, const AstNode *generic_decl,
+                                     const char *export_name, int *spec_index_out,
+                                     AstNode **target_decl_out) {
+    if (spec_index_out)
+        *spec_index_out = -1;
+    if (target_decl_out)
+        *target_decl_out = NULL;
+    XrModuleGraph *graph = analyzer ? (XrModuleGraph *) analyzer->graph : NULL;
+    if (!graph || !generic_decl || !export_name || !spec_index_out || !target_decl_out)
+        return false;
+    for (int spec_index = 0; spec_index < graph->spec_count; ++spec_index) {
+        AstNode *root = graph->specs[spec_index].ast;
+        if (!root || root->type != AST_PROGRAM)
+            continue;
+        bool owns_generic = false;
+        for (int i = 0; i < root->as.program.count; ++i)
+            owns_generic |= root->as.program.statements[i] == generic_decl;
+        if (!owns_generic)
+            continue;
+        for (int i = 0; i < root->as.program.count; ++i) {
+            AstNode *candidate = root->as.program.statements[i];
+            if (!candidate || candidate->type != AST_FUNCTION_DECL ||
+                !candidate->as.function_decl.name ||
+                strcmp(candidate->as.function_decl.name, export_name) != 0)
+                continue;
+            XaGenericSpecializationFact fact;
+            if (!xa_analyzer_get_generic_specialization(analyzer, candidate, &fact) ||
+                fact.generic_decl != generic_decl)
+                continue;
+            *spec_index_out = spec_index;
+            *target_decl_out = candidate;
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+static bool mono_program_append(AstNode *root, AstNode *statement) {
+    if (!root || root->type != AST_PROGRAM || !statement || !root->as.program.arena)
+        return false;
+    ProgramNode *program = &root->as.program;
+    if (program->count >= program->capacity) {
+        int capacity = program->capacity > 0 ? program->capacity * 2 : 8;
+        AstNode **statements =
+            (AstNode **) xr_arena_alloc_array(program->arena, sizeof(AstNode *), (size_t) capacity);
+        if (!statements)
+            return false;
+        if (program->statements && program->count > 0)
+            memcpy(statements, program->statements, (size_t) program->count * sizeof(AstNode *));
+        program->statements = statements;
+        program->capacity = capacity;
+    }
+    program->statements[program->count++] = statement;
+    return true;
+}
+
 static const char *mono_append_specialized_import(AstNode *root, uint32_t imported_symbol_id,
-                                                  const char *export_name) {
-    if (!root || root->type != AST_PROGRAM || imported_symbol_id == 0 || !export_name)
+                                                  const XaGenericDecl *decl,
+                                                  const char *export_name, XaAnalyzer *analyzer) {
+    if (!root || root->type != AST_PROGRAM || imported_symbol_id == 0 || !decl || !decl->node ||
+        !export_name || !analyzer)
         return NULL;
     ProgramNode *program = &root->as.program;
     XrArena *arena = program->arena;
     if (!arena)
         return NULL;
+
+    int target_spec_index = -1;
+    AstNode *target_decl = NULL;
+    if (!mono_find_private_target(analyzer, decl->node, export_name, &target_spec_index,
+                                  &target_decl))
+        return NULL;
+
+    for (int stmt_index = 0; stmt_index < program->count; stmt_index++) {
+        AstNode *stmt = program->statements[stmt_index];
+        if (!stmt || stmt->type != AST_IMPORT_STMT)
+            continue;
+        ImportStmtNode *import = &stmt->as.import_stmt;
+        for (int member_index = 0; member_index < import->member_count; member_index++) {
+            ImportMember *member = &import->members[member_index];
+            if (member->has_private_target && member->private_target_decl == target_decl &&
+                member->alias)
+                return member->alias;
+        }
+    }
 
     for (int stmt_index = 0; stmt_index < program->count; stmt_index++) {
         AstNode *stmt = program->statements[stmt_index];
@@ -2236,7 +2315,9 @@ static const char *mono_append_specialized_import(AstNode *root, uint32_t import
             if (member->symbol_id == imported_symbol_id)
                 original_index = member_index;
         }
-        if (original_index < 0)
+        bool namespace_import =
+            import->member_count == 0 && import->symbol_id == imported_symbol_id;
+        if (original_index < 0 && !namespace_import)
             continue;
 
         size_t alias_size = strlen(export_name) + 48u;
@@ -2246,25 +2327,46 @@ static const char *mono_append_specialized_import(AstNode *root, uint32_t import
         (void) snprintf(alias, alias_size, "__xr_mono_import_%" PRIu32 "_%s", imported_symbol_id,
                         export_name);
 
-        for (int member_index = 0; member_index < import->member_count; member_index++) {
-            ImportMember *member = &import->members[member_index];
-            if (member->name && member->alias && strcmp(member->name, export_name) == 0 &&
-                strcmp(member->alias, alias) == 0)
-                return member->alias;
+        ImportStmtNode *target_import = import;
+        if (namespace_import) {
+            AstNode *private_stmt = (AstNode *) xr_arena_alloc(arena, sizeof(AstNode));
+            if (!private_stmt)
+                return NULL;
+            memset(private_stmt, 0, sizeof(*private_stmt));
+            private_stmt->type = AST_IMPORT_STMT;
+            private_stmt->node_id =
+                xr_compiler_session_next_ast_node_id(analyzer->compiler_session);
+            private_stmt->line = stmt->line;
+            private_stmt->column = stmt->column;
+            private_stmt->as.import_stmt.module_name = xr_arena_strdup(arena, import->module_name);
+            private_stmt->as.import_stmt.is_quoted = import->is_quoted;
+            private_stmt->as.import_stmt.members =
+                (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), 1u);
+            if (!private_stmt->as.import_stmt.module_name ||
+                !private_stmt->as.import_stmt.members || !mono_program_append(root, private_stmt))
+                return NULL;
+            private_stmt->as.import_stmt.member_count = 1;
+            target_import = &private_stmt->as.import_stmt;
+        } else {
+            int grown_count = import->member_count + 1;
+            ImportMember *grown =
+                (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), grown_count);
+            if (!grown)
+                return NULL;
+            memcpy(grown, import->members, (size_t) import->member_count * sizeof(ImportMember));
+            import->members = grown;
+            import->member_count = grown_count;
         }
-
-        int grown_count = import->member_count + 1;
-        ImportMember *grown =
-            (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), grown_count);
-        if (!grown)
-            return NULL;
-        memcpy(grown, import->members, (size_t) import->member_count * sizeof(ImportMember));
-        ImportMember *specialized = &grown[import->member_count];
+        ImportMember *specialized = &target_import->members[target_import->member_count - 1];
+        memset(specialized, 0, sizeof(*specialized));
         specialized->name = xr_arena_strdup(arena, export_name);
         specialized->alias = alias;
-        specialized->symbol_id = 0;
-        import->members = grown;
-        import->member_count = grown_count;
+        if (!specialized->name)
+            return NULL;
+        specialized->has_private_target = true;
+        specialized->private_target_spec_index = target_spec_index;
+        specialized->private_generic_decl = decl->node;
+        specialized->private_target_decl = target_decl;
         return specialized->alias;
     }
     return NULL;
@@ -2329,7 +2431,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                         xa_analyzer_symbol_by_id(collector->analyzer, original_symbol_id);
                     if (decl->is_external && symbol && symbol->is_imported) {
                         const char *alias = mono_append_specialized_import(
-                            collector->rewrite_root, original_symbol_id, mangled);
+                            collector->rewrite_root, original_symbol_id, decl, mangled,
+                            collector->analyzer);
                         if (!alias) {
                             mono_report_rewrite_failure(collector, node, decl->name);
                             return;
@@ -2361,7 +2464,20 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                     if (!mono_publish_specialization(collector, node, decl, call->type_args,
                                                      call->type_arg_count))
                         return;
-                    call->callee->as.member_access.name = xr_strdup(mangled);
+                    AstNode *object = call->callee->as.member_access.object;
+                    uint32_t namespace_symbol_id =
+                        object && object->type == AST_VARIABLE ? object->as.variable.symbol_id : 0u;
+                    const char *alias =
+                        mono_append_specialized_import(collector->rewrite_root, namespace_symbol_id,
+                                                       decl, mangled, collector->analyzer);
+                    if (!alias) {
+                        mono_report_rewrite_failure(collector, node, decl->name);
+                        return;
+                    }
+                    AstNode *callee = call->callee;
+                    memset(&callee->as, 0, sizeof(callee->as));
+                    callee->type = AST_VARIABLE;
+                    callee->as.variable.name = (char *) alias;
                     call->type_args = NULL;
                     call->type_arg_count = 0;
                 }

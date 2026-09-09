@@ -2537,7 +2537,7 @@ static void prescan_enum_method_bindings(XiLower *l, EnumDeclNode *ed, uint16_t 
 }
 
 static XiImportRef *prescan_import_ref(XiLower *l, const AstNode *node, const char *module_name,
-                                       const char *member_name) {
+                                       const char *member_name, const ImportMember *member) {
     if (!l || !l->func || !node || node->type != AST_IMPORT_STMT || !module_name)
         return NULL;
     XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
@@ -2547,6 +2547,7 @@ static XiImportRef *prescan_import_ref(XiLower *l, const AstNode *node, const ch
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
     ref->resolved_export_slot = -1;
+    ref->exact_target_spec_index = -1;
     ref->psc_dependency_index = XI_PSC_ROW_NONE;
     ref->psc_import_locator = (XiSourceLocator) {
         .kind = (uint32_t) node->type,
@@ -2571,6 +2572,10 @@ static XiImportRef *prescan_import_ref(XiLower *l, const AstNode *node, const ch
             return NULL;
         memcpy(member_copy, member_name, member_length + 1);
         ref->member_name = member_copy;
+    }
+    if (member && member->has_private_target) {
+        ref->has_exact_target = true;
+        ref->exact_target_spec_index = member->private_target_spec_index;
     }
     return ref;
 }
@@ -2630,12 +2635,21 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     const char *mname = m->alias ? m->alias : m->name;
                     if (!mname || xi_lower_import_member_is_type_only(l, m))
                         continue;
-                    int vid = xi_lower_var_create(l, m->symbol_id, mname, l->type_any);
+                    XrType *import_type = l->type_any;
+                    if (m->has_private_target) {
+                        import_type = xi_lower_declared_symbol_type(l, m->symbol_id);
+                        if (!import_type || import_type->kind != XR_KIND_FUNCTION) {
+                            l->had_error = true;
+                            prescan_slot_meta_free(&slot_meta);
+                            return;
+                        }
+                    }
+                    int vid = xi_lower_var_create(l, m->symbol_id, mname, import_type);
                     XR_DCHECK(vid >= 0 && vid < l->var_cap,
                               "prescan_top_level_bindings: var_id overflow (import member)");
                     l->shared_map[vid] = (int16_t) next_shared;
                     XiImportRef *ref =
-                        prescan_import_ref(l, s, s->as.import_stmt.module_name, m->name);
+                        prescan_import_ref(l, s, s->as.import_stmt.module_name, m->name, m);
                     if (!ref || next_shared >= (uint16_t) l->var_cap) {
                         l->had_error = true;
                         prescan_slot_meta_free(&slot_meta);
@@ -2655,7 +2669,7 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                   "prescan_top_level_bindings: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
         if (s && s->type == AST_IMPORT_STMT) {
-            XiImportRef *ref = prescan_import_ref(l, s, s->as.import_stmt.module_name, NULL);
+            XiImportRef *ref = prescan_import_ref(l, s, s->as.import_stmt.module_name, NULL, NULL);
             if (!ref || next_shared >= (uint16_t) l->var_cap) {
                 l->had_error = true;
                 prescan_slot_meta_free(&slot_meta);

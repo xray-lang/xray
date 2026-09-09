@@ -38,6 +38,7 @@ typedef struct SourceBuildFixture {
     char directory[XR_TEST_PATH_MAX];
     char entry_path[XR_TEST_PATH_MAX];
     char dependency_path[XR_TEST_PATH_MAX];
+    char facade_path[XR_TEST_PATH_MAX];
     XrVMRuntime *isolate;
     XrCompilerSession *session;
     XrCompilerSession *original_session;
@@ -843,6 +844,8 @@ static void source_build_fixture_free(SourceBuildFixture *fixture) {
     xr_module_resolver_free(fixture->resolver);
     xr_free(fixture->entry_identity);
     xr_free(fixture->entry_logical_path);
+    if (fixture->facade_path[0])
+        xr_test_unlink(fixture->facade_path);
     if (fixture->dependency_path[0])
         xr_test_unlink(fixture->dependency_path);
     if (fixture->entry_path[0])
@@ -924,6 +927,16 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
 fail:
     source_build_fixture_free(fixture);
     return false;
+}
+
+static bool source_build_fixture_add_facade(SourceBuildFixture *fixture,
+                                            const char *facade_source) {
+    if (!fixture || !facade_source || !fixture->directory[0] || fixture->facade_path[0])
+        return false;
+    int facade_length = snprintf(fixture->facade_path, sizeof(fixture->facade_path), "%s/facade.xr",
+                                 fixture->directory);
+    return facade_length >= 0 && (size_t) facade_length < sizeof(fixture->facade_path) &&
+           write_source_file(fixture->facade_path, facade_source);
 }
 
 static void assert_products_equal(const XrProgramSourceProduct *first,
@@ -1533,8 +1546,11 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
         "  return counter.current() + nested<Array<T>>() - 1\n"
         "}\n";
+    static const char facade_source[] =
+        "export { ReadCounter, LeftCounter, genericRead as readCounter } from \"./library\"\n";
     static const char entry_source[] =
-        "import { ReadCounter, LeftCounter, genericRead as readCounter } from \"./library\"\n"
+        "import { ReadCounter, LeftCounter, readCounter } from \"./facade\"\n"
+        "import \"./facade\" as counters\n"
         "struct LocalCounter implements ReadCounter {\n"
         "  value: i64\n"
         "  current() -> i64 { return this.value }\n"
@@ -1544,10 +1560,12 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "  var left = LeftCounter{value: 20}\n"
         "  var local = LocalCounter{value: 11}\n"
         "  return readCounter<LeftCounter>(left) + readCounter<LocalCounter>(local) +\n"
-        "         readCounter(local)\n"
+        "         readCounter(local) + counters.readCounter(left) +\n"
+        "         counters.readCounter(local) - 31\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
+    ASSERT_TRUE(source_build_fixture_add_facade(&fixture, facade_source));
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
@@ -1567,7 +1585,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_EQ_UINT(program->function_count, 7u);
     ASSERT_EQ_UINT(program->interface_count, 0u);
     ASSERT_EQ_UINT(program->conformance_count, 0u);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 7u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 9u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT), 0u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_EXISTENTIAL_PACK), 0u);
 
@@ -1611,7 +1629,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
             }
         }
     }
-    ASSERT_EQ_UINT(entry_call_count, 3u);
+    ASSERT_EQ_UINT(entry_call_count, 5u);
     ASSERT_EQ_UINT(specialization_count, 2u);
     ASSERT_TRUE(specializations[0] != specializations[1]);
 
@@ -1746,8 +1764,8 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     source_build_fixture_free(&fixture);
 
     static const char namespace_entry_source[] =
-        "import { ReadCounter, LeftCounter } from \"./library\"\n"
-        "import \"./library\" as counters\n"
+        "import { ReadCounter, LeftCounter } from \"./facade\"\n"
+        "import \"./facade\" as counters\n"
         "struct LocalCounter implements ReadCounter {\n"
         "  value: i64\n"
         "  current() -> i64 { return this.value }\n"
@@ -1755,11 +1773,13 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "fn answer() -> i64 {\n"
         "  var left = LeftCounter{value: 41}\n"
         "  var local = LocalCounter{value: 1}\n"
-        "  return counters.genericRead(left) + counters.genericRead(local)\n"
+        "  return counters.readCounter(left) + counters.readCounter(left) +\n"
+        "         counters.readCounter(local) - 41\n"
         "}\n";
     SourceBuildFixture namespace_fixture;
     ASSERT_TRUE(source_build_fixture_init(&namespace_fixture, namespace_entry_source,
                                           library_source));
+    ASSERT_TRUE(source_build_fixture_add_facade(&namespace_fixture, facade_source));
     XrProgramSourceProduct namespace_product = {0};
     XrProgramSourceDiagnostic namespace_diagnostic;
     assert_source_build_ok(&namespace_fixture.input, &namespace_product, &namespace_diagnostic);
@@ -1782,19 +1802,22 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "  return counter.current()\n"
         "}\n";
     static const char negative_entry_source[] =
-        "import { genericRead as readCounter } from \"./library\"\n"
+        "import { readCounter } from \"./facade\"\n"
         "struct NotCounter { value: i64 }\n"
         "fn genericRead<T>(_value: T) -> i64 { return 999 }\n"
         "fn answer() -> i64 { return readCounter(NotCounter{value: 42}) }\n";
     SourceBuildFixture negative_fixture;
     ASSERT_TRUE(source_build_fixture_init(&negative_fixture, negative_entry_source,
                                           negative_library_source));
+    static const char negative_facade_source[] =
+        "export { genericRead as readCounter } from \"./library\"\n";
+    ASSERT_TRUE(source_build_fixture_add_facade(&negative_fixture, negative_facade_source));
     XrProgramSourceProduct rejected = {0};
     XrProgramSourceDiagnostic rejection;
     ASSERT_EQ_INT(xr_program_source_build(&negative_fixture.input, &rejected, &rejection),
                   XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED);
     ASSERT_EQ_INT(rejection.stage, XR_PROGRAM_SOURCE_STAGE_ANALYSIS);
-    ASSERT_EQ_UINT(rejection.module_index, 1u);
+    ASSERT_EQ_UINT(rejection.module_index, 2u);
     ASSERT_EQ_UINT(rejection.underlying_status, XR_ERR_ANALYZE_GENERIC_CONSTRAINT);
     ASSERT_EQ_UINT(rejection.source_line, 4u);
     ASSERT_NOT_NULL(strstr(rejection.source_path, "main.xr"));
@@ -1802,6 +1825,24 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_NULL(rejected.artifact.bytes);
     ASSERT_NULL(rejected.program);
     source_build_fixture_free(&negative_fixture);
+
+    static const char private_name_entry_source[] = "import { genericRead } from \"./facade\"\n"
+                                                    "fn answer() -> i64 { return 0 }\n";
+    SourceBuildFixture private_name_fixture;
+    ASSERT_TRUE(source_build_fixture_init(&private_name_fixture, private_name_entry_source,
+                                          negative_library_source));
+    ASSERT_TRUE(source_build_fixture_add_facade(&private_name_fixture, negative_facade_source));
+    XrProgramSourceProduct private_name_rejected = {0};
+    XrProgramSourceDiagnostic private_name_rejection;
+    ASSERT_EQ_INT(xr_program_source_build(&private_name_fixture.input, &private_name_rejected,
+                                          &private_name_rejection),
+                  XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED);
+    ASSERT_EQ_INT(private_name_rejection.stage, XR_PROGRAM_SOURCE_STAGE_ANALYSIS);
+    ASSERT_EQ_UINT(private_name_rejection.module_index, 2u);
+    ASSERT_NOT_NULL(strstr(private_name_rejection.message, "has no member 'genericRead'"));
+    ASSERT_NULL(private_name_rejected.artifact.bytes);
+    ASSERT_NULL(private_name_rejected.program);
+    source_build_fixture_free(&private_name_fixture);
 }
 
 TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates) {

@@ -15,6 +15,7 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xa_intrinsic_registry.h"
+#include "xa_node_table.h"
 #include "xaddressability.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
@@ -3238,6 +3239,25 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
     return graph->specs[idx].export_symbols;
 }
 
+static XaSymbol *resolve_private_import_target(XaAnalyzer *analyzer, const ImportMember *member) {
+    XrModuleGraph *graph = analyzer ? (XrModuleGraph *) analyzer->graph : NULL;
+    if (!graph || !member || !member->has_private_target || member->private_target_spec_index < 0 ||
+        member->private_target_spec_index >= graph->spec_count || !member->name ||
+        !member->private_generic_decl || !member->private_target_decl)
+        return NULL;
+    XrModuleSpec *target = &graph->specs[member->private_target_spec_index];
+    XaSymbol *symbol = target->export_symbols
+                           ? (XaSymbol *) xr_hashmap_get(target->export_symbols, member->name)
+                           : NULL;
+    XaGenericSpecializationFact fact;
+    if (target->export_symbols_invalid || !symbol ||
+        symbol->links.function_decl_node != member->private_target_decl ||
+        !xa_analyzer_get_generic_specialization(analyzer, member->private_target_decl, &fact) ||
+        fact.generic_decl != member->private_generic_decl)
+        return NULL;
+    return symbol;
+}
+
 // Helper: collect import statement (register module variable in symbol table)
 static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
@@ -3291,11 +3311,18 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
             }
             const char *local_name = member->alias ? member->alias : member->name;
             XaSymbol *export_sym =
-                graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL;
+                member->has_private_target
+                    ? resolve_private_import_target(ctx->analyzer, member)
+                    : (graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name)
+                                     : NULL);
             const XaBuiltinObjectShape *builtin_object_shape =
-                export_sym ? NULL : xa_builtin_get_object_shape(import->module_name, member->name);
+                export_sym || member->has_private_target
+                    ? NULL
+                    : xa_builtin_get_object_shape(import->module_name, member->name);
             const XaBuiltinEnum *builtin_enum =
-                export_sym ? NULL : xa_builtin_get_enum_type(import->module_name, member->name);
+                export_sym || member->has_private_target
+                    ? NULL
+                    : xa_builtin_get_enum_type(import->module_name, member->name);
 
             // Register each imported member as its exported semantic kind.
             XaSymbolKind imported_kind = export_sym             ? export_sym->kind
@@ -3333,7 +3360,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                     }
 
                     // Priority 2: resolve from builtin module signatures (stdlib)
-                    if (!member_type) {
+                    if (!member_type && !member->has_private_target) {
                         builtin_sig =
                             xa_builtin_get_module_func_signature(import->module_name, member->name);
                         if (builtin_sig) {
@@ -3360,9 +3387,17 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                                                                 builtin_enum, &links->enum_info);
                     }
 
-                    if (!export_sym && !builtin_sig && !builtin_object_shape && !builtin_enum)
+                    if (!export_sym && member->has_private_target) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        xa_analyzer_add_diagnostic(
+                            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
+                            "compiler-private specialization target is missing or inexact", &loc);
+                    } else if (!export_sym && !builtin_sig && !builtin_object_shape &&
+                               !builtin_enum) {
                         xa_report_unknown_stdlib_member(ctx, node, import->module_name,
                                                         member->name);
+                    }
 
                     if (!export_sym) {
                         links->type = member_type ? member_type : xr_type_new_unknown(NULL);

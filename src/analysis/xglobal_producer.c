@@ -97,6 +97,10 @@ typedef struct XgModuleImportRow {
     const char *local_name;
     const char *module_name;
     const char *member_name;
+    // Compiler-private specialization imports keep declaration authority without publishing
+    // mangled members through intermediate facades.
+    XgModuleId exact_target_module_id;
+    const AstNode *exact_target_decl;
 } XgModuleImportRow;
 
 typedef struct XgLocalType XgLocalType;
@@ -1465,7 +1469,9 @@ static bool producer_reserve_module_imports(XgProducer *p, uint32_t needed) {
 
 static bool producer_register_module_import(XgProducer *p, XgModuleId module_id,
                                             const char *local_name, const char *module_name,
-                                            const char *member_name) {
+                                            const char *member_name,
+                                            XgModuleId exact_target_module_id,
+                                            const AstNode *exact_target_decl) {
     XgModuleImportRow *row;
     if (!local_name || !local_name[0] || !module_name || !module_name[0])
         return true;
@@ -1476,6 +1482,8 @@ static bool producer_register_module_import(XgProducer *p, XgModuleId module_id,
     row->local_name = local_name;
     row->module_name = module_name;
     row->member_name = member_name;
+    row->exact_target_module_id = exact_target_module_id;
+    row->exact_target_decl = exact_target_decl;
     return true;
 }
 
@@ -9364,13 +9372,26 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         const char *callee_name = callee->as.variable.name;
         const XgModuleImportRow *import =
             producer_lookup_module_import(bc->producer, bc->module_id, callee_name);
-        XgFuncNameRow *target = import && import->member_name
-                                    ? producer_lookup_func_row_scoped(
-                                          bc->producer,
-                                          producer_module_id_for_coordinate(
-                                              bc->producer, bc->module_id, import->module_name),
-                                          import->member_name)
-                                    : NULL;
+        XgFuncNameRow *target =
+            import && import->exact_target_decl
+                ? producer_lookup_func_row_by_decl(bc->producer, import->exact_target_decl)
+            : import && import->member_name
+                ? producer_lookup_func_row_scoped(
+                      bc->producer,
+                      producer_module_id_for_coordinate(bc->producer, bc->module_id,
+                                                        import->module_name),
+                      import->member_name)
+                : NULL;
+        if (target && import && import->exact_target_decl &&
+            (import->exact_target_module_id == XG_NO_ID ||
+             target->module_id != import->exact_target_module_id)) {
+            bc->producer->failed = true;
+            return;
+        }
+        if (!target && import && import->exact_target_decl) {
+            bc->producer->failed = true;
+            return;
+        }
         if (!target)
             target = producer_lookup_func_row(bc->producer, callee_name);
         const XgPendingBody *child_target =
@@ -12117,13 +12138,26 @@ static bool add_import_contract(XgProducer *p, XgModuleId module_id, const AstNo
         return false;
     if (import->member_count == 0) {
         const char *local_name = import->alias ? import->alias : import->module_name;
-        return producer_register_module_import(p, module_id, local_name, import->module_name, NULL);
+        return producer_register_module_import(p, module_id, local_name, import->module_name, NULL,
+                                               XG_NO_ID, NULL);
     }
     for (int i = 0; i < import->member_count; i++) {
         const ImportMember *member = &import->members[i];
         const char *local_name = member->alias ? member->alias : member->name;
+        XgModuleId exact_target_module_id = XG_NO_ID;
+        if (member->has_private_target) {
+            if (!p->module_graph || member->private_target_spec_index < 0 ||
+                member->private_target_spec_index >= p->module_graph->spec_count ||
+                !member->private_target_decl)
+                return false;
+            const XrModuleSpec *target = &p->module_graph->specs[member->private_target_spec_index];
+            exact_target_module_id = producer_module_id_for_identity(p, target->canonical);
+            if (exact_target_module_id == XG_NO_ID)
+                return false;
+        }
         if (!producer_register_module_import(p, module_id, local_name, import->module_name,
-                                             member->name))
+                                             member->name, exact_target_module_id,
+                                             member->private_target_decl))
             return false;
     }
     return true;

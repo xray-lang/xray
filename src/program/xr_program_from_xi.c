@@ -4962,8 +4962,13 @@ static const XiFunc *resolved_shared_callable_target(const XrXiBuildContext *con
     const XiFunc *target =
         resolved_imported_callable_target(context, function, value, signature_key);
     if (target) {
-        if (visible_type)
-            *visible_type = imported_callable_refined_type(context, function, value);
+        const XiImportRef *ref = imported_callable_ref(context, function, value);
+        if (visible_type) {
+            *visible_type =
+                ref && ref->has_exact_target && value->type && value->type->kind == XR_KIND_FUNCTION
+                    ? value->type
+                    : imported_callable_refined_type(context, function, value);
+        }
         return visible_type && !*visible_type ? NULL : target;
     }
     target = resolved_local_callable_target(context, function, value, signature_key);
@@ -7069,11 +7074,11 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
     bool result_mapped = map_logical_value_type(context, function->xi, value, &result_type);
     if (!result_mapped)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi function %s block b%u operation %u at v%u result type kind %u is not "
+                    "Xi function %s block b%u operation %s (%u) at v%u result type kind %u is not "
                     "active in CoreSpec",
                     function->xi && function->xi->name ? function->xi->name : "<anonymous>",
-                    block && block->xi ? block->xi->id : UINT32_MAX, value->op, value->id,
-                    value->type ? (unsigned) value->type->kind : UINT32_MAX);
+                    block && block->xi ? block->xi->id : UINT32_MAX, xi_op_name(value->op),
+                    value->op, value->id, value->type ? (unsigned) value->type->kind : UINT32_MAX);
     if (value->op == XI_ASSERTION) {
         uint16_t condition_type = XR_CORE_TYPE_VOID;
         if (!exact_condition_assertion(value) || result_type != XR_CORE_TYPE_VOID ||
@@ -14846,9 +14851,7 @@ static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage,
                                                      bool include_initializer, char *diagnostic,
                                                      size_t diagnostic_size) {
     const XiModule *module = storage && storage->root ? storage->root->module : NULL;
-    if (!module || module->init != storage->root ||
-        (!include_initializer && module->nfuncs == 0u) ||
-        (module->nfuncs != 0u && !module->functions))
+    if (!module || module->init != storage->root || (module->nfuncs != 0u && !module->functions))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi module has no exact initializer function tree");
     uint32_t count = include_initializer ? 1u : module->nfuncs;

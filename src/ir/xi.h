@@ -878,6 +878,8 @@ static inline bool xi_vec_shape_is_scalable(int64_t shape) {
 typedef struct XiImportRef {
     const char *module_path;          /* import source (e.g. "./math_lib") */
     const char *member_name;          /* exported name (e.g. "square") */
+    bool has_exact_target;            /* compiler-private direct graph binding */
+    int exact_target_spec_index;      /* XrModuleGraph spec index, never a source locator */
     int resolved_mod_index;           /* index into the driver's module array, -1 = unresolved */
     int resolved_shared_slot;         /* shared slot in the target module, -1 = unresolved */
     int resolved_export_slot;         /* dense VM runtime export slot, -1 = unresolved */

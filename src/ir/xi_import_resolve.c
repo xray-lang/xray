@@ -324,7 +324,12 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
                 continue; /* fully resolved */
 
             int target_spec_idx = -1;
-            if (ref->module_path[0] == '.') {
+            if (ref->has_exact_target) {
+                if (ref->exact_target_spec_index < 0 ||
+                    ref->exact_target_spec_index >= graph->spec_count || !ref->member_name)
+                    continue;
+                target_spec_idx = ref->exact_target_spec_index;
+            } else if (ref->module_path[0] == '.') {
                 /* Relative import: resolve specifier to canonical path via graph */
                 const char *canonical =
                     xi_resolve_import_canonical(graph, importer_path, ref->module_path);
