@@ -310,7 +310,7 @@ static const XaBuiltinMember g_gen_time_functions[] = {
     {"__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__utcOffsetAt", "(seconds: i64): i64", "Minutes east of UTC at a Unix timestamp in seconds", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_TIME_FUNCTION_COUNT 5
 

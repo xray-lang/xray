@@ -55,7 +55,6 @@ src/aot/xi_cgen_ctx_impl.inc.c
 src/aot/xi_cgen_import_helpers.inc.c
 src/aot/xi_cgen_struct_helpers.inc.c
 src/aot/xi_cgen_value_helpers.inc.c
-src/aot/xi_cgen_verify_output.c
 src/aot/xr_leaf_value_product_program_emission.c
 src/aot/xr_leaf_value_product_program_emission.h
 src/aot/xr_target_aggregate_c_projection.c
@@ -80,7 +79,6 @@ src/app/cli/xcmd_compile.c
 src/app/cli/xcmd_language.c
 src/app/cli/xcmd_plan.c
 src/app/cli/xcmd_repl.c
-src/app/cli/xcmd_run.c
 src/app/cli/xcmd_test.c
 src/app/dap/xdap_protocol.c
 src/app/lsp/xlsp_keywords.c
@@ -127,7 +125,6 @@ src/incremental/xr_module_summary_build.h
 src/incremental/xr_module_task_graph.c
 src/incremental/xr_module_task_graph.h
 src/ir/xi_builtin_map_entry_iterator_shape.h
-src/ir/xi_coro_analyze.h
 src/ir/xi_coro_lower.c
 src/ir/xi_emit_arith.c
 src/ir/xi_emit_eh.c
@@ -219,7 +216,6 @@ src/plan/target/xr_target_entry_abi.c
 src/plan/target/xr_target_entry_abi.h
 src/plan/target/xr_target_instruction_verify.h
 src/plan/target/xr_target_plan_internal.h
-src/plan/target/xr_target_profile.c
 src/plan/target/xr_target_profile_internal.h
 src/plan/target/xr_xtp_materialize.c
 src/runtime/abi/xr_runtime_contract.h
@@ -309,7 +305,6 @@ src/shared/xr_truthy_core.h
 src/shared/xr_type_identity_core.h
 src/shared/xr_type_names_core.h
 src/shared/xr_win_utf.h
-src/stdlib/xstdlib_metadata.h
 src/stdlib/xstdlib_vm_fastpath.h
 src/toolchain/xcompiler_session.c
 src/toolchain/xcompiler_session.h

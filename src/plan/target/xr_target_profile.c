@@ -213,7 +213,8 @@ static void compute_runtime_kernel(const XrTargetProfileDraft *facts,
     kernel->generation_protocol = 1u;
     kernel->panic_policy = XR_RUNTIME_KERNEL_POLICY_CONTRACTUAL;
     kernel->oom_policy = XR_RUNTIME_KERNEL_POLICY_CONTRACTUAL;
-    kernel->scheduler_hook_mask = XR_RUNTIME_SCHEDULER_HOOK_COOPERATIVE_YIELD;
+    kernel->scheduler_hook_mask =
+        XR_RUNTIME_SCHEDULER_HOOK_COROUTINE_SUSPENSION | XR_RUNTIME_SCHEDULER_HOOK_TIMER;
     kernel->runtime_abi_id = facts->runtime_abi_fingerprint;
 
     XrSHA256Context context;

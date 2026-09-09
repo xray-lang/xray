@@ -44,8 +44,7 @@ _Static_assert((int) XA_TARGET_NAMESPACE_TARGET == (int) XG_TARGET_NAMESPACE_TAR
                "target namespace identity drifted between analyzer and Xglobal");
 _Static_assert((int) XA_TARGET_QUERY_POINTER_BITS == (int) XG_TARGET_QUERY_POINTER_BITS,
                "target query identity drifted between analyzer and Xglobal");
-_Static_assert((int) XA_TARGET_QUERY_OPERATING_SYSTEM ==
-                   (int) XG_TARGET_QUERY_OPERATING_SYSTEM &&
+_Static_assert((int) XA_TARGET_QUERY_OPERATING_SYSTEM == (int) XG_TARGET_QUERY_OPERATING_SYSTEM &&
                    (int) XA_TARGET_QUERY_ARCHITECTURE == (int) XG_TARGET_QUERY_ARCHITECTURE &&
                    (int) XA_TARGET_QUERY_NATIVE_ABI == (int) XG_TARGET_QUERY_NATIVE_ABI &&
                    (int) XA_TARGET_QUERY_ENDIANNESS == (int) XG_TARGET_QUERY_ENDIANNESS,
@@ -274,8 +273,8 @@ static bool producer_reserve_callable_target_sets(XgProducer *producer, uint32_t
         return false;
     if (producer->callable_target_set_cap >= needed)
         return true;
-    uint32_t new_cap = producer->callable_target_set_cap < 8 ? 8
-                                                             : producer->callable_target_set_cap;
+    uint32_t new_cap =
+        producer->callable_target_set_cap < 8 ? 8 : producer->callable_target_set_cap;
     while (new_cap < needed) {
         if (new_cap > UINT32_MAX / 2)
             return false;
@@ -291,8 +290,10 @@ static bool producer_reserve_callable_target_sets(XgProducer *producer, uint32_t
 }
 
 /* Callable facts can point forward to a lambda nested in a body that has not
- * been enumerated yet.  Capture the pointer-free analyzer identity here and
- * resolve it only after the body-discovery walk has reached its fixed point. */
+ * been enumerated
+ * yet.  Capture the pointer-free analyzer identity here and
+ * resolve it only after the
+ * body-discovery walk has reached its fixed point. */
 static bool producer_queue_callable_target_set(const XgBodyCollect *bc, const AstNode *call,
                                                XgCallsiteId callsite_id) {
     XaCallableTargetSetFact fact;
@@ -341,10 +342,8 @@ static bool producer_emit_callable_target_sets(XgProducer *producer) {
         uint32_t target_count = 0;
         for (uint32_t i = 0; i < set->target_count; i++) {
             const XaCallableTarget *target = &set->targets[i];
-            const XgPendingBody *pending =
-                producer_find_callable_target_body(producer, target);
-            if (!pending ||
-                target->structural_signature_key != set->structural_signature_key) {
+            const XgPendingBody *pending = producer_find_callable_target_body(producer, target);
+            if (!pending || target->structural_signature_key != set->structural_signature_key) {
                 xr_free(target_func_ids);
                 return false;
             }
@@ -1464,8 +1463,7 @@ static bool producer_reserve_module_imports(XgProducer *p, uint32_t needed) {
     new_cap = p->module_import_cap < 8 ? 8 : p->module_import_cap;
     while (new_cap < needed)
         new_cap *= 2;
-    rows = (XgModuleImportRow *) xr_realloc(p->module_imports,
-                                            (size_t) new_cap * sizeof(*rows));
+    rows = (XgModuleImportRow *) xr_realloc(p->module_imports, (size_t) new_cap * sizeof(*rows));
     if (!rows)
         return false;
     p->module_imports = rows;
@@ -1589,8 +1587,8 @@ static bool producer_nominal_info_key_can_rebind(const XrClassInfo *info, uint64
            info->xg_interface_id == XG_NO_ID;
 }
 
-static bool producer_rebind_class_info(XrClassInfo *info, uint64_t nominal_key,
-                                       XgDeclId decl_id, XgClassId class_id) {
+static bool producer_rebind_class_info(XrClassInfo *info, uint64_t nominal_key, XgDeclId decl_id,
+                                       XgClassId class_id) {
     if (!producer_nominal_info_key_can_rebind(info, nominal_key) ||
         info->xg_interface_id != XG_NO_ID)
         return false;
@@ -1602,8 +1600,7 @@ static bool producer_rebind_class_info(XrClassInfo *info, uint64_t nominal_key,
 
 static bool producer_rebind_interface_info(XrClassInfo *info, uint64_t nominal_key,
                                            XgDeclId decl_id, XgInterfaceId interface_id) {
-    if (!producer_nominal_info_key_can_rebind(info, nominal_key) ||
-        info->xg_class_id != XG_NO_ID ||
+    if (!producer_nominal_info_key_can_rebind(info, nominal_key) || info->xg_class_id != XG_NO_ID ||
         (info->xg_interface_id != XG_NO_ID && info->xg_interface_id != interface_id))
         return false;
     info->xg_decl_id = decl_id;
@@ -1612,10 +1609,9 @@ static bool producer_rebind_interface_info(XrClassInfo *info, uint64_t nominal_k
     return true;
 }
 
-static bool producer_rebind_enum_info(XrClassInfo *info, uint64_t nominal_key,
-                                      XgDeclId decl_id) {
-    if (!producer_nominal_info_key_can_rebind(info, nominal_key) ||
-        info->xg_class_id != XG_NO_ID || info->xg_interface_id != XG_NO_ID)
+static bool producer_rebind_enum_info(XrClassInfo *info, uint64_t nominal_key, XgDeclId decl_id) {
+    if (!producer_nominal_info_key_can_rebind(info, nominal_key) || info->xg_class_id != XG_NO_ID ||
+        info->xg_interface_id != XG_NO_ID)
         return false;
     info->xg_decl_id = decl_id;
     info->xg_nominal_key = nominal_key;
@@ -2057,8 +2053,7 @@ static bool producer_publish_nominal_conformance(XgProducer *producer, XgClassId
         nominal_key == 0 || producer_nominal_key(producer, decl) != nominal_key)
         return false;
     if (decl_kind == XG_DECL_ENUM) {
-        if (class_id != XG_NO_ID ||
-            !producer_rebind_enum_info(nominal_info, nominal_key, decl_id))
+        if (class_id != XG_NO_ID || !producer_rebind_enum_info(nominal_info, nominal_key, decl_id))
             return false;
     } else if (!producer_rebind_class_info(nominal_info, nominal_key, decl_id, class_id)) {
         return false;
@@ -2687,24 +2682,23 @@ static XgMethodSummary *producer_find_method_by_name_in_hierarchy(XgProducer *p,
     return NULL;
 }
 
-static XgMethodSummary *producer_find_method_for_symbol_in_hierarchy(
-    XgProducer *producer, XgClassId class_id, const XaSymbol *method_symbol) {
+static XgMethodSummary *
+producer_find_method_for_symbol_in_hierarchy(XgProducer *producer, XgClassId class_id,
+                                             const XaSymbol *method_symbol) {
     const AstNode *declaration = method_symbol ? method_symbol->links.function_decl_node : NULL;
     XgClassNameRow *row = producer_lookup_class_row_by_id(producer, class_id);
     uint32_t depth = 0u;
-    if (!producer || !producer->evidence || !declaration ||
-        declaration->type != AST_METHOD_DECL)
+    if (!producer || !producer->evidence || !declaration || declaration->type != AST_METHOD_DECL)
         return NULL;
     while (row && depth++ < 64u) {
         const AstNode *class_node = row->class_node;
-        if (!class_node || (class_node->type != AST_CLASS_DECL &&
-                            class_node->type != AST_STRUCT_DECL &&
-                            class_node->type != AST_UNION_DECL) ||
+        if (!class_node ||
+            (class_node->type != AST_CLASS_DECL && class_node->type != AST_STRUCT_DECL &&
+             class_node->type != AST_UNION_DECL) ||
             row->summary_index >= producer->evidence->nclasses)
             return NULL;
         const ClassDeclNode *class_decl = &class_node->as.class_decl;
-        const XgClassSummary *class_summary =
-            &producer->evidence->classes[row->summary_index];
+        const XgClassSummary *class_summary = &producer->evidence->classes[row->summary_index];
         if (class_summary->method_start == 0u ||
             class_summary->method_count != (uint32_t) class_decl->method_count)
             return NULL;
@@ -2713,10 +2707,9 @@ static XgMethodSummary *producer_find_method_for_symbol_in_hierarchy(
             if (class_decl->methods[ordinal] != declaration)
                 continue;
             uint32_t method_index = class_summary->method_start - 1u + (uint32_t) ordinal;
-            XgMethodSummary *method =
-                method_index < producer->evidence->nmethods
-                    ? &producer->evidence->methods[method_index]
-                    : NULL;
+            XgMethodSummary *method = method_index < producer->evidence->nmethods
+                                          ? &producer->evidence->methods[method_index]
+                                          : NULL;
             const MethodDeclNode *method_decl = &declaration->as.method_decl;
             return method && method->owner_class_id == class_summary->class_id &&
                            method->name_id == hash_name32(method_decl->name) &&
@@ -7737,10 +7730,10 @@ static bool body_class_implements_hashable(XgBodyCollect *bc, const XgClassSumma
                 : node && node->type == AST_STRUCT_DECL ? &node->as.struct_decl
                 : node && node->type == AST_UNION_DECL  ? &node->as.union_decl
                                                         : NULL;
-            XaSymbol *symbol = decl && decl->symbol_id != 0
-                                   ? xa_analyzer_symbol_by_id(bc->producer->analyzer,
-                                                              decl->symbol_id)
-                                   : NULL;
+            XaSymbol *symbol =
+                decl && decl->symbol_id != 0
+                    ? xa_analyzer_symbol_by_id(bc->producer->analyzer, decl->symbol_id)
+                    : NULL;
             class_info = symbol && symbol->kind == XA_SYM_CLASS ? symbol->links.class_info : NULL;
             break;
         }
@@ -9458,8 +9451,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 : NULL;
         const char *module_coordinate =
             body_module_coordinate_for_expr(bc, callee->as.member_access.object);
-        XgModuleId target_module_id = producer_module_id_for_coordinate(
-            bc->producer, bc->module_id, module_coordinate);
+        XgModuleId target_module_id =
+            producer_module_id_for_coordinate(bc->producer, bc->module_id, module_coordinate);
         XgFuncNameRow *module_target = producer_lookup_func_row_scoped(
             bc->producer, target_module_id, callee->as.member_access.name);
         XgClassNameRow *module_class =
@@ -9495,8 +9488,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
         if (module_class)
             bc->capability_bits |= XG_CAP_OBJECTS;
-        if (module_target &&
-            (module_target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0) {
+        if (module_target && (module_target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0) {
             row.kind = XG_CALL_DIRECT_FUNC;
             row.static_target_func_id = module_target->func_id;
             generic_origin_decl_id = module_target->decl_id;
@@ -9539,15 +9531,16 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         } else {
             XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
             if (receiver_class == XG_NO_ID && bc->producer->analyzer)
-                receiver_class = producer_lookup_class_from_analyzer_type(
-                    bc->producer, analyzer_receiver_type);
+                receiver_class =
+                    producer_lookup_class_from_analyzer_type(bc->producer, analyzer_receiver_type);
             /* A function-typed field called directly (obj.field(args)) is an
+             *
              * indirect closure call, not a method dispatch: the field holds a
-             * function value, so lowering emits XI_CALL. Recording it as a
-             * method would make closed-world reachability search for a method
-             * that does not exist and reject the build; the concrete target set
-             * is proven by the callable analysis instead. The analyzer records
-             * XA_SEL_FIELD on the callee for exactly this case. */
+             *
+             * function value, so lowering emits XI_CALL. Recording it as a method would make
+             * closed-world reachability search for a method that does not exist and reject the
+             * build; the concrete target set is proven by the callable analysis instead. The
+             * analyzer records XA_SEL_FIELD on the callee for exactly this case. */
             const XaSelection *field_sel = member_selection;
             XrType *field_result =
                 field_sel && field_sel->kind == XA_SEL_FIELD && field_sel->target_symbol &&
@@ -9558,14 +9551,16 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 analyzer_receiver_type && analyzer_receiver_type->kind == XR_KIND_CLASS;
             XgMethodSummary *method = NULL;
             /* Analyzer-backed dispatch joins the selected declaration to the
-             * exact nominal receiver. Name lookup is retained only for the
-             * analyzer-free evidence producer. */
+             * exact
+             * nominal receiver. Name lookup is retained only for the
+             * analyzer-free
+             * evidence producer. */
             if (bc->producer->analyzer && analyzer_target_symbol) {
-                method = producer_find_method_for_symbol_in_hierarchy(
-                    bc->producer, receiver_class, analyzer_target_symbol);
+                method = producer_find_method_for_symbol_in_hierarchy(bc->producer, receiver_class,
+                                                                      analyzer_target_symbol);
             } else if (!bc->producer->analyzer && !static_receiver) {
-                method = producer_find_method_by_name_in_hierarchy(
-                    bc->producer, receiver_class, method_name_id, false);
+                method = producer_find_method_by_name_in_hierarchy(bc->producer, receiver_class,
+                                                                   method_name_id, false);
             }
             if (field_result && field_result->kind == XR_KIND_FUNCTION) {
                 row.kind = XG_CALL_CLOSURE;
@@ -9610,6 +9605,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     }
     if (row.kind == XG_CALL_CLOSURE) {
         /* A closure call never carries the old single-target field.  Its only
+         *
          *
          * closed-world authority is the analyzer-published canonical set. */
         row.static_target_func_id = XG_NO_ID;
@@ -9974,8 +9970,8 @@ static bool body_stdlib_call_identity(XgBodyCollect *bc, const AstNode *call,
          * for imported public calls and private wrapper calls. */
         if ((!module || !name) && callee->as.variable.symbol_id != 0 && bc->producer &&
             bc->producer->analyzer) {
-            XaSymbol *symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer,
-                                                        callee->as.variable.symbol_id);
+            XaSymbol *symbol =
+                xa_analyzer_symbol_by_id(bc->producer->analyzer, callee->as.variable.symbol_id);
             XaSymbolLinks *links = symbol && symbol->kind == XA_SYM_FUNCTION && symbol->is_builtin
                                        ? xa_analyzer_get_links(bc->producer->analyzer, symbol)
                                        : NULL;
@@ -10135,8 +10131,7 @@ static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
     bool has_fact = xa_analyzer_get_target_query(bc->producer->analyzer, node, &fact);
     if (!receiver || receiver->type != AST_VARIABLE || receiver->as.variable.symbol_id == 0)
         return true;
-    symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer,
-                                      receiver->as.variable.symbol_id);
+    symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer, receiver->as.variable.symbol_id);
     links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
     if (!symbol || !symbol->is_builtin || symbol->kind != XA_SYM_MODULE || !links ||
         links->target_namespace_id != XA_TARGET_NAMESPACE_TARGET)
@@ -10171,15 +10166,15 @@ static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
         default:
             return false;
     }
-    bool result_type_matches =
-        expected_enum ? (result_type && result_type->kind == XR_KIND_ENUM &&
-                         result_type->enum_type.enum_name &&
-                         strcmp(result_type->enum_type.enum_name, expected_enum) == 0)
-                      : (result_type && result_type->kind == XR_KIND_INT &&
-                         result_type->scalar_rep == XR_NATIVE_U16);
+    bool result_type_matches = expected_enum
+                                   ? (result_type && result_type->kind == XR_KIND_ENUM &&
+                                      result_type->enum_type.enum_name &&
+                                      strcmp(result_type->enum_type.enum_name, expected_enum) == 0)
+                                   : (result_type && result_type->kind == XR_KIND_INT &&
+                                      result_type->scalar_rep == XR_NATIVE_U16);
     if (!has_fact || fact.namespace_id != XA_TARGET_NAMESPACE_TARGET ||
-        fact.result_native_type != XR_NATIVE_U16 || fact.complete != 1 ||
-        !result_type_matches || result_type->is_nullable)
+        fact.result_native_type != XR_NATIVE_U16 || fact.complete != 1 || !result_type_matches ||
+        result_type->is_nullable)
         return false;
 
     source_node_id = producer_source_node_id(bc->module_id, node);
@@ -11414,9 +11409,8 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
             method = candidate;
         }
         bool exact_source_method =
-            method &&
-            (method->flags &
-             (XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE | XG_METHOD_OVERRIDDEN)) == 0u;
+            method && (method->flags & (XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE |
+                                        XG_METHOD_OVERRIDDEN)) == 0u;
         if (callsite->kind != XG_CALL_INTERFACE && !exact_source_method)
             continue;
         if (exact_source_method) {
@@ -11431,11 +11425,16 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
                 body = candidate;
             }
             /* This is an evidence refinement, not an assumption. A sealed
-             * source method whose complete call graph cannot be closed keeps
-             * the analyzer's conservative fact and remains unavailable to
-             * exact consumers.  This also covers calls duplicated into a
-             * static defer frontier, where the analyzer intentionally does
-             * not publish a second per-call effect fact. */
+             * source
+             * method whose complete call graph cannot be closed keeps
+             * the analyzer's
+             * conservative fact and remains unavailable to
+             * exact consumers.  This
+             * also covers calls duplicated into a
+             * static defer frontier, where the
+             * analyzer intentionally does
+             * not publish a second per-call effect fact.
+             */
             if (!body || !xg_body_effects_compose_closed_world_calls(producer->evidence, body,
                                                                      &effect_union))
                 continue;
@@ -11721,10 +11720,9 @@ static bool add_interface_decl(XgProducer *p, XgModuleId module_id, const AstNod
         producer_interface_id(decl.nominal_key) != interface_id ||
         !xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
-    if (interface_info &&
-        (interface_info->xg_interface_id != interface_id ||
-         !producer_rebind_interface_info(interface_info, decl.nominal_key, decl.decl_id,
-                                         interface_id)))
+    if (interface_info && (interface_info->xg_interface_id != interface_id ||
+                           !producer_rebind_interface_info(interface_info, decl.nominal_key,
+                                                           decl.decl_id, interface_id)))
         return false;
     for (int i = 0; i < iface->extends_count; i++) {
         const XrTypeRef *parent = iface->extends ? iface->extends[i] : NULL;
@@ -12051,25 +12049,6 @@ static bool add_type_alias_object_shape(XgProducer *p, XgModuleId module_id, con
     return true;
 }
 
-static bool module_stmt_has_runtime_body(const AstNode *stmt) {
-    if (!stmt)
-        return false;
-    switch (stmt->type) {
-        case AST_FUNCTION_DECL:
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-        case AST_UNION_DECL:
-        case AST_INTERFACE_DECL:
-        case AST_ENUM_DECL:
-        case AST_IMPORT_STMT:
-        case AST_EXPORT_STMT:
-        case AST_TYPE_ALIAS:
-            return false;
-        default:
-            return true;
-    }
-}
-
 static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const AstNode *stmt) {
     XgDeclSummary decl;
     const char *name = NULL;
@@ -12155,7 +12134,6 @@ static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstN
 }
 
 static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *ast) {
-    bool has_module_body = false;
     if (!ast || ast->type != AST_PROGRAM)
         return true;
     for (int i = 0; i < ast->as.program.count; i++) {
@@ -12167,17 +12145,11 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
             return false;
         if (!add_module_decl_stmt(p, module_id, stmt, &handled))
             return false;
-        if (!handled && module_stmt_has_runtime_body(stmt))
-            has_module_body = true;
     }
-    if (has_module_body) {
-        XgFuncId module_func_id = producer_next_func_id(p);
-        if (!producer_enqueue_body(p, module_func_id, module_id, XG_NO_ID, XG_NO_ID, XG_NO_ID,
-                                   hash_name32("<module-init>"), 0, 0, 0, 0, 0, XG_BODY_MODULE_INIT,
-                                   ast, NULL, NULL, NULL))
-            return false;
-    }
-    return true;
+    XgFuncId module_func_id = producer_next_func_id(p);
+    return producer_enqueue_body(p, module_func_id, module_id, XG_NO_ID, XG_NO_ID, XG_NO_ID,
+                                 hash_name32("<module-init>"), 0, 0, 0, 0, 0, XG_BODY_MODULE_INIT,
+                                 ast, NULL, NULL, NULL);
 }
 
 static uint64_t module_source_hash(const XrModuleSpec *spec);
@@ -12410,11 +12382,11 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
             continue;
         for (int i = 0; i < spec->ast->as.program.count; i++) {
             const AstNode *node = spec->ast->as.program.statements[i];
-            XaSymbol *symbol = analyzer && node && node->type == AST_INTERFACE_DECL &&
-                                       node->as.interface_decl.symbol_id != 0
-                                   ? xa_analyzer_symbol_by_id(
-                                         analyzer, node->as.interface_decl.symbol_id)
-                                   : NULL;
+            XaSymbol *symbol =
+                analyzer && node && node->type == AST_INTERFACE_DECL &&
+                        node->as.interface_decl.symbol_id != 0
+                    ? xa_analyzer_symbol_by_id(analyzer, node->as.interface_decl.symbol_id)
+                    : NULL;
             XrClassInfo *info =
                 symbol && symbol->kind == XA_SYM_CLASS ? symbol->links.class_info : NULL;
             if (node && node->type == AST_INTERFACE_DECL &&

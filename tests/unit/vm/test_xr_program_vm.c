@@ -46,6 +46,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ == 90,
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_SUSPEND == 140, "coroutine suspension stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CANCEL_PUBLISH == 51, "cancel publish stable id drifted");
 
@@ -2177,12 +2178,12 @@ static void test_concurrent_execution_and_drain(void) {
         .code = code,
         .instance = instance,
         .entry = xr_validated_program_entry_function(program),
-        .start = ATOMIC_VAR_INIT(false),
-        .drain_started = ATOMIC_VAR_INIT(false),
-        .returned = ATOMIC_VAR_INIT(0),
-        .stale = ATOMIC_VAR_INIT(0),
-        .invalid = ATOMIC_VAR_INIT(0),
     };
+    atomic_init(&race.start, false);
+    atomic_init(&race.drain_started, false);
+    atomic_init(&race.returned, 0u);
+    atomic_init(&race.stale, 0u);
+    atomic_init(&race.invalid, 0u);
     xr_thread_t threads[VM_RACE_THREADS];
     for (size_t index = 0; index < VM_RACE_THREADS; ++index)
         REQUIRE(xr_thread_create(&threads[index], vm_race_worker, &race));

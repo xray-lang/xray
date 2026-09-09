@@ -1451,7 +1451,10 @@ XR_FUNC bool xi_coro_plan_is_logical_member(const XiCoroPlan *plan, const XiValu
 static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
                                               const XiCoroResolver *resolver) {
     /* Direct suspend ops map straight to their kind; anything else is a
-     * concurrency method call, a stdlib sleep, or a suspendable direct call. */
+     * concurrency method
+     * call or a suspendable call. The request kind belongs
+     * to canonical Program metadata,
+     * not source spelling. */
     if (v->op == XI_YIELD)
         return XI_CORO_SUSP_YIELD;
     if (v->op == XI_GO)
@@ -1475,8 +1478,6 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
         return XI_CORO_SUSP_CHAN_RECV;
     if (xi_value_is_blocking_task_method_call(v))
         return XI_CORO_SUSP_AWAIT;
-    if (xi_coro_is_time_sleep_call(f, v, resolver))
-        return XI_CORO_SUSP_SLEEP;
     return XI_CORO_SUSP_CALL;
 }
 

@@ -488,7 +488,8 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
         {XR_CORE_TYPE_TARGET_OS, 7u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_TARGET_ARCH, 8u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_TARGET_ABI, 9u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_TARGET_ENDIAN, 10u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_TARGET_ENDIAN, 10u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+         XR_CORE_IR_COPY_TRIVIAL},
     };
     buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]) + program->type_count);
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
@@ -747,9 +748,9 @@ static void encode_semantic_metadata(ByteBuffer *buffer, const XrCoreIrProgram *
     }
 }
 
-static bool provider_operation_index(const XrCoreIrProgram *program,
-                                     XrStableId contract_id, XrStableId operation_id,
-                                     uint32_t *provider_out, uint32_t *operation_out) {
+static bool provider_operation_index(const XrCoreIrProgram *program, XrStableId contract_id,
+                                     XrStableId operation_id, uint32_t *provider_out,
+                                     uint32_t *operation_out) {
     for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
         const XrCoreIrProviderRequirement *requirement = &program->provider_requirements[provider];
         if (memcmp(requirement->contract_id.bytes, contract_id.bytes, XR_STABLE_ID_BYTES) != 0)
@@ -842,6 +843,11 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrProgram *progra
             buffer_put_uvar(buffer, id);
             buffer_put_uvar(buffer, instruction->immediate.coroutine_call.safepoint_id);
             break;
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND:
+            buffer_put_uvar(buffer, instruction->immediate.coroutine_suspend.safepoint_id);
+            buffer_put_uvar(buffer, instruction->immediate.coroutine_suspend.request_kind);
+            buffer_put_uvar(buffer, instruction->immediate.coroutine_suspend.request_operand_count);
+            break;
         default:
             buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
             return;
@@ -885,8 +891,7 @@ static void encode_code(ByteBuffer *buffer, const XrCoreIrProgram *program,
 static void encode_imports(ByteBuffer *buffer, const XrCoreIrProgram *program) {
     buffer_put_uvar(buffer, program->provider_requirement_count);
     for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
-        const XrCoreIrProviderRequirement *requirement =
-            &program->provider_requirements[provider];
+        const XrCoreIrProviderRequirement *requirement = &program->provider_requirements[provider];
         buffer_put_bytes(buffer, requirement->contract_id.bytes, XR_STABLE_ID_BYTES);
         buffer_put_uvar(buffer, requirement->operation_count);
         for (uint32_t operation = 0; operation < requirement->operation_count; ++operation)

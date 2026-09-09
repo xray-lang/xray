@@ -139,8 +139,13 @@
     },
     {
       "stable_id": 7,
-      "name": "runtime.cooperative-yield",
-      "description": "The runtime kernel provides stackless cooperative yield and resume."
+      "name": "runtime.coroutine-suspension",
+      "description": "The runtime kernel provides stackless coroutine suspension and resume."
+    },
+    {
+      "stable_id": 8,
+      "name": "runtime.timer-suspension",
+      "description": "The runtime kernel can surface and drive a monotonic timer-after-milliseconds suspension request."
     }
   ],
   "traps": [
@@ -3870,7 +3875,7 @@
         "suspend"
       ],
       "capability_requirements": [
-        "runtime.cooperative-yield"
+        "runtime.coroutine-suspension"
       ],
       "ownership": {
         "operands": [
@@ -3878,7 +3883,7 @@
         ],
         "result": "none"
       },
-      "profile_dependency": "scheduler-yield",
+      "profile_dependency": "scheduler-suspension",
       "materialization": "logical-coroutine-control",
       "determinism": {
         "kind": "deterministic",
@@ -4102,7 +4107,7 @@
         "suspend"
       ],
       "capability_requirements": [
-        "runtime.cooperative-yield"
+        "runtime.coroutine-suspension"
       ],
       "ownership": {
         "operands": [
@@ -4111,13 +4116,93 @@
         ],
         "result": "callee result and live-across values are successor block arguments"
       },
-      "profile_dependency": "scheduler-yield",
+      "profile_dependency": "scheduler-suspension",
       "materialization": "logical-child-coroutine-control",
       "determinism": {
         "kind": "deterministic",
         "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends; it takes the normal continuation after return, the cancel continuation after child cancellation, or its optional provider-failed continuation on trap 7 from child step or cancellation cleanup; each continuation has a separate operand segment and only the selected segment transfers its owners; normal, cancellation and provider-failed continuation domains have distinct blocks; ordinary edges preserve the selected reason, every explicit cleanup exit preserves that reason, and only an exact provider-refusal edge may change cancellation into trap 7; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "coroutine-call",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 140,
+      "spelling": "core.coroutine.suspend",
+      "class": "coroutine-terminator",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "request-values...",
+          "suspend-edge-values...",
+          "cancel-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {
+          "safepoint_id": "function-local-safepoint-id",
+          "request_kind": "closed-suspension-request-kind",
+          "request_operand_count": "request-kind-arity"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": false,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": true,
+        "suspend": true
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "cancel",
+        "suspend"
+      ],
+      "capability_requirements": [
+        "runtime.coroutine-suspension",
+        "runtime.timer-suspension"
+      ],
+      "ownership": {
+        "operands": [
+          "request-borrow...",
+          "live-across-preserve..."
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "scheduler-suspension",
+      "materialization": "logical-coroutine-suspension-request",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one typed suspension request at the named safepoint followed by exactly one resume after readiness or one terminal cancellation continuation; timer-after-ms has exactly one i64 request value, normalizes non-positive values to immediate readiness and values above 86400000 to 86400000, and uses monotonic elapsed time; cancellation enters a separate reason-preserving subgraph whose ordinary edges retain cancellation and whose explicit exits publish cancellation; cleanup subgraphs cannot suspend"
+      },
+      "kat_validator": "coroutine-suspend",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

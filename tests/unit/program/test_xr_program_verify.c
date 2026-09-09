@@ -40,6 +40,7 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project s
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_SUSPEND == 140, "coroutine suspension stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
@@ -3740,6 +3741,29 @@ static void test_coroutine_state_and_exact_liveness(void) {
               sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
     xr_program_artifact_free(&artifact);
+
+    CHECK(xr_program_timer_suspension_fixture_write_mutated(
+              XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_VALID, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    const XrProgramTimerSuspensionFixtureMutation invalid_requests[] = {
+        XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_KIND,
+        XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_COUNT,
+        XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_TYPE,
+    };
+    for (size_t index = 0u; index < sizeof(invalid_requests) / sizeof(invalid_requests[0]);
+         ++index) {
+        memset(&artifact, 0, sizeof(artifact));
+        CHECK(xr_program_timer_suspension_fixture_write_mutated(invalid_requests[index], &artifact,
+                                                                diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+        xr_program_artifact_free(&artifact);
+    }
 }
 
 static void test_coroutine_cancel_cleanup_requires_exact_owner_transfer(void) {
@@ -4137,7 +4161,7 @@ static XrProgramBuildStatus write_cleanup_graph_suspension(bool trap_domain, boo
             .key = key("cleanup-suspend:child-function"),
             .result_type_id = XR_CORE_TYPE_VOID,
             .effect_mask = XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND,
-            .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD,
+            .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION,
             .entry_block = child_blocks[0].key,
             .blocks = child_blocks,
             .block_count = 3u,

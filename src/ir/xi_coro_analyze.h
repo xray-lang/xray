@@ -39,7 +39,6 @@ typedef enum {
     XI_CORO_SUSP_CHAN_RECV,
     XI_CORO_SUSP_SELECT,
     XI_CORO_SUSP_SCOPE_EXIT,
-    XI_CORO_SUSP_SLEEP,
     XI_CORO_SUSP_CALL,
 } XiCoroSuspendKind;
 

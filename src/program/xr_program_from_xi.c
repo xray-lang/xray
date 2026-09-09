@@ -305,7 +305,8 @@ static XrProgramBuildStatus append_cancel_edge(XrXiBuildContext *context, const 
                                                const XiCoroSuspendPoint *point,
                                                const XiValue *registration,
                                                bool private_projection);
-static bool coroutine_function_has_proven_suspend(const XiFunc *function, const XiFunc **stack,
+static bool coroutine_function_has_proven_suspend(const XrXiBuildContext *context,
+                                                  const XiFunc *function, const XiFunc **stack,
                                                   uint32_t depth);
 static bool exact_condition_assertion(const XiValue *value);
 static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *function,
@@ -1670,6 +1671,11 @@ static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, con
 static const XrStdlibDefEntry *resolved_provider_native_call(const XrXiBuildContext *context,
                                                              const XiFunc *caller,
                                                              const XiValue *call);
+static const XrStdlibDefEntry *resolved_suspension_native_call(const XrXiBuildContext *context,
+                                                               const XiFunc *caller,
+                                                               const XiValue *call);
+static const XiCoroSuspendPoint *coroutine_point_for_block(const XrXiFunctionStorage *function,
+                                                           const XiBlock *block);
 
 static bool exact_static_cleanup_try(const XiFunc *function, const XiValue *value) {
     if (!function || !value || value->op != XI_TRY || value->aux_int != XI_TRY_AUX_STATIC_CLEANUP ||
@@ -2024,7 +2030,8 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                      (((consumer->op == XI_CALL || consumer->op == XI_CALL_METHOD ||
                         consumer->op == XI_CALL_METHOD_DIRECT) &&
                        (resolved_sealed_callee(context, function, consumer) ||
-                        resolved_provider_native_call(context, function, consumer))) ||
+                        resolved_provider_native_call(context, function, consumer) ||
+                        resolved_suspension_native_call(context, function, consumer))) ||
                       resolved_canonical_class_construction(context, function, consumer, NULL,
                                                             NULL)) ||
                      resolved_class_carrier(context, function, consumer, XG_NO_ID, NULL) ||
@@ -2097,8 +2104,25 @@ static const XrStdlibDefEntry *resolved_provider_native_call(const XrXiBuildCont
     return entry;
 }
 
-static bool provider_import_reference_is_exact(const XrXiBuildContext *context,
-                                               const XiFunc *function, const XiValue *value) {
+static const XrStdlibDefEntry *resolved_suspension_native_call(const XrXiBuildContext *context,
+                                                               const XiFunc *caller,
+                                                               const XiValue *call) {
+    if (!context || !caller || !call || call->op != XI_CALL || call->nargs != 2u || !call->args)
+        return NULL;
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    const XiImportRef *reference = xi_value_import_ref(caller, call->args[0]);
+    if (!row || row->kind != XG_CALL_NATIVE || (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
+        (row->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) != 0u ||
+        !xi_import_ref_is_grounded_native(reference) || !reference->member_name ||
+        row->arg_count != 1u || row->method_id != (XgMethodId) xg_name_id(reference->member_name))
+        return NULL;
+    return xr_stdlib_metadata_exact_native_suspension_call(reference->module_path,
+                                                           reference->member_name, row->arg_count);
+}
+
+static bool projected_native_import_reference_is_exact(const XrXiBuildContext *context,
+                                                       const XiFunc *function,
+                                                       const XiValue *value) {
     const XiImportRef *reference = value && value->op == XI_IMPORT_REF && value->nargs == 0u
                                        ? (const XiImportRef *) value->aux
                                        : NULL;
@@ -2111,7 +2135,8 @@ static bool provider_import_reference_is_exact(const XrXiBuildContext *context,
             continue;
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             const XiValue *call = block->values[value_index];
-            if (!resolved_provider_native_call(context, function, call))
+            if (!resolved_provider_native_call(context, function, call) &&
+                !resolved_suspension_native_call(context, function, call))
                 continue;
             if (xi_value_import_ref(function, call->args[0]) == reference)
                 found = true;
@@ -5064,7 +5089,8 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                         resolved_sealed_callee(context, function, call) ||
                         resolved_canonical_class_construction(context, function, call, NULL,
                                                               NULL) ||
-                        resolved_provider_native_call(context, function, call))
+                        resolved_provider_native_call(context, function, call) ||
+                        resolved_suspension_native_call(context, function, call))
                         continue;
 
                     const XgCallsiteSummary *row = resolved_callsite(context, function, call);
@@ -5076,13 +5102,31 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                                     function->name ? function->name : "<anonymous>", call->id,
                                     module_index, block_index);
                     if (row->kind != XG_CALL_CLOSURE ||
-                        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
+                        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u) {
+                        const XiImportRef *reference =
+                            call->nargs && call->args ? xi_value_import_ref(function, call->args[0])
+                                                      : NULL;
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                     "Xi indirect call %s:v%u module=%u block=%u has inconsistent "
-                                    "callable effect evidence (kind=%u flags=0x%x)",
+                                    "callable effect evidence (kind=%u flags=0x%x nargs=%u "
+                                    "native=%u argc=%u method=%llu/%llu metadata=%u target=%s.%s)",
                                     function->name ? function->name : "<anonymous>", call->id,
                                     module_index, block_index, (unsigned) row->kind,
-                                    (unsigned) row->flags);
+                                    (unsigned) row->flags, (unsigned) call->nargs,
+                                    xi_import_ref_is_grounded_native(reference) ? 1u : 0u,
+                                    (unsigned) row->arg_count, (unsigned long long) row->method_id,
+                                    (unsigned long long) xg_name_id(
+                                        reference ? reference->member_name : NULL),
+                                    reference && xr_stdlib_metadata_exact_native_suspension_call(
+                                                     reference->module_path, reference->member_name,
+                                                     row->arg_count)
+                                        ? 1u
+                                        : 0u,
+                                    reference && reference->module_path ? reference->module_path
+                                                                        : "<none>",
+                                    reference && reference->member_name ? reference->member_name
+                                                                        : "<none>");
+                    }
 
                     const XgCallableTargetSummary *targets = NULL;
                     uint32_t target_count = 0u;
@@ -6046,10 +6090,34 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
                                       diagnostic_size);
     }
     if (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE &&
-        callsite->kind != XG_CALL_METHOD)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi call v%u uses unsupported global callsite kind %u", value->id,
-                    callsite->kind);
+        callsite->kind != XG_CALL_METHOD) {
+        const XiCoroSuspendPoint *point =
+            value->block ? coroutine_point_for_block(function, value->block) : NULL;
+        const XiFunc *resolved = resolved_sealed_callee(context, function->xi, value);
+        const XiImportRef *reference =
+            value->nargs && value->args ? xi_value_import_ref(function->xi, value->args[0]) : NULL;
+        return fail(
+            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+            "Xi call %s:v%u in b%u uses unsupported global callsite kind %u "
+            "(op=%u/call=%u suspension=%u:v%u callee=%s flags=0x%x nargs=%u argc=%u "
+            "native=%u method=%u metadata=%u target=%s.%s)",
+            function->xi->name ? function->xi->name : "<anonymous>", value->id,
+            value->block ? value->block->id : UINT32_MAX, callsite->kind, (unsigned) value->op,
+            value->op == XI_CALL ? 1u : 0u, point ? (unsigned) point->kind : 0u,
+            point && point->op ? point->op->id : UINT32_MAX,
+            resolved && resolved->name ? resolved->name : "<none>", (unsigned) callsite->flags,
+            (unsigned) value->nargs, (unsigned) callsite->arg_count,
+            xi_import_ref_is_grounded_native(reference) ? 1u : 0u,
+            reference && callsite->method_id == (XgMethodId) xg_name_id(reference->member_name)
+                ? 1u
+                : 0u,
+            reference && xr_stdlib_metadata_exact_native_suspension_call(
+                             reference->module_path, reference->member_name, callsite->arg_count)
+                ? 1u
+                : 0u,
+            reference && reference->module_path ? reference->module_path : "<none>",
+            reference && reference->member_name ? reference->member_name : "<none>");
+    }
     if ((callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi call v%u lacks verified callsite error evidence", value->id);
@@ -7359,7 +7427,7 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         return true;
     if (static_import_publication_is_exact(context, function, value))
         return true;
-    if (provider_import_reference_is_exact(context, function, value))
+    if (projected_native_import_reference_is_exact(context, function, value))
         return true;
     if (imported_callable_checktype_is_exact(context, function, value))
         return true;
@@ -8141,6 +8209,7 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
     bool erased_first_operand =
         value->op == XI_VARIANT_CONSTRUCT ||
         resolved_provider_native_call(context, function->xi, value) ||
+        resolved_suspension_native_call(context, function->xi, value) ||
         (sealed_callee && !sealed_callee->has_receiver) ||
         resolved_canonical_class_construction(context, function->xi, value, NULL, NULL) ||
         resolved_empty_struct_literal(context, function->xi, value) ||
@@ -9034,7 +9103,7 @@ static XrProgramBuildStatus prepare_cancel_continuations(XrXiBuildContext *conte
                 !xi_coro_plan_is_current(function, plan))
                 continue;
             const XiFunc *suspend_stack[64] = {0};
-            if (!coroutine_function_has_proven_suspend(function, suspend_stack, 0u))
+            if (!coroutine_function_has_proven_suspend(context, function, suspend_stack, 0u))
                 continue;
             for (uint32_t point_index = 0u; point_index < plan->nstates; ++point_index) {
                 const XiCoroSuspendPoint *point = &plan->points[point_index];
@@ -9971,7 +10040,8 @@ static const XiCoroSuspendPoint *coroutine_point_for_safepoint(const XrXiFunctio
     return found;
 }
 
-static bool coroutine_function_has_proven_suspend(const XiFunc *function, const XiFunc **stack,
+static bool coroutine_function_has_proven_suspend(const XrXiBuildContext *context,
+                                                  const XiFunc *function, const XiFunc **stack,
                                                   uint32_t depth) {
     const XiCoroPlan *plan = function ? function->coro_plan : NULL;
     if (!plan || plan->nstates == 0u || !plan->points)
@@ -9986,8 +10056,11 @@ static bool coroutine_function_has_proven_suspend(const XiFunc *function, const 
         const XiCoroSuspendPoint *point = &plan->points[point_index];
         if (!point->op || point->kind != XI_CORO_SUSP_CALL)
             return true;
+        if (resolved_suspension_native_call(context, function, point->op))
+            return true;
         if (point->resolved_callee) {
-            if (coroutine_function_has_proven_suspend(point->resolved_callee, stack, depth + 1u))
+            if (coroutine_function_has_proven_suspend(context, point->resolved_callee, stack,
+                                                      depth + 1u))
                 return true;
             continue;
         }
@@ -10056,7 +10129,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
     const XiFunc *suspend_stack[64] = {0};
     if (yield_count == 0u && plan->is_coroutine && plan->analysis_complete &&
         plan->actions_materialized && plan->cfg_rewritten && xi_coro_plan_is_current(xi, plan) &&
-        !coroutine_function_has_proven_suspend(xi, suspend_stack, 0u))
+        !coroutine_function_has_proven_suspend(context, xi, suspend_stack, 0u))
         return XR_PROGRAM_BUILD_OK;
     if (!context || !xi || !output || !plan || !plan->is_coroutine || !plan->analysis_complete ||
         !plan->actions_materialized || !plan->cfg_rewritten || !xi_coro_plan_is_current(xi, plan) ||
@@ -10114,8 +10187,10 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
                 diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                 "Xi function %s cooperative yield %u lacks exact logical plan/evidence closure",
                 xi->name ? xi->name : "<anonymous>", point_index);
+        bool exact_suspend = point->kind == XI_CORO_SUSP_CALL &&
+                             resolved_suspension_native_call(context, xi, point->op) != NULL;
         bool exact_call = false;
-        if (point->kind == XI_CORO_SUSP_CALL &&
+        if (!exact_suspend && point->kind == XI_CORO_SUSP_CALL &&
             (point->op->op == XI_CALL || point->op->op == XI_CALL_METHOD ||
              point->op->op == XI_CALL_METHOD_DIRECT)) {
             const XiFunc *callee = resolved_sealed_callee(context, xi, point->op);
@@ -10133,11 +10208,14 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
             for (uint32_t child_point = 0u; exact_call && child_point < callee_plan->nstates;
                  ++child_point)
                 exact_call = callee_plan->points[child_point].state_id == child_point + 1u &&
-                             callee_plan->points[child_point].kind == XI_CORO_SUSP_YIELD &&
-                             exact_cooperative_yield_contract(context, callee_storage,
-                                                              callee_plan->points[child_point].op);
+                             ((callee_plan->points[child_point].kind == XI_CORO_SUSP_YIELD &&
+                               exact_cooperative_yield_contract(
+                                   context, callee_storage, callee_plan->points[child_point].op)) ||
+                              (callee_plan->points[child_point].kind == XI_CORO_SUSP_CALL &&
+                               resolved_suspension_native_call(
+                                   context, callee, callee_plan->points[child_point].op)));
         }
-        if (!exact_yield && !exact_call)
+        if (!exact_yield && !exact_suspend && !exact_call)
             return fail(
                 diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                 "Xi function %s suspension %u is outside the active canonical Program slice",
@@ -10941,6 +11019,91 @@ translate_coroutine_yield_terminator(XrXiBuildContext *context, XrXiFunctionStor
         if (!coroutine_cancel_drop_set_matches(context, function, resume, 0u, live_count, point))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi cooperative yield has no exact cancellation owner set");
+        return append_cancel_handler_operands(context, instruction, function, block, cancel_handler,
+                                              point, diagnostic, diagnostic_size);
+    }
+    status = prepare_cancel_block(context, function, resume, 0u, live_count, point, safepoint_id,
+                                  diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    return append_cancel_drop_operands(context, instruction, function, block, point, diagnostic,
+                                       diagnostic_size);
+}
+
+static XrProgramBuildStatus
+translate_coroutine_suspend_terminator(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                                       XrXiBlockStorage *block, const XiCoroSuspendPoint *point,
+                                       XrCoreIrInstructionInput *instruction, char *diagnostic,
+                                       size_t diagnostic_size) {
+    XrXiBlockStorage *resume = point ? find_block_storage(function, point->resume_block) : NULL;
+    const XrXiCancelEdge *cancel_edge = find_cancel_edge(context, function->xi, point);
+    XrXiBlockStorage *cancel_handler =
+        cancel_edge ? find_block_storage(function, cancel_edge->handler) : NULL;
+    uint32_t safepoint_id = point && point->state_id != 0u ? point->state_id - 1u : UINT32_MAX;
+    const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
+    const XrStdlibDefEntry *entry =
+        point ? resolved_suspension_native_call(context, function->xi, point->op) : NULL;
+    uint16_t request_type = XR_CORE_TYPE_VOID;
+    if (!context || !function || !block || !instruction || !point || !resume || !plan || !entry ||
+        safepoint_id >= plan->nstates || !function->coroutine_safepoints ||
+        point->op->nargs != 2u || !point->op->args ||
+        !map_logical_value_type(context, function->xi, point->op->args[1], &request_type) ||
+        request_type != XR_CORE_TYPE_I64 ||
+        !coroutine_live_set_matches(context, function, block, resume, point) ||
+        (cancel_edge && !cancel_handler))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi suspension request in b%u has no exact canonical resume/live set",
+                    block && block->xi ? block->xi->id : UINT32_MAX);
+
+    instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_SUSPEND;
+    instruction->result_type_id = XR_CORE_TYPE_VOID;
+    instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND;
+    instruction->immediate.coroutine_suspend.safepoint_id = safepoint_id;
+    instruction->immediate.coroutine_suspend.request_kind = XR_SUSPENSION_REQUEST_TIMER_AFTER_MS;
+    instruction->immediate.coroutine_suspend.request_operand_count = 1u;
+    XrCoreIrKey *successors = xr_calloc(2u, sizeof(*successors));
+    if (!successors)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    successors[0] = block_key(function, point->resume_block);
+    successors[1] = cancel_edge && !cancel_edge->private_projection
+                        ? block_key(function, cancel_edge->handler)
+                        : cancel_block_key(function, safepoint_id);
+    instruction->successors = successors;
+    instruction->successor_count = 2u;
+    XrProgramBuildStatus status = set_edge_operands(context, instruction, function, block, resume,
+                                                    NULL, NULL, diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+
+    uint32_t live_count = instruction->operand_count;
+    if (live_count == UINT32_MAX)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    XrCoreIrKey *operands = xr_calloc((size_t) live_count + 1u, sizeof(*operands));
+    if (!operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (!edge_value_operand_key(context, function, block, point->op->args[1], point->op,
+                                &operands[0])) {
+        xr_free(operands);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi suspension request value is unavailable");
+    }
+    if (live_count != 0u)
+        memcpy(operands + 1u, instruction->operands, (size_t) live_count * sizeof(*operands));
+    xr_free((void *) instruction->operands);
+    instruction->operands = operands;
+    instruction->operand_count = live_count + 1u;
+
+    XrCoreIrKey *live_values = live_count ? xr_calloc(live_count, sizeof(*live_values)) : NULL;
+    if (live_count && !live_values)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (live_count)
+        memcpy(live_values, operands + 1u, (size_t) live_count * sizeof(*live_values));
+    function->coroutine_safepoints[safepoint_id].live_values = live_values;
+    function->coroutine_safepoints[safepoint_id].live_value_count = live_count;
+    if (cancel_edge) {
+        if (!coroutine_cancel_drop_set_matches(context, function, resume, 0u, live_count, point))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi suspension request has no exact cancellation owner set");
         return append_cancel_handler_operands(context, instruction, function, block, cancel_handler,
                                               point, diagnostic, diagnostic_size);
     }
@@ -12749,6 +12912,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                     const XrCoreOperationSpec *provider_operation =
                         provider_entry ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PROVIDER_CALL)
                                        : NULL;
+                    const XrCoreOperationSpec *suspension_operation =
+                        resolved_suspension_native_call(context, function, value)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_SUSPEND)
+                            : NULL;
                     bool has_contract = false;
                     if (value->xg_existential_kind != XI_EXISTENTIAL_NONE) {
                         has_contract = xr_program_xi_semantic_operation_contract(
@@ -12802,6 +12969,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = true;
                         value_effects = provider_operation->effect_mask;
                         value_capabilities = provider_operation->capability_mask;
+                    } else if (suspension_operation) {
+                        has_contract = true;
+                        value_effects = suspension_operation->effect_mask;
+                        value_capabilities = suspension_operation->capability_mask;
                     } else {
                         has_contract = xr_program_xi_operation_contract(value->op, &value_effects,
                                                                         &value_capabilities);
@@ -12895,7 +13066,8 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         if (resolved_canonical_class_construction(context, storage->xi, value, NULL,
                                                                   NULL) ||
                             resolved_empty_struct_literal(context, storage->xi, value) ||
-                            resolved_provider_native_call(context, storage->xi, value))
+                            resolved_provider_native_call(context, storage->xi, value) ||
+                            resolved_suspension_native_call(context, storage->xi, value))
                             continue;
                         const XiFunc *callee = resolved_sealed_callee(context, storage->xi, value);
                         bool invoke =
@@ -13447,9 +13619,14 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (suspend_point && suspend_point->kind == XI_CORO_SUSP_CALL) {
-            status = translate_coroutine_call_terminator(context, module, storage, block_storage,
-                                                         suspend_point, terminator, diagnostic,
-                                                         diagnostic_size);
+            if (resolved_suspension_native_call(context, xi, suspend_point->op))
+                status = translate_coroutine_suspend_terminator(context, storage, block_storage,
+                                                                suspend_point, terminator,
+                                                                diagnostic, diagnostic_size);
+            else
+                status = translate_coroutine_call_terminator(
+                    context, module, storage, block_storage, suspend_point, terminator, diagnostic,
+                    diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (invoke_call) {
@@ -13757,7 +13934,8 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                         if (resolved_canonical_class_construction(context, function->xi, value,
                                                                   NULL, NULL) ||
                             resolved_empty_struct_literal(context, function->xi, value) ||
-                            resolved_provider_native_call(context, function->xi, value))
+                            resolved_provider_native_call(context, function->xi, value) ||
+                            resolved_suspension_native_call(context, function->xi, value))
                             continue;
                         const XiFunc *callee = resolved_sealed_callee(context, function->xi, value);
                         bool invoke =
@@ -14441,7 +14619,7 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                 "Xi-produced XrProgram failed semantic verification: %s/%s "
                 "at function=%u block=%u instruction=%u value=%u operation=%u "
                 "result_type=%u category=%u ownership=%u result_zero=%u "
-                "function_effects=%u function_capabilities=%u",
+                "function_effects=%u function_capabilities=%u states=%u safepoints=%u",
                 xr_program_verify_status_name(verify),
                 xr_program_diagnostic_kind_name(verify_diagnostic.kind),
                 verify_diagnostic.location.function_id, verify_diagnostic.location.block_id,
@@ -14453,7 +14631,9 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                 failed_instruction ? (unsigned) xr_core_ir_key_is_zero(failed_instruction->result)
                                    : 1u,
                 failed_function ? failed_function->effect_mask : 0u,
-                failed_function ? failed_function->capability_mask : 0u);
+                failed_function ? failed_function->capability_mask : 0u,
+                failed_function ? failed_function->coroutine_state_count : 0u,
+                failed_function ? failed_function->coroutine_safepoint_count : 0u);
         }
     }
     xr_core_ir_program_free(program);

@@ -1079,6 +1079,35 @@
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/CMakeLists.txt"
       ]
+    },
+    {
+      "id": "core.coroutine.suspend",
+      "core_spec_contract": "publish one typed readiness request at an exact function-local safepoint, then resume through the declared logical state or take the distinct cancellation continuation while preserving the named live values",
+      "program_encoding": "one closed request-kind immediate and exact request arity followed by separate resume-live and cancellation-live operand suffixes; timer-after-ms owns one normalized i64 request value",
+      "decoder_verifier_evaluator": "bounded decode plus exact request-kind, arity, type, capability, safepoint, state, successor, and live-value closure; the independent reference evaluator publishes the normalized request without performing the wait",
+      "vm_implementation": "private sessions publish the same normalized request and retain only verified frame state until the product readiness driver resumes or cancels them",
+      "aot_lowering": "generated native frames publish the same typed request through their private step ABI; standalone generated-C entrypoints drive monotonic timer readiness without depending on the VM",
+      "source_producer": "an exact native-call suspension fact derived from authoritative stdlib metadata projects time.__sleep into one timer-after-ms request; child coroutine calls propagate the child request while preserving the caller-local state and safepoint",
+      "old_owner_deletion": "timer readiness is neither an eager blocking native call in the compiler nor a hidden VM opcode, serialized scheduler plan, compatibility hook, or backend-specific fallback",
+      "status": "COROUTINE_SUSPENSION_CANONICAL_ONLY",
+      "evidence": [
+        "stdlib/defs/core.def",
+        "src/stdlib/xstdlib_metadata.h",
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/app/cli/xcmd_run.c",
+        "tests/unit/program/xr_program_coroutine_fixture.h",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/fixtures/canonical_run/time_sleep.xr",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
     }
   ],
   "capability_groups": [

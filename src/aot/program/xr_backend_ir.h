@@ -19,7 +19,7 @@
 #include "../../execution/xr_execution_identity.h"
 
 #define XR_BACKEND_IR_SCHEMA_VERSION UINT32_C(1)
-#define XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION UINT32_C(2)
+#define XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION UINT32_C(3)
 #define XR_AOT_TOOLCHAIN_SCHEMA_VERSION UINT32_C(1)
 #define XR_NATIVE_ARTIFACT_SCHEMA_VERSION UINT32_C(1)
 #define XR_AOT_BACKEND_NAME "xray-c11-aot"
@@ -84,6 +84,7 @@ typedef struct XrBackendExecutionOutcome {
     int64_t value;
     uint32_t state_id;
     uint32_t safepoint_id;
+    XrSuspensionRequest suspension;
 } XrBackendExecutionOutcome;
 
 typedef struct XrBackendNativeOutcome {
@@ -91,6 +92,7 @@ typedef struct XrBackendNativeOutcome {
     int64_t value;
     uint32_t state_id;
     uint32_t safepoint_id;
+    XrSuspensionRequest suspension;
 } XrBackendNativeOutcome;
 
 // Backend-private adapter for a generated or loaded native step.

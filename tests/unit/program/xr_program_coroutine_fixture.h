@@ -126,7 +126,7 @@ xr_program_coroutine_fixture_write_mutated(XrProgramCoroutineFixtureMutation mut
         .key = xr_program_coroutine_fixture_key("coro:function"),
         .result_type_id = XR_CORE_TYPE_I64,
         .effect_mask = XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_TRAP,
-        .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD,
+        .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION,
         .entry_block = entry_key,
         .blocks = blocks,
         .block_count = 3u,
@@ -166,6 +166,170 @@ static XrProgramBuildStatus xr_program_coroutine_fixture_write(XrProgramArtifact
                                                                size_t diagnostic_size) {
     return xr_program_coroutine_fixture_write_mutated(XR_PROGRAM_COROUTINE_FIXTURE_VALID, artifact,
                                                       diagnostic, diagnostic_size);
+}
+
+typedef enum XrProgramTimerSuspensionFixtureMutation {
+    XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_VALID = 0,
+    XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_KIND,
+    XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_COUNT,
+    XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_TYPE,
+} XrProgramTimerSuspensionFixtureMutation;
+
+static inline XrProgramBuildStatus
+xr_program_timer_suspension_fixture_write_mutated(XrProgramTimerSuspensionFixtureMutation mutation,
+                                                  XrProgramArtifact *artifact, char *diagnostic,
+                                                  size_t diagnostic_size) {
+    XrCoreIrConstantInput constants[] = {
+        {.key = xr_program_coroutine_fixture_key("timer-suspend:ten"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 10},
+        {.key = xr_program_coroutine_fixture_key("timer-suspend:false"),
+         .type_id = XR_CORE_TYPE_BOOL,
+         .kind = XR_CORE_IR_CONSTANT_BOOL,
+         .value.boolean = false},
+        {.key = xr_program_coroutine_fixture_key("timer-suspend:two"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 2},
+    };
+    XrCoreIrKey entry_key = xr_program_coroutine_fixture_key("timer-suspend:entry");
+    XrCoreIrKey resume_key = xr_program_coroutine_fixture_key("timer-suspend:resume");
+    XrCoreIrKey cancel_key = xr_program_coroutine_fixture_key("timer-suspend:cancel");
+    XrCoreIrKey ten = xr_program_coroutine_fixture_key("timer-suspend:value:ten");
+    XrCoreIrKey boolean = xr_program_coroutine_fixture_key("timer-suspend:value:false");
+    XrCoreIrKey resumed = xr_program_coroutine_fixture_key("timer-suspend:value:resumed");
+    XrCoreIrKey two = xr_program_coroutine_fixture_key("timer-suspend:value:two");
+    XrCoreIrKey sum = xr_program_coroutine_fixture_key("timer-suspend:value:sum");
+    XrCoreIrKey suspend_operands[] = {
+        mutation == XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_TYPE ? boolean : ten,
+        ten,
+    };
+    XrCoreIrKey suspend_successors[] = {resume_key, cancel_key};
+    XrCoreIrInstructionInput entry_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = ten,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_BOOL,
+         .result = boolean,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_COROUTINE_SUSPEND,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = suspend_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND,
+         .immediate.coroutine_suspend =
+             {
+                 .safepoint_id = 0u,
+                 .request_kind =
+                     mutation == XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_KIND
+                         ? UINT16_MAX
+                         : XR_SUSPENSION_REQUEST_TIMER_AFTER_MS,
+                 .request_operand_count =
+                     mutation == XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_INVALID_REQUEST_COUNT ? 0u
+                                                                                           : 1u,
+             },
+         .successors = suspend_successors,
+         .successor_count = 2u},
+    };
+    XrCoreIrValueInput resume_argument = {
+        .key = resumed,
+        .type_id = XR_CORE_TYPE_I64,
+    };
+    XrCoreIrKey resume_arguments[] = {resumed};
+    XrCoreIrKey add_operands[] = {resumed, two};
+    XrCoreIrKey return_operand[] = {sum};
+    XrCoreIrInstructionInput resume_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = resume_arguments,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = two,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[2].key},
+        {.operation_id = XR_CORE_OP_CORE_ADD_I64,
+         .result = sum,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = add_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = return_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrInstructionInput cancel_instruction = {
+        .operation_id = XR_CORE_OP_CORE_CANCEL_PUBLISH,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    XrCoreIrBlockInput blocks[] = {
+        {.key = entry_key, .instructions = entry_instructions, .instruction_count = 3u},
+        {.key = resume_key,
+         .arguments = &resume_argument,
+         .argument_count = 1u,
+         .instructions = resume_instructions,
+         .instruction_count = 4u},
+        {.key = cancel_key, .instructions = &cancel_instruction, .instruction_count = 1u},
+    };
+    XrCoreIrCoroutineStateInput states[] = {
+        {.state_id = 0u, .continuation_block = entry_key},
+        {.state_id = 1u, .continuation_block = resume_key},
+    };
+    XrCoreIrKey live_values[] = {ten};
+    XrCoreIrCoroutineSafepointInput safepoint = {
+        .safepoint_id = 0u,
+        .resume_state_id = 1u,
+        .live_values = live_values,
+        .live_value_count = 1u,
+    };
+    XrCoreIrFunctionInput function = {
+        .key = xr_program_coroutine_fixture_key("timer-suspend:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_TRAP,
+        .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION |
+                           XR_CORE_CAPABILITY_RUNTIME_TIMER_SUSPENSION,
+        .entry_block = entry_key,
+        .blocks = blocks,
+        .block_count = 3u,
+        .coroutine_states = states,
+        .coroutine_state_count = 2u,
+        .coroutine_safepoints = &safepoint,
+        .coroutine_safepoint_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = xr_program_coroutine_fixture_key("timer-suspend:module"),
+        .constants = constants,
+        .constant_count = 3u,
+        .functions = &function,
+        .function_count = 1u,
+    };
+    uint8_t profile[XR_PROGRAM_DIGEST_SIZE] = {0};
+    uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
+    XrCoreIrProgramInput input = {
+        .semantic_profile_fingerprint = profile,
+        .required_features = &feature,
+        .required_feature_count = 1u,
+        .modules = &module,
+        .module_count = 1u,
+    };
+    XrCoreIrProgram *program = NULL;
+    XrProgramBuildStatus status =
+        xr_core_ir_program_build(&input, &program, diagnostic, diagnostic_size);
+    if (status == XR_PROGRAM_BUILD_OK)
+        status = xr_program_write(program, artifact, diagnostic, diagnostic_size);
+    xr_core_ir_program_free(program);
+    return status;
 }
 
 typedef enum XrProgramCoroutineOwnerFixtureMutation {
@@ -339,7 +503,7 @@ xr_program_coroutine_owner_fixture_write_mutated(XrProgramCoroutineOwnerFixtureM
          .result_type_id = XR_CORE_TYPE_PANIC_INFO,
          .result_ownership = XR_CORE_IR_OWNER,
          .effect_mask = XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND,
-         .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD,
+         .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION,
          .entry_block = owner_entry_key,
          .blocks = owner_blocks,
          .block_count = 3u,

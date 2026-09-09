@@ -622,7 +622,7 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 for (uint64_t operand = 0; operand < operand_count; ++operand)
                     (void) take_uvar(&section);
                 uint64_t immediate_kind = take_uvar(&section);
-                if (immediate_kind > XR_CORE_IR_IMMEDIATE_COROUTINE_CALL) {
+                if (immediate_kind > XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND) {
                     section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                     break;
                 }
@@ -649,6 +649,13 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                     if (immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL) {
                         uint64_t safepoint = take_uvar(&section);
                         if (immediate >= function_count || safepoint > UINT32_MAX)
+                            section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                    }
+                    if (immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND) {
+                        uint64_t request_kind = take_uvar(&section);
+                        uint64_t request_operand_count = take_uvar(&section);
+                        if (immediate > UINT32_MAX || request_kind > UINT16_MAX ||
+                            request_operand_count > UINT16_MAX)
                             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                     }
                     if ((immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD ||
@@ -697,8 +704,8 @@ static bool decode_imports(Reader *artifact, const XrProgramSectionView *view,
         return section_done(&section, artifact);
     }
     uint8_t previous_contract[XR_STABLE_ID_BYTES] = {0};
-    for (uint64_t provider = 0;
-         provider < provider_count && section.status == XR_PROGRAM_DECODE_OK; ++provider) {
+    for (uint64_t provider = 0; provider < provider_count && section.status == XR_PROGRAM_DECODE_OK;
+         ++provider) {
         uint8_t contract[XR_STABLE_ID_BYTES] = {0};
         take_bytes(&section, contract, sizeof(contract));
         if (bytes_are_zero(contract, sizeof(contract)) ||

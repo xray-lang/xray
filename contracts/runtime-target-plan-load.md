@@ -449,6 +449,15 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
+The canonical source execution route is governed separately from the legacy
+XSM/XTP route above. Its native hosted TargetProfile declares distinct general
+coroutine-suspension and timer-suspension bits. `xray run` consumes only the
+typed suspended outcome: cooperative yield resumes immediately, and an exact
+normalized `timer-after-ms` request waits through the runtime monotonic timer
+primitive before resuming. Missing capability, unknown request kind, wrong
+arity, or a non-normalized payload fails closed; the CLI does not invoke a
+hidden TargetPlan executor or fall back to the old yieldable-call path.
+
 anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
@@ -476,8 +485,8 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h e77a18a77e556011096
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c e138096323af8b59ad6e7dbf4aa9813400c2f9ce231c09bc1e26eefb45b09911
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.h 8653f30d2ed073fd75d3adab9eb5e0cb27ddf538b7e0634f896ce21704382308
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.c 31918070b7e530780073a8ca0010d2b62f78afbfcdf4d610c41bf27e4da4a5d1
-anchor-sha256: src/plan/target/xr_target_profile.h 0673f198b623c2b6e3f1895b2c2fdeed19b7fae5ed78ff36e04936b60e4596cb
-anchor-sha256: src/plan/target/xr_target_profile.c a132e3f382f6293969649e57445e2543aaf0c133584d5345374680d653f8f9e1
+anchor-sha256: src/plan/target/xr_target_profile.h bdf184b79d382fe14ba2d3e4d1522ad74b7ee2fa3d70723f79468899e6374322
+anchor-sha256: src/plan/target/xr_target_profile.c 0ea3522a38fcd87b6f3dcf9768ebf5cd170f6a8b8b892b36a5c3889217dbba17
 anchor-sha256: src/plan/target/xr_target_plan.h c64114debd03439d4674d8d4e24cbf1f7fc727aec14ce37990177cac6f7cb578
 anchor-sha256: src/plan/target/xr_target_plan.c 3d19cbcf432e4e5da4b2d45a555cff1823662a19d83c552ceed30d5601f7a6cc
 anchor-sha256: src/plan/target/xr_target_builder.c f8dbf513a09d863d1dfad77f641cac81410658b3f11c6f10db5a86663aea290f
@@ -488,14 +497,14 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 47203f0c178dc46872e6d
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c 6769b535c81ef682bfec16f7364b2fa5991e037ed7f2e67e70b21d12f331c4a0
 anchor-sha256: src/runtime/xr_target_plan_load.c 162babb92d90b8ead7842e68de5a6bccbb0a304e3e62299de4bb64c8ccf7a22d
 anchor-sha256: src/runtime/xr_runtime_api.c 3cbd014aa9037a69efc4eacc2bbe70e723d603fa16dea6d7f73541edb59a2744
-anchor-sha256: src/app/cli/xcmd_run.c 6843252999115296ab5893250e35f322be8588a25adc5b994feda197df02cabb
+anchor-sha256: src/app/cli/xcmd_run.c 0bae4a9cc7395dbb462480da91d3065e02f933e18ffa61e85031ef2fee549ed6
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
 anchor-sha256: tests/unit/plan/test_target_plan.c c1237baa6a16a896f9ead9e06729879ad1f5de51d769b85bb801951a0fadfb97
 anchor-sha256: tests/unit/plan/test_xtp_format.c f8476491ca33e9aa709c017d7c9b657dce372392b5b416c28363748c275fea86
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 57201fe01683630e4960c911f739acfada9b33c8342f2aa2709b700f51ff7b7b
-anchor-sha256: tests/unit/CMakeLists.txt 37c7d17d4cf391031ba0d3d71017d9c6b78bc8580e8bac1055a46a9910c132d7
+anchor-sha256: tests/unit/CMakeLists.txt 20786799eea5478bc68d3c02a705f02c19effb635c151e97db463fe0b0d4419d
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 30015dd2f75ad8917788a30b367f203d15e85d037af8d394940a4d30af87e69a
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 4514f40cccc03abe86c15f2a4fcf562b174fcba066193ab58a4b6992ed0d57b5
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f

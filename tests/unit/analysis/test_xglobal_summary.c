@@ -196,8 +196,8 @@ TEST(global_evidence_publishes_exact_target_pointer_bits_query) {
     XgGlobalEvidence evidence = {0};
     XaAnalyzer *analyzer = NULL;
     AstNode *ast = NULL;
-    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
-        "var bits: u16 = target.pointerBits\n", &evidence, &analyzer, &ast));
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source("var bits: u16 = target.pointerBits\n",
+                                                           &evidence, &analyzer, &ast));
     ASSERT_EQ_UINT(evidence.ntarget_queries, 1);
     const XgTargetQuerySummary *query = &evidence.target_queries[0];
     ASSERT_TRUE(query->use_id != XG_NO_ID);
@@ -210,9 +210,9 @@ TEST(global_evidence_publishes_exact_target_pointer_bits_query) {
     ASSERT_EQ_UINT(query->result_type_key,
                    xg_target_query_result_type_key(XG_TARGET_QUERY_POINTER_BITS));
     ASSERT_EQ_PTR(xg_global_evidence_find_target_query(&evidence, query->use_id), query);
-    ASSERT_EQ_PTR(xg_global_evidence_find_target_query_at(
-                      &evidence, query->owner_func_id, query->source_node_id,
-                      XG_TARGET_QUERY_POINTER_BITS),
+    ASSERT_EQ_PTR(xg_global_evidence_find_target_query_at(&evidence, query->owner_func_id,
+                                                          query->source_node_id,
+                                                          XG_TARGET_QUERY_POINTER_BITS),
                   query);
     const XgBodySummary *owner = NULL;
     for (uint32_t index = 0; index < evidence.nbodies; ++index) {
@@ -339,12 +339,12 @@ TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow) {
     XgGlobalEvidence shadow = {0};
     XaAnalyzer *shadow_analyzer = NULL;
     AstNode *shadow_ast = NULL;
-    ASSERT_FALSE(build_analyzed_global_evidence_from_source(
-        "fn read() -> i64 {\n"
-        "    var target = {pointerBits: 7}\n"
-        "    return target.pointerBits\n"
-        "}\n",
-        &shadow, &shadow_analyzer, &shadow_ast));
+    ASSERT_FALSE(build_analyzed_global_evidence_from_source("fn read() -> i64 {\n"
+                                                            "    var target = {pointerBits: 7}\n"
+                                                            "    return target.pointerBits\n"
+                                                            "}\n",
+                                                            &shadow, &shadow_analyzer,
+                                                            &shadow_ast));
     ASSERT_EQ_UINT(shadow.ntarget_queries, 0);
     ASSERT_NULL(shadow_analyzer);
     ASSERT_NULL(shadow_ast);
@@ -352,7 +352,7 @@ TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow) {
 }
 
 static XaAnalyzer *build_analyzed_global_evidence_from_graph(XrModuleGraph *graph,
-                                                              XgGlobalEvidence *out) {
+                                                             XgGlobalEvidence *out) {
     XaAnalyzer *analyzer;
     bool has_errors = false;
     if (!graph || !out)
@@ -689,9 +689,8 @@ static AstNode *evidence_first_function_call(AstNode *ast) {
     if (!ast || ast->type != AST_PROGRAM || ast->as.program.count < 1)
         return NULL;
     AstNode *function = ast->as.program.statements[0];
-    AstNode *body = function && function->type == AST_FUNCTION_DECL
-                        ? function->as.function_decl.body
-                        : NULL;
+    AstNode *body =
+        function && function->type == AST_FUNCTION_DECL ? function->as.function_decl.body : NULL;
     AstNode *statement = body && body->type == AST_BLOCK && body->as.block.count > 0
                              ? body->as.block.statements[0]
                              : NULL;
@@ -703,12 +702,11 @@ TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract) 
     XgGlobalEvidence evidence = {0};
     XaAnalyzer *analyzer = NULL;
     AstNode *ast = NULL;
-    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
-        "fn run() -> i64 {\n"
-        "    Coro.yield()\n"
-        "    return 42\n"
-        "}\n",
-        &evidence, &analyzer, &ast));
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source("fn run() -> i64 {\n"
+                                                           "    Coro.yield()\n"
+                                                           "    return 42\n"
+                                                           "}\n",
+                                                           &evidence, &analyzer, &ast));
 
     AstNode *call = evidence_first_function_call(ast);
     ASSERT_NOT_NULL(call);
@@ -729,9 +727,9 @@ TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract) 
     ASSERT_EQ_UINT(point->may_suspend, 1);
     ASSERT_EQ_UINT(point->contract_complete, 1);
     ASSERT_EQ_PTR(xg_global_evidence_find_suspend_point(&evidence, point->use_id), point);
-    ASSERT_EQ_PTR(xg_global_evidence_find_suspend_point_at(
-                      &evidence, point->owner_func_id, point->source_node_id,
-                      XG_SUSPEND_POINT_COOPERATIVE_YIELD),
+    ASSERT_EQ_PTR(xg_global_evidence_find_suspend_point_at(&evidence, point->owner_func_id,
+                                                           point->source_node_id,
+                                                           XG_SUSPEND_POINT_COOPERATIVE_YIELD),
                   point);
     const XgBodySummary *owner = NULL;
     for (uint32_t i = 0; i < evidence.nbodies; i++) {
@@ -802,15 +800,13 @@ TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract) 
 
     uint32_t saved_suspend_point_count = evidence.nsuspend_points;
     evidence.nsuspend_points = 0;
-    XiPipelineResult missing_global =
-        xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
+    XiPipelineResult missing_global = xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
     ASSERT_NE(missing_global.status, XI_PIPE_OK);
     xi_pipeline_result_free(&missing_global);
     evidence.nsuspend_points = saved_suspend_point_count;
 
     xa_analyzer_clear_suspend_point(analyzer, call);
-    XiPipelineResult missing_analyzer =
-        xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
+    XiPipelineResult missing_analyzer = xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
     ASSERT_NE(missing_analyzer.status, XI_PIPE_OK);
     xi_pipeline_result_free(&missing_analyzer);
     ASSERT_TRUE(xa_analyzer_set_suspend_point(analyzer, call, &fact));
@@ -826,15 +822,13 @@ TEST(global_evidence_owns_top_level_cooperative_yield_on_module_initializer) {
     XgGlobalEvidence evidence = {0};
     XaAnalyzer *analyzer = NULL;
     AstNode *ast = NULL;
-    ASSERT_TRUE(build_analyzed_global_evidence_from_source(
-        "Coro.yield()\n", &evidence, &analyzer, &ast));
+    ASSERT_TRUE(
+        build_analyzed_global_evidence_from_source("Coro.yield()\n", &evidence, &analyzer, &ast));
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_UINT(ast->type, AST_PROGRAM);
     ASSERT_EQ_UINT(ast->as.program.count, 1);
     AstNode *statement = ast->as.program.statements[0];
-    AstNode *call = statement && statement->type == AST_EXPR_STMT
-                        ? statement->as.expr_stmt
-                        : NULL;
+    AstNode *call = statement && statement->type == AST_EXPR_STMT ? statement->as.expr_stmt : NULL;
     ASSERT_NOT_NULL(call);
 
     XaSuspendPointFact fact = {0};
@@ -857,10 +851,8 @@ TEST(global_evidence_owns_top_level_cooperative_yield_on_module_initializer) {
     ASSERT_EQ_UINT(point->kind, XG_SUSPEND_POINT_COOPERATIVE_YIELD);
     ASSERT_EQ_UINT(point->may_suspend, 1);
     ASSERT_EQ_UINT(point->contract_complete, 1);
-    ASSERT_EQ_UINT(module_initializer->effect_bits & XG_BODY_MAY_SUSPEND,
-                   XG_BODY_MAY_SUSPEND);
-    ASSERT_EQ_UINT(module_initializer->capability_bits & XG_CAP_COROUTINE,
-                   XG_CAP_COROUTINE);
+    ASSERT_EQ_UINT(module_initializer->effect_bits & XG_BODY_MAY_SUSPEND, XG_BODY_MAY_SUSPEND);
+    ASSERT_EQ_UINT(module_initializer->capability_bits & XG_CAP_COROUTINE, XG_CAP_COROUTINE);
 
     xg_global_evidence_free(&evidence);
     xa_analyzer_free(analyzer);
@@ -1184,8 +1176,8 @@ TEST(global_evidence_records_interface_object_use_rows) {
     ASSERT_NE(original_hash, 0);
     ASSERT(xg_global_evidence_find_interface_object_use(
                &ev, 11, 405, 77, XG_INTERFACE_OBJECT_USE_FIELD) == &ev.interface_object_uses[0]);
-    ASSERT_NULL(xg_global_evidence_find_interface_object_use(
-        &ev, 11, 406, 77, XG_INTERFACE_OBJECT_USE_FIELD));
+    ASSERT_NULL(xg_global_evidence_find_interface_object_use(&ev, 11, 406, 77,
+                                                             XG_INTERFACE_OBJECT_USE_FIELD));
     ev.interface_object_uses[0].use_kind = XG_INTERFACE_USE_MOVE;
     ASSERT_NE(xg_global_evidence_hash(&ev), original_hash);
     ev.interface_object_uses[0].use_kind = XG_INTERFACE_USE_OWNED_STORAGE;
@@ -1204,8 +1196,8 @@ TEST(global_evidence_records_interface_object_use_rows) {
     duplicate.use_id = 2;
     duplicate.body_ordinal = 3;
     ASSERT_NOT_NULL(xg_global_evidence_add_interface_object_use(&ev, &duplicate));
-    ASSERT_NULL(xg_global_evidence_find_interface_object_use(
-        &ev, 11, 405, 77, XG_INTERFACE_OBJECT_USE_FIELD));
+    ASSERT_NULL(xg_global_evidence_find_interface_object_use(&ev, 11, 405, 77,
+                                                             XG_INTERFACE_OBJECT_USE_FIELD));
     duplicate.use_id = 3;
     duplicate.use_kind = XG_INTERFACE_USE_INVALID;
     ASSERT_NULL(xg_global_evidence_add_interface_object_use(&ev, &duplicate));
@@ -7273,9 +7265,11 @@ TEST(global_evidence_build_skips_imported_package_module_rows) {
     ASSERT_EQ_UINT(ev.modules[0].module_id, 1);
     ASSERT_TRUE(xg_module_summary_identity_matches(&ev.modules[0], &imported_package));
     ASSERT_EQ_UINT(ev.ndecls, 1);
-    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.nbodies, 2);
     ASSERT_EQ_UINT(ev.decls[0].module_id, 2);
     ASSERT_EQ_UINT(ev.bodies[0].module_id, 2);
+    ASSERT_EQ_UINT(ev.bodies[1].module_id, 2);
+    ASSERT_EQ_UINT(ev.bodies[1].kind, XG_BODY_MODULE_INIT);
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -7304,7 +7298,7 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 2);
-    ASSERT_EQ_UINT(ev.nbodies, 2);
+    ASSERT_EQ_UINT(ev.nbodies, 3);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     const XgCallsiteSummary *call = &ev.callsites[0];
     ASSERT_EQ_UINT(call->kind, XG_CALL_DIRECT_FUNC);
@@ -7355,7 +7349,7 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&rebuilt, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 2);
-    ASSERT_EQ_UINT(ev.nbodies, 2);
+    ASSERT_EQ_UINT(ev.nbodies, 3);
     ASSERT_EQ_UINT(ev.ncallsites, 2);
 
     const XgBodySummary *callee_body = evidence_find_body_by_name(&ev, "callee");
@@ -8032,7 +8026,7 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 1);
-    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.nbodies, 2);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_CLOSURE);
     ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
@@ -8073,8 +8067,8 @@ TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity) {
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
     ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
     ASSERT_NE(enumeration->as.enum_decl.symbol_id, 0);
-    ASSERT_NOT_NULL(xa_scope_lookup_by_id(analyzer->global_scope,
-                                          enumeration->as.enum_decl.symbol_id));
+    ASSERT_NOT_NULL(
+        xa_scope_lookup_by_id(analyzer->global_scope, enumeration->as.enum_decl.symbol_id));
 
     enumeration->as.enum_decl.symbol_id = 0;
     XgGlobalEvidence evidence;
@@ -8117,7 +8111,8 @@ TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry) {
     ASSERT_NE(exact_symbol_id, 0);
 
     /* Installing and using another analyzer on the same thread must not
-     * redirect evidence lookup away from the analyzer passed to the producer. */
+     * redirect evidence
+     * lookup away from the analyzer passed to the producer. */
     XaAnalyzer *other_analyzer = xa_analyzer_new(g_session);
     ASSERT_NOT_NULL(other_analyzer);
     AstNode *other_ast = xr_parse(g_session, "var wrongIdentity = 1\n");
@@ -8256,8 +8251,8 @@ TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key) {
     xg_global_evidence_free(&evidence);
 
     box_info->xg_interface_id = XG_NO_ID;
-    marker_info->xg_interface_id = marker_interface_id == UINT32_MAX ? marker_interface_id - 1
-                                                                     : marker_interface_id + 1;
+    marker_info->xg_interface_id =
+        marker_interface_id == UINT32_MAX ? marker_interface_id - 1 : marker_interface_id + 1;
     ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
         &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
     xg_global_evidence_free(&evidence);
@@ -8419,7 +8414,7 @@ TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites) {
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 1);
-    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.nbodies, 2);
     ASSERT_EQ_UINT(ev.ncallsites, 0);
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL) == 0);
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
@@ -8585,7 +8580,7 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 2);
-    ASSERT_EQ_UINT(ev.nbodies, 1);
+    ASSERT_EQ_UINT(ev.nbodies, 2);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_EXTERN);
     ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
@@ -9789,16 +9784,16 @@ TEST(global_evidence_publishes_exact_nominal_interface_witnesses) {
 
         XgClassId saved_legacy_class_id = evidence.interface_impls[i].implementor_class_id;
         evidence.interface_impls[i].implementor_class_id = UINT32_MAX;
-        ASSERT_TRUE(xg_global_evidence_find_conformance(
-                        &evidence, impl->implementor_decl_id, impl->nominal_key,
-                        impl->implementor_kind, impl->interface_id) == impl);
+        ASSERT_TRUE(xg_global_evidence_find_conformance(&evidence, impl->implementor_decl_id,
+                                                        impl->nominal_key, impl->implementor_kind,
+                                                        impl->interface_id) == impl);
         evidence.interface_impls[i].implementor_class_id = saved_legacy_class_id;
 
         uint64_t saved_nominal_key = evidence.interface_impls[i].nominal_key;
         evidence.interface_impls[i].nominal_key ^= UINT64_C(0x9e3779b97f4a7c15);
-        ASSERT_NULL(xg_global_evidence_find_conformance(
-            &evidence, impl->implementor_decl_id, saved_nominal_key, impl->implementor_kind,
-            impl->interface_id));
+        ASSERT_NULL(xg_global_evidence_find_conformance(&evidence, impl->implementor_decl_id,
+                                                        saved_nominal_key, impl->implementor_kind,
+                                                        impl->interface_id));
         evidence.interface_impls[i].nominal_key = saved_nominal_key;
     }
     ASSERT_TRUE((kind_mask & (1u << XG_DECL_CLASS)) != 0);
@@ -15165,7 +15160,7 @@ RUN_TEST(global_evidence_producer_rejects_error_class_field_type);
 RUN_TEST(global_evidence_class_layout_failure_is_atomic);
 RUN_TEST(global_evidence_class_layout_uses_selected_target_abi);
 RUN_TEST(global_evidence_producer_resolves_interface_extends_callsite_methods);
-    RUN_TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods);
+RUN_TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods);
 RUN_TEST(global_evidence_producer_resolves_transitive_interface_implementors);
 RUN_TEST(global_evidence_producer_marks_metadata_reachability);
 RUN_TEST(global_evidence_producer_records_derive_rows);

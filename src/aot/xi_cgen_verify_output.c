@@ -478,9 +478,9 @@ bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *ou
     W4State w4 = {NULL, 0};
     int brace = 0, paren = 0;
     int pp_cond = 0; /* nesting depth of #if / #ifdef / #ifndef */
-    XiCgenVerifyResult w2r, w3r, w4r;
+    XiCgenVerifyResult w2r = {0}, w3r = {0}, w4r = {0};
     bool have_w1 = false, have_w2 = false, have_w3 = false, have_w4 = false;
-    XiCgenVerifyResult w1r;
+    XiCgenVerifyResult w1r = {0};
 
     size_t pos = 0;
     int lineno = 1;
@@ -650,8 +650,12 @@ bool xi_cgen_verify_c90_output(const char *c_src, size_t len, XiCgenVerifyResult
         {"xrt_task", "task runtime residue"},
         {"xrt_channel", "channel runtime residue"},
     };
-    enum { C90_SCAN_CODE = 0, C90_SCAN_BLOCK_COMMENT, C90_SCAN_STRING, C90_SCAN_CHAR } state =
-        C90_SCAN_CODE;
+    enum {
+        C90_SCAN_CODE = 0,
+        C90_SCAN_BLOCK_COMMENT,
+        C90_SCAN_STRING,
+        C90_SCAN_CHAR
+    } state = C90_SCAN_CODE;
     int line = 1;
 
     if (out)
@@ -678,8 +682,7 @@ bool xi_cgen_verify_c90_output(const char *c_src, size_t len, XiCgenVerifyResult
                 i++;
                 continue;
             }
-            if ((state == C90_SCAN_STRING && c == '"') ||
-                (state == C90_SCAN_CHAR && c == '\''))
+            if ((state == C90_SCAN_STRING && c == '"') || (state == C90_SCAN_CHAR && c == '\''))
                 state = C90_SCAN_CODE;
             continue;
         }
@@ -709,8 +712,7 @@ bool xi_cgen_verify_c90_output(const char *c_src, size_t len, XiCgenVerifyResult
         for (size_t t = 0; t < sizeof(forbidden) / sizeof(forbidden[0]); t++) {
             size_t token_len = strlen(forbidden[t].token);
             if (i + token_len <= len && memcmp(c_src + i, forbidden[t].token, token_len) == 0) {
-                set_result(out, XI_CGEN_VERIFY_C90_RESTRICTED, line, "%s",
-                           forbidden[t].detail);
+                set_result(out, XI_CGEN_VERIFY_C90_RESTRICTED, line, "%s", forbidden[t].detail);
                 return false;
             }
         }

@@ -56,7 +56,8 @@ Environment:
     XR_BUILD_DIR   build directory (default: build)
     XR_JOBS        parallelism (default: cores - 2)
     XR_NO_BUILD=1  skip the incremental build step
-    XR_FAST=1      t0/t1/canonical: build in build-fast, load stdlib source
+    XR_FAST=1      t0/t1/canonical: build in build-fast (build-fast-clang on
+                   Windows), load stdlib source
                    from disk, and omit stdlib VM fastpaths. This removes both
                    self-hosted stdlib generation edges from the edit loop; the
                    fastpath edge alone costs ~70s after any src/ edit. t2/t3
@@ -434,19 +435,26 @@ def main(argv: List[str]) -> int:
                   "without")
             print("       them would report a pass those tiers never established.")
             return 1
-        build_dir = Path(os.environ.get("XR_BUILD_DIR", "build-fast"))
+        fast_default = "build-fast-clang" if platform.IS_WINDOWS else "build-fast"
+        build_dir = Path(os.environ.get("XR_BUILD_DIR", fast_default))
         fast_cache = (
             "XR_STDLIB_FROM_FILE:BOOL=ON",
             "XRAY_STDLIB_VM_FASTPATHS:BOOL=OFF",
         )
         if not cache_contains_all(build_dir, fast_cache):
             print(f"{BLUE}==>{NC} configuring {build_dir} (source stdlib, no VM fastpaths)")
+            configure_args = [
+                "cmake", "-S", str(REPO_ROOT), "-B", str(build_dir), "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Release", "-DXR_STDLIB_FROM_FILE=ON",
+                "-DXRAY_STDLIB_VM_FASTPATHS=OFF", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            ]
+            if platform.IS_WINDOWS:
+                configure_args.extend((
+                    f"-DCMAKE_C_COMPILER={sanitizer.resolve_compiler_command('clang-cl')}",
+                    f"-DCMAKE_CXX_COMPILER={sanitizer.resolve_compiler_command('clang-cl')}",
+                ))
             with timed_phase("fast-tree configure"):
-                configure = proc.run(["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
-                                      "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
-                                      "-DXR_STDLIB_FROM_FILE=ON",
-                                      "-DXRAY_STDLIB_VM_FASTPATHS=OFF",
-                                      "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"])
+                configure = proc.run(configure_args)
             if not configure.ok:
                 sys.stdout.write(configure.combined_text())
                 return 1

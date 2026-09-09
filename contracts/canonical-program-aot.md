@@ -49,7 +49,7 @@ provider version, target triple, codegen options, sysroot, runtime objects, and 
 fingerprints; every partition is checked exactly and mismatches fail closed.
 
 The pure-AOT walking-skeleton executable contains no VM, compiler, program-loader, TargetPlan, or
-AOT-toolchain symbol and executes without program bytes. All fifty-five current CoreSpec operations
+AOT-toolchain symbol and executes without program bytes. All fifty-six current CoreSpec operations
 have private BackendIR/C lowering. `core.logical.not`, `core.logical.and`, and `core.logical.or`
 accept only canonical `bool` values and emit portable C logical expressions over already evaluated
 SSA operands. Source expressions with a trapping or effectful right-hand side are projected into
@@ -82,6 +82,15 @@ because its caller owns the backing storage. The BackendIR verifier rejects inst
 places in live rows, missing frame owners, extra or undropped cancel values, and malformed
 continuations; generated C does not treat frame disposal, place-address reconstruction, error,
 panic, or trap as a cancellation alias.
+
+`core.coroutine.suspend` remains a logical request in private BackendIR and in
+the generated step ABI. Its timer form has exactly one normalized i64 payload;
+embedded hosts observe that request and decide readiness, while the hosted
+standalone main drives cooperative yield immediately and timer readiness with a
+monotonic OS wait before polling the same frame again. A sealed child forwards
+its request but not its private state identity. Unknown kinds, wrong arity, and
+non-normalized timer payloads become a terminal generated-C failure rather than
+an eager native call, VM dependency, or compatibility fallback.
 
 For related aggregate-field `REF` arguments, BackendIR independently checks the typed projection
 chain and proves that its unique value root occurs once in the caller safepoint. Generated C saves
@@ -143,19 +152,19 @@ the actual generated allocator, and cover nested value isolation, each allocatio
 invalid private dispatch, unchanged failed-copy outputs, destruction, and forbidden symbol absence.
 Those private-state mutations are materialization checks, not source-language mutation examples.
 
-anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h a964247d2aacfd087417bc19ad30e2c81c870cb5a28521bb953b2dc8d84d2f1f
-anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h c51ff9a5892b84710d42cd5eceab4fc7f2887ed37062dd28b3a2f0bc68fc00ca
+anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h 44cab32da792042b788f5282f91a042f2c6deb76c65bf7be69c242cc36003c54
+anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h a69072ef2f14b4b1350dcdeb9a5facaf9ee36b4a04c5bf1b18f09727f5b3aa50
 anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
-anchor-sha256: tests/unit/CMakeLists.txt 37c7d17d4cf391031ba0d3d71017d9c6b78bc8580e8bac1055a46a9910c132d7
-anchor-sha256: xisa/core/registry.json 1066fb08ca4dae249c7fc59d26e1ce4f6c387fbbdd16d31480c72badb109483f
+anchor-sha256: tests/unit/CMakeLists.txt 20786799eea5478bc68d3c02a705f02c19effb635c151e97db463fe0b0d4419d
+anchor-sha256: xisa/core/registry.json 384cdc51e68cfb167e5278b851c7a601eacb8fb70fe7c144a2afc257935d4bde
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
-anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 68c13c4ee82d25c007508ef3ec3b2084a7439c4e5db025c08d670bcb33f5c9f8
-anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json 81bb6fb3456dbc45d6bd4d81b672a296e9c2990cf846a2c8ed72a2a2b45fa6da
-anchor-sha256: src/aot/program/xr_backend_ir.h af75b1247f80f1b3132d71b65774b05f6c99d4bfbcab3e9fd097911f7694a799
-anchor-sha256: src/aot/program/xr_backend_ir_internal.h c1360e511db5f08bb28aea04b0b4048b958f4778da8eecd7adeee88fba9f9942
-anchor-sha256: src/aot/program/xr_backend_ir.c d2f80522ab5b2907551229d5efd615c6be04bb7ce6ba6e6a40eae40cdb6c0c3d
-anchor-sha256: src/aot/program/xr_backend_ir_verify.c 54b6fd939984b9c0bb26e1ffddea43eff4c76027e2a883306a8db590dfea364f
-anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c b6adfcd64a469889499d825e4e6e8c422b41b0e1e574806a612a7e3da82a1943
+anchor-sha256: contracts/canonical-program/operation-capability-matrix.json 4496a328f7492c45252e5e3b911eb5642b9f9aa554fdab1a097d9001b3e407f1
+anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json bb97ac9d81ed183fa8ba97c93ba547fa444dc68187a93a86e7ff1f587e010596
+anchor-sha256: src/aot/program/xr_backend_ir.h 27bbdd970f1bf1ad039af977cd395aa8609d9c02794e9a566232ba174d86b8af
+anchor-sha256: src/aot/program/xr_backend_ir_internal.h 5a33e1981425e9392eebbe80a058d3a9a8b80f221e327fd0d505a3f5ee737855
+anchor-sha256: src/aot/program/xr_backend_ir.c c719e13cbf496ebd595e88aaf3342c1f7e7941d499edfb1219fb5ca9f9bf8d2b
+anchor-sha256: src/aot/program/xr_backend_ir_verify.c c6312143e78e246c02fd4e6dc16418cb9e3d7e083c7e345f77e2d134ea3c5fe7
+anchor-sha256: src/aot/program/xr_backend_ir_emit_c.c 7dd4f366b12b28d70d7a5ec3bd3927845fd6a4ea498c14b4fcb1f4fe60d7ef84
 anchor-sha256: src/aot/program/xr_backend_ir_emit_copy.inc.c 8c831fe2d6161dd1b9a4b86de86d9a40b4573e05985650d258772345658d78f8
 anchor-sha256: src/aot/program/xr_native_artifact.c fc273aac15c76b9ffcd6300e7c77978a4f729bbbfcbf06c8018df85ba72d4f76
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -163,5 +172,5 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b91bd3928d1f82b993b1955240e13323b572360497e
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
-anchor-sha256: tests/unit/aot/test_xr_program_aot.c ea9d5fb6c739ec615a2064f6e8bb83d14ba2566e0b92989f6c3a77f3570ee240
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 7d7cec3199041b72f10405b1fc881c66c6542665dc32247b387f0b6220f1c066
+anchor-sha256: tests/unit/aot/test_xr_program_aot.c 4a8d06fbd35250bb62b3f6f720e2fe260f5ee885b814c0570a60a290b5668a0f
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c cc0b75718a84f43708f6283e89ed9f4d65fbd0756ee5bf349f0b43744aa028f2

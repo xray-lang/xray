@@ -1928,7 +1928,7 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(
         function->coroutine_state_count == 2u && function->coroutine_safepoint_count == 1u &&
         function->effect_mask == (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
-        function->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
+        function->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION &&
         validated_program_has_operation(validated, XR_CORE_OP_CORE_COROUTINE_YIELD));
 
     XrExecutionBindingInput execution_input = {
@@ -2111,12 +2111,12 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     uint32_t entry_function = xr_validated_program_entry_function(validated);
     PIPELINE_TEST_REQUIRE(entry_function < validated->function_count);
     const XrValidatedFunction *entry = &validated->functions[entry_function];
-    PIPELINE_TEST_REQUIRE(entry->result_type_id == XR_CORE_TYPE_I64 &&
-                          entry->coroutine_state_count == 2u &&
-                          entry->coroutine_safepoint_count == 1u &&
-                          entry->effect_mask == (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL |
-                                                 XR_CORE_EFFECT_SUSPEND) &&
-                          entry->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+    PIPELINE_TEST_REQUIRE(
+        entry->result_type_id == XR_CORE_TYPE_I64 && entry->coroutine_state_count == 2u &&
+        entry->coroutine_safepoint_count == 1u &&
+        entry->effect_mask ==
+            (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
+        entry->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION);
 
     const XrValidatedInstruction *coroutine_call = NULL;
     for (uint32_t block_index = 0u; block_index < entry->block_count; ++block_index) {
@@ -2147,7 +2147,7 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
         validated_child->coroutine_state_count == 2u &&
         validated_child->coroutine_safepoint_count == 1u &&
         validated_child->effect_mask == (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) &&
-        validated_child->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD &&
+        validated_child->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION &&
         validated_program_has_operation(validated, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED));
 
     XrExecutionBindingInput execution_input = {
@@ -4861,6 +4861,7 @@ TEST(e2e_print_group_without_write_is_refused) {
 }
 
 int main(int argc, char **argv) {
+    bool canonical_only = false;
     if (argc == 9 && strcmp(argv[1], "--source-aot-c") == 0 &&
         strcmp(argv[3], "--pointer-aot-c") == 0 && strcmp(argv[5], "--yield-aot-c") == 0 &&
         strcmp(argv[7], "--coroutine-call-aot-c") == 0) {
@@ -4868,6 +4869,8 @@ int main(int argc, char **argv) {
         g_pointer_aot_output_path = argv[4];
         g_yield_aot_output_path = argv[6];
         g_coroutine_call_aot_output_path = argv[8];
+    } else if (argc == 2 && strcmp(argv[1], "--canonical") == 0) {
+        canonical_only = true;
     } else if (argc != 1) {
         return 2;
     }
@@ -4887,13 +4890,13 @@ int main(int argc, char **argv) {
      * unrelated emitter capability must neither
      * block nor silently change a canonical native
      * artifact. */
-    if (g_source_aot_output_path) {
+    if (g_source_aot_output_path || canonical_only) {
         run_e2e_program_cooperative_yield_closes_source_reference_vm_and_aot();
         run_e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot();
         run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
         run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
         teardown();
-        printf("\n=== %d/%d Xi Pipeline fixture generators passed ===\n", tests_passed,
+        printf("\n=== %d/%d Xi Pipeline canonical tests passed ===\n", tests_passed,
                tests_passed + tests_failed);
         return tests_failed > 0 ? 1 : 0;
     }

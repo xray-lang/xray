@@ -110,7 +110,7 @@ static void xr_program_coroutine_trap_body_init(XrProgramCoroutineTrapBody *body
         .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_CANCEL |
                        XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_PROVIDER_CALL,
         .capability_mask =
-            XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD | XR_CORE_CAPABILITY_PROVIDER_BINDING,
+            XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION | XR_CORE_CAPABILITY_PROVIDER_BINDING,
         .entry_block = body->blocks[0].key,
         .blocks = body->blocks,
         .block_count = block_count,

@@ -257,7 +257,7 @@ static bool xr_program_cleanup_graph_fixture_init(XrProgramCleanupGraphFixture *
         .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CANCEL |
                        XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_PROVIDER_CALL,
         .capability_mask =
-            XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD | XR_CORE_CAPABILITY_PROVIDER_BINDING,
+            XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION | XR_CORE_CAPABILITY_PROVIDER_BINDING,
         .entry_block = fixture->blocks[XR_CLEANUP_GRAPH_ENTRY].key,
         .blocks = fixture->blocks,
         .block_count = XR_CLEANUP_GRAPH_BLOCK_COUNT,

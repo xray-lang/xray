@@ -263,8 +263,8 @@ void xr_core_ir_program_free(XrCoreIrProgram *program) {
     xr_free(program);
 }
 
-static XrProgramBuildStatus copy_provider_requirements(
-    const XrCoreIrProgramInput *input, XrCoreIrProgram *program) {
+static XrProgramBuildStatus copy_provider_requirements(const XrCoreIrProgramInput *input,
+                                                       XrCoreIrProgram *program) {
     if (input->provider_requirement_count == 0u)
         return input->provider_requirements ? XR_PROGRAM_BUILD_INVALID_INPUT : XR_PROGRAM_BUILD_OK;
     if (!input->provider_requirements ||
@@ -312,8 +312,8 @@ static XrProgramBuildStatus copy_provider_requirements(
     }
     uint32_t provider_count = 0u;
     for (size_t index = 0; index < unique_count; ++index) {
-        if (index == 0u || stable_id_compare(pairs[index - 1u].contract_id,
-                                             pairs[index].contract_id) != 0)
+        if (index == 0u ||
+            stable_id_compare(pairs[index - 1u].contract_id, pairs[index].contract_id) != 0)
             ++provider_count;
     }
     if (provider_count > XR_PROGRAM_LIMIT_PROVIDER_CONTRACTS) {
@@ -457,6 +457,14 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
             output->immediate.coroutine_call.callee = input->immediate.coroutine_call.callee;
             output->immediate.coroutine_call.safepoint_id =
                 input->immediate.coroutine_call.safepoint_id;
+            break;
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND:
+            output->immediate.coroutine_suspend.safepoint_id =
+                input->immediate.coroutine_suspend.safepoint_id;
+            output->immediate.coroutine_suspend.request_kind =
+                input->immediate.coroutine_suspend.request_kind;
+            output->immediate.coroutine_suspend.request_operand_count =
+                input->immediate.coroutine_suspend.request_operand_count;
             break;
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -1799,10 +1807,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
     return XR_PROGRAM_BUILD_OK;
 }
 
-static bool provider_operation_flat_index(const XrCoreIrProgram *program,
-                                          XrStableId contract_id,
-                                          XrStableId operation_id,
-                                          size_t *index_out) {
+static bool provider_operation_flat_index(const XrCoreIrProgram *program, XrStableId contract_id,
+                                          XrStableId operation_id, size_t *index_out) {
     size_t flat_index = 0u;
     for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
         const XrCoreIrProviderRequirement *requirement = &program->provider_requirements[provider];
@@ -1824,8 +1830,9 @@ static bool operation_is_provider_backed(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP_I64;
 }
 
-static XrProgramBuildStatus validate_provider_operation_requirements(
-    const XrCoreIrProgram *program, char *diagnostic, size_t diagnostic_size) {
+static XrProgramBuildStatus validate_provider_operation_requirements(const XrCoreIrProgram *program,
+                                                                     char *diagnostic,
+                                                                     size_t diagnostic_size) {
     size_t operation_count = 0u;
     for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider) {
         uint32_t count = program->provider_requirements[provider].operation_count;
@@ -1898,8 +1905,7 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         (input->type_count == 0u) != (input->types == NULL) ||
         (input->interface_count == 0u) != (input->interfaces == NULL) ||
         (input->conformance_count == 0u) != (input->conformances == NULL) ||
-        (input->provider_requirement_count == 0u) !=
-            (input->provider_requirements == NULL)) {
+        (input->provider_requirement_count == 0u) != (input->provider_requirements == NULL)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR program input is incomplete");
         return XR_PROGRAM_BUILD_INVALID_INPUT;

@@ -15,6 +15,7 @@ import program_source_fixtures as source_fixtures
 
 
 _SCRIPT_AND_EXECUTABLE_TESTS = (
+    "canonical_source_run_cli",
     "canonical_cutover_manifests",
     "canonical_cutover_manifests_self_test",
     "contract_freeze",
@@ -30,6 +31,8 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
     "test_xr_program_verify",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
+    "test_xglobal_summary",
+    "test_xi_pipeline_canonical",
     "test_xi_verify_ext",
     "xr_execution_contracts",
     "xr_execution_contracts_self_test",
@@ -61,8 +64,17 @@ _EXECUTABLE_TARGETS = (
     "test_xr_program_verify",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
+    "test_xglobal_summary",
     "test_xi_verify_ext",
 )
+
+# Support executables whose CTest registration has a deliberately different
+# name. Keep the evidence mapping explicit so adding a broad build proxy cannot
+# silently enter the exact profile.
+_SUPPORT_BUILD_TARGET_TESTS = {
+    "test_xi_pipeline": "test_xi_pipeline_canonical",
+    "xray": "canonical_source_run_cli",
+}
 
 
 def load_inventory(manifest: Path = source_fixtures.MANIFEST,
@@ -70,11 +82,13 @@ def load_inventory(manifest: Path = source_fixtures.MANIFEST,
     registry = source_fixtures.load_registry(manifest, source)
     native_targets = source_fixtures.native_target_names(registry)
     tests = _SCRIPT_AND_EXECUTABLE_TESTS + native_targets
-    targets = _EXECUTABLE_TARGETS + native_targets
+    targets = _EXECUTABLE_TARGETS + tuple(_SUPPORT_BUILD_TARGET_TESTS) + native_targets
     if len(tests) != len(set(tests)) or len(targets) != len(set(targets)):
         raise source_fixtures.FixtureError("canonical profile contains duplicate registration")
-    if not set(targets) <= set(tests):
+    if not set(_EXECUTABLE_TARGETS + native_targets) <= set(tests):
         raise source_fixtures.FixtureError("canonical build target lacks a qualification test")
+    if not set(_SUPPORT_BUILD_TARGET_TESTS.values()) <= set(tests):
+        raise source_fixtures.FixtureError("canonical support target lacks a qualification test")
     return tests, targets
 
 

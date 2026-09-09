@@ -119,6 +119,7 @@ typedef struct XrReferenceOutcome {
     uint64_t steps;
     uint32_t state_id;
     uint32_t safepoint_id;
+    XrSuspensionRequest suspension;
 } XrReferenceOutcome;
 
 typedef struct XrReferenceAggregateView {

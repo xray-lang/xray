@@ -42,7 +42,7 @@ static XrProgramBuildStatus xr_program_coroutine_branch_fixture_encode(
         .key = xr_program_coroutine_branch_fixture_key("coro-branch:function"),
         .result_type_id = XR_CORE_TYPE_I64,
         .effect_mask = XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_TRAP,
-        .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD,
+        .capability_mask = XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION,
         .entry_block = blocks[0].key,
         .blocks = blocks,
         .block_count = 4u,

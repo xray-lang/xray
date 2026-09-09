@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -55,6 +56,19 @@ def main() -> int:
     require(
         clock_text.isdecimal() and int(clock_text) > 0,
         f"clock provider did not produce positive epoch milliseconds: {clock.stdout!r}",
+    )
+
+    sleep_started = time.monotonic()
+    slept = invoke(args.binary, "run", str(args.fixtures / "time_sleep.xr"))
+    sleep_elapsed = time.monotonic() - sleep_started
+    require(slept.returncode == 0, f"timer suspension route failed: {slept.stderr!r}")
+    require(
+        slept.stdout == "",
+        f"timer suspension produced unexpected stdout: {slept.stdout!r}",
+    )
+    require(
+        sleep_elapsed >= 0.020,
+        f"canonical run did not wait for timer readiness: {sleep_elapsed:.6f}s",
     )
 
     implicit = invoke(args.binary, str(args.fixtures / "main_zero.xr"))

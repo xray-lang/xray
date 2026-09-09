@@ -418,6 +418,10 @@ add_xray_unit_test(test_xi_analysis ir/test_xi_analysis.c)
 add_xray_unit_test(test_xi_cfg_edit ir/test_xi_cfg_edit.c)
 add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
+add_test(NAME test_xi_pipeline_canonical
+    COMMAND $<TARGET_FILE:test_xi_pipeline> --canonical)
+set_tests_properties(test_xi_pipeline_canonical PROPERTIES
+    LABELS "unit;ir;canonical-program;source-owner;task-293;task-302")
 
 function(xr_enable_pure_aot_symbol_map target_name)
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"

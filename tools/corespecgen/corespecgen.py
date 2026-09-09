@@ -81,11 +81,11 @@ GENERIC_TYPES = {
     "A", "C", "Capture?", "E", "V", "T", "T...", "R", "R?", "P...",
     "TargetEnum",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
-    "trap-edge-values...", "cancel-edge-values...", "suspend-edge-values...",
+    "trap-edge-values...", "cancel-edge-values...", "suspend-edge-values...", "request-values...",
 }
 VARIADIC_TYPES = {
     "T...", "P...", "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
-    "trap-edge-values...", "cancel-edge-values...", "suspend-edge-values...",
+    "trap-edge-values...", "cancel-edge-values...", "suspend-edge-values...", "request-values...",
 }
 IMPLEMENTATION_KEYS = {
     "aot_handler",
@@ -315,7 +315,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} lacks ownership contract")
         require(operation["profile_dependency"] in {
             "none", "pointer_width", "operating_system", "architecture", "native_abi",
-            "endianness", "provider_contract", "scheduler-yield",
+            "endianness", "provider_contract", "scheduler-suspension",
         },
                 f"operation {spelling} has unknown profile dependency")
         require(isinstance(operation["materialization"], str) and operation["materialization"],
@@ -336,7 +336,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-reborrow-read", "existential-test",
             "provider-call", "output-group-i64",
-            "coroutine-yield", "coroutine-call",
+            "coroutine-yield", "coroutine-suspend", "coroutine-call",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -985,6 +985,20 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and continuation_graph_valid(actual, cancel=True, trap=False)
                 and isinstance(actual.get("live_values"), list)
                 and actual.get("live_values") == actual.get("resume_edge_values"))
+    if validator == "coroutine-suspend":
+        requested = actual.get("requested_ms")
+        normalized = actual.get("normalized_ms")
+        return (actual.get("result_type") == "void"
+                and actual.get("successor_count") == 2
+                and actual.get("resume_state") == actual.get("continuation_state")
+                and continuation_graph_valid(actual, cancel=True, trap=False)
+                and actual.get("request_kind") == "timer-after-ms"
+                and actual.get("request_operand_count") == 1
+                and actual.get("request_operand_types") == ["i64"]
+                and isinstance(requested, int) and not isinstance(requested, bool)
+                and normalized == max(0, min(requested, 86400000))
+                and isinstance(actual.get("live_values"), list)
+                and actual.get("live_values") == actual.get("resume_edge_values"))
     if validator == "coroutine-call":
         live = actual.get("live_values")
         owners = actual.get("owner_values", [])
@@ -1010,7 +1024,9 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("resume_state") == actual.get("continuation_state")
                 and continuation_graph_valid(actual, cancel=True, trap=successor_count == 3)
                 and actual.get("callee_coroutine") is True
-                and actual.get("callee_suspend_kind") == "cooperative-yield"
+                and actual.get("callee_suspend_kind") in {
+                    "cooperative-yield", "timer-after-ms"
+                }
                 and actual.get("callee_error_type") == "void"
                 and actual.get("callee_panic_type") == "void"
                 and actual.get("scalar_non_owner_boundary") is True
@@ -1452,6 +1468,7 @@ def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
 
     for case_id, validator in (
             ("coroutine-yield-valid", "coroutine-yield"),
+            ("coroutine-suspend-timer-valid", "coroutine-suspend"),
             ("coroutine-call-provider-trap-continuation-valid", "coroutine-call"),
             ("provider-call-trap-continuation-valid", "provider-call"),
             ("sealed-call-trap-continuation-valid", "sealed-call"),

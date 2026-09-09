@@ -33,6 +33,15 @@ owner exactly once; ambiguous projections, missing owners, and duplicate owner p
 rejected. Disposing a frame is not an implicit cancellation operation, and no error, panic, or
 trap outcome aliases cancellation.
 
+A suspended outcome carries one Program-owned typed readiness request rather
+than asking either executor to wait internally. Cooperative yield has no
+operand. `timer-after-ms` has one i64 operand normalized into the closed range
+0 through 86400000 before publication. The exact TargetProfile independently
+requires general coroutine suspension and timer suspension; neither capability
+is inferred from hosted execution. Product readiness drivers may resume only a
+well-formed request, use monotonic elapsed time for the timer, and fail closed
+on every unknown kind, arity, or non-normalized payload.
+
 Callable dispatch is program-owned rather than provider-owned. An indirect call performs a
 non-consuming `READ` of its affine callable operand, so an owned pack and a borrowed non-owner
 function parameter are both valid; target identity and capture layout remain private to each
@@ -72,8 +81,8 @@ hybrid, or reloadable adapters remain inactive. Runtime-kernel policy remains a 
 for the active object/string identity, RC/weak/panic/OOM policies, and generation protocol. No
 executor slot, native register, or common local physical plan is stored here.
 
-anchor-sha256: src/plan/target/xr_target_profile.h 0673f198b623c2b6e3f1895b2c2fdeed19b7fae5ed78ff36e04936b60e4596cb
-anchor-sha256: src/plan/target/xr_target_profile.c a132e3f382f6293969649e57445e2543aaf0c133584d5345374680d653f8f9e1
+anchor-sha256: src/plan/target/xr_target_profile.h bdf184b79d382fe14ba2d3e4d1522ad74b7ee2fa3d70723f79468899e6374322
+anchor-sha256: src/plan/target/xr_target_profile.c 0ea3522a38fcd87b6f3dcf9768ebf5cd170f6a8b8b892b36a5c3889217dbba17
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 4092adc2ff88ab03eccf6e9795b4c32efd7173a8acf96c94dba7932cc5e34ab7
 anchor-sha256: src/plan/target/xr_target_verify.c a7aade83086711c19cdfc03b0130fd186c5a5a71bd549273476260ae21304433
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
@@ -83,8 +92,8 @@ anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498a
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c e582bf2d99821a9473a0621914168cccb730f904c93c6180603f2d36f2035eb7
-anchor-sha256: src/program/xr_validated_program_internal.h 1cd61fb3b536b3414091d39919ff909e6b12710387438a89303cf1e5c66e78c8
+anchor-sha256: src/program/xr_program_verify.c ef71403c9fa5dc81123a041baba91dfd04c3f41ab4636d937f5ef99806e23216
+anchor-sha256: src/program/xr_validated_program_internal.h dd5f240dbaff69c50117506bbf92401f21f70a038b6cfc72d344dff56fa34207
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
@@ -92,5 +101,5 @@ anchor-sha256: tests/unit/plan/test_target_profile.c ebcd1c0fef635f5e4997fd41523
 anchor-sha256: tests/unit/execution/test_xr_execution.c 04ba917bf55ef830923fd8a9c70baca6ed17b14a526bd3935cecc1745455edbc
 anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 177583c0f785168d4693a33d035ce52c04c6bfd37eeb4de7dacf0843aeffb601
 anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 1bf549df5f42fabbbe537b578709e032b72b8d0b4848627186945a12b2ee215f
-anchor-sha256: scripts/check_xr_execution_contracts.py f478d5f8032c7a17c79a49bb79e87a49687ebf13b6037533fa6a35fe16310e5b
+anchor-sha256: scripts/check_xr_execution_contracts.py 9001e12d09cd39abd658772dbe5a2079482f0a6b0109e31f364e5ff1d41bae89
 anchor-sha256: contracts/canonical-program/execution-binding-coverage.json efee9456407f35a994f73bed05dd3116790be6f3667d400691cb08648a729227

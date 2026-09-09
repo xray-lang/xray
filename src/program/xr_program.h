@@ -124,6 +124,27 @@ typedef enum XrCoreIrConstantKind {
     XR_CORE_IR_CONSTANT_BOOL = 2,
 } XrCoreIrConstantKind;
 
+typedef enum XrSuspensionRequestKind {
+    XR_SUSPENSION_REQUEST_NONE = 0,
+    XR_SUSPENSION_REQUEST_COOPERATIVE_YIELD = 1,
+    XR_SUSPENSION_REQUEST_TIMER_AFTER_MS = 2,
+} XrSuspensionRequestKind;
+
+typedef struct XrSuspensionRequest {
+    XrSuspensionRequestKind kind;
+    uint16_t operand_count;
+    uint16_t reserved16;
+    union {
+        int64_t timer_after_ms;
+    } payload;
+} XrSuspensionRequest;
+
+static inline int64_t xr_suspension_timer_normalize_ms(int64_t milliseconds) {
+    if (milliseconds <= 0)
+        return 0;
+    return milliseconds > INT64_C(86400000) ? INT64_C(86400000) : milliseconds;
+}
+
 typedef struct XrCoreIrConstantInput {
     XrCoreIrKey key;
     uint16_t type_id;
@@ -147,6 +168,7 @@ typedef enum XrCoreIrImmediateKind {
     XR_CORE_IR_IMMEDIATE_TYPE,
     XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
     XR_CORE_IR_IMMEDIATE_COROUTINE_CALL,
+    XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND,
 } XrCoreIrImmediateKind;
 
 /* A place is a verifier-confined SSA capability naming typed storage. It is
@@ -222,6 +244,11 @@ typedef struct XrCoreIrInstructionInput {
             XrCoreIrKey callee;
             uint32_t safepoint_id;
         } coroutine_call;
+        struct {
+            uint32_t safepoint_id;
+            uint16_t request_kind;
+            uint16_t request_operand_count;
+        } coroutine_suspend;
     } immediate;
     const XrCoreIrKey *successors;
     uint32_t successor_count;

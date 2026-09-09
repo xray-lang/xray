@@ -968,7 +968,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         instruction->operands[operand] = (uint32_t) value;
     }
     uint64_t immediate_kind = take_uvar(reader);
-    if (immediate_kind > XR_CORE_IR_IMMEDIATE_COROUTINE_CALL) {
+    if (immediate_kind > XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
         return false;
     }
@@ -1074,6 +1074,21 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
             }
             instruction->immediate.coroutine_call.function_id = (uint32_t) function;
             instruction->immediate.coroutine_call.safepoint_id = (uint32_t) safepoint;
+            break;
+        }
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND: {
+            uint64_t safepoint = take_uvar(reader);
+            uint64_t request_kind = take_uvar(reader);
+            uint64_t request_operand_count = take_uvar(reader);
+            if (safepoint > UINT32_MAX || request_kind > UINT16_MAX ||
+                request_operand_count > UINT16_MAX) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            instruction->immediate.coroutine_suspend.safepoint_id = (uint32_t) safepoint;
+            instruction->immediate.coroutine_suspend.request_kind = (uint16_t) request_kind;
+            instruction->immediate.coroutine_suspend.request_operand_count =
+                (uint16_t) request_operand_count;
             break;
         }
         default:
@@ -1746,6 +1761,7 @@ static bool instruction_is_terminator(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
            operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_RETURN || operation_id == XR_CORE_OP_CORE_TRAP ||
            operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH ||
@@ -2921,9 +2937,13 @@ static uint32_t owner_occurrences_on_successor_edge(const VerifyContext *context
         start = 1u;
         if (successor_index != 0u)
             start += function->blocks[terminator->successors[0]].argument_count;
-    } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+               terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND) {
+        start = terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND
+                    ? terminator->immediate.coroutine_suspend.request_operand_count
+                    : 0u;
         if (successor_index != 0u)
-            start = function->blocks[terminator->successors[0]].argument_count;
+            start += function->blocks[terminator->successors[0]].argument_count;
     } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
         uint32_t count = 0u;
         uint32_t implicit = 0u;
@@ -2985,6 +3005,7 @@ static bool verify_owner_block_closure(VerifyContext *context, uint32_t function
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
                      terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                     terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
                      terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
     for (uint32_t value = 0; value < function->value_count; ++value) {
         if (function->value_blocks[value] != block_id ||
@@ -3203,6 +3224,7 @@ static VerifyCleanupReason cleanup_successor_reason(const VerifyContext *context
                                                     VerifyCleanupReason incoming) {
     switch (instruction->operation_id) {
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
+        case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
             return successor == 1u   ? VERIFY_CLEANUP_CANCEL
                    : successor == 2u ? VERIFY_CLEANUP_TRAP7
@@ -3231,6 +3253,7 @@ static bool cleanup_terminal_preserves_reason(VerifyContext *context,
                                               XrProgramSemanticLocation location) {
     if (reason != VERIFY_CLEANUP_NORMAL &&
         (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+         instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
          instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED)) {
         /* Suspension is an observable exit even though it also has explicit
          * successors.
@@ -3390,6 +3413,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
         instruction->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
         instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+        instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
         instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
@@ -3630,6 +3654,62 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             return true;
         }
+        case XR_CORE_OP_CORE_COROUTINE_SUSPEND: {
+            const uint32_t request_count =
+                instruction->immediate.coroutine_suspend.request_operand_count;
+            const uint32_t safepoint_id = instruction->immediate.coroutine_suspend.safepoint_id;
+            if (instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_VOID ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND ||
+                instruction->immediate.coroutine_suspend.request_kind !=
+                    XR_SUSPENSION_REQUEST_TIMER_AFTER_MS ||
+                request_count != 1u || safepoint_id >= function->coroutine_safepoint_count ||
+                instruction->successor_count != 2u ||
+                instruction->successors[0] >= function->block_count ||
+                instruction->successors[1] >= function->block_count ||
+                !operand_type_is(function, instruction, 0u, XR_CORE_TYPE_I64) ||
+                !operand_category_is(function, instruction, 0u, XR_CORE_IR_VALUE) ||
+                !operand_ownership_is(function, instruction, 0u, XR_CORE_IR_NON_OWNER)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                return false;
+            }
+            const XrValidatedCoroutineSafepoint *safepoint =
+                &function->coroutine_safepoints[safepoint_id];
+            if (safepoint->resume_state_id == 0u ||
+                safepoint->resume_state_id >= function->coroutine_state_count ||
+                function->coroutine_states[safepoint->resume_state_id].continuation_block !=
+                    instruction->successors[0] ||
+                instruction->operand_count < request_count + safepoint->live_value_count ||
+                safepoint->live_value_count !=
+                    function->blocks[instruction->successors[0]].argument_count ||
+                !verify_successor_arguments(context, function, instruction, 0u, request_count,
+                                            location) ||
+                !verify_cancel_continuation(
+                    context, function, instruction, 1u, request_count, safepoint->live_value_count,
+                    request_count + safepoint->live_value_count, safepoint, location)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                return false;
+            }
+            for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+                uint32_t value = instruction->operands[request_count + live];
+                uint32_t resume_value =
+                    function->blocks[instruction->successors[0]].argument_ids[live];
+                uint32_t resume_uses = 0u;
+                const XrValidatedBlock *resume = &function->blocks[instruction->successors[0]];
+                for (uint32_t resume_instruction = 1u;
+                     resume_instruction < resume->instruction_count; ++resume_instruction) {
+                    const XrValidatedInstruction *resume_op =
+                        &resume->instructions[resume_instruction];
+                    for (uint32_t operand = 0u; operand < resume_op->operand_count; ++operand)
+                        resume_uses += resume_op->operands[operand] == resume_value;
+                }
+                if (function->value_categories[value] > XR_CORE_IR_PLACE || resume_uses == 0u) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                    return false;
+                }
+            }
+            return true;
+        }
         case XR_CORE_OP_CORE_ASSERT_CONDITION:
             if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 ||
                 instruction->immediate.u32 != XR_ASSERTION_FAILURE_CONDITION_FALSE ||
@@ -3692,6 +3772,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     uint16_t operation =
                         callee->blocks[child_block].instructions[child_instruction].operation_id;
                     if (operation == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                        operation == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
                         operation == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED)
                         ++child_suspensions;
                 }
@@ -4614,8 +4695,12 @@ static bool edge_argument_source(const XrValidatedProgram *program,
     uint32_t operand = argument_index;
     if (terminator->operation_id == XR_CORE_OP_CORE_BRANCH) {
         operand = argument_index;
-    } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
-        operand = argument_index;
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+               terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND) {
+        operand =
+            argument_index + (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND
+                                  ? terminator->immediate.coroutine_suspend.request_operand_count
+                                  : 0u);
         if (successor_index != 0u)
             operand += function->blocks[terminator->successors[0]].argument_count;
     } else if (terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
@@ -4845,7 +4930,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     if (has_coroutine != ((function->effect_mask & XR_CORE_EFFECT_SUSPEND) != 0u) ||
         has_coroutine != ((function->effect_mask & XR_CORE_EFFECT_CANCEL) != 0u) ||
         has_coroutine !=
-            ((function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) != 0u) ||
+            ((function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION) != 0u) ||
         (has_coroutine &&
          function->coroutine_state_count != function->coroutine_safepoint_count + 1u)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
@@ -4920,6 +5005,8 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
              ++instruction_id) {
             if (block->instructions[instruction_id].operation_id ==
                     XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                block->instructions[instruction_id].operation_id ==
+                    XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
                 block->instructions[instruction_id].operation_id ==
                     XR_CORE_OP_CORE_COROUTINE_CALL_SEALED)
                 ++suspension_count;

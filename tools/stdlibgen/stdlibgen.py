@@ -189,6 +189,7 @@ class StdlibEntry:
     caps: tuple[str, ...]
     provider_contract: str = ""
     provider_operation: str = ""
+    suspension_kind: str = ""
 
     @property
     def symbol(self) -> str:
@@ -1318,6 +1319,7 @@ def parse_def_metadata(
             target_leaf = str(props.get("target_leaf", ""))
             provider_contract = str(props.get("provider_contract", ""))
             provider_operation = str(props.get("provider_operation", ""))
+            suspension_kind = str(props.get("suspension_kind", ""))
             effect = str(props.get("effect", ""))
             if target_leaf not in TARGET_LEAF_KINDS:
                 raise SystemExit(
@@ -1418,6 +1420,35 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} provider operation "
                     "must use an admitted logical provider-call shape"
                 )
+            if suspension_kind not in {"", "timer-after-ms"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} has unsupported "
+                    f"suspension_kind: {suspension_kind}"
+                )
+            if suspension_kind and (
+                visibility != "internal"
+                or signature_return != "()"
+                or len(signature_params) != 1
+                or function_parameter_type(
+                    signature_params[0],
+                    f"{current_module}.{current_name} suspension parameter",
+                ) != "i64"
+                or argc_raw != "1"
+                or arg_spec != "v"
+                or aot_direct
+                or vm_binding != "yieldable"
+                or set(caps) != {"coro", "timer"}
+                or provider_contract
+                or provider_operation
+                or return_ownership
+                or semantic_intrinsic
+                or target_leaf
+                or effect != "nothrow"
+            ):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} suspension request "
+                    "must use the internal yieldable void(i64) runtime shape"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -1447,6 +1478,7 @@ def parse_def_metadata(
                     caps=caps,
                     provider_contract=provider_contract,
                     provider_operation=provider_operation,
+                    suspension_kind=suspension_kind,
                 )
             )
         elif current_kind == "const":
@@ -2660,6 +2692,7 @@ def emit_defs_header(
             "    const char *return_ownership;",
             "    const char *provider_contract_key;",
             "    const char *provider_operation_key;",
+            "    const char *suspension_kind;",
             "    uint32_t runtime_capabilities;",
             "    uint16_t argc;",
             "    uint16_t target_leaf;",
@@ -2792,6 +2825,7 @@ def emit_defs_header(
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
             f"{c_string(e.aot_kind)}, {c_string(e.return_ownership)}, "
             f"{c_string(e.provider_contract)}, {c_string(e.provider_operation)}, "
+            f"{c_string(e.suspension_kind)}, "
             f"{runtime_caps}, {argc}, "
             f"{TARGET_LEAF_KINDS[e.target_leaf]}, "
             f"{'true' if e.aot_direct else 'false'}"

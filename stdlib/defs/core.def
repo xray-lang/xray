@@ -66,8 +66,10 @@ module time {
   fn __sleep {
     signature: "(ms: i64): ()"
     doc: "Sleep for milliseconds"
+    effect: "nothrow"
     vm: "xr_time_sleep"
     vm_binding: "yieldable"
+    suspension_kind: "timer-after-ms"
     argc: 1
     arg_spec: "v"
     aot_direct: false

@@ -34,7 +34,7 @@ fixture writer whenever VM or verifier sources change. An excluded, opt-in write
 to regenerate the committed artifact when its schema intentionally changes; it is never a runtime
 test dependency.
 
-The executor covers all fifty-five current CoreSpec operations. `core.logical.not`,
+The executor covers all fifty-six current CoreSpec operations. `core.logical.not`,
 `core.logical.and`, and `core.logical.or` operate only on canonical `bool` SSA values. The binary
 operations are eager at the Program level because their operands are already evaluated; source
 `&&` and `||` expressions whose right-hand side can trap or perform effects are instead projected
@@ -84,6 +84,15 @@ retains the cancelled safepoint state for cross-executor comparison, and release
 generation lease; there is no frame-dispose fallback, raw stack-address spill, or
 cancellation-as-error compatibility path.
 
+`core.coroutine.suspend` publishes a typed request without performing readiness
+work inside the VM. The timer form accepts exactly one i64 request value,
+normalizes it to 0 through 86400000, and exposes the same normalized payload as
+the reference evaluator. A sealed child propagates that request while the
+observable state and safepoint remain those of the parent. The product VM
+driver resumes cooperative yield immediately, waits for timer readiness using
+monotonic time, and rejects an unknown kind, wrong arity, or non-normalized
+payload instead of selecting a legacy native-call path.
+
 Related field `REF` arguments may share one typed aggregate storage root. Each field place retains
 its own checked ordinal, but the parent safepoint carries the aggregate owner exactly once and
 reconstructs the field addresses from that root. A separately observed scalar field snapshot stays
@@ -114,22 +123,22 @@ an inner registration discovered from a cold outer handler keeps its outer-handl
 closed owner payload, and cleanup-local branch place across Reference and both VM decode policies.
 This test-build decomposition changes no VM semantics or supported capability.
 
-anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h a964247d2aacfd087417bc19ad30e2c81c870cb5a28521bb953b2dc8d84d2f1f
-anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h c51ff9a5892b84710d42cd5eceab4fc7f2887ed37062dd28b3a2f0bc68fc00ca
+anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h 44cab32da792042b788f5282f91a042f2c6deb76c65bf7be69c242cc36003c54
+anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h a69072ef2f14b4b1350dcdeb9a5facaf9ee36b4a04c5bf1b18f09727f5b3aa50
 anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
-anchor-sha256: xisa/core/registry.json 1066fb08ca4dae249c7fc59d26e1ce4f6c387fbbdd16d31480c72badb109483f
-anchor-sha256: src/vm/xr_program_vm.h 2576452ee188a355ebf60ec19e405a95200304c5ce733c72aa623855640f6c7a
-anchor-sha256: src/vm/xr_program_vm.c ed45b5dce766dfae80042e886e9b46816dc374ac3c68768fd2fee8bc0bd4c0c8
+anchor-sha256: xisa/core/registry.json 384cdc51e68cfb167e5278b851c7a601eacb8fb70fe7c144a2afc257935d4bde
+anchor-sha256: src/vm/xr_program_vm.h 0bc3507d2aa429bb07579df820302acbd91d9ffb84651236955d29078b576f6d
+anchor-sha256: src/vm/xr_program_vm.c 5a5e621aa157b72f3189a26e61070987e38695c306e0192827b461bb41c8c0d8
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
-anchor-sha256: src/program/xr_program_verify.c e582bf2d99821a9473a0621914168cccb730f904c93c6180603f2d36f2035eb7
+anchor-sha256: src/program/xr_program_verify.c ef71403c9fa5dc81123a041baba91dfd04c3f41ab4636d937f5ef99806e23216
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 857dc89de900a4eda6e71c9498aac3657779a93e68d9593cd4fefb374b84f0bf
 anchor-sha256: scripts/check_xr_program_vm_contracts.py c38952179d9d09b0e9a9c390b981e9d78b0801da4b550a5fc6b5be90893a7c72
-anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json dd8b3088756d093a260be71a4663e4e5942153ec98369aedf9de42c9fb32bdaf
-anchor-sha256: tests/unit/vm/test_xr_program_vm.c 28164a25784dd5f1b3b0c3397b10edab68e8b410e6d843ae92ca5ba8430fb4bb
+anchor-sha256: contracts/canonical-program/xrprogram-vm-coverage.json 4b2a2c58d3eb9d589f80b3b0042dcfc56219bbc721e01538d5fd70253e797677
+anchor-sha256: tests/unit/vm/test_xr_program_vm.c de100dae3ba240a37bab9d5460c0722750378000055da675ead8a1f57d9f0664
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
-anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 0e4d14ac337b31262cf3c2e6a51f7d8381c1164962dd81247a7e4cd748ee0695
+anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 5df1836536c03286597538ed33873ae676a4be037cbd40493f052e55d0fd6225
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 7d7cec3199041b72f10405b1fc881c66c6542665dc32247b387f0b6220f1c066
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c cc0b75718a84f43708f6283e89ed9f4d65fbd0756ee5bf349f0b43744aa028f2

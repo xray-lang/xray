@@ -149,6 +149,7 @@ static bool backend_instruction_is_terminal(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
         case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
+        case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_TRAP:
@@ -237,6 +238,7 @@ static bool instruction_control_shape_valid(const XrBackendIR *ir,
         case XR_CORE_OP_CORE_PANIC_PUBLISH:
             return successors == 0u && instruction->operand_count == 1u;
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
+        case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
             return successors == 2u;
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
             return successors == 2u || successors == 3u;
@@ -487,6 +489,10 @@ static bool backend_edge_segment(const BackendOwnerCheck *check,
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
             start = edge ? function->blocks[instruction->successors[0]].argument_count : 0u;
             break;
+        case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
+            start = instruction->immediate.coroutine_suspend.request_operand_count +
+                    (edge ? function->blocks[instruction->successors[0]].argument_count : 0u);
+            break;
         case XR_CORE_OP_CORE_ASSERT_CONDITION:
             start = 1u;
             segment->implicit = 1u;
@@ -682,6 +688,7 @@ static bool cleanup_reason_flow_valid(const XrBackendIR *ir, uint32_t function_i
         for (uint32_t i = 0u; valid && i < block->instruction_count; ++i) {
             const XrBackendInstruction *instruction = &block->instructions[i];
             bool suspension = instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                              instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
                               instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
             valid = cleanup_exit_valid(instruction, reason) &&
                     (!suspension || reason == BACKEND_REASON_NORMAL);
@@ -1004,6 +1011,16 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 < function->coroutine_safepoint_count &&
                    instruction->successor_count == 2u;
+        case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND &&
+                   instruction->immediate.coroutine_suspend.safepoint_id <
+                       function->coroutine_safepoint_count &&
+                   instruction->immediate.coroutine_suspend.request_kind ==
+                       XR_SUSPENSION_REQUEST_TIMER_AFTER_MS &&
+                   instruction->immediate.coroutine_suspend.request_operand_count == 1u &&
+                   instruction->operand_count != 0u &&
+                   function->value_types[instruction->operands[0]] == XR_CORE_TYPE_I64 &&
+                   instruction->successor_count == 2u;
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL &&
                    instruction->immediate.coroutine_call.function_id < ir->function_count &&
@@ -1178,7 +1195,7 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         uint32_t suspension_count = 0u;
         if (coroutine &&
             ((function->effect_mask & XR_CORE_EFFECT_SUSPEND) == 0u ||
-             (function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) == 0u)) {
+             (function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION) == 0u)) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                       function_id, 0u, 0u);
             return false;
@@ -1288,6 +1305,24 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                         instruction->operand_count < point->live_value_count ||
                         !safepoint_live_set_matches(function, instruction, point, 0u) ||
                         !cancel_continuation_matches(function, instruction, point, 0u)) {
+                        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                  instruction->operation_id, function_id, block_id,
+                                                  instruction_id);
+                        return false;
+                    }
+                }
+                if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND) {
+                    ++suspension_count;
+                    uint32_t safepoint_id = instruction->immediate.coroutine_suspend.safepoint_id;
+                    uint32_t request_count =
+                        instruction->immediate.coroutine_suspend.request_operand_count;
+                    const XrBackendCoroutineSafepoint *point =
+                        &function->coroutine_safepoints[safepoint_id];
+                    if (instruction->successors[0] !=
+                            function->coroutine_states[point->resume_state_id].continuation_block ||
+                        instruction->operand_count < request_count + point->live_value_count ||
+                        !safepoint_live_set_matches(function, instruction, point, request_count) ||
+                        !cancel_continuation_matches(function, instruction, point, request_count)) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
                                                   instruction_id);
@@ -1446,6 +1481,13 @@ static bool immediate_equal(const XrValidatedInstruction *source,
                        lowered->immediate.coroutine_call.function_id &&
                    source->immediate.coroutine_call.safepoint_id ==
                        lowered->immediate.coroutine_call.safepoint_id;
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND:
+            return source->immediate.coroutine_suspend.safepoint_id ==
+                       lowered->immediate.coroutine_suspend.safepoint_id &&
+                   source->immediate.coroutine_suspend.request_kind ==
+                       lowered->immediate.coroutine_suspend.request_kind &&
+                   source->immediate.coroutine_suspend.request_operand_count ==
+                       lowered->immediate.coroutine_suspend.request_operand_count;
     }
     return false;
 }

@@ -4,7 +4,10 @@ Status: legacy evidence authority under deletion. The canonical XrProgram
 producer does not consume PSC modules, functions, calls, families, indexes, or
 fingerprints. It consumes verified target-neutral Xi plus source-module
 authority, uses an explicitly selected linked-program entry, and derives
-function/call identities mechanically from the linked graph. This contract
+function/call identities mechanically from the linked graph. Native suspension
+identity is likewise not a PSC fact: the producer joins the grounded Xi import
+and Xglobal callsite to one exact generated-stdlib suspension row before
+emitting the typed Program request. This contract
 continues to govern the old product path only until that path is deleted.
 
 This contract freezes the target-neutral, pre-Xi semantic authority used by
@@ -428,8 +431,8 @@ anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 57201fe016
 anchor-sha256: tests/unit/frontend/test_parser.c 32a9be018ac2bd8e9acc5df8be96227cccabadb3a099fa258d4e1a551f7d84f4
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 6c466d049fc54135ebae826e477d5722650e359898bb0c61db74434e7abecb62
-anchor-sha256: tests/unit/ir/test_xi_pipeline.c 204a56ec315bc4da7572634caf525632ada5270527b493e60adff4a327cac7f7
-anchor-sha256: tests/unit/CMakeLists.txt 37c7d17d4cf391031ba0d3d71017d9c6b78bc8580e8bac1055a46a9910c132d7
+anchor-sha256: tests/unit/ir/test_xi_pipeline.c c5dd627a3ec54b4db68ea2826e0bc91b80f090d4da10c8d74c1697078e14fbee
+anchor-sha256: tests/unit/CMakeLists.txt 20786799eea5478bc68d3c02a705f02c19effb635c151e97db463fe0b0d4419d
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
 anchor-sha256: src/aot/xaot_bundle.c ba841869547bc2d2cbc463ecab796b84213c4408a078e47b9759f6a7f6e01f69

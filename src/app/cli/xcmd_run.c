@@ -72,8 +72,8 @@ static bool builtin_provider_id(const char *key, XrStableId *out) {
     return xr_stable_id_from_key(key, out, &digest);
 }
 
-static const XrTargetProviderContract *find_profile_provider(
-    const XrTargetProfile *profile, XrStableId contract_id) {
+static const XrTargetProviderContract *find_profile_provider(const XrTargetProfile *profile,
+                                                             XrStableId contract_id) {
     for (size_t index = 0; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
         if (candidate && stable_id_equal(candidate->contract_id, contract_id))
@@ -90,8 +90,7 @@ static XrProviderCallStatus stdout_output_write(void *context, const uint8_t *by
     if (_setmode(_fileno(stream), _O_BINARY) == -1)
         return XR_PROVIDER_CALL_FAILED;
 #endif
-    return fwrite(bytes, 1u, size, stream) == size ? XR_PROVIDER_CALL_OK
-                                                   : XR_PROVIDER_CALL_FAILED;
+    return fwrite(bytes, 1u, size, stream) == size ? XR_PROVIDER_CALL_OK : XR_PROVIDER_CALL_FAILED;
 }
 
 static XrProviderCallStatus clock_realtime_nanos(void *context, int64_t *result_out) {
@@ -119,7 +118,7 @@ static XrProviderCallStatus clock_process_cpu_nanos(void *context, int64_t *resu
 }
 
 static XrProviderCallStatus clock_utc_offset_at(void *context, int64_t argument,
-                                               int64_t *result_out) {
+                                                int64_t *result_out) {
     (void) context;
     if (!result_out)
         return XR_PROVIDER_CALL_FAILED;
@@ -154,8 +153,8 @@ static XrProviderCallStatus pipe_close(void *context, int64_t argument, bool *re
 
 typedef struct XrRunProviderBindings {
     XrProviderBinding providers[XR_RUNTIME_ABI_MAX_PROVIDERS];
-    XrProviderOperationBinding
-        operations[XR_RUNTIME_ABI_MAX_PROVIDERS][XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS];
+    XrProviderOperationBinding operations[XR_RUNTIME_ABI_MAX_PROVIDERS]
+                                         [XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS];
     uint32_t count;
 } XrRunProviderBindings;
 
@@ -206,8 +205,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
             XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT;
         provider->operations = bindings->operations[provider_index];
         provider->operation_count = (uint16_t) requirement.operation_count;
-        if (xr_target_provider_contract_fingerprint(contract,
-                                                    &provider->contract_fingerprint) !=
+        if (xr_target_provider_contract_fingerprint(contract, &provider->contract_fingerprint) !=
             XR_RUNTIME_ABI_OK)
             return false;
         for (uint16_t operation_index = 0u; operation_index < provider->operation_count;
@@ -215,8 +213,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
             XrStableId required_operation = requirement.operation_ids[operation_index];
             const XrTargetProviderOperationContract *operation_contract = NULL;
             for (uint16_t candidate = 0u; candidate < contract->operation_count; ++candidate) {
-                if (!stable_id_equal(contract->operations[candidate].stable_id,
-                                     required_operation))
+                if (!stable_id_equal(contract->operations[candidate].stable_id, required_operation))
                     continue;
                 if (operation_contract)
                     return false;
@@ -298,6 +295,7 @@ static int report_execution_outcome(XrVmOutcome outcome) {
         case XR_VM_OUTCOME_RESOURCE_LIMIT:
             fprintf(stderr, "XR_RUN_6003: canonical execution exceeded its resource budget\n");
             return XR_CLI_EXIT_FAIL;
+        case XR_VM_OUTCOME_CANCELLED:
         case XR_VM_OUTCOME_SUSPENDED:
         case XR_VM_OUTCOME_INVALID_INVOCATION:
         case XR_VM_OUTCOME_STALE_CODE:
@@ -309,15 +307,34 @@ static int report_execution_outcome(XrVmOutcome outcome) {
     return XR_CLI_EXIT_INTERNAL;
 }
 
+static bool drive_vm_suspension(const XrVmOutcome *outcome) {
+    if (!outcome || outcome->kind != XR_VM_OUTCOME_SUSPENDED)
+        return false;
+    switch (outcome->suspension.kind) {
+        case XR_SUSPENSION_REQUEST_COOPERATIVE_YIELD:
+            return outcome->suspension.operand_count == 0u;
+        case XR_SUSPENSION_REQUEST_TIMER_AFTER_MS: {
+            int64_t milliseconds = outcome->suspension.payload.timer_after_ms;
+            if (outcome->suspension.operand_count != 1u ||
+                milliseconds != xr_suspension_timer_normalize_ms(milliseconds))
+                return false;
+            xr_time_sleep_ms((uint64_t) milliseconds);
+            return true;
+        }
+        case XR_SUSPENSION_REQUEST_NONE:
+            return false;
+    }
+    return false;
+}
+
 static int execute_program(XrProgramSourceProduct *product, XrTargetProfile *profile) {
     XrRunProviderBindings bindings = {0};
     const XrProviderBinding *providers = NULL;
     uint32_t provider_count = xr_validated_program_provider_requirement_count(product->program);
     if (provider_count != 0u) {
         if (!build_run_provider_binding(product->program, profile, &bindings)) {
-            fprintf(stderr,
-                    "XR_RUN_6008: canonical run cannot bind the exact program provider "
-                    "requirements\n");
+            fprintf(stderr, "XR_RUN_6008: canonical run cannot bind the exact program provider "
+                            "requirements\n");
             return XR_CLI_EXIT_FAIL;
         }
         providers = bindings.providers;
@@ -359,7 +376,7 @@ static int execute_program(XrProgramSourceProduct *product, XrTargetProfile *pro
         xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution)) {
         do {
             outcome = xr_vm_execution_step(execution);
-        } while (outcome.kind == XR_VM_OUTCOME_SUSPENDED);
+        } while (outcome.kind == XR_VM_OUTCOME_SUSPENDED && drive_vm_suspension(&outcome));
     }
     int result = report_execution_outcome(outcome);
     xr_vm_execution_free(execution);

@@ -47,6 +47,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_CANCEL_PUBLISH:
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
+        case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
@@ -462,6 +463,11 @@ static void hash_immediate(XrSHA256Context *context, const XrBackendInstruction 
             hash_u32(context, instruction->immediate.coroutine_call.function_id);
             hash_u32(context, instruction->immediate.coroutine_call.safepoint_id);
             return;
+        case XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND:
+            hash_u32(context, instruction->immediate.coroutine_suspend.safepoint_id);
+            hash_u16(context, instruction->immediate.coroutine_suspend.request_kind);
+            hash_u16(context, instruction->immediate.coroutine_suspend.request_operand_count);
+            return;
     }
 }
 
@@ -752,6 +758,7 @@ static XrBackendExecutionOutcome backend_execution_outcome(XrBackendExecution *e
         .value = native.value,
         .state_id = native.state_id,
         .safepoint_id = native.safepoint_id,
+        .suspension = native.suspension,
     };
     if (execution)
         execution->last = result;

@@ -20,7 +20,7 @@
     {"name": "source_owner_keeps_related_ref_parameter_places_stable_across_child_suspension", "fixture": {"id": "ref_parameter_coroutine", "expected_exit": 230, "labels": ["ref", "coroutine", "cancel", "provider", "clock", "pipe", "refusal", "cleanup", "trap"]}},
     {"name": "source_owner_keeps_read_existential_root_across_child_suspension", "fixture": {"id": "read_existential_coroutine", "expected_exit": 231, "labels": ["interface", "read", "coroutine", "cancel"]}},
     {"name": "source_owner_cross_module_coroutine_transfers_affine_resource_result", "fixture": {"id": "affine_coroutine_result", "expected_exit": 229, "labels": ["module-graph", "provider", "pipe", "coroutine", "affine", "cancel"]}},
-    {"name": "source_owner_keeps_reachable_unlowered_sleep_fail_closed", "fixture": null},
+    {"name": "source_owner_time_sleep_has_typed_suspension_request", "fixture": {"id": "time_sleep", "expected_exit": 239, "labels": ["coroutine", "timer", "suspension"]}},
     {"name": "source_owner_module_initializer_is_a_canonical_entry", "fixture": null},
     {"name": "source_owner_rejects_non_authoritative_entry_identity", "fixture": null},
     {"name": "source_owner_rejects_module_budget_before_analysis", "fixture": null},

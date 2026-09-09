@@ -26,11 +26,18 @@ SPEC.loader.exec_module(profile)
 
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
-        self.assertEqual(len(profile.CTEST_NAMES), 48)
-        self.assertEqual(len(profile.BUILD_TARGETS), 24)
+        self.assertEqual(len(profile.CTEST_NAMES), 53)
+        self.assertEqual(len(profile.BUILD_TARGETS), 29)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
-        self.assertLessEqual(set(profile.BUILD_TARGETS), set(profile.CTEST_NAMES))
+        self.assertLessEqual(
+            set(profile.BUILD_TARGETS) - {"test_xi_pipeline", "xray"},
+            set(profile.CTEST_NAMES),
+        )
+        self.assertIn("canonical_source_run_cli", profile.CTEST_NAMES)
+        self.assertIn("xray", profile.BUILD_TARGETS)
+        self.assertIn("test_xi_pipeline_canonical", profile.CTEST_NAMES)
+        self.assertIn("test_xi_pipeline", profile.BUILD_TARGETS)
         self.assertIn("test_xr_program_vm_runtime", profile.BUILD_TARGETS)
 
     def test_manifest_additions_and_removals_change_both_inventories(self) -> None:
@@ -123,6 +130,9 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_vm",
             "test_xr_program_vm_runtime",
             "test_xr_program_aot",
+            "canonical_source_run_cli",
+            "test_xglobal_summary",
+            "test_xi_pipeline_canonical",
             "test_xr_program_cross_module_coroutine_aot_native",
             "test_xr_program_cross_module_static_method_coroutine_aot_native",
             "test_xr_program_multi_safepoint_aot_native",

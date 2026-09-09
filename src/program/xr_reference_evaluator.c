@@ -1457,7 +1457,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_BOOL ||
            operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_SUB_I64 ||
-           operation_id == XR_CORE_OP_CORE_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_COMPARE_I64 || operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
            operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
            operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
@@ -1473,6 +1473,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
            operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
            operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_TRAP ||
@@ -1726,11 +1727,14 @@ static bool reference_materialize_suspension_edge(XrReferenceExecution *executio
         instruction->successors[successor_index] >= function->block_count)
         return false;
     uint32_t operand_start = 0u;
-    if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
+    if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+        instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND) {
         if (instruction->successor_count != 2u)
             return false;
+        if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND)
+            operand_start = instruction->immediate.coroutine_suspend.request_operand_count;
         if (successor_index == 1u)
-            operand_start = function->blocks[instruction->successors[0]].argument_count;
+            operand_start += function->blocks[instruction->successors[0]].argument_count;
     } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
                successor_index != 0u && instruction->successor_count <= 3u) {
         uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
@@ -1844,6 +1848,42 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->values[instruction->result_id] = (EvalRuntimeValue) {
                     .category = XR_CORE_IR_VALUE,
                     .as.value = {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = value},
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_COMPARE_I64: {
+                int64_t left = execution->values[instruction->operands[0]].as.value.as.i64;
+                int64_t right = execution->values[instruction->operands[1]].as.value.as.i64;
+                bool comparison = false;
+                switch (instruction->immediate.u32) {
+                    case 0u:
+                        comparison = left == right;
+                        break;
+                    case 1u:
+                        comparison = left != right;
+                        break;
+                    case 2u:
+                        comparison = left < right;
+                        break;
+                    case 3u:
+                        comparison = left <= right;
+                        break;
+                    case 4u:
+                        comparison = left > right;
+                        break;
+                    case 5u:
+                        comparison = left >= right;
+                        break;
+                    default:
+                        execution->finished = true;
+                        reference_execution_release_lease(execution);
+                        return execution_outcome(execution,
+                                                 XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+                }
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = comparison},
                 };
                 execution->initialized[instruction->result_id] = true;
                 break;
@@ -2144,6 +2184,28 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 XrReferenceOutcome result =
                     execution_outcome(execution, XR_REFERENCE_OUTCOME_SUSPENDED);
                 result.safepoint_id = instruction->immediate.u32;
+                result.suspension.kind = XR_SUSPENSION_REQUEST_COOPERATIVE_YIELD;
+                return result;
+            }
+            case XR_CORE_OP_CORE_COROUTINE_SUSPEND: {
+                uint32_t safepoint_id = instruction->immediate.coroutine_suspend.safepoint_id;
+                uint32_t request_value = instruction->operands[0];
+                const XrValidatedCoroutineSafepoint *safepoint =
+                    &function->coroutine_safepoints[safepoint_id];
+                execution->suspension_block_id = execution->block_id;
+                execution->suspension_instruction_id = execution->instruction_id - 1u;
+                execution->state_id = safepoint->resume_state_id;
+                execution->block_id = instruction->successors[0];
+                execution->instruction_id = 0u;
+                execution->suspended = true;
+                execution->cancel_block_id = instruction->successors[1];
+                XrReferenceOutcome result =
+                    execution_outcome(execution, XR_REFERENCE_OUTCOME_SUSPENDED);
+                result.safepoint_id = safepoint_id;
+                result.suspension.kind = XR_SUSPENSION_REQUEST_TIMER_AFTER_MS;
+                result.suspension.operand_count = 1u;
+                result.suspension.payload.timer_after_ms = xr_suspension_timer_normalize_ms(
+                    execution->values[request_value].as.value.as.i64);
                 return result;
             }
             case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED: {
@@ -2170,6 +2232,7 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     XrReferenceOutcome suspended =
                         execution_outcome(execution, XR_REFERENCE_OUTCOME_SUSPENDED);
                     suspended.safepoint_id = safepoint_id;
+                    suspended.suspension = child.suspension;
                     return suspended;
                 }
                 if (child.kind != XR_REFERENCE_OUTCOME_RETURN) {

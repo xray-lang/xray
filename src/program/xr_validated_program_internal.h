@@ -139,6 +139,11 @@ typedef struct XrValidatedInstruction {
             uint32_t function_id;
             uint32_t safepoint_id;
         } coroutine_call;
+        struct {
+            uint32_t safepoint_id;
+            uint16_t request_kind;
+            uint16_t request_operand_count;
+        } coroutine_suspend;
     } immediate;
     uint32_t *successors;
     uint32_t successor_count;

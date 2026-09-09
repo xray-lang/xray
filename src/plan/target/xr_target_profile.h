@@ -121,7 +121,8 @@ typedef enum XrRuntimeKernelPolicy {
 } XrRuntimeKernelPolicy;
 
 typedef enum XrRuntimeSchedulerHook {
-    XR_RUNTIME_SCHEDULER_HOOK_COOPERATIVE_YIELD = UINT64_C(1),
+    XR_RUNTIME_SCHEDULER_HOOK_COROUTINE_SUSPENSION = UINT64_C(1),
+    XR_RUNTIME_SCHEDULER_HOOK_TIMER = UINT64_C(2),
 } XrRuntimeSchedulerHook;
 
 typedef struct XrRuntimeKernelContract {

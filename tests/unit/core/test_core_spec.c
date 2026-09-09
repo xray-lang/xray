@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 55u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 56u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -175,8 +175,8 @@ static void test_operation_metadata(void) {
     CHECK(yield->result_type == XR_CORE_TYPE_VOID);
     CHECK(yield->successor_mask == (XR_CORE_SUCCESSOR_CANCEL | XR_CORE_SUCCESSOR_SUSPEND));
     CHECK(yield->effect_mask == (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND));
-    CHECK(yield->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
-    CHECK(strcmp(yield->profile_dependency, "scheduler-yield") == 0);
+    CHECK(yield->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION);
+    CHECK(strcmp(yield->profile_dependency, "scheduler-suspension") == 0);
     CHECK(strcmp(yield->materialization, "logical-coroutine-control") == 0);
     CHECK(coroutine_call != NULL);
     CHECK(strcmp(coroutine_call->spelling, "core.coroutine.call.sealed") == 0);
@@ -187,8 +187,8 @@ static void test_operation_metadata(void) {
                                              XR_CORE_SUCCESSOR_CANCEL | XR_CORE_SUCCESSOR_SUSPEND));
     CHECK(coroutine_call->effect_mask ==
           (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND));
-    CHECK(coroutine_call->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
-    CHECK(strcmp(coroutine_call->profile_dependency, "scheduler-yield") == 0);
+    CHECK(coroutine_call->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION);
+    CHECK(strcmp(coroutine_call->profile_dependency, "scheduler-suspension") == 0);
     CHECK(strcmp(coroutine_call->materialization, "logical-child-coroutine-control") == 0);
     CHECK(cancel != NULL);
     CHECK(strcmp(cancel->spelling, "core.cancel.publish") == 0);

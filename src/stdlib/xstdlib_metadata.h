@@ -49,7 +49,7 @@ xr_stdlib_metadata_native_class_fingerprint(const XrStdlibNativeClassDefEntry *e
 }
 
 static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-stdlib-definition-registry-v3\0";
+    static const uint8_t domain[] = "xray-stdlib-definition-registry-v4\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -73,6 +73,7 @@ static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
         xr_stdlib_metadata_hash_string(&ctx, entry->return_ownership);
         xr_stdlib_metadata_hash_string(&ctx, entry->provider_contract_key);
         xr_stdlib_metadata_hash_string(&ctx, entry->provider_operation_key);
+        xr_stdlib_metadata_hash_string(&ctx, entry->suspension_kind);
         xr_stdlib_metadata_hash_u64(&ctx, entry->runtime_capabilities);
         xr_stdlib_metadata_hash_u64(&ctx, entry->argc);
         xr_stdlib_metadata_hash_u64(&ctx, entry->target_leaf);
@@ -298,6 +299,21 @@ static inline bool xr_stdlib_metadata_func_is_yieldable(const char *module, cons
     const XrStdlibDefEntry *entry = xr_stdlib_metadata_unique_func(module, name);
     return entry && entry->signature && entry->vm && entry->vm_binding &&
            strcmp(entry->vm_binding, "yieldable") == 0;
+}
+
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_exact_native_suspension_call(const char *module, const char *name,
+                                                uint16_t argument_count) {
+    const XrStdlibDefEntry *entry =
+        xr_stdlib_metadata_unique_func_arity(module, name, argument_count);
+    if (!entry || !entry->signature || !entry->vm || !entry->vm_binding || !entry->arg_spec ||
+        !entry->ret || !entry->suspension_kind || entry->argc != 1u ||
+        strcmp(entry->vm_binding, "yieldable") != 0 || strcmp(entry->arg_spec, "v") != 0 ||
+        strcmp(entry->ret, "value") != 0 || strcmp(entry->suspension_kind, "timer-after-ms") != 0 ||
+        entry->aot_direct || entry->provider_contract_key[0] != '\0' ||
+        entry->provider_operation_key[0] != '\0')
+        return NULL;
+    return entry;
 }
 
 static inline bool xr_stdlib_metadata_func_resumes_by_netpoll_retry(const char *module,

@@ -167,6 +167,14 @@ function sharing the selector is an ordinary call through a callee operand and
 never reaches this authority. Distinct arities are independent overloads;
 duplicate registry rows with the same complete identity remain ambiguous and
 fail closed.
+An exact native suspension is a separate closed metadata shape, not a relaxed
+native-call case. The generated registry must identify one internal,
+`nothrow`, yieldable `(i64) -> ()` entry with one value argument, no provider
+binding, no direct-AOT binding, the coroutine and timer capabilities, and the
+closed `timer-after-ms` suspension kind. That kind participates in the stdlib
+metadata fingerprint. Xi-to-Program lowering accepts only the complete row and
+erases the import reference; missing, duplicate, unknown, or partially matching
+metadata cannot become a suspension request or fall back to a blocking call.
 When the independently proven target reaches a function with a canonical
 static suspend operation (or `XI_GO`), the same row also authorizes exactly one
 coroutine-state entity for an ordinary call. A direct tail-call edge propagates
@@ -607,7 +615,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
 anchor-sha256: src/plan/semantic/xr_semantic_verify.c 79ee5def223bb0c098b3ff3694208b30790073098309e4e5168ea19a80d364bb
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 532959558cb72938709198f481ac42d53ec074ca0602b5d4c4512568db908f1a
-anchor-sha256: src/stdlib/xstdlib_metadata.h 7fa2502761dfca7b9db65a3c456291ba5bf29435a3d58891b25eba8cfe4844c5
+anchor-sha256: src/stdlib/xstdlib_metadata.h 66a7c9995b1a1aa6d2a57297beb21189009b54b7098ee4501a0c9a0f1963eca9
 anchor-sha256: tests/unit/plan/test_semantic_plan.c aebdf70cc4c04f630863382d174298661b8d1061cba5cf4f9634f1e481854de0
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def 630421965a4045646bc4350ecbced9a04342938cf37e59939cee2bf4ababd195
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
