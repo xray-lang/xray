@@ -128,8 +128,8 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     inst.specialized_func_id = 31;
     inst.root_callsite_id = call.callsite_id;
     inst.name_id = xg_name_id("box");
-    inst.type_key = 400;
-    inst.type_arg_key_start = 401;
+    inst.type_key = UINT64_C(0x100000190);
+    inst.type_arg_key_start = UINT64_C(0x200000191);
     inst.type_arg_count = 1;
     inst.source_span_id = 6;
     inst.kind = XG_GENERIC_INST_FUNCTION;
@@ -178,8 +178,8 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     cls.interface_count = 1;
     cls.generic_origin_class_id = 19;
     cls.generic_origin_name_id = xg_name_id("Box");
-    cls.generic_type_key = 900;
-    cls.generic_type_arg_key_start = 910;
+    cls.generic_type_key = UINT64_C(0x300000384);
+    cls.generic_type_arg_key_start = UINT64_C(0x40000038e);
     cls.generic_type_arg_count = 1;
     cls.decl_kind = XG_DECL_CLASS;
     ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &cls));
@@ -312,8 +312,8 @@ static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
     body_use.origin_body_func_id = 11;
     body_use.specialized_body_func_id = 31;
     body_use.root_callsite_id = 1;
-    body_use.type_key = 400;
-    body_use.type_arg_key_start = 401;
+    body_use.type_key = UINT64_C(0x100000190);
+    body_use.type_arg_key_start = UINT64_C(0x200000191);
     body_use.type_arg_count = 1;
     body_use.estimated_body_size = 12;
     body_use.flags = XG_GENERIC_BODY_EXPLICIT_ROOT;
@@ -793,7 +793,7 @@ TEST(cache_payload_materializes_global_evidence) {
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
     ASSERT_NOT_NULL(strstr(payload, "payload-global v1"));
-    ASSERT_NOT_NULL(strstr(payload, "payload-extra v9 generic_body_uses=1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v10 generic_body_uses=1"));
     expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     materialized_key =
@@ -822,6 +822,13 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.nhash_eqs, 1);
     ASSERT_EQ_UINT(materialized.modules[0].flags, XG_MODULE_EMBEDDED_SOURCE);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].use_id, 91);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].type_key, UINT64_C(0x100000190));
+    ASSERT_EQ_UINT(materialized.generic_insts[0].type_arg_key_start, UINT64_C(0x200000191));
+    ASSERT_EQ_UINT(materialized.classes[0].generic_type_key, UINT64_C(0x300000384));
+    ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_key_start, UINT64_C(0x40000038e));
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].type_key, UINT64_C(0x100000190));
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].type_arg_key_start,
+                   UINT64_C(0x200000191));
     ASSERT_EQ_UINT(materialized.object_shapes[0].object_shape_id, 101);
     ASSERT_EQ_UINT(materialized.object_shapes[0].domain, XG_OBJECT_DOMAIN_STRUCT);
     ASSERT_EQ_UINT(materialized.json_codecs[0].input_shape_id, 101);

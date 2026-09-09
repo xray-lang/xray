@@ -10,10 +10,13 @@
 
 #include "../test_framework.h"
 #include "../../../src/frontend/analyzer/xanalyzer_mono.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/frontend/analyzer/xanalyzer_capability.h"
 #include "../../../src/frontend/parser/xtype_ref.h"
+#include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 
 /* ========== Name Mangling Tests ========== */
 
@@ -74,6 +77,95 @@ TEST(mono_mangle_multi) {
     char *result = xr_mono_mangle("map", args, 2);
     ASSERT_STR_EQ(result, "map$i64_str");
     free(result);
+}
+
+TEST(mono_mangle_uses_exact_nominal_declaration_identity) {
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    ASSERT_NOT_NULL(analyzer);
+
+    XrClassInfo first_info = {.name = "LocalCounter", .xg_nominal_key = UINT64_C(0x1111)};
+    XrClassInfo second_info = {.name = "LocalCounter", .xg_nominal_key = UINT64_C(0x2222)};
+    XrType *first_type = xr_type_new_instance(analyzer->isolate, &first_info);
+    XrType *same_first_type = xr_type_new_instance(analyzer->isolate, &first_info);
+    XrType *second_type = xr_type_new_instance(analyzer->isolate, &second_info);
+    ASSERT_NOT_NULL(first_type);
+    ASSERT_NOT_NULL(same_first_type);
+    ASSERT_NOT_NULL(second_type);
+    same_first_type->is_value_type = true;
+
+    XrTypeRef first_ref = {.kind = XR_TREF_NAMED, .name = "LocalCounter"};
+    XrTypeRef same_first_ref = {.kind = XR_TREF_NAMED, .name = "LocalCounter"};
+    XrTypeRef second_ref = {.kind = XR_TREF_NAMED, .name = "LocalCounter"};
+    ASSERT_TRUE(xa_analyzer_bind_type_ref_type(analyzer, &first_ref, first_type));
+    ASSERT_TRUE(xa_analyzer_bind_type_ref_type(analyzer, &same_first_ref, same_first_type));
+    ASSERT_TRUE(xa_analyzer_bind_type_ref_type(analyzer, &second_ref, second_type));
+
+    XrTypeRef *first_args[] = {&first_ref};
+    XrTypeRef *same_first_args[] = {&same_first_ref};
+    XrTypeRef *second_args[] = {&second_ref};
+    char *first = xr_mono_mangle_in_analyzer(analyzer, "read", first_args, 1);
+    char *same_first = xr_mono_mangle_in_analyzer(analyzer, "read", same_first_args, 1);
+    char *second = xr_mono_mangle_in_analyzer(analyzer, "read", second_args, 1);
+    ASSERT_NOT_NULL(first);
+    ASSERT_NOT_NULL(same_first);
+    ASSERT_NOT_NULL(second);
+    ASSERT_STR_EQ(first, same_first);
+    ASSERT_TRUE(strcmp(first, second) != 0);
+    ASSERT_NOT_NULL(strstr(first, "read$LocalCounter$x"));
+
+    XrTypeRef param_ref = {.kind = XR_TREF_TYPE_PARAM, .name = "T"};
+    XrTypeRef *array_children[] = {&param_ref};
+    XrTypeRef array_ref = {
+        .kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = array_children};
+    XrType *param_type = xr_type_new_type_param(analyzer->isolate, "T", 0);
+    XrType *array_type = xr_type_new_array(analyzer->isolate, param_type);
+    ASSERT_NOT_NULL(param_type);
+    ASSERT_NOT_NULL(array_type);
+    ASSERT_TRUE(xa_analyzer_bind_type_ref_type(analyzer, &param_ref, param_type));
+    ASSERT_TRUE(xa_analyzer_bind_type_ref_type(analyzer, &array_ref, array_type));
+
+    XrMonoTypeMap first_map[] = {{.param_name = "T",
+                                  .concrete_type = &first_ref,
+                                  .concrete_semantic_type = first_type}};
+    XrMonoTypeMap second_map[] = {{.param_name = "T",
+                                   .concrete_type = &second_ref,
+                                   .concrete_semantic_type = second_type}};
+    XrTypeRef *first_array =
+        xr_mono_type_substitute_in_analyzer(analyzer, &array_ref, first_map, 1);
+    XrTypeRef *second_array =
+        xr_mono_type_substitute_in_analyzer(analyzer, &array_ref, second_map, 1);
+    ASSERT_NOT_NULL(first_array);
+    ASSERT_NOT_NULL(second_array);
+    XrType *first_array_type = xa_analyzer_get_type_ref_type(analyzer, first_array);
+    XrType *second_array_type = xa_analyzer_get_type_ref_type(analyzer, second_array);
+    ASSERT_NOT_NULL(first_array_type);
+    ASSERT_NOT_NULL(second_array_type);
+    ASSERT_EQ_PTR(first_array_type->container.element_type->instance.class_ref, &first_info);
+    ASSERT_EQ_PTR(second_array_type->container.element_type->instance.class_ref, &second_info);
+    XrTypeRef *first_array_args[] = {first_array};
+    XrTypeRef *second_array_args[] = {second_array};
+    char *first_nested = xr_mono_mangle_in_analyzer(analyzer, "nested", first_array_args, 1);
+    char *second_nested = xr_mono_mangle_in_analyzer(analyzer, "nested", second_array_args, 1);
+    ASSERT_NOT_NULL(first_nested);
+    ASSERT_NOT_NULL(second_nested);
+    ASSERT_TRUE(strcmp(first_nested, second_nested) != 0);
+
+    first_ref.name = "MutatedCounter";
+    ASSERT_NULL(xa_analyzer_get_type_ref_type(analyzer, &first_ref));
+
+    free(first);
+    free(same_first);
+    free(second);
+    free(first_nested);
+    free(second_nested);
+    free(first_array->children);
+    free(first_array);
+    free(second_array->children);
+    free(second_array);
+    xa_analyzer_free(analyzer);
+    xr_compiler_session_delete(session);
 }
 
 TEST(mono_mangle_preserves_const_capability_identity) {
@@ -546,6 +638,7 @@ int main(void) {
     RUN_TEST(mono_scalar_tags_are_semantic_and_unique);
     RUN_TEST(mono_mangle_single);
     RUN_TEST(mono_mangle_multi);
+    RUN_TEST(mono_mangle_uses_exact_nominal_declaration_identity);
     RUN_TEST(mono_mangle_preserves_const_capability_identity);
     RUN_TEST(mono_mangle_distinguishes_container_element_types);
     RUN_TEST(mono_mangle_distinguishes_tuple_and_optional_shapes);

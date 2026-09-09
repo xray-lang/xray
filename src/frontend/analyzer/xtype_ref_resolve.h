@@ -46,6 +46,13 @@ XR_FUNC struct XrType *xr_tref_resolve(struct XrVMRuntime *X, const struct XrTyp
 XR_FUNC struct XrType *xr_tref_resolve_in_analyzer(struct XaAnalyzer *analyzer,
                                                    const struct XrTypeRef *tref);
 
+// Return a stable semantic key for an analyzer-bound type reference. Exact
+// declaration-backed nominal keys keep equal cross-module spellings distinct.
+// `out_has_nominal` is false when syntax-only identity remains sufficient.
+// Returns false only when an exact binding is incomplete.
+XR_FUNC bool xr_tref_exact_semantic_key(struct XaAnalyzer *analyzer, const struct XrTypeRef *tref,
+                                        uint64_t *out_key, bool *out_has_nominal);
+
 /* Resolve a declaration parameter type. A direct, unconstrained function type
  * in parameter position is effect-polymorphic (rethrows); a compiler-owned
  * effect contract may narrow it to the concrete NO_THROW constraint. */

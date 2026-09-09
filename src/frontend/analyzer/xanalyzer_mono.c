@@ -22,6 +22,7 @@
 
 #include "xanalyzer_mono.h"
 #include "xanalyzer.h"
+#include "xa_node_table.h"
 #include "xa_selection.h"
 #include "../../base/xarena.h"
 #include "../../base/xlog.h"
@@ -136,6 +137,14 @@ static uint64_t mono_hash_bytes(uint64_t hash, const void *data, size_t length) 
     const unsigned char *bytes = (const unsigned char *) data;
     for (size_t i = 0; i < length; i++) {
         hash ^= bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t mono_hash_u64(uint64_t hash, uint64_t value) {
+    for (uint32_t shift = 0u; shift < 64u; shift += 8u) {
+        hash ^= (uint8_t) (value >> shift);
         hash *= UINT64_C(1099511628211);
     }
     return hash;
@@ -295,9 +304,41 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     return buf;
 }
 
+char *xr_mono_mangle_in_analyzer(XaAnalyzer *analyzer, const char *name, XrTypeRef **type_args,
+                                 int count) {
+    char *base = xr_mono_mangle(name, type_args, count);
+    if (!base || !analyzer || !type_args || count <= 0)
+        return base;
+    uint64_t tuple_key = UINT64_C(1469598103934665603);
+    tuple_key = mono_hash_u64(tuple_key, (uint64_t) count);
+    bool has_nominal = false;
+    for (int i = 0; i < count; ++i) {
+        uint64_t type_key = 0u;
+        bool type_has_nominal = false;
+        if (!xr_tref_exact_semantic_key(analyzer, type_args[i], &type_key, &type_has_nominal)) {
+            xr_free(base);
+            return NULL;
+        }
+        tuple_key = mono_hash_u64(tuple_key, type_key);
+        has_nominal = has_nominal || type_has_nominal;
+    }
+    if (!has_nominal)
+        return base;
+    size_t length = strlen(base) + sizeof("$x0123456789abcdef");
+    char *qualified = (char *) xr_malloc(length);
+    if (!qualified) {
+        xr_free(base);
+        return NULL;
+    }
+    snprintf(qualified, length, "%s$x%016" PRIx64, base, tuple_key);
+    xr_free(base);
+    return qualified;
+}
+
 /* ========== Type Substitution ========== */
 
-XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *map, int map_count) {
+static XrTypeRef *mono_type_substitute(XaAnalyzer *analyzer, XrTypeRef *type, XrMonoTypeMap *map,
+                                       int map_count) {
     if (!type || !map || map_count <= 0)
         return type;
 
@@ -316,7 +357,11 @@ XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *map, int map_
         if (!new_children)
             return type;
         for (int i = 0; i < type->nchildren; i++) {
-            new_children[i] = xr_mono_type_substitute(type->children[i], map, map_count);
+            new_children[i] = mono_type_substitute(analyzer, type->children[i], map, map_count);
+            if (!new_children[i]) {
+                xr_free(new_children);
+                return NULL;
+            }
             if (new_children[i] != type->children[i])
                 changed = true;
         }
@@ -331,10 +376,59 @@ XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *map, int map_
         }
         *result = *type;
         result->children = new_children;
+        if (analyzer) {
+            XrType *semantic = xa_analyzer_get_type_ref_type(analyzer, type);
+            const char *stack_names[16];
+            XrType *stack_types[16];
+            const char **names = map_count <= 16
+                                     ? stack_names
+                                     : (const char **) xr_malloc(sizeof(*names) * map_count);
+            XrType **types =
+                map_count <= 16 ? stack_types : (XrType **) xr_malloc(sizeof(*types) * map_count);
+            if (!semantic || !names || !types) {
+                if (names != stack_names)
+                    xr_free(names);
+                if (types != stack_types)
+                    xr_free(types);
+                xr_free(new_children);
+                xr_free(result);
+                return NULL;
+            }
+            bool complete = true;
+            for (int i = 0; i < map_count; ++i) {
+                names[i] = map[i].param_name;
+                types[i] = map[i].concrete_semantic_type
+                               ? map[i].concrete_semantic_type
+                               : xa_analyzer_get_type_ref_type(analyzer, map[i].concrete_type);
+                if (!names[i] || !types[i])
+                    complete = false;
+            }
+            XrType *substituted =
+                complete ? xr_type_substitute(analyzer->isolate, semantic, names, types, map_count)
+                         : NULL;
+            if (names != stack_names)
+                xr_free(names);
+            if (types != stack_types)
+                xr_free(types);
+            if (!substituted || !xa_analyzer_bind_type_ref_type(analyzer, result, substituted)) {
+                xr_free(new_children);
+                xr_free(result);
+                return NULL;
+            }
+        }
         return result;
     }
 
     return type;
+}
+
+XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *map, int map_count) {
+    return mono_type_substitute(NULL, type, map, map_count);
+}
+
+XrTypeRef *xr_mono_type_substitute_in_analyzer(XaAnalyzer *analyzer, XrTypeRef *type,
+                                               XrMonoTypeMap *map, int map_count) {
+    return mono_type_substitute(analyzer, type, map, map_count);
 }
 
 /* ========== AST Clone ========== */
@@ -345,6 +439,8 @@ static char *clone_str(const char *s) {
 
 typedef struct {
     XrCompilerSession *session;
+    XaAnalyzer *analyzer;
+    bool type_substitution_failed;
     bool preserve_symbol_ids;
 } XrAstCloneCtx;
 
@@ -394,16 +490,24 @@ static AstBorrowOriginRef *clone_borrow_origins(const AstBorrowOriginRef *origin
 /* Substitute type parameters in an XrTypeRef tree.
  * Returns a new XrTypeRef if substitution occurred,
  * or the original pointer unchanged. */
-static XrTypeRef *sub_tref(XrTypeRef *t, XrMonoTypeMap *map, int mc) {
-    return (map && mc > 0) ? xr_mono_type_substitute(t, map, mc) : t;
+static XrTypeRef *sub_tref(XrTypeRef *t, XrMonoTypeMap *map, int mc, XrAstCloneCtx *clone_ctx) {
+    if (!t || !map || mc <= 0)
+        return t;
+    XrTypeRef *result = clone_ctx && clone_ctx->analyzer
+                            ? xr_mono_type_substitute_in_analyzer(clone_ctx->analyzer, t, map, mc)
+                            : xr_mono_type_substitute(t, map, mc);
+    if (!result && clone_ctx)
+        clone_ctx->type_substitution_failed = true;
+    return result;
 }
 
-static XrTypeRef **clone_tref_array(XrTypeRef **arr, int count, XrMonoTypeMap *map, int mc) {
+static XrTypeRef **clone_tref_array(XrTypeRef **arr, int count, XrMonoTypeMap *map, int mc,
+                                    XrAstCloneCtx *clone_ctx) {
     if (!arr || count <= 0)
         return NULL;
     XrTypeRef **result = (XrTypeRef **) xr_calloc((size_t) count, sizeof(XrTypeRef *));
     for (int i = 0; i < count; i++)
-        result[i] = sub_tref(arr[i], map, mc);
+        result[i] = sub_tref(arr[i], map, mc, clone_ctx);
     return result;
 }
 
@@ -416,7 +520,7 @@ static XrParamNode **clone_params(XrParamNode **params, int count, XrMonoTypeMap
         XrParamNode *p = (XrParamNode *) xr_calloc(1, sizeof(XrParamNode));
         *p = *params[i];
         p->name = clone_str(params[i]->name);
-        p->type = sub_tref(params[i]->type, map, mc);
+        p->type = sub_tref(params[i]->type, map, mc, clone_ctx);
         p->default_value = xr_ast_clone_ctx(params[i]->default_value, map, mc, clone_ctx);
         // pattern clone omitted (not used in generic contexts)
         result[i] = p;
@@ -447,7 +551,7 @@ static XrNameSpan *clone_name_spans(const XrNameSpan *spans, int count) {
  * bound that mentions an enclosing class type param (for example
  * `find<U: Comparable<T>>` inside `Box<T>`) lands on the substituted type. */
 static XrGenericParam **clone_generic_params(XrGenericParam **arr, int count, XrMonoTypeMap *map,
-                                             int mc) {
+                                             int mc, XrAstCloneCtx *clone_ctx) {
     if (!arr || count <= 0)
         return NULL;
     XrGenericParam **result = (XrGenericParam **) xr_calloc((size_t) count, sizeof(*result));
@@ -456,7 +560,8 @@ static XrGenericParam **clone_generic_params(XrGenericParam **arr, int count, Xr
             continue;
         XrGenericParam *gp = (XrGenericParam *) xr_calloc(1, sizeof(XrGenericParam));
         gp->name = clone_str(arr[i]->name);
-        gp->constraints = clone_tref_array(arr[i]->constraints, arr[i]->constraint_count, map, mc);
+        gp->constraints =
+            clone_tref_array(arr[i]->constraints, arr[i]->constraint_count, map, mc, clone_ctx);
         gp->constraint_count = gp->constraints ? arr[i]->constraint_count : 0;
         result[i] = gp;
     }
@@ -575,7 +680,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.var_decl.initializer =
                 xr_ast_clone_ctx(node->as.var_decl.initializer, map, mc, clone_ctx);
             n->as.var_decl.is_const = node->as.var_decl.is_const;
-            n->as.var_decl.type_annotation = sub_tref(node->as.var_decl.type_annotation, map, mc);
+            n->as.var_decl.type_annotation =
+                sub_tref(node->as.var_decl.type_annotation, map, mc, clone_ctx);
             break;
         case AST_VARIABLE:
             n->as.variable.name = clone_str(node->as.variable.name);
@@ -633,7 +739,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.for_in_stmt.domain_kind = node->as.for_in_stmt.domain_kind;
             n->as.for_in_stmt.enum_symbol_id = node->as.for_in_stmt.enum_symbol_id;
             n->as.for_in_stmt.enum_variant_count = node->as.for_in_stmt.enum_variant_count;
-            n->as.for_in_stmt.item_type = sub_tref(node->as.for_in_stmt.item_type, map, mc);
+            n->as.for_in_stmt.item_type =
+                sub_tref(node->as.for_in_stmt.item_type, map, mc, clone_ctx);
             n->as.for_in_stmt.collection =
                 xr_ast_clone_ctx(node->as.for_in_stmt.collection, map, mc, clone_ctx);
             n->as.for_in_stmt.body =
@@ -655,7 +762,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->params = clone_params(src->params, src->param_count, map, mc, clone_ctx);
             dst->param_count = src->param_count;
             dst->required_count = src->required_count;
-            dst->return_type = sub_tref(src->return_type, map, mc);
+            dst->return_type = sub_tref(src->return_type, map, mc, clone_ctx);
             dst->borrow_origin_syntax = src->borrow_origin_syntax;
             dst->borrow_origin_count = src->borrow_origin_count;
             dst->borrow_origins =
@@ -684,13 +791,14 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 node->as.call_expr.arguments, node->as.call_expr.arg_count, map, mc, clone_ctx);
             n->as.call_expr.arg_accesses = clone_call_arg_accesses(node->as.call_expr.arg_accesses,
                                                                    node->as.call_expr.arg_count);
-            n->as.call_expr.type_args = clone_tref_array(
-                node->as.call_expr.type_args, node->as.call_expr.type_arg_count, map, mc);
+            n->as.call_expr.type_args =
+                clone_tref_array(node->as.call_expr.type_args, node->as.call_expr.type_arg_count,
+                                 map, mc, clone_ctx);
             n->as.call_expr.type_arg_count = node->as.call_expr.type_arg_count;
             n->as.call_expr.semantic_type_id = node->as.call_expr.semantic_type_id;
             n->as.call_expr.semantic_type_args =
                 clone_tref_array(node->as.call_expr.semantic_type_args,
-                                 node->as.call_expr.semantic_type_arg_count, map, mc);
+                                 node->as.call_expr.semantic_type_arg_count, map, mc, clone_ctx);
             n->as.call_expr.semantic_type_arg_count = node->as.call_expr.semantic_type_arg_count;
             break;
 
@@ -703,11 +811,11 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         // === Type check ===
         case AST_IS_EXPR:
             n->as.is_expr.expr = xr_ast_clone_ctx(node->as.is_expr.expr, map, mc, clone_ctx);
-            n->as.is_expr.type = sub_tref(node->as.is_expr.type, map, mc);
+            n->as.is_expr.type = sub_tref(node->as.is_expr.type, map, mc, clone_ctx);
             break;
         case AST_AS_EXPR:
             n->as.as_expr.expr = xr_ast_clone_ctx(node->as.as_expr.expr, map, mc, clone_ctx);
-            n->as.as_expr.type = sub_tref(node->as.as_expr.type, map, mc);
+            n->as.as_expr.type = sub_tref(node->as.as_expr.type, map, mc, clone_ctx);
             n->as.as_expr.is_safe = node->as.as_expr.is_safe;
             break;
 
@@ -834,7 +942,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                     dc->var_name = clone_str(sc->var_name);
                     dc->var_line = sc->var_line;
                     dc->var_column = sc->var_column;
-                    dc->type = sub_tref(sc->type, map, mc);
+                    dc->type = sub_tref(sc->type, map, mc, clone_ctx);
                     dc->pattern = xr_ast_clone_ctx(sc->pattern, map, mc, clone_ctx);
                     dc->body = xr_ast_clone_ctx(sc->body, map, mc, clone_ctx);
                     dc->symbol_id = 0;
@@ -861,8 +969,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 node->as.new_expr.arguments, node->as.new_expr.arg_count, map, mc, clone_ctx);
             n->as.new_expr.arg_accesses = clone_call_arg_accesses(node->as.new_expr.arg_accesses,
                                                                   node->as.new_expr.arg_count);
-            n->as.new_expr.type_args = clone_tref_array(node->as.new_expr.type_args,
-                                                        node->as.new_expr.type_arg_count, map, mc);
+            n->as.new_expr.type_args = clone_tref_array(
+                node->as.new_expr.type_args, node->as.new_expr.type_arg_count, map, mc, clone_ctx);
             n->as.new_expr.type_arg_count = node->as.new_expr.type_arg_count;
             n->as.new_expr.is_type_namespace = node->as.new_expr.is_type_namespace;
             break;
@@ -1027,7 +1135,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->super_name = clone_str(src->super_name);
             dst->super_module = clone_str(src->super_module);
             dst->interface_count = src->interface_count;
-            dst->interfaces = clone_tref_array(src->interfaces, src->interface_count, map, mc);
+            dst->interfaces =
+                clone_tref_array(src->interfaces, src->interface_count, map, mc, clone_ctx);
             dst->field_count = src->field_count;
             dst->fields = clone_node_array(src->fields, src->field_count, map, mc, clone_ctx);
             dst->method_count = src->method_count;
@@ -1051,7 +1160,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->required_count = src->required_count;
             dst->is_variadic = src->is_variadic;
             dst->params = clone_params(src->params, src->param_count, map, mc, clone_ctx);
-            dst->return_type = sub_tref(src->return_type, map, mc);
+            dst->return_type = sub_tref(src->return_type, map, mc, clone_ctx);
             dst->borrow_origin_syntax = src->borrow_origin_syntax;
             dst->borrow_origin_count = src->borrow_origin_count;
             dst->borrow_origins =
@@ -1077,7 +1186,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             // params (for example U in map<U>). Clearing them makes the
             // post-mono analyzer treat U as an ordinary unresolved type name.
             dst->type_params =
-                clone_generic_params(src->type_params, src->type_param_count, map, mc);
+                clone_generic_params(src->type_params, src->type_param_count, map, mc, clone_ctx);
             dst->type_param_count = src->type_param_count;
             break;
         }
@@ -1087,7 +1196,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             FieldDeclNode *src = &node->as.field_decl;
             FieldDeclNode *dst = &n->as.field_decl;
             dst->name = clone_str(src->name);
-            dst->field_type = sub_tref(src->field_type, map, mc);
+            dst->field_type = sub_tref(src->field_type, map, mc, clone_ctx);
             dst->is_private = src->is_private;
             dst->is_protected = src->is_protected;
             dst->is_static = src->is_static;
@@ -1107,7 +1216,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->field_names = clone_str_array(src->field_names, src->field_count);
             dst->field_values =
                 clone_node_array(src->field_values, src->field_count, map, mc, clone_ctx);
-            dst->type_args = clone_tref_array(src->type_args, src->type_arg_count, map, mc);
+            dst->type_args =
+                clone_tref_array(src->type_args, src->type_arg_count, map, mc, clone_ctx);
             dst->type_arg_count = src->type_arg_count;
             break;
         }
@@ -1119,8 +1229,9 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                                                               node->as.enum_member.payload_count);
             n->as.enum_member.payload_name_spans = clone_name_spans(
                 node->as.enum_member.payload_name_spans, node->as.enum_member.payload_count);
-            n->as.enum_member.payload_types = clone_tref_array(
-                node->as.enum_member.payload_types, node->as.enum_member.payload_count, map, mc);
+            n->as.enum_member.payload_types =
+                clone_tref_array(node->as.enum_member.payload_types,
+                                 node->as.enum_member.payload_count, map, mc, clone_ctx);
             break;
 
         // === Nodes not typically inside generic bodies (shallow copy) ===
@@ -1192,9 +1303,11 @@ void xa_mono_collector_free(XaMonoCollector *c) {
     c->rewrite_failed = false;
 }
 
-static char *mono_effect_mangle(const char *generic_name, XrTypeRef **type_args, int type_arg_count,
+static char *mono_effect_mangle(XaMonoCollector *collector, const char *generic_name,
+                                XrTypeRef **type_args, int type_arg_count,
                                 XaMonoThrowEffect throw_effect) {
-    char *base = xr_mono_mangle(generic_name, type_args, type_arg_count);
+    char *base = xr_mono_mangle_in_analyzer(collector ? collector->analyzer : NULL, generic_name,
+                                            type_args, type_arg_count);
     if (!base || throw_effect != XA_MONO_EFFECT_NO_THROW)
         return base;
     size_t len = strlen(base) + sizeof("$nothrow");
@@ -1262,6 +1375,37 @@ static void mono_report(XaMonoCollector *c, int code, const char *message, const
     xa_analyzer_add_diagnostic(c->analyzer, XR_DIAG_SEV_ERROR, code, message, &at);
 }
 
+static void mono_report_exact_type_identity(XaMonoCollector *collector, const char *generic_name,
+                                            const XrLocation *location) {
+    if (!collector || collector->rewrite_failed)
+        return;
+    collector->rewrite_failed = true;
+    char message[256];
+    snprintf(message, sizeof(message),
+             "generic specialization '%s' has an incomplete concrete type identity",
+             generic_name ? generic_name : "<unknown>");
+    XrLocation at = location ? *location : (XrLocation) {0};
+    if (!at.file && collector->analyzer)
+        at.file = collector->analyzer->current_file;
+    xa_analyzer_add_diagnostic(collector->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
+                               message, &at);
+}
+
+static bool mono_type_ref_contains_open_param(XaAnalyzer *analyzer, const XrTypeRef *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_TREF_TYPE_PARAM)
+        return true;
+    XrType *semantic = analyzer ? xa_analyzer_get_type_ref_type(analyzer, type) : NULL;
+    if (semantic && semantic->kind == XR_KIND_TYPE_PARAM)
+        return true;
+    for (uint8_t i = 0; i < type->nchildren; ++i) {
+        if (mono_type_ref_contains_open_param(analyzer, type->children ? type->children[i] : NULL))
+            return true;
+    }
+    return false;
+}
+
 static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *generic_name,
                                                 const AstNode *generic_decl, XrTypeRef **type_args,
                                                 int type_arg_count, bool is_class_generic,
@@ -1270,10 +1414,22 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
     if (!c || !generic_name)
         return NULL;
 
+    /* An instantiation nested in a generic template is not a concrete root yet.
+     * Defer it
+     * until the enclosing clone substitutes every open parameter; the
+     * injection fixpoint
+     * will then collect the concrete nested root. */
+    for (int i = 0; i < type_arg_count; ++i) {
+        if (mono_type_ref_contains_open_param(c->analyzer, type_args ? type_args[i] : NULL))
+            return NULL;
+    }
+
     char *candidate_mangled =
-        mono_effect_mangle(generic_name, type_args, type_arg_count, throw_effect);
-    if (!candidate_mangled)
+        mono_effect_mangle(c, generic_name, type_args, type_arg_count, throw_effect);
+    if (!candidate_mangled) {
+        mono_report_exact_type_identity(c, generic_name, loc);
         return NULL;
+    }
 
     // Concrete type arguments define instance identity. ABI-equivalent instances
     // may share code only through explicit verified plans, not collector dedup.
@@ -1353,8 +1509,16 @@ static const char *xa_mono_collector_lookup(XaMonoCollector *c, const char *gene
                                             int type_arg_count, XaMonoThrowEffect throw_effect) {
     if (!c || !generic_name)
         return NULL;
+    for (int i = 0; i < type_arg_count; ++i) {
+        if (mono_type_ref_contains_open_param(c->analyzer, type_args ? type_args[i] : NULL))
+            return NULL;
+    }
     char *candidate_mangled =
-        mono_effect_mangle(generic_name, type_args, type_arg_count, throw_effect);
+        mono_effect_mangle(c, generic_name, type_args, type_arg_count, throw_effect);
+    if (!candidate_mangled) {
+        mono_report_exact_type_identity(c, generic_name, NULL);
+        return NULL;
+    }
     const char *result = NULL;
     for (int i = 0; i < c->count; i++) {
         if ((generic_decl && c->instances[i].generic_decl != generic_decl) ||
@@ -2120,6 +2284,25 @@ static void mono_report_rewrite_failure(XaMonoCollector *collector, const AstNod
                                &loc);
 }
 
+static bool mono_publish_specialization(XaMonoCollector *collector, const AstNode *node,
+                                        const XaGenericDecl *decl, XrTypeRef **type_args,
+                                        int type_arg_count) {
+    if (!collector || !collector->analyzer || !node || !decl || !decl->node || !type_args ||
+        type_arg_count <= 0) {
+        mono_report_exact_type_identity(collector, decl ? decl->name : NULL, NULL);
+        return false;
+    }
+    XaGenericSpecializationFact fact = {
+        .generic_decl = decl->node,
+        .type_args = type_args,
+        .type_arg_count = (uint32_t) type_arg_count,
+    };
+    if (xa_analyzer_set_generic_specialization(collector->analyzer, node, &fact))
+        return true;
+    mono_report_exact_type_identity(collector, decl->name, NULL);
+    return false;
+}
+
 // Phase 3: Rewrite call sites — replace callee name with mangled name
 static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                                XaMonoCollector *collector,
@@ -2138,6 +2321,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                     xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
                                              call->type_arg_count, effect);
                 if (mangled) {
+                    if (!mono_publish_specialization(collector, node, decl, call->type_args,
+                                                     call->type_arg_count))
+                        return;
                     uint32_t original_symbol_id = call->callee->as.variable.symbol_id;
                     XaSymbol *symbol =
                         xa_analyzer_symbol_by_id(collector->analyzer, original_symbol_id);
@@ -2172,6 +2358,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                     xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
                                              call->type_arg_count, effect);
                 if (mangled) {
+                    if (!mono_publish_specialization(collector, node, decl, call->type_args,
+                                                     call->type_arg_count))
+                        return;
                     call->callee->as.member_access.name = xr_strdup(mangled);
                     call->type_args = NULL;
                     call->type_arg_count = 0;
@@ -2510,7 +2699,10 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         return;
 
     ProgramNode *prog = &root->as.program;
-    XrAstCloneCtx clone_ctx = {.session = xr_compiler_session_current_for_isolate(isolate)};
+    XrAstCloneCtx clone_ctx = {
+        .session = xr_compiler_session_current_for_isolate(isolate),
+        .analyzer = collector->analyzer,
+    };
 
     // prog->statements starts as arena-allocated (from xr_ast_program_add).
     // Once we copy it to the heap for growth, heap_owned becomes true and
@@ -2537,14 +2729,21 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         for (int j = 0; j < map_count; j++) {
             map[j].param_name = decl->type_params[j]->name;
             map[j].concrete_type = inst->type_args[j];
+            map[j].concrete_semantic_type =
+                collector->analyzer
+                    ? xa_analyzer_get_type_ref_type(collector->analyzer, inst->type_args[j])
+                    : NULL;
         }
 
         // Clone the generic function with type substitution
+        clone_ctx.type_substitution_failed = false;
         AstNode *cloned = xr_ast_clone_ctx(decl->node, map, map_count, &clone_ctx);
         xr_free(map);
 
-        if (!cloned)
+        if (!cloned || clone_ctx.type_substitution_failed) {
+            mono_report_exact_type_identity(collector, inst->generic_name, NULL);
             continue;
+        }
 
         // Rename cloned function/class to mangled name
         if (cloned->type == AST_FUNCTION_DECL) {
@@ -2597,6 +2796,10 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
                 decl->node->as.struct_decl.is_generic_skeleton = true;
             }
         }
+
+        if (!mono_publish_specialization(collector, cloned, decl, inst->type_args,
+                                         inst->type_arg_count))
+            continue;
 
         // Find the position of the original generic declaration so we insert
         // the monomorphized clone right after it. This ensures the specialized

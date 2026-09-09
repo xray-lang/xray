@@ -21,6 +21,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
 #include "../../frontend/parser/xast_nodes.h"
+#include "../../frontend/parser/xtype_ref.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,13 +45,25 @@ typedef struct XaNodeEntry {
     XaSuspendPointFact suspend_point;
     bool has_callable_target_set;
     XaCallableTargetSetFact callable_target_set;
+    bool has_generic_specialization;
+    XaGenericSpecializationFact generic_specialization;
     struct XaNodeEntry *next;
 } XaNodeEntry;
+
+typedef struct XaTypeRefEntry {
+    const struct XrTypeRef *type_ref;
+    struct XrType *type;
+    uint64_t syntax_key;
+    struct XaTypeRefEntry *next;
+} XaTypeRefEntry;
 
 struct XaNodeTable {
     XaNodeEntry **buckets;
     int bucket_count;
     int size;
+    XaTypeRefEntry **type_ref_buckets;
+    int type_ref_bucket_count;
+    int type_ref_size;
 };
 
 #define XA_NODE_TABLE_INITIAL_BUCKETS 64
@@ -77,6 +90,15 @@ XaNodeTable *xa_node_table_new(void) {
         return NULL;
     }
     t->size = 0;
+    t->type_ref_bucket_count = XA_NODE_TABLE_INITIAL_BUCKETS;
+    t->type_ref_buckets =
+        (XaTypeRefEntry **) xr_calloc(t->type_ref_bucket_count, sizeof(XaTypeRefEntry *));
+    if (!t->type_ref_buckets) {
+        xr_free(t->buckets);
+        xr_free(t);
+        return NULL;
+    }
+    t->type_ref_size = 0;
     return t;
 }
 
@@ -88,10 +110,20 @@ void xa_node_table_free(XaNodeTable *t) {
         while (e) {
             XaNodeEntry *next = e->next;
             xr_free((void *) e->callable_target_set.targets);
+            xr_free(e->generic_specialization.type_args);
             xr_free(e);
             e = next;
         }
     }
+    for (int i = 0; i < t->type_ref_bucket_count; i++) {
+        XaTypeRefEntry *e = t->type_ref_buckets[i];
+        while (e) {
+            XaTypeRefEntry *next = e->next;
+            xr_free(e);
+            e = next;
+        }
+    }
+    xr_free(t->type_ref_buckets);
     xr_free(t->buckets);
     xr_free(t);
 }
@@ -104,12 +136,29 @@ void xa_node_table_clear(XaNodeTable *t) {
         while (e) {
             XaNodeEntry *next = e->next;
             xr_free((void *) e->callable_target_set.targets);
+            xr_free(e->generic_specialization.type_args);
             xr_free(e);
             e = next;
         }
         t->buckets[i] = NULL;
     }
     t->size = 0;
+    xa_node_table_clear_type_ref_types(t);
+}
+
+void xa_node_table_clear_type_ref_types(XaNodeTable *t) {
+    if (!t)
+        return;
+    for (int i = 0; i < t->type_ref_bucket_count; i++) {
+        XaTypeRefEntry *e = t->type_ref_buckets[i];
+        while (e) {
+            XaTypeRefEntry *next = e->next;
+            xr_free(e);
+            e = next;
+        }
+        t->type_ref_buckets[i] = NULL;
+    }
+    t->type_ref_size = 0;
 }
 
 int xa_node_table_size(const XaNodeTable *t) {
@@ -175,7 +224,7 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 static bool entry_has_no_facts(const XaNodeEntry *e) {
     return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion &&
            !e->has_call_error_effect && !e->has_function_expr_effect && !e->has_target_query &&
-           !e->has_suspend_point && !e->has_callable_target_set;
+           !e->has_suspend_point && !e->has_callable_target_set && !e->has_generic_specialization;
 }
 
 static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
@@ -188,6 +237,7 @@ static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
             XaNodeEntry *to_free = *pp;
             *pp = to_free->next;
             xr_free((void *) to_free->callable_target_set.targets);
+            xr_free(to_free->generic_specialization.type_args);
             xr_free(to_free);
             t->size--;
             return;
@@ -243,6 +293,147 @@ struct XaSymbol *xa_node_table_get_symbol(const XaNodeTable *t, const struct Ast
         return NULL;
     const XaNodeEntry *e = find_entry(t, node->node_id);
     return e ? e->symbol : NULL;
+}
+
+static inline uint32_t hash_type_ref(const struct XrTypeRef *type_ref) {
+    uintptr_t value = (uintptr_t) type_ref;
+    return xr_hash_int((int64_t) (value ^ (value >> 32)));
+}
+
+static uint64_t type_ref_syntax_fold(uint64_t hash, uint64_t value) {
+    for (uint32_t shift = 0u; shift < 64u; shift += 8u) {
+        hash ^= (uint8_t) (value >> shift);
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t type_ref_syntax_string(uint64_t hash, const char *value) {
+    size_t length = value ? strlen(value) : 0u;
+    hash = type_ref_syntax_fold(hash, (uint64_t) length);
+    for (size_t i = 0; i < length; ++i) {
+        hash ^= (unsigned char) value[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static bool type_ref_syntax_key_inner(const XrTypeRef *type_ref, int depth, uint64_t *hash) {
+    if (!type_ref || !hash || depth > 64)
+        return false;
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->kind);
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->nchildren);
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->scalar_rep);
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->requires_nothrow);
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) (uint32_t) type_ref->fixed_length);
+    *hash = type_ref_syntax_fold(
+        *hash, type_ref->fixed_length_expr ? (uint64_t) type_ref->fixed_length_expr->node_id : 0u);
+    *hash = type_ref_syntax_string(*hash, type_ref->name);
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->borrow_origin_syntax);
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) (uint32_t) type_ref->borrow_origin_count);
+    for (int i = 0; i < type_ref->borrow_origin_count; ++i) {
+        if (!type_ref->borrow_origins)
+            return false;
+        *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->borrow_origins[i].kind);
+        *hash = type_ref_syntax_string(*hash, type_ref->borrow_origins[i].name);
+    }
+    for (uint8_t i = 0; i < type_ref->nchildren; ++i) {
+        if (!type_ref->children ||
+            !type_ref_syntax_key_inner(type_ref->children[i], depth + 1, hash))
+            return false;
+        if (type_ref->kind == XR_TREF_OBJECT) {
+            if (!type_ref->field_names)
+                return false;
+            *hash = type_ref_syntax_string(*hash, type_ref->field_names[i]);
+            *hash = type_ref_syntax_fold(
+                *hash, (uint64_t) (type_ref->field_readonly && type_ref->field_readonly[i]));
+        } else if (type_ref->kind == XR_TREF_FUNCTION) {
+            XrParamMode mode = XR_PARAM_READ;
+            if (i + 1u < type_ref->nchildren && type_ref->function_param_modes)
+                mode = type_ref->function_param_modes[i];
+            *hash = type_ref_syntax_fold(*hash, (uint64_t) mode);
+            if (i + 1u < type_ref->nchildren)
+                *hash = type_ref_syntax_string(*hash, type_ref->function_param_names
+                                                          ? type_ref->function_param_names[i]
+                                                          : NULL);
+        }
+    }
+    return true;
+}
+
+static uint64_t type_ref_syntax_key(const XrTypeRef *type_ref) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    return type_ref_syntax_key_inner(type_ref, 0, &hash) ? hash : 0u;
+}
+
+static inline int type_ref_bucket_of(const XaNodeTable *t, const struct XrTypeRef *type_ref) {
+    return (int) (hash_type_ref(type_ref) % (uint32_t) t->type_ref_bucket_count);
+}
+
+static void type_ref_table_grow(XaNodeTable *t) {
+    int new_count = t->type_ref_bucket_count * XA_NODE_TABLE_GROWTH;
+    XaTypeRefEntry **new_buckets =
+        (XaTypeRefEntry **) xr_calloc(new_count, sizeof(XaTypeRefEntry *));
+    if (!new_buckets)
+        return;
+    for (int i = 0; i < t->type_ref_bucket_count; i++) {
+        XaTypeRefEntry *e = t->type_ref_buckets[i];
+        while (e) {
+            XaTypeRefEntry *next = e->next;
+            int bucket = (int) (hash_type_ref(e->type_ref) % (uint32_t) new_count);
+            e->next = new_buckets[bucket];
+            new_buckets[bucket] = e;
+            e = next;
+        }
+    }
+    xr_free(t->type_ref_buckets);
+    t->type_ref_buckets = new_buckets;
+    t->type_ref_bucket_count = new_count;
+}
+
+bool xa_node_table_set_type_ref_type(XaNodeTable *t, const struct XrTypeRef *type_ref,
+                                     struct XrType *type) {
+    if (!t || !type_ref || !type)
+        return false;
+    uint64_t syntax_key = type_ref_syntax_key(type_ref);
+    if (syntax_key == 0u)
+        return false;
+    int bucket = type_ref_bucket_of(t, type_ref);
+    for (XaTypeRefEntry *e = t->type_ref_buckets[bucket]; e; e = e->next) {
+        if (e->type_ref == type_ref) {
+            e->type = type;
+            e->syntax_key = syntax_key;
+            return true;
+        }
+    }
+    XaTypeRefEntry *entry = (XaTypeRefEntry *) xr_calloc(1, sizeof(*entry));
+    if (!entry)
+        return false;
+    entry->type_ref = type_ref;
+    entry->type = type;
+    entry->syntax_key = syntax_key;
+    entry->next = t->type_ref_buckets[bucket];
+    t->type_ref_buckets[bucket] = entry;
+    t->type_ref_size++;
+    if ((int64_t) t->type_ref_size * XA_NODE_TABLE_LOAD_DEN >
+        (int64_t) t->type_ref_bucket_count * XA_NODE_TABLE_LOAD_NUM)
+        type_ref_table_grow(t);
+    return true;
+}
+
+struct XrType *xa_node_table_get_type_ref_type(const XaNodeTable *t,
+                                               const struct XrTypeRef *type_ref) {
+    if (!t || !type_ref)
+        return NULL;
+    uint64_t syntax_key = type_ref_syntax_key(type_ref);
+    if (syntax_key == 0u)
+        return NULL;
+    int bucket = type_ref_bucket_of(t, type_ref);
+    for (XaTypeRefEntry *e = t->type_ref_buckets[bucket]; e; e = e->next) {
+        if (e->type_ref == type_ref && e->syntax_key == syntax_key)
+            return e->type;
+    }
+    return NULL;
 }
 
 void xa_node_table_set_ct_value(XaNodeTable *t, const struct AstNode *node,
@@ -836,4 +1027,67 @@ void xa_node_table_clear_callable_target_set(XaNodeTable *t, const struct AstNod
     entry->callable_target_set = (XaCallableTargetSetFact) {0};
     if (entry_has_no_facts(entry))
         remove_entry_by_id(t, node->node_id);
+}
+
+bool xa_node_table_set_generic_specialization(XaNodeTable *t, const struct AstNode *node,
+                                              const XaGenericSpecializationFact *fact) {
+    if (!t || !node || !fact || !fact->generic_decl || fact->type_arg_count == 0u ||
+        !fact->type_args)
+        return false;
+    struct XrTypeRef **type_args =
+        (struct XrTypeRef **) xr_malloc(sizeof(*type_args) * (size_t) fact->type_arg_count);
+    if (!type_args)
+        return false;
+    for (uint32_t i = 0u; i < fact->type_arg_count; ++i) {
+        if (!fact->type_args[i]) {
+            xr_free(type_args);
+            return false;
+        }
+        type_args[i] = fact->type_args[i];
+    }
+    XaNodeEntry *entry = find_or_create(t, node->node_id);
+    if (!entry) {
+        xr_free(type_args);
+        return false;
+    }
+    xr_free(entry->generic_specialization.type_args);
+    entry->has_generic_specialization = true;
+    entry->generic_specialization = *fact;
+    entry->generic_specialization.type_args = type_args;
+    return true;
+}
+
+bool xa_node_table_get_generic_specialization(const XaNodeTable *t, const struct AstNode *node,
+                                              XaGenericSpecializationFact *out_fact) {
+    if (!t || !node)
+        return false;
+    const XaNodeEntry *entry = find_entry(t, node->node_id);
+    if (!entry || !entry->has_generic_specialization)
+        return false;
+    if (out_fact)
+        *out_fact = entry->generic_specialization;
+    return true;
+}
+
+void xa_node_table_clear_generic_specializations(XaNodeTable *t) {
+    if (!t)
+        return;
+    for (int bucket = 0; bucket < t->bucket_count; ++bucket) {
+        XaNodeEntry **link = &t->buckets[bucket];
+        while (*link) {
+            XaNodeEntry *entry = *link;
+            if (entry->has_generic_specialization) {
+                xr_free(entry->generic_specialization.type_args);
+                entry->generic_specialization = (XaGenericSpecializationFact) {0};
+                entry->has_generic_specialization = false;
+            }
+            if (entry_has_no_facts(entry)) {
+                *link = entry->next;
+                xr_free(entry);
+                t->size--;
+            } else {
+                link = &entry->next;
+            }
+        }
+    }
 }

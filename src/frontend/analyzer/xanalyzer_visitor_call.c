@@ -163,7 +163,7 @@ static XrType *xa_json_path_target_type(XaInferContext *ctx, AstNode *node, Call
         if (is_get && target && target->is_nullable)
             target = xr_type_non_nullable(ctx->analyzer->isolate, target);
         XrType *inferred[1] = {target};
-        xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call, inferred, 1);
+        xa_writeback_inferred_type_args(ctx->analyzer, call, inferred, 1);
     } else {
         char msg[224];
         snprintf(msg, sizeof(msg),
@@ -1084,10 +1084,12 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
 
 // Record a complete inferred type tuple before monomorphization. The tuple is published atomically
 // because a nonzero count with no backing array is not a valid AST state.
-void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *call,
-                                     XrType **inferred, int type_param_count) {
-    if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
+void xa_writeback_inferred_type_args(XaAnalyzer *analyzer, CallExprNode *call, XrType **inferred,
+                                     int type_param_count) {
+    if (!analyzer || !analyzer->compiler_session || !call || !inferred || type_param_count <= 0 ||
+        call->type_arg_count != 0)
         return;
+    XrCompilerSession *session = analyzer->compiler_session;
     XrTypeRef *stack_synth[8] = {0};
     XrTypeRef **synth =
         type_param_count <= 8
@@ -1098,6 +1100,11 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
     for (int i = 0; i < type_param_count; i++) {
         synth[i] = xa_synth_tref_from_type(session, inferred[i]);
         if (!synth[i]) {
+            if (synth != stack_synth)
+                xr_free(synth);
+            return;
+        }
+        if (!xa_analyzer_bind_type_ref_type(analyzer, synth[i], inferred[i])) {
             if (synth != stack_synth)
                 xr_free(synth);
             return;
@@ -1346,8 +1353,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                         if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
                             inst->semantic_type_id = (uint32_t) semantic_type_id;
                         if (inst)
-                            xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call,
-                                                            inferred, type_param_count);
+                            xa_writeback_inferred_type_args(ctx->analyzer, call, inferred,
+                                                            type_param_count);
                         if (inferred != inferred_buf)
                             xr_free(inferred);
                         if (inst)
@@ -1379,8 +1386,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                     inst->is_value_type = true;
                 if (semantic_type_id != XA_SEMANTIC_TYPE_NONE)
                     inst->semantic_type_id = (uint32_t) semantic_type_id;
-                xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call,
-                                                expected->instance.type_args, type_param_count);
+                xa_writeback_inferred_type_args(ctx->analyzer, call, expected->instance.type_args,
+                                                type_param_count);
                 return inst;
             }
         }

@@ -377,7 +377,7 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
     XrProgramSourceBuildStatus status = analyze_modules(context, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK)
         return status;
-    if (!xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+    if (!xg_global_evidence_build_pre_monomorphization_from_module_graph(
             &context->pre_monomorphization_evidence, context->graph,
             evidence_profile(context->input->source_profile), 0u, NULL, 0u, context->analyzer))
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,

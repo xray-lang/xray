@@ -880,8 +880,8 @@ typedef struct XaotGenericInstantiationPlan {
     XgCallsiteId root_callsite_id;
     XgInterfaceId constraint_interface_id;
     uint32_t name_id;
-    uint32_t type_key;
-    uint32_t type_arg_key_start;
+    uint64_t type_key;
+    uint64_t type_arg_key_start;
     uint16_t type_arg_count;
     uint8_t inst_kind;
     uint8_t action;
@@ -952,8 +952,8 @@ typedef struct XaotGenericBodyPlan {
     XgFuncId origin_body_func_id;
     XgFuncId specialized_body_func_id;
     XgCallsiteId root_callsite_id;
-    uint32_t type_key;
-    uint32_t type_arg_key_start;
+    uint64_t type_key;
+    uint64_t type_arg_key_start;
     uint16_t type_arg_count;
     uint32_t estimated_body_size;
     uint8_t action;

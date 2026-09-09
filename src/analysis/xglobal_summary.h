@@ -75,8 +75,10 @@ enum {
      * 53: compiler-owned target queries publish stable source occurrence and
      * exact result contracts.
      * 54: combines the independent schema 49 and schema 53 lineages.
-     * 55: adds exact cooperative-yield suspend-point evidence. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 55,
+     * 55: adds exact cooperative-yield suspend-point evidence.
+     * 56: preserves the full 64-bit
+     * generic specialization identity. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 56,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -804,8 +806,8 @@ typedef struct XgClassSummary {
     uint32_t interface_count;
     XgClassId generic_origin_class_id;
     uint32_t generic_origin_name_id;
-    uint32_t generic_type_key;
-    uint32_t generic_type_arg_key_start;
+    uint64_t generic_type_key;
+    uint64_t generic_type_arg_key_start;
     uint16_t generic_type_arg_count;
     uint8_t decl_kind;
 } XgClassSummary;
@@ -1049,8 +1051,8 @@ typedef struct XgGenericInstSummary {
     XgCallsiteId root_callsite_id;
     XgInterfaceId constraint_interface_id;
     uint32_t name_id;
-    uint32_t type_key;
-    uint32_t type_arg_key_start;
+    uint64_t type_key;
+    uint64_t type_arg_key_start;
     uint16_t type_arg_count;
     uint32_t source_span_id;
     uint8_t kind;
@@ -1065,8 +1067,8 @@ typedef struct XgGenericBodyUseSummary {
     XgFuncId origin_body_func_id;
     XgFuncId specialized_body_func_id;
     XgCallsiteId root_callsite_id;
-    uint32_t type_key;
-    uint32_t type_arg_key_start;
+    uint64_t type_key;
+    uint64_t type_arg_key_start;
     uint16_t type_arg_count;
     uint32_t estimated_body_size;
     uint32_t flags;

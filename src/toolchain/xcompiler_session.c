@@ -54,6 +54,7 @@ struct XrCompilerSession {
     struct XrArena *current_arena;
     struct XrCompileStringPool *compile_string_pool;
     uint32_t next_ast_node_id;
+    uint64_t ast_identity_epoch;
 
     struct XrTypePool *analyzer_pool;
     struct XrSourceCache *source_cache;
@@ -107,6 +108,7 @@ static void clear_transient_operation_state(XrCompilerSession *session) {
     session->current_arena = NULL;
     session->compile_string_pool = NULL;
     session->next_ast_node_id = 0;
+    session->ast_identity_epoch++;
     session->module_graph = NULL;
     session->compile_unit_identity = (XrCompileUnitIdentity) {0};
 }
@@ -966,6 +968,10 @@ uint32_t xr_compiler_session_next_ast_node_id(XrCompilerSession *session) {
 
 uint32_t xr_compiler_session_ast_node_id(const XrCompilerSession *session) {
     return session ? session->next_ast_node_id : 0;
+}
+
+uint64_t xr_compiler_session_ast_identity_epoch(const XrCompilerSession *session) {
+    return session ? session->ast_identity_epoch : 0;
 }
 
 void xr_compiler_session_set_ast_node_id(XrCompilerSession *session, uint32_t next_id) {

@@ -9,7 +9,9 @@ Status: frozen after exact-object convergence and the removal of the public
 2. The trailing type syntax `...` and `...: T` does not exist. Width is a
    relation used only when a generic structural constraint is satisfied:
    `T: { name: string }` requires at least that field while preserving the
-   caller's concrete exact type. Ordinary assignment and argument matching
+   caller's concrete exact type and declaration context. Generic substitution
+   may not re-resolve a caller-owned nominal argument by spelling in the
+   generic definition's module. Ordinary assignment and argument matching
    between concrete structural-object types remain exact.
 3. A field type `T?` is the only spelling for a nullable field. A field-name
    suffix `field?: T` is not part of the grammar and does not define a second
@@ -96,9 +98,9 @@ anchor-sha256: src/frontend/parser/xtype_ref.c 534687dba660afca5766f5833652a0761
 anchor-sha256: src/frontend/analyzer/xanalyzer_capability.h 24822aedfbe4c40e2f3916c8bc804bae3b6d924f0f54986d3e359db6b97a3342
 anchor-sha256: src/frontend/analyzer/xanalyzer_capability.c 631929798226365ce84a13b8205600c04b4b57816adc99300d2c455cc1b2685f
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c 4798db3ee5ab3560706eac8ab98e25d1aab29086d2bb4a212569b9df3a41eb14
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 93df86609519d348a1ab36b36e5a80112c37369592faf2bfbd70127c7afbe671
-anchor-sha256: src/frontend/analyzer/xtype_ref_resolve.c 2680ea9a0d697f6ed8657a102573ab9c13a0da593ecc64240707e3f01728e6ec
-anchor-sha256: src/analysis/xglobal_summary.h 706a614c3fcce2cd338232133f4bf431bea1ccf7abc72f1cd97b707024da7ff2
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 9ece31d33c0ff14d784ee9853fa9aef001995467fb1ef74a08e336bd600562e3
+anchor-sha256: src/frontend/analyzer/xtype_ref_resolve.c f036dbda77e2d1853b7b6bdee61435fccd9e48bac7197135aa194c60ec747b59
+anchor-sha256: src/analysis/xglobal_summary.h da08ed6045cf3424462c9d8ffaadef643c2adcffb253525cfc9b68e298b61800
 anchor-sha256: src/ir/xi.h 983c20f018d503dbdbd12a47ce39f68392d08a9caadfbbb1abb07a4e3a907f45
 anchor-sha256: xisa/xi/ops.def 35dd3030a7fd4b40c8f3b76e053cea5202b9e21418c3b7af51c0715dde586cef
 anchor-sha256: src/aot/xrt_coll.h f699e3aecd8f3c408deca50e306274be74d0d700a61b29ca1dd170be48086511

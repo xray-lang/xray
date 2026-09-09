@@ -1515,29 +1515,36 @@ TEST(source_owner_generic_specializations_are_exact_program_functions) {
 }
 
 TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
-    // The dependency owns the constraint, both implementors and the generic body. Selective-import
-    // aliases must retain that declaration identity even when the entry declares a same-named
-    // generic. Each concrete type gets an independently imported specialization.
+    // The dependency owns the constraint and generic body, while one concrete implementor belongs
+    // to the caller and shadows a dependency-private decoy. Selective-import aliases must retain
+    // the generic declaration identity, and each specialization must retain the exact concrete
+    // type declaration identity across the module boundary.
     static const char library_source[] =
         "export interface ReadCounter { current() -> i64 }\n"
         "export struct LeftCounter implements ReadCounter {\n"
         "  value: i64\n"
         "  current() -> i64 { return this.value }\n"
         "}\n"
-        "export struct RightCounter implements ReadCounter {\n"
+        "struct LocalCounter implements ReadCounter {\n"
+        "  value: i64\n"
+        "  current() -> i64 { return 999 }\n"
+        "}\n"
+        "fn nested<U>() -> i64 { return 1 }\n"
+        "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
+        "  return counter.current() + nested<Array<T>>() - 1\n"
+        "}\n";
+    static const char entry_source[] =
+        "import { ReadCounter, LeftCounter, genericRead as readCounter } from \"./library\"\n"
+        "struct LocalCounter implements ReadCounter {\n"
         "  value: i64\n"
         "  current() -> i64 { return this.value }\n"
         "}\n"
-        "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
-        "  return counter.current()\n"
-        "}\n";
-    static const char entry_source[] =
-        "import { LeftCounter, RightCounter, genericRead as readCounter } from \"./library\"\n"
         "fn genericRead<T>(_counter: T) -> i64 { return 999 }\n"
         "fn answer() -> i64 {\n"
-        "  var left = LeftCounter{value: 41}\n"
-        "  var right = RightCounter{value: 1}\n"
-        "  return readCounter<LeftCounter>(left) + readCounter<RightCounter>(right)\n"
+        "  var left = LeftCounter{value: 20}\n"
+        "  var local = LocalCounter{value: 11}\n"
+        "  return readCounter<LeftCounter>(left) + readCounter<LocalCounter>(local) +\n"
+        "         readCounter(local)\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
@@ -1557,10 +1564,10 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     assert_products_equal(&first, &second);
 
     const XrValidatedProgram *program = first.program;
-    ASSERT_EQ_UINT(program->function_count, 5u);
+    ASSERT_EQ_UINT(program->function_count, 7u);
     ASSERT_EQ_UINT(program->interface_count, 0u);
     ASSERT_EQ_UINT(program->conformance_count, 0u);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 4u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 7u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT), 0u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_EXISTENTIAL_PACK), 0u);
 
@@ -1604,7 +1611,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
             }
         }
     }
-    ASSERT_EQ_UINT(entry_call_count, 2u);
+    ASSERT_EQ_UINT(entry_call_count, 3u);
     ASSERT_EQ_UINT(specialization_count, 2u);
     ASSERT_TRUE(specializations[0] != specializations[1]);
 
@@ -1623,6 +1630,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         ASSERT_EQ_UINT(receiver->field_count, 1u);
         ASSERT_EQ_UINT(receiver->field_types[0], XR_CORE_TYPE_I64);
         uint32_t calls = 0u;
+        uint32_t nested_calls = 0u;
         for (uint32_t block_index = 0u; block_index < caller->block_count; ++block_index) {
             const XrValidatedBlock *block = &caller->blocks[block_index];
             for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
@@ -1630,11 +1638,16 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
                 const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
                 if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT)
                     continue;
-                ASSERT_EQ_UINT(instruction->operand_count, 1u);
                 ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FUNCTION);
                 ASSERT_LT(instruction->immediate.function_id, program->function_count);
                 const XrValidatedFunction *method =
                     &program->functions[instruction->immediate.function_id];
+                if (!method->has_receiver) {
+                    ASSERT_EQ_UINT(instruction->operand_count, 0u);
+                    ++nested_calls;
+                    continue;
+                }
+                ASSERT_EQ_UINT(instruction->operand_count, 1u);
                 ASSERT_TRUE(method->has_receiver);
                 ASSERT_EQ_INT(method->receiver_mode, XR_PARAM_READ);
                 ASSERT_EQ_UINT(method->parameter_count, 1u);
@@ -1649,6 +1662,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
             }
         }
         ASSERT_EQ_UINT(calls, 1u);
+        ASSERT_EQ_UINT(nested_calls, 1u);
     }
     ASSERT_TRUE(receiver_types[0] != receiver_types[1]);
     ASSERT_TRUE(method_targets[0] != method_targets[1]);
@@ -1732,12 +1746,16 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     source_build_fixture_free(&fixture);
 
     static const char namespace_entry_source[] =
-        "import { LeftCounter, RightCounter } from \"./library\"\n"
+        "import { ReadCounter, LeftCounter } from \"./library\"\n"
         "import \"./library\" as counters\n"
+        "struct LocalCounter implements ReadCounter {\n"
+        "  value: i64\n"
+        "  current() -> i64 { return this.value }\n"
+        "}\n"
         "fn answer() -> i64 {\n"
         "  var left = LeftCounter{value: 41}\n"
-        "  var right = RightCounter{value: 1}\n"
-        "  return counters.genericRead(left) + counters.genericRead(right)\n"
+        "  var local = LocalCounter{value: 1}\n"
+        "  return counters.genericRead(left) + counters.genericRead(local)\n"
         "}\n";
     SourceBuildFixture namespace_fixture;
     ASSERT_TRUE(source_build_fixture_init(&namespace_fixture, namespace_entry_source,
@@ -1756,6 +1774,10 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
 
     static const char negative_library_source[] =
         "export interface ReadCounter { current() -> i64 }\n"
+        "struct NotCounter implements ReadCounter {\n"
+        "  value: i64\n"
+        "  current() -> i64 { return 999 }\n"
+        "}\n"
         "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
         "  return counter.current()\n"
         "}\n";

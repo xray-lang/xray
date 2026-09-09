@@ -39,6 +39,7 @@
 #include <stdint.h>
 
 struct AstNode;
+struct XrTypeRef;
 struct XrType;
 struct XaScope;
 struct XaSymbol;
@@ -118,6 +119,20 @@ typedef struct XaNodeCallableTargetSetEntry {
     XaCallableTargetSetFact fact;
 } XaNodeCallableTargetSetEntry;
 
+/* Exact generic specialization selected before monomorphization rewrites the
+ * call or declaration
+ * into its non-generic executable form. The declaration
+ * and type refs are AST-owned; the node
+ * table owns only the copied pointer
+ * array. Xglobal consumes this fact instead of reconstructing
+ * semantic
+ * identity from a mangled name or display spelling. */
+typedef struct XaGenericSpecializationFact {
+    const struct AstNode *generic_decl;
+    struct XrTypeRef **type_args;
+    uint32_t type_arg_count;
+} XaGenericSpecializationFact;
+
 XR_FUNC XaNodeTable *xa_node_table_new(void);
 XR_FUNC void xa_node_table_free(XaNodeTable *t);
 
@@ -136,6 +151,17 @@ XR_FUNC void xa_node_table_set(XaNodeTable *t, struct AstNode *node, struct XrTy
 // Retrieve scope / symbol binding for a node.
 XR_FUNC struct XaScope *xa_node_table_get_scope(const XaNodeTable *t, const struct AstNode *node);
 XR_FUNC struct XaSymbol *xa_node_table_get_symbol(const XaNodeTable *t, const struct AstNode *node);
+
+// Bind syntax to the exact type resolved in its declaration context. The
+// pointer-keyed fact stays off XrTypeRef so parser-owned syntax remains free
+// of analyzer state while generic substitutions retain caller identity.
+XR_FUNC bool xa_node_table_set_type_ref_type(XaNodeTable *t, const struct XrTypeRef *type_ref,
+                                             struct XrType *type);
+XR_FUNC struct XrType *xa_node_table_get_type_ref_type(const XaNodeTable *t,
+                                                       const struct XrTypeRef *type_ref);
+// Invalidate declaration-context bindings before referenced symbol metadata
+// is replaced. Other node facts remain available.
+XR_FUNC void xa_node_table_clear_type_ref_types(XaNodeTable *t);
 
 // Store / retrieve a compile-time value fact for `node`.
 // Passing NULL for `value` clears only the ct-value fact.
@@ -207,6 +233,13 @@ XR_FUNC bool xa_node_table_snapshot_callable_target_sets(const XaNodeTable *t,
 XR_FUNC void xa_node_callable_target_set_entries_free(XaNodeCallableTargetSetEntry *entries,
                                                       uint32_t count);
 XR_FUNC void xa_node_table_clear_callable_target_set(XaNodeTable *t, const struct AstNode *node);
+
+XR_FUNC bool xa_node_table_set_generic_specialization(XaNodeTable *t, const struct AstNode *node,
+                                                      const XaGenericSpecializationFact *fact);
+XR_FUNC bool xa_node_table_get_generic_specialization(const XaNodeTable *t,
+                                                      const struct AstNode *node,
+                                                      XaGenericSpecializationFact *out_fact);
+XR_FUNC void xa_node_table_clear_generic_specializations(XaNodeTable *t);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.

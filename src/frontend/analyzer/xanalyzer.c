@@ -878,9 +878,29 @@ bool xa_analyzer_is_freestanding(const XaAnalyzer *analyzer) {
     return analyzer && analyzer->build_profile == XA_ANALYZER_BUILD_PROFILE_FREESTANDING;
 }
 
+static void xa_analyzer_sync_type_ref_ast_epoch(XaAnalyzer *analyzer) {
+    if (!analyzer || !analyzer->node_table)
+        return;
+    uint64_t ast_epoch = xr_compiler_session_ast_identity_epoch(analyzer->compiler_session);
+    if (analyzer->type_ref_batch_ast_epoch == ast_epoch)
+        return;
+    xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
+    xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
+    analyzer->type_ref_batch_ast_epoch = ast_epoch;
+    analyzer->type_ref_batch_root_id = 0u;
+}
+
 void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *graph) {
-    if (analyzer)
-        analyzer->graph = graph;
+    if (!analyzer)
+        return;
+    if (analyzer->graph != graph) {
+        xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
+        xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
+        analyzer->type_ref_batch_root_id = 0u;
+        analyzer->type_ref_batch_ast_epoch =
+            xr_compiler_session_ast_identity_epoch(analyzer->compiler_session);
+    }
+    analyzer->graph = graph;
 }
 
 /* Extract the declared name from an exported declaration AST node. */
@@ -2128,6 +2148,13 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     if (!analyzer || !ast)
         return;
 
+    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
+    if (!analyzer->graph && analyzer->type_ref_batch_root_id != ast->node_id) {
+        xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
+        xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
+    }
+    analyzer->type_ref_batch_root_id = analyzer->graph ? 0u : ast->node_id;
+
     xa_enum_record_plan_table_begin_analysis(
         (XaEnumRecordPlanTable *) analyzer->enum_record_plan_table);
 
@@ -2226,6 +2253,11 @@ void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) 
     // Clear diagnostics for this file
     xa_analyzer_clear_diagnostics(analyzer);
 
+    // Exact type-reference facts may point through types to the class metadata
+    // removed below. Invalidate the cache before replacing any declaration.
+    xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
+    xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
+
     // Remove old symbols from this file
     if (file) {
         remove_file_symbols(analyzer->global_scope, file, analyzer);
@@ -2300,6 +2332,11 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
 
     // Clear diagnostics for this file
     xa_analyzer_clear_diagnostics(analyzer);
+
+    // Exact type-reference facts may point through types to the class metadata
+    // removed below. Invalidate the cache before replacing any declaration.
+    xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
+    xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
 
     // Remove old symbols from this file
     if (file) {
@@ -2407,6 +2444,37 @@ struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstN
     if (!analyzer || !node)
         return NULL;
     return xa_node_table_get_type((XaNodeTable *) analyzer->node_table, node);
+}
+
+bool xa_analyzer_bind_type_ref_type(XaAnalyzer *analyzer, const struct XrTypeRef *type_ref,
+                                    struct XrType *type) {
+    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
+    return analyzer && analyzer->node_table && type_ref && type &&
+           xa_node_table_set_type_ref_type((XaNodeTable *) analyzer->node_table, type_ref, type);
+}
+
+struct XrType *xa_analyzer_get_type_ref_type(XaAnalyzer *analyzer,
+                                             const struct XrTypeRef *type_ref) {
+    if (!analyzer || !analyzer->node_table || !type_ref)
+        return NULL;
+    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
+    return xa_node_table_get_type_ref_type((const XaNodeTable *) analyzer->node_table, type_ref);
+}
+
+bool xa_analyzer_set_generic_specialization(XaAnalyzer *analyzer, const struct AstNode *node,
+                                            const XaGenericSpecializationFact *fact) {
+    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
+    return analyzer && analyzer->node_table && node && fact &&
+           xa_node_table_set_generic_specialization((XaNodeTable *) analyzer->node_table, node,
+                                                    fact);
+}
+
+bool xa_analyzer_get_generic_specialization(XaAnalyzer *analyzer, const struct AstNode *node,
+                                            XaGenericSpecializationFact *out_fact) {
+    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
+    return analyzer && analyzer->node_table && node &&
+           xa_node_table_get_generic_specialization((const XaNodeTable *) analyzer->node_table,
+                                                    node, out_fact);
 }
 
 void xa_analyzer_set_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
@@ -2709,7 +2777,10 @@ void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
     }
     xr_free(file_ids);
 
-    // Step 3: remove symbols owned by this file from the symbol table.
+    // Step 3: invalidate exact type references before their declaration
+    // metadata is freed, then remove symbols owned by this file.
+    xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
+    xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
     remove_file_symbols(analyzer->global_scope, file, analyzer);
 
     // Step 4: remove file from hash map and linked list.

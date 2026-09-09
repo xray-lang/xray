@@ -40,6 +40,7 @@ typedef struct AstNode XrAstNode;
 typedef struct XrArena XrArena;
 typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrVMRuntime XrVMRuntime;
+struct XrTypeRef;
 
 /* The analyzer consumes the compiler session's target ABI.  Semantic layout
  * queries must never infer ABI facts from the machine running the compiler. */
@@ -177,6 +178,10 @@ struct XaAnalyzer {
     // with semantic state. Forward-declared as void* to keep the public
     // analyzer header free of frontend-internal types.
     void *node_table;  // XaNodeTable* (forward declared)
+    // A graph-less analyzer retains exact type-reference facts only while it
+    // reanalyzes the same AST root in one compiler-session AST epoch.
+    uint32_t type_ref_batch_root_id;
+    uint64_t type_ref_batch_ast_epoch;
 
     // Arena-owned compile-time aggregate values cached in symbols/nodes.
     XrArena *consteval_arena;
@@ -317,6 +322,10 @@ XR_FUNC void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file);
 XR_FUNC void xa_analyzer_set_node_type(XaAnalyzer *analyzer, struct AstNode *node,
                                        struct XrType *type);
 XR_FUNC struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstNode *node);
+XR_FUNC bool xa_analyzer_bind_type_ref_type(XaAnalyzer *analyzer, const struct XrTypeRef *type_ref,
+                                            struct XrType *type);
+XR_FUNC struct XrType *xa_analyzer_get_type_ref_type(XaAnalyzer *analyzer,
+                                                     const struct XrTypeRef *type_ref);
 XR_FUNC void xa_analyzer_set_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
                                              const XrConversionWitness *witness);
 XR_FUNC bool xa_analyzer_get_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
@@ -326,6 +335,7 @@ struct XaFunctionExprEffectFact;
 struct XaTargetQueryFact;
 struct XaSuspendPointFact;
 struct XaCallableTargetSetFact;
+struct XaGenericSpecializationFact;
 XR_FUNC bool xa_analyzer_set_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
                                                const struct XaCallErrorEffectFact *fact);
 XR_FUNC bool xa_analyzer_get_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
@@ -353,6 +363,12 @@ XR_FUNC bool xa_analyzer_get_callable_target_set(XaAnalyzer *analyzer, const str
                                                  struct XaCallableTargetSetFact *out_fact);
 XR_FUNC void xa_analyzer_clear_callable_target_set(XaAnalyzer *analyzer,
                                                    const struct AstNode *node);
+XR_FUNC bool xa_analyzer_set_generic_specialization(XaAnalyzer *analyzer,
+                                                    const struct AstNode *node,
+                                                    const struct XaGenericSpecializationFact *fact);
+XR_FUNC bool xa_analyzer_get_generic_specialization(XaAnalyzer *analyzer,
+                                                    const struct AstNode *node,
+                                                    struct XaGenericSpecializationFact *out_fact);
 XR_FUNC void xa_analyzer_set_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,
                                            const XrCtValue *value);
 XR_FUNC bool xa_analyzer_get_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,

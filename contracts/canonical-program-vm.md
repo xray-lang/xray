@@ -138,15 +138,21 @@ Selective-import aliases bind two explicit concrete calls through independent co
 imports to that same dependency even when the entry declares a same-named generic; the source
 declaration and ordered concrete arguments jointly identify each specialization. An exact
 non-implementor through the selective alias is rejected with the generic-constraint error before
-Program construction. Two concrete trivial value-struct implementations produce distinct generic
-function clones, nominal READ signatures, and non-generic method FunctionIds. Named locals and fresh
-direct trivial value-struct arguments carry distinct verified provenance but share an exact
-call-bound, non-escaping READ lifetime. Their physical addresses and receiver loads are erased to
-value operands; no interface table, conformance table, witness call, or runtime constraint lookup
-remains. Reference and both VM decode policies return 42. Caller-local type arguments,
-parameterized/builtin constraints, generic methods, generic ownership cleanup, arbitrary
-returned/select/projected READ places, re-exported specialization facades, and valid finite recursive
-specialization remain outside this bounded slice.
+Program construction. One dependency-owned and one caller-local trivial value-struct implementation
+produce distinct generic function clones, nominal READ signatures, and non-generic method
+FunctionIds. The caller-local declaration remains exact even when the defining module contains a
+same-named private decoy; explicit and inferred calls with that caller type merge into one
+specialization. Named locals and fresh direct trivial value-struct arguments carry distinct verified
+provenance but share an exact call-bound, non-escaping READ lifetime. Their physical addresses and
+receiver loads are erased to value operands; no interface table, conformance table, witness call, or
+runtime constraint lookup remains. Before a generic call is rewritten to its concrete non-generic
+callee, the analyzer publishes the exact template declaration and ordered concrete type tuple as one
+fact. Final Xglobal evidence consumes that fact rather than mangled or display names, retains finite
+nested roots such as `nested<Array<T>>` after substitution, and preserves the full 64-bit identity for
+function and class/struct specializations. Reference and both VM decode policies return 42. Parameterized
+and builtin constraints, generic methods, generic ownership cleanup, arbitrary returned/projected READ
+places, re-exported specialization facades, and valid finite recursive specialization remain outside
+this bounded slice.
 The source-build request carries one fail-closed budget for module count, monomorphization depth,
 whole-graph specialization count, and final Program bytes. A caller may tighten those limits but
 cannot raise them above the production defaults. Exhaustion stops before VM construction with the
@@ -177,4 +183,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 2bd090c7f2f13a2a382fad2fa6706030adf9813a96dfc06eadbda41241d75ff5
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c f269bd11ba19cf536e66f343f96b785ab6bf28a4fff43556d732744f8ec5faf1

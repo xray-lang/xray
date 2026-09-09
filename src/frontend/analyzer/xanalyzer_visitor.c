@@ -2732,8 +2732,7 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
             }
         }
         if (all_inferred)
-            xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call, actual_types,
-                                            actual_count);
+            xa_writeback_inferred_type_args(ctx->analyzer, call, actual_types, actual_count);
     }
 
     xr_free(param_names);

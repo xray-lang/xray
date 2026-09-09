@@ -1796,7 +1796,8 @@ static XrType *resolve_generic_value_struct_mono_instance(XaAnalyzer *analyzer,
                                                           const XrTypeRef *tref) {
     if (!analyzer || !tref || !tref->name || tref->nchildren <= 0)
         return NULL;
-    char *mangled = xr_mono_mangle(tref->name, (XrTypeRef **) tref->children, tref->nchildren);
+    char *mangled = xr_mono_mangle_in_analyzer(analyzer, tref->name, (XrTypeRef **) tref->children,
+                                               tref->nchildren);
     if (!mangled)
         return NULL;
     XrType *result = NULL;
@@ -1813,7 +1814,7 @@ static XrType *resolve_generic_value_struct_mono_instance(XaAnalyzer *analyzer,
     return result;
 }
 
-XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
+static XrType *resolve_in_analyzer_uncached(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     if (!tref)
         return xr_type_new_error(NULL);
     if (!analyzer)
@@ -1912,6 +1913,8 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                 if (head->kind == XR_KIND_INTERFACE) {
                     result =
                         xr_type_new_generic_interface(analyzer->isolate, tref->name, args, nargs);
+                    if (result)
+                        result->instance.class_ref = links->class_info;
                 } else if (head->kind == XR_KIND_ENUM) {
                     const XrEnumLayout *layout =
                         links->enum_info ? links->enum_info->layout : head->enum_type.layout;
@@ -2092,6 +2095,204 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     }
 
     return resolve_impl(analyzer->isolate, tref);
+}
+
+XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
+    if (!tref)
+        return xr_type_new_error(NULL);
+    if (!analyzer)
+        return resolve_impl(NULL, tref);
+    XrType *bound = xa_analyzer_get_type_ref_type(analyzer, tref);
+    if (bound)
+        return bound;
+    XrType *resolved = resolve_in_analyzer_uncached(analyzer, tref);
+    if (resolved && resolved->kind != XR_KIND_ERROR && resolved->kind != XR_KIND_UNKNOWN &&
+        !xa_analyzer_bind_type_ref_type(analyzer, tref, resolved)) {
+        XrLocation location = {
+            .file = analyzer->current_file, .line = tref->line, .column = tref->column};
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_OUT_OF_MEMORY,
+                                   "exact type-reference binding allocation failed", &location);
+        return xr_type_new_error(NULL);
+    }
+    return resolved;
+}
+
+static uint64_t exact_type_key_fold(uint64_t hash, uint64_t value) {
+    for (uint32_t shift = 0u; shift < 64u; shift += 8u) {
+        hash ^= (uint8_t) (value >> shift);
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t exact_type_key_string(uint64_t hash, const char *value) {
+    uint64_t length = value ? (uint64_t) strlen(value) : 0u;
+    hash = exact_type_key_fold(hash, length);
+    if (!value)
+        return hash;
+    for (size_t i = 0; i < (size_t) length; ++i) {
+        hash ^= (unsigned char) value[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static bool exact_type_key(const XrType *type, int depth, uint64_t *hash, bool *has_nominal) {
+    if (!type || !hash || !has_nominal || depth > 64)
+        return false;
+    *hash = exact_type_key_fold(*hash, (uint64_t) type->kind);
+    *hash = exact_type_key_fold(*hash, (uint64_t) type->is_nullable);
+    *hash = exact_type_key_fold(*hash, (uint64_t) type->is_const);
+    *hash = exact_type_key_fold(*hash, (uint64_t) type->scalar_rep);
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_SLICE:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_POINTER:
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->ptr_is_mut);
+            return exact_type_key(type->container.element_type, depth + 1, hash, has_nominal);
+        case XR_KIND_MAP:
+            return exact_type_key(type->map.key_type, depth + 1, hash, has_nominal) &&
+                   exact_type_key(type->map.value_type, depth + 1, hash, has_nominal);
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+        case XR_KIND_INTERFACE: {
+            XrClassInfo *info = type->instance.class_ref;
+            if (info && info->xg_nominal_key != 0u) {
+                *has_nominal = true;
+                *hash = exact_type_key_fold(*hash, UINT64_C(0x4e4f4d494e414c));
+                *hash = exact_type_key_fold(*hash, info->xg_nominal_key);
+            } else if (info && info->declaration_symbol &&
+                       info->nominal_kind != XA_NOMINAL_INVALID) {
+                return false;
+            } else {
+                *hash = exact_type_key_string(*hash, type->instance.class_name);
+            }
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->instance.type_arg_count);
+            for (int i = 0; i < type->instance.type_arg_count; ++i) {
+                if (!type->instance.type_args ||
+                    !exact_type_key(type->instance.type_args[i], depth + 1, hash, has_nominal))
+                    return false;
+            }
+            return true;
+        }
+        case XR_KIND_ENUM: {
+            XrClassInfo *info = type->enum_type.nominal_ref;
+            if (info && info->xg_nominal_key != 0u) {
+                *has_nominal = true;
+                *hash = exact_type_key_fold(*hash, UINT64_C(0x4e4f4d494e414c));
+                *hash = exact_type_key_fold(*hash, info->xg_nominal_key);
+            } else if (info && info->declaration_symbol &&
+                       info->nominal_kind != XA_NOMINAL_INVALID) {
+                return false;
+            } else {
+                *hash = exact_type_key_string(*hash, type->enum_type.enum_name);
+                *hash = exact_type_key_fold(*hash, type->enum_type.layout_id);
+            }
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->enum_type.type_arg_count);
+            for (int i = 0; i < type->enum_type.type_arg_count; ++i) {
+                if (!type->enum_type.type_args ||
+                    !exact_type_key(type->enum_type.type_args[i], depth + 1, hash, has_nominal))
+                    return false;
+            }
+            return true;
+        }
+        case XR_KIND_FUNCTION:
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->function.param_count);
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->function.is_variadic);
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->function.is_c_abi);
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->function.throw_effect);
+            for (int i = 0; i < type->function.param_count; ++i) {
+                if (!type->function.params ||
+                    !exact_type_key(type->function.params[i].type, depth + 1, hash, has_nominal))
+                    return false;
+                *hash = exact_type_key_fold(*hash, (uint64_t) type->function.params[i].mode);
+            }
+            return exact_type_key(type->function.return_type, depth + 1, hash, has_nominal);
+        case XR_KIND_TUPLE:
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->tuple.element_count);
+            for (int i = 0; i < type->tuple.element_count; ++i) {
+                if (!type->tuple.element_types ||
+                    !exact_type_key(type->tuple.element_types[i], depth + 1, hash, has_nominal))
+                    return false;
+            }
+            return true;
+        case XR_KIND_UNION:
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->union_type.member_count);
+            for (uint8_t i = 0; i < type->union_type.member_count; ++i) {
+                if (!type->union_type.members ||
+                    !exact_type_key(type->union_type.members[i], depth + 1, hash, has_nominal))
+                    return false;
+            }
+            return true;
+        case XR_KIND_FIXED_ARRAY:
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->fixed_array.length);
+            return exact_type_key(type->fixed_array.element_type, depth + 1, hash, has_nominal);
+        case XR_KIND_JSON:
+        case XR_KIND_STRUCT_OBJECT:
+            *hash = exact_type_key_fold(*hash, (uint64_t) type->object.field_count);
+            for (int i = 0; i < type->object.field_count; ++i) {
+                if (!type->object.field_names || !type->object.field_types)
+                    return false;
+                *hash = exact_type_key_string(*hash, type->object.field_names[i]);
+                *hash = exact_type_key_fold(*hash, (uint64_t) (type->object.field_readonly &&
+                                                               type->object.field_readonly[i]));
+                if (!exact_type_key(type->object.field_types[i], depth + 1, hash, has_nominal))
+                    return false;
+            }
+            return true;
+        case XR_KIND_TYPE_PARAM:
+        case XR_KIND_UNKNOWN:
+        case XR_KIND_ERROR:
+            return false;
+        default:
+            return true;
+    }
+}
+
+XR_FUNC bool xr_tref_exact_semantic_key(XaAnalyzer *analyzer, const XrTypeRef *tref,
+                                        uint64_t *out_key, bool *out_has_nominal) {
+    if (out_key)
+        *out_key = 0u;
+    if (out_has_nominal)
+        *out_has_nominal = false;
+    if (!out_key || !out_has_nominal || !tref)
+        return false;
+    if (!analyzer) {
+        switch (tref->kind) {
+            case XR_TREF_SCALAR:
+            case XR_TREF_STRING:
+            case XR_TREF_BOOL:
+            case XR_TREF_RUNE:
+            case XR_TREF_UNIT:
+            case XR_TREF_NULL:
+                return true;
+            default:
+                return false;
+        }
+    }
+    XrType *type = xa_analyzer_get_type_ref_type(analyzer, tref);
+    if (!type) {
+        switch (tref->kind) {
+            case XR_TREF_SCALAR:
+            case XR_TREF_STRING:
+            case XR_TREF_BOOL:
+            case XR_TREF_RUNE:
+            case XR_TREF_UNIT:
+            case XR_TREF_NULL:
+                return true;
+            default:
+                return false;
+        }
+    }
+    uint64_t hash = UINT64_C(1469598103934665603);
+    bool has_nominal = false;
+    if (!exact_type_key(type, 0, &hash, &has_nominal))
+        return false;
+    *out_key = hash;
+    *out_has_nominal = has_nominal;
+    return true;
 }
 
 XrType *xr_tref_resolve_parameter_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {

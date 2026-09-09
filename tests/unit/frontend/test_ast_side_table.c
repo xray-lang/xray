@@ -35,6 +35,7 @@
 #include "frontend/analyzer/xa_node_table.h"
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/parser/xast_nodes.h"
+#include "frontend/parser/xtype_ref.h"
 #include "runtime/value/xtype.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
@@ -177,6 +178,35 @@ TEST(node_table_clear_drops_all_entries) {
     xa_node_table_free(t);
 }
 
+TEST(node_table_generic_specialization_copies_tuple_and_clears_atomically) {
+    XaNodeTable *table = xa_node_table_new();
+    ASSERT_NOT_NULL(table);
+    AstNode call = make_node(180);
+    AstNode generic_decl = make_node(181);
+    XrTypeRef first = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef second = {.kind = XR_TREF_STRING};
+    XrTypeRef *input[2] = {&first, &second};
+    XaGenericSpecializationFact fact = {
+        .generic_decl = &generic_decl,
+        .type_args = input,
+        .type_arg_count = 2u,
+    };
+    ASSERT_TRUE(xa_node_table_set_generic_specialization(table, &call, &fact));
+    input[0] = &second;
+
+    XaGenericSpecializationFact observed = {0};
+    ASSERT_TRUE(xa_node_table_get_generic_specialization(table, &call, &observed));
+    ASSERT_EQ_PTR(observed.generic_decl, &generic_decl);
+    ASSERT_EQ_UINT(observed.type_arg_count, 2u);
+    ASSERT_EQ_PTR(observed.type_args[0], &first);
+    ASSERT_EQ_PTR(observed.type_args[1], &second);
+
+    xa_node_table_clear_generic_specializations(table);
+    ASSERT_FALSE(xa_node_table_get_generic_specialization(table, &call, &observed));
+    ASSERT_EQ_INT(xa_node_table_size(table), 0);
+    xa_node_table_free(table);
+}
+
 TEST(node_table_growth_preserves_entries) {
     // Default capacity is 64 buckets with a 0.75 load factor, so 49+
     // entries triggers at least one grow(). We insert 256 to force
@@ -209,6 +239,95 @@ TEST(node_table_growth_preserves_entries) {
     xa_node_table_free(t);
     free(nodes); /* xr:allow-raw-alloc */
     free(types); /* xr:allow-raw-alloc */
+}
+
+TEST(type_ref_bindings_grow_and_clear_independently) {
+    XaNodeTable *t = xa_node_table_new();
+    ASSERT_NOT_NULL(t);
+
+    enum {
+        N = 256
+    };
+    XrTypeRef *refs = (XrTypeRef *) malloc(sizeof(*refs) * N); /* xr:allow-raw-alloc */
+    XrType *types = (XrType *) malloc(sizeof(*types) * N);     /* xr:allow-raw-alloc */
+    ASSERT_NOT_NULL(refs);
+    ASSERT_NOT_NULL(types);
+
+    AstNode node = make_node(4000);
+    xa_node_table_set_type(t, &node, &types[0]);
+    for (int i = 0; i < N; ++i) {
+        memset(&refs[i], 0, sizeof(refs[i]));
+        memset(&types[i], 0, sizeof(types[i]));
+        types[i].kind = XR_KIND_INT;
+        ASSERT_TRUE(xa_node_table_set_type_ref_type(t, &refs[i], &types[i]));
+    }
+    for (int i = 0; i < N; ++i)
+        ASSERT_EQ_PTR(xa_node_table_get_type_ref_type(t, &refs[i]), &types[i]);
+
+    types[0].kind = XR_KIND_STRING;
+    ASSERT_TRUE(xa_node_table_set_type_ref_type(t, &refs[0], &types[0]));
+    ASSERT_EQ_PTR(xa_node_table_get_type_ref_type(t, &refs[0]), &types[0]);
+
+    refs[0].scalar_rep = XR_NATIVE_U64;
+    ASSERT_NULL(xa_node_table_get_type_ref_type(t, &refs[0]));
+    ASSERT_TRUE(xa_node_table_set_type_ref_type(t, &refs[0], &types[0]));
+    ASSERT_EQ_PTR(xa_node_table_get_type_ref_type(t, &refs[0]), &types[0]);
+
+    xa_node_table_clear_type_ref_types(t);
+    for (int i = 0; i < N; ++i)
+        ASSERT_NULL(xa_node_table_get_type_ref_type(t, &refs[i]));
+    ASSERT_EQ_PTR(xa_node_table_get_type(t, &node), &types[0]);
+
+    ASSERT_FALSE(xa_node_table_set_type_ref_type(NULL, NULL, NULL));
+    ASSERT_NULL(xa_node_table_get_type_ref_type(NULL, NULL));
+    xa_node_table_clear_type_ref_types(NULL);
+
+    xa_node_table_free(t);
+    free(refs);  /* xr:allow-raw-alloc */
+    free(types); /* xr:allow-raw-alloc */
+}
+
+TEST(analyzer_type_ref_bindings_follow_graphless_ast_batch) {
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    ASSERT_NOT_NULL(analyzer);
+
+    AstNode first = {.type = AST_PROGRAM, .node_id = 4101};
+    AstNode second = {.type = AST_PROGRAM, .node_id = 4102};
+    AstNode call = {.type = AST_CALL_EXPR, .node_id = 4103};
+    AstNode generic_decl = {.type = AST_FUNCTION_DECL, .node_id = 4104};
+    XrTypeRef type_ref = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef *type_args[1] = {&type_ref};
+    XrType type = {.kind = XR_KIND_INT, .scalar_rep = XR_NATIVE_I64};
+    XaGenericSpecializationFact specialization = {
+        .generic_decl = &generic_decl,
+        .type_args = type_args,
+        .type_arg_count = 1u,
+    };
+    XaGenericSpecializationFact observed = {0};
+
+    xa_analyzer_analyze(analyzer, "first.xr", &first);
+    ASSERT_TRUE(xa_analyzer_bind_type_ref_type(analyzer, &type_ref, &type));
+    ASSERT_TRUE(xa_analyzer_set_generic_specialization(analyzer, &call, &specialization));
+    ASSERT_TRUE(xa_analyzer_get_generic_specialization(analyzer, &call, &observed));
+    xa_analyzer_analyze(analyzer, "first.xr", &first);
+    ASSERT_EQ_PTR(xa_analyzer_get_type_ref_type(analyzer, &type_ref), &type);
+
+    ASSERT_TRUE(xr_compiler_session_reset_incremental(session));
+    ASSERT_FALSE(xa_analyzer_get_generic_specialization(analyzer, &call, &observed));
+    ASSERT_NULL(xa_analyzer_get_type_ref_type(analyzer, &type_ref));
+    xa_analyzer_analyze(analyzer, "first-reset-id.xr", &first);
+    ASSERT_NULL(xa_analyzer_get_type_ref_type(analyzer, &type_ref));
+
+    ASSERT_TRUE(xa_analyzer_bind_type_ref_type(analyzer, &type_ref, &type));
+    ASSERT_TRUE(xa_analyzer_set_generic_specialization(analyzer, &call, &specialization));
+    xa_analyzer_analyze(analyzer, "second.xr", &second);
+    ASSERT_FALSE(xa_analyzer_get_generic_specialization(analyzer, &call, &observed));
+    ASSERT_NULL(xa_analyzer_get_type_ref_type(analyzer, &type_ref));
+
+    xa_analyzer_free(analyzer);
+    xr_compiler_session_delete(session);
 }
 
 TEST(node_table_null_safe_api) {
@@ -401,7 +520,10 @@ RUN_TEST(node_table_get_returns_null_for_unknown);
 RUN_TEST(node_table_set_null_clears_entry);
 RUN_TEST(node_table_set_overwrites_existing);
 RUN_TEST(node_table_clear_drops_all_entries);
+RUN_TEST(node_table_generic_specialization_copies_tuple_and_clears_atomically);
 RUN_TEST(node_table_growth_preserves_entries);
+RUN_TEST(type_ref_bindings_grow_and_clear_independently);
+RUN_TEST(analyzer_type_ref_bindings_follow_graphless_ast_batch);
 RUN_TEST(node_table_null_safe_api);
 RUN_TEST(node_table_scope_symbol_bindings);
 RUN_TEST(node_table_ct_value_round_trip);

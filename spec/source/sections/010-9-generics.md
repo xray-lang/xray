@@ -186,6 +186,8 @@ var result = identity<f64>(0)            // 泛型实参提供唯一上下文，
 **实现策略**：构建期 monomorphization（单态化）。**泛型源声明身份与有序具体类型实参元组共同构成实例身份**，函数泛型与 class / struct 泛型适用同一条规则；两个模块中同名、同实参的泛型仍是不同实例。跨模块选择性导入的每个特化绑定到定义模块导出的精确实例，不按本地别名或裸函数名回退。
 
 - **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。前端不按表示合并，因为 duck-typed 的泛型体要针对具体类型实参解析 `x.foo()`：在解析完成之前，两个 ABI 等价的实例并不可互换。
+- **名义类型实参身份**：声明型 class / struct / interface / enum 实参由其精确声明身份标识，而不是由源码拼写标识。调用模块的 `LocalCounter` 与定义模块中同名的私有类型必须产生不同特化；显式和推断得到的同一调用方类型则必须合并为同一特化。
+- **定义上下文与调用上下文**：泛型声明体始终在定义模块的词法上下文分析，调用点解析出的具体类型实参则保留调用模块中的精确语义身份。编译器在语法类型引用之外保存该绑定；缺少或无法完整证明声明身份时必须拒绝构建，不得按裸类型名回退。
 - **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
 - 名字修饰（name mangling）：`identity<i64>` → `identity$i64`，`Pair<string, i64>` → `Pair$str_i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
 - 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
@@ -478,6 +480,8 @@ var result = identity<f64>(0)            // the type argument supplies a unique 
 **Implementation strategy**: build-time monomorphization. **The source generic declaration identity and ordered concrete type-argument tuple jointly form the instance identity**, and the same rule applies to generic functions and to generic classes / structs alike; same-named generics in different modules remain distinct even for the same arguments. Every cross-module selective-import specialization binds to the exact instance exported by the defining module, never by falling back to the local alias or bare function name.
 
 - **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. The frontend never merges by representation, because a duck-typed generic body resolves `x.foo()` against the concrete type argument: until that resolution is done, two ABI-equivalent instances are not interchangeable.
+- **Nominal type-argument identity**: declaration-backed class / struct / interface / enum arguments are identified by their exact declarations, not by source spelling. A caller's `LocalCounter` and a same-named private type in the defining module must produce different specializations; explicit and inferred uses of the same caller type must merge into one specialization.
+- **Definition and call contexts**: the generic declaration body is always analyzed in its defining module's lexical context, while concrete type arguments resolved at a call site retain their exact semantic identities from the calling module. The compiler stores that binding outside syntax type references; if the declaration identity is missing or cannot be proven complete, the build is rejected rather than falling back to a bare type name.
 - **Code sharing is an AOT decision, not a frontend one**: size-driven merging happens after resolution, in the backend plan (`generic-body-plan` / `generic-code-size-plan` evidence rows decide `share_canonical_body` against a size threshold), and it carries evidence. The frontend keeps identity exact; the backend owns size.
 - Name mangling: `identity<i64>` → `identity$i64`, `Pair<string, i64>` → `Pair$str_i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
 - Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.

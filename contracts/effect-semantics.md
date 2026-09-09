@@ -384,6 +384,10 @@ it cannot add, remove, or complete a source-semantic effect dimension.
    and owns a node-id-keyed immutable numeric conversion snapshot; Xi consumes
    the published data rather than borrowing mutable analyzer node tables or
    re-inferring semantics from Xi op names.
+   Parser-owned type references likewise carry no analyzer state. Their exact
+   declaration-context types live in an analyzer-owned side table and are
+   invalidated before any referenced symbol or class metadata is replaced;
+   incremental analysis must never reuse a stale nominal binding.
 7. `contains_unsafe_op` is an audit fact and normally does not propagate as a
    caller requirement. `requires_unsafe_at_call` is a capability boundary that
    must be discharged at each call site; a safe wrapper may contain unsafe work
@@ -580,7 +584,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c 212d6b4960b0e4dad44f
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c 5a969904e2c31ce2f271910aed406c29d4a152e6d109def6d8b9e73353df3074
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 37ded58432af0c583c64271fd3600dcecfabd6f552e7513e0d8db164e57d96f0
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c 59a9ee51eb35f477700d3b3fab57b086cc6d73bcb88cdd48659f52291cd3737c
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h afb5fad039e37f995ca0246cdb82aa6d69d1a7d710f94b59c5bce5d07a372286
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h c6130f7de2ef1865ed7c8bc26ca44c5842e332521388b6ddb2fd3c8538d42240
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 4c52ef49920029315610b343d6ec332a74772aa0046d91848ee6e7c50adfc325
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 3b078d307ea17ba3d0635162036f6c861036660e3e0dd73e30991c3f085c4f6b
 anchor-sha256: src/runtime/value/xtype.h 9de63a916d92dd91359e1be782ddb1fccb8e7ae31df0198f78eb333591935192
@@ -591,9 +595,9 @@ anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ce
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 0fbd8360ee76e968a1933fee66cb2c409e161989ee6e7e58c503202cb85ea2ad
 anchor-sha256: tests/unit/analyzer/test_effect_db.c f6fd62d692987325db74de9a31808b9a0e5d0573bd458c25a154a676257dfa1e
 anchor-sha256: tests/unit/ir/test_xi_lower.c 198423a8ec57974d652a7a5e5991122c474e9f44da5710610bd7a35a5a35c679
-anchor-sha256: src/frontend/analyzer/xanalyzer.c 22e5a3e52b264bb0cb005a8c9ce4946b0d6551ba52700c6be630545c07693706
-anchor-sha256: src/frontend/analyzer/xanalyzer.h 8f6437b32f0f63f88923b2fdf29bd6b02e68b2042ae49e8da988d49487d1befd
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 93df86609519d348a1ab36b36e5a80112c37369592faf2bfbd70127c7afbe671
+anchor-sha256: src/frontend/analyzer/xanalyzer.c 407ca5f353744f994baa7dac449a34f3a61f8cdbc8164246a9e4771bf01be572
+anchor-sha256: src/frontend/analyzer/xanalyzer.h 2325e0365bbdb091e0c7c21e37054bf972c46a12907cdea0e8b4052813fe4a05
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 9ece31d33c0ff14d784ee9853fa9aef001995467fb1ef74a08e336bd600562e3
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b

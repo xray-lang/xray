@@ -103,6 +103,12 @@ typedef enum XaMonoThrowEffect {
 // Example: mangle("identity", [int_tref], 1) -> "identity$i64"
 XR_FUNC char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count);
 
+// Analyzer-aware specialization name. Declaration-backed nominal arguments
+// append stable semantic identity, so equal spellings from different modules
+// cannot share a specialization.
+XR_FUNC char *xr_mono_mangle_in_analyzer(XaAnalyzer *analyzer, const char *name,
+                                         XrTypeRef **type_args, int count);
+
 // Encode a single type ref into its mangled form.
 // Returns static string (no allocation needed).
 XR_FUNC const char *xr_mono_type_tag(XrTypeRef *t);
@@ -115,6 +121,7 @@ XR_FUNC const char *xr_mono_type_tag(XrTypeRef *t);
 typedef struct {
     const char *param_name;    // Type parameter name (e.g., "T")
     XrTypeRef *concrete_type;  // Concrete type ref to substitute
+    struct XrType *concrete_semantic_type;  // Exact analyzer type, when available
 } XrMonoTypeMap;
 
 XR_FUNC AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *type_map, int type_map_count);
@@ -131,6 +138,8 @@ XR_FUNC AstNode *xr_ast_clone_session(AstNode *node, struct XrCompilerSession *s
 // If no substitution needed, may return the original type ref.
 XR_FUNC XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *type_map,
                                            int type_map_count);
+XR_FUNC XrTypeRef *xr_mono_type_substitute_in_analyzer(XaAnalyzer *analyzer, XrTypeRef *type,
+                                                       XrMonoTypeMap *type_map, int type_map_count);
 
 /* ========== Mono Instance Tracking ========== */
 

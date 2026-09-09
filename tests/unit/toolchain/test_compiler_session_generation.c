@@ -340,6 +340,7 @@ TEST(incremental_reset_advances_identity_and_clears_transient_state) {
     xr_compiler_session_set_module_graph(session, (struct XrModuleGraph *) (uintptr_t) 3);
     xr_compiler_session_set_compile_unit_identity(session, &identity);
     xr_compiler_session_set_ast_node_id(session, 41);
+    uint64_t ast_identity_epoch = xr_compiler_session_ast_identity_epoch(session);
     XrCompilerSessionGenerationSnapshot before =
         xr_compiler_session_generation_snapshot(session);
 
@@ -355,6 +356,7 @@ TEST(incremental_reset_advances_identity_and_clears_transient_state) {
     ASSERT_NULL(xr_compiler_session_string_pool(session));
     ASSERT_NULL(xr_compiler_session_module_graph(session));
     ASSERT_EQ_UINT(xr_compiler_session_ast_node_id(session), 0);
+    ASSERT_EQ_UINT(xr_compiler_session_ast_identity_epoch(session), ast_identity_epoch + 1);
     ASSERT_NULL(xr_compiler_session_compile_unit_identity(session).module_identity);
     xr_compiler_session_pop_arena(&scope);
     ASSERT_NULL(xr_compiler_session_current_arena(session));

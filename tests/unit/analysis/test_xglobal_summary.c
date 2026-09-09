@@ -15,6 +15,7 @@
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xanalyzer_mono.h"
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/parser/xtype_ref.h"
@@ -1410,7 +1411,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=55 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=56 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1784,15 +1785,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=55 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=55 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=55 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=55 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=56 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=56 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=56 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=56 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=55 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=55 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=55 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=55 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -7584,6 +7585,274 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_binding) {
+    setup_parser_session();
+    const char *source = "struct Marker { value: i64 }\n"
+                         "fn consume<T>(_value: T) -> i64 { return 1 }\n"
+                         "fn wrapper() -> i64 {\n"
+                         "    var marker = Marker{value: 7}\n"
+                         "    return consume<Marker>(marker)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "final-generic-identity.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    ASSERT_EQ_UINT(evidence.ngeneric_insts, 1);
+    xg_global_evidence_free(&evidence);
+
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_set_graph(analyzer, &graph);
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&evidence);
+    ASSERT_FALSE(
+        xg_global_evidence_build_from_module_graph(&evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    xg_global_evidence_free(&evidence);
+
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    xg_global_evidence_free(&evidence);
+
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_generic_root_merge_preserves_identity_high_bits) {
+    XgGlobalEvidence dst = {0};
+    XgGlobalEvidence roots = {0};
+    XgBuildKey key = {.module_id = 1, .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGenericInstSummary existing = {.generic_inst_id = 1,
+                                     .module_id = 1,
+                                     .name_id = 7,
+                                     .type_key = UINT64_C(0x100000001),
+                                     .type_arg_key_start = UINT64_C(0x300000002),
+                                     .type_arg_count = 1,
+                                     .kind = XG_GENERIC_INST_FUNCTION,
+                                     .flags = XG_GENERIC_INST_CONCRETE_TYPES};
+    XgGenericInstSummary distinct = existing;
+    distinct.type_key = UINT64_C(0x200000001);
+    distinct.type_arg_key_start = UINT64_C(0x400000002);
+
+    xg_global_evidence_init(&dst, key);
+    xg_global_evidence_init(&roots, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&dst, &existing));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&roots, &distinct));
+
+    ASSERT_TRUE(xg_global_evidence_merge_generic_inst_roots(&dst, &roots));
+    ASSERT_EQ_UINT(dst.ngeneric_insts, 2);
+    ASSERT_EQ_UINT(dst.generic_insts[0].type_key, UINT64_C(0x100000001));
+    ASSERT_EQ_UINT(dst.generic_insts[1].type_key, UINT64_C(0x200000001));
+    ASSERT_EQ_UINT(dst.generic_insts[1].type_arg_key_start, UINT64_C(0x400000002));
+
+    xg_global_evidence_free(&roots);
+    xg_global_evidence_free(&dst);
+}
+
+TEST(global_evidence_post_mono_records_concrete_nested_generic_root) {
+    setup_parser_session();
+    const char *source = "struct Marker { value: i64 }\n"
+                         "fn nested<U>() -> i64 { return 1 }\n"
+                         "fn outer<T>() -> i64 { return nested<Array<T>>() }\n"
+                         "fn answer() -> i64 { return outer<Marker>() }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "nested-generic-root.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {
+        .specs = &spec,
+        .spec_count = 1,
+        .topo_order = topo_order,
+        .topo_count = 1,
+        .entry_index = 0,
+    };
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence pre = {0};
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &pre, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_EQ_UINT(pre.ngeneric_insts, 1u);
+    ASSERT_EQ_UINT(pre.generic_insts[0].name_id, xg_name_id("outer"));
+
+    XaMonoBudget budget = xa_mono_default_budget();
+    XaMonoUsage usage = {0};
+    AstNode *roots[1] = {ast};
+    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
+    xa_analyzer_clear_diagnostics(analyzer);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_TRUE(xg_global_evidence_merge_generic_inst_roots(&evidence, &pre));
+    ASSERT_EQ_UINT(evidence.ngeneric_insts, 2u);
+    uint32_t outer_roots = 0u;
+    uint32_t nested_roots = 0u;
+    for (uint32_t i = 0u; i < evidence.ngeneric_insts; ++i) {
+        const XgGenericInstSummary *inst = &evidence.generic_insts[i];
+        ASSERT_EQ_UINT(inst->kind, XG_GENERIC_INST_FUNCTION);
+        ASSERT_TRUE(inst->origin_decl_id != XG_NO_ID);
+        ASSERT_TRUE(inst->origin_func_id != XG_NO_ID);
+        ASSERT_TRUE(inst->specialized_func_id != XG_NO_ID);
+        ASSERT_TRUE(inst->root_callsite_id != XG_NO_ID);
+        ASSERT_TRUE(inst->type_key != 0u);
+        ASSERT_TRUE(inst->type_arg_key_start != 0u);
+        if (inst->name_id == xg_name_id("outer"))
+            outer_roots++;
+        if (inst->name_id == xg_name_id("nested"))
+            nested_roots++;
+    }
+    ASSERT_EQ_UINT(outer_roots, 1u);
+    ASSERT_EQ_UINT(nested_roots, 1u);
+    ASSERT_EQ_UINT(evidence.ngeneric_body_uses, 2u);
+    ASSERT_EQ_UINT(evidence.ngeneric_code_sizes, 2u);
+
+    xg_global_evidence_free(&evidence);
+    xg_global_evidence_free(&pre);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
+static bool build_monomorphized_type_keys(const char *source, const char *canonical,
+                                          const char *namespace_id, const char *source_path,
+                                          uint64_t *out_type_key, uint64_t *out_type_arg_key) {
+    AstNode *ast = xr_parse(g_session, source);
+    if (!ast)
+        return false;
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.canonical = (char *) canonical;
+    spec.authority.namespace_id = (char *) namespace_id;
+    spec.source_path = (char *) source_path;
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {
+        .specs = &spec,
+        .spec_count = 1,
+        .topo_order = topo_order,
+        .topo_count = 1,
+        .entry_index = 0,
+    };
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    if (!analyzer) {
+        xr_program_destroy(ast);
+        return false;
+    }
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    bool first_analysis_ok = analyzer->diagnostic_count == 0u;
+    XgGlobalEvidence pre = {0};
+    bool pre_ok = xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &pre, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
+    bool ok = first_analysis_ok && pre_ok;
+    XaMonoBudget budget = xa_mono_default_budget();
+    XaMonoUsage usage = {0};
+    AstNode *roots[1] = {ast};
+    bool mono_ok = xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer);
+    ok = ok && mono_ok;
+    xa_analyzer_clear_diagnostics(analyzer);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    bool second_analysis_ok = analyzer->diagnostic_count == 0u;
+    ok = ok && second_analysis_ok;
+    XgGlobalEvidence evidence = {0};
+    bool evidence_ok = xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
+    ok = ok && evidence_ok;
+    uint32_t specialized_count = 0;
+    if (ok) {
+        for (uint32_t i = 0u; i < evidence.nclasses; ++i) {
+            const XgClassSummary *specialized = &evidence.classes[i];
+            if ((specialized->flags & XG_CLASS_MONOMORPHIZED) == 0u)
+                continue;
+            specialized_count++;
+            *out_type_key = specialized->generic_type_key;
+            *out_type_arg_key = specialized->generic_type_arg_key_start;
+        }
+    }
+    xg_global_evidence_free(&evidence);
+    xg_global_evidence_free(&pre);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    return ok && specialized_count == 1u && *out_type_key != 0u && *out_type_arg_key != 0u;
+}
+
+TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments) {
+    setup_parser_session();
+    const char *source = "struct LocalCounter { value: i64 }\n"
+                         "class Box<T> {}\n"
+                         "fn make() { var value = Box<LocalCounter>() }\n";
+    uint64_t left_type_key = 0u;
+    uint64_t left_arg_key = 0u;
+    uint64_t right_type_key = 0u;
+    uint64_t right_arg_key = 0u;
+    ASSERT_TRUE(build_monomorphized_type_keys(
+        source, "memory-module-v1:id=18:generic-class-left", "generic-class-left",
+        "generic-class-left.xr", &left_type_key, &left_arg_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(
+        source, "memory-module-v1:id=19:generic-class-right", "generic-class-right",
+        "generic-class-right.xr", &right_type_key, &right_arg_key));
+    ASSERT_TRUE(left_type_key != right_type_key);
+    ASSERT_TRUE(left_arg_key != right_arg_key);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_monomorphized_struct_keys_use_exact_nominal_arguments) {
+    setup_parser_session();
+    const char *source = "struct LocalCounter { value: i64 }\n"
+                         "struct Box<T> { value: T }\n"
+                         "fn make() {\n"
+                         "  var counter = LocalCounter{value: 1}\n"
+                         "  var value = Box<LocalCounter>{value: counter}\n"
+                         "}\n";
+    uint64_t left_type_key = 0u;
+    uint64_t left_arg_key = 0u;
+    uint64_t right_type_key = 0u;
+    uint64_t right_arg_key = 0u;
+    ASSERT_TRUE(build_monomorphized_type_keys(
+        source, "memory-module-v1:id=20:generic-struct-left", "generic-struct-left",
+        "generic-struct-left.xr", &left_type_key, &left_arg_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(
+        source, "memory-module-v1:id=21:generic-struct-right", "generic-struct-right",
+        "generic-struct-right.xr", &right_type_key, &right_arg_key));
+    ASSERT_TRUE(left_type_key != right_type_key);
+    ASSERT_TRUE(left_arg_key != right_arg_key);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x1830,
@@ -11017,28 +11286,14 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
                          "    seen.add(key)\n"
                          "    if (values.containsKey(Key(7, \"alpha\")) && "
                          "seen.contains(Key(7, \"alpha\"))) {\n"
-                         "        return values.get(Key(7, \"alpha\"))\n"
+                         "        return values.get(Key(7, \"alpha\"))!\n"
                          "    }\n"
                          "    return 0\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
-    ASSERT_NOT_NULL(ast);
-
-    XrModuleSpec spec;
-    init_memory_module_spec(&spec);
-    spec.ast = ast;
-    int topo_order[1] = {0};
-    XrModuleGraph graph;
-    memset(&graph, 0, sizeof(graph));
-    graph.specs = &spec;
-    graph.spec_count = 1;
-    graph.topo_order = topo_order;
-    graph.topo_count = 1;
-    graph.entry_index = 0;
-
     XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, &ast));
     ASSERT_EQ_UINT(ev.nderives, 2);
     ASSERT_EQ_UINT(ev.derives[0].derive_kind, XG_DERIVE_EQ);
     ASSERT_EQ_UINT(ev.derives[1].derive_kind, XG_DERIVE_HASH);
@@ -11105,6 +11360,8 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
     teardown_parser_session();
 }
 
@@ -12594,25 +12851,11 @@ TEST(global_evidence_producer_records_json_codec_calls) {
         "    var shaped = { name: \"A\", age: 1 }\n"
         "    var text: string = JSON.stringify(shaped)\n"
         "}\n";
-    AstNode *ast = xr_parse(g_session, source);
-    ASSERT_NOT_NULL(ast);
-
-    XrModuleSpec spec;
-    init_memory_module_spec(&spec);
-    spec.ast = ast;
-    int topo_order[1] = {0};
-    XrModuleGraph graph;
-    memset(&graph, 0, sizeof(graph));
-    graph.specs = &spec;
-    graph.spec_count = 1;
-    graph.topo_order = topo_order;
-    graph.topo_count = 1;
-    graph.entry_index = 0;
-
     XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.nobject_shapes, 2);
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, &ast));
+    ASSERT_EQ_UINT(ev.nobject_shapes, 3);
     const XgObjectShapeSummary *struct_shape = NULL;
     for (uint32_t i = 0; i < ev.nobject_shapes; i++) {
         ASSERT_EQ_UINT(ev.object_shapes[i].domain, XG_OBJECT_DOMAIN_STRUCT);
@@ -12620,8 +12863,8 @@ TEST(global_evidence_producer_records_json_codec_calls) {
                     ev.object_shapes[i].shape_kind == XG_OBJECT_SHAPE_STATIC);
         ASSERT_TRUE((ev.object_shapes[i].flags & XG_OBJECT_SHAPE_JSON_ENCODABLE) != 0);
     }
-    ASSERT_EQ_UINT(ev.nobject_fields, 4);
-    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_STRUCT), 2);
+    ASSERT_EQ_UINT(ev.nobject_fields, 6);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_STRUCT), 3);
     ASSERT_EQ_UINT(ev.njson_codecs, 4);
     for (uint32_t i = 0; i < ev.njson_codecs; i++) {
         ASSERT_NE(ev.json_codecs[i].source_node_id, 0);
@@ -12645,7 +12888,11 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_EQ_UINT(ev.json_codecs[2].codec_kind, XG_JSON_CODEC_ENCODE);
     ASSERT_NE(ev.json_codecs[2].input_type_key, 0);
     ASSERT_TRUE((ev.json_codecs[2].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
-    ASSERT_EQ_UINT(ev.json_codecs[2].input_shape_id, struct_shape->object_shape_id);
+    const XgObjectShapeSummary *input_shape =
+        xg_global_evidence_find_object_shape(&ev, ev.json_codecs[2].input_shape_id);
+    ASSERT_NOT_NULL(input_shape);
+    ASSERT_EQ_UINT(input_shape->field_count, 2);
+    ASSERT_NE(input_shape->stable_shape_key, 0);
     ASSERT_EQ_UINT(ev.json_codecs[2].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[3].codec_kind, XG_JSON_CODEC_STRINGIFY);
     ASSERT_TRUE((ev.json_codecs[3].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
@@ -12669,6 +12916,8 @@ TEST(global_evidence_producer_records_json_codec_calls) {
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
     teardown_parser_session();
 }
 
@@ -12873,24 +13122,10 @@ TEST(global_evidence_producer_propagates_object_shape_through_field_and_containe
                          "fn readContainer(users: Array<User>) -> i64 {\n"
                          "    return users[0].age\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
-    ASSERT_NOT_NULL(ast);
-    XrModuleSpec spec;
-    init_memory_module_spec(&spec);
-    spec.source_path = "test.xr";
-    spec.ast = ast;
-    int topo_order[1] = {0};
-    XrModuleGraph graph;
-    memset(&graph, 0, sizeof(graph));
-    graph.specs = &spec;
-    graph.spec_count = 1;
-    graph.topo_order = topo_order;
-    graph.topo_count = 1;
-    graph.entry_index = 0;
-
     XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, &ast));
     const XgBodySummary *field_reader = evidence_find_body_by_name(&ev, "readField");
     const XgBodySummary *container_reader = evidence_find_body_by_name(&ev, "readContainer");
     ASSERT_NOT_NULL(field_reader);
@@ -12925,6 +13160,8 @@ TEST(global_evidence_producer_propagates_object_shape_through_field_and_containe
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
     teardown_parser_session();
 }
 
@@ -13298,30 +13535,16 @@ TEST(global_evidence_producer_records_dense_enum_map_set_lookup) {
                          "    var seen: Set<Color> = #[Color.Red, Color.Green, Color.Blue, "
                          "Color.Yellow, Color.Purple]\n"
                          "    var fromIndex = scores[Color.Blue]\n"
-                         "    var viaGet = scores.get(Color.Purple)\n"
+                         "    var viaGet = scores.get(Color.Purple)!\n"
                          "    if (scores.containsKey(Color.Green)) {\n"
                          "        if (seen.contains(Color.Yellow)) { return fromIndex + viaGet }\n"
                          "    }\n"
                          "    return 0\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
-    ASSERT_NOT_NULL(ast);
-    XrModuleSpec spec;
-    init_memory_module_spec(&spec);
-    spec.source_path = "test.xr";
-    spec.ast = ast;
-    int topo_order[1] = {0};
-    XrModuleGraph graph;
-    memset(&graph, 0, sizeof(graph));
-    graph.specs = &spec;
-    graph.spec_count = 1;
-    graph.topo_order = topo_order;
-    graph.topo_count = 1;
-    graph.entry_index = 0;
-
     XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, &ast));
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
     ASSERT_EQ_UINT(ev.nmap_entries, 10);
     ASSERT_EQ_UINT(ev.nkey_accesses, 4);
@@ -13365,6 +13588,8 @@ TEST(global_evidence_producer_records_dense_enum_map_set_lookup) {
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
     teardown_parser_session();
 }
 
@@ -15172,6 +15397,10 @@ RUN_TEST(global_evidence_producer_uses_stable_source_identity);
 RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);
 RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
+RUN_TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_binding);
+RUN_TEST(global_evidence_generic_root_merge_preserves_identity_high_bits);
+RUN_TEST(global_evidence_post_mono_records_concrete_nested_generic_root);
+RUN_TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity);
 RUN_TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry);

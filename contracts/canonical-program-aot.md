@@ -138,14 +138,20 @@ through independent compiler-private imports to that same dependency even when t
 same-named generic; the source declaration and ordered concrete arguments jointly identify each
 specialization. An exact non-implementor through the selective alias is rejected before Program
 construction. Each generic function clone carries its own nominal READ signature and calls one
-distinct non-generic method FunctionId. Named locals and fresh direct trivial value-struct arguments
-carry distinct verified provenance but share an exact call-bound, non-escaping READ lifetime. Their
-physical Xi addresses and receiver loads are erased only after the frozen plans and exact struct
-identities agree; Program contains neither an interface witness table nor runtime constraint
-dispatch. Reference, both VM views, and strict native C return 42. Caller-local type arguments,
-parameterized/builtin constraints, generic methods, generic ownership cleanup, arbitrary
-returned/select/projected READ places, re-exported specialization facades, and valid finite recursive
-specialization remain unqualified.
+distinct non-generic method FunctionId. One dependency-owned and one caller-local trivial
+value-struct implementation remain distinct even when the defining module contains a same-named
+private decoy; explicit and inferred calls with that caller type merge into one specialization.
+Named locals and fresh direct trivial value-struct arguments carry distinct verified provenance but
+share an exact call-bound, non-escaping READ lifetime. Their physical Xi addresses and receiver
+loads are erased only after the frozen plans and exact struct identities agree; Program contains
+neither an interface witness table nor runtime constraint dispatch. Before rewriting a generic call
+to its concrete non-generic callee, the analyzer publishes the exact template declaration and ordered
+concrete type tuple as one fact. Final Xglobal evidence consumes that fact rather than mangled or
+display names, retains finite nested roots such as `nested<Array<T>>` after substitution, and preserves
+the full 64-bit identity for function and class/struct specializations. Reference, both VM views, and
+strict native C return 42. Parameterized/builtin constraints, generic methods, generic ownership
+cleanup, arbitrary returned/projected READ places, re-exported specialization facades, and valid
+finite recursive specialization remain unqualified.
 Before AOT receives a validated Program,
 the shared source-build request enforces one fail-closed module/depth/whole-graph-instance/final-byte
 budget. Requests may tighten but not expand the production defaults; E0388/E0389 exhaustion remains
@@ -205,4 +211,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 2bd090c7f2f13a2a382fad2fa6706030adf9813a96dfc06eadbda41241d75ff5
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c f269bd11ba19cf536e66f343f96b785ab6bf28a4fff43556d732744f8ec5faf1

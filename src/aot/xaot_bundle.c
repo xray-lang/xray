@@ -8135,8 +8135,8 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         fprintf(out,
                 "generic-instantiation %u id=%u module=%u kind=%s origin_decl=%u "
                 "origin_func=%u origin_method=%u origin_class=%u specialized_func=%u "
-                "specialized_class=%u root_callsite=%u constraint_iface=%u name=%u type=%u "
-                "type_args=%u+%u action=%s evidence=",
+                "specialized_class=%u root_callsite=%u constraint_iface=%u name=%u type=%" PRIu64
+                " type_args=%" PRIu64 "+%u action=%s evidence=",
                 gi, gp->generic_inst_id, gp->module_id, xg_generic_inst_kind_name(gp->inst_kind),
                 gp->origin_decl_id, gp->origin_func_id, gp->origin_method_id, gp->origin_class_id,
                 gp->specialized_func_id, gp->specialized_class_id, gp->root_callsite_id,
@@ -8151,7 +8151,8 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         const XaotGenericBodyPlan *gp = &bundle->generic_body_plans[gi];
         fprintf(out,
                 "generic-body-plan %u id=%u inst=%u module=%u owner=%u origin_body=%u "
-                "specialized_body=%u root_callsite=%u type=%u type_args=%u+%u size=%u "
+                "specialized_body=%u root_callsite=%u type=%" PRIu64 " type_args=%" PRIu64
+                "+%u size=%u "
                 "action=%s evidence=",
                 gi, gp->use_id, gp->generic_inst_id, gp->module_id, gp->owner_func_id,
                 gp->origin_body_func_id, gp->specialized_body_func_id, gp->root_callsite_id,

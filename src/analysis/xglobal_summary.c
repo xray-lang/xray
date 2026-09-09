@@ -224,8 +224,8 @@ static uint64_t hash_class_summary(uint64_t hash, const XgClassSummary *row) {
     hash = hash_u32(hash, row->interface_count);
     hash = hash_u32(hash, row->generic_origin_class_id);
     hash = hash_u32(hash, row->generic_origin_name_id);
-    hash = hash_u32(hash, row->generic_type_key);
-    hash = hash_u32(hash, row->generic_type_arg_key_start);
+    hash = hash_u64(hash, row->generic_type_key);
+    hash = hash_u64(hash, row->generic_type_arg_key_start);
     hash = hash_u32(hash, row->generic_type_arg_count);
     return hash_u8(hash, row->decl_kind);
 }
@@ -509,8 +509,8 @@ static uint64_t hash_generic_inst_summary(uint64_t hash, const XgGenericInstSumm
     hash = hash_u32(hash, row->root_callsite_id);
     hash = hash_u32(hash, row->constraint_interface_id);
     hash = hash_u32(hash, row->name_id);
-    hash = hash_u32(hash, row->type_key);
-    hash = hash_u32(hash, row->type_arg_key_start);
+    hash = hash_u64(hash, row->type_key);
+    hash = hash_u64(hash, row->type_arg_key_start);
     hash = hash_u32(hash, row->type_arg_count);
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u8(hash, row->kind);
@@ -527,8 +527,8 @@ static uint64_t hash_generic_body_use_summary(uint64_t hash, const XgGenericBody
     hash = hash_u32(hash, row->origin_body_func_id);
     hash = hash_u32(hash, row->specialized_body_func_id);
     hash = hash_u32(hash, row->root_callsite_id);
-    hash = hash_u32(hash, row->type_key);
-    hash = hash_u32(hash, row->type_arg_key_start);
+    hash = hash_u64(hash, row->type_key);
+    hash = hash_u64(hash, row->type_arg_key_start);
     hash = hash_u32(hash, row->type_arg_count);
     hash = hash_u32(hash, row->estimated_body_size);
     hash = hash_u32(hash, row->flags);
@@ -4316,7 +4316,8 @@ static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evide
         const XgClassSummary *c = &evidence->classes[i];
         fprintf(out,
                 "class id=%u module=%u decl=%u name=%u parent=%u flags=0x%x fields=%u+%u "
-                "methods=%u+%u impls=%u+%u origin=%u origin_name=%u type=%u args=%u+%u "
+                "methods=%u+%u impls=%u+%u origin=%u origin_name=%u type=%" PRIu64 " args=%" PRIu64
+                "+%u "
                 "decl_kind=%u\n",
                 c->class_id, c->module_id, c->decl_id, c->name_id, c->parent_class_id, c->flags,
                 c->field_start, c->field_count, c->method_start, c->method_count,
@@ -4520,7 +4521,7 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
         fprintf(out,
                 "generic-inst id=%u module=%u origin_decl=%u origin_func=%u origin_method=%u "
                 "origin_class=%u spec_func=%u spec_class=%u root=%u constraint=%u name=%u "
-                "type=%u args=%u+%u span=%u kind=%u flags=0x%x\n",
+                "type=%" PRIu64 " args=%" PRIu64 "+%u span=%u kind=%u flags=0x%x\n",
                 g->generic_inst_id, g->module_id, g->origin_decl_id, g->origin_func_id,
                 g->origin_method_id, g->origin_class_id, g->specialized_func_id,
                 g->specialized_class_id, g->root_callsite_id, g->constraint_interface_id,
@@ -4531,7 +4532,7 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
 
 static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
-            "payload-extra v9 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
+            "payload-extra v10 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
             "seq=%u capacity=%u bulk=%u encoding=%u "
             "json_codecs=%u object_shapes=%u object_fields=%u "
             "object_accesses=%u object_access_cases=%u object_merges=%u "
@@ -4551,14 +4552,14 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
         return;
     for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
         const XgGenericBodyUseSummary *u = &evidence->generic_body_uses[i];
-        fprintf(out,
-                "generic-body-use id=%u inst=%u module=%u owner=%u origin_body=%u "
-                "specialized_body=%u root=%u type=%u args=%u+%u size=%u flags=0x%x "
-                "hash=%016" PRIx64 "\n",
-                u->use_id, u->generic_inst_id, u->module_id, u->owner_func_id,
-                u->origin_body_func_id, u->specialized_body_func_id, u->root_callsite_id,
-                u->type_key, u->type_arg_key_start, (unsigned) u->type_arg_count,
-                u->estimated_body_size, u->flags, u->body_use_hash);
+        fprintf(
+            out,
+            "generic-body-use id=%u inst=%u module=%u owner=%u origin_body=%u "
+            "specialized_body=%u root=%u type=%" PRIu64 " args=%" PRIu64 "+%u size=%u flags=0x%x "
+            "hash=%016" PRIx64 "\n",
+            u->use_id, u->generic_inst_id, u->module_id, u->owner_func_id, u->origin_body_func_id,
+            u->specialized_body_func_id, u->root_callsite_id, u->type_key, u->type_arg_key_start,
+            (unsigned) u->type_arg_count, u->estimated_body_size, u->flags, u->body_use_hash);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
         const XgGenericStorageSummary *s = &evidence->generic_storages[i];
@@ -5009,7 +5010,7 @@ static bool materialize_payload_semantic_cursor(const char **cursor, XgGlobalEvi
                    "class id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " name=%" SCNu32
                    " parent=%" SCNu32 " flags=0x%" SCNx32 " fields=%" SCNu32 "+%" SCNu32
                    " methods=%" SCNu32 "+%" SCNu32 " impls=%" SCNu32 "+%" SCNu32 " origin=%" SCNu32
-                   " origin_name=%" SCNu32 " type=%" SCNu32 " args=%" SCNu32 "+%" SCNu32
+                   " origin_name=%" SCNu32 " type=%" SCNu64 " args=%" SCNu64 "+%" SCNu32
                    " decl_kind=%" SCNu32 " %c",
                    &row.class_id, &row.module_id, &row.decl_id, &row.name_id, &row.parent_class_id,
                    &row.flags, &row.field_start, &row.field_count, &row.method_start,
@@ -5496,7 +5497,7 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
                    "generic-inst id=%" SCNu32 " module=%" SCNu32 " origin_decl=%" SCNu32
                    " origin_func=%" SCNu32 " origin_method=%" SCNu32 " origin_class=%" SCNu32
                    " spec_func=%" SCNu32 " spec_class=%" SCNu32 " root=%" SCNu32
-                   " constraint=%" SCNu32 " name=%" SCNu32 " type=%" SCNu32 " args=%" SCNu32
+                   " constraint=%" SCNu32 " name=%" SCNu32 " type=%" SCNu64 " args=%" SCNu64
                    "+%" SCNu32 " span=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " %c",
                    &row.generic_inst_id, &row.module_id, &row.origin_decl_id, &row.origin_func_id,
                    &row.origin_method_id, &row.origin_class_id, &row.specialized_func_id,
@@ -5542,7 +5543,7 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
     if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "payload-extra v9 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
+               "payload-extra v10 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
                " generic_code_sizes=%" SCNu32 " seq=%" SCNu32 " capacity=%" SCNu32 " bulk=%" SCNu32
                " encoding=%" SCNu32 " json_codecs=%" SCNu32 " object_shapes=%" SCNu32
                " object_fields=%" SCNu32 " object_accesses=%" SCNu32 " object_access_cases=%" SCNu32
@@ -5585,7 +5586,7 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
         if (sscanf(line,
                    "generic-body-use id=%" SCNu32 " inst=%" SCNu32 " module=%" SCNu32
                    " owner=%" SCNu32 " origin_body=%" SCNu32 " specialized_body=%" SCNu32
-                   " root=%" SCNu32 " type=%" SCNu32 " args=%" SCNu32 "+%" SCNu32 " size=%" SCNu32
+                   " root=%" SCNu32 " type=%" SCNu64 " args=%" SCNu64 "+%" SCNu32 " size=%" SCNu32
                    " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
                    &row.use_id, &row.generic_inst_id, &row.module_id, &row.owner_func_id,
                    &row.origin_body_func_id, &row.specialized_body_func_id, &row.root_callsite_id,
@@ -7370,7 +7371,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         fprintf(out,
                 "class %u id=%u module=%u decl=%u name=%u parent=%u kind=%s flags=0x%x "
                 "fields=%u+%u methods=%u+%u interfaces=%u+%u generic_origin=%u "
-                "generic_name=%u generic_type=%u generic_args=%u+%u\n",
+                "generic_name=%u generic_type=%" PRIu64 " generic_args=%" PRIu64 "+%u\n",
                 i, c->class_id, c->module_id, c->decl_id, c->name_id, c->parent_class_id,
                 xg_decl_kind_name(c->decl_kind ? c->decl_kind : XG_DECL_CLASS), c->flags,
                 c->field_start, c->field_count, c->method_start, c->method_count,
@@ -7553,7 +7554,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         fprintf(out,
                 "generic-inst %u id=%u module=%u kind=%s origin_decl=%u origin_func=%u "
                 "origin_method=%u origin_class=%u specialized_func=%u specialized_class=%u "
-                "root_callsite=%u constraint_iface=%u name=%u type=%u type_args=%u+%u "
+                "root_callsite=%u constraint_iface=%u name=%u type=%" PRIu64 " type_args=%" PRIu64
+                "+%u "
                 "span=%u flags=0x%x\n",
                 i, inst->generic_inst_id, inst->module_id, xg_generic_inst_kind_name(inst->kind),
                 inst->origin_decl_id, inst->origin_func_id, inst->origin_method_id,
@@ -7566,7 +7568,8 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         const XgGenericBodyUseSummary *use = &evidence->generic_body_uses[i];
         fprintf(out,
                 "generic-body-use %u id=%u inst=%u module=%u owner=%u origin_body=%u "
-                "specialized_body=%u root_callsite=%u type=%u type_args=%u+%u size=%u "
+                "specialized_body=%u root_callsite=%u type=%" PRIu64 " type_args=%" PRIu64
+                "+%u size=%u "
                 "flags=0x%x hash=%016" PRIx64 "\n",
                 i, use->use_id, use->generic_inst_id, use->module_id, use->owner_func_id,
                 use->origin_body_func_id, use->specialized_body_func_id, use->root_callsite_id,

@@ -48,6 +48,10 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
     XgGlobalEvidence *evidence, const struct XrModuleGraph *graph, uint32_t profile,
     uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
     uint32_t imported_module_count, struct XaAnalyzer *analyzer);
+XR_FUNC bool xg_global_evidence_build_pre_monomorphization_from_module_graph(
+    XgGlobalEvidence *evidence, const struct XrModuleGraph *graph, uint32_t profile,
+    uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
+    uint32_t imported_module_count, struct XaAnalyzer *analyzer);
 XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
                                                          const XgGlobalEvidence *roots);
 
