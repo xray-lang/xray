@@ -99,6 +99,13 @@ class FocusedSelectionTest(unittest.TestCase):
                 self.assertIn("exhaustive Xi generator mutations", not_covered)
         self.assertEqual(runner.TIERS["t3"][1], "")
 
+    def test_complete_t3_deduplicates_fast_but_focused_t3_keeps_it(self):
+        _, complete_exclude, _ = runner.tier_ctest_filters("t3", False)
+        self.assertRegex(runner.XI_GENERATOR_FAST, complete_exclude)
+        self.assertNotRegex(runner.SLOW_EXHAUSTIVE, complete_exclude)
+        _, focused_exclude, _ = runner.tier_ctest_filters("t3", True)
+        self.assertEqual(focused_exclude, "")
+
     def test_script_only_profile_does_not_trigger_full_build(self):
         listed = SimpleNamespace(ok=True, stdout=b"phony: phony\n")
         with mock.patch.object(runner.proc, "run", return_value=listed) as run:
@@ -107,6 +114,83 @@ class FocusedSelectionTest(unittest.TestCase):
                 include_xray=False, allow_no_targets=True))
         run.assert_called_once_with(["ninja", "-C", "build",
                                      "-t", "targets", "all"])
+
+
+class ProductionBuildPreflightTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="xr-production-cache-")
+        self.build = Path(self.temporary.name)
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def write_cache(self, overrides=None, *, omitted=(), duplicate=None):
+        values = {
+            "CMAKE_HOME_DIRECTORY": str(runner.REPO_ROOT.resolve()),
+            **runner.PRODUCTION_CACHE_VALUES,
+        }
+        values.update(overrides or {})
+        lines = [f"{name}:STRING={value}" for name, value in values.items()
+                 if name not in omitted]
+        if duplicate is not None:
+            lines.append(f"{duplicate}:STRING={values[duplicate]}")
+        (self.build / "CMakeCache.txt").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_exact_production_configuration_is_accepted(self):
+        self.write_cache()
+        self.assertEqual(runner.production_build_identity_errors(self.build), ())
+
+    def test_missing_and_duplicate_cache_entries_fail_closed(self):
+        self.assertIn("cannot read", " ".join(
+            runner.production_build_identity_errors(self.build)))
+        for name in ("CMAKE_HOME_DIRECTORY", *runner.PRODUCTION_CACHE_VALUES):
+            with self.subTest(missing=name):
+                self.write_cache(omitted=(name,))
+                self.assertIn(f"missing CMake cache entry: {name}",
+                              runner.production_build_identity_errors(self.build))
+        self.write_cache(duplicate="XR_STDLIB_FROM_FILE")
+        self.assertIn("duplicate CMake cache entry: XR_STDLIB_FROM_FILE",
+                      runner.production_build_identity_errors(self.build))
+
+    def test_every_nonproduction_identity_dimension_is_rejected(self):
+        cases = {
+            "source root": {"CMAKE_HOME_DIRECTORY": str(self.build / "other")},
+            "relative source root": {"CMAKE_HOME_DIRECTORY": "."},
+            "generator": {"CMAKE_GENERATOR": "Visual Studio 17 2022"},
+            "build type": {"CMAKE_BUILD_TYPE": "Debug"},
+            "source stdlib": {"XR_STDLIB_FROM_FILE": "ON"},
+            "missing fastpaths": {"XRAY_STDLIB_VM_FASTPATHS": "OFF"},
+            "ASan": {"ENABLE_ASAN": "ON"},
+            "UBSan": {"ENABLE_UBSAN": "ON"},
+            "TSan": {"ENABLE_TSAN": "ON"},
+            "MSan": {"ENABLE_MSAN": "ON"},
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label=label):
+                self.write_cache(overrides)
+                self.assertTrue(runner.production_build_identity_errors(self.build))
+
+    def test_t2_and_t3_refuse_before_manifest_build_or_ctest(self):
+        for tier in ("t2", "t3"):
+            with self.subTest(tier=tier), ExitStack() as stack:
+                stack.enter_context(mock.patch.dict(
+                    runner.os.environ, {"XR_BUILD_DIR": str(self.build)}, clear=True))
+                stack.enter_context(mock.patch.object(
+                    runner.sanitizer, "activate_windows_msvc_environment",
+                    return_value=True))
+                stack.enter_context(mock.patch.object(
+                    runner, "validate_production_build", return_value=False))
+                refresh = stack.enter_context(mock.patch.object(
+                    runner, "refresh_cmake_manifest"))
+                build = stack.enter_context(mock.patch.object(runner, "build_selected"))
+                ctest = stack.enter_context(mock.patch.object(runner, "ctest_names"))
+                execute = stack.enter_context(mock.patch.object(runner.subprocess, "call"))
+                self.assertEqual(runner._run_main(["t.py", tier]), 1)
+                refresh.assert_not_called()
+                build.assert_not_called()
+                ctest.assert_not_called()
+                execute.assert_not_called()
 
 
 class AutoRoutingTest(unittest.TestCase):
@@ -270,6 +354,8 @@ class EmptySelectionTest(unittest.TestCase):
             stack.enter_context(mock.patch.dict(runner.os.environ, environment, clear=True))
             stack.enter_context(mock.patch.object(runner.sanitizer,
                                                  "activate_windows_msvc_environment",
+                                                 return_value=True))
+            stack.enter_context(mock.patch.object(runner, "validate_production_build",
                                                  return_value=True))
             manifest = stack.enter_context(mock.patch.object(
                 runner, "refresh_cmake_manifest", return_value=True))

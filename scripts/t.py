@@ -130,6 +130,7 @@ SLOW_EXTERNAL = ("aot_standalone_suite|asan_focused|lsan_strict|aot_ubsan|"
 # Keep their bounded fast profiles in edit/pre-commit tiers and reserve the
 # complete inventories for the periodic/release tier.
 SLOW_EXHAUSTIVE = "xi_generator_self_test"
+XI_GENERATOR_FAST = "xi_generator_fast_self_test"
 
 # QEMU-backed cross targets: slow, and unavailable on most developer machines.
 SLOW_QEMU = ("aot_freestanding_qemu_smoke|aot_freestanding_riscv_qemu_smoke|"
@@ -188,6 +189,16 @@ FOCUSED_CTEST_OPTIONS = {
 }
 
 REGRESSION_BASELINE = REPO_ROOT / "tests" / "regression" / "baseline_failures.txt"
+PRODUCTION_CACHE_VALUES = {
+    "CMAKE_GENERATOR": "Ninja",
+    "CMAKE_BUILD_TYPE": "Release",
+    "XR_STDLIB_FROM_FILE": "OFF",
+    "XRAY_STDLIB_VM_FASTPATHS": "ON",
+    "ENABLE_ASAN": "OFF",
+    "ENABLE_UBSAN": "OFF",
+    "ENABLE_TSAN": "OFF",
+    "ENABLE_MSAN": "OFF",
+}
 
 
 @dataclass(frozen=True)
@@ -367,6 +378,14 @@ def has_explicit_ctest_selection(args: Sequence[str]) -> bool:
     return False
 
 
+def tier_ctest_filters(tier: str, focused_selection: bool) -> Tuple[str, str, str]:
+    """Return tier filters while avoiding duplicate exhaustive Xi execution."""
+    include, exclude, not_covered = TIERS[tier]
+    if tier == "t3" and not focused_selection:
+        exclude = exact_ctest_regex((XI_GENERATOR_FAST,))
+    return include, exclude, not_covered
+
+
 def has_ctest_option(args: Sequence[str], option: str) -> bool:
     """Return whether forwarded arguments already claim an owned CTest option."""
     return option in args or any(argument.startswith(f"{option}=") for argument in args)
@@ -400,6 +419,68 @@ def cache_contains_all(build_dir: Path, entries: Sequence[str]) -> bool:
         return False
     text = cache.read_text(encoding="utf-8", errors="replace")
     return all(entry in text for entry in entries)
+
+
+def production_build_identity_errors(build_dir: Path) -> Tuple[str, ...]:
+    """Return every reason a tree cannot provide production t2/t3 evidence."""
+    cache = build_dir / "CMakeCache.txt"
+    try:
+        lines = cache.read_text(encoding="utf-8", errors="strict").splitlines()
+    except (OSError, UnicodeError) as error:
+        return (f"cannot read {cache}: {error}",)
+
+    required = {"CMAKE_HOME_DIRECTORY", *PRODUCTION_CACHE_VALUES}
+    values: Dict[str, str] = {}
+    errors: List[str] = []
+    for line in lines:
+        key, separator, value = line.partition("=")
+        if not separator or ":" not in key:
+            continue
+        name = key.split(":", 1)[0]
+        if name not in required:
+            continue
+        if name in values:
+            errors.append(f"duplicate CMake cache entry: {name}")
+            continue
+        values[name] = value.strip()
+
+    for name in sorted(required - set(values)):
+        errors.append(f"missing CMake cache entry: {name}")
+
+    home = values.get("CMAKE_HOME_DIRECTORY")
+    if home:
+        home_path = Path(home)
+        if not home_path.is_absolute():
+            errors.append(f"CMAKE_HOME_DIRECTORY is not absolute: {home!r}")
+        else:
+            actual_root = os.path.normcase(os.path.normpath(
+                str(home_path.resolve(strict=False))))
+            expected_root = os.path.normcase(os.path.normpath(
+                str(REPO_ROOT.resolve(strict=False))))
+        if home_path.is_absolute() and actual_root != expected_root:
+            errors.append(
+                f"CMAKE_HOME_DIRECTORY is {home!r}, expected {str(REPO_ROOT)!r}"
+            )
+
+    for name, expected in PRODUCTION_CACHE_VALUES.items():
+        actual = values.get(name)
+        if actual is not None and actual != expected:
+            errors.append(f"{name} is {actual!r}, expected {expected!r}")
+    return tuple(errors)
+
+
+def validate_production_build(build_dir: Path) -> bool:
+    """Fail closed unless a t2/t3 tree is the exact production configuration."""
+    errors = production_build_identity_errors(build_dir)
+    if not errors:
+        print(f"{BLUE}==>{NC} production build identity verified")
+        return True
+    print(f"{RED}PRODUCTION BUILD PREFLIGHT FAILED{NC}: {build_dir}")
+    for error in errors:
+        print(f"    {error}")
+    print("    configure a separate Ninja Release tree with embedded stdlib, "
+          "VM fastpaths enabled, and sanitizers disabled")
+    return False
 
 
 @timed_phase("manifest/configure")
@@ -636,6 +717,9 @@ def _run_main(argv: List[str]) -> int:
               "(Ninja + Release in build/)")
         return 1
 
+    if tier in ("t2", "t3") and not validate_production_build(build_dir):
+        return 1
+
     kind = "profile" if exact_profile is not None else "tier"
     print(f"{BOLD}{kind} {tier}{NC}  build={build_dir}  "
           f"build_jobs={build_jobs}  ctest_jobs={ctest_jobs}")
@@ -644,13 +728,13 @@ def _run_main(argv: List[str]) -> int:
     if not refresh_cmake_manifest(build_dir, build_jobs):
         return 1
 
+    focused_selection = exact_profile is None and has_explicit_ctest_selection(extra)
     if exact_profile is not None:
         include = exact_ctest_regex(exact_profile.tests)
         exclude = ""
         not_covered = exact_profile.not_covered
     else:
-        include, exclude, not_covered = TIERS[tier]
-    focused_selection = exact_profile is None and has_explicit_ctest_selection(extra)
+        include, exclude, not_covered = tier_ctest_filters(tier, focused_selection)
     if focused_selection:
         focus_gap = f"unselected {tier} tests and auxiliary corpora"
         not_covered = f"{focus_gap}, {not_covered}" if not_covered else focus_gap

@@ -46,6 +46,36 @@ def lowering_test() -> ast.FunctionDef:
                 and node.name == '_test_xi_lowering_parser')
 
 
+def command_suite_names(command: str) -> tuple[str, ...]:
+    tree = ast.parse(Path(xisagen.__file__).read_text(encoding='utf-8'))
+    function = next(node for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name == command)
+
+    suites = None
+    for statement in function.body:
+        if (isinstance(statement, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == 'suites'
+                        for target in statement.targets)):
+            suites = statement.value
+        if (isinstance(statement, ast.For) and isinstance(statement.target, ast.Name)
+                and statement.target.id == 'suite' and isinstance(statement.iter, ast.Tuple)):
+            suites = statement.iter
+    assert isinstance(suites, ast.Tuple), command
+
+    def suite_name(expression: ast.expr) -> str:
+        if isinstance(expression, ast.Name):
+            return expression.id
+        if isinstance(expression, ast.Attribute):
+            return expression.attr
+        assert isinstance(expression, ast.Lambda), ast.dump(expression)
+        calls = [node for node in ast.walk(expression)
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+        assert len(calls) == 1
+        return calls[0].func.id
+
+    return tuple(suite_name(expression) for expression in suites.elts)
+
+
 def case_call(node: ast.AST) -> bool:
     return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
             and node.func.id in CASE_HELPERS)
@@ -366,18 +396,23 @@ class ReportingTests(unittest.TestCase):
         inventory = set('/'.join(row) for row in case_inventory(lowering_test()))
         selected = xisagen.XI_FAST_NEGATIVE_CASES
         self.assertTrue(selected < inventory)
+        self.assertEqual(len(selected), 4)
         self.assertEqual({name.split('/', 1)[0] for name in selected},
                          {'binding', 'discovery', 'source'})
 
-    def test_fast_profile_contains_no_nested_ninja_suite(self):
-        tree = ast.parse(Path(xisagen.__file__).read_text(encoding='utf-8'))
-        function = next(node for node in tree.body
-                        if isinstance(node, ast.FunctionDef)
-                        and node.name == 'cmd_test_fast')
-        names = {node.id for node in ast.walk(function) if isinstance(node, ast.Name)}
-        self.assertIn('_test_xi_lowering_build_artifacts', names)
-        self.assertNotIn('_test_xi_lowering_ninja_failed_edge', names)
-        self.assertNotIn('_test_xi_lowering_actual_ninja_edge', names)
+    def test_exhaustive_suite_inventory_contains_the_complete_fast_inventory(self):
+        exhaustive = command_suite_names('cmd_test')
+        fast = command_suite_names('cmd_test_fast')
+        exhaustive_only = {
+            '_test_xi_lowering_ninja_failed_edge',
+            '_test_xi_lowering_actual_ninja_edge',
+        }
+        self.assertEqual(exhaustive, SUITES)
+        self.assertEqual(set(fast), set(exhaustive) - exhaustive_only)
+        self.assertEqual(len(exhaustive), len(set(exhaustive)))
+        self.assertEqual(len(fast), len(set(fast)))
+        self.assertEqual(len(exhaustive), 16)
+        self.assertEqual(len(fast), 14)
 
     def test_expensive_discovery_probes_are_exhaustive_only(self):
         exhaustive_labels = set()
