@@ -1108,6 +1108,34 @@
         "tests/fixtures/canonical_run/time_sleep.xr",
         "tests/cli/run_canonical_source_route_tests.py"
       ]
+    },
+    {
+      "id": "core.coroutine.call.indirect",
+      "core_spec_contract": "invoke a callable through its exact closed target set, propagate suspension through a caller-owned continuation state, and keep normal resume and cancellation as distinct successors",
+      "program_encoding": "one frame-stable callable carrier, exact scalar arguments, separate resume and cancellation operand suffixes, and a signature whose effects include suspend and cancel with coroutine capability",
+      "decoder_verifier_evaluator": "bounded decode plus exact callable signature, target set, carrier stability, state, safepoint, successor, effect, capability, and live-value closure; the independent evaluator dispatches the selected target through a private child session",
+      "vm_implementation": "the VM resolves the callable target from Program data, owns a private child session, forwards its typed request, and resumes or cancels through the caller-local state without a TargetPlan or shared frame layout",
+      "aot_lowering": "BackendIR independently revalidates carrier stability and lowers each exact target to a private child-frame alternative; generated C dispatches on the callable target and contains no VM, compiler, or TargetPlan dependency",
+      "source_producer": "Xglobal closes the target union and projects the union of target effects and capabilities onto a function-parameter callsite; the source owner emits this operation only for an exact suspending callable signature and a captureless or otherwise frame-stable carrier",
+      "old_owner_deletion": "dynamic suspending dispatch is neither serialized as a TargetPlan nor reconstructed from a backend-only callee graph, compatibility opcode, fallback executor, or copied owner",
+      "status": "COROUTINE_INDIRECT_CALL_CANONICAL_ONLY",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "src/analysis/xglobal_producer.c",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_verify.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_indirect_coroutine_fixture.h",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/analysis/test_xglobal_summary.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
+      ]
     }
   ],
   "capability_groups": [

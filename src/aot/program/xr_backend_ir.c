@@ -49,6 +49,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
         case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:

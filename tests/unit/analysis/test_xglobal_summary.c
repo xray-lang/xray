@@ -8557,6 +8557,52 @@ TEST(global_evidence_closes_transitive_named_nested_function_calls) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_closes_suspending_callable_parameter_targets) {
+    setup_parser_session();
+    const char *source = "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
+                         "    return body(value)\n"
+                         "}\n"
+                         "fn suspended(value: i64) -> i64 {\n"
+                         "    Coro.yield()\n"
+                         "    return value * 2\n"
+                         "}\n"
+                         "fn answer() -> i64 { return apply(21, suspended) }\n";
+    XgGlobalEvidence ev = {0};
+    XaAnalyzer *analyzer = NULL;
+
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, NULL));
+    const XgBodySummary *apply = evidence_find_body_by_name(&ev, "apply");
+    const XgBodySummary *suspended = evidence_find_body_by_name(&ev, "suspended");
+    ASSERT_NOT_NULL(apply);
+    ASSERT_NOT_NULL(suspended);
+    ASSERT_EQ_UINT(apply->callsite_count, 1u);
+
+    const XgCallsiteSummary *call = xg_global_evidence_find_callsite(&ev, apply->callsite_start);
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(call->kind, XG_CALL_CLOSURE);
+    ASSERT_EQ_UINT(call->static_target_func_id, XG_NO_ID);
+    ASSERT_TRUE((call->flags & XG_CALL_TARGET_SET_VERIFIED) != 0u);
+    ASSERT_TRUE((call->flags & XG_CALL_MAY_SUSPEND) != 0u);
+    ASSERT_TRUE((call->callable_effect_union & XG_BODY_MAY_SUSPEND) != 0u);
+    ASSERT_EQ_UINT(call->callable_capability_union, XG_CAP_COROUTINE);
+
+    const XgCallableTargetSummary *targets = NULL;
+    uint32_t target_count = 0u;
+    ASSERT_TRUE(xg_global_evidence_callable_targets(&ev, call, &targets, &target_count));
+    ASSERT_EQ_UINT(target_count, 1u);
+    ASSERT_EQ_UINT(targets[0].target_func_id, suspended->func_id);
+    ASSERT_TRUE((targets[0].effect_bits & XG_BODY_MAY_SUSPEND) != 0u);
+    ASSERT_EQ_UINT(targets[0].capability_bits, XG_CAP_COROUTINE);
+
+    uint32_t composed_effects = 0u;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, apply, &composed_effects));
+    ASSERT_TRUE((composed_effects & XG_BODY_MAY_SUSPEND) != 0u);
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls) {
     setup_parser_session();
     const char *source = "extern \"C\" { fn cos(x: f64) -> f64 }\n"
@@ -15136,6 +15182,7 @@ RUN_TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites);
 RUN_TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_composes_recursive_direct_call_effects);
 RUN_TEST(global_evidence_closes_transitive_named_nested_function_calls);
+RUN_TEST(global_evidence_closes_suspending_callable_parameter_targets);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_methods);

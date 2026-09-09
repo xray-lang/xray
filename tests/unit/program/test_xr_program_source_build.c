@@ -1349,6 +1349,148 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     source_build_fixture_free(&fixture);
 }
 
+TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
+    static const char source[] = "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
+                                 "  return body(value)\n"
+                                 "}\n"
+                                 "fn suspended(value: i64) -> i64 {\n"
+                                 "  Coro.yield()\n"
+                                 "  return value * 2\n"
+                                 "}\n"
+                                 "fn answer() -> i64 { return apply(21, suspended) }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    ASSERT_NOT_NULL(product.program);
+
+    const XrValidatedProgram *program = product.program;
+    uint32_t entry = xr_validated_program_entry_function(program);
+    ASSERT_LT(entry, program->function_count);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT), 1u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED), 1u);
+    const XrValidatedFunction *entry_function = &program->functions[entry];
+    ASSERT_EQ_UINT(entry_function->coroutine_state_count, 2u);
+    ASSERT_EQ_UINT(entry_function->coroutine_safepoint_count, 1u);
+
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = product.program,
+        .profile = profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+
+    XrReferenceExecution *reference = NULL;
+    ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference));
+    XrReferenceOutcome reference_suspended = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_suspended.kind, XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_UINT(reference_suspended.safepoint_id, 0u);
+    ASSERT_EQ_UINT(reference_suspended.state_id, 1u);
+    XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
+    ASSERT_EQ_INT(reference_return.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(reference_return.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(reference_return.value.as.i64, 42);
+    xr_reference_execution_free(reference);
+
+    XrReferenceExecution *reference_cancel = NULL;
+    ASSERT_TRUE(xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference_cancel));
+    ASSERT_EQ_INT(xr_reference_execution_step(reference_cancel).kind,
+                  XR_REFERENCE_OUTCOME_SUSPENDED);
+    ASSERT_EQ_INT(xr_reference_execution_cancel(reference_cancel).kind,
+                  XR_REFERENCE_OUTCOME_CANCELLED);
+    xr_reference_execution_free(reference_cancel);
+
+    const XrVmDecodePolicy policies[] = {
+        XR_VM_DECODE_BASELINE_VIEW,
+        XR_VM_DECODE_FIXED_ROWS,
+    };
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions vm_options = xr_vm_code_default_options();
+        vm_options.decode_policy = policies[policy];
+        XrVmCodeDiagnostic vm_diagnostic;
+        XrVmCode *code = NULL;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &vm_options, &code, &vm_diagnostic),
+                      XR_VM_CODE_OK);
+        ASSERT_NOT_NULL(code);
+        ASSERT_EQ_INT(xr_vm_code_decode_policy(code), policies[policy]);
+
+        XrVmExecution *vm = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm));
+        XrVmOutcome vm_suspended = xr_vm_execution_step(vm);
+        ASSERT_EQ_INT(vm_suspended.kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_UINT(vm_suspended.safepoint_id, reference_suspended.safepoint_id);
+        ASSERT_EQ_UINT(vm_suspended.state_id, reference_suspended.state_id);
+        XrVmOutcome vm_return = xr_vm_execution_step(vm);
+        ASSERT_EQ_INT(vm_return.kind, XR_VM_OUTCOME_RETURN);
+        ASSERT_EQ_INT(vm_return.value.kind, XR_VM_VALUE_I64);
+        ASSERT_EQ_INT(vm_return.value.as.i64, reference_return.value.as.i64);
+        xr_vm_execution_free(vm);
+
+        XrVmExecution *vm_cancel = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm_cancel));
+        ASSERT_EQ_INT(xr_vm_execution_step(vm_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED);
+        xr_vm_execution_free(vm_cancel);
+        xr_vm_code_free(code);
+    }
+
+    XrBackendOptions backend_options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    XrBackendStatus backend_status =
+        xr_backend_ir_build(program, profile, &backend_options, &backend_ir, &backend_diagnostic);
+    if (backend_status != XR_BACKEND_OK)
+        fprintf(stderr,
+                "indirect coroutine AOT build failed: status=%s op=%u function=%u block=%u "
+                "instruction=%u\n",
+                xr_backend_status_name(backend_status), backend_diagnostic.operation_id,
+                backend_diagnostic.function_id, backend_diagnostic.block_id,
+                backend_diagnostic.instruction_id);
+    ASSERT_EQ_INT(backend_status, XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    const char *output_path =
+        source_fixture_output_path(XR_SOURCE_FIXTURE_FUNCTION_PARAMETER_SUSPENDING);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     static const char source[] = "import time\n"
                                  "fn answer() -> i64 {\n"
@@ -4098,9 +4240,8 @@ static bool inspect_read_existential_coroutine(const XrValidatedProgram *program
            owner_type->interface_id == borrow_type->interface_id;
 }
 
-static bool run_read_existential_coroutine_executors(const XrValidatedProgram *program,
-                                                     const XrTargetProfile *profile,
-                                                     uint32_t entry) {
+static bool run_read_existential_coroutine_executors(XrValidatedProgram *program,
+                                                     XrTargetProfile *profile, uint32_t entry) {
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = program,

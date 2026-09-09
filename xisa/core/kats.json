@@ -3456,7 +3456,9 @@
         "actual_result_type": "i64",
         "declared_result_type": "i64",
         "callable_error_type": "void",
-        "callable_panic_type": "void"
+        "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false
       },
       "expect": {
         "valid": true
@@ -3477,7 +3479,9 @@
         "actual_result_type": "i64",
         "declared_result_type": "i64",
         "callable_error_type": "ErrorCode",
-        "callable_panic_type": "void"
+        "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false
       },
       "expect": {
         "valid": false
@@ -3499,6 +3503,8 @@
         "declared_result_type": "i64",
         "callable_error_type": "void",
         "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false,
         "successor_count": 1,
         "trap": "provider-call-failed",
         "live_values": [
@@ -3546,6 +3552,8 @@
         "declared_result_type": "i64",
         "callable_error_type": "void",
         "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false,
         "successor_count": 1,
         "trap": "provider-call-failed",
         "live_values": [
@@ -3591,6 +3599,8 @@
         "callable_result_type": "i64",
         "callable_error_type": "ErrorCode",
         "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false,
         "error_argument_type": "ErrorCode",
         "panic_argument_type": "void"
       },
@@ -3614,6 +3624,8 @@
         "callable_result_type": "i64",
         "callable_error_type": "ErrorCode",
         "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false,
         "error_argument_type": "ErrorCode",
         "panic_argument_type": "void",
         "successor_count": 3,
@@ -3665,6 +3677,8 @@
         "callable_result_type": "i64",
         "callable_error_type": "ErrorCode",
         "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false,
         "error_argument_type": "ErrorCode",
         "panic_argument_type": "void",
         "successor_count": 3,
@@ -3715,7 +3729,57 @@
         "callable_result_type": "i64",
         "callable_error_type": "void",
         "callable_panic_type": "void",
+        "callable_may_suspend": false,
+        "callable_may_cancel": false,
         "error_argument_type": "void",
+        "panic_argument_type": "void"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "indirect-call-rejects-suspending-signature",
+      "operation": "core.call.indirect_direct",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callable_error_type": "void",
+        "callable_panic_type": "void",
+        "callable_may_suspend": true,
+        "callable_may_cancel": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "indirect-invoke-rejects-suspending-signature",
+      "operation": "core.call.indirect_invoke",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "normal_result_type": "i64",
+        "callable_result_type": "i64",
+        "callable_error_type": "ErrorCode",
+        "callable_panic_type": "void",
+        "callable_may_suspend": true,
+        "callable_may_cancel": true,
+        "error_argument_type": "ErrorCode",
         "panic_argument_type": "void"
       },
       "expect": {
@@ -3730,7 +3794,7 @@
         "target_identity_closed": true,
         "callable_signature": "fn(i64)->i64",
         "target_visible_signature": "fn(i64)->i64",
-        "result_ownership": "owner",
+        "result_ownership": "non-owner",
         "capture_type": "none",
         "target_has_receiver": false
       },
@@ -3769,7 +3833,7 @@
         "target_identity_closed": true,
         "callable_signature": "fn(i64)->i64",
         "target_visible_signature": "fn(bool)->i64",
-        "result_ownership": "owner",
+        "result_ownership": "non-owner",
         "capture_type": "none",
         "target_has_receiver": false
       },
@@ -4980,6 +5044,148 @@
             },
             {
               "exit": "trap7",
+              "flow": [],
+              "refusal": []
+            }
+          ]
+        }
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "coroutine-indirect-call-valid",
+      "operation": "core.coroutine.call.indirect",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 2,
+        "resume_state": 1,
+        "continuation_state": 1,
+        "callable_signature": true,
+        "exact_target_set": true,
+        "callable_carrier_frame_stable": true,
+        "callable_effects": [
+          "cancel",
+          "suspend"
+        ],
+        "callable_capabilities": [
+          "runtime.coroutine-suspension"
+        ],
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "scalar_non_owner_boundary": true,
+        "live_values": [
+          2
+        ],
+        "resume_edge_values": [
+          2
+        ],
+        "continuation_graph": {
+          "entries": {
+            "normal": 0,
+            "cancel": 1
+          },
+          "blocks": [
+            {
+              "exit": "return",
+              "flow": [],
+              "refusal": []
+            },
+            {
+              "exit": "cancel",
+              "flow": [],
+              "refusal": []
+            }
+          ]
+        }
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "coroutine-indirect-call-rejects-nonsuspending-signature",
+      "operation": "core.coroutine.call.indirect",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 2,
+        "resume_state": 1,
+        "continuation_state": 1,
+        "callable_signature": true,
+        "exact_target_set": true,
+        "callable_carrier_frame_stable": true,
+        "callable_effects": [
+          "call"
+        ],
+        "callable_capabilities": [],
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "scalar_non_owner_boundary": true,
+        "live_values": [],
+        "resume_edge_values": [],
+        "continuation_graph": {
+          "entries": {
+            "normal": 0,
+            "cancel": 1
+          },
+          "blocks": [
+            {
+              "exit": "return",
+              "flow": [],
+              "refusal": []
+            },
+            {
+              "exit": "cancel",
+              "flow": [],
+              "refusal": []
+            }
+          ]
+        }
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "coroutine-indirect-call-rejects-unstable-carrier",
+      "operation": "core.coroutine.call.indirect",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 2,
+        "resume_state": 1,
+        "continuation_state": 1,
+        "callable_signature": true,
+        "exact_target_set": true,
+        "callable_carrier_frame_stable": false,
+        "callable_effects": [
+          "cancel",
+          "suspend"
+        ],
+        "callable_capabilities": [
+          "runtime.coroutine-suspension"
+        ],
+        "callee_error_type": "void",
+        "callee_panic_type": "void",
+        "scalar_non_owner_boundary": true,
+        "live_values": [],
+        "resume_edge_values": [],
+        "continuation_graph": {
+          "entries": {
+            "normal": 0,
+            "cancel": 1
+          },
+          "blocks": [
+            {
+              "exit": "return",
+              "flow": [],
+              "refusal": []
+            },
+            {
+              "exit": "cancel",
               "flow": [],
               "refusal": []
             }

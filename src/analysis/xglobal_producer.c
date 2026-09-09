@@ -11387,9 +11387,11 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
         }
         callsite->callable_effect_union = effect_union;
         callsite->callable_capability_union = capability_union;
-        callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC);
+        callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_SUSPEND | XG_CALL_MAY_PANIC);
         if ((effect_union & XG_BODY_MAY_ERROR) != 0u)
             callsite->flags |= XG_CALL_MAY_ERROR;
+        if ((effect_union & XG_BODY_MAY_SUSPEND) != 0u)
+            callsite->flags |= XG_CALL_MAY_SUSPEND;
         if ((effect_union & XG_BODY_MAY_PANIC) != 0u)
             callsite->flags |= XG_CALL_MAY_PANIC;
         callsite->flags |= XG_CALL_ERROR_EFFECT_VERIFIED;

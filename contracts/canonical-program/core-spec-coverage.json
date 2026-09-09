@@ -1,9 +1,9 @@
 {
   "schema": "xray-core-spec-coverage/1",
-  "semantic_sha256": "64c7fec8231fd5ff5e5628cbc81f9cec7282ce52b5e5931f6b7b769a473505e8",
+  "semantic_sha256": "3e1a819236cf29266adc940d6b642aa4be3d794f4a7be284f2dbc2892167a323",
   "epoch": 1,
-  "operation_count": 56,
-  "normative_kat_count": 227,
+  "operation_count": 57,
+  "normative_kat_count": 232,
   "operations": [
     {
       "stable_id": 1,
@@ -1658,6 +1658,36 @@
     {
       "stable_id": 140,
       "spelling": "core.coroutine.suspend",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 141,
+      "spelling": "core.coroutine.call.indirect",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

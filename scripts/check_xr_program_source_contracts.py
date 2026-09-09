@@ -527,6 +527,7 @@ def validate(root: Path) -> None:
     }
     wave_five_coroutine_yield = {"core.coroutine.yield"}
     canonical_coroutine_call = {"core.coroutine.call.sealed"}
+    canonical_coroutine_indirect_call = {"core.coroutine.call.indirect"}
     canonical_coroutine_suspend = {"core.coroutine.suspend"}
     canonical_coroutine_cancel = {"core.cancel.publish"}
     wave_five_provider = {"core.provider.call"}
@@ -581,6 +582,8 @@ def validate(root: Path) -> None:
            for operation in wave_five_coroutine_yield},
         **{operation: "COROUTINE_CALL_CANONICAL_ONLY"
            for operation in canonical_coroutine_call},
+        **{operation: "COROUTINE_INDIRECT_CALL_CANONICAL_ONLY"
+           for operation in canonical_coroutine_indirect_call},
         **{operation: "COROUTINE_SUSPENSION_CANONICAL_ONLY"
            for operation in canonical_coroutine_suspend},
         **{operation: "COROUTINE_CANCEL_CANONICAL_ONLY"

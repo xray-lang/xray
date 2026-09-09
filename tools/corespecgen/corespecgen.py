@@ -337,6 +337,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "existential-project", "existential-reborrow-read", "existential-test",
             "provider-call", "output-group-i64",
             "coroutine-yield", "coroutine-suspend", "coroutine-call",
+            "coroutine-indirect-call",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -737,6 +738,8 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
                 and actual.get("callable_error_type") == "void"
                 and actual.get("callable_panic_type") == "void"
+                and actual.get("callable_may_suspend") is False
+                and actual.get("callable_may_cancel") is False
                 and (not has_trap_edge or trap_edge_valid))
     if validator == "indirect-invoke":
         error_type = actual.get("callable_error_type")
@@ -760,6 +763,8 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("panic_argument_type") == panic_type
                 and (not has_error or error_type != "panic-info")
                 and (not has_panic or panic_type == "panic-info")
+                and actual.get("callable_may_suspend") is False
+                and actual.get("callable_may_cancel") is False
                 and (not has_trap_edge or trap_edge_valid))
     if validator == "witness-call":
         ordinal = actual.get("slot_ordinal")
@@ -897,11 +902,12 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     if validator == "callable-pack":
         capture_type = actual.get("capture_type")
         shared = (actual.get("target_identity_closed") is True
-                  and actual.get("callable_signature") == actual.get("target_visible_signature")
-                  and actual.get("result_ownership") == "owner")
+                  and actual.get("callable_signature") == actual.get("target_visible_signature"))
         if capture_type == "none":
-            return shared and actual.get("target_has_receiver") is False
-        return (shared and actual.get("capture_kind") == "aggregate"
+            return (shared and actual.get("target_has_receiver") is False
+                    and actual.get("result_ownership") == "non-owner")
+        return (shared and actual.get("result_ownership") == "owner"
+                and actual.get("capture_kind") == "aggregate"
                 and actual.get("capture_type_ownership") == "affine"
                 and actual.get("capture_copy_contract") == "explicit"
                 and actual.get("capture_value_ownership") == "owner"
@@ -999,7 +1005,7 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and normalized == max(0, min(requested, 86400000))
                 and isinstance(actual.get("live_values"), list)
                 and actual.get("live_values") == actual.get("resume_edge_values"))
-    if validator == "coroutine-call":
+    if validator in {"coroutine-call", "coroutine-indirect-call"}:
         live = actual.get("live_values")
         owners = actual.get("owner_values", [])
         cancel_values = actual.get("cancel_edge_values", [])
@@ -1019,14 +1025,23 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
             and all(value in live for value in trap_values)
             and all(trap_values.count(owner) == 1 for owner in owners)
         )
+        target_valid = (
+            actual.get("callee_coroutine") is True
+            and actual.get("callee_suspend_kind") in {
+                "cooperative-yield", "timer-after-ms"
+            }
+        ) if validator == "coroutine-call" else (
+            actual.get("callable_signature") is True
+            and actual.get("exact_target_set") is True
+            and actual.get("callable_carrier_frame_stable") is True
+            and actual.get("callable_effects") == ["cancel", "suspend"]
+            and actual.get("callable_capabilities") == ["runtime.coroutine-suspension"]
+        )
         return (actual.get("result_type") == "void"
                 and trap_valid
                 and actual.get("resume_state") == actual.get("continuation_state")
                 and continuation_graph_valid(actual, cancel=True, trap=successor_count == 3)
-                and actual.get("callee_coroutine") is True
-                and actual.get("callee_suspend_kind") in {
-                    "cooperative-yield", "timer-after-ms"
-                }
+                and target_valid
                 and actual.get("callee_error_type") == "void"
                 and actual.get("callee_panic_type") == "void"
                 and actual.get("scalar_non_owner_boundary") is True

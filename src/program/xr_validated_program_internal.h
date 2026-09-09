@@ -295,4 +295,10 @@ XR_FUNC uint32_t xr_validated_function_scoped_affine_borrow_owner(
     const XrValidatedProgram *program, const XrValidatedFunction *function, uint32_t value_id,
     uint32_t block_id);
 
+/* Private query for a non-owning callable whose complete SSA provenance */
+/* terminates at a frame parameter or captureless static callable pack. */
+XR_FUNC bool xr_validated_function_frame_stable_callable(const XrValidatedProgram *program,
+                                                         const XrValidatedFunction *function,
+                                                         uint32_t value_id);
+
 #endif /* XR_VALIDATED_PROGRAM_INTERNAL_H */

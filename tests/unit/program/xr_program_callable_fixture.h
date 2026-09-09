@@ -11,7 +11,9 @@ typedef enum XrProgramCallableFixtureMutation {
     XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,
     XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
     XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
+    XR_CALLABLE_FIXTURE_DIRECT_SUSPENDING,
     XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
+    XR_CALLABLE_FIXTURE_INVOKE_SUSPENDING,
     XR_CALLABLE_FIXTURE_DIRECT_TRAP,
     XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER,
     XR_CALLABLE_FIXTURE_INVOKE_TRAP,
@@ -56,6 +58,14 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
     XrCoreIrCallableSignatureInput fallible_signature = direct_signature;
     fallible_signature.error_type_id = XR_CORE_TYPE_ERROR;
     fallible_signature.effect_mask |= XR_CORE_EFFECT_ERROR;
+    if (mutation == XR_CALLABLE_FIXTURE_DIRECT_SUSPENDING) {
+        direct_signature.effect_mask |= XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND;
+        direct_signature.capability_mask |= XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION;
+    }
+    if (mutation == XR_CALLABLE_FIXTURE_INVOKE_SUSPENDING) {
+        fallible_signature.effect_mask |= XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND;
+        fallible_signature.capability_mask |= XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION;
+    }
     XrCoreIrTypeInput types[] = {
         {
             .key = xr_callable_fixture_key("callable:type:capture"),
@@ -267,7 +277,6 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
     XrCoreIrKey drop_direct_copy[] = {direct_copy};
     XrCoreIrKey drop_direct[] = {direct_callable};
     XrCoreIrKey captureless_call[] = {captureless_callable};
-    XrCoreIrKey drop_captureless[] = {captureless_callable};
     XrCoreIrKey construct_fallible_capture[] = {value_42};
     XrCoreIrKey pack_fallible_capture[] = {fallible_capture};
     XrCoreIrKey invoke_operands[5] = {
@@ -322,7 +331,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
          .result = captureless_callable,
          .result_type_id = XR_CALLABLE_FIXTURE_DIRECT_TYPE,
          .result_category = XR_CORE_IR_VALUE,
-         .result_ownership = XR_CORE_IR_OWNER,
+         .result_ownership = XR_CORE_IR_NON_OWNER,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
          .immediate.key = captureless_target_key},
         {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
@@ -367,11 +376,6 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
          .result_type_id = XR_CORE_TYPE_VOID,
-         .operands = drop_captureless,
-         .operand_count = 1u,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
-        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
-         .result_type_id = XR_CORE_TYPE_VOID,
          .operands = drop_direct,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
@@ -386,7 +390,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
     XrCoreIrBlockInput entry_block = {
         .key = entry_block_key,
         .instructions = entry_instructions,
-        .instruction_count = 14u,
+        .instruction_count = 13u,
     };
 
     XrCoreIrKey normal_result = xr_callable_fixture_key("callable:value:normal-result");
@@ -472,13 +476,12 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
     };
     XrCoreIrKey trap_drop_operands[4][1] = {{0}};
     XrCoreIrInstructionInput trap_instructions[6] = {0};
-    uint32_t trap_argument_count = invoke_trap ? (lost_trap_owner ? 0u : 1u)
-                                               : (lost_trap_owner ? 3u : 4u);
+    uint32_t trap_argument_count =
+        invoke_trap ? (lost_trap_owner ? 0u : 1u) : (lost_trap_owner ? 3u : 4u);
     uint16_t trap_types[] = {
         invoke_trap ? XR_CALLABLE_FIXTURE_FALLIBLE_TYPE : XR_CALLABLE_FIXTURE_DIRECT_TYPE,
         XR_CALLABLE_FIXTURE_DIRECT_TYPE,
-        lost_trap_owner ? XR_CALLABLE_FIXTURE_FALLIBLE_TYPE
-                        : XR_CALLABLE_FIXTURE_DIRECT_TYPE,
+        lost_trap_owner ? XR_CALLABLE_FIXTURE_FALLIBLE_TYPE : XR_CALLABLE_FIXTURE_DIRECT_TYPE,
         XR_CALLABLE_FIXTURE_FALLIBLE_TYPE,
     };
     trap_instructions[0] = (XrCoreIrInstructionInput) {
@@ -488,15 +491,19 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .operand_count = trap_argument_count,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
+    uint32_t trap_instruction_count = 1u;
     for (uint32_t argument = 0u; argument < trap_argument_count; ++argument) {
+        bool captureless = !invoke_trap && argument == (lost_trap_owner ? 1u : 2u);
         trap_arguments[argument] = (XrCoreIrValueInput) {
             .key = trap_argument_keys[argument],
             .type_id = trap_types[argument],
             .category = XR_CORE_IR_VALUE,
-            .ownership = XR_CORE_IR_OWNER,
+            .ownership = captureless ? XR_CORE_IR_NON_OWNER : XR_CORE_IR_OWNER,
         };
+        if (captureless)
+            continue;
         trap_drop_operands[argument][0] = trap_argument_keys[argument];
-        trap_instructions[argument + 1u] = (XrCoreIrInstructionInput) {
+        trap_instructions[trap_instruction_count++] = (XrCoreIrInstructionInput) {
             .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
             .result_type_id = XR_CORE_TYPE_VOID,
             .operands = trap_drop_operands[argument],
@@ -504,7 +511,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
             .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
         };
     }
-    trap_instructions[trap_argument_count + 1u] = (XrCoreIrInstructionInput) {
+    trap_instructions[trap_instruction_count++] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_TRAP,
         .result_type_id = XR_CORE_TYPE_VOID,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
@@ -515,7 +522,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .arguments = trap_argument_count ? trap_arguments : NULL,
         .argument_count = trap_argument_count,
         .instructions = trap_instructions,
-        .instruction_count = trap_argument_count + 2u,
+        .instruction_count = trap_instruction_count,
     };
     XrCoreIrBlockInput entry_blocks[] = {entry_block, normal_block, error_block, trap_block};
     XrCoreIrFunctionInput entry = {

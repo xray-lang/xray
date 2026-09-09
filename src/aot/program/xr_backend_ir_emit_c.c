@@ -809,7 +809,9 @@ coroutine_suspension_instruction(const XrBackendFunction *function, uint32_t saf
                            (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND &&
                             candidate->immediate.coroutine_suspend.safepoint_id == safepoint_id) ||
                            (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
-                            candidate->immediate.coroutine_call.safepoint_id == safepoint_id);
+                            candidate->immediate.coroutine_call.safepoint_id == safepoint_id) ||
+                           (candidate->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT &&
+                            candidate->immediate.u32 == safepoint_id);
             if (!matches)
                 continue;
             if (found)
@@ -827,7 +829,7 @@ coroutine_suspension_instruction(const XrBackendFunction *function, uint32_t saf
  * instruction's live-operand tuple because that tuple is positionally
  * paired with the resume
  * block arguments. */
-static bool coroutine_live_operand_start(const XrBackendIR *ir,
+static bool coroutine_live_operand_start(const XrBackendIR *ir, const XrBackendFunction *function,
                                          const XrBackendInstruction *instruction,
                                          const XrBackendCoroutineSafepoint *point,
                                          uint32_t *start_out) {
@@ -839,6 +841,15 @@ static bool coroutine_live_operand_start(const XrBackendIR *ir,
         if (callee >= ir->function_count)
             return false;
         start = ir->functions[callee].parameter_count;
+    } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
+        if (instruction->operand_count == 0u || instruction->operands[0] >= function->value_count)
+            return false;
+        const XrValidatedType *callable =
+            xr_validated_program_type(ir->program, function->value_types[instruction->operands[0]]);
+        if (!callable || callable->kind != XR_CORE_IR_TYPE_CALLABLE ||
+            callable->signature_id >= ir->program->signature_count)
+            return false;
+        start = ir->program->signatures[callable->signature_id].parameter_count + 1u;
     } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND) {
         start = instruction->immediate.coroutine_suspend.request_operand_count;
     } else if (instruction->operation_id != XR_CORE_OP_CORE_COROUTINE_YIELD) {
@@ -913,6 +924,9 @@ static XrAotHostedPipeBindings hosted_pipe_bindings(const XrBackendIR *ir) {
     return bindings;
 }
 
+static bool callable_type_can_target(const XrBackendIR *ir, uint16_t callable_type,
+                                     uint32_t target_function);
+
 static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *ir,
                                             uint32_t function_id, uint8_t *state) {
     if (state[function_id] == 2u)
@@ -926,10 +940,18 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
             coroutine_suspension_instruction(function, safepoint, NULL);
         if (!instruction)
             return false;
-        if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
-            !emit_coroutine_frame_definition(
-                buffer, ir, instruction->immediate.coroutine_call.function_id, state))
-            return false;
+        if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+            if (!emit_coroutine_frame_definition(
+                    buffer, ir, instruction->immediate.coroutine_call.function_id, state))
+                return false;
+        } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
+            uint16_t callable_type = function->value_types[instruction->operands[0]];
+            for (uint32_t target = 0u; target < ir->function_count; ++target)
+                if (callable_type_can_target(ir, callable_type, target) &&
+                    ir->functions[target].coroutine_safepoint_count != 0u &&
+                    !emit_coroutine_frame_definition(buffer, ir, target, state))
+                    return false;
+        }
     }
     if (!append_format(buffer, "struct XrAotCoroutineFrame%u {\n    uint32_t state;\n",
                        function_id))
@@ -947,7 +969,7 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
             coroutine_suspension_instruction(function, safepoint, NULL);
         uint32_t live_operand_start = 0u;
         if (!instruction ||
-            !coroutine_live_operand_start(ir, instruction, point, &live_operand_start))
+            !coroutine_live_operand_start(ir, function, instruction, point, &live_operand_start))
             return false;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
             char storage[32];
@@ -963,6 +985,27 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
                             instruction->immediate.coroutine_call.function_id, safepoint) ||
              !append_format(buffer, "    uint8_t child_active_%u;\n", safepoint)))
             return false;
+        if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
+            uint16_t callable_type = function->value_types[instruction->operands[0]];
+            if (!append_text(buffer, "    union {\n"))
+                return false;
+            uint32_t child_count = 0u;
+            for (uint32_t target = 0u; target < ir->function_count; ++target) {
+                if (!callable_type_can_target(ir, callable_type, target) ||
+                    ir->functions[target].coroutine_safepoint_count == 0u)
+                    continue;
+                if (!append_format(buffer, "        XrAotCoroutineFrame%u target_%u;\n", target,
+                                   target))
+                    return false;
+                ++child_count;
+            }
+            if (child_count == 0u || !append_format(buffer,
+                                                    "    } child_%u;\n"
+                                                    "    uint32_t child_function_%u;\n"
+                                                    "    uint8_t child_active_%u;\n",
+                                                    safepoint, safepoint, safepoint))
+                return false;
+        }
     }
     if (!append_text(buffer, "};\n\n"))
         return false;
@@ -1937,6 +1980,190 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
                             callee->parameter_count, function_id, result);
 }
 
+static bool emit_indirect_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
+                                         const XrBackendFunction *function,
+                                         const XrBackendInstruction *instruction,
+                                         uint32_t function_id, uint32_t instruction_id) {
+    const XrValidatedSignature *signature = callable_signature(ir, function, instruction);
+    uint32_t safepoint_id = instruction->immediate.u32;
+    uint32_t callable_value = instruction->operands[0];
+    uint16_t callable_type = function->value_types[callable_value];
+    uint32_t parameter_prefix = signature ? signature->parameter_count + 1u : 0u;
+    const XrBackendCoroutineSafepoint *point = safepoint_id < function->coroutine_safepoint_count
+                                                   ? &function->coroutine_safepoints[safepoint_id]
+                                                   : NULL;
+    if (!signature || !point ||
+        !append_format(buffer,
+                       "        XrAotOutcome child_%u = xr_aot_make(4, 0, 0);\n"
+                       "        uint8_t child_sync_%u = UINT8_C(0);\n",
+                       instruction_id, instruction_id))
+        return false;
+    if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+        char storage[32];
+        const char *type = type_c_name(signature->result_type_id, storage);
+        if (!type ||
+            !append_format(buffer, "        %s child_result_%u = {0};\n", type, instruction_id))
+            return false;
+    }
+    if (!append_format(buffer,
+                       "        if (!frame->child_active_%u) {\n"
+                       "            frame->child_function_%u = v%u.function_id;\n"
+                       "            switch (frame->child_function_%u) {\n",
+                       safepoint_id, safepoint_id, callable_value, safepoint_id))
+        return false;
+    for (uint32_t target_id = 0u; target_id < ir->function_count; ++target_id) {
+        if (!callable_type_can_target(ir, callable_type, target_id))
+            continue;
+        const XrBackendFunction *target = &ir->functions[target_id];
+        const XrValidatedFunction *semantic_target = &ir->program->functions[target_id];
+        uint32_t receiver_count = semantic_target->has_receiver ? 1u : 0u;
+        if (target->parameter_count != signature->parameter_count + receiver_count ||
+            !append_format(buffer, "                case UINT32_C(%u):\n", target_id))
+            return false;
+        if (target->coroutine_safepoint_count == 0u) {
+            if (!append_format(buffer, "                    child_%u = xr_aot_fn_%u(xr_ctx",
+                               instruction_id, target_id))
+                return false;
+            if (receiver_count != 0u) {
+                char storage[32];
+                const char *capture_type = type_c_name(target->parameter_types[0], storage);
+                if (!capture_type || !append_format(buffer, ", *(const %s *)v%u.capture",
+                                                    capture_type, callable_value))
+                    return false;
+            }
+            for (uint32_t parameter = 0u; parameter < signature->parameter_count; ++parameter)
+                if (!append_format(buffer, ", v%u", instruction->operands[parameter + 1u]))
+                    return false;
+            if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+                !append_format(buffer, ", &child_result_%u", instruction_id))
+                return false;
+            if (!append_format(buffer,
+                               ");\n"
+                               "                    child_sync_%u = UINT8_C(1);\n"
+                               "                    break;\n",
+                               instruction_id))
+                return false;
+            continue;
+        }
+        if (!append_format(buffer,
+                           "                    { XrAotCoroutineFrame%u child_zero = {0};\n"
+                           "                      frame->child_%u.target_%u = child_zero; }\n",
+                           target_id, safepoint_id, target_id))
+            return false;
+        for (uint32_t parameter = 0u; parameter < target->parameter_count; ++parameter) {
+            if (parameter < receiver_count) {
+                char storage[32];
+                const char *capture_type = type_c_name(target->parameter_types[0], storage);
+                if (!capture_type ||
+                    !append_format(buffer,
+                                   "                    frame->child_%u.target_%u.parameter_0 = "
+                                   "*(const %s *)v%u.capture;\n",
+                                   safepoint_id, target_id, capture_type, callable_value))
+                    return false;
+            } else if (!append_format(
+                           buffer,
+                           "                    frame->child_%u.target_%u.parameter_%u = v%u;\n",
+                           safepoint_id, target_id, parameter,
+                           instruction->operands[1u + parameter - receiver_count])) {
+                return false;
+            }
+        }
+        if (!append_format(buffer,
+                           "                    frame->child_active_%u = UINT8_C(1);\n"
+                           "                    break;\n",
+                           safepoint_id))
+            return false;
+    }
+    if (!append_text(buffer, "                default:\n"
+                             "                    break;\n"
+                             "            }\n"
+                             "        }\n") ||
+        !append_format(buffer,
+                       "        if (frame->child_active_%u) {\n"
+                       "            switch (frame->child_function_%u) {\n",
+                       safepoint_id, safepoint_id))
+        return false;
+    for (uint32_t target_id = 0u; target_id < ir->function_count; ++target_id) {
+        if (!callable_type_can_target(ir, callable_type, target_id))
+            continue;
+        const XrBackendFunction *target = &ir->functions[target_id];
+        if (target->coroutine_safepoint_count == 0u)
+            continue;
+        if (!append_format(buffer,
+                           "                case UINT32_C(%u):\n"
+                           "                    child_%u = xr_aot_fn_%u_step("
+                           "xr_ctx, &frame->child_%u.target_%u, UINT8_C(0)",
+                           target_id, instruction_id, target_id, safepoint_id, target_id))
+            return false;
+        for (uint32_t parameter = 0u; parameter < target->parameter_count; ++parameter)
+            if (!append_format(buffer, ", frame->child_%u.target_%u.parameter_%u", safepoint_id,
+                               target_id, parameter))
+                return false;
+        if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+            !append_format(buffer, ", &child_result_%u", instruction_id))
+            return false;
+        if (!append_text(buffer, ");\n                    break;\n"))
+            return false;
+    }
+    if (!append_text(buffer, "                default:\n"
+                             "                    break;\n"
+                             "            }\n"
+                             "        }\n") ||
+        !append_format(buffer,
+                       "        if (!frame->child_active_%u && !child_sync_%u) "
+                       "return xr_aot_make(4, 0, 0);\n"
+                       "        if (child_%u.kind == UINT32_C(5)) {\n",
+                       safepoint_id, instruction_id, instruction_id))
+        return false;
+    for (uint32_t live = 0u; live < point->live_value_count; ++live)
+        if (!append_format(buffer, "            frame->live_%u_%u = v%u;\n", safepoint_id, live,
+                           instruction->operands[parameter_prefix + live]))
+            return false;
+    if (!append_format(buffer,
+                       "            frame->state = UINT32_C(%u);\n"
+                       "            child_%u.safepoint_id = UINT32_C(%u);\n"
+                       "            return child_%u;\n"
+                       "        }\n"
+                       "        frame->child_active_%u = UINT8_C(0);\n",
+                       point->resume_state_id, instruction_id, safepoint_id, instruction_id,
+                       safepoint_id))
+        return false;
+    if (instruction->successor_count == 3u) {
+        uint32_t trap_start = parameter_prefix + point->live_value_count +
+                              function->blocks[instruction->successors[1]].argument_count;
+        if (!append_format(buffer,
+                           "        if (child_%u.kind == UINT32_C(1) && child_%u.trap == 7) ",
+                           instruction_id, instruction_id) ||
+            !emit_parallel_edge(buffer, function, instruction, 2u, trap_start, function_id))
+            return false;
+    }
+    if (!append_format(buffer,
+                       "        if (child_%u.kind != UINT32_C(0)) {\n"
+                       "            frame->state = UINT32_MAX;\n"
+                       "            return child_%u;\n"
+                       "        }\n",
+                       instruction_id, instruction_id))
+        return false;
+    uint32_t implicit_result = signature->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+    char result_expression[64];
+    const char *result = NULL;
+    if (implicit_result != 0u) {
+        if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+            (void) snprintf(result_expression, sizeof(result_expression), "child_result_%u",
+                            instruction_id);
+        } else {
+            const char *field = outcome_field(signature->result_type_id);
+            if (!field)
+                return false;
+            (void) snprintf(result_expression, sizeof(result_expression), "child_%u.%s",
+                            instruction_id, field);
+        }
+        result = result_expression;
+    }
+    return emit_invoke_edge(buffer, function, instruction, 0u, implicit_result, parameter_prefix,
+                            function_id, result);
+}
+
 static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                              const XrBackendFunction *function,
                              const XrBackendInstruction *instruction, uint32_t function_id,
@@ -2085,6 +2312,9 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
             return emit_coroutine_call(buffer, ir, function, instruction, function_id,
                                        instruction_id);
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
+            return emit_indirect_coroutine_call(buffer, ir, function, instruction, function_id,
+                                                instruction_id);
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
             return emit_call(buffer, ir, function, instruction, function_id, instruction_id);
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
@@ -2422,7 +2652,8 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
             point ? coroutine_suspension_instruction(function, safepoint_id, NULL) : NULL;
         if (!suspension ||
             (suspension->successor_count != 2u &&
-             !(suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+             !((suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+                suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) &&
                suspension->successor_count == 3u)) ||
             !append_format(buffer, "            case UINT32_C(%u):\n", state))
             return false;
@@ -2452,14 +2683,59 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
                                "                frame->child_active_%u = UINT8_C(0);\n",
                                safepoint_id))
                 return false;
+        } else if (suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
+            const XrValidatedSignature *signature = callable_signature(ir, function, suspension);
+            uint16_t callable_type = function->value_types[suspension->operands[0]];
+            if (!signature || !append_format(buffer,
+                                             "                if (!frame->child_active_%u) "
+                                             "return xr_aot_make(4, 0, 0);\n"
+                                             "                XrAotOutcome cancel_%u = "
+                                             "xr_aot_make(4, 0, 0);\n",
+                                             safepoint_id, safepoint_id))
+                return false;
+            if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+                char storage[32];
+                const char *type = type_c_name(signature->result_type_id, storage);
+                if (!type || !append_format(buffer, "                %s cancel_result_%u = {0};\n",
+                                            type, safepoint_id))
+                    return false;
+            }
+            if (!append_format(buffer, "                switch (frame->child_function_%u) {\n",
+                               safepoint_id))
+                return false;
+            for (uint32_t target_id = 0u; target_id < ir->function_count; ++target_id) {
+                if (!callable_type_can_target(ir, callable_type, target_id) ||
+                    ir->functions[target_id].coroutine_safepoint_count == 0u)
+                    continue;
+                const XrBackendFunction *target = &ir->functions[target_id];
+                if (!append_format(buffer,
+                                   "                    case UINT32_C(%u):\n"
+                                   "                        cancel_%u = xr_aot_fn_%u_step("
+                                   "xr_ctx, &frame->child_%u.target_%u, UINT8_C(1)",
+                                   target_id, safepoint_id, target_id, safepoint_id, target_id))
+                    return false;
+                for (uint32_t parameter = 0u; parameter < target->parameter_count; ++parameter)
+                    if (!append_format(buffer, ", frame->child_%u.target_%u.parameter_%u",
+                                       safepoint_id, target_id, parameter))
+                        return false;
+                if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+                    !append_format(buffer, ", &cancel_result_%u", safepoint_id))
+                    return false;
+                if (!append_text(buffer, ");\n                        break;\n"))
+                    return false;
+            }
+            if (!append_format(buffer,
+                               "                    default:\n"
+                               "                        break;\n"
+                               "                }\n"
+                               "                frame->child_active_%u = UINT8_C(0);\n",
+                               safepoint_id))
+                return false;
         }
         const XrBackendBlock *cancel = &function->blocks[suspension->successors[1]];
-        uint32_t live_operand_start =
-            suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED
-                ? ir->functions[suspension->immediate.coroutine_call.function_id].parameter_count
-            : suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND
-                ? suspension->immediate.coroutine_suspend.request_operand_count
-                : 0u;
+        uint32_t live_operand_start = 0u;
+        if (!coroutine_live_operand_start(ir, function, suspension, point, &live_operand_start))
+            return false;
         uint32_t cancel_operand_start = live_operand_start + point->live_value_count;
         if (cancel_operand_start > suspension->operand_count ||
             cancel->argument_count > suspension->operand_count - cancel_operand_start)
@@ -2469,7 +2745,8 @@ static bool emit_coroutine_cancel_dispatch(CBuffer *buffer, const XrBackendIR *i
                                suspension->operands[live_operand_start + live], safepoint_id, live))
                 return false;
         }
-        if (suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+        if (suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+            suspension->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
             if (suspension->successor_count == 3u &&
                 (!append_format(buffer,
                                 "                if (cancel_%u.kind == UINT32_C(1) && "
@@ -2554,14 +2831,15 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
             if (!point || !suspension ||
                 !append_format(buffer, "        case UINT32_C(%u):\n", state))
                 return false;
+            uint32_t live_operand_start = 0u;
+            if (!coroutine_live_operand_start(ir, function, suspension, point, &live_operand_start))
+                return false;
             for (uint32_t live = 0; live < point->live_value_count; ++live) {
                 uint32_t target =
-                    suspension->operation_id != XR_CORE_OP_CORE_COROUTINE_CALL_SEALED
+                    suspension->operation_id != XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+                            suspension->operation_id != XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT
                         ? function->blocks[resume_block].argument_ids[live]
-                        : suspension->operands
-                              [ir->functions[suspension->immediate.coroutine_call.function_id]
-                                   .parameter_count +
-                               live];
+                        : suspension->operands[live_operand_start + live];
                 if (!append_format(buffer, "            v%u = frame->live_%u_%u;\n", target,
                                    safepoint_id, live))
                     return false;

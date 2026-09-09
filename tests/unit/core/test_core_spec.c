@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 56u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 57u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -91,6 +91,8 @@ static void test_operation_metadata(void) {
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_YIELD);
     const XrCoreOperationSpec *coroutine_call =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED);
+    const XrCoreOperationSpec *indirect_coroutine_call =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT);
     const XrCoreOperationSpec *cancel =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CANCEL_PUBLISH);
 
@@ -190,6 +192,21 @@ static void test_operation_metadata(void) {
     CHECK(coroutine_call->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION);
     CHECK(strcmp(coroutine_call->profile_dependency, "scheduler-suspension") == 0);
     CHECK(strcmp(coroutine_call->materialization, "logical-child-coroutine-control") == 0);
+    CHECK(indirect_coroutine_call != NULL);
+    CHECK(strcmp(indirect_coroutine_call->spelling, "core.coroutine.call.indirect") == 0);
+    CHECK(strcmp(indirect_coroutine_call->operation_class, "coroutine-call-terminator") == 0);
+    CHECK(indirect_coroutine_call->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
+    CHECK(indirect_coroutine_call->result_type == XR_CORE_TYPE_VOID);
+    CHECK(indirect_coroutine_call->successor_mask ==
+          (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_TRAP | XR_CORE_SUCCESSOR_CANCEL |
+           XR_CORE_SUCCESSOR_SUSPEND));
+    CHECK(indirect_coroutine_call->effect_mask ==
+          (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND));
+    CHECK(indirect_coroutine_call->capability_mask ==
+          XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION);
+    CHECK(strcmp(indirect_coroutine_call->profile_dependency, "scheduler-suspension") == 0);
+    CHECK(strcmp(indirect_coroutine_call->materialization,
+                 "logical-dynamic-child-coroutine-control") == 0);
     CHECK(cancel != NULL);
     CHECK(strcmp(cancel->spelling, "core.cancel.publish") == 0);
     CHECK(strcmp(cancel->operation_class, "termination") == 0);

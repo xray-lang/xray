@@ -1457,7 +1457,8 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_BOOL ||
            operation_id == XR_CORE_OP_CORE_ADD_I64 || operation_id == XR_CORE_OP_CORE_SUB_I64 ||
-           operation_id == XR_CORE_OP_CORE_COMPARE_I64 || operation_id == XR_CORE_OP_CORE_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_MUL_I64 || operation_id == XR_CORE_OP_CORE_COMPARE_I64 ||
+           operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
            operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
            operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
@@ -1466,6 +1467,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_AGGREGATE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
            operation_id == XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ ||
+           operation_id == XR_CORE_OP_CORE_CALLABLE_PACK ||
            operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
@@ -1475,6 +1477,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+           operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT ||
            operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
            operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_TRAP ||
            operation_id == XR_CORE_OP_CORE_RETURN;
@@ -1561,13 +1564,29 @@ static bool reference_child_execution_create(XrReferenceExecution *parent,
                                              XrReferenceExecution **child_out) {
     if (child_out)
         *child_out = NULL;
-    if (!parent || !parent->context || !instruction || !child_out ||
-        instruction->immediate.coroutine_call.function_id >=
-            parent->context->program->function_count)
+    if (!parent || !parent->context || !instruction || !child_out)
         return false;
+    bool indirect = instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT;
+    const XrReferenceCallableValue *carrier = NULL;
+    uint32_t source_argument = 0u;
+    uint32_t target_argument = 0u;
     uint32_t function_id = instruction->immediate.coroutine_call.function_id;
+    if (indirect) {
+        if (instruction->operand_count == 0u || !parent->initialized[instruction->operands[0]] ||
+            parent->values[instruction->operands[0]].category != XR_CORE_IR_VALUE ||
+            parent->values[instruction->operands[0]].as.value.kind != XR_REFERENCE_VALUE_CALLABLE)
+            return false;
+        carrier = parent->values[instruction->operands[0]].as.value.as.callable;
+        function_id = callable_function_id(parent->context->program, carrier);
+        source_argument = 1u;
+    }
+    if (function_id >= parent->context->program->function_count)
+        return false;
     const XrValidatedFunction *function = &parent->context->program->functions[function_id];
-    if (instruction->operand_count < function->parameter_count ||
+    uint32_t visible_parameters =
+        function->parameter_count - (carrier && carrier->has_capture ? 1u : 0u);
+    if (function->parameter_count < (carrier && carrier->has_capture ? 1u : 0u) ||
+        instruction->operand_count < source_argument + visible_parameters ||
         function->value_count > parent->context->budget.max_value_cells ||
         parent->depth == parent->context->budget.max_call_depth)
         return false;
@@ -1586,10 +1605,17 @@ static bool reference_child_execution_create(XrReferenceExecution *parent,
         xr_reference_execution_free(child);
         return false;
     }
-    for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
-        uint32_t source = instruction->operands[parameter];
-        uint32_t target = function->blocks[function->entry_block].argument_ids[parameter];
-        XrCoreIrValueCategory expected = function->parameter_modes[parameter] == XR_PARAM_REF
+    if (carrier && carrier->has_capture) {
+        uint32_t target = function->blocks[function->entry_block].argument_ids[0];
+        child->values[target].category = XR_CORE_IR_VALUE;
+        child->values[target].as.value = carrier->capture;
+        child->initialized[target] = true;
+        target_argument = 1u;
+    }
+    for (; target_argument < function->parameter_count; ++target_argument, ++source_argument) {
+        uint32_t source = instruction->operands[source_argument];
+        uint32_t target = function->blocks[function->entry_block].argument_ids[target_argument];
+        XrCoreIrValueCategory expected = function->parameter_modes[target_argument] == XR_PARAM_REF
                                              ? XR_CORE_IR_PLACE
                                              : XR_CORE_IR_VALUE;
         XrReferenceValue value = expected == XR_CORE_IR_PLACE && parent->values[source].as.place
@@ -1597,7 +1623,7 @@ static bool reference_child_execution_create(XrReferenceExecution *parent,
                                      : parent->values[source].as.value;
         if (!parent->initialized[source] || parent->values[source].category != expected ||
             !reference_value_matches_type(parent->context->program, value,
-                                          function->parameter_types[parameter])) {
+                                          function->parameter_types[target_argument])) {
             xr_reference_execution_free(child);
             return false;
         }
@@ -1735,17 +1761,42 @@ static bool reference_materialize_suspension_edge(XrReferenceExecution *executio
             operand_start = instruction->immediate.coroutine_suspend.request_operand_count;
         if (successor_index == 1u)
             operand_start += function->blocks[instruction->successors[0]].argument_count;
-    } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+    } else if ((instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+                instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) &&
                successor_index != 0u && instruction->successor_count <= 3u) {
+        bool indirect = instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT;
         uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
+        uint32_t parameter_prefix = 0u;
+        uint16_t result_type_id = XR_CORE_TYPE_VOID;
+        if (indirect) {
+            const XrReferenceCallableValue *carrier =
+                execution->values[instruction->operands[0]].as.value.as.callable;
+            callee_id = callable_function_id(execution->context->program, carrier);
+            const XrValidatedType *callable =
+                carrier ? xr_validated_program_type(execution->context->program,
+                                                    carrier->callable_type_id)
+                        : NULL;
+            const XrValidatedSignature *signature =
+                callable && callable->signature_id < execution->context->program->signature_count
+                    ? &execution->context->program->signatures[callable->signature_id]
+                    : NULL;
+            if (!signature)
+                return false;
+            parameter_prefix = signature->parameter_count + 1u;
+            result_type_id = signature->result_type_id;
+        }
         if (callee_id >= execution->context->program->function_count)
             return false;
         const XrValidatedFunction *callee = &execution->context->program->functions[callee_id];
+        if (!indirect) {
+            parameter_prefix = callee->parameter_count;
+            result_type_id = callee->result_type_id;
+        }
         const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
-        uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+        uint32_t implicit_result = result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
         if (normal->argument_count < implicit_result)
             return false;
-        operand_start = callee->parameter_count + normal->argument_count - implicit_result;
+        operand_start = parameter_prefix + normal->argument_count - implicit_result;
         if (successor_index == 2u)
             operand_start += function->blocks[instruction->successors[1]].argument_count;
     } else {
@@ -1824,14 +1875,17 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 break;
             }
             case XR_CORE_OP_CORE_ADD_I64:
-            case XR_CORE_OP_CORE_SUB_I64: {
+            case XR_CORE_OP_CORE_SUB_I64:
+            case XR_CORE_OP_CORE_MUL_I64: {
                 int64_t left = execution->values[instruction->operands[0]].as.value.as.i64;
                 int64_t right = execution->values[instruction->operands[1]].as.value.as.i64;
                 int64_t value = 0;
                 if (instruction->immediate.u32 == 0u) {
                     bool valid = instruction->operation_id == XR_CORE_OP_CORE_ADD_I64
                                      ? checked_add(left, right, &value)
-                                     : checked_sub(left, right, &value);
+                                 : instruction->operation_id == XR_CORE_OP_CORE_SUB_I64
+                                     ? checked_sub(left, right, &value)
+                                     : checked_mul(left, right, &value);
                     if (!valid) {
                         execution->finished = true;
                         reference_execution_release_lease(execution);
@@ -1841,9 +1895,12 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                         return result;
                     }
                 } else {
-                    value = i64_from_bits(instruction->operation_id == XR_CORE_OP_CORE_ADD_I64
-                                              ? (uint64_t) left + (uint64_t) right
-                                              : (uint64_t) left - (uint64_t) right);
+                    uint64_t bits = instruction->operation_id == XR_CORE_OP_CORE_ADD_I64
+                                        ? (uint64_t) left + (uint64_t) right
+                                    : instruction->operation_id == XR_CORE_OP_CORE_SUB_I64
+                                        ? (uint64_t) left - (uint64_t) right
+                                        : (uint64_t) left * (uint64_t) right;
+                    value = i64_from_bits(bits);
                 }
                 execution->values[instruction->result_id] = (EvalRuntimeValue) {
                     .category = XR_CORE_IR_VALUE,
@@ -1917,6 +1974,32 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->values[instruction->result_id] = (EvalRuntimeValue) {
                     .category = XR_CORE_IR_VALUE,
                     .as.value = aggregate->fields[instruction->immediate.field_ordinal],
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
+            case XR_CORE_OP_CORE_CALLABLE_PACK: {
+                XrReferenceCallableValue *carrier = allocate_callable(execution->context);
+                if (!carrier) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+                }
+                carrier->callable_type_id = instruction->result_type_id;
+                carrier->function_id = instruction->immediate.function_id;
+                carrier->has_capture = instruction->operand_count != 0u;
+                if (carrier->has_capture) {
+                    uint32_t capture_value = instruction->operands[0];
+                    carrier->capture_type_id = function->value_types[capture_value];
+                    carrier->capture = execution->values[capture_value].as.value;
+                }
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        {
+                            .kind = XR_REFERENCE_VALUE_CALLABLE,
+                            .as.callable = carrier,
+                        },
                 };
                 execution->initialized[instruction->result_id] = true;
                 break;
@@ -2208,11 +2291,14 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     execution->values[request_value].as.value.as.i64);
                 return result;
             }
-            case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED: {
+            case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
+            case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT: {
+                bool indirect =
+                    instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT;
                 uint32_t callee_id = instruction->immediate.coroutine_call.function_id;
-                uint32_t safepoint_id = instruction->immediate.coroutine_call.safepoint_id;
-                const XrValidatedFunction *callee =
-                    &execution->context->program->functions[callee_id];
+                uint32_t safepoint_id = indirect
+                                            ? instruction->immediate.u32
+                                            : instruction->immediate.coroutine_call.safepoint_id;
                 const XrValidatedCoroutineSafepoint *safepoint =
                     &function->coroutine_safepoints[safepoint_id];
                 if (!execution->child &&
@@ -2221,6 +2307,9 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     reference_execution_release_lease(execution);
                     return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
                 }
+                callee_id = execution->child->function_id;
+                const XrValidatedFunction *callee =
+                    &execution->context->program->functions[callee_id];
                 XrReferenceOutcome child = xr_reference_execution_step(execution->child);
                 if (child.kind == XR_REFERENCE_OUTCOME_SUSPENDED) {
                     execution->suspension_block_id = execution->block_id;
@@ -2265,8 +2354,30 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 }
                 const XrReferenceValue *implicit_result =
                     callee->result_type_id == XR_CORE_TYPE_VOID ? NULL : &child.value;
+                uint32_t parameter_prefix = callee->parameter_count;
+                if (indirect) {
+                    const XrReferenceCallableValue *carrier =
+                        execution->values[instruction->operands[0]].as.value.as.callable;
+                    const XrValidatedType *callable =
+                        carrier ? xr_validated_program_type(execution->context->program,
+                                                            carrier->callable_type_id)
+                                : NULL;
+                    if (!callable ||
+                        callable->signature_id >= execution->context->program->signature_count) {
+                        execution->finished = true;
+                        xr_reference_execution_free(execution->child);
+                        execution->child = NULL;
+                        reference_execution_release_lease(execution);
+                        return execution_outcome(execution,
+                                                 XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+                    }
+                    parameter_prefix =
+                        execution->context->program->signatures[callable->signature_id]
+                            .parameter_count +
+                        1u;
+                }
                 bool transferred = reference_execution_transfer_edge(
-                    execution, instruction, 0u, callee->parameter_count, implicit_result);
+                    execution, instruction, 0u, parameter_prefix, implicit_result);
                 xr_reference_execution_free(execution->child);
                 execution->child = NULL;
                 if (!transferred) {
@@ -2320,7 +2431,8 @@ XrReferenceOutcome xr_reference_execution_cancel(XrReferenceExecution *execution
         const XrValidatedInstruction *instruction = reference_suspension_instruction(execution);
         if (child.kind == XR_REFERENCE_OUTCOME_TRAP &&
             child.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED && instruction &&
-            instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+            (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+             instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) &&
             instruction->successor_count == 3u) {
             successor_index = 2u;
         } else if (child.kind != XR_REFERENCE_OUTCOME_CANCELLED) {

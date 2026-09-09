@@ -14,6 +14,7 @@
 #include "xr_program_panic_fixture.h"
 #include "xr_program_assert_fixture.h"
 #include "xr_program_coroutine_fixture.h"
+#include "xr_program_indirect_coroutine_fixture.h"
 #include "xr_program_ref_coroutine_fixture.h"
 #include "xr_program_coroutine_trap_fixture.h"
 #include "xr_program_cleanup_graph_fixture.h"
@@ -42,6 +43,8 @@ _Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id 
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_SUSPEND == 140, "coroutine suspension stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT == 141,
+               "indirect coroutine call stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted");
@@ -3686,7 +3689,8 @@ static void test_callable_pack_and_indirect_calls(void) {
 
     const XrProgramCallableFixtureMutation rejected[] = {
         XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH, XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
-        XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,         XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
+        XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,         XR_CALLABLE_FIXTURE_DIRECT_SUSPENDING,
+        XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,       XR_CALLABLE_FIXTURE_INVOKE_SUSPENDING,
         XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER,  XR_CALLABLE_FIXTURE_INVOKE_TRAP_BAD_TARGET,
         XR_CALLABLE_FIXTURE_INVOKE_TRAP_LOST_OWNER,
     };
@@ -3762,6 +3766,39 @@ static void test_coroutine_state_and_exact_liveness(void) {
                                                                 diagnostic, sizeof(diagnostic)) ==
               XR_PROGRAM_BUILD_OK);
         expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_indirect_coroutine_call_contract(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_indirect_coroutine_fixture_write(XR_PROGRAM_INDIRECT_COROUTINE_VALID,
+                                                      &artifact, diagnostic,
+                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    const struct {
+        XrProgramIndirectCoroutineMutation mutation;
+        XrProgramDiagnosticKind diagnostic;
+    } rejected[] = {
+        {XR_PROGRAM_INDIRECT_COROUTINE_BAD_IMMEDIATE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_INDIRECT_COROUTINE_BAD_SAFEPOINT, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_INDIRECT_COROUTINE_NONSUSPENDING_SIGNATURE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_INDIRECT_COROUTINE_NONCALLABLE_OPERAND, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_INDIRECT_COROUTINE_MISSING_LIVE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_INDIRECT_COROUTINE_MISSING_CANCEL_ARGUMENT, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+    };
+    for (size_t index = 0u; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
+        memset(&artifact, 0, sizeof(artifact));
+        memset(diagnostic, 0, sizeof(diagnostic));
+        CHECK(xr_program_indirect_coroutine_fixture_write(rejected[index].mutation, &artifact,
+                                                          diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, rejected[index].diagnostic);
         xr_program_artifact_free(&artifact);
     }
 }
@@ -4482,6 +4519,7 @@ int main(void) {
     test_existential_owned_read_reborrow();
     test_callable_pack_and_indirect_calls();
     test_coroutine_state_and_exact_liveness();
+    test_indirect_coroutine_call_contract();
     test_coroutine_cancel_cleanup_requires_exact_owner_transfer();
     test_coroutine_related_field_refs_require_one_live_storage_root();
     test_coroutine_child_trap_requires_recoverable_cleanup_inputs();

@@ -24,7 +24,7 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 56,
+  "operation_count": 57,
   "operations": [
     {
       "stable_id": 1,
@@ -469,6 +469,14 @@
     {
       "stable_id": 140,
       "spelling": "core.coroutine.suspend",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 141,
+      "spelling": "core.coroutine.call.indirect",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",

@@ -4217,9 +4217,11 @@ static bool resolved_callable_call_targets(const XrXiBuildContext *context, cons
                         call->xg_callable_capability_union == row->callable_capability_union;
     bool error_valid = evidence_valid && (((row->callable_effect_union & XG_BODY_MAY_ERROR) !=
                                            0u) == ((row->flags & XG_CALL_MAY_ERROR) != 0u));
+    bool suspend_valid = evidence_valid && (((row->callable_effect_union & XG_BODY_MAY_SUSPEND) !=
+                                             0u) == ((row->flags & XG_CALL_MAY_SUSPEND) != 0u));
     bool panic_valid = evidence_valid && (((row->callable_effect_union & XG_BODY_MAY_PANIC) !=
                                            0u) == ((row->flags & XG_CALL_MAY_PANIC) != 0u));
-    if (!evidence_valid || !mirror_valid || !error_valid || !panic_valid)
+    if (!evidence_valid || !mirror_valid || !error_valid || !suspend_valid || !panic_valid)
         return false;
     for (uint32_t index = 0u; index < target_count; ++index) {
         if (!find_xi_function_by_xg_id(context, targets[index].target_func_id))
@@ -5147,6 +5149,8 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                             call->id);
                     if ((((row->callable_effect_union & XG_BODY_MAY_ERROR) != 0u) !=
                          ((row->flags & XG_CALL_MAY_ERROR) != 0u)) ||
+                        (((row->callable_effect_union & XG_BODY_MAY_SUSPEND) != 0u) !=
+                         ((row->flags & XG_CALL_MAY_SUSPEND) != 0u)) ||
                         (((row->callable_effect_union & XG_BODY_MAY_PANIC) != 0u) !=
                          ((row->flags & XG_CALL_MAY_PANIC) != 0u)))
                         return fail(
@@ -5384,9 +5388,7 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
     if (value->op == XI_VARIANT_PROJECT)
         return value->nargs == 1u && value->args && value->args[0] &&
                logical_value_produces_owner(context, function, value->args[0], depth + 1u);
-    return value->op == XI_CLOSURE_NEW ||
-           (value->op == XI_GET_SHARED &&
-            resolved_shared_callable_target(context, function, value, NULL, NULL)) ||
+    return (value->op == XI_CLOSURE_NEW && value->nargs != 0u) ||
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
            value->xg_existential_kind == XI_EXISTENTIAL_PROJECT || value->op == XI_SUM_INJECT ||
            xi_copy_is_value_clone(value) || value->op == XI_SOURCE_MOVE ||
@@ -6262,7 +6264,7 @@ static XrProgramBuildStatus translate_callable_pack(XrXiBuildContext *context,
     instruction->operation_id = XR_CORE_OP_CORE_CALLABLE_PACK;
     instruction->result = value_key(function, value);
     instruction->result_type_id = callable_type_id;
-    instruction->result_ownership = XR_CORE_IR_OWNER;
+    instruction->result_ownership = value->nargs == 0u ? XR_CORE_IR_NON_OWNER : XR_CORE_IR_OWNER;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
     instruction->immediate.key = target_storage->key;
     if (value->nargs != 0u) {
@@ -6299,7 +6301,7 @@ translate_shared_callable_pack(XrXiBuildContext *context, XrXiFunctionStorage *f
     instruction->operation_id = XR_CORE_OP_CORE_CALLABLE_PACK;
     instruction->result = value_key(function, value);
     instruction->result_type_id = callable_type_id;
-    instruction->result_ownership = XR_CORE_IR_OWNER;
+    instruction->result_ownership = XR_CORE_IR_NON_OWNER;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
     instruction->immediate.key = target_storage->key;
     return XR_PROGRAM_BUILD_OK;
@@ -10047,15 +10049,19 @@ static bool coroutine_function_has_proven_suspend(const XrXiBuildContext *contex
     if (!plan || plan->nstates == 0u || !plan->points)
         return false;
     if (!stack || depth >= 64u)
-        return true;
+        return false;
     for (uint32_t ancestor = 0u; ancestor < depth; ++ancestor)
         if (stack[ancestor] == function)
             return false;
     stack[depth] = function;
     for (uint32_t point_index = 0u; point_index < plan->nstates; ++point_index) {
         const XiCoroSuspendPoint *point = &plan->points[point_index];
-        if (!point->op || point->kind != XI_CORO_SUSP_CALL)
+        if (!point->op)
+            return false;
+        if (point->kind == XI_CORO_SUSP_YIELD)
             return true;
+        if (point->kind != XI_CORO_SUSP_CALL)
+            return false;
         if (resolved_suspension_native_call(context, function, point->op))
             return true;
         if (point->resolved_callee) {
@@ -10065,7 +10071,35 @@ static bool coroutine_function_has_proven_suspend(const XrXiBuildContext *contex
             continue;
         }
         const XiCoroEdge *child = xi_coro_point_find_edge(point, XI_CORO_EDGE_CHILD);
-        if ((point->op->flags & XI_FLAG_MAY_SUSPEND) != 0u || !child || !child->indirect_child)
+        XrXiCallableTargetSet target_set = {0};
+        if (!child || !child->indirect_child || child->callee ||
+            !resolved_callable_call_targets(context, function, point->op, &target_set) ||
+            (target_set.callsite->flags & XG_CALL_MAY_SUSPEND) == 0u ||
+            (target_set.callsite->callable_effect_union & XG_BODY_MAY_SUSPEND) == 0u ||
+            (target_set.callsite->callable_capability_union & XG_CAP_COROUTINE) == 0u)
+            continue;
+        bool has_suspending_target = false;
+        bool targets_proven = true;
+        for (uint32_t target_index = 0u; target_index < target_set.target_count; ++target_index) {
+            const XgCallableTargetSummary *target_row = &target_set.targets[target_index];
+            const XiFunc *target = find_xi_function_by_xg_id(context, target_row->target_func_id);
+            const XrXiFunctionStorage *target_storage =
+                find_xi_function(context, target, NULL, NULL);
+            bool row_suspends = (target_row->effect_bits & XG_BODY_MAY_SUSPEND) != 0u;
+            bool storage_suspends = target_storage && (target_storage->closed_effect_mask &
+                                                       XR_CORE_EFFECT_SUSPEND) != 0u;
+            if (!target_storage || !target_storage->closed_contract_ready ||
+                row_suspends != storage_suspends ||
+                (row_suspends &&
+                 (!coroutine_function_has_proven_suspend(context, target, stack, depth + 1u) ||
+                  (target_storage->closed_capability_mask &
+                   XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION) == 0u))) {
+                targets_proven = false;
+                break;
+            }
+            has_suspending_target |= row_suspends;
+        }
+        if (targets_proven && has_suspending_target)
             return true;
     }
     return false;
@@ -10129,6 +10163,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
     const XiFunc *suspend_stack[64] = {0};
     if (yield_count == 0u && plan->is_coroutine && plan->analysis_complete &&
         plan->actions_materialized && plan->cfg_rewritten && xi_coro_plan_is_current(xi, plan) &&
+        (function->closed_effect_mask & XR_CORE_EFFECT_SUSPEND) == 0u &&
         !coroutine_function_has_proven_suspend(context, xi, suspend_stack, 0u))
         return XR_PROGRAM_BUILD_OK;
     if (!context || !xi || !output || !plan || !plan->is_coroutine || !plan->analysis_complete ||
@@ -10190,6 +10225,7 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         bool exact_suspend = point->kind == XI_CORO_SUSP_CALL &&
                              resolved_suspension_native_call(context, xi, point->op) != NULL;
         bool exact_call = false;
+        bool exact_indirect_call = false;
         if (!exact_suspend && point->kind == XI_CORO_SUSP_CALL &&
             (point->op->op == XI_CALL || point->op->op == XI_CALL_METHOD ||
              point->op->op == XI_CALL_METHOD_DIRECT)) {
@@ -10205,17 +10241,53 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
                          callee_plan->cfg_rewritten &&
                          xi_coro_plan_is_current(callee, callee_plan) &&
                          callee_plan->nstates != 0u && callee_plan->points;
-            for (uint32_t child_point = 0u; exact_call && child_point < callee_plan->nstates;
-                 ++child_point)
-                exact_call = callee_plan->points[child_point].state_id == child_point + 1u &&
-                             ((callee_plan->points[child_point].kind == XI_CORO_SUSP_YIELD &&
-                               exact_cooperative_yield_contract(
-                                   context, callee_storage, callee_plan->points[child_point].op)) ||
-                              (callee_plan->points[child_point].kind == XI_CORO_SUSP_CALL &&
-                               resolved_suspension_native_call(
-                                   context, callee, callee_plan->points[child_point].op)));
+            const XiFunc *callee_stack[64] = {0};
+            exact_call = exact_call &&
+                         coroutine_function_has_proven_suspend(context, callee, callee_stack, 0u);
         }
-        if (!exact_yield && !exact_suspend && !exact_call)
+        if (!exact_suspend && !exact_call && point->kind == XI_CORO_SUSP_CALL &&
+            point->op->op == XI_CALL && !point->resolved_callee) {
+            XrXiCallableTargetSet target_set = {0};
+            const XiCoroEdge *child = xi_coro_point_find_edge(point, XI_CORO_EDGE_CHILD);
+            exact_indirect_call =
+                child && !child->terminal && child->indirect_child && !child->callee &&
+                resolved_callable_call_targets(context, xi, point->op, &target_set) &&
+                (target_set.callsite->flags & XG_CALL_MAY_SUSPEND) != 0u &&
+                (target_set.callsite->callable_effect_union & XG_BODY_MAY_SUSPEND) != 0u &&
+                (target_set.callsite->callable_capability_union & XG_CAP_COROUTINE) != 0u;
+            bool has_suspending_target = false;
+            uint32_t effect_union = 0u;
+            uint32_t capability_union = 0u;
+            for (uint32_t target_index = 0u;
+                 exact_indirect_call && target_index < target_set.target_count; ++target_index) {
+                const XgCallableTargetSummary *target_row = &target_set.targets[target_index];
+                const XiFunc *target =
+                    find_xi_function_by_xg_id(context, target_row->target_func_id);
+                const XrXiFunctionStorage *target_storage =
+                    find_xi_function(context, target, NULL, NULL);
+                const XiFunc *target_stack[64] = {0};
+                bool row_suspends = (target_row->effect_bits & XG_BODY_MAY_SUSPEND) != 0u;
+                bool storage_suspends = target_storage && (target_storage->closed_effect_mask &
+                                                           XR_CORE_EFFECT_SUSPEND) != 0u;
+                exact_indirect_call =
+                    target && target_storage && target_storage->closed_contract_ready &&
+                    row_suspends == storage_suspends &&
+                    (!row_suspends ||
+                     (coroutine_function_has_proven_suspend(context, target, target_stack, 0u) &&
+                      (target_storage->closed_capability_mask &
+                       XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION) != 0u));
+                if (!exact_indirect_call)
+                    break;
+                has_suspending_target |= row_suspends;
+                effect_union |= target_row->effect_bits;
+                capability_union |= target_row->capability_bits;
+            }
+            exact_indirect_call =
+                exact_indirect_call && has_suspending_target &&
+                effect_union == target_set.callsite->callable_effect_union &&
+                capability_union == target_set.callsite->callable_capability_union;
+        }
+        if (!exact_yield && !exact_suspend && !exact_call && !exact_indirect_call)
             return fail(
                 diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                 "Xi function %s suspension %u is outside the active canonical Program slice",
@@ -10230,7 +10302,8 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
 
         function->coroutine_states[point->state_id].state_id = point->state_id;
         function->coroutine_states[point->state_id].continuation_block =
-            block_key(function, exact_call ? point->suspend_block : point->resume_block);
+            block_key(function, exact_call || exact_indirect_call ? point->suspend_block
+                                                                  : point->resume_block);
         function->coroutine_safepoints[point_index].safepoint_id = point_index;
         function->coroutine_safepoints[point_index].resume_state_id = point->state_id;
     }
@@ -11205,6 +11278,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
                                         : XR_PROGRAM_BUILD_INVALID_INPUT;
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
+    bool indirect = call.operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT;
     uint32_t implicit_result = call.result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
     const XrXiFunctionStorage *callee =
         point ? find_xi_function(context, point->resolved_callee, NULL, NULL) : NULL;
@@ -11212,6 +11286,32 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     const XrXiBlockStorage *trap_handler =
         trap_edge ? find_block_storage(function, trap_edge->handler) : NULL;
     uint32_t parameter_count = callee && callee->xi ? callee->xi->nparams : 0u;
+    if (indirect) {
+        const XiValue *carrier = point && point->op && point->op->nargs && point->op->args
+                                     ? logical_value_identity(point->op->args[0])
+                                     : NULL;
+        uint16_t callable_type_id = XR_CORE_TYPE_VOID;
+        const XrXiTypeStorage *callable_type = NULL;
+        if (carrier && map_callable_call_type(context, function->xi, point->op, carrier->type,
+                                              &callable_type_id, NULL))
+            callable_type = find_dynamic_type_by_id(context, callable_type_id);
+        if (!callable_type || !callable_type->callable_signature ||
+            callable_type->callable_signature->error_type_id != XR_CORE_TYPE_VOID ||
+            callable_type->callable_signature->panic_type_id != XR_CORE_TYPE_VOID ||
+            (callable_type->callable_signature->effect_mask &
+             (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND)) !=
+                (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) ||
+            (callable_type->callable_signature->capability_mask &
+             XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION) == 0u ||
+            callable_type->callable_signature->result_type_id != call.result_type_id ||
+            callable_type->callable_signature->parameter_count == UINT32_MAX) {
+            xr_free((void *) call.operands);
+            xr_free((void *) call.successors);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi coroutine callable has no exact infallible signature");
+        }
+        parameter_count = callable_type->callable_signature->parameter_count + 1u;
+    }
     const XiCoroPlan *plan = function && function->xi ? function->xi->coro_plan : NULL;
     const char *live_set_failure =
         coroutine_call_live_set_mismatch(context, function, resume, point, implicit_result);
@@ -11219,13 +11319,13 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         xr_free((void *) call.operands);
         xr_free((void *) call.successors);
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi coroutine call in b%u has no exact sealed child continuation: %s",
+                    "Xi coroutine call in b%u has no exact child continuation: %s",
                     block && block->xi ? block->xi->id : UINT32_MAX, live_set_failure);
     }
     const char *closure_failure = NULL;
     if (!resume)
         closure_failure = "resume block is absent";
-    else if (!callee)
+    else if (!callee && !indirect)
         closure_failure = "sealed callee is absent";
     else if (!plan)
         closure_failure = "coroutine plan is absent";
@@ -11233,10 +11333,12 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         closure_failure = "safepoint is outside the coroutine plan";
     else if (cancel_edge && !cancel_handler)
         closure_failure = "cancel handler is absent";
-    else if (call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION)
+    else if (!indirect && call.immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION)
         closure_failure = "call target is not a function key";
-    else if (!xr_core_ir_key_equal(call.immediate.key, callee->key))
+    else if (!indirect && !xr_core_ir_key_equal(call.immediate.key, callee->key))
         closure_failure = "call target disagrees with the sealed callee";
+    else if (indirect && call.immediate_kind != XR_CORE_IR_IMMEDIATE_NONE)
+        closure_failure = "indirect call retained an unexpected immediate";
     else if (call.successor_count != (trap_edge ? 1u : 0u) ||
              (trap_edge &&
               (!trap_handler || !call.successors ||
@@ -11250,7 +11352,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
         xr_free((void *) call.operands);
         xr_free((void *) call.successors);
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi coroutine call in b%u has no exact sealed child continuation: %s",
+                    "Xi coroutine call in b%u has no exact child continuation: %s",
                     block && block->xi ? block->xi->id : UINT32_MAX, closure_failure);
     }
     uint32_t live_count = resume->argument_count - implicit_result;
@@ -11298,11 +11400,17 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
                         : cancel_block_key(function, safepoint_id);
     if (trap_edge)
         successors[2] = call.successors[0];
-    instruction->operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
+    instruction->operation_id =
+        indirect ? XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT : XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
     instruction->result_type_id = XR_CORE_TYPE_VOID;
-    instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
-    instruction->immediate.coroutine_call.callee = callee->key;
-    instruction->immediate.coroutine_call.safepoint_id = safepoint_id;
+    if (indirect) {
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+        instruction->immediate.u32 = safepoint_id;
+    } else {
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
+        instruction->immediate.coroutine_call.callee = callee->key;
+        instruction->immediate.coroutine_call.safepoint_id = safepoint_id;
+    }
     instruction->operands = operands;
     instruction->operand_count = operand_count;
     instruction->successors = successors;
@@ -11417,7 +11525,8 @@ static bool input_operation_consumes_operand(const XrXiBuildContext *context,
         parameter_modes = callee->parameter_modes;
         parameter_count = callee->parameter_count;
     } else if (instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT ||
-               instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE) {
+               instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
+               instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
         if (instruction->operand_count == 0u)
             return false;
         uint16_t callable_type = XR_CORE_TYPE_VOID;

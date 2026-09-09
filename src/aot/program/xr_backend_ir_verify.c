@@ -122,6 +122,7 @@ static uint32_t instruction_trap_successor(const XrBackendIR *ir, const XrBacken
                                            const XrBackendInstruction *instruction) {
     switch (instruction->operation_id) {
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
             return instruction->successor_count == 3u ? 2u : XR_PROGRAM_LOCATION_NONE;
         case XR_CORE_OP_CORE_PROVIDER_CALL:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
@@ -151,6 +152,7 @@ static bool backend_instruction_is_terminal(uint16_t operation_id) {
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
         case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_TRAP:
         case XR_CORE_OP_CORE_CANCEL_PUBLISH:
@@ -241,6 +243,7 @@ static bool instruction_control_shape_valid(const XrBackendIR *ir,
         case XR_CORE_OP_CORE_COROUTINE_SUSPEND:
             return successors == 2u;
         case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
             return successors == 2u || successors == 3u;
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
@@ -285,6 +288,7 @@ static bool backend_call_authority(const XrBackendIR *ir, const XrBackendFunctio
             break;
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
             signature = callable_invoke_signature(ir, function, instruction);
             call->prefix = 1u;
             break;
@@ -511,7 +515,8 @@ static bool backend_edge_segment(const BackendOwnerCheck *check,
             BackendCallAuthority call;
             if (!backend_call_authority(check->ir, function, instruction, &call))
                 return false;
-            bool coroutine = instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
+            bool coroutine = instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+                             instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT;
             uint32_t typed =
                 coroutine ? 1u : invoke_typed_successor_count(check->ir, function, instruction);
             start = (uint64_t) call.prefix + call.count;
@@ -689,7 +694,8 @@ static bool cleanup_reason_flow_valid(const XrBackendIR *ir, uint32_t function_i
             const XrBackendInstruction *instruction = &block->instructions[i];
             bool suspension = instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
                               instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
-                              instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
+                              instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+                              instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT;
             valid = cleanup_exit_valid(instruction, reason) &&
                     (!suspension || reason == BACKEND_REASON_NORMAL);
             uint32_t trap = instruction_trap_successor(ir, function, instruction);
@@ -808,6 +814,8 @@ static bool coroutine_read_argument_is_frame_stable(const XrBackendIR *ir,
     if (scalar)
         return true;
     const XrValidatedFunction *validated = &ir->program->functions[function_id];
+    if (xr_validated_function_frame_stable_callable(ir->program, validated, borrow))
+        return true;
     uint32_t owner =
         xr_validated_function_scoped_affine_borrow_owner(ir->program, validated, borrow, block_id);
     if (owner >= function->value_count || function->value_categories[borrow] != XR_CORE_IR_VALUE ||
@@ -861,7 +869,8 @@ static bool cancel_continuation_matches(const XrBackendFunction *function,
                                         uint32_t live_operand_start) {
     if (!function || !instruction ||
         (instruction->successor_count != 2u &&
-         !(instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED &&
+         !((instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+            instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) &&
            instruction->successor_count == 3u)) ||
         instruction->successors[1] >= function->block_count || !point ||
         live_operand_start > instruction->operand_count ||
@@ -1026,6 +1035,11 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
                    instruction->immediate.coroutine_call.function_id < ir->function_count &&
                    instruction->immediate.coroutine_call.safepoint_id <
                        function->coroutine_safepoint_count &&
+                   (instruction->successor_count == 2u || instruction->successor_count == 3u);
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
+                   instruction->immediate.u32 < function->coroutine_safepoint_count &&
+                   callable_invoke_signature(ir, function, instruction) != NULL &&
                    (instruction->successor_count == 2u || instruction->successor_count == 3u);
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
@@ -1392,6 +1406,82 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                         uint32_t operand = callee->parameter_count + live;
                         uint32_t target = implicit_result + live;
                         uint32_t value = instruction->operands[operand];
+                        if (normal->argument_types[target] != function->value_types[value] ||
+                            normal->argument_categories[target] !=
+                                function->value_categories[value] ||
+                            normal->argument_ownerships[target] !=
+                                function->value_ownerships[value]) {
+                            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                      instruction->operation_id, function_id,
+                                                      block_id, instruction_id);
+                            return false;
+                        }
+                    }
+                }
+                if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT) {
+                    ++suspension_count;
+                    const XrValidatedSignature *signature =
+                        callable_invoke_signature(ir, function, instruction);
+                    uint32_t carrier = instruction->operand_count != 0u ? instruction->operands[0]
+                                                                        : XR_PROGRAM_LOCATION_NONE;
+                    uint32_t safepoint_id = instruction->immediate.u32;
+                    const XrBackendCoroutineSafepoint *point =
+                        &function->coroutine_safepoints[safepoint_id];
+                    const XrBackendBlock *normal = &function->blocks[instruction->successors[0]];
+                    uint32_t implicit_result =
+                        signature && signature->result_type_id != XR_CORE_TYPE_VOID ? 1u : 0u;
+                    uint32_t live_start = signature ? signature->parameter_count + 1u : UINT32_MAX;
+                    bool stable_carrier =
+                        carrier < function->value_count &&
+                        (function->value_ownerships[carrier] == XR_CORE_IR_OWNER ||
+                         xr_validated_function_frame_stable_callable(
+                             ir->program, &ir->program->functions[function_id], carrier));
+                    if (!signature || !stable_carrier ||
+                        signature->error_type_id != XR_CORE_TYPE_VOID ||
+                        signature->panic_type_id != XR_CORE_TYPE_VOID ||
+                        (signature->effect_mask &
+                         (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND)) !=
+                            (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) ||
+                        (signature->capability_mask &
+                         XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION) == 0u ||
+                        function->coroutine_states[point->resume_state_id].continuation_block !=
+                            block_id ||
+                        live_start > instruction->operand_count ||
+                        point->live_value_count > instruction->operand_count - live_start ||
+                        normal->argument_count != implicit_result + point->live_value_count ||
+                        !cancel_continuation_matches(function, instruction, point, live_start) ||
+                        !coroutine_trap_continuation_matches(function, instruction, point,
+                                                             live_start)) {
+                        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                  instruction->operation_id, function_id, block_id,
+                                                  instruction_id);
+                        return false;
+                    }
+                    if (implicit_result != 0u &&
+                        (normal->argument_types[0] != signature->result_type_id ||
+                         normal->argument_categories[0] != XR_CORE_IR_VALUE ||
+                         normal->argument_ownerships[0] != signature->result_ownership)) {
+                        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                  instruction->operation_id, function_id, block_id,
+                                                  instruction_id);
+                        return false;
+                    }
+                    for (uint32_t parameter = 0u; parameter < signature->parameter_count;
+                         ++parameter) {
+                        uint32_t value = instruction->operands[parameter + 1u];
+                        if (signature->parameter_modes[parameter] != XR_PARAM_READ ||
+                            function->value_types[value] != signature->parameter_types[parameter] ||
+                            function->value_categories[value] != XR_CORE_IR_VALUE ||
+                            function->value_ownerships[value] != XR_CORE_IR_NON_OWNER) {
+                            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
+                                                      instruction->operation_id, function_id,
+                                                      block_id, instruction_id);
+                            return false;
+                        }
+                    }
+                    for (uint32_t live = 0u; live < point->live_value_count; ++live) {
+                        uint32_t value = instruction->operands[live_start + live];
+                        uint32_t target = implicit_result + live;
                         if (normal->argument_types[target] != function->value_types[value] ||
                             normal->argument_categories[target] !=
                                 function->value_categories[value] ||

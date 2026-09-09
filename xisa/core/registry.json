@@ -1573,7 +1573,7 @@
       "materialization": "executor-private-callable-dispatch",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the packed closed target trace under the callable signature; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
+        "allowed_trace": "the packed closed non-suspending target trace under a callable signature without suspend/cancel effects or coroutine-suspension capability; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "indirect-call",
       "coverage": {
@@ -1652,7 +1652,7 @@
       "materialization": "executor-private-callable-dispatch-terminator",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the packed closed target selects one normal, typed-error, or typed-panic continuation; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
+        "allowed_trace": "the packed closed non-suspending target selects one normal, typed-error, or typed-panic continuation under a callable signature without suspend/cancel effects or coroutine-suspension capability; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "indirect-invoke",
       "coverage": {
@@ -3126,7 +3126,7 @@
         "operands": [
           "consume-capture-owner?"
         ],
-        "result": "callable-owner"
+        "result": "captureless-static-carrier-is-non-owner; captured-callable-is-owner"
       },
       "profile_dependency": "none",
       "materialization": "executor-private-callable-carrier",
@@ -4203,6 +4203,87 @@
         "allowed_trace": "one typed suspension request at the named safepoint followed by exactly one resume after readiness or one terminal cancellation continuation; timer-after-ms has exactly one i64 request value, normalizes non-positive values to immediate readiness and values above 86400000 to 86400000, and uses monotonic elapsed time; cancellation enters a separate reason-preserving subgraph whose ordinary edges retain cancellation and whose explicit exits publish cancellation; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "coroutine-suspend",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 141,
+      "spelling": "core.coroutine.call.indirect",
+      "class": "coroutine-call-terminator",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "C",
+          "P...",
+          "suspend-edge-values...",
+          "cancel-edge-values...",
+          "trap-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {
+          "safepoint_id": "function-local-safepoint-id"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": true,
+        "cancel": true,
+        "suspend": true
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call",
+        "cancel",
+        "suspend"
+      ],
+      "capability_requirements": [
+        "runtime.coroutine-suspension"
+      ],
+      "ownership": {
+        "operands": [
+          "callable-borrow",
+          "parameter-mode...",
+          "live-across-preserve..."
+        ],
+        "result": "selected callable result and live-across values are successor block arguments"
+      },
+      "profile_dependency": "scheduler-suspension",
+      "materialization": "logical-dynamic-child-coroutine-control",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "the frame-stable callable carrier selects one target admitted by its exact closed target set; a non-suspending target completes synchronously, while a suspending target resumes the same private child execution until return, cancellation, or provider-failed trap; continuation ownership and reason domains are identical to a sealed coroutine call"
+      },
+      "kat_validator": "coroutine-indirect-call",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",
