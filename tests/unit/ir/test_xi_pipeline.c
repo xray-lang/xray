@@ -3980,6 +3980,29 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(missing_allocation_identity_artifact.bytes == NULL);
     empty_class_callsite->receiver_static_class_id = saved_allocation_class_id;
 
+    XiBlock *empty_class_success_block = empty_class_allocation->block->succs[1];
+    PIPELINE_TEST_REQUIRE(empty_class_success_block != NULL);
+    PIPELINE_TEST_REQUIRE(empty_class_success_block->npreds == 1u);
+    PIPELINE_TEST_REQUIRE(empty_class_success_block->phis == NULL);
+    PIPELINE_TEST_REQUIRE(empty_class_allocation->args != NULL);
+    PIPELINE_TEST_REQUIRE(empty_class_allocation->args[0] != NULL);
+    uint32_t saved_existential_next_value_id = existential_function->next_value_id;
+    XiPhi *carrier_phi = xi_phi_new(existential_function, empty_class_success_block,
+                                    empty_class_allocation->args[0]->type, 1u);
+    PIPELINE_TEST_REQUIRE(carrier_phi != NULL);
+    PIPELINE_TEST_REQUIRE(carrier_phi->value.args != NULL);
+    carrier_phi->value.args[0] = empty_class_allocation->args[0];
+    XrProgramArtifact escaped_class_carrier_artifact = {0};
+    memset(producer_diagnostic, 0, sizeof(producer_diagnostic));
+    XrProgramBuildStatus escaped_class_carrier_status =
+        xr_program_write_from_xi(&producer_input, &escaped_class_carrier_artifact,
+                                 producer_diagnostic, sizeof(producer_diagnostic));
+    PIPELINE_TEST_REQUIRE(escaped_class_carrier_status == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
+    PIPELINE_TEST_REQUIRE(escaped_class_carrier_artifact.bytes == NULL);
+    PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "GET_SHARED") != NULL);
+    empty_class_success_block->phis = carrier_phi->next;
+    existential_function->next_value_id = saved_existential_next_value_id;
+
     XiBlockKind saved_error_block_kind = empty_class_error_block->kind;
     empty_class_error_block->kind = XI_BLOCK_PLAIN;
     XrProgramArtifact nonmechanical_allocation_error_artifact = {0};

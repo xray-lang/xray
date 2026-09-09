@@ -9563,6 +9563,27 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             bc->producer, target_module_id, callee->as.member_access.name);
         XgClassNameRow *module_class =
             body_resolve_module_member_class(bc, &callee->as.member_access);
+        XrType *analyzer_result_type =
+            bc->producer->analyzer && bc->producer->analyzer->node_table
+                ? xa_node_table_get_type((const XaNodeTable *) bc->producer->analyzer->node_table,
+                                         call)
+                : NULL;
+        XgClassId selected_module_class_id =
+            member_selection && member_selection->kind == XA_SEL_MODULE_EXPORT &&
+                    analyzer_target_symbol && analyzer_target_symbol->kind == XA_SYM_CLASS
+                ? producer_lookup_class_from_analyzer_type(bc->producer, analyzer_result_type)
+                : XG_NO_ID;
+        XgClassNameRow *selected_module_class =
+            selected_module_class_id != XG_NO_ID
+                ? producer_lookup_class_row_by_id(bc->producer, selected_module_class_id)
+                : NULL;
+        if (module_class && selected_module_class &&
+            module_class->class_id != selected_module_class->class_id) {
+            bc->producer->failed = true;
+            return;
+        }
+        if (!module_class)
+            module_class = selected_module_class;
         XgClassSummary *module_class_summary =
             module_class && module_class->summary_index < bc->evidence->nclasses
                 ? &bc->evidence->classes[module_class->summary_index]

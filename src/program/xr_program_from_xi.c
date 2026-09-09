@@ -19,6 +19,7 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi.h"
+#include "../ir/xi_analysis.h"
 #include "../ir/xi_cleanup.h"
 #include "../ir/xi_coro_analyze.h"
 #include "../ir/xi_coro_lower.h"
@@ -2031,6 +2032,10 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
             continue;
         if (block->control == value)
             return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            for (uint16_t argument = 0u; argument < phi->value.nargs; ++argument)
+                if (phi->value.args && phi->value.args[argument] == value)
+                    return false;
         for (uint32_t value_index = 0; block && value_index < block->nvalues; ++value_index) {
             const XiValue *consumer = block->values[value_index];
             for (uint16_t argument = 0; consumer && argument < consumer->nargs; ++argument) {
@@ -2593,45 +2598,53 @@ static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, con
     return find_xi_function_by_xg_id(context, row->static_target_func_id);
 }
 
-/* A source `C()` with no declared constructor still uses the runtime shared
- * namespace carrier in Xi.  That carrier is phase-only in Program, but it may
- * disappear only when the Xi allocation marker, the caller module's exact
- * shared-slot class table, and the Xglobal class-allocation row all name the
- * same declaration.  Restrict this normalization to fieldless declarations;
- * defaults need a future explicit value graph and must not be guessed here. */
+/* A source `C()` with no declared constructor still uses a class carrier in
+ * Xi. The carrier is
+ * phase-only in Program, but it may disappear only when
+ * its exact local, imported, or namespace
+ * export resolution and the Xglobal
+ * class-allocation row name the same declaration. Restrict
+ * this normalization
+ * to fieldless declarations; defaults need an explicit value graph. */
 static const XiClassData *resolved_empty_class_allocation(const XrXiBuildContext *context,
                                                           const XiFunc *caller,
                                                           const XiValue *call) {
-    if (!context || !caller || !call || call->op != XI_CALL || call->nargs != 1u || !call->args)
+    if (!context || !context->source || !context->source->global_evidence || !caller || !call ||
+        (call->op != XI_CALL && call->op != XI_CALL_METHOD) || call->nargs != 1u || !call->args ||
+        !call->type || call->type->kind != XR_KIND_INSTANCE || call->type->is_nullable)
         return NULL;
-    const XiValue *callee = logical_value_identity(call->args[0]);
     const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
-    if (!callee || callee->op != XI_GET_SHARED || callee->aux_int < 0 || !row ||
-        row->kind != XG_CALL_CLASS_ALLOC || row->receiver_static_class_id == XG_NO_ID)
+    if (!row || row->kind != XG_CALL_CLASS_ALLOC || row->receiver_static_class_id == XG_NO_ID ||
+        row->arg_count != 0u)
         return NULL;
     uint32_t module_index = UINT32_MAX;
-    if (!find_collected_xi_function_module(context, caller, &module_index) ||
-        module_index >= context->source->module_count)
-        return NULL;
-    const XiFunc *root = context->source->module_roots[module_index];
-    const XiModule *module = root ? root->module : NULL;
-    uint32_t slot = (uint32_t) callee->aux_int;
-    if (!module || slot >= module->nslots || !module->slot_classes)
-        return NULL;
-    const XiClassData *class_data = module->slot_classes[slot];
-    if (!class_data || class_data->xg_class_id != row->receiver_static_class_id ||
-        class_data->instance_field_count != 0u)
+    const XiClassData *class_data = resolved_class_carrier(
+        context, caller, call->args[0], row->receiver_static_class_id, &module_index);
+    if (!class_data || module_index >= context->source->module_count ||
+        class_data->instance_field_count != 0u || class_data->is_generic_skeleton)
         return NULL;
     for (uint16_t method = 0u; method < class_data->nmethod; ++method)
         if (class_data->methods && class_data->methods[method].is_constructor &&
             !class_data->methods[method].is_static)
             return NULL;
     const XrClassInfo *info = nominal_info_for_type(call->type);
+    uint8_t decl_kind = 0u;
+    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    uint64_t nominal_key = 0u;
     const XgClassSummary *class_row =
         find_xg_class_by_id(context->source->global_evidence, row->receiver_static_class_id);
-    if (!info || !class_row || info->xg_decl_id != class_row->decl_id ||
-        (class_row->decl_kind != XG_DECL_CLASS && class_row->decl_kind != XG_DECL_STRUCT) ||
-        !nominal_contract(context, call->type, NULL, NULL, NULL))
+    const XgDeclSummary *decl_row =
+        class_row ? find_xg_decl_by_id(context->source->global_evidence, class_row->decl_id) : NULL;
+    if (!info || !class_row || !decl_row ||
+        class_row->module_id != (XgModuleId) (module_index + 1u) ||
+        decl_row->module_id != class_row->module_id || class_row->class_id != info->xg_class_id ||
+        class_row->class_id != class_data->xg_class_id || class_row->decl_id != info->xg_decl_id ||
+        decl_row->decl_id != class_row->decl_id || class_row->decl_kind != XG_DECL_CLASS ||
+        decl_row->kind != XG_DECL_CLASS || class_row->parent_class_id != XG_NO_ID ||
+        (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u ||
+        !nominal_contract(context, call->type, &decl_kind, &nominal_kind, &nominal_key) ||
+        decl_kind != XG_DECL_CLASS || nominal_kind != XR_CORE_IR_NOMINAL_CLASS ||
+        nominal_key != info->xg_nominal_key || decl_row->nominal_key != nominal_key)
         return NULL;
     return class_data;
 }
@@ -2837,13 +2850,13 @@ static const XiClassData *resolved_canonical_class_construction(const XrXiBuildC
 }
 
 /* A value-struct literal is physical Xi allocation followed by one AGG_SET per
- * field.  Canonical
- * Program has no uninitialized aggregate state: collapse
- * that exact sequence into one logical
+ * field. Canonical
+ * Program has no uninitialized aggregate state: collapse that
+ * exact sequence into one logical
  * aggregate.construct only after the
  * specialized nominal declaration, detached layout, Xglobal
  * field table and
- * every initializer operand agree.  This is also the point where a
+ * every initializer operand agree. This is also the point where a
  *
  * monomorphized Box$i64 becomes a distinct Program TypeId; the open Box<T>
  * skeleton is never a
@@ -2884,24 +2897,31 @@ static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildC
     uint8_t decl_kind = 0u;
     XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
     uint64_t nominal_key = 0u;
-    if (!class_data || !class_row || !decl_row || module_index >= context->source->module_count ||
-        class_data->xg_class_id != class_row->class_id || class_row->decl_id != info->xg_decl_id ||
-        decl_row->decl_id != info->xg_decl_id || decl_row->nominal_key != info->xg_nominal_key ||
-        class_row->module_id != (XgModuleId) (module_index + 1u) ||
-        decl_row->module_id != class_row->module_id || class_row->decl_kind != XG_DECL_STRUCT ||
-        decl_row->kind != XG_DECL_STRUCT || class_row->parent_class_id != XG_NO_ID ||
-        (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u || class_data->is_generic_skeleton ||
-        (((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) != class_data->is_monomorphized) ||
-        class_data->struct_layout == NULL ||
-        !xr_aggregate_layout_semantically_equal(class_data->struct_layout, layout) ||
-        class_data->instance_field_count != layout->field_count ||
-        class_row->field_count != layout->field_count ||
-        (layout->field_count != 0u &&
-         (!class_data->instance_field_names || !class_data->instance_field_types ||
-          !class_data->instance_field_source_node_ids)) ||
-        !nominal_contract(context, allocation->type, &decl_kind, &nominal_kind, &nominal_key) ||
-        decl_kind != XG_DECL_STRUCT || nominal_kind != XR_CORE_IR_NOMINAL_STRUCT ||
-        nominal_key != info->xg_nominal_key)
+    bool identity_exact =
+        class_data && class_row && decl_row && module_index < context->source->module_count &&
+        class_data->xg_class_id == class_row->class_id && class_row->decl_id == info->xg_decl_id &&
+        decl_row->decl_id == info->xg_decl_id && decl_row->nominal_key == info->xg_nominal_key &&
+        class_row->module_id == (XgModuleId) (module_index + 1u) &&
+        decl_row->module_id == class_row->module_id;
+    bool declaration_exact = identity_exact && class_row->decl_kind == XG_DECL_STRUCT &&
+                             decl_row->kind == XG_DECL_STRUCT &&
+                             class_row->parent_class_id == XG_NO_ID;
+    bool specialization_exact =
+        declaration_exact && (class_row->flags & XG_CLASS_GENERIC_SKELETON) == 0u &&
+        !class_data->is_generic_skeleton &&
+        (((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) == class_data->is_monomorphized);
+    bool layout_exact = specialization_exact && class_data->struct_layout &&
+                        xr_aggregate_layout_semantically_equal(class_data->struct_layout, layout) &&
+                        class_data->instance_field_count == layout->field_count &&
+                        class_row->field_count == layout->field_count &&
+                        (layout->field_count == 0u ||
+                         (class_data->instance_field_names && class_data->instance_field_types &&
+                          class_data->instance_field_source_node_ids));
+    bool nominal_exact =
+        nominal_contract(context, allocation->type, &decl_kind, &nominal_kind, &nominal_key) &&
+        decl_kind == XG_DECL_STRUCT && nominal_kind == XR_CORE_IR_NOMINAL_STRUCT &&
+        nominal_key == info->xg_nominal_key;
+    if (!layout_exact || !nominal_exact)
         return NULL;
 
     if ((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) {
@@ -2945,74 +2965,98 @@ static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildC
     uint32_t initialization_count = 0u;
     bool saw_allocation = false;
     bool saw_non_initializer_use = false;
-    for (uint32_t block_index = 0u; block_index < caller->nblocks; ++block_index) {
-        const XiBlock *block = caller->blocks[block_index];
-        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
-            const XiValue *value = block->values[value_index];
-            if (value == allocation) {
-                if (block != allocation->block || saw_allocation)
+    const XiBlock *allocation_block = allocation->block;
+    for (const XiPhi *phi = allocation_block->phis; phi; phi = phi->next)
+        for (uint16_t argument = 0u; argument < phi->value.nargs; ++argument)
+            if (phi->value.args && logical_value_identity(phi->value.args[argument]) == allocation)
+                return NULL;
+    for (uint32_t value_index = 0u; value_index < allocation_block->nvalues; ++value_index) {
+        const XiValue *value = allocation_block->values[value_index];
+        if (value == allocation) {
+            if (saw_allocation)
+                return NULL;
+            saw_allocation = true;
+            continue;
+        }
+        for (uint16_t argument = 0u; value && argument < value->nargs; ++argument) {
+            if (!value->args || logical_value_identity(value->args[argument]) != allocation)
+                continue;
+            bool initializer = value->op == XI_AGG_SET && argument == 0u;
+            if (!initializer) {
+                if (!saw_allocation || initialization_count != layout->field_count)
                     return NULL;
-                saw_allocation = true;
+                saw_non_initializer_use = true;
                 continue;
             }
-            for (uint16_t argument = 0u; value && argument < value->nargs; ++argument) {
-                if (!value->args || logical_value_identity(value->args[argument]) != allocation)
-                    continue;
-                bool initializer = value->op == XI_AGG_SET && argument == 0u;
-                if (!initializer) {
-                    if (block == allocation->block && saw_allocation &&
-                        initialization_count == layout->field_count)
-                        saw_non_initializer_use = true;
-                    else
-                        return NULL;
-                    continue;
-                }
-                uint32_t ordinal = value->aux_int >= 0 ? (uint32_t) value->aux_int : UINT32_MAX;
-                if (block != allocation->block || !saw_allocation || saw_non_initializer_use ||
-                    value->nargs != 2u || !value->args[1] || value->aux != layout ||
-                    ordinal >= layout->field_count ||
-                    (seen_fields & (UINT64_C(1) << ordinal)) != 0u ||
-                    !layout->field_names[ordinal] ||
-                    strcmp(layout->field_names[ordinal],
-                           class_data->instance_field_names[ordinal]) != 0 ||
-                    !xr_type_equals(value->args[1]->type,
-                                    class_data->instance_field_types[ordinal]))
-                    return NULL;
-                const XgClassFieldSummary *field = NULL;
-                for (uint32_t field_index = 0u; field_index < evidence->nclass_fields;
-                     ++field_index) {
-                    const XgClassFieldSummary *candidate = &evidence->class_fields[field_index];
-                    if (candidate->owner_class_id != class_row->class_id ||
-                        candidate->instance_slot != ordinal)
-                        continue;
-                    if (field)
-                        return NULL;
-                    field = candidate;
-                }
-                if (!field || field->module_id != class_row->module_id ||
-                    field->decl_ordinal != ordinal ||
-                    (field->flags & XG_CLASS_FIELD_STATIC) != 0u ||
-                    field->source_node_id != class_data->instance_field_source_node_ids[ordinal] ||
-                    field->name_id != xg_name_id(class_data->instance_field_names[ordinal]))
-                    return NULL;
-                seen_fields |= UINT64_C(1) << ordinal;
-                ++initialization_count;
-                if (field_values_out)
-                    field_values_out[ordinal] = value->args[1];
-            }
-        }
-        if (block && block->control && logical_value_identity(block->control) == allocation) {
-            if (block != allocation->block || !saw_allocation ||
-                initialization_count != layout->field_count)
+            uint32_t ordinal = value->aux_int >= 0 ? (uint32_t) value->aux_int : UINT32_MAX;
+            if (!saw_allocation || saw_non_initializer_use || value->nargs != 2u ||
+                !value->args[1] || value->aux != layout || ordinal >= layout->field_count ||
+                (seen_fields & (UINT64_C(1) << ordinal)) != 0u || !layout->field_names[ordinal] ||
+                strcmp(layout->field_names[ordinal], class_data->instance_field_names[ordinal]) !=
+                    0 ||
+                !xr_type_equals(value->args[1]->type, class_data->instance_field_types[ordinal]))
                 return NULL;
-            saw_non_initializer_use = true;
+            const XgClassFieldSummary *field = NULL;
+            for (uint32_t field_index = 0u; field_index < evidence->nclass_fields; ++field_index) {
+                const XgClassFieldSummary *candidate = &evidence->class_fields[field_index];
+                if (candidate->owner_class_id != class_row->class_id ||
+                    candidate->instance_slot != ordinal)
+                    continue;
+                if (field)
+                    return NULL;
+                field = candidate;
+            }
+            if (!field || field->module_id != class_row->module_id ||
+                field->decl_ordinal != ordinal || (field->flags & XG_CLASS_FIELD_STATIC) != 0u ||
+                field->source_node_id != class_data->instance_field_source_node_ids[ordinal] ||
+                field->name_id != xg_name_id(class_data->instance_field_names[ordinal]))
+                return NULL;
+            seen_fields |= UINT64_C(1) << ordinal;
+            ++initialization_count;
+            if (field_values_out)
+                field_values_out[ordinal] = value->args[1];
         }
+    }
+    if (allocation_block->control &&
+        logical_value_identity(allocation_block->control) == allocation) {
+        if (!saw_allocation || initialization_count != layout->field_count)
+            return NULL;
+        saw_non_initializer_use = true;
     }
     uint64_t expected_fields =
         layout->field_count == 64u ? UINT64_MAX : (UINT64_C(1) << layout->field_count) - 1u;
     if (!saw_allocation || initialization_count != layout->field_count ||
         seen_fields != expected_fields)
         return NULL;
+
+    xi_ensure_dominators((XiFunc *) caller);
+    for (uint32_t block_index = 0u; block_index < caller->nblocks; ++block_index) {
+        const XiBlock *block = caller->blocks[block_index];
+        if (!block || block == allocation_block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            for (uint16_t argument = 0u; argument < phi->value.nargs; ++argument) {
+                if (!phi->value.args ||
+                    logical_value_identity(phi->value.args[argument]) != allocation)
+                    continue;
+                if (argument >= block->npreds || !block->preds[argument] ||
+                    !xi_dominates(allocation_block, block->preds[argument]))
+                    return NULL;
+            }
+        }
+        for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
+            const XiValue *value = block->values[value_index];
+            for (uint16_t argument = 0u; value && argument < value->nargs; ++argument) {
+                if (!value->args || logical_value_identity(value->args[argument]) != allocation)
+                    continue;
+                if (value->op == XI_AGG_SET || !xi_dominates(allocation_block, block))
+                    return NULL;
+            }
+        }
+        if (block->control && logical_value_identity(block->control) == allocation &&
+            !xi_dominates(allocation_block, block))
+            return NULL;
+    }
     if (field_count_out)
         *field_count_out = layout->field_count;
     return class_data;
@@ -7990,6 +8034,10 @@ static const XiClassData *static_value_struct_publication_source(const XrXiBuild
         const XiBlock *block = function->blocks[block_index];
         if (block && block->control == source)
             return NULL;
+        for (const XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next)
+            for (uint16_t argument = 0u; argument < phi->value.nargs; ++argument)
+                if (phi->value.args && logical_value_identity(phi->value.args[argument]) == source)
+                    return NULL;
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             const XiValue *user = block->values[value_index];
             for (uint16_t argument = 0u; user && argument < user->nargs; ++argument) {
