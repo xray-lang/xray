@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -235,12 +236,12 @@ class RegistryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="xr-source-fixture-projection-") as directory:
             root = Path(directory)
             header_path, cmake_path = root / "cases.h", root / "fixtures.cmake"
-            command = [sys.executable, str(Path(__file__).resolve()), "project",
-                       "--header", str(header_path), "--cmake", str(cmake_path)]
-            subprocess.run(command, check=True, capture_output=True)
+            command = ["project", "--header", str(header_path),
+                       "--cmake", str(cmake_path)]
+            self.assertEqual(main(command), 0)
             before = [(path.stat().st_ino, path.stat().st_mtime_ns)
                       for path in (header_path, cmake_path)]
-            subprocess.run(command, check=True, capture_output=True)
+            self.assertEqual(main(command), 0)
             self.assertEqual(header_path.read_bytes(), header)
             self.assertEqual(cmake_path.read_bytes(), cmake)
             self.assertEqual(before, [(path.stat().st_ino, path.stat().st_mtime_ns)
@@ -249,18 +250,25 @@ class RegistryTests(unittest.TestCase):
     def test_cli_refuses_missing_unknown_duplicate_and_positional_arguments(self):
         with tempfile.TemporaryDirectory(prefix="xr-source-fixture-cli-") as directory:
             output = Path(directory) / "unexpected.c"
-            script = [sys.executable, str(Path(__file__).resolve())]
             valid = ["generate", "--fixture", "cross_module_coroutine",
                      "--producer", sys.executable, "--output", str(output)]
             invalid = [[], [str(output)], valid[:-2],
                        valid + ["--fixture", "cross_module_coroutine"],
                        valid + ["--unknown", "value"],
-                       ["generate", "--fixture", "unknown"] + valid[3:],
                        ["generate", "--fix", "cross_module_coroutine"] + valid[3:]]
             for arguments in invalid:
-                result = subprocess.run(script + arguments, capture_output=True, check=False)
-                self.assertNotEqual(result.returncode, 0, arguments)
+                errors = io.StringIO()
+                with mock.patch.object(sys, "stderr", errors), \
+                        self.assertRaises(SystemExit) as raised:
+                    parse_arguments(arguments)
+                self.assertEqual(raised.exception.code, 2, arguments)
                 self.assertFalse(output.exists(), arguments)
+                self.assertTrue(errors.getvalue(), arguments)
+            errors = io.StringIO()
+            unknown = ["generate", "--fixture", "unknown"] + valid[3:]
+            with mock.patch.object(sys, "stderr", errors):
+                self.assertEqual(main(unknown), 1)
+            self.assertIn("unknown fixture id", errors.getvalue())
             self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_complete_registration_and_identity(self):
@@ -444,7 +452,7 @@ class BuildGraphTests(unittest.TestCase):
             self.assertEqual((build / "configure.events").read_bytes(), configure_events)
 
 
-def main() -> int:
+def parse_arguments(arguments: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     commands = parser.add_subparsers(dest="command", required=True)
     for mode in ("project", "check"):
@@ -457,7 +465,11 @@ def main() -> int:
     generate.add_argument("--output", type=Path, required=True, action=Once)
     commands.add_parser("self-test", allow_abbrev=False)
     commands.add_parser("self-test-build", allow_abbrev=False)
-    args = parser.parse_args()
+    return parser.parse_args(arguments)
+
+
+def main(arguments: list[str] | None = None) -> int:
+    args = parse_arguments(sys.argv[1:] if arguments is None else arguments)
     if args.command in ("self-test", "self-test-build"):
         test_case = RegistryTests if args.command == "self-test" else BuildGraphTests
         result = unittest.TextTestRunner(verbosity=2).run(

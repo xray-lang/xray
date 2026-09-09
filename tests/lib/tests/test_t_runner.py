@@ -121,7 +121,8 @@ class AutoRoutingTest(unittest.TestCase):
     def test_canonical_private_program_paths_use_exact_profile(self):
         self.assert_route("canonical", "src/program/xr_program_verify.c",
                           "src/aot/program/xr_backend_ir_verify.c",
-                          "tests/unit/program/test_xr_program.c")
+                          "tests/unit/program/test_xr_program.c",
+                          "scripts/program_source_fixtures.py")
 
     def test_documentation_does_not_widen_an_owned_change(self):
         self.assert_route("canonical", "src/program/xr_program_verify.c",

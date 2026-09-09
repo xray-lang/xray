@@ -3592,6 +3592,10 @@ if(BUILD_TESTS)
     set_tests_properties(meta_ownership_inventory PROPERTIES
         LABELS "aot;ir;metadata;memory;task-218"
         PROCESSORS 1
+        # This source-tree scan takes about 2.3 seconds on the Windows Release
+        # worker.  Declare that cost so a fresh build schedules it before the
+        # sub-second native fixtures instead of stranding it at the tail.
+        COST 3
         TIMEOUT 30
     )
 

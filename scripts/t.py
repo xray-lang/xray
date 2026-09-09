@@ -226,7 +226,8 @@ CANONICAL_EDIT_PATH = re.compile(
     r"^(src/program/|src/aot/program/|src/vm/xr_(program_vm|typed_)|"
     r"src/execution/xr_|tests/unit/program/|tests/unit/vm/.*xr_program|"
     r"tests/unit/aot/.*xr_program|tests/unit/ir/test_xr_program|"
-    r"scripts/(canonical_program_test_profile|run_canonical_program_gate|"
+    r"scripts/(canonical_program_test_profile|program_source_fixtures|"
+    r"run_canonical_program_gate|"
     r"check_xr_program)[^/]*\.py$|"
     r"tests/lib/(program_source_fixtures\.py|tests/test_(canonical_program|"
     r"xr_program)[^/]*\.py)$)")

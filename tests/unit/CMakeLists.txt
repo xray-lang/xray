@@ -128,7 +128,8 @@ add_custom_command(TARGET test_xr_program_source_build PRE_LINK
 add_test(NAME xr_program_source_fixtures_self_test
     COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} self-test)
 set_tests_properties(xr_program_source_fixtures_self_test PROPERTIES
-    LABELS "unit;canonical-program;source-owner;generator;self-test")
+    LABELS "unit;canonical-program;source-owner;generator;self-test"
+    COST 1)
 add_test(NAME xr_program_source_fixtures_build_self_test
     COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} self-test-build)
 set_tests_properties(xr_program_source_fixtures_build_self_test PROPERTIES
