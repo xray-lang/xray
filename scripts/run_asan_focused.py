@@ -25,7 +25,6 @@ Environment overrides:
     XR_ASAN_PROFILE       full (default) or canonical-program preflight
     XR_ASAN_JOBS          parallel build/test jobs (default: all cores)
     XR_ASAN_BUILD_DIR     ASan build directory (default: build-asan)
-    XR_ASAN_BUILD_TARGETS whitespace-separated Ninja targets (default: all)
     XR_ASAN_CTEST_REGEX   unit test name regex (default: ^test_)
     XR_ASAN_CTEST_EXCLUDE unit tests kept out of the memory-safety surface
     XR_ASAN_CTEST_SERIAL_REGEX subprocess tests kept out of the saturated lane
@@ -126,7 +125,7 @@ def _run_main(argv: list[str]) -> int:
     jobs = sanitizer.default_jobs("XR_ASAN_JOBS")
     build_dir = PROJECT_DIR / os.environ.get("XR_ASAN_BUILD_DIR", "build-asan")
     timeout = platform.env_timeout("XR_ASAN_TIMEOUT", 3600)
-    build_targets = tuple(os.environ.get("XR_ASAN_BUILD_TARGETS", "").split())
+    build_targets: tuple[str, ...] = ()
 
     ctest_regex = os.environ.get("XR_ASAN_CTEST_REGEX", "^test_")
     ctest_exclude = os.environ.get("XR_ASAN_CTEST_EXCLUDE", DEFAULT_CTEST_EXCLUDE)
@@ -152,6 +151,13 @@ def _run_main(argv: list[str]) -> int:
         build_targets = canonical_profile.BUILD_TARGETS
         ctest_regex = canonical_profile.ctest_regex()
         ctest_exclude = ""
+    elif "XR_ASAN_BUILD_TARGETS" in os.environ:
+        log(
+            "full profile owns the complete build inventory; "
+            "XR_ASAN_BUILD_TARGETS is not allowed",
+            error=True,
+        )
+        return 1
 
     xxhash_main = Path(os.environ.get(
         "XR_ASAN_XXHASH_MAIN",
@@ -219,52 +225,24 @@ def _run_main(argv: list[str]) -> int:
         return 1
 
     xray = build_dir / platform.exe_name("xray")
+    if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
+        return 1
     if profile == "canonical-program":
-        cache_problem = next(
-            (
-                candidate
-                for flag in spec.verification_targets()
-                if (candidate := sanitizer.verify_configured(build_dir, flag))
-            ),
-            None,
-        )
-        if sanitizer.configured_generator(build_dir) != "Ninja" or cache_problem:
-            log("configuring canonical-program sanitizer preflight")
-            if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
-                return 1
-        # Ninja's dependency graph is authoritative for this exact target set.
-        # Comparing every source mtime with the unrelated xray CLI would force a
-        # configure on every preflight and still say nothing about these targets.
         log("incrementally building exact canonical-program sanitizer targets")
-        if not sanitizer.build(spec, jobs, timeout, log):
-            return 1
     else:
-        reason = sanitizer.rebuild_reason(xray, PROJECT_DIR)
-        if build_targets and reason is None:
-            reason = "explicit build targets requested"
-        if reason:
-            log(f"building compiler + tests (ASan/UBSan): {reason}")
-            if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
-                return 1
-            if not sanitizer.build(spec, jobs, timeout, log):
-                return 1
-        else:
-            log("reusing the up-to-date ASan build")
-
-    if profile == "full" and not (xray.is_file() and os.access(xray, os.X_OK)):
-        log(f"ASan xray binary not found at {xray}", error=True)
+        log("incrementally building the complete ASan/UBSan tree")
+    # Ninja, not the CLI timestamp, owns target-level dependency freshness.
+    # Invoking it on every run is cheap when current and cannot omit changed
+    # tests, scripts, generated inputs, or deleted dependencies from the gate.
+    if not sanitizer.build(spec, jobs, timeout, log):
         return 1
 
-    problem = next(
-        (
-            candidate
-            for flag in spec.verification_targets()
-            if (candidate := sanitizer.verify_configured(build_dir, flag))
-        ),
-        None,
-    )
+    problem = sanitizer.verify_build_tree(spec, PROJECT_DIR)
     if problem:
         log(problem, error=True)
+        return 1
+    if profile == "full" and not (xray.is_file() and os.access(xray, os.X_OK)):
+        log(f"ASan xray binary not found at {xray}", error=True)
         return 1
 
     if profile == "canonical-program":

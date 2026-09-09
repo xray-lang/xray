@@ -3,7 +3,8 @@
 The two load-bearing invariants, both testable without any sanitizer build:
 
   - a lane must refuse a build tree that does not actually have the sanitizer on
-  - a lane reusing a binary must refuse one older than the sources
+  - a lane must prove the exact source, generator, profile, and compiler tree
+    before allowing Ninja to decide whether every target is current
 
 Either failing silently produces the worst possible outcome for these lanes: a
 green result the tree never earned.
@@ -42,6 +43,73 @@ class AsanEntryPointTest(unittest.TestCase):
         self.assertIn("usage: run_asan_focused.py", output.getvalue())
         lock.assert_not_called()
         run.assert_not_called()
+
+    def test_full_profile_rejects_a_partial_build_inventory(self):
+        with mock.patch.dict(os.environ, {
+                "XR_ASAN_PROFILE": "full",
+                "XR_ASAN_BUILD_TARGETS": "test_xr_program",
+             }, clear=True), \
+             mock.patch.object(asan_runner.sanitizer, "configure") as configure:
+            self.assertEqual(asan_runner._run_main(["run_asan_focused.py"]), 1)
+        configure.assert_not_called()
+
+    def _run_full(self, root: Path, events: list[str], tree_problem=None) -> int:
+        build_dir = root / "build-asan"
+        build_dir.mkdir()
+        (build_dir / asan_runner.platform.exe_name("xray")).write_bytes(b"binary")
+        ok = sanitizer.proc.ProcResult(
+            argv=("ctest",), returncode=0, stdout=b"", stderr=b"", timed_out=False)
+
+        def configure(*_args, **_kwargs):
+            events.append("configure")
+            return True
+
+        def build(*_args, **_kwargs):
+            events.append("build")
+            return True
+
+        def verify(*_args, **_kwargs):
+            events.append("verify")
+            return tree_problem
+
+        def ctest(*_args, **_kwargs):
+            events.append("ctest")
+            return ok
+
+        with mock.patch.dict(os.environ, {
+                "XR_ASAN_PROFILE": "full",
+                "XR_ASAN_BUILD_DIR": "build-asan",
+             }, clear=True), \
+             mock.patch.object(asan_runner, "PROJECT_DIR", root), \
+             mock.patch.object(asan_runner.sanitizer, "resolve_compiler_command",
+                               side_effect=lambda command: command), \
+             mock.patch.object(asan_runner.sanitizer,
+                               "activate_windows_msvc_environment", return_value=True), \
+             mock.patch.object(asan_runner.sanitizer,
+                               "activate_windows_dynamic_asan_runtime", return_value=True), \
+             mock.patch.object(asan_runner.sanitizer, "configure",
+                               side_effect=configure), \
+             mock.patch.object(asan_runner.sanitizer, "build", side_effect=build), \
+             mock.patch.object(asan_runner.sanitizer, "verify_build_tree",
+                               side_effect=verify), \
+             mock.patch.object(asan_runner.sanitizer, "ctest", side_effect=ctest), \
+             mock.patch.object(asan_runner.sanitizer, "ctest_has_match",
+                               return_value=False), \
+             mock.patch.object(asan_runner, "compile_workload", return_value=True):
+            return asan_runner._run_main(["run_asan_focused.py"])
+
+    def test_full_profile_always_builds_before_post_check_and_ctest(self):
+        with tempfile.TemporaryDirectory(prefix="xt_asan_entry.") as temp:
+            events: list[str] = []
+            self.assertEqual(self._run_full(Path(temp), events), 0)
+        self.assertEqual(events, ["configure", "build", "verify", "ctest"])
+
+    def test_failed_post_check_starts_no_ctest(self):
+        with tempfile.TemporaryDirectory(prefix="xt_asan_entry.") as temp:
+            events: list[str] = []
+            self.assertEqual(
+                self._run_full(Path(temp), events, "wrong compiler identity"), 1)
+        self.assertEqual(events, ["configure", "build", "verify"])
 
     def test_unknown_argument_fails_before_acquiring_the_build_tree(self):
         with mock.patch.object(asan_runner.buildlock, "BuildTreeLock") as lock, \
@@ -181,6 +249,69 @@ class CacheInspectionTest(unittest.TestCase):
               mock.patch.dict(os.environ, {"ProgramFiles": str(self.build)})):
             self.assertEqual(
                 Path(sanitizer.resolve_compiler_command("clang-cl")), compiler)
+
+    def test_complete_build_tree_identity_is_accepted(self):
+        source = self.build / "source"
+        source.mkdir()
+        build = self.build / "tree"
+        build.mkdir()
+        (build / "build.ninja").write_text("# generated\n", encoding="utf-8")
+        (build / "CMakeCache.txt").write_text(
+            f"CMAKE_HOME_DIRECTORY:INTERNAL={source.resolve()}\n"
+            "CMAKE_GENERATOR:INTERNAL=Ninja\n"
+            "CMAKE_BUILD_TYPE:STRING=Debug\n"
+            "CMAKE_C_COMPILER:FILEPATH=fixture-clang\n"
+            "CMAKE_CXX_COMPILER:FILEPATH=fixture-clang++\n"
+            "ENABLE_ASAN:BOOL=ON\nENABLE_UBSAN:BOOL=ON\n",
+            encoding="utf-8",
+        )
+        spec = sanitizer.BuildSpec(
+            build_dir=build,
+            sanitizer_flags=("ENABLE_ASAN=ON", "ENABLE_UBSAN=ON"),
+            c_compiler="fixture-clang",
+            cxx_compiler="fixture-clang++",
+        )
+        with mock.patch.object(sanitizer, "resolve_compiler_command",
+                               side_effect=lambda command: command):
+            self.assertIsNone(sanitizer.verify_build_tree(spec, source))
+
+    def test_build_tree_identity_rejects_each_mismatched_dimension(self):
+        source = self.build / "source"
+        source.mkdir()
+        build = self.build / "tree"
+        build.mkdir()
+        (build / "build.ninja").write_text("# generated\n", encoding="utf-8")
+        base = (
+            f"CMAKE_HOME_DIRECTORY:INTERNAL={source.resolve()}\n"
+            "CMAKE_GENERATOR:INTERNAL=Ninja\n"
+            "CMAKE_BUILD_TYPE:STRING=Debug\n"
+            "CMAKE_C_COMPILER:FILEPATH=fixture-clang\n"
+            "CMAKE_CXX_COMPILER:FILEPATH=fixture-clang++\n"
+            "ENABLE_ASAN:BOOL=ON\nENABLE_UBSAN:BOOL=ON\n"
+        )
+        spec = sanitizer.BuildSpec(
+            build_dir=build,
+            sanitizer_flags=("ENABLE_ASAN=ON", "ENABLE_UBSAN=ON"),
+            c_compiler="fixture-clang",
+            cxx_compiler="fixture-clang++",
+        )
+        mutations = {
+            "source root": (str(source.resolve()), str((self.build / "other").resolve())),
+            "generator": ("CMAKE_GENERATOR:INTERNAL=Ninja",
+                          "CMAKE_GENERATOR:INTERNAL=Unix Makefiles"),
+            "build type": ("CMAKE_BUILD_TYPE:STRING=Debug",
+                           "CMAKE_BUILD_TYPE:STRING=Release"),
+            "C compiler": ("CMAKE_C_COMPILER:FILEPATH=fixture-clang",
+                           "CMAKE_C_COMPILER:FILEPATH=other-clang"),
+            "UBSan": ("ENABLE_UBSAN:BOOL=ON", "ENABLE_UBSAN:BOOL=OFF"),
+        }
+        with mock.patch.object(sanitizer, "resolve_compiler_command",
+                               side_effect=lambda command: command):
+            for label, (old, new) in mutations.items():
+                with self.subTest(label=label):
+                    (build / "CMakeCache.txt").write_text(
+                        base.replace(old, new), encoding="utf-8")
+                    self.assertIsNotNone(sanitizer.verify_build_tree(spec, source))
 
     def test_non_windows_does_not_need_msvc_environment(self):
         with mock.patch.object(sanitizer.platform, "IS_WINDOWS", False):
@@ -361,7 +492,14 @@ class ReuseGuardTest(unittest.TestCase):
         self.messages.append(message)
 
     def _cache(self, text):
-        (self.build / "CMakeCache.txt").write_text(text, encoding="utf-8")
+        identity = (
+            f"CMAKE_HOME_DIRECTORY:INTERNAL={Path(self.tmp).resolve()}\n"
+            "CMAKE_BUILD_TYPE:STRING=Debug\n"
+            f"CMAKE_C_COMPILER:FILEPATH={sanitizer.resolve_compiler_command('clang')}\n"
+            f"CMAKE_CXX_COMPILER:FILEPATH={sanitizer.resolve_compiler_command('clang++')}\n"
+        )
+        (self.build / "CMakeCache.txt").write_text(
+            identity + text, encoding="utf-8")
 
     def _complete_ninja_tree(self):
         (self.build / "build.ninja").write_text("# generated\n", encoding="utf-8")
@@ -406,6 +544,23 @@ class ReuseGuardTest(unittest.TestCase):
         joined = " ".join(self.messages)
         self.assertNotIn("reusing existing configuration", joined)
         self.assertIn("ENABLE_UBSAN=ON", joined)
+
+    def test_foreign_source_tree_is_refused_without_deletion(self):
+        foreign = self.build / "foreign"
+        (self.build / "CMakeCache.txt").write_text(
+            f"CMAKE_HOME_DIRECTORY:INTERNAL={foreign.resolve()}\n"
+            "CMAKE_GENERATOR:INTERNAL=Ninja\nENABLE_TSAN:BOOL=ON\n",
+            encoding="utf-8",
+        )
+        sentinel = self.build / "keep.me"
+        sentinel.write_text("owned by another checkout\n", encoding="utf-8")
+        spec = sanitizer.BuildSpec(build_dir=self.build,
+                                   sanitizer_flags=("ENABLE_TSAN=ON",))
+        with mock.patch.object(sanitizer.proc, "run") as run:
+            self.assertFalse(
+                sanitizer.configure(spec, Path(self.tmp), 1, 5, self._log))
+        self.assertTrue(sentinel.is_file())
+        run.assert_not_called()
 
 
 class BuildSpecTest(unittest.TestCase):

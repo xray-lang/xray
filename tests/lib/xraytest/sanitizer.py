@@ -12,10 +12,9 @@ Two invariants are enforced here rather than left to each lane:
     lane at an ordinary build directory fails loudly instead of reporting a
     clean result it never earned.
 
-  - **A skipped build must not certify stale code.** When a lane reuses an
-    existing binary, any source newer than that binary is a hard error: a green
-    sanitizer result for code that was never built under the sanitizer is worse
-    than no result.
+  - **A reused tree must belong to the requested build.** Its source root,
+    generator, build type, compilers, and sanitizer settings are checked before
+    use. Ninja then owns incremental freshness for every requested target.
 """
 
 from __future__ import annotations
@@ -89,6 +88,26 @@ def configured_generator(build_dir: Path) -> str | None:
         if line.startswith("CMAKE_GENERATOR:INTERNAL="):
             return line.split("=", 1)[1].strip()
     return None
+
+
+def configured_value(build_dir: Path, name: str) -> str | None:
+    """Return one exact CMake cache value, independent of its cache type."""
+    cache = cache_file(build_dir)
+    if not cache.is_file():
+        return None
+    prefix = f"{name}:"
+    for line in cache.read_text(encoding="utf-8").splitlines():
+        if line.startswith(prefix) and "=" in line:
+            return line.split("=", 1)[1]
+    return None
+
+
+def _same_path(left: str, right: str) -> bool:
+    if platform.IS_WINDOWS:
+        return ntpath.normcase(ntpath.normpath(left)) == ntpath.normcase(
+            ntpath.normpath(right)
+        )
+    return Path(left).resolve(strict=False) == Path(right).resolve(strict=False)
 
 
 def resolve_compiler_command(command: str) -> str:
@@ -253,35 +272,53 @@ def verify_configured(build_dir: Path, required_flag: str) -> str | None:
     # (e.g. "-fsanitize=thread") that must occur somewhere in the cache.
     if "=" in required_flag and not required_flag.startswith("-"):
         name, value = required_flag.split("=", 1)
-        configured_value = next(
-            (
-                line.split("=", 1)[1]
-                for line in text.splitlines()
-                if line.startswith(f"{name}:") and "=" in line
-            ),
-            None,
-        )
-        matches = configured_value == value
+        actual_value = configured_value(build_dir, name)
+        matches = actual_value == value
         if (
-            platform.IS_WINDOWS
-            and name in {"CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER"}
-            and configured_value
+            name in {"CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_HOME_DIRECTORY"}
+            and actual_value
             and value
         ):
-            # shutil.which() preserves whichever spelling of the executable
-            # happened to occur first in PATH.  Windows and CMake may therefore
-            # alternate between clang-cl.exe and clang-cl.EXE for the same file.
-            # Treat only these path-valued compiler identities with Windows path
-            # semantics; other cache variables remain exact strings.
-            matches = ntpath.normcase(ntpath.normpath(configured_value)) == ntpath.normcase(
-                ntpath.normpath(value)
-            )
+            matches = _same_path(actual_value, value)
         if not matches:
             return f"{build_dir} is configured without {required_flag}"
         return None
 
     if required_flag not in text:
         return f"{build_dir} is configured without {required_flag}"
+    return None
+
+
+def configuration_targets(spec: BuildSpec) -> tuple[str, ...]:
+    """The exact cache identity required before this build tree can run."""
+    targets = (
+        f"CMAKE_BUILD_TYPE={spec.build_type}",
+        f"CMAKE_C_COMPILER={resolve_compiler_command(spec.c_compiler)}",
+        f"CMAKE_CXX_COMPILER={resolve_compiler_command(spec.cxx_compiler)}",
+        *spec.verification_targets(),
+    )
+    return tuple(dict.fromkeys(targets))
+
+
+def verify_build_tree(spec: BuildSpec, project_dir: Path) -> str | None:
+    """Return the first identity problem in a configured Ninja tree."""
+    build_dir = spec.build_dir
+    if not cache_file(build_dir).is_file():
+        return f"{build_dir} has no CMakeCache.txt"
+    actual_source = configured_value(build_dir, "CMAKE_HOME_DIRECTORY")
+    expected_source = str(project_dir.resolve(strict=False))
+    if actual_source is None or not _same_path(actual_source, expected_source):
+        return (
+            f"{build_dir} belongs to source root {actual_source!r}, "
+            f"expected {expected_source!r}"
+        )
+    if configured_generator(build_dir) != "Ninja":
+        return f"{build_dir} is not configured with Ninja"
+    if not (build_dir / "build.ninja").is_file():
+        return f"{build_dir} has no build.ninja"
+    for required in configuration_targets(spec):
+        if problem := verify_configured(build_dir, required):
+            return problem
     return None
 
 
@@ -345,6 +382,22 @@ def configure(spec: BuildSpec, project_dir: Path, jobs: int,
     """
     build_dir = spec.build_dir
     generator = configured_generator(build_dir)
+    cache = cache_file(build_dir)
+    if cache.is_file():
+        actual_source = configured_value(build_dir, "CMAKE_HOME_DIRECTORY")
+        expected_source = str(project_dir.resolve(strict=False))
+        if actual_source is not None and not _same_path(actual_source, expected_source):
+            log(
+                f"{build_dir} belongs to source root {actual_source!r}; "
+                f"refusing to replace it with {expected_source!r}",
+                error=True,
+            )
+            return False
+        if actual_source is None:
+            log(f"{build_dir} has no source-root identity; reconfiguring")
+            shutil.rmtree(build_dir, ignore_errors=True)
+            generator = None
+
     if generator is not None and generator != "Ninja":
         log(f"{build_dir} was configured with '{generator}'; reconfiguring with Ninja")
         shutil.rmtree(build_dir, ignore_errors=True)
@@ -366,7 +419,7 @@ def configure(spec: BuildSpec, project_dir: Path, jobs: int,
     # earned. Checked before the build, because verify_configured() afterwards
     # would only turn that into a late failure instead of a correct run.
     if generator is not None:
-        mismatched = [flag for flag in spec.verification_targets()
+        mismatched = [flag for flag in configuration_targets(spec)
                       if verify_configured(build_dir, flag) is not None]
         if mismatched:
             log(f"{build_dir} is configured without {', '.join(mismatched)}; reconfiguring")
