@@ -1515,9 +1515,9 @@ TEST(source_owner_generic_specializations_are_exact_program_functions) {
 }
 
 TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
-    /* The dependency owns the constraint, both implementors and the generic body. The entry owns
-     * only explicit namespace-qualified instantiations, so this exercises cross-module identity
-     * joins without relying on caller-local type lookup or inferred generic arguments. */
+    // The dependency owns the constraint, both implementors and the generic body. The entry owns
+    // only namespace-qualified calls. One inferred and one explicit call per concrete type must
+    // converge on the same two specializations in the defining module.
     static const char library_source[] =
         "export interface ReadCounter { current() -> i64 }\n"
         "export struct LeftCounter implements ReadCounter {\n"
@@ -1537,10 +1537,10 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "fn answer() -> i64 {\n"
         "  var left = LeftCounter{value: 39}\n"
         "  var right = RightCounter{value: 1}\n"
-        "  return counters.genericRead<LeftCounter>(left) +\n"
+        "  return counters.genericRead(left) +\n"
         "         counters.genericRead<RightCounter>(right) +\n"
         "         counters.genericRead<LeftCounter>(LeftCounter{value: 1}) +\n"
-        "         counters.genericRead<RightCounter>(RightCounter{value: 1})\n"
+        "         counters.genericRead(RightCounter{value: 1})\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
@@ -1733,6 +1733,32 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     xr_program_source_product_free(&first);
     xr_target_profile_free(profile);
     source_build_fixture_free(&fixture);
+
+    static const char negative_library_source[] =
+        "export interface ReadCounter { current() -> i64 }\n"
+        "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
+        "  return counter.current()\n"
+        "}\n";
+    static const char negative_entry_source[] =
+        "import \"./library\" as counters\n"
+        "struct NotCounter { value: i64 }\n"
+        "fn answer() -> i64 { return counters.genericRead(NotCounter{value: 42}) }\n";
+    SourceBuildFixture negative_fixture;
+    ASSERT_TRUE(source_build_fixture_init(&negative_fixture, negative_entry_source,
+                                          negative_library_source));
+    XrProgramSourceProduct rejected = {0};
+    XrProgramSourceDiagnostic rejection;
+    ASSERT_EQ_INT(xr_program_source_build(&negative_fixture.input, &rejected, &rejection),
+                  XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED);
+    ASSERT_EQ_INT(rejection.stage, XR_PROGRAM_SOURCE_STAGE_ANALYSIS);
+    ASSERT_EQ_UINT(rejection.module_index, 1u);
+    ASSERT_EQ_UINT(rejection.underlying_status, XR_ERR_ANALYZE_GENERIC_CONSTRAINT);
+    ASSERT_EQ_UINT(rejection.source_line, 3u);
+    ASSERT_NOT_NULL(strstr(rejection.source_path, "main.xr"));
+    ASSERT_NOT_NULL(strstr(rejection.message, "does not satisfy constraint"));
+    ASSERT_NULL(rejected.artifact.bytes);
+    ASSERT_NULL(rejected.program);
+    source_build_fixture_free(&negative_fixture);
 }
 
 TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates) {

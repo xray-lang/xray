@@ -390,6 +390,13 @@ static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, X
     return links;
 }
 
+static bool xa_links_require_source_generic_specialization(const XaSymbolLinks *links) {
+    const AstNode *declaration = links ? links->function_decl_node : NULL;
+    return links && links->intrinsic_id == XA_INTRINSIC_NONE && links->type_param_count > 0 &&
+           declaration && declaration->type == AST_FUNCTION_DECL &&
+           declaration->as.function_decl.type_param_count == links->type_param_count;
+}
+
 static bool xa_simd_shuffle_diag_exists(const XaAnalyzer *analyzer, const XrLocation *loc) {
     if (!analyzer || !loc)
         return false;
@@ -1075,14 +1082,8 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
     }
 }
 
-/*
- * task-221 gap C: record inferred generic type arguments on the call node so
- * monomorphization and AOT cgen specialize the call identically to the explicit
- * form. Used for both inferred generic-class construction (`Cell(5)`) and
- * inferred generic-function calls (`wrapIt(99)`). Only applies when no explicit
- * type args were written and every inferred arg synthesizes; otherwise leaves
- * the node untouched.
- */
+// Record a complete inferred type tuple before monomorphization. The tuple is published atomically
+// because a nonzero count with no backing array is not a valid AST state.
 void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *call,
                                      XrType **inferred, int type_param_count) {
     if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
@@ -1102,9 +1103,12 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
             return;
         }
     }
-    call->type_args = xr_tref_array_copy(session, synth, type_param_count);
+    XrTypeRef **published = xr_tref_array_copy(session, synth, type_param_count);
     if (synth != stack_synth)
         xr_free(synth);
+    if (!published)
+        return;
+    call->type_args = published;
     call->type_arg_count = type_param_count;
     call->semantic_type_args = call->type_args;
     call->semantic_type_arg_count = type_param_count;
@@ -6756,18 +6760,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (call->type_arg_count > 0 && fn_links) {
         xa_check_explicit_type_args(ctx, node, call, fn_links);
         type_args_checked = true;
-    } else if (fn_links && xa_symbol_links_get_type_param_count(fn_links) > 0 && call->callee &&
-               call->callee->type == AST_VARIABLE) {
+    } else if (xa_links_require_source_generic_specialization(fn_links)) {
         // Implicit generic instantiation: type args inferred from arguments.
         // For each parameter typed as a bare T, infer T = type(arg) and
         // verify constraints on T.  This mirrors the explicit branch above
-        // but does its own simple inference per type parameter.
-        XaSymbol *fn_sym = xa_lookup_visible_symbol(ctx, call->callee->as.variable.name);
-        if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
-            xa_check_inferred_type_arg_constraints(ctx, node, call,
-                                                   xa_analyzer_get_links(ctx->analyzer, fn_sym));
-            type_args_checked = true;
-        }
+        // but does its own simple inference per type parameter. Exact source
+        // links make this independent of bare-name versus namespace syntax.
+        xa_check_inferred_type_arg_constraints(ctx, node, call, fn_links);
+        type_args_checked = true;
     }
 
     // Recognize JSON.decode<T>(data) and JSON.decodeObject<T>(data): compiler-generated typed
@@ -8147,14 +8147,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Apply type substitution for generic function calls. Write inferred type
-    // args back only for locally-defined generic functions; imported ones (e.g.
-    // parallel.reduce) are lowered by dedicated cgen intrinsics that require the
-    // call to remain in inferred (type_arg_count == 0) form.
+    // A source-backed generic function needs the inferred tuple on its call
+    // node so the declaration-owning monomorphizer can create the exact body.
+    // Intrinsics retain their own typed lowering and never enter this path.
     if (return_type && fn_links) {
-        return_type =
-            xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call, arg_count,
-                                       effective_arg_types, fn_sym && !fn_sym->is_imported);
+        return_type = xa_substitute_generic_call(
+            ctx, fn_links, callee_type, return_type, call, arg_count, effective_arg_types,
+            xa_links_require_source_generic_specialization(fn_links));
     }
 
     if (json_path_target) {
