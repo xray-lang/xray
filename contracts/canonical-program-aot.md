@@ -131,8 +131,14 @@ struct fixture additionally proves that concrete field evidence closes `Box<i64>
 to distinct nominal Program TypeIds, collapses the exact Xi allocation-and-initialization sequence
 to one logical aggregate construction, and emits byte-identical C whose strict native result is 42.
 The open aggregate skeleton is absent and there is no erased aggregate representation or AOT-only
-specialization policy. Constraints, generic ownership cleanup, and recursive specialization remain
-unqualified. A branching
+specialization policy. A bounded constraint fixture additionally proves two concrete value-struct
+implementors: each generic function clone carries its own nominal READ signature and calls one
+distinct non-generic method FunctionId. The physical Xi call-bound address and receiver load are
+erased only after their frozen non-escaping READ plans and exact struct identities agree; Program
+contains neither an interface witness table nor runtime constraint dispatch. Reference, both VM
+views, and strict native C return 42 from the same four sealed calls. Parameterized/builtin
+constraints, generic methods, generic ownership cleanup, temporary-expression READ places, and
+recursive specialization remain unqualified. A branching
 deferred-Pipe fixture executes normal, cancellation-at-each-safepoint, and provider-refusal paths;
 its native output proves that the complete private cancellation graph preserves branch inputs and
 cleanup order without an AOT-only unwind rule.
@@ -187,4 +193,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c bf5fa617067601e6865fa5a08187105ab36a41fd09111ed0a781301d29367bd5
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 8f57b37e41b331ea0a650f6bdab7341575df0455ec3d8f314f24a513b001c6d1

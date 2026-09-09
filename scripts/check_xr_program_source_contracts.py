@@ -256,6 +256,7 @@ def validate(root: Path) -> None:
         "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors",
         "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors",
         "source_owner_generic_specializations_are_exact_program_functions",
+        "source_owner_generic_constraint_methods_have_exact_concrete_targets",
         "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates",
         "source_owner_module_initializer_is_a_canonical_entry",
         "source_owner_rejects_non_authoritative_entry_identity",
@@ -281,6 +282,8 @@ def validate(root: Path) -> None:
         "xr_program_xi_value_is_materialized",
         "map_type_recursive",
         "logical_value_identity",
+        "read_value_call_place_is_exact",
+        "read_value_receiver_load_is_exact",
         "resolved_value_aggregate_construction",
         "static_value_struct_publication_is_exact",
         "block_typed_invoke_call",
@@ -433,6 +436,12 @@ def validate(root: Path) -> None:
     require(("exact-value-struct-xi.agg.new-plus-xi.agg.set-sequence",
              "core.aggregate.construct") in structural_rows,
             "exact value-struct construction projection is absent")
+    require(("exact-value-struct-read-call-local-address",
+             "core.call.sealed_direct") in structural_rows,
+            "exact value-struct READ call-place normalization is absent")
+    require(("exact-value-struct-read-receiver-place-load",
+             "core.block.argument") in structural_rows,
+            "exact value-struct READ receiver normalization is absent")
     require(not any(row.get("xi_operation") == "xi.agg.set" for row in value_mappings
                     if isinstance(row, dict)),
             "mutating aggregate storage regained a CoreSpec projection")

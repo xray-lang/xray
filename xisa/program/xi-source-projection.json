@@ -389,6 +389,14 @@
       "core_operation": "core.aggregate.construct"
     },
     {
+      "source": "exact-value-struct-read-call-local-address",
+      "core_operation": "core.call.sealed_direct"
+    },
+    {
+      "source": "exact-value-struct-read-receiver-place-load",
+      "core_operation": "core.block.argument"
+    },
+    {
       "source": "function-return",
       "core_operation": "core.return"
     },

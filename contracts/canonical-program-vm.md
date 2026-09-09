@@ -132,8 +132,14 @@ layout, field evidence, and the complete Xi allocation-and-initialization sequen
 never becomes a runtime value. Exact value-struct declaration tokens published by a module
 initializer are phase-only and are erased, while heap classes and ordinary shared state remain
 outside that rule. Reference and both VM decode policies return 42 for field projection and update.
-Constrained calls, generic ownership cleanup, and recursive specialization remain outside this
-bounded slice. A branching deferred-Pipe fixture proves that provider failure can use the
+One bounded user-interface constraint call is also closed before Program: two concrete trivial
+value-struct implementations produce distinct generic function clones, nominal READ signatures,
+and non-generic method FunctionIds. Exact call-bound READ addresses and receiver loads are erased
+to value operands; no interface table, conformance table, witness call, or runtime constraint
+lookup remains. Reference and both VM decode policies return 42 through the same sealed-call graph.
+Parameterized/builtin constraints, generic methods, generic ownership cleanup, direct temporary
+READ expressions, and recursive specialization remain outside this bounded slice. A branching
+deferred-Pipe fixture proves that provider failure can use the
 shared cleanup graph while cancellation receives a private copy of the complete multi-block graph,
 including the non-owner branch condition. A nested deferred-Pipe fixture additionally proves that
 an inner registration discovered from a cold outer handler keeps its outer-handler failure edge,
@@ -158,4 +164,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c bf5fa617067601e6865fa5a08187105ab36a41fd09111ed0a781301d29367bd5
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 8f57b37e41b331ea0a650f6bdab7341575df0455ec3d8f314f24a513b001c6d1

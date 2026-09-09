@@ -5078,6 +5078,96 @@ static bool cleanup_return_copy_is_exact(const XiValue *value) {
            value->enum_metadata_owner == NULL && value->enum_metadata_kind == 0u;
 }
 
+/* A READ parameter is a value in Canonical Program. Xi may still materialize one LOCAL_ADDR
+ *
+ * because its executors borrow a value-struct argument through caller storage. Collapse that
+ *
+ * address only when every reachable use is the matching READ slot of one exact sealed call and
+ *
+ * the frozen call plan names this call-bound, non-escaping local. */
+static bool read_value_call_place_is_exact(const XrXiBuildContext *context, const XiFunc *function,
+                                           const XiValue *value) {
+    value = logical_value_identity(value);
+    const XiValue *storage =
+        value && value->op == XI_LOCAL_ADDR && value->nargs == 1u && value->args
+            ? logical_value_identity(value->args[0])
+            : NULL;
+    uint8_t decl_kind = 0u;
+    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    const XiClassData *schema =
+        storage ? find_aggregate_schema(context, storage->type, NULL) : NULL;
+    if (!context || !function || !value || !storage || !value->type || !storage->type ||
+        !xi_local_addr_names_operand_storage(value->aux_int) ||
+        !xr_type_equals(value->type, storage->type) ||
+        !nominal_contract(context, storage->type, &decl_kind, &nominal_kind, NULL) ||
+        decl_kind != XG_DECL_STRUCT || nominal_kind != XR_CORE_IR_NOMINAL_STRUCT || !schema ||
+        !schema->struct_layout || schema->needs_runtime_type || schema->is_generic_skeleton)
+        return false;
+
+    bool found = false;
+    for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+        const XiBlock *block = function->blocks[block_index];
+        if (!canonical_block_is_reachable(context, function, block))
+            continue;
+        if (block->control == value)
+            return false;
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *call = block->values[value_index];
+            for (uint16_t argument = 0u; call && argument < call->nargs; ++argument) {
+                if (call->args[argument] != value)
+                    continue;
+                const XiFunc *callee = resolved_sealed_callee(context, function, call);
+                const XiCallPlan *plan = xi_call_plan(call);
+                uint16_t first = callee && callee->has_receiver ? 0u : 1u;
+                uint16_t parameter = argument >= first ? (uint16_t) (argument - first) : UINT16_MAX;
+                const XiCallArgPlan *argument_plan =
+                    plan && parameter < plan->nargs ? &plan->args[parameter] : NULL;
+                if (!callee || call->op != XI_CALL || !plan || !plan->verified ||
+                    plan->has_receiver || parameter >= callee->nparams || !callee->params ||
+                    callee->params[parameter]->param_mode != XR_PARAM_READ || !argument_plan ||
+                    argument_plan->param_mode != XR_PARAM_READ ||
+                    argument_plan->access != XR_CALL_ARG_PLAIN ||
+                    argument_plan->origin != XI_PLACE_ORIGIN_STACK_LOCAL ||
+                    argument_plan->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+                    argument_plan->escape != XI_PLACE_ESCAPE_NONE || !argument_plan->addressable ||
+                    argument_plan->place != value || !callee->params[parameter]->type ||
+                    !xr_type_equals(callee->params[parameter]->type, storage->type))
+                    return false;
+                found = true;
+            }
+        }
+    }
+    return found;
+}
+
+/* Xi exposes a value-struct READ receiver as a call-bound place so its executors can borrow the
+ *
+ * caller's storage. Canonical Program passes READ parameters as immutable values. Erase the
+ *
+ * physical load only when it is the exact receiver parameter of one concrete, non-runtime struct
+ *
+ * declaration; REF receivers and heap classes keep their explicit place semantics. */
+static bool read_value_receiver_load_is_exact(const XrXiBuildContext *context,
+                                              const XiFunc *function, const XiValue *value) {
+    value = logical_value_identity(value);
+    const XiValue *receiver =
+        value && value->op == XI_PLACE_LOAD && value->nargs == 1u && value->args
+            ? logical_value_identity(value->args[0])
+            : NULL;
+    uint8_t decl_kind = 0u;
+    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    const XiClassData *schema =
+        receiver ? find_aggregate_schema(context, receiver->type, NULL) : NULL;
+    return context && function && function->has_receiver &&
+           function->receiver_mode == XR_PARAM_READ && function->nparams != 0u &&
+           function->params && receiver == logical_value_identity(function->params[0]) &&
+           receiver && receiver->op == XI_PARAM && receiver->param_mode == XR_PARAM_READ &&
+           value->type && receiver->type && xr_type_equals(value->type, receiver->type) &&
+           nominal_contract(context, receiver->type, &decl_kind, &nominal_kind, NULL) &&
+           decl_kind == XG_DECL_STRUCT && nominal_kind == XR_CORE_IR_NOMINAL_STRUCT && schema &&
+           schema->struct_layout && !schema->needs_runtime_type && !schema->is_generic_skeleton;
+}
+
 static const XiValue *exact_logical_value_identity(const XrXiBuildContext *context,
                                                    const XiFunc *function, const XiValue *value) {
     for (;;) {
@@ -5087,6 +5177,14 @@ static const XiValue *exact_logical_value_identity(const XrXiBuildContext *conte
             continue;
         }
         if (imported_callable_checktype_is_exact(context, function, value)) {
+            value = value->args[0];
+            continue;
+        }
+        if (read_value_receiver_load_is_exact(context, function, value)) {
+            value = value->args[0];
+            continue;
+        }
+        if (read_value_call_place_is_exact(context, function, value)) {
             value = value->args[0];
             continue;
         }
@@ -7785,6 +7883,10 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
     if (projected_native_import_reference_is_exact(context, function, value))
         return true;
     if (imported_callable_checktype_is_exact(context, function, value))
+        return true;
+    if (read_value_receiver_load_is_exact(context, function, value))
+        return true;
+    if (read_value_call_place_is_exact(context, function, value))
         return true;
     if (value->op == XI_PARAM || value->op == XI_THROW || xi_copy_is_identity_alias(value) ||
         cleanup_return_copy_is_exact(value) ||
