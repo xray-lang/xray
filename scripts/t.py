@@ -31,7 +31,8 @@ The build step builds exactly the targets the selected tests need -- a full
 build's correctness without a full build's ~195 links.
 
 USAGE                                          measured, warm tree, 18 cores
-    scripts/t.py t0      after an edit         ~23s  (build + 255 tests)
+    scripts/t.py t0      after an edit         exact bounded smoke inventory
+    scripts/t.py infra   test-runner-only edit exact Python self-tests
     scripts/t.py t0 -R <re>  one test          ~3s   (builds only that test)
     scripts/t.py canonical  canonical Program edit preflight; exact inventory
     scripts/t.py t1      before a commit       ~1min
@@ -87,6 +88,7 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -134,17 +136,35 @@ SLOW_QEMU = ("aot_freestanding_qemu_smoke|aot_freestanding_riscv_qemu_smoke|"
              "aot_freestanding_thumb_qemu_smoke|aot_cross_smoke|"
              "aot_bundled_zig_smoke")
 
-# Everything that runs in-process: unit tests plus the static gates. No
-# toolchain spawn.
-T0_INCLUDE = (r"^(test_|.*_residue$|.*_convergence.*|.*_sync$|.*_inventory.*|"
-              r"harness_|check_|stdlib_boundary_|stdlib_def_|stdlib_metadata|"
-              r"contract_freeze|surface_drift)")
+# T0 is an edit-feedback contract, not "every test whose current name happens
+# to start with test_".  The old open-ended regex grew from 255 to 458 CTests
+# and forced 344 executable links.  Keep this inventory explicit and compose
+# it with the canonical Program registry so new source fixtures enter through
+# one machine-owned source of truth.
+T0_EXTRA_CTEST_NAMES = (
+    "expected_format_self_test",
+    "stdlib_analyzer_builtins_sync",
+    "test_analyzer",
+    "test_build_tree_lock",
+    "test_canonical_program_test_profile",
+    "test_tiered_test_runner",
+)
+T0_CTEST_NAMES = tuple(dict.fromkeys(
+    canonical_profile.CTEST_NAMES + T0_EXTRA_CTEST_NAMES))
+
+
+def exact_ctest_regex(names: Sequence[str]) -> str:
+    return "^(" + "|".join(re.escape(name) for name in names) + ")$"
+
+
+T0_INCLUDE = exact_ctest_regex(T0_CTEST_NAMES)
 
 TIERS: Dict[str, Tuple[str, str, str]] = {
     # tier: (include, exclude, not_covered)
     "t0": (T0_INCLUDE, f"{SLOW_EXTERNAL}|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}",
-           "full compile-error corpus, exhaustive Xi generator mutations, VM/AOT "
-           "differential, regression corpus, AOT suites, sanitizers"),
+           "unselected unit/meta tests, full compile-error corpus, exhaustive Xi "
+           "generator mutations, VM/AOT differential, regression corpus, broad "
+           "AOT suites and sanitizers"),
     # + the VM-executed corpora: regression, syntax, bytecode, stdlib.
     "t1": ("", f"{SLOW_EXTERNAL}|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}|^backend_diff|^task190_|^aot_|"
            "^ffi_|^install_|^native_output|^binary_|^dap_|^raw_scalar|"
@@ -168,6 +188,49 @@ FOCUSED_CTEST_OPTIONS = {
 }
 
 REGRESSION_BASELINE = REPO_ROOT / "tests" / "regression" / "baseline_failures.txt"
+
+
+@dataclass(frozen=True)
+class ExactProfile:
+    tests: Tuple[str, ...]
+    targets: Tuple[str, ...]
+    include_xray: bool
+    not_covered: str
+    allow_no_build_targets: bool = False
+
+
+EXACT_PROFILES = {
+    "canonical": ExactProfile(
+        tests=canonical_profile.CTEST_NAMES,
+        targets=canonical_profile.BUILD_TARGETS,
+        include_xray=False,
+        not_covered=("known-red terminal readiness/residue gates, broad language/runtime "
+                     "suites, full backend differential, full ASan/LSan, QEMU and release "
+                     "qualification"),
+    ),
+    "infra": ExactProfile(
+        tests=("test_build_tree_lock", "test_tiered_test_runner",
+               "test_canonical_program_test_profile"),
+        targets=(),
+        include_xray=False,
+        allow_no_build_targets=True,
+        not_covered=("all product compiler/runtime tests, compile-error corpora, native "
+                     "toolchains, sanitizers and release qualification"),
+    ),
+}
+
+INFRA_EDIT_PATH = re.compile(
+    r"^(scripts/t\.py|tests/lib/xraytest/buildlock\.py|"
+    r"tests/lib/tests/test_(t_runner|buildlock)\.py)$")
+CANONICAL_EDIT_PATH = re.compile(
+    r"^(src/program/|src/aot/program/|src/vm/xr_(program_vm|typed_)|"
+    r"src/execution/xr_|tests/unit/program/|tests/unit/vm/.*xr_program|"
+    r"tests/unit/aot/.*xr_program|tests/unit/ir/test_xr_program|"
+    r"scripts/(canonical_program_test_profile|run_canonical_program_gate|"
+    r"check_xr_program)[^/]*\.py$|"
+    r"tests/lib/(program_source_fixtures\.py|tests/test_(canonical_program|"
+    r"xr_program)[^/]*\.py)$)")
+DOCUMENTATION_PATH = re.compile(r"(^|/)(README[^/]*|[^/]+\.md)$")
 
 
 def usage(code: int = 0) -> int:
@@ -194,33 +257,79 @@ def git_lines(args: Sequence[str]) -> List[str]:
             if line.strip()]
 
 
-def choose_tier_from_diff() -> str:
-    """Pick a TIER from what the working tree touches, not a bespoke test list.
+def choose_run_for_paths(changed: Sequence[str]) -> Tuple[str, str]:
+    """Return a named exact profile or a conservative broad tier.
 
-    Tier selection is a coverage floor that can be reasoned about; a hand-picked
-    per-change test list is where coverage goes missing without anyone noticing.
+    Exact profiles are permitted only when every non-documentation path has a
+    declared owner. Mixed or unknown paths escalate; they never inherit the
+    narrowest rule that happened to match one file.
     """
+    if not changed:
+        return "t0", "working tree is clean"
+
+    substantive = [path.replace("\\", "/") for path in changed
+                   if not DOCUMENTATION_PATH.search(path.replace("\\", "/"))]
+    if not substantive:
+        return "t0", "documentation-only change"
+
+    if all(INFRA_EDIT_PATH.search(path) for path in substantive):
+        return "infra", "test-runner infrastructure is fully owned by the infra profile"
+
+    if all(CANONICAL_EDIT_PATH.search(path) for path in substantive):
+        return "canonical", "canonical Program private paths have an exact profile"
+
+    if any(BACKEND_TOUCHED.search(path) for path in substantive):
+        return "t2", "backend, runtime, ISA or build-graph change"
+    if any(path.startswith("src/") for path in substantive):
+        return "t1", "compiler source outside an exact owned profile"
+    return "t1", "unowned or mixed change; conservatively escalated"
+
+
+def choose_run_from_diff() -> str:
+    """Choose a bounded profile/tier and explain the complete path decision."""
     changed = sorted(set(git_lines(["diff", "--name-only", "HEAD"])
                          + git_lines(["ls-files", "--others", "--exclude-standard"])))
-    if not changed:
-        print("auto: working tree is clean — running t0")
-        return "t0"
-
-    if any(BACKEND_TOUCHED.search(path) for path in changed):
-        tier = "t2"
-        print(f"auto: backend / runtime / build changes — running {tier}")
-    elif any(path.startswith("src/") for path in changed):
-        tier = "t1"
-        print(f"auto: compiler source changes — running {tier}")
-    else:
-        tier = "t0"
-        print(f"auto: no compiler source changes — running {tier}")
+    run, reason = choose_run_for_paths(changed)
+    print(f"auto rule: {reason}; running {run}")
 
     for path in changed[:12]:
         print(f"       {path}")
     if len(changed) > 12:
         print("       ...")
-    return tier
+    return run
+
+
+def print_exact_inventory(label: str, items: Sequence[str]) -> None:
+    """Print an exact machine selection without one unbounded output line."""
+    print(f"{BLUE}==>{NC} exact {label} ({len(items)})")
+    line = "    "
+    for item in items:
+        addition = item if line == "    " else f", {item}"
+        if len(line) + len(addition) > 108:
+            print(line)
+            line = f"    {item}"
+        else:
+            line += addition
+    if line != "    ":
+        print(line)
+
+
+def validate_exact_inventory(label: str, selected: Sequence[str],
+                             expected: Sequence[str]) -> bool:
+    selected_set = set(selected)
+    expected_set = set(expected)
+    missing = sorted(expected_set - selected_set)
+    unexpected = sorted(selected_set - expected_set)
+    if not missing and not unexpected and len(selected) == len(expected):
+        return True
+    print(f"{RED}{label} inventory mismatch{NC}")
+    for name in missing:
+        print(f"    missing: {name}")
+    for name in unexpected:
+        print(f"    unexpected: {name}")
+    if len(selected) != len(set(selected)):
+        print("    duplicate selected CTest name")
+    return False
 
 
 def ctest_names(build_dir: Path, args: Sequence[str]) -> List[str]:
@@ -289,7 +398,9 @@ def refresh_cmake_manifest(build_dir: Path, jobs: int) -> bool:
 @timed_phase("build (dependency checks + compile + link)")
 def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
                    include_xray: bool = True,
-                   required_targets: Sequence[str] = ()) -> bool:
+                   required_targets: Sequence[str] = (),
+                   allow_no_targets: bool = False,
+                   explain_targets: bool = False) -> bool:
     """Build exactly what this run needs.
 
     Every tier needs current binaries; running a tier against a stale one is
@@ -315,6 +426,9 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
         targets.extend(required_targets)
         targets.extend(sorted(set(selected) & available))
         targets = list(dict.fromkeys(targets))
+        if not targets and allow_no_targets:
+            print(f"{BLUE}==>{NC} building 0 targets (script-only exact profile)")
+            return True
     else:
         # No target list available: fall back to a full build rather than
         # silently under-building and testing stale binaries.
@@ -322,6 +436,8 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
 
     if targets:
         print(f"{BLUE}==>{NC} building {len(targets)} target(s)")
+        if explain_targets:
+            print_exact_inventory("build targets", targets)
         argv = ["cmake", "--build", str(build_dir), "-j", str(jobs)]
         for target in targets:
             argv += ["--target", target]
@@ -411,9 +527,9 @@ def _run_main(argv: List[str]) -> int:
         return usage(0)
 
     if tier == "auto":
-        tier = choose_tier_from_diff()
-    canonical_preflight = tier == "canonical"
-    if tier not in TIERS and not canonical_preflight:
+        tier = choose_run_from_diff()
+    exact_profile = EXACT_PROFILES.get(tier)
+    if tier not in TIERS and exact_profile is None:
         print(f"Unknown tier '{tier}'")
         return usage(1)
 
@@ -477,9 +593,9 @@ def _run_main(argv: List[str]) -> int:
     if not 0 <= shard_index < shards:
         print(f"{RED}Error{NC}: XR_SHARD_INDEX must be in [0,{shards})")
         return 1
-    if shards > 1 and canonical_preflight:
-        print(f"{RED}Error{NC}: XR_SHARDS is not accepted by the canonical "
-              "preflight; its inventory is exact.")
+    if shards > 1 and exact_profile is not None:
+        print(f"{RED}Error{NC}: XR_SHARDS is not accepted by exact profile "
+              f"{tier}.")
         return 1
     if shards > 1 and tier == "t3":
         print(f"{RED}Error{NC}: XR_SHARDS is not allowed for t3 — a release "
@@ -492,7 +608,7 @@ def _run_main(argv: List[str]) -> int:
               "(Ninja + Release in build/)")
         return 1
 
-    kind = "profile" if canonical_preflight else "tier"
+    kind = "profile" if exact_profile is not None else "tier"
     print(f"{BOLD}{kind} {tier}{NC}  build={build_dir}  "
           f"build_jobs={build_jobs}  ctest_jobs={ctest_jobs}")
     print("=" * 72)
@@ -500,15 +616,13 @@ def _run_main(argv: List[str]) -> int:
     if not refresh_cmake_manifest(build_dir, build_jobs):
         return 1
 
-    if canonical_preflight:
-        include = canonical_profile.ctest_regex()
+    if exact_profile is not None:
+        include = exact_ctest_regex(exact_profile.tests)
         exclude = ""
-        not_covered = ("known-red terminal readiness/residue gates, broad language/runtime "
-                       "suites, full backend differential, full ASan/LSan, QEMU and release "
-                       "qualification")
+        not_covered = exact_profile.not_covered
     else:
         include, exclude, not_covered = TIERS[tier]
-    focused_selection = not canonical_preflight and has_explicit_ctest_selection(extra)
+    focused_selection = exact_profile is None and has_explicit_ctest_selection(extra)
     if focused_selection:
         focus_gap = f"unselected {tier} tests and auxiliary corpora"
         not_covered = f"{focus_gap}, {not_covered}" if not_covered else focus_gap
@@ -525,14 +639,34 @@ def _run_main(argv: List[str]) -> int:
         print(f"{RED}TEST SELECTION FAILED{NC}: no tests match the selected tier and filters")
         return 1
 
+    exact_expected: Sequence[str] = ()
+    required_targets: Sequence[str] = ()
+    include_xray = True
+    allow_no_targets = False
+    if exact_profile is not None:
+        exact_expected = exact_profile.tests
+        required_targets = exact_profile.targets
+        include_xray = exact_profile.include_xray
+        allow_no_targets = exact_profile.allow_no_build_targets
+    elif tier == "t0" and not focused_selection:
+        exact_expected = T0_CTEST_NAMES
+        required_targets = canonical_profile.BUILD_TARGETS
+
+    if exact_expected:
+        if not validate_exact_inventory(f"{tier} exact profile", selected,
+                                        exact_expected):
+            return 1
+        print_exact_inventory("CTest names", selected)
+
     if not platform.env_flag("XR_NO_BUILD"):
         if not build_selected(
             build_dir,
             selected,
             build_jobs,
-            include_xray=not canonical_preflight,
-            required_targets=(canonical_profile.BUILD_TARGETS
-                              if canonical_preflight else ()),
+            include_xray=include_xray,
+            required_targets=required_targets,
+            allow_no_targets=allow_no_targets,
+            explain_targets=bool(exact_expected),
         ):
             return 1
         refreshed = ctest_names(build_dir, ctest_args + extra)
@@ -549,23 +683,14 @@ def _run_main(argv: List[str]) -> int:
                 build_dir,
                 selected,
                 build_jobs,
-                include_xray=not canonical_preflight,
-                required_targets=(canonical_profile.BUILD_TARGETS
-                                  if canonical_preflight else ()),
+                include_xray=include_xray,
+                required_targets=required_targets,
+                allow_no_targets=allow_no_targets,
+                explain_targets=bool(exact_expected),
             ):
                 return 1
-
-    if canonical_preflight:
-        selected_set = set(selected)
-        expected_set = set(canonical_profile.CTEST_NAMES)
-        missing = sorted(expected_set - selected_set)
-        unexpected = sorted(selected_set - expected_set)
-        if missing or unexpected:
-            print(f"{RED}canonical preflight inventory mismatch{NC}")
-            for name in missing:
-                print(f"    missing: {name}")
-            for name in unexpected:
-                print(f"    unexpected: {name}")
+        if exact_expected and not validate_exact_inventory(
+                f"{tier} exact profile", selected, exact_expected):
             return 1
 
     env = dict(os.environ)

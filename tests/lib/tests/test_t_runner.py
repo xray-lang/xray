@@ -19,6 +19,13 @@ runner = load_module("tiered_test_runner_under_test", ROOT / "scripts" / "t.py")
 
 
 class FocusedSelectionTest(unittest.TestCase):
+    def test_t0_is_a_bounded_exact_inventory(self):
+        self.assertLess(len(runner.T0_CTEST_NAMES), 100)
+        self.assertEqual(len(runner.T0_CTEST_NAMES), len(set(runner.T0_CTEST_NAMES)))
+        self.assertTrue(set(runner.canonical_profile.CTEST_NAMES) <=
+                        set(runner.T0_CTEST_NAMES))
+        self.assertNotIn(".*", runner.T0_INCLUDE)
+
     def test_requested_build_dir_matches_fast_tree_selection(self):
         with mock.patch.dict(runner.os.environ, {}, clear=True), mock.patch.object(
                 runner.platform, "IS_WINDOWS", True):
@@ -91,6 +98,47 @@ class FocusedSelectionTest(unittest.TestCase):
                 self.assertNotRegex("xi_generator_fast_self_test", exclude)
                 self.assertIn("exhaustive Xi generator mutations", not_covered)
         self.assertEqual(runner.TIERS["t3"][1], "")
+
+    def test_script_only_profile_does_not_trigger_full_build(self):
+        listed = SimpleNamespace(ok=True, stdout=b"phony: phony\n")
+        with mock.patch.object(runner.proc, "run", return_value=listed) as run:
+            self.assertTrue(runner.build_selected(
+                Path("build"), ["test_tiered_test_runner"], 4,
+                include_xray=False, allow_no_targets=True))
+        run.assert_called_once_with(["ninja", "-C", "build",
+                                     "-t", "targets", "all"])
+
+
+class AutoRoutingTest(unittest.TestCase):
+    def assert_route(self, expected, *paths):
+        route, _ = runner.choose_run_for_paths(paths)
+        self.assertEqual(route, expected)
+
+    def test_owned_test_infrastructure_uses_script_only_profile(self):
+        self.assert_route("infra", "scripts/t.py",
+                          "tests/lib/tests/test_t_runner.py")
+
+    def test_canonical_private_program_paths_use_exact_profile(self):
+        self.assert_route("canonical", "src/program/xr_program_verify.c",
+                          "src/aot/program/xr_backend_ir_verify.c",
+                          "tests/unit/program/test_xr_program.c")
+
+    def test_documentation_does_not_widen_an_owned_change(self):
+        self.assert_route("canonical", "src/program/xr_program_verify.c",
+                          "contracts/canonical-program-vm.md")
+
+    def test_backend_and_general_source_changes_keep_broad_floors(self):
+        self.assert_route("t2", "src/aot/xi_cgen.c")
+        self.assert_route("t2", "CMakeLists.txt")
+        self.assert_route("t1", "src/frontend/parser/xparse.c")
+
+    def test_unknown_or_mixed_paths_conservatively_escalate(self):
+        self.assert_route("t1", "new-root-tool.py")
+        self.assert_route("t1", "scripts/t.py", "src/program/xr_program.c")
+
+    def test_clean_and_documentation_only_changes_use_bounded_t0(self):
+        self.assert_route("t0")
+        self.assert_route("t0", "README.md", "contracts/notes.md")
 
 
 class PhaseTimingTest(unittest.TestCase):
