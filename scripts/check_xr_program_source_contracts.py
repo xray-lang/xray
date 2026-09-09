@@ -155,6 +155,7 @@ def validate(root: Path) -> None:
     run_route_test = read(root, "tests/cli/run_canonical_source_route_tests.py")
     pipeline_header = read(root, "src/ir/xi_pipeline.h")
     pipeline = read(root, "src/ir/xi_pipeline.c")
+    lower_class = read(root, "src/ir/xi_lower_class.inc.c")
     test = read(root, "tests/unit/ir/test_xi_pipeline.c")
     global_producer = read(root, "src/analysis/xglobal_producer.c")
     imported_callable_test = read(root, "tests/unit/ir/test_xr_program_imported_callable.c")
@@ -255,6 +256,7 @@ def validate(root: Path) -> None:
         "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors",
         "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors",
         "source_owner_generic_specializations_are_exact_program_functions",
+        "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates",
         "source_owner_module_initializer_is_a_canonical_entry",
         "source_owner_rejects_non_authoritative_entry_identity",
         "source_owner_rejects_module_budget_before_analysis",
@@ -279,6 +281,8 @@ def validate(root: Path) -> None:
         "xr_program_xi_value_is_materialized",
         "map_type_recursive",
         "logical_value_identity",
+        "resolved_value_aggregate_construction",
+        "static_value_struct_publication_is_exact",
         "block_typed_invoke_call",
         "map_function_error_type",
         "XR_CORE_OP_CORE_CALL_SEALED_INVOKE",
@@ -287,6 +291,13 @@ def validate(root: Path) -> None:
         "XR_CORE_OP_CORE_PANIC_PUBLISH",
     ):
         require(token in producer, f"source producer lacks {token}")
+    for token in (
+        "class_field_evidence_source_node_id",
+        "instance_field_source_node_ids",
+        "class_xglobal_row_for_info",
+    ):
+        require(token in lower_class,
+                f"Xi class lowering lacks exact specialized field evidence: {token}")
     for token in ("program_semantic_closure", "psc_", "semantic_function"):
         require(token not in producer, f"source producer regained legacy authority: {token}")
     for token in (
@@ -419,6 +430,9 @@ def validate(root: Path) -> None:
     require(("affine-xi.place.load-writeback",
              "core.place.take") in structural_rows,
             "affine REF writeback take projection is absent")
+    require(("exact-value-struct-xi.agg.new-plus-xi.agg.set-sequence",
+             "core.aggregate.construct") in structural_rows,
+            "exact value-struct construction projection is absent")
     require(not any(row.get("xi_operation") == "xi.agg.set" for row in value_mappings
                     if isinstance(row, dict)),
             "mutating aggregate storage regained a CoreSpec projection")
@@ -632,6 +646,7 @@ def self_test(root: Path) -> None:
             "src/program/xr_reference_evaluator.c",
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
+            "src/ir/xi_lower_class.inc.c",
             "src/analysis/xglobal_producer.c",
             "tests/unit/ir/test_xi_pipeline.c",
             "tests/unit/ir/test_xr_program_imported_callable.c",

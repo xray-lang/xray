@@ -385,6 +385,10 @@
       "core_operation": "core.place.take"
     },
     {
+      "source": "exact-value-struct-xi.agg.new-plus-xi.agg.set-sequence",
+      "core_operation": "core.aggregate.construct"
+    },
+    {
       "source": "function-return",
       "core_operation": "core.return"
     },

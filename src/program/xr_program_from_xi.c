@@ -2002,6 +2002,13 @@ static const XiClassData *resolved_canonical_class_construction(const XrXiBuildC
                                                                 const XiValue *call,
                                                                 XiValue *const **field_values_out,
                                                                 uint32_t *field_count_out);
+static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildContext *context,
+                                                                const XiFunc *caller,
+                                                                const XiValue *allocation,
+                                                                XiValue **field_values_out,
+                                                                uint32_t *field_count_out);
+static bool value_aggregate_initializer_is_exact(const XrXiBuildContext *context,
+                                                 const XiFunc *caller, const XiValue *initializer);
 static const XiClassData *resolved_empty_struct_literal(const XrXiBuildContext *context,
                                                         const XiFunc *caller, const XiValue *call);
 static const XiClassData *resolved_class_carrier(const XrXiBuildContext *context,
@@ -2039,6 +2046,8 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                         resolved_suspension_native_call(context, function, consumer))) ||
                       resolved_canonical_class_construction(context, function, consumer, NULL,
                                                             NULL)) ||
+                     resolved_value_aggregate_construction(context, function, consumer, NULL,
+                                                           NULL) ||
                      resolved_class_carrier(context, function, consumer, XG_NO_ID, NULL) ||
                      resolved_empty_struct_literal(context, function, consumer) ||
                      resolved_unit_enum_literal(context, function, consumer, NULL))) {
@@ -2060,7 +2069,12 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
             }
         }
     }
-    return found;
+    /* Lowering may emit a dead physical retain next to a logical value use.
+     * It is
+     * representation-only, but a retained value with any reachable use
+     * must still prove that
+     * every such use is elided. */
+    return found || value->op == XI_RETAIN;
 }
 
 static bool value_is_only_elided_operand(const XrXiBuildContext *context, const XiFunc *function,
@@ -2748,6 +2762,203 @@ static const XiClassData *resolved_canonical_class_construction(const XrXiBuildC
     if (field_count_out)
         *field_count_out = class_data->instance_field_count;
     return class_data;
+}
+
+/* A value-struct literal is physical Xi allocation followed by one AGG_SET per
+ * field.  Canonical
+ * Program has no uninitialized aggregate state: collapse
+ * that exact sequence into one logical
+ * aggregate.construct only after the
+ * specialized nominal declaration, detached layout, Xglobal
+ * field table and
+ * every initializer operand agree.  This is also the point where a
+ *
+ * monomorphized Box$i64 becomes a distinct Program TypeId; the open Box<T>
+ * skeleton is never a
+ * runtime value or an erased construction fallback. */
+static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildContext *context,
+                                                                const XiFunc *caller,
+                                                                const XiValue *allocation,
+                                                                XiValue **field_values_out,
+                                                                uint32_t *field_count_out) {
+    if (field_values_out)
+        memset(field_values_out, 0, XR_MAX_AGG_FIELDS * sizeof(*field_values_out));
+    if (field_count_out)
+        *field_count_out = 0u;
+    const XrAggregateLayout *layout = allocation && allocation->op == XI_AGG_NEW
+                                          ? (const XrAggregateLayout *) allocation->aux
+                                          : NULL;
+    const XrClassInfo *info =
+        allocation && allocation->type ? nominal_info_for_type(allocation->type) : NULL;
+    if (!context || !context->source || !context->source->global_evidence || !caller ||
+        !allocation || allocation->nargs != 1u || !allocation->args || !allocation->args[0] ||
+        !allocation->block || allocation->block->func != caller || !layout ||
+        (layout->kind != XR_AGG_LAYOUT_STRUCT && layout->kind != XR_AGG_LAYOUT_PACKED_STRUCT) ||
+        layout->field_count > XR_MAX_AGG_FIELDS || !layout->nominal_name ||
+        (layout->field_count != 0u && !layout->field_names) || !allocation->type ||
+        allocation->type->is_nullable ||
+        (allocation->type->kind != XR_KIND_INSTANCE && allocation->type->kind != XR_KIND_CLASS) ||
+        !info || info->xg_class_id == XG_NO_ID || info->xg_decl_id == XG_NO_ID ||
+        info->xg_nominal_key == 0u)
+        return NULL;
+
+    uint32_t module_index = UINT32_MAX;
+    const XiClassData *class_data = resolved_class_carrier(context, caller, allocation->args[0],
+                                                           info->xg_class_id, &module_index);
+    const XgGlobalEvidence *evidence = context->source->global_evidence;
+    const XgClassSummary *class_row = find_xg_class_by_id(evidence, info->xg_class_id);
+    const XgDeclSummary *decl_row =
+        class_row ? find_xg_decl_by_id(evidence, class_row->decl_id) : NULL;
+    uint8_t decl_kind = 0u;
+    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    uint64_t nominal_key = 0u;
+    if (!class_data || !class_row || !decl_row || module_index >= context->source->module_count ||
+        class_data->xg_class_id != class_row->class_id || class_row->decl_id != info->xg_decl_id ||
+        decl_row->decl_id != info->xg_decl_id || decl_row->nominal_key != info->xg_nominal_key ||
+        class_row->module_id != (XgModuleId) (module_index + 1u) ||
+        decl_row->module_id != class_row->module_id || class_row->decl_kind != XG_DECL_STRUCT ||
+        decl_row->kind != XG_DECL_STRUCT || class_row->parent_class_id != XG_NO_ID ||
+        (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u || class_data->is_generic_skeleton ||
+        (((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) != class_data->is_monomorphized) ||
+        class_data->struct_layout == NULL ||
+        !xr_aggregate_layout_semantically_equal(class_data->struct_layout, layout) ||
+        class_data->instance_field_count != layout->field_count ||
+        class_row->field_count != layout->field_count ||
+        (layout->field_count != 0u &&
+         (!class_data->instance_field_names || !class_data->instance_field_types ||
+          !class_data->instance_field_source_node_ids)) ||
+        !nominal_contract(context, allocation->type, &decl_kind, &nominal_kind, &nominal_key) ||
+        decl_kind != XG_DECL_STRUCT || nominal_kind != XR_CORE_IR_NOMINAL_STRUCT ||
+        nominal_key != info->xg_nominal_key)
+        return NULL;
+
+    if ((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) {
+        const XgClassSummary *origin =
+            find_xg_class_by_id(evidence, class_row->generic_origin_class_id);
+        const XgGenericInstSummary *instance = NULL;
+        for (uint32_t index = 0u; index < evidence->ngeneric_insts; ++index) {
+            const XgGenericInstSummary *candidate = &evidence->generic_insts[index];
+            if (candidate->specialized_class_id != class_row->class_id)
+                continue;
+            if (instance)
+                return NULL;
+            instance = candidate;
+        }
+        const uint32_t required_flags = XG_GENERIC_INST_CONCRETE_TYPES |
+                                        XG_GENERIC_INST_SPECIALIZED_ABI |
+                                        XG_GENERIC_INST_CONCRETE_STORAGE;
+        if (!origin || !instance || (origin->flags & XG_CLASS_GENERIC_SKELETON) == 0u ||
+            instance->kind != XG_GENERIC_INST_CLASS ||
+            instance->origin_class_id != class_row->generic_origin_class_id ||
+            instance->origin_decl_id != origin->decl_id ||
+            instance->name_id != class_row->generic_origin_name_id ||
+            instance->type_key != class_row->generic_type_key ||
+            instance->type_arg_key_start != class_row->generic_type_arg_key_start ||
+            instance->type_arg_count != class_row->generic_type_arg_count ||
+            instance->type_arg_count == 0u ||
+            (instance->flags & required_flags) != required_flags ||
+            !class_data->generic_origin_name ||
+            xg_name_id(class_data->generic_origin_name) != class_row->generic_origin_name_id ||
+            class_data->mono_type_arg_count != class_row->generic_type_arg_count)
+            return NULL;
+    } else if (class_row->generic_origin_class_id != XG_NO_ID ||
+               class_row->generic_origin_name_id != 0u || class_row->generic_type_key != 0u ||
+               class_row->generic_type_arg_key_start != 0u ||
+               class_row->generic_type_arg_count != 0u || class_data->generic_origin_name ||
+               class_data->mono_type_arg_count != 0u) {
+        return NULL;
+    }
+
+    uint64_t seen_fields = 0u;
+    uint32_t initialization_count = 0u;
+    bool saw_allocation = false;
+    bool saw_non_initializer_use = false;
+    for (uint32_t block_index = 0u; block_index < caller->nblocks; ++block_index) {
+        const XiBlock *block = caller->blocks[block_index];
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *value = block->values[value_index];
+            if (value == allocation) {
+                if (block != allocation->block || saw_allocation)
+                    return NULL;
+                saw_allocation = true;
+                continue;
+            }
+            for (uint16_t argument = 0u; value && argument < value->nargs; ++argument) {
+                if (!value->args || logical_value_identity(value->args[argument]) != allocation)
+                    continue;
+                bool initializer = value->op == XI_AGG_SET && argument == 0u;
+                if (!initializer) {
+                    if (block == allocation->block && saw_allocation &&
+                        initialization_count == layout->field_count)
+                        saw_non_initializer_use = true;
+                    else
+                        return NULL;
+                    continue;
+                }
+                uint32_t ordinal = value->aux_int >= 0 ? (uint32_t) value->aux_int : UINT32_MAX;
+                if (block != allocation->block || !saw_allocation || saw_non_initializer_use ||
+                    value->nargs != 2u || !value->args[1] || value->aux != layout ||
+                    ordinal >= layout->field_count ||
+                    (seen_fields & (UINT64_C(1) << ordinal)) != 0u ||
+                    !layout->field_names[ordinal] ||
+                    strcmp(layout->field_names[ordinal],
+                           class_data->instance_field_names[ordinal]) != 0 ||
+                    !xr_type_equals(value->args[1]->type,
+                                    class_data->instance_field_types[ordinal]))
+                    return NULL;
+                const XgClassFieldSummary *field = NULL;
+                for (uint32_t field_index = 0u; field_index < evidence->nclass_fields;
+                     ++field_index) {
+                    const XgClassFieldSummary *candidate = &evidence->class_fields[field_index];
+                    if (candidate->owner_class_id != class_row->class_id ||
+                        candidate->instance_slot != ordinal)
+                        continue;
+                    if (field)
+                        return NULL;
+                    field = candidate;
+                }
+                if (!field || field->module_id != class_row->module_id ||
+                    field->decl_ordinal != ordinal ||
+                    (field->flags & XG_CLASS_FIELD_STATIC) != 0u ||
+                    field->source_node_id != class_data->instance_field_source_node_ids[ordinal] ||
+                    field->name_id != xg_name_id(class_data->instance_field_names[ordinal]))
+                    return NULL;
+                seen_fields |= UINT64_C(1) << ordinal;
+                ++initialization_count;
+                if (field_values_out)
+                    field_values_out[ordinal] = value->args[1];
+            }
+        }
+        if (block && block->control && logical_value_identity(block->control) == allocation) {
+            if (block != allocation->block || !saw_allocation ||
+                initialization_count != layout->field_count)
+                return NULL;
+            saw_non_initializer_use = true;
+        }
+    }
+    uint64_t expected_fields =
+        layout->field_count == 64u ? UINT64_MAX : (UINT64_C(1) << layout->field_count) - 1u;
+    if (!saw_allocation || initialization_count != layout->field_count ||
+        seen_fields != expected_fields)
+        return NULL;
+    if (field_count_out)
+        *field_count_out = layout->field_count;
+    return class_data;
+}
+
+static bool value_aggregate_initializer_is_exact(const XrXiBuildContext *context,
+                                                 const XiFunc *caller, const XiValue *initializer) {
+    const XiValue *allocation = initializer && initializer->op == XI_AGG_SET &&
+                                        initializer->nargs == 2u && initializer->args
+                                    ? logical_value_identity(initializer->args[0])
+                                    : NULL;
+    XiValue *field_values[XR_MAX_AGG_FIELDS];
+    uint32_t field_count = 0u;
+    if (!resolved_value_aggregate_construction(context, caller, allocation, field_values,
+                                               &field_count) ||
+        initializer->aux_int < 0 || (uint64_t) initializer->aux_int >= field_count)
+        return false;
+    return field_values[initializer->aux_int] == initializer->args[1];
 }
 
 /* Field operations share Xi opcodes with namespace and enum access.  Admit a
@@ -5412,6 +5623,7 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
            ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
             resolved_sealed_callee(context, function, value)) ||
            resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
+           resolved_value_aggregate_construction(context, function, value, NULL, NULL) ||
            (value->op == XI_CALL_BUILTIN && value->aux && value->aux_kind == XI_AUX_KIND_NONE &&
             strcmp((const char *) value->aux, "copy") == 0);
 }
@@ -5670,6 +5882,7 @@ static bool value_has_canonical_materialization(const XrXiBuildContext *context,
         shared_callable_value_is_exact(context, function, value) ||
         static_typed_catch_contract_is_exact(context, value) ||
         resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
+        resolved_value_aggregate_construction(context, function, value, NULL, NULL) ||
         resolved_empty_struct_literal(context, function, value) ||
         resolved_unit_enum_literal(context, function, value, NULL) ||
         resolved_aggregate_field_projection(context, value, NULL) ||
@@ -6834,6 +7047,24 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
         return XR_PROGRAM_BUILD_OK;
     }
+    XiValue *aggregate_fields[XR_MAX_AGG_FIELDS];
+    uint32_t aggregate_field_count = 0u;
+    if (resolved_value_aggregate_construction(context, function->xi, value, aggregate_fields,
+                                              &aggregate_field_count)) {
+        const XrXiTypeStorage *aggregate = find_dynamic_type_by_id(context, result_type);
+        if (!aggregate || aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
+            aggregate->input.nominal_kind != XR_CORE_IR_NOMINAL_STRUCT ||
+            aggregate->input.field_count != aggregate_field_count)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi value aggregate construction v%u has no exact nominal type", value->id);
+        instruction->operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = logical_ownership_for_type(context, result_type);
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+        return set_operands(context, instruction, function, block, aggregate_fields,
+                            aggregate_field_count, diagnostic, diagnostic_size);
+    }
     uint32_t aggregate_field_ordinal = UINT32_MAX;
     if (resolved_aggregate_field_projection(context, value, &aggregate_field_ordinal)) {
         uint16_t aggregate_type_id = XR_CORE_TYPE_VOID;
@@ -7425,6 +7656,96 @@ static bool static_import_publication_is_exact(const XrXiBuildContext *context,
            resolved_import_reference_is_exact(context, value);
 }
 
+/* A source value-struct declaration publishes a phase-only class token through
+ * module shared
+ * storage even though instances are represented by their frozen
+ * aggregate TypeId.  Erase that
+ * token and its store only when one initializer,
+ * one slot, one Xi descriptor and one Xglobal
+ * struct declaration all agree.
+ * Heap classes remain outside this rule because their runtime type
+ * object is a
+ * real execution value. */
+static const XiClassData *static_value_struct_publication_source(const XrXiBuildContext *context,
+                                                                 const XiFunc *function,
+                                                                 const XiValue *source,
+                                                                 uint32_t *slot_out) {
+    if (slot_out)
+        *slot_out = UINT32_MAX;
+    source = logical_value_identity(source);
+    const XiClassData *class_data =
+        source && source->op == XI_CLASS_CREATE ? (const XiClassData *) source->aux : NULL;
+    const XiModule *module = function ? function->module : NULL;
+    if (!context || !context->source || !context->source->global_evidence || !function || !module ||
+        module->init != function || !source || source->block == NULL ||
+        source->block->func != function || source->nargs != 0u || !class_data ||
+        class_data->needs_runtime_type || class_data->xg_class_id == XG_NO_ID)
+        return NULL;
+    uint32_t module_index = UINT32_MAX;
+    if (!find_collected_xi_function_module(context, function, &module_index) ||
+        module_index >= context->source->module_count ||
+        context->source->module_roots[module_index] != function)
+        return NULL;
+    const XgClassSummary *class_row =
+        find_xg_class_by_id(context->source->global_evidence, class_data->xg_class_id);
+    const XgDeclSummary *decl_row =
+        class_row ? find_xg_decl_by_id(context->source->global_evidence, class_row->decl_id) : NULL;
+    bool skeleton = (class_row && (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u);
+    bool monomorphized = (class_row && (class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u);
+    if (!class_row || !decl_row || class_row->module_id != (XgModuleId) (module_index + 1u) ||
+        decl_row->module_id != class_row->module_id || class_row->decl_kind != XG_DECL_STRUCT ||
+        decl_row->kind != XG_DECL_STRUCT || class_row->parent_class_id != XG_NO_ID ||
+        class_row->class_id != class_data->xg_class_id ||
+        skeleton != class_data->is_generic_skeleton ||
+        monomorphized != class_data->is_monomorphized || (skeleton && monomorphized) ||
+        (!skeleton && !class_data->struct_layout) ||
+        (class_data->struct_layout && class_data->struct_layout->kind != XR_AGG_LAYOUT_STRUCT &&
+         class_data->struct_layout->kind != XR_AGG_LAYOUT_PACKED_STRUCT))
+        return NULL;
+
+    uint32_t publication_slot = UINT32_MAX;
+    uint32_t publications = 0u;
+    for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+        const XiBlock *block = function->blocks[block_index];
+        if (block && block->control == source)
+            return NULL;
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *user = block->values[value_index];
+            for (uint16_t argument = 0u; user && argument < user->nargs; ++argument) {
+                if (!user->args || logical_value_identity(user->args[argument]) != source)
+                    continue;
+                if (user->op == XI_RETAIN || user->op == XI_RELEASE)
+                    continue;
+                if (user->op != XI_SET_SHARED || argument != 0u || user->aux_int < 0 ||
+                    (uint64_t) user->aux_int >= module->nslots || !module->slot_classes ||
+                    module->slot_classes[user->aux_int] != class_data || publications != 0u)
+                    return NULL;
+                publication_slot = (uint32_t) user->aux_int;
+                ++publications;
+            }
+        }
+    }
+    if (publications != 1u)
+        return NULL;
+    if (slot_out)
+        *slot_out = publication_slot;
+    return class_data;
+}
+
+static bool static_value_struct_publication_is_exact(const XrXiBuildContext *context,
+                                                     const XiFunc *function, const XiValue *value) {
+    if (!value)
+        return false;
+    if (value->op == XI_CLASS_CREATE)
+        return static_value_struct_publication_source(context, function, value, NULL) != NULL;
+    if (value->op != XI_SET_SHARED || value->nargs != 1u || !value->args || value->aux_int < 0)
+        return false;
+    uint32_t slot = UINT32_MAX;
+    return static_value_struct_publication_source(context, function, value->args[0], &slot) !=
+               NULL &&
+           slot == (uint32_t) value->aux_int;
+}
+
 static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *function,
                              const XiValue *value) {
     if (direct_projection_writeback_is_exact(context, function, value))
@@ -7456,6 +7777,10 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
     if (static_function_publication_is_exact(function, value))
         return true;
     if (static_import_publication_is_exact(context, function, value))
+        return true;
+    if (static_value_struct_publication_is_exact(context, function, value))
+        return true;
+    if (value_aggregate_initializer_is_exact(context, function, value))
         return true;
     if (projected_native_import_reference_is_exact(context, function, value))
         return true;
@@ -8236,6 +8561,19 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
                                     diagnostic, diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK)
             return status;
+    }
+    XiValue *aggregate_fields[XR_MAX_AGG_FIELDS];
+    uint32_t aggregate_field_count = 0u;
+    if (resolved_value_aggregate_construction(context, function->xi, value, aggregate_fields,
+                                              &aggregate_field_count)) {
+        for (uint32_t field = 0u; field < aggregate_field_count; ++field) {
+            XrProgramBuildStatus status =
+                require_value_available(context, function, block, aggregate_fields[field], changed,
+                                        diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+        return XR_PROGRAM_BUILD_OK;
     }
     const XiFunc *sealed_callee =
         value->op == XI_CALL || value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT
@@ -13142,6 +13480,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         resolved_canonical_class_construction(context, function, value, NULL, NULL)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT)
                             : NULL;
+                    const XrCoreOperationSpec *value_aggregate_construction =
+                        resolved_value_aggregate_construction(context, function, value, NULL, NULL)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT)
+                            : NULL;
                     const XrCoreOperationSpec *empty_struct_literal =
                         resolved_empty_struct_literal(context, function, value)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT)
@@ -13195,6 +13537,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = true;
                         value_effects = class_construction->effect_mask;
                         value_capabilities = class_construction->capability_mask;
+                    } else if (value_aggregate_construction) {
+                        has_contract = true;
+                        value_effects = value_aggregate_construction->effect_mask;
+                        value_capabilities = value_aggregate_construction->capability_mask;
                     } else if (empty_struct_literal) {
                         has_contract = true;
                         value_effects = empty_struct_literal->effect_mask;

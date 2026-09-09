@@ -224,6 +224,44 @@ static XrClassInfo *class_info_for_decl(XiLower *l, const ClassDeclNode *cd) {
     return class_links ? class_links->class_info : NULL;
 }
 
+/* Monomorphized class/struct clones may retain the template field's AST node
+ * id.  Xglobal
+ * deliberately uniquifies that id for the concrete nominal
+ * declaration, so the detached Xi
+ * descriptor must copy the evidence-owned id
+ * instead of re-deriving it from the cloned AST. */
+static uint32_t class_field_evidence_source_node_id(XiLower *l, const ClassDeclNode *cd,
+                                                    const AstNode *field_node,
+                                                    uint32_t declaration_ordinal,
+                                                    uint32_t instance_ordinal) {
+    uint32_t fallback = xi_lower_source_node_id(l, field_node);
+    const XrClassInfo *info = class_info_for_decl(l, cd);
+    const XgClassSummary *owner = class_xglobal_row_for_info(l, info);
+    const XgClassFieldSummary *match = NULL;
+    if (!l || !l->global_evidence || !cd || !field_node || field_node->type != AST_FIELD_DECL ||
+        !field_node->as.field_decl.name || !owner || owner->field_start == 0u ||
+        owner->field_count == 0u)
+        return fallback;
+    uint32_t start = owner->field_start - 1u;
+    if (start >= l->global_evidence->nclass_fields ||
+        owner->field_count > l->global_evidence->nclass_fields - start)
+        return fallback;
+    uint32_t name_id = xg_name_id(field_node->as.field_decl.name);
+    for (uint32_t index = 0u; index < owner->field_count; ++index) {
+        const XgClassFieldSummary *candidate = &l->global_evidence->class_fields[start + index];
+        if (candidate->owner_class_id != owner->class_id ||
+            candidate->module_id != owner->module_id ||
+            candidate->decl_ordinal != declaration_ordinal ||
+            candidate->instance_slot != instance_ordinal || candidate->name_id != name_id ||
+            (candidate->flags & XG_CLASS_FIELD_STATIC) != 0u)
+            continue;
+        if (match)
+            return fallback;
+        match = candidate;
+    }
+    return match && match->source_node_id != 0u ? match->source_node_id : fallback;
+}
+
 /* A class participates in polymorphic vtable dispatch when it has a parent
  * (it is a subclass) or is extended by some subclass. Only such classes require
  * the native heap type-id representation; keeping the check here lets the native
@@ -1045,7 +1083,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                     ? xr_tref_resolve(l->isolate, field_node->as.field_decl.field_type)
                     : NULL;
             data->instance_field_source_node_ids[field_index] =
-                xi_lower_source_node_id(l, field_node);
+                class_field_evidence_source_node_id(l, cd, field_node, (uint32_t) i, field_index);
             class_field_default_from_ast(l, field_node->as.field_decl.initializer,
                                          &data->instance_field_defaults[field_index]);
             field_index++;
