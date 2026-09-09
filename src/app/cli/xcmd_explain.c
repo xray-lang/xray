@@ -574,9 +574,12 @@ static int explain_effect_view(const char *subject, bool suspend_view) {
     if (mono_roots) {
         for (int ti = 0; ti < graph->topo_count; ti++)
             mono_roots[ti] = graph->specs[graph->topo_order[ti]].ast;
+        XaMonoBudget mono_budget = xa_mono_default_budget();
+        XaMonoUsage mono_usage = {0};
         for (int ti = 0; ti < graph->topo_count; ti++) {
             XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
-            xa_mono_pass(spec->ast, mono_roots, graph->topo_count, isolate, analyzer);
+            xa_mono_pass(spec->ast, mono_roots, graph->topo_count, isolate, &mono_budget,
+                         &mono_usage, analyzer);
         }
         for (int ti = 0; ti < graph->topo_count; ti++) {
             XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];

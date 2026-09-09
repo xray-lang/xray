@@ -27,6 +27,7 @@
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
+#include "../runtime/xerror_codes.h"
 #include "../toolchain/xcompiler_session.h"
 
 #include <stdarg.h>
@@ -49,6 +50,15 @@ typedef struct XrProgramSourceBuildContext {
     uint8_t *reachable_bodies;
     uint32_t reachable_body_count;
 } XrProgramSourceBuildContext;
+
+XrProgramSourceBuildBudget xr_program_source_build_default_budget(void) {
+    return (XrProgramSourceBuildBudget) {
+        .max_modules = XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES,
+        .max_monomorphization_depth = XR_MONO_MAX_DEPTH,
+        .max_monomorphization_instances = XR_MONO_MAX_INSTANCES,
+        .max_program_bytes = XR_PROGRAM_LIMIT_ARTIFACT_BYTES,
+    };
+}
 
 static void clear_diagnostic(XrProgramSourceDiagnostic *diagnostic) {
     if (!diagnostic)
@@ -171,12 +181,12 @@ static XrProgramSourceBuildStatus build_module_graph(XrProgramSourceBuildContext
                       XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX, 0u, 0u, "%s",
                       context->graph->cycle_desc ? context->graph->cycle_desc
                                                  : "module graph is incomplete");
-    if ((uint32_t) context->graph->topo_count > input->max_modules)
+    if ((uint32_t) context->graph->topo_count > input->budget.max_modules)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT,
                       XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX, 0u,
                       (uint32_t) context->graph->topo_count,
                       "module count %d exceeds request limit %u", context->graph->topo_count,
-                      input->max_modules);
+                      input->budget.max_modules);
     context->module_count = (uint32_t) context->graph->topo_count;
     XrProgramSourceBuildStatus status = allocate_module_storage(context, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK)
@@ -362,12 +372,45 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
                       XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
                       "pre-monomorphization generic evidence construction failed");
     XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
+    XaMonoBudget mono_budget = {
+        .max_depth = context->input->budget.max_monomorphization_depth,
+        .max_instances = context->input->budget.max_monomorphization_instances,
+    };
+    XaMonoUsage mono_usage = {0};
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         if (!xa_mono_pass(context->ast_roots[topo], context->ast_roots, (int) context->module_count,
-                          isolate, context->analyzer))
+                          isolate, &mono_budget, &mono_usage, context->analyzer)) {
+            int diagnostic_count = 0;
+            XaDiagnostic *analysis =
+                xa_analyzer_get_diagnostics(context->analyzer, &diagnostic_count);
+            for (; analysis; analysis = analysis->next) {
+                if (analysis->severity != XR_DIAG_SEV_ERROR)
+                    continue;
+                uint32_t code = analysis->code >= 0 ? (uint32_t) analysis->code : 0u;
+                XrProgramSourceBuildStatus failure =
+                    code == XR_ERR_ANALYZE_MONO_BUDGET || code == XR_ERR_ANALYZE_MONO_DEPTH
+                        ? XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT
+                        : XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED;
+                const char *message =
+                    analysis->message ? analysis->message : "module monomorphization failed";
+                XrProgramSourceBuildStatus status =
+                    code > 0u
+                        ? reject(
+                              diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo,
+                              analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
+                              code, "E%04u: %s", code, message)
+                        : reject(
+                              diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo,
+                              analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
+                              0u, "%s", message);
+                xa_analyzer_clear_diagnostics(context->analyzer);
+                return status;
+            }
+            xa_analyzer_clear_diagnostics(context->analyzer);
             return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED,
                           XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo, 0u, 0u,
-                          "module monomorphization failed");
+                          "module monomorphization failed without a diagnostic");
+        }
     }
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         int spec_index = context->graph->topo_order[topo];
@@ -487,6 +530,12 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
                       writer_diagnostic[0] ? writer_diagnostic
                                            : xr_program_build_status_name(writer));
     }
+    if (product->artifact.size > context->input->budget.max_program_bytes)
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT,
+                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, context->entry_topological_index, 0u,
+                      (uint32_t) product->artifact.size,
+                      "canonical Program size %zu exceeds request limit %u bytes",
+                      product->artifact.size, context->input->budget.max_program_bytes);
     XrProgramDiagnostic verifier_diagnostic;
     XrProgramVerifyStatus verifier =
         xr_program_validate(product->artifact.bytes, product->artifact.size, NULL,
@@ -506,9 +555,16 @@ static bool input_valid(const XrProgramSourceBuildInput *input) {
     bool function_entry = input && input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_FUNCTION;
     bool initializer_entry =
         input && input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER;
+    XaMonoBudget mono_budget = {
+        .max_depth = input ? input->budget.max_monomorphization_depth : 0u,
+        .max_instances = input ? input->budget.max_monomorphization_instances : 0u,
+    };
     if (!input || input->schema_version != XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION ||
-        input->max_modules == 0u || !input->session || !input->resolver ||
-        !input->entry_source_path || !input->entry_authority ||
+        input->budget.max_modules == 0u ||
+        input->budget.max_modules > XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES ||
+        !xa_mono_budget_valid(&mono_budget) || input->budget.max_program_bytes == 0u ||
+        input->budget.max_program_bytes > XR_PROGRAM_LIMIT_ARTIFACT_BYTES || !input->session ||
+        !input->resolver || !input->entry_source_path || !input->entry_authority ||
         (!function_entry && !initializer_entry) || input->entry.reserved8[0] != 0u ||
         input->entry.reserved8[1] != 0u || input->entry.reserved8[2] != 0u ||
         !input->entry.module_identity ||

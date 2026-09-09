@@ -54,7 +54,9 @@ process startup. A skipped or unreached phase has no timing record.
 
 Environment:
     XR_BUILD_DIR   build directory (default: build)
-    XR_JOBS        parallelism (default: cores - 2)
+    XR_JOBS        build parallelism (default: cores - 2)
+    XR_CTEST_JOBS  CTest parallelism (default: XR_JOBS, capped at 8 on Windows
+                   where process/toolchain contention makes higher values slower)
     XR_NO_BUILD=1  skip the incremental build step
     XR_FAST=1      t0/t1/canonical: build in build-fast (build-fast-clang on
                    Windows), load stdlib source
@@ -139,8 +141,8 @@ T0_INCLUDE = (r"^(test_|.*_residue$|.*_convergence.*|.*_sync$|.*_inventory.*|"
 TIERS: Dict[str, Tuple[str, str, str]] = {
     # tier: (include, exclude, not_covered)
     "t0": (T0_INCLUDE, f"{SLOW_EXTERNAL}|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}",
-           "exhaustive Xi generator mutations, VM/AOT differential, regression corpus, "
-           "AOT suites, sanitizers"),
+           "full compile-error corpus, exhaustive Xi generator mutations, VM/AOT "
+           "differential, regression corpus, AOT suites, sanitizers"),
     # + the VM-executed corpora: regression, syntax, bytecode, stdlib.
     "t1": ("", f"{SLOW_EXTERNAL}|{SLOW_QEMU}|{SLOW_EXHAUSTIVE}|^backend_diff|^task190_|^aot_|"
            "^ffi_|^install_|^native_output|^binary_|^dap_|^raw_scalar|"
@@ -176,6 +178,10 @@ def usage(code: int = 0) -> int:
 def default_jobs() -> int:
     cores = platform.cpu_count()
     return max(1, cores - 2) if cores > 3 else 1
+
+
+def default_ctest_jobs(build_jobs: int) -> int:
+    return min(build_jobs, 8) if platform.IS_WINDOWS else build_jobs
 
 
 def git_lines(args: Sequence[str]) -> List[str]:
@@ -421,7 +427,8 @@ def main(argv: List[str]) -> int:
             return 1
 
     build_dir = Path(os.environ.get("XR_BUILD_DIR", "build"))
-    jobs = platform.env_int("XR_JOBS", default_jobs())
+    build_jobs = platform.env_int("XR_JOBS", default_jobs())
+    ctest_jobs = platform.env_int("XR_CTEST_JOBS", default_ctest_jobs(build_jobs))
 
     # XR_FAST removes both self-hosted stdlib generation edges from the edit
     # cycle.  Source loading preserves the language/compiler checks while
@@ -484,10 +491,11 @@ def main(argv: List[str]) -> int:
         return 1
 
     kind = "profile" if canonical_preflight else "tier"
-    print(f"{BOLD}{kind} {tier}{NC}  build={build_dir}  jobs={jobs}")
+    print(f"{BOLD}{kind} {tier}{NC}  build={build_dir}  "
+          f"build_jobs={build_jobs}  ctest_jobs={ctest_jobs}")
     print("=" * 72)
 
-    if not refresh_cmake_manifest(build_dir, jobs):
+    if not refresh_cmake_manifest(build_dir, build_jobs):
         return 1
 
     if canonical_preflight:
@@ -502,7 +510,7 @@ def main(argv: List[str]) -> int:
     if focused_selection:
         focus_gap = f"unselected {tier} tests and auxiliary corpora"
         not_covered = f"{focus_gap}, {not_covered}" if not_covered else focus_gap
-    ctest_args = ["--output-on-failure", "-j", str(jobs)]
+    ctest_args = ["--output-on-failure", "-j", str(ctest_jobs)]
     if include:
         ctest_args += ["-R", include]
     if exclude:
@@ -519,7 +527,7 @@ def main(argv: List[str]) -> int:
         if not build_selected(
             build_dir,
             selected,
-            jobs,
+            build_jobs,
             include_xray=not canonical_preflight,
             required_targets=(canonical_profile.BUILD_TARGETS
                               if canonical_preflight else ()),
@@ -538,7 +546,7 @@ def main(argv: List[str]) -> int:
             if not build_selected(
                 build_dir,
                 selected,
-                jobs,
+                build_jobs,
                 include_xray=not canonical_preflight,
                 required_targets=(canonical_profile.BUILD_TARGETS
                                   if canonical_preflight else ()),
@@ -559,6 +567,7 @@ def main(argv: List[str]) -> int:
             return 1
 
     env = dict(os.environ)
+    env.setdefault("XRAY_TEST_JOBS", str(ctest_jobs))
     if shards > 1:
         # Both big corpora already implement a stable 0-based shard of their
         # case list, so this only forwards the request.
@@ -583,14 +592,17 @@ def main(argv: List[str]) -> int:
         elif tier in ("t2", "t3") and not run_regression_corpus(build_dir, False):
             code = 1
 
-    # t0 additionally runs the compile-error corpus: the fastest broad check of
-    # parser and analyzer diagnostics there is.
+    # t0 runs an exact negative smoke inventory. t1 already includes the full
+    # compile_error_tests CTest, so repeating all cases here made t0 slower than
+    # the tier above it and let one divergent case consume the entire edit loop.
     if tier == "t0" and code == 0 and not focused_selection:
-        print(f"{BLUE}==>{NC} compile-error corpus")
+        print(f"{BLUE}==>{NC} compile-error smoke")
         env["XRAY_BIN"] = str(build_dir / platform.exe_name("xray"))
-        with timed_phase("compile-error corpus"):
+        with timed_phase("compile-error smoke"):
             corpus = proc.run([sys.executable, REPO_ROOT / "tests" / "compile_errors"
-                               / "run_compile_error_tests.py"], env=env, cwd=REPO_ROOT)
+                               / "run_compile_error_tests.py", "--case-list",
+                               REPO_ROOT / "tests" / "compile_errors"
+                               / "t0_cases.txt"], env=env, cwd=REPO_ROOT)
         for line in corpus.combined_text().splitlines()[-6:]:
             print(line)
         if not corpus.ok:

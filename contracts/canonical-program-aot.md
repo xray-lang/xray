@@ -138,7 +138,11 @@ erased only after their frozen non-escaping READ plans and exact struct identiti
 contains neither an interface witness table nor runtime constraint dispatch. Reference, both VM
 views, and strict native C return 42 from the same four sealed calls. Parameterized/builtin
 constraints, generic methods, generic ownership cleanup, temporary-expression READ places, and
-recursive specialization remain unqualified. A branching
+valid finite recursive specialization remain unqualified. Before AOT receives a validated Program,
+the shared source-build request enforces one fail-closed module/depth/whole-graph-instance/final-byte
+budget. Requests may tighten but not expand the production defaults; E0388/E0389 exhaustion remains
+an exact structured source diagnostic rather than an AOT-only limit or fallback. Small injected
+budgets test this production boundary without generating a giant source fixture. A branching
 deferred-Pipe fixture executes normal, cancellation-at-each-safepoint, and provider-refusal paths;
 its native output proves that the complete private cancellation graph preserves branch inputs and
 cleanup order without an AOT-only unwind rule.
@@ -174,7 +178,7 @@ Those private-state mutations are materialization checks, not source-language mu
 
 anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h 44cab32da792042b788f5282f91a042f2c6deb76c65bf7be69c242cc36003c54
 anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h a69072ef2f14b4b1350dcdeb9a5facaf9ee36b4a04c5bf1b18f09727f5b3aa50
-anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
+anchor-sha256: CMakeLists.txt 22555c1478109c8992cbaae6ce1d91b1b75d4c18ff5aea6e7e3e60347bd7375b
 anchor-sha256: tests/unit/CMakeLists.txt 20786799eea5478bc68d3c02a705f02c19effb635c151e97db463fe0b0d4419d
 anchor-sha256: xisa/core/registry.json 3ada1fa0976aea3619134da0e559427465bf0f2b83910497d59647ce55d0b172
 anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
@@ -193,4 +197,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 8f57b37e41b331ea0a650f6bdab7341575df0455ec3d8f314f24a513b001c6d1
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 5fe677817bad4600b15ec0f4b1806464e6ca16ecae43a1451b2cfd8a1a5d7e20

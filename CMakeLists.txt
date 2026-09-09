@@ -4454,6 +4454,7 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_canonical_source_route_tests.py
                 --binary $<TARGET_FILE:xray>
                 --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/canonical_run
+                --compile-errors ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/generics
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(canonical_source_run_cli PROPERTIES

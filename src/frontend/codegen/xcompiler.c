@@ -179,7 +179,9 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         ctx->post_analyze_hook(ctx, ast, ctx->post_analyze_user_data);
 
     /* Monomorphization: clone generic functions/structs for each concrete type */
-    bool mono_ok = xa_mono_pass(ast, NULL, 0, ctx->X, ctx->analyzer);
+    XaMonoBudget mono_budget = xa_mono_default_budget();
+    XaMonoUsage mono_usage = {0};
+    bool mono_ok = xa_mono_pass(ast, NULL, 0, ctx->X, &mono_budget, &mono_usage, ctx->analyzer);
 
     /* Drain before the blanket mark-as-reported below, which would otherwise
      * swallow an E0387/E0388 without ever printing it. */

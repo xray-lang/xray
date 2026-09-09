@@ -459,9 +459,11 @@ static bool scalar_graph_fixture_build(ScalarGraphFixture *fixture, const char *
     AstNode *roots[2];
     for (int topo = 0; topo < fixture->graph->topo_count; topo++)
         roots[topo] = fixture->graph->specs[fixture->graph->topo_order[topo]].ast;
+    XaMonoBudget mono_budget = xa_mono_default_budget();
+    XaMonoUsage mono_usage = {0};
     for (int topo = 0; topo < fixture->graph->topo_count; topo++)
-        if (!xa_mono_pass(roots[topo], roots, fixture->graph->topo_count, g_isolate,
-                          fixture->analyzer))
+        if (!xa_mono_pass(roots[topo], roots, fixture->graph->topo_count, g_isolate, &mono_budget,
+                          &mono_usage, fixture->analyzer))
             goto fail;
     for (int topo = 0; topo < fixture->graph->topo_count; topo++) {
         XrModuleSpec *spec = &fixture->graph->specs[fixture->graph->topo_order[topo]];
@@ -625,9 +627,11 @@ static bool source_private_leaf_fixture_build_source(ScalarGraphFixture *fixture
     AstNode *roots[2];
     for (int topo = 0; topo < fixture->graph->topo_count; topo++)
         roots[topo] = fixture->graph->specs[fixture->graph->topo_order[topo]].ast;
+    XaMonoBudget mono_budget = xa_mono_default_budget();
+    XaMonoUsage mono_usage = {0};
     for (int topo = 0; topo < fixture->graph->topo_count; topo++)
-        if (!xa_mono_pass(roots[topo], roots, fixture->graph->topo_count, g_isolate,
-                          fixture->analyzer))
+        if (!xa_mono_pass(roots[topo], roots, fixture->graph->topo_count, g_isolate, &mono_budget,
+                          &mono_usage, fixture->analyzer))
             goto fail;
     for (int topo = 0; topo < fixture->graph->topo_count; topo++) {
         XrModuleSpec *spec = &fixture->graph->specs[fixture->graph->topo_order[topo]];

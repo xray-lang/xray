@@ -151,6 +151,7 @@ def validate(root: Path) -> None:
     unit_cmake = read(root, "tests/unit/CMakeLists.txt")
     cli_adapter = read(root, "src/app/cli/xcli_canonical_source.c")
     run_route = read(root, "src/app/cli/xcmd_run.c")
+    check_route = read(root, "src/app/cli/xcmd_check.c")
     cli_spec = read(root, "src/app/cli/xcli_spec.c")
     run_route_test = read(root, "tests/cli/run_canonical_source_route_tests.py")
     pipeline_header = read(root, "src/ir/xi_pipeline.h")
@@ -177,6 +178,11 @@ def validate(root: Path) -> None:
         "XrProgramSourceProduct",
         "XrValidatedProgram *program",
         "XrProgramSourceDiagnostic",
+        "XrProgramSourceBuildBudget",
+        "max_monomorphization_depth",
+        "max_monomorphization_instances",
+        "max_program_bytes",
+        "xr_program_source_build_default_budget",
     ):
         require(token in owner_header, f"source owner API lacks {token}")
     for token in (
@@ -193,6 +199,11 @@ def validate(root: Path) -> None:
         "xr_program_write_from_xi",
         "xr_program_validate",
         "xr_program_source_product_free",
+        "XR_ERR_ANALYZE_MONO_BUDGET",
+        "XR_ERR_ANALYZE_MONO_DEPTH",
+        "XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT",
+        "XaMonoUsage mono_usage",
+        "product->artifact.size > context->input->budget.max_program_bytes",
     ):
         require(token in owner, f"source owner implementation lacks {token}")
     for forbidden in ("XrProto", "XrTargetPlan", "XrInstance"):
@@ -227,6 +238,13 @@ def validate(root: Path) -> None:
     ):
         require(forbidden not in run_route,
                 f"canonical run route regained legacy execution: {forbidden}")
+    for token in (
+        "xa_mono_default_budget",
+        "xa_mono_pass",
+        "monomorphization failed without a diagnostic",
+        'fprintf(stderr, "E%04d: ", diagnostic->code)',
+    ):
+        require(token in check_route, f"check route lacks canonical monomorphization evidence: {token}")
     require('"run", "Run one exact .xr source entry"' in cli_spec,
             "run command schema does not expose the canonical source-only contract")
     run_options = cli_spec.split("static const XrCliOptionSpec repl_options[]", 1)[0]
@@ -248,6 +266,9 @@ def validate(root: Path) -> None:
         "declaration-only module initializer failed",
         "unknown option '--semantic-plan'",
         "source fingerprint drifted across CRLF ingestion",
+        "run accepted unbounded generic specialization",
+        "check accepted unbounded generic specialization",
+        "stage=4 status=resource-limit",
     ):
         require(token in run_route_test, f"canonical run evidence lacks {token}")
     for token in (
@@ -261,6 +282,11 @@ def validate(root: Path) -> None:
         "source_owner_module_initializer_is_a_canonical_entry",
         "source_owner_rejects_non_authoritative_entry_identity",
         "source_owner_rejects_module_budget_before_analysis",
+        "source_owner_rejects_invalid_or_expanded_budget_request",
+        "source_owner_reports_exact_monomorphization_depth_budget",
+        "source_owner_reports_exact_monomorphization_instance_budget",
+        "source_owner_applies_instance_budget_across_module_graph",
+        "source_owner_rejects_program_bytes_over_request_budget",
         "source_owner_reports_structured_analysis_failure",
         "xr_validated_program_bytes",
         "XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION",
@@ -650,6 +676,7 @@ def self_test(root: Path) -> None:
             "src/program/xr_program_source_build.c",
             "src/app/cli/xcli_canonical_source.c",
             "src/app/cli/xcli_spec.c",
+            "src/app/cli/xcmd_check.c",
             "src/app/cli/xcmd_run.c",
             "src/program/xr_program_verify.c",
             "src/program/xr_reference_evaluator.c",

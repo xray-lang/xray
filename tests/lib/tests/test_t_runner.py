@@ -19,6 +19,13 @@ runner = load_module("tiered_test_runner_under_test", ROOT / "scripts" / "t.py")
 
 
 class FocusedSelectionTest(unittest.TestCase):
+    def test_windows_ctest_parallelism_is_capped_without_throttling_builds(self):
+        with mock.patch.object(runner.platform, "IS_WINDOWS", True):
+            self.assertEqual(runner.default_ctest_jobs(26), 8)
+            self.assertEqual(runner.default_ctest_jobs(6), 6)
+        with mock.patch.object(runner.platform, "IS_WINDOWS", False):
+            self.assertEqual(runner.default_ctest_jobs(26), 26)
+
     def test_broad_options_do_not_select_out_auxiliary_corpora(self):
         self.assertFalse(runner.has_explicit_ctest_selection([]))
         self.assertFalse(runner.has_explicit_ctest_selection(["--output-on-failure"]))

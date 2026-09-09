@@ -42,6 +42,7 @@ Usage: run_compile_error_tests.py
 
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import sys
@@ -84,6 +85,10 @@ XR_DIAG_RE = re.compile(
     r"(^|[^A-Za-z])([Ee]rror(\[E[0-9]+\])?:|\[xcompiler\].*failed at )")
 
 PASS, FAIL, RUNTIME, MISPLACED = "PASS", "FAIL", "RUNTIME", "MISPLACED"
+
+
+class SelectionError(ValueError):
+    """Raised when an exact compile-error selection is not trustworthy."""
 
 
 @dataclass
@@ -149,8 +154,38 @@ def run_one_case(xray: Path, case: Path, timeout: float | None) -> Result:
                   f"  {GREEN}✓{NC} {name} - correctly rejected\n")
 
 
-def collect_cases() -> list[Path]:
+def resolve_case(name: str) -> Path:
+    relative = Path(name)
+    if (relative.is_absolute() or len(relative.parts) != 2 or
+            any(part in ("", ".", "..") for part in relative.parts) or
+            relative.suffix != ".xr"):
+        raise SelectionError(
+            f"case must be an exact category/name.xr path, got {name!r}")
+    case = SCRIPT_DIR / relative
+    if not case.is_file():
+        raise SelectionError(f"selected case does not exist: {name}")
+    expected, _ = expected_path_for(case)
+    if not expected.is_file():
+        raise SelectionError(f"selected case has no expectation file: {name}")
+    return case
+
+
+def load_case_list(path: Path) -> list[str]:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="strict").splitlines()
+    except OSError as error:
+        raise SelectionError(f"cannot read case list {path}: {error}") from error
+    return [line.strip() for line in lines
+            if line.strip() and not line.lstrip().startswith("#")]
+
+
+def collect_cases(selected: list[str] | None = None) -> list[Path]:
     """One directory level of categories, `*.xr` directly inside each."""
+    if selected is not None:
+        cases = [resolve_case(name) for name in selected]
+        if len(cases) != len(set(cases)):
+            raise SelectionError("compile-error selection contains duplicate cases")
+        return cases
     cases: list[Path] = []
     for directory in sorted(p for p in SCRIPT_DIR.iterdir() if p.is_dir()):
         cases.extend(sorted(directory.glob("*.xr")))
@@ -158,6 +193,15 @@ def collect_cases() -> list[Path]:
 
 
 def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--case", action="append", default=[], metavar="CATEGORY/NAME.XR",
+        help="run one exact case; repeat to select more than one")
+    parser.add_argument(
+        "--case-list", action="append", default=[], type=Path, metavar="PATH",
+        help="read exact category/name.xr selections from a UTF-8 file")
+    args = parser.parse_args(argv[1:])
+
     xray = Path(os.environ.get("XRAY")
                 or os.environ.get("XRAY_BIN")
                 or str(PROJECT_DIR / "build" / platform.exe_name("xray")))
@@ -169,12 +213,20 @@ def main(argv: list[str]) -> int:
     jobs = platform.env_int("XRAY_TEST_JOBS", platform.cpu_count())
     timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 300)
 
-    cases = collect_cases()
+    selected = list(args.case)
+    try:
+        for case_list in args.case_list:
+            selected.extend(load_case_list(case_list))
+        cases = collect_cases(selected if args.case or args.case_list else None)
+    except SelectionError as error:
+        print(f"Error: {error}")
+        return 1
     if not cases:
-        print(f"No compile-error cases found under {SCRIPT_DIR}")
+        scope = "selection" if args.case or args.case_list else str(SCRIPT_DIR)
+        print(f"No compile-error cases found in {scope}")
         return 1
 
-    print(f"Running compile error tests... ({jobs} parallel)")
+    print(f"Running compile error tests... ({len(cases)} cases, {jobs} parallel)")
     print("========================================")
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:

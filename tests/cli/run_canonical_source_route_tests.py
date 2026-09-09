@@ -40,6 +40,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--fixtures", required=True, type=Path)
+    parser.add_argument("--compile-errors", required=True, type=Path)
     args = parser.parse_args()
 
     zero = invoke(args.binary, "run", str(args.fixtures / "main_zero.xr"))
@@ -117,6 +118,21 @@ def main() -> int:
         "XR_RUN_6013: canonical run accepts only an exact '.xr' source path"
         in artifact.stderr,
         f"retired artifact path did not stop at the source boundary: {artifact.stderr!r}",
+    )
+
+    mono_depth = args.compile_errors / "005_mono_depth_budget.xr"
+    rejected_run = invoke(args.binary, "run", str(mono_depth))
+    require(rejected_run.returncode != 0, "run accepted unbounded generic specialization")
+    require(
+        "E0389:" in rejected_run.stderr
+        and "stage=4 status=resource-limit" in rejected_run.stderr,
+        f"run lost the exact monomorphization budget failure: {rejected_run.stderr!r}",
+    )
+    rejected_check = invoke(args.binary, "check", str(mono_depth))
+    require(rejected_check.returncode != 0, "check accepted unbounded generic specialization")
+    require(
+        ": error: E0389:" in rejected_check.stderr,
+        f"check lost the exact monomorphization budget failure: {rejected_check.stderr!r}",
     )
 
     print("canonical source run route passed")

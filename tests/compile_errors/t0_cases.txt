@@ -1,0 +1,14 @@
+# Exact, fast negative smoke inventory for scripts/t.py t0.
+# The full compile-error corpus remains mandatory in t1 and higher tiers.
+syntax/043_fixed_byte_prefix_rb_rejected.xr
+syntax/044_fixed_byte_prefix_rc_rejected.xr
+syntax/053_effectless_expr_stmt_force_unwrap.xr
+type/065_char_empty_literal.xr
+type/066_char_raw_single_quote_removed.xr
+ownership/142_ref_param_default_rejected.xr
+ownership/145_ref_rest_param_mode_rejected.xr
+concurrency/go_block_form_removed.xr
+concurrency/linked_go_block_form_removed.xr
+ffi/020_extern_layout_rejects_managed_field.xr
+generics/001_where_unknown_param.xr
+generics/002_where_without_type_params.xr

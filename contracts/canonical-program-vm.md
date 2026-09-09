@@ -138,7 +138,12 @@ and non-generic method FunctionIds. Exact call-bound READ addresses and receiver
 to value operands; no interface table, conformance table, witness call, or runtime constraint
 lookup remains. Reference and both VM decode policies return 42 through the same sealed-call graph.
 Parameterized/builtin constraints, generic methods, generic ownership cleanup, direct temporary
-READ expressions, and recursive specialization remain outside this bounded slice. A branching
+READ expressions, and valid finite recursive specialization remain outside this bounded slice.
+The source-build request carries one fail-closed budget for module count, monomorphization depth,
+whole-graph specialization count, and final Program bytes. A caller may tighten those limits but
+cannot raise them above the production defaults. Exhaustion stops before VM construction with the
+exact E0388 or E0389 analyzer diagnostic and a structured resource-limit stage; tests use small
+limits to exercise the same boundary without manufacturing thousands of specializations. A branching
 deferred-Pipe fixture proves that provider failure can use the
 shared cleanup graph while cancellation receives a private copy of the complete multi-block graph,
 including the non-owner branch condition. A nested deferred-Pipe fixture additionally proves that
@@ -148,7 +153,7 @@ This test-build decomposition changes no VM semantics or supported capability.
 
 anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h 44cab32da792042b788f5282f91a042f2c6deb76c65bf7be69c242cc36003c54
 anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h a69072ef2f14b4b1350dcdeb9a5facaf9ee36b4a04c5bf1b18f09727f5b3aa50
-anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
+anchor-sha256: CMakeLists.txt 22555c1478109c8992cbaae6ce1d91b1b75d4c18ff5aea6e7e3e60347bd7375b
 anchor-sha256: xisa/core/registry.json 3ada1fa0976aea3619134da0e559427465bf0f2b83910497d59647ce55d0b172
 anchor-sha256: src/vm/xr_program_vm.h 0bc3507d2aa429bb07579df820302acbd91d9ffb84651236955d29078b576f6d
 anchor-sha256: src/vm/xr_program_vm.c d36d2492589f2913db27a0da44ccdcfb01accc8e02671c3783a3a22cb9c66017
@@ -164,4 +169,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 8f57b37e41b331ea0a650f6bdab7341575df0455ec3d8f314f24a513b001c6d1
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 5fe677817bad4600b15ec0f4b1806464e6ca16ecae43a1451b2cfd8a1a5d7e20

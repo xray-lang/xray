@@ -458,7 +458,7 @@ primitive before resuming. Missing capability, unknown request kind, wrong
 arity, or a non-normalized payload fails closed; the CLI does not invoke a
 hidden TargetPlan executor or fall back to the old yieldable-call path.
 
-anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
+anchor-sha256: CMakeLists.txt 22555c1478109c8992cbaae6ce1d91b1b75d4c18ff5aea6e7e3e60347bd7375b
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
@@ -503,7 +503,7 @@ anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837
 anchor-sha256: tests/unit/plan/test_target_plan.c c1237baa6a16a896f9ead9e06729879ad1f5de51d769b85bb801951a0fadfb97
 anchor-sha256: tests/unit/plan/test_xtp_format.c f8476491ca33e9aa709c017d7c9b657dce372392b5b416c28363748c275fea86
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 57201fe01683630e4960c911f739acfada9b33c8342f2aa2709b700f51ff7b7b
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c a7d587230761c53321bde6d5e91bc4572a24f72740a06c43af5c9242e85b096b
 anchor-sha256: tests/unit/CMakeLists.txt 20786799eea5478bc68d3c02a705f02c19effb635c151e97db463fe0b0d4419d
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 30015dd2f75ad8917788a30b367f203d15e85d037af8d394940a4d30af87e69a
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 4514f40cccc03abe86c15f2a4fcf562b174fcba066193ab58a4b6992ed0d57b5

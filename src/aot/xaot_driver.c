@@ -2389,6 +2389,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     /* Mirror the VM compiler entry: monomorphize after the first graph-aware
      * analysis, then analyze again so cloned declarations have concrete
      * signatures and value-struct layouts before Xi lowering. */
+    XaMonoBudget mono_budget = xa_mono_default_budget();
+    XaMonoUsage mono_usage = {0};
     for (int ti = 0; ti < nmodules; ti++) {
         int idx = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[idx];
@@ -2397,7 +2399,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         /* A budget failure must stop here rather than fall through to the
          * re-analysis below: the module's generic calls were left unexpanded,
          * so every later stage would report consequences of the first error. */
-        if (!xa_mono_pass((AstNode *) spec->ast, mono_roots, nmodules, X, shared_analyzer)) {
+        if (!xa_mono_pass((AstNode *) spec->ast, mono_roots, nmodules, X, &mono_budget, &mono_usage,
+                          shared_analyzer)) {
             (void) report_analyzer_diagnostics(shared_analyzer, spec->source_path);
             fprintf(stderr, "Error: monomorphization budget exceeded for '%s'\n",
                     spec->source_path ? spec->source_path : "<unknown>");

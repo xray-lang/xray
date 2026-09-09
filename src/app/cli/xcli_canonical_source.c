@@ -144,7 +144,7 @@ xr_cli_canonical_source_build(const XrCliCanonicalSourceRequest *request,
         session, authority.project ? authority.project->native_plan : NULL);
     XrProgramSourceBuildInput input = {
         .schema_version = XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION,
-        .max_modules = XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES,
+        .budget = xr_program_source_build_default_budget(),
         .session = session,
         .resolver = authority.resolver,
         .entry_source_path = canonical_path,

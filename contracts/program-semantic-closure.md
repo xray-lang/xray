@@ -369,7 +369,7 @@ registrations inside cold handlers. Normal exits close active boundaries; an exp
 may abandon an outer closed boundary and must preserve its reason. Cancellation owner payload
 exactness is checked only after live-in propagation reaches its fixed point.
 
-anchor-sha256: CMakeLists.txt 98de1343fd92cf4293bc518311f52c1fd98b4d94279a86640234c1fff37dc71f
+anchor-sha256: CMakeLists.txt 22555c1478109c8992cbaae6ce1d91b1b75d4c18ff5aea6e7e3e60347bd7375b
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1
@@ -427,11 +427,11 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d3
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2b5667297212ffe1df19d87643c5045b1a6cfed11bc8683c
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c aebdf70cc4c04f630863382d174298661b8d1061cba5cf4f9634f1e481854de0
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 57201fe01683630e4960c911f739acfada9b33c8342f2aa2709b700f51ff7b7b
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c a7d587230761c53321bde6d5e91bc4572a24f72740a06c43af5c9242e85b096b
 anchor-sha256: tests/unit/frontend/test_parser.c 32a9be018ac2bd8e9acc5df8be96227cccabadb3a099fa258d4e1a551f7d84f4
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 6c466d049fc54135ebae826e477d5722650e359898bb0c61db74434e7abecb62
-anchor-sha256: tests/unit/ir/test_xi_pipeline.c c5dd627a3ec54b4db68ea2826e0bc91b80f090d4da10c8d74c1697078e14fbee
+anchor-sha256: tests/unit/ir/test_xi_pipeline.c 25b224688e5350356bd6f538b671f86ecb61b87d6786e4d1bc07bc881357fd3e
 anchor-sha256: tests/unit/CMakeLists.txt 20786799eea5478bc68d3c02a705f02c19effb635c151e97db463fe0b0d4419d
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc

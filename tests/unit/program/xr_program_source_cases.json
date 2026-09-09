@@ -28,6 +28,11 @@
     {"name": "source_owner_module_initializer_is_a_canonical_entry", "fixture": null},
     {"name": "source_owner_rejects_non_authoritative_entry_identity", "fixture": null},
     {"name": "source_owner_rejects_module_budget_before_analysis", "fixture": null},
+    {"name": "source_owner_rejects_invalid_or_expanded_budget_request", "fixture": null},
+    {"name": "source_owner_reports_exact_monomorphization_depth_budget", "fixture": null},
+    {"name": "source_owner_reports_exact_monomorphization_instance_budget", "fixture": null},
+    {"name": "source_owner_applies_instance_budget_across_module_graph", "fixture": null},
+    {"name": "source_owner_rejects_program_bytes_over_request_budget", "fixture": null},
     {"name": "source_owner_reports_structured_analysis_failure", "fixture": null}
   ]
 }

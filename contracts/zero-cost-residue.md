@@ -138,4 +138,4 @@ failure is a null result with no error allocation or pending-error traffic.
 anchor-sha256: src/aot/xi_cgen.h 82dbe6329f95db4b2ecd0eba6f2bf33e353a0814cd9e253528be6ce540a3c9d1
 anchor-sha256: src/aot/xi_cgen.c 9b93d97300afad661e4fc8ff4092bcdd78e908506858f6c5c9dd53c1f3c1be5e
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 131be3ff114fba322a67fa7bd35e833a2115a251b93ffbbb15fdf73bf0394be7
-anchor-sha256: src/app/cli/xcmd_verify.c 4d806bacb7a94efeba2d3d05e1ef657596fb7cbac2f315aff0d40f0e4de49629
+anchor-sha256: src/app/cli/xcmd_verify.c 6ef7c58cb0fa017474ba5cb30c7bf322870df980acc30a8cebec3872652eb850

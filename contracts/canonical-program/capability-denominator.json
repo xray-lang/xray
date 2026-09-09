@@ -589,7 +589,9 @@
       "source_test_anchors": [
         "tests/diff/cases/semantics/generic_container_type_args.xr",
         "tests/diff/cases/semantics/value_struct_generic_literal.xr",
+        "tests/compile_errors/generics/005_mono_depth_budget.xr",
         "tests/compile_errors/generics/e0388_mono_breadth_budget.xr",
+        "tests/cli/run_canonical_source_route_tests.py",
         "tests/unit/program/test_xr_program_source_build.c"
       ],
       "required_observations": [
@@ -617,7 +619,7 @@
         "product": "CURRENT_ROUTE_ONLY"
       },
       "state": "OPEN",
-      "open_reason": "The shared source owner now merges pre/post-monomorphization evidence and emits exact, deduplicated primitive and value-struct function specializations through Program, Reference, both VM views, and native C while rejecting an open generic entry. One same-module user-interface constraint method shape also resolves to exact sealed direct calls. Generic heap or owned fields, parameterized and builtin constraints, generic methods, ownership cleanup, direct temporary READ arguments, recursive specialization, and resource-budget product diagnostics remain open."
+      "open_reason": "The shared source owner now merges pre/post-monomorphization evidence and emits exact, deduplicated primitive and value-struct function specializations through Program, Reference, both VM views, and native C while rejecting an open generic entry. One same-module user-interface constraint method shape also resolves to exact sealed direct calls. Monomorphization depth and whole-graph instance limits now produce exact E0389/E0388 resource-limit diagnostics, and the source request also bounds module count and final Program bytes without permitting limits above the production defaults. Generic heap or owned fields, parameterized and builtin constraints, generic methods, ownership cleanup, direct temporary READ arguments, and valid finite recursive-specialization semantics remain open."
     },
     {
       "id": "ownership-read-ref-move-copy-drop",

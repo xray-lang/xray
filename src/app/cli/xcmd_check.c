@@ -22,6 +22,7 @@
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../frontend/analyzer/xanalyzer_mono.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
@@ -33,6 +34,44 @@
 #include <stdio.h>
 #include <string.h>
 #include "../../os/os_fs.h"
+
+static const char *diagnostic_severity_name(XrDiagSeverity severity) {
+    switch (severity) {
+        case XR_DIAG_SEV_WARNING:
+            return "warning";
+        case XR_DIAG_SEV_INFO:
+            return "info";
+        case XR_DIAG_SEV_HINT:
+            return "hint";
+        case XR_DIAG_SEV_ERROR:
+            break;
+    }
+    return "error";
+}
+
+/* The first pass prepares monomorphization.
+ * Emit successful diagnostics after reanalysis.
+ *
+ * This avoids printing warnings twice. */
+static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *path, bool final_pass) {
+    int diagnostic_count = 0;
+    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    int errors = 0;
+    for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next)
+        if (diagnostic->severity == XR_DIAG_SEV_ERROR)
+            errors++;
+    if (final_pass || errors > 0) {
+        for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next) {
+            fprintf(stderr, "%s:%d:%d: %s: ", path, diagnostic->location.line,
+                    diagnostic->location.column, diagnostic_severity_name(diagnostic->severity));
+            if (diagnostic->code > 0)
+                fprintf(stderr, "E%04d: ", diagnostic->code);
+            fprintf(stderr, "%s\n", diagnostic->message);
+        }
+    }
+    xa_analyzer_clear_diagnostics(analyzer);
+    return errors;
+}
 
 // Check single file, returns: 0 = no error, 1 = has error
 static int check_file(XrVMRuntime *X, XaAnalyzer *analyzer, const char *path, int verbose) {
@@ -49,25 +88,27 @@ static int check_file(XrVMRuntime *X, XaAnalyzer *analyzer, const char *path, in
     if (has_error) {
         // Error message already printed by parser
     } else if (analyzer) {
-        // Run semantic analysis (default for `xray check`)
+        /* Match compilation: analyze, specialize, reanalyze.
+         * A first-pass-only check can
+         * accept divergent code. */
         xa_analyzer_analyze(analyzer, path, (XrAstNode *) ast);
-        int diag_count = 0;
-        XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
-        for (XaDiagnostic *d = diags; d; d = d->next) {
-            if (d->severity == XR_DIAG_SEV_ERROR) {
-                has_error = 1;
+        has_error = report_analyzer_diagnostics(analyzer, path, false) > 0;
+        if (!has_error) {
+            XaMonoBudget mono_budget = xa_mono_default_budget();
+            XaMonoUsage mono_usage = {0};
+            bool mono_ok = xa_mono_pass(ast, NULL, 0, X, &mono_budget, &mono_usage, analyzer);
+            int mono_errors = report_analyzer_diagnostics(analyzer, path, true);
+            if (!mono_ok && mono_errors == 0) {
+                fprintf(stderr, "%s:0:0: error: monomorphization failed without a diagnostic\n",
+                        path);
+                mono_errors = 1;
             }
-            const char *sev = "error";
-            if (d->severity == XR_DIAG_SEV_WARNING)
-                sev = "warning";
-            else if (d->severity == XR_DIAG_SEV_INFO)
-                sev = "info";
-            else if (d->severity == XR_DIAG_SEV_HINT)
-                sev = "hint";
-            fprintf(stderr, "%s:%d:%d: %s: %s\n", path, d->location.line, d->location.column, sev,
-                    d->message);
+            has_error = mono_errors > 0;
+            if (mono_ok && !has_error) {
+                xa_analyzer_analyze(analyzer, path, (XrAstNode *) ast);
+                has_error = report_analyzer_diagnostics(analyzer, path, true) > 0;
+            }
         }
-        xa_analyzer_clear_diagnostics(analyzer);
         if (!has_error && verbose) {
             printf("ok %s\n", path);
         }
@@ -180,28 +221,10 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
             spec->export_symbols =
                 xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
 
-            int file_errs = 0;
-            int diag_count = 0;
-            XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
-            for (XaDiagnostic *d = diags; d; d = d->next) {
-                if (d->severity == XR_DIAG_SEV_ERROR)
-                    file_errs++;
-                const char *sev = "error";
-                if (d->severity == XR_DIAG_SEV_WARNING)
-                    sev = "warning";
-                else if (d->severity == XR_DIAG_SEV_INFO)
-                    sev = "info";
-                else if (d->severity == XR_DIAG_SEV_HINT)
-                    sev = "hint";
-                fprintf(stderr, "%s:%d:%d: %s: %s\n", spec->source_path, d->location.line,
-                        d->location.column, sev, d->message);
-            }
-            xa_analyzer_clear_diagnostics(analyzer);
+            int file_errs = report_analyzer_diagnostics(analyzer, spec->source_path, false);
             errors += file_errs;
             if (file_errs == 0) {
                 spec->status = XR_MODSPEC_ANALYZED;
-                if (verbose)
-                    printf("ok %s\n", spec->source_path);
             }
         } else {
             /* Parse-only mode: AST already parsed during graph build */
@@ -209,6 +232,36 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
                 printf("ok %s\n", spec->source_path);
         }
     }
+
+    if (analyzer && errors == 0) {
+        /* Check the entry module's local generic closure.
+         * The source-build owner checks
+         * the full graph.
+         * Repeating it here costs more and mutates imports twice. */
+        XrModuleSpec *entry = &graph->specs[graph->entry_index];
+        XaMonoBudget mono_budget = xa_mono_default_budget();
+        XaMonoUsage mono_usage = {0};
+        bool mono_ok = xa_mono_pass(entry->ast, NULL, 0, X, &mono_budget, &mono_usage, analyzer);
+        int mono_errors = report_analyzer_diagnostics(analyzer, entry->source_path, true);
+        if (!mono_ok && mono_errors == 0) {
+            fprintf(stderr, "%s:0:0: error: monomorphization failed without a diagnostic\n",
+                    entry->source_path);
+            mono_errors = 1;
+        }
+        errors += mono_errors;
+        if (mono_ok && errors == 0) {
+            xa_analyzer_analyze(analyzer, entry->source_path, (XrAstNode *) entry->ast);
+            if (entry->export_symbols)
+                xr_hashmap_free(entry->export_symbols);
+            entry->export_symbols =
+                xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) entry->ast);
+            errors += report_analyzer_diagnostics(analyzer, entry->source_path, true);
+        }
+    }
+
+    if (analyzer && errors == 0 && verbose)
+        for (int topo = 0; topo < graph->topo_count; ++topo)
+            printf("ok %s\n", graph->specs[graph->topo_order[topo]].source_path);
 
     if (analyzer)
         xa_analyzer_set_graph(analyzer, NULL);

@@ -1164,6 +1164,10 @@ void xa_mono_collector_init(XaMonoCollector *c) {
     c->analyzer = NULL;
     c->tref_rewrite_count = 0;
     c->expanding = -1;
+    c->max_depth = XR_MONO_MAX_DEPTH;
+    c->max_instances = XR_MONO_MAX_INSTANCES;
+    c->instance_offset = 0u;
+    c->max_observed_depth = 0u;
     c->budget_reported = false;
 }
 
@@ -1212,7 +1216,7 @@ static void mono_render_chain(const XaMonoCollector *c, int parent, char *buf, s
      * XR_MONO_MAX_DEPTH, so a fixed index array is exact, not a guess. */
     int chain[XR_MONO_MAX_DEPTH + 1];
     int n = 0;
-    for (int i = parent; i >= 0 && n <= XR_MONO_MAX_DEPTH; i = c->instances[i].parent)
+    for (int i = parent; i >= 0 && n <= (int) c->max_depth; i = c->instances[i].parent)
         chain[n++] = i;
 
     /* A chain at the limit is far too long to print whole, and the middle is
@@ -1280,7 +1284,7 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
 
     /* Depth guard: a specialized body instantiating an ever-larger type has no
      * finite expansion. Dedup cannot catch it -- every round is a new tuple. */
-    if (depth > XR_MONO_MAX_DEPTH) {
+    if (depth > (int) c->max_depth) {
         char chain[512];
         mono_render_chain(c, parent, chain, sizeof(chain));
         char msg[896];
@@ -1289,19 +1293,21 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
                  "  instantiated through: %s -> %s\n"
                  "  note: a generic that instantiates itself at a larger type (f<T> requesting "
                  "f<Box<T>>) has no finite specialization and always reaches this limit",
-                 generic_name, XR_MONO_MAX_DEPTH, chain, candidate_mangled);
+                 generic_name, (int) c->max_depth, chain, candidate_mangled);
         mono_report(c, XR_ERR_ANALYZE_MONO_DEPTH, msg, loc);
         xr_free(candidate_mangled);
         return NULL;
     }
+    if ((uint32_t) depth > c->max_observed_depth)
+        c->max_observed_depth = (uint32_t) depth;
 
     /* Breadth guard: a compile-time memory backstop, not a language rule. */
-    if (c->count >= XR_MONO_MAX_INSTANCES) {
+    if (c->instance_offset + (uint32_t) c->count >= c->max_instances) {
         char msg[320];
         snprintf(msg, sizeof(msg),
                  "program exceeds the monomorphization budget of %d generic instances "
                  "(reached while instantiating '%s')",
-                 XR_MONO_MAX_INSTANCES, generic_name);
+                 (int) c->max_instances, generic_name);
         mono_report(c, XR_ERR_ANALYZE_MONO_BUDGET, msg, loc);
         xr_free(candidate_mangled);
         return NULL;
@@ -2511,8 +2517,24 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
 /* ========== Public API ========== */
 
+XaMonoBudget xa_mono_default_budget(void) {
+    return (XaMonoBudget) {
+        .max_depth = XR_MONO_MAX_DEPTH,
+        .max_instances = XR_MONO_MAX_INSTANCES,
+    };
+}
+
+bool xa_mono_budget_valid(const XaMonoBudget *budget) {
+    return budget && budget->max_depth != 0u && budget->max_depth <= XR_MONO_MAX_DEPTH &&
+           budget->max_instances != 0u && budget->max_instances <= XR_MONO_MAX_INSTANCES;
+}
+
 static bool xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int external_root_count,
-                                  XrVMRuntime *isolate, XaAnalyzer *analyzer) {
+                                  XrVMRuntime *isolate, const XaMonoBudget *budget,
+                                  XaMonoUsage *usage, XaAnalyzer *analyzer) {
+    if (!xa_mono_budget_valid(budget) || !usage || usage->instance_count > budget->max_instances ||
+        usage->max_depth > budget->max_depth)
+        return false;
     if (!root || root->type != AST_PROGRAM)
         return true;
 
@@ -2523,6 +2545,9 @@ static bool xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
     XaMonoCollector collector;
     xa_mono_collector_init(&collector);
     collector.analyzer = analyzer;
+    collector.max_depth = budget->max_depth;
+    collector.max_instances = budget->max_instances;
+    collector.instance_offset = usage->instance_count;
 
     XaMonoImportAliases root_imports;
     mono_import_aliases_init(&root_imports);
@@ -2580,13 +2605,18 @@ static bool xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
 cleanup:
     mono_import_aliases_free(&root_imports);
     ok = !collector.budget_reported;
+    usage->instance_count += (uint32_t) collector.count;
+    if (collector.max_observed_depth > usage->max_depth)
+        usage->max_depth = collector.max_observed_depth;
     xa_mono_collector_free(&collector);
     xr_free(registry.decls);
     return ok;
 }
 
 bool xa_mono_pass(AstNode *root, AstNode **external_roots, int external_root_count,
-                  XrVMRuntime *isolate, XaAnalyzer *analyzer) {
+                  XrVMRuntime *isolate, const XaMonoBudget *budget, XaMonoUsage *usage,
+                  XaAnalyzer *analyzer) {
     XR_DCHECK(analyzer != NULL, "xa_mono_pass: NULL analyzer; budgets need a diagnostic sink");
-    return xa_mono_pass_internal(root, external_roots, external_root_count, isolate, analyzer);
+    return xa_mono_pass_internal(root, external_roots, external_root_count, isolate, budget, usage,
+                                 analyzer);
 }

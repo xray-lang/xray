@@ -60,12 +60,29 @@
  *                         any plausible real program: a program that trips it
  *                         has a generic expansion problem worth seeing.
  *
- * Both are hard errors (E0388 / E0387). Exceeding a budget never silently
- * leaves a call unspecialized -- a silent fallback would reintroduce boxing
- * underneath an `xray verify` no-box contract that claims it cannot happen.
+ * Both limits fail with E0388 or E0389.
+ * Exhaustion must never leave a generic call in place.
+ *
+ * That would violate the no-box verifier contract.
  */
 #define XR_MONO_MAX_DEPTH 128
 #define XR_MONO_MAX_INSTANCES 16384
+
+typedef struct XaMonoBudget {
+    uint32_t max_depth;
+    uint32_t max_instances;
+} XaMonoBudget;
+
+/* One usage object spans the source build's declaring modules.
+ * It accumulates usage; it is not a
+ * one-pass snapshot. */
+typedef struct XaMonoUsage {
+    uint32_t instance_count;
+    uint32_t max_depth;
+} XaMonoUsage;
+
+XR_FUNC XaMonoBudget xa_mono_default_budget(void);
+XR_FUNC bool xa_mono_budget_valid(const XaMonoBudget *budget);
 
 typedef struct XaAnalyzer XaAnalyzer;
 
@@ -144,8 +161,13 @@ typedef struct {
      * changed can be marked for re-collection in the post-mono analysis pass. */
     uint32_t tref_rewrite_count;
     /* Index of the instance whose clone is currently being scanned for nested
+     *
      * instantiations, or -1 while scanning user-written code. */
     int expanding;
+    uint32_t max_depth;
+    uint32_t max_instances;
+    uint32_t instance_offset;
+    uint32_t max_observed_depth;
     /* A budget diagnostic is reported once. The pass keeps running so the user
      * still gets the rest of the program's errors, but every later
      * instantiation would report the same exhausted budget. */
@@ -176,14 +198,20 @@ XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generi
  * to specializations injected by their defining modules. Value-struct clones
  * stay local to the using module so lowering has a concrete local layout.
  *
- * `analyzer` is required, not optional: it is both the throw-effect oracle
- * that splits generic HOFs into MAY_THROW / NO_THROW bodies and the sink for
- * E0387/E0388. A pass that cannot report an exhausted budget could only
- * respond by silently leaving calls generic.
+ * `analyzer` is required. It classifies generic HOF throw effects.
+ * It also receives E0388 and
+ * E0389 budget diagnostics.
+ * Without diagnostics, exhaustion could leave calls generic.
  *
- * Returns false when a budget diagnostic was reported; the caller must not
- * proceed to lowering. */
+ *
+ * `usage` accumulates across a complete source build.
+ * Thus max_instances is a whole-program
+ * budget.
+ * Declaring modules can still be specialized in separate passes.
+ * Returns false when a
+ * budget diagnostic was reported; the caller must not proceed to lowering. */
 XR_FUNC bool xa_mono_pass(AstNode *root, AstNode **external_roots, int external_root_count,
-                          XrVMRuntime *isolate, XaAnalyzer *analyzer);
+                          XrVMRuntime *isolate, const XaMonoBudget *budget, XaMonoUsage *usage,
+                          XaAnalyzer *analyzer);
 
 #endif  // XANALYZER_MONO_H

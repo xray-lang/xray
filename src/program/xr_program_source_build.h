@@ -22,9 +22,22 @@ struct XrCompilerSession;
 struct XrModuleIdentityAuthority;
 struct XrModuleResolver;
 
-#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(2)
+#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(3)
 #define XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES UINT32_C(1024)
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE 512u
+
+/* Requests may tighten but never expand these limits.
+ * Specialization usage spans the complete
+ * module graph.
+ * max_program_bytes bounds the final canonical artifact. */
+typedef struct XrProgramSourceBuildBudget {
+    uint32_t max_modules;
+    uint32_t max_monomorphization_depth;
+    uint32_t max_monomorphization_instances;
+    uint32_t max_program_bytes;
+} XrProgramSourceBuildBudget;
+
+XR_FUNC XrProgramSourceBuildBudget xr_program_source_build_default_budget(void);
 
 typedef enum XrProgramSourceProfile {
     XR_PROGRAM_SOURCE_PROFILE_INVALID = 0,
@@ -56,7 +69,7 @@ typedef struct XrProgramSourceEntryIdentity {
 
 typedef struct XrProgramSourceBuildInput {
     uint32_t schema_version;
-    uint32_t max_modules;
+    XrProgramSourceBuildBudget budget;
     struct XrCompilerSession *session;
     struct XrModuleResolver *resolver;
     const char *entry_source_path;

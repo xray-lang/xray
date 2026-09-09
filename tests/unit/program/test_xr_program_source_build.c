@@ -23,6 +23,7 @@
 #include "program/xr_validated_program_internal.h"
 #include "runtime/abi/xr_builtin_provider_contract.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
+#include "runtime/xerror_codes.h"
 #include "plan/semantic/xr_semantic_ids.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/xr_program_vm.h"
@@ -903,7 +904,7 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
     xr_module_source_fingerprint(entry_source, &source_fingerprint);
     fixture->input = (XrProgramSourceBuildInput) {
         .schema_version = XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION,
-        .max_modules = XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES,
+        .budget = xr_program_source_build_default_budget(),
         .session = fixture->session,
         .resolver = fixture->resolver,
         .entry_source_path = fixture->entry_path,
@@ -5723,13 +5724,156 @@ TEST(source_owner_rejects_module_budget_before_analysis) {
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
     XrProgramSourceBuildInput input = fixture.input;
-    input.max_modules = 1u;
+    input.budget.max_modules = 1u;
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
     ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
                   XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT);
     ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH);
     ASSERT_EQ_UINT(diagnostic.underlying_status, 2u);
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_NULL(product.program);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_rejects_invalid_or_expanded_budget_request) {
+    static const char source[] = "fn answer() -> i64 { return 42 }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrProgramSourceBuildBudget defaults = xr_program_source_build_default_budget();
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    XrProgramSourceBuildInput input = fixture.input;
+
+    input.budget.max_modules = defaults.max_modules + 1u;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
+    input = fixture.input;
+    input.budget.max_monomorphization_depth = defaults.max_monomorphization_depth + 1u;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
+    input = fixture.input;
+    input.budget.max_monomorphization_instances = defaults.max_monomorphization_instances + 1u;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
+    input = fixture.input;
+    input.budget.max_program_bytes = defaults.max_program_bytes + 1u;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
+    input = fixture.input;
+    input.budget.max_program_bytes = 0u;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_NULL(product.program);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_reports_exact_monomorphization_depth_budget) {
+    static const char source[] = "class C0<T> {\n"
+                                 "  value: T\n"
+                                 "  constructor(value: T) { this.value = value }\n"
+                                 "  get() -> T {\n"
+                                 "    var next = C1<T>(this.value)\n"
+                                 "    return next.get()\n"
+                                 "  }\n"
+                                 "}\n"
+                                 "class C1<T> {\n"
+                                 "  value: T\n"
+                                 "  constructor(value: T) { this.value = value }\n"
+                                 "  get() -> T {\n"
+                                 "    var next = C2<T>(this.value)\n"
+                                 "    return next.get()\n"
+                                 "  }\n"
+                                 "}\n"
+                                 "class C2<T> {\n"
+                                 "  value: T\n"
+                                 "  constructor(value: T) { this.value = value }\n"
+                                 "  get() -> T { return this.value }\n"
+                                 "}\n"
+                                 "fn answer() -> i64 {\n"
+                                 "  var root = C0<i64>(42)\n"
+                                 "  return root.get()\n"
+                                 "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrProgramSourceBuildInput input = fixture.input;
+    input.budget.max_monomorphization_depth = 1u;
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION);
+    ASSERT_EQ_UINT(diagnostic.underlying_status, XR_ERR_ANALYZE_MONO_DEPTH);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "E0389"));
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "deeper than 1 levels"));
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_NULL(product.program);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_reports_exact_monomorphization_instance_budget) {
+    static const char source[] = "fn identity<T>(value: T) -> T { return value }\n"
+                                 "fn answer() -> i64 {\n"
+                                 "  var number = identity<i64>(41)\n"
+                                 "  if (identity<bool>(true)) { return number + 1 }\n"
+                                 "  return 0\n"
+                                 "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrProgramSourceBuildInput input = fixture.input;
+    input.budget.max_monomorphization_instances = 1u;
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION);
+    ASSERT_EQ_UINT(diagnostic.underlying_status, XR_ERR_ANALYZE_MONO_BUDGET);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "E0388"));
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "budget of 1 generic instances"));
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_NULL(product.program);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_applies_instance_budget_across_module_graph) {
+    static const char library_source[] =
+        "export fn importedIdentity<T>(value: T) -> T { return value }\n";
+    static const char entry_source[] =
+        "import { importedIdentity } from \"./library\"\n"
+        "fn localIdentity<T>(value: T) -> T { return value }\n"
+        "fn answer() -> i64 { return importedIdentity<i64>(21) + localIdentity<i64>(21) }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
+    XrProgramSourceBuildInput input = fixture.input;
+    input.budget.max_monomorphization_instances = 1u;
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION);
+    ASSERT_EQ_UINT(diagnostic.module_index, 1u);
+    ASSERT_EQ_UINT(diagnostic.underlying_status, XR_ERR_ANALYZE_MONO_BUDGET);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "E0388"));
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_NULL(product.program);
+    source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_rejects_program_bytes_over_request_budget) {
+    static const char source[] = "fn answer() -> i64 { return 42 }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrProgramSourceBuildInput input = fixture.input;
+    input.budget.max_program_bytes = 1u;
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT);
+    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE);
+    ASSERT_GT(diagnostic.underlying_status, 1u);
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "Program size"));
+    ASSERT_NOT_NULL(strstr(diagnostic.message, "limit 1 bytes"));
     ASSERT_NULL(product.artifact.bytes);
     ASSERT_NULL(product.program);
     source_build_fixture_free(&fixture);
