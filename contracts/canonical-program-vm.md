@@ -153,9 +153,19 @@ function and class/struct specializations. Selective re-export aliases and names
 the same facade carry compiler-private exact graph and declaration bindings to the defining-module
 specialization; repeated namespace calls reuse that binding. The facade publishes only its declared
 source names, and importing the hidden original generic name is rejected. Reference and both VM decode
-policies return 42. Parameterized and builtin constraints, generic methods, generic ownership cleanup,
-arbitrary returned/projected READ places, and valid finite recursive specialization remain outside this
-bounded slice.
+policies return 42. The same exact declaration-plus-ordered-tuple authority now covers generic
+instance methods on a concrete, nongeneric value-struct receiver. Explicit and inferred calls reached
+through a selective re-export and its namespace produce separate concrete method bodies for two
+nominal constraint implementors while reusing each identical tuple. The open method template is not
+executable, each specialized body calls the exact sealed implementor method, and Xglobal records the
+origin class, method, declaration, specialized body, callsite, body-use, and code-size evidence.
+Reference and both VM decode policies return 42. Xi-only call-bound READ places for the trivial struct
+receiver and explicit argument are erased to Program values only after the receiver plan, callee ABI,
+nominal TypeIds, direct source call, nonescape, and ownership facts agree. A constraint violation and
+an uninferable method type tuple fail during analysis instead of reaching Program. Static generic
+methods, generic receiver-plus-method tuples, interface generic dispatch, parameterized and builtin
+constraints, generic ownership cleanup, arbitrary returned/projected READ places, and valid finite
+recursive specialization remain outside this bounded slice.
 The source-build request carries one fail-closed budget for module count, monomorphization depth,
 whole-graph specialization count, and final Program bytes. A caller may tighten those limits but
 cannot raise them above the production defaults. Exhaustion stops before VM construction with the
@@ -186,4 +196,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 545b7f329fd085e3a9973e3c47ece0001f138e1258f56af570438b54fda55d3c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c fc73bfeaa33ffda18d06cdf9ef5835961e1bab28ff1d639c7539a32303b5df54

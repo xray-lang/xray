@@ -960,11 +960,11 @@ static void assert_source_build_ok(const XrProgramSourceBuildInput *input,
     if (status != XR_PROGRAM_SOURCE_BUILD_OK) {
         fprintf(stderr,
                 "source build failed: status=%s stage=%u module=%u underlying=%u "
-                "writer=%u verifier=%u message=%s\n",
+                "writer=%u verifier=%u source=%s:%u message=%s\n",
                 xr_program_source_build_status_name(status), (unsigned) diagnostic->stage,
                 diagnostic->module_index, diagnostic->underlying_status,
                 (unsigned) diagnostic->writer_status, (unsigned) diagnostic->verifier_status,
-                diagnostic->message);
+                diagnostic->source_path, diagnostic->source_line, diagnostic->message);
     }
     ASSERT_EQ_INT(status, XR_PROGRAM_SOURCE_BUILD_OK);
 }
@@ -1545,11 +1545,19 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "fn nested<U>() -> i64 { return 1 }\n"
         "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
         "  return counter.current() + nested<Array<T>>() - 1\n"
+        "}\n"
+        "export struct GenericReader {\n"
+        "  bias: i64\n"
+        "  genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
+        "    return this.bias + counter.current()\n"
+        "  }\n"
+        "  token<T>() -> i64 { return 999 }\n"
         "}\n";
     static const char facade_source[] =
-        "export { ReadCounter, LeftCounter, genericRead as readCounter } from \"./library\"\n";
+        "export { ReadCounter, LeftCounter, GenericReader, genericRead as readCounter } from "
+        "\"./library\"\n";
     static const char entry_source[] =
-        "import { ReadCounter, LeftCounter, readCounter } from \"./facade\"\n"
+        "import { ReadCounter, LeftCounter, GenericReader, readCounter } from \"./facade\"\n"
         "import \"./facade\" as counters\n"
         "struct LocalCounter implements ReadCounter {\n"
         "  value: i64\n"
@@ -1559,9 +1567,11 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "fn answer() -> i64 {\n"
         "  var left = LeftCounter{value: 20}\n"
         "  var local = LocalCounter{value: 11}\n"
+        "  var reader = GenericReader{bias: 0}\n"
         "  return readCounter<LeftCounter>(left) + readCounter<LocalCounter>(local) +\n"
         "         readCounter(local) + counters.readCounter(left) +\n"
-        "         counters.readCounter(local) - 31\n"
+        "         counters.readCounter(local) + reader.genericRead<LeftCounter>(left) +\n"
+        "         reader.genericRead(local) - 62\n"
         "}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
@@ -1582,10 +1592,10 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     assert_products_equal(&first, &second);
 
     const XrValidatedProgram *program = first.program;
-    ASSERT_EQ_UINT(program->function_count, 7u);
+    ASSERT_EQ_UINT(program->function_count, 9u);
     ASSERT_EQ_UINT(program->interface_count, 0u);
     ASSERT_EQ_UINT(program->conformance_count, 0u);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 9u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 13u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_WITNESS_DIRECT), 0u);
     ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_EXISTENTIAL_PACK), 0u);
 
@@ -1596,7 +1606,11 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_EQ_UINT(entry_function->result_type_id, XR_CORE_TYPE_I64);
     uint32_t specializations[2] = {UINT32_MAX, UINT32_MAX};
     uint32_t specialization_count = 0u;
+    uint32_t method_specializations[2] = {UINT32_MAX, UINT32_MAX};
+    uint32_t method_specialization_count = 0u;
     uint32_t entry_call_count = 0u;
+    uint32_t free_call_count = 0u;
+    uint32_t method_call_count = 0u;
     for (uint32_t block_index = 0u; block_index < entry_function->block_count; ++block_index) {
         const XrValidatedBlock *block = &entry_function->blocks[block_index];
         for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
@@ -1604,34 +1618,51 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
             const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
             if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT)
                 continue;
-            ASSERT_EQ_UINT(instruction->operand_count, 1u);
             ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FUNCTION);
             ASSERT_LT(instruction->immediate.function_id, program->function_count);
             const XrValidatedFunction *callee =
                 &program->functions[instruction->immediate.function_id];
-            ASSERT_EQ_UINT(callee->parameter_count, 1u);
-            ASSERT_EQ_INT(callee->parameter_modes[0], XR_PARAM_READ);
             ASSERT_EQ_UINT(callee->result_type_id, XR_CORE_TYPE_I64);
-            ASSERT_EQ_UINT(entry_function->value_types[instruction->operands[0]],
-                           callee->parameter_types[0]);
-            ASSERT_EQ_INT(entry_function->value_categories[instruction->operands[0]],
-                          XR_CORE_IR_VALUE);
-            ASSERT_EQ_INT(entry_function->value_ownerships[instruction->operands[0]],
-                          XR_CORE_IR_NON_OWNER);
             ++entry_call_count;
+            uint32_t *instances = specializations;
+            uint32_t *instance_count = &specialization_count;
+            if (callee->has_receiver) {
+                ASSERT_EQ_UINT(instruction->operand_count, 2u);
+                ASSERT_EQ_UINT(callee->parameter_count, 2u);
+                ASSERT_EQ_INT(callee->receiver_mode, XR_PARAM_READ);
+                instances = method_specializations;
+                instance_count = &method_specialization_count;
+                ++method_call_count;
+            } else {
+                ASSERT_EQ_UINT(instruction->operand_count, 1u);
+                ASSERT_EQ_UINT(callee->parameter_count, 1u);
+                ++free_call_count;
+            }
+            for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
+                ASSERT_EQ_INT(callee->parameter_modes[parameter], XR_PARAM_READ);
+                ASSERT_EQ_UINT(entry_function->value_types[instruction->operands[parameter]],
+                               callee->parameter_types[parameter]);
+                ASSERT_EQ_INT(entry_function->value_categories[instruction->operands[parameter]],
+                              XR_CORE_IR_VALUE);
+                ASSERT_EQ_INT(entry_function->value_ownerships[instruction->operands[parameter]],
+                              XR_CORE_IR_NON_OWNER);
+            }
             bool known = false;
-            for (uint32_t specialization = 0u; specialization < specialization_count;
-                 ++specialization)
-                known |= specializations[specialization] == instruction->immediate.function_id;
+            for (uint32_t specialization = 0u; specialization < *instance_count; ++specialization)
+                known |= instances[specialization] == instruction->immediate.function_id;
             if (!known) {
-                ASSERT_LT(specialization_count, 2u);
-                specializations[specialization_count++] = instruction->immediate.function_id;
+                ASSERT_LT(*instance_count, 2u);
+                instances[(*instance_count)++] = instruction->immediate.function_id;
             }
         }
     }
-    ASSERT_EQ_UINT(entry_call_count, 5u);
+    ASSERT_EQ_UINT(entry_call_count, 7u);
+    ASSERT_EQ_UINT(free_call_count, 5u);
+    ASSERT_EQ_UINT(method_call_count, 2u);
     ASSERT_EQ_UINT(specialization_count, 2u);
+    ASSERT_EQ_UINT(method_specialization_count, 2u);
     ASSERT_TRUE(specializations[0] != specializations[1]);
+    ASSERT_TRUE(method_specializations[0] != method_specializations[1]);
 
     uint32_t method_targets[2] = {UINT32_MAX, UINT32_MAX};
     uint16_t receiver_types[2] = {XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID};
@@ -1689,6 +1720,52 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_NOT_NULL(left_type);
     ASSERT_NOT_NULL(right_type);
     ASSERT_TRUE(!xr_core_ir_key_equal(left_type->key, right_type->key));
+
+    uint32_t generic_method_targets[2] = {UINT32_MAX, UINT32_MAX};
+    for (uint32_t specialization = 0u; specialization < 2u; ++specialization) {
+        const XrValidatedFunction *method =
+            &program->functions[method_specializations[specialization]];
+        ASSERT_TRUE(method->has_receiver);
+        ASSERT_EQ_INT(method->receiver_mode, XR_PARAM_READ);
+        ASSERT_EQ_UINT(method->parameter_count, 2u);
+        ASSERT_EQ_INT(method->parameter_modes[0], XR_PARAM_READ);
+        ASSERT_EQ_INT(method->parameter_modes[1], XR_PARAM_READ);
+        ASSERT_EQ_UINT(method->result_type_id, XR_CORE_TYPE_I64);
+        if (specialization != 0u)
+            ASSERT_EQ_UINT(method->parameter_types[0],
+                           program->functions[method_specializations[0]].parameter_types[0]);
+        ASSERT_TRUE(method->parameter_types[1] == receiver_types[0] ||
+                    method->parameter_types[1] == receiver_types[1]);
+
+        uint32_t calls = 0u;
+        for (uint32_t block_index = 0u; block_index < method->block_count; ++block_index) {
+            const XrValidatedBlock *block = &method->blocks[block_index];
+            for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
+                const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
+                if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT)
+                    continue;
+                ASSERT_EQ_UINT(instruction->operand_count, 1u);
+                ASSERT_LT(instruction->immediate.function_id, program->function_count);
+                const XrValidatedFunction *target =
+                    &program->functions[instruction->immediate.function_id];
+                ASSERT_TRUE(target->has_receiver);
+                ASSERT_EQ_UINT(target->parameter_count, 1u);
+                ASSERT_EQ_UINT(target->parameter_types[0], method->parameter_types[1]);
+                ASSERT_EQ_UINT(method->value_types[instruction->operands[0]],
+                               method->parameter_types[1]);
+                ASSERT_EQ_INT(method->value_categories[instruction->operands[0]], XR_CORE_IR_VALUE);
+                generic_method_targets[specialization] = instruction->immediate.function_id;
+                ++calls;
+            }
+        }
+        ASSERT_EQ_UINT(calls, 1u);
+    }
+    ASSERT_TRUE(generic_method_targets[0] != generic_method_targets[1]);
+    ASSERT_TRUE((generic_method_targets[0] == method_targets[0] ||
+                 generic_method_targets[0] == method_targets[1]) &&
+                (generic_method_targets[1] == method_targets[0] ||
+                 generic_method_targets[1] == method_targets[1]));
 
     XrReferenceProfile reference_profile = {.pointer_width = 64u};
     XrReferenceOutcome reference =
@@ -1777,8 +1854,8 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "         counters.readCounter(local) - 41\n"
         "}\n";
     SourceBuildFixture namespace_fixture;
-    ASSERT_TRUE(source_build_fixture_init(&namespace_fixture, namespace_entry_source,
-                                          library_source));
+    ASSERT_TRUE(
+        source_build_fixture_init(&namespace_fixture, namespace_entry_source, library_source));
     ASSERT_TRUE(source_build_fixture_add_facade(&namespace_fixture, facade_source));
     XrProgramSourceProduct namespace_product = {0};
     XrProgramSourceDiagnostic namespace_diagnostic;
@@ -1825,6 +1902,68 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_NULL(rejected.artifact.bytes);
     ASSERT_NULL(rejected.program);
     source_build_fixture_free(&negative_fixture);
+
+    static const char negative_method_library_source[] =
+        "export interface ReadCounter { current() -> i64 }\n"
+        "export struct GenericReader {\n"
+        "  bias: i64\n"
+        "  read<T: ReadCounter>(counter: T) -> i64 { return this.bias + counter.current() }\n"
+        "  token<T>() -> i64 { return 999 }\n"
+        "}\n";
+    static const char negative_method_facade_source[] =
+        "export { ReadCounter, GenericReader } from \"./library\"\n";
+    static const char negative_method_entry_source[] =
+        "import { GenericReader } from \"./facade\"\n"
+        "struct NotCounter { value: i64 }\n"
+        "fn answer() -> i64 {\n"
+        "  var reader = GenericReader{bias: 0}\n"
+        "  return reader.read<NotCounter>(NotCounter{value: 42})\n"
+        "}\n";
+    SourceBuildFixture negative_method_fixture;
+    ASSERT_TRUE(source_build_fixture_init(&negative_method_fixture, negative_method_entry_source,
+                                          negative_method_library_source));
+    ASSERT_TRUE(
+        source_build_fixture_add_facade(&negative_method_fixture, negative_method_facade_source));
+    XrProgramSourceProduct method_rejected = {0};
+    XrProgramSourceDiagnostic method_rejection;
+    ASSERT_EQ_INT(xr_program_source_build(&negative_method_fixture.input, &method_rejected,
+                                          &method_rejection),
+                  XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED);
+    ASSERT_EQ_INT(method_rejection.stage, XR_PROGRAM_SOURCE_STAGE_ANALYSIS);
+    ASSERT_EQ_UINT(method_rejection.module_index, 2u);
+    ASSERT_EQ_UINT(method_rejection.underlying_status, XR_ERR_ANALYZE_GENERIC_CONSTRAINT);
+    ASSERT_EQ_UINT(method_rejection.source_line, 5u);
+    ASSERT_NOT_NULL(strstr(method_rejection.message, "does not satisfy constraint"));
+    ASSERT_NULL(method_rejected.artifact.bytes);
+    ASSERT_NULL(method_rejected.program);
+    source_build_fixture_free(&negative_method_fixture);
+
+    static const char uninferred_method_entry_source[] =
+        "import { GenericReader } from \"./facade\"\n"
+        "fn answer() -> i64 {\n"
+        "  var reader = GenericReader{bias: 0}\n"
+        "  return reader.token()\n"
+        "}\n";
+    SourceBuildFixture uninferred_method_fixture;
+    ASSERT_TRUE(source_build_fixture_init(&uninferred_method_fixture,
+                                          uninferred_method_entry_source,
+                                          negative_method_library_source));
+    ASSERT_TRUE(
+        source_build_fixture_add_facade(&uninferred_method_fixture, negative_method_facade_source));
+    XrProgramSourceProduct uninferred_rejected = {0};
+    XrProgramSourceDiagnostic uninferred_rejection;
+    ASSERT_EQ_INT(xr_program_source_build(&uninferred_method_fixture.input, &uninferred_rejected,
+                                          &uninferred_rejection),
+                  XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED);
+    ASSERT_EQ_INT(uninferred_rejection.stage, XR_PROGRAM_SOURCE_STAGE_ANALYSIS);
+    ASSERT_EQ_UINT(uninferred_rejection.module_index, 2u);
+    ASSERT_EQ_UINT(uninferred_rejection.underlying_status, XR_ERR_ANALYZE_GENERIC_COUNT);
+    ASSERT_EQ_UINT(uninferred_rejection.source_line, 4u);
+    ASSERT_NOT_NULL(strstr(uninferred_rejection.message, "Cannot infer type argument 'T'"));
+    ASSERT_NOT_NULL(strstr(uninferred_rejection.message, "token"));
+    ASSERT_NULL(uninferred_rejected.artifact.bytes);
+    ASSERT_NULL(uninferred_rejected.program);
+    source_build_fixture_free(&uninferred_method_fixture);
 
     static const char private_name_entry_source[] = "import { genericRead } from \"./facade\"\n"
                                                     "fn answer() -> i64 { return 0 }\n";

@@ -39,9 +39,9 @@ XR_FUNC XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *l
                                            XrType *callee_type, XrType *return_type,
                                            CallExprNode *call, int arg_count,
                                            XrType **effective_arg_types, bool writeback_inferred);
-// task-221 gap C: record inferred generic type arguments on a call node so
-// monomorphization/AOT cgen specialize inferred generic construction and
-// generic-function calls. Defined in xanalyzer_visitor_call.c.
+// Record inferred generic type arguments on a call node so monomorphization
+// specializes inferred generic construction, functions, and methods. Defined
+// in xanalyzer_visitor_call.c.
 void xa_writeback_inferred_type_args(XaAnalyzer *analyzer, CallExprNode *call, XrType **inferred,
                                      int type_param_count);
 XR_FUNC XrType *xa_infer_function_return_type(XaInferContext *ctx, AstNode *body);

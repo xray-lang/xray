@@ -152,9 +152,18 @@ the full 64-bit identity for function and class/struct specializations. Referenc
 strict native C return 42. That native fixture covers both a selective re-export alias and a namespace
 reached through the same facade. Their compiler-private bindings retain the defining module's exact
 graph and declaration authority, repeated namespace calls reuse one binding, and the facade never
-publishes a mangled specialization or the hidden original generic name. Parameterized/builtin
-constraints, generic methods, generic ownership cleanup, arbitrary returned/projected READ places,
-and valid finite recursive specialization remain unqualified.
+publishes a mangled specialization or the hidden original generic name. The same source-backed
+identity now admits generic instance methods on a concrete, nongeneric value-struct receiver. Explicit
+and inferred calls through a selective re-export and namespace produce one concrete method body per
+exact nominal constraint implementor and reuse identical tuples; the open method template is absent
+from executable reachability. Xglobal binds each clone to its origin class, method, declaration,
+specialized body, exact callsite, body-use, and code-size evidence. Reference, both VM views, and strict
+native C return 42. Xi-only call-bound READ places for the trivial receiver and explicit argument are
+erased only after exact receiver-plan, callee-ABI, nominal-TypeId, direct-source-call, nonescape, and
+ownership agreement. A constraint violation and an uninferable method type tuple fail during analysis.
+Static generic methods, generic receiver-plus-method tuples, interface generic dispatch,
+parameterized/builtin constraints, generic ownership cleanup, arbitrary returned/projected READ
+places, and valid finite recursive specialization remain unqualified.
 Before AOT receives a validated Program,
 the shared source-build request enforces one fail-closed module/depth/whole-graph-instance/final-byte
 budget. Requests may tighten but not expand the production defaults; E0388/E0389 exhaustion remains
@@ -214,4 +223,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 545b7f329fd085e3a9973e3c47ece0001f138e1258f56af570438b54fda55d3c
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c fc73bfeaa33ffda18d06cdf9ef5835961e1bab28ff1d639c7539a32303b5df54

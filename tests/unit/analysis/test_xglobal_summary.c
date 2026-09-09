@@ -7746,6 +7746,116 @@ TEST(global_evidence_post_mono_records_concrete_nested_generic_root) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
+    setup_parser_session();
+    const char *source =
+        "interface ReadCounter { current() -> i64 }\n"
+        "struct Counter implements ReadCounter {\n"
+        "  value: i64\n"
+        "  current() -> i64 { return this.value }\n"
+        "}\n"
+        "struct Reader {\n"
+        "  bias: i64\n"
+        "  read<T: ReadCounter>(counter: T) -> i64 { return this.bias + counter.current() }\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        "  var reader = Reader{bias: 1}\n"
+        "  var counter = Counter{value: 41}\n"
+        "  return reader.read(counter)\n"
+        "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "generic-method-root.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {
+        .specs = &spec,
+        .spec_count = 1,
+        .topo_order = topo_order,
+        .topo_count = 1,
+        .entry_index = 0,
+    };
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence pre = {0};
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &pre, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_EQ_UINT(pre.ngeneric_insts, 1u);
+    ASSERT_EQ_UINT(pre.generic_insts[0].kind, XG_GENERIC_INST_METHOD);
+    ASSERT_EQ_UINT(pre.generic_insts[0].name_id, xg_name_id("read"));
+    ASSERT_TRUE(pre.generic_insts[0].origin_decl_id != XG_NO_ID);
+    ASSERT_TRUE(pre.generic_insts[0].origin_func_id != XG_NO_ID);
+    ASSERT_TRUE(pre.generic_insts[0].origin_method_id != XG_NO_ID);
+    ASSERT_TRUE(pre.generic_insts[0].origin_class_id != XG_NO_ID);
+
+    XaMonoBudget budget = xa_mono_default_budget();
+    XaMonoUsage usage = {0};
+    AstNode *roots[1] = {ast};
+    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
+    xa_analyzer_clear_diagnostics(analyzer);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_TRUE(xg_global_evidence_merge_generic_inst_roots(&evidence, &pre));
+    ASSERT_EQ_UINT(evidence.ngeneric_insts, 1u);
+    const XgGenericInstSummary *inst = &evidence.generic_insts[0];
+    ASSERT_EQ_UINT(inst->kind, XG_GENERIC_INST_METHOD);
+    ASSERT_EQ_UINT(inst->name_id, xg_name_id("read"));
+    ASSERT_TRUE(inst->origin_decl_id != XG_NO_ID);
+    ASSERT_TRUE(inst->origin_func_id != XG_NO_ID);
+    ASSERT_TRUE(inst->origin_method_id != XG_NO_ID);
+    ASSERT_TRUE(inst->origin_class_id != XG_NO_ID);
+    ASSERT_TRUE(inst->specialized_func_id != XG_NO_ID);
+    ASSERT_TRUE(inst->specialized_func_id != inst->origin_func_id);
+    ASSERT_TRUE((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0u);
+    ASSERT_TRUE((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0u);
+    ASSERT_EQ_UINT(evidence.ngeneric_body_uses, 1u);
+    ASSERT_EQ_UINT(evidence.ngeneric_code_sizes, 1u);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].origin_body_func_id, inst->origin_func_id);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].specialized_body_func_id,
+                   inst->specialized_func_id);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].root_callsite_id, inst->root_callsite_id);
+
+    const XgCallsiteSummary *root_call = NULL;
+    for (uint32_t i = 0u; i < evidence.ncallsites; ++i) {
+        if (evidence.callsites[i].callsite_id == inst->root_callsite_id) {
+            root_call = &evidence.callsites[i];
+            break;
+        }
+    }
+    ASSERT_NOT_NULL(root_call);
+    ASSERT_EQ_UINT(root_call->kind, XG_CALL_METHOD);
+    ASSERT_TRUE(root_call->method_id != XG_NO_ID);
+    ASSERT_TRUE(root_call->method_id != inst->origin_method_id);
+    bool specialized_method_body = false;
+    for (uint32_t i = 0u; i < evidence.nbodies; ++i) {
+        const XgBodySummary *body = &evidence.bodies[i];
+        if (body->func_id == inst->specialized_func_id) {
+            specialized_method_body =
+                body->kind == XG_BODY_METHOD && body->owner_method_id == root_call->method_id;
+            break;
+        }
+    }
+    ASSERT_TRUE(specialized_method_body);
+
+    xg_global_evidence_free(&evidence);
+    xg_global_evidence_free(&pre);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
 static bool build_monomorphized_type_keys(const char *source, const char *canonical,
                                           const char *namespace_id, const char *source_path,
                                           uint64_t *out_type_key, uint64_t *out_type_arg_key) {
@@ -7788,8 +7898,9 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
     bool second_analysis_ok = analyzer->diagnostic_count == 0u;
     ok = ok && second_analysis_ok;
     XgGlobalEvidence evidence = {0};
-    bool evidence_ok = xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
-        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
+    bool evidence_ok =
+        xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+            &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
     ok = ok && evidence_ok;
     uint32_t specialized_count = 0;
     if (ok) {
@@ -7819,12 +7930,12 @@ TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments) {
     uint64_t left_arg_key = 0u;
     uint64_t right_type_key = 0u;
     uint64_t right_arg_key = 0u;
-    ASSERT_TRUE(build_monomorphized_type_keys(
-        source, "memory-module-v1:id=18:generic-class-left", "generic-class-left",
-        "generic-class-left.xr", &left_type_key, &left_arg_key));
-    ASSERT_TRUE(build_monomorphized_type_keys(
-        source, "memory-module-v1:id=19:generic-class-right", "generic-class-right",
-        "generic-class-right.xr", &right_type_key, &right_arg_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=18:generic-class-left",
+                                              "generic-class-left", "generic-class-left.xr",
+                                              &left_type_key, &left_arg_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=19:generic-class-right",
+                                              "generic-class-right", "generic-class-right.xr",
+                                              &right_type_key, &right_arg_key));
     ASSERT_TRUE(left_type_key != right_type_key);
     ASSERT_TRUE(left_arg_key != right_arg_key);
     teardown_parser_session();
@@ -7842,12 +7953,12 @@ TEST(global_evidence_monomorphized_struct_keys_use_exact_nominal_arguments) {
     uint64_t left_arg_key = 0u;
     uint64_t right_type_key = 0u;
     uint64_t right_arg_key = 0u;
-    ASSERT_TRUE(build_monomorphized_type_keys(
-        source, "memory-module-v1:id=20:generic-struct-left", "generic-struct-left",
-        "generic-struct-left.xr", &left_type_key, &left_arg_key));
-    ASSERT_TRUE(build_monomorphized_type_keys(
-        source, "memory-module-v1:id=21:generic-struct-right", "generic-struct-right",
-        "generic-struct-right.xr", &right_type_key, &right_arg_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=20:generic-struct-left",
+                                              "generic-struct-left", "generic-struct-left.xr",
+                                              &left_type_key, &left_arg_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=21:generic-struct-right",
+                                              "generic-struct-right", "generic-struct-right.xr",
+                                              &right_type_key, &right_arg_key));
     ASSERT_TRUE(left_type_key != right_type_key);
     ASSERT_TRUE(left_arg_key != right_arg_key);
     teardown_parser_session();
@@ -15400,6 +15511,7 @@ RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_binding);
 RUN_TEST(global_evidence_generic_root_merge_preserves_identity_high_bits);
 RUN_TEST(global_evidence_post_mono_records_concrete_nested_generic_root);
+RUN_TEST(global_evidence_post_mono_records_concrete_generic_method_root);
 RUN_TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity);

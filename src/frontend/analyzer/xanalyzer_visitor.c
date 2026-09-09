@@ -2712,15 +2712,47 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
         return xr_type_new_error(NULL);
     }
 
+    if (writeback_inferred && call->type_arg_count == 0 && actual_count == type_param_count) {
+        int missing = -1;
+        for (int i = 0; i < actual_count; i++) {
+            if (!actual_types[i] || XR_TYPE_IS_UNKNOWN(actual_types[i])) {
+                missing = i;
+                break;
+            }
+        }
+        if (missing >= 0) {
+            const AstNode *declaration = links->function_decl_node;
+            const char *name = declaration && declaration->type == AST_FUNCTION_DECL
+                                   ? declaration->as.function_decl.name
+                               : declaration && declaration->type == AST_METHOD_DECL
+                                   ? declaration->as.method_decl.name
+                                   : "<generic>";
+            XrLocation loc = {
+                .file = ctx->file_path,
+                .line = call->callee ? call->callee->line : 0,
+                .column = call->callee ? call->callee->column : 0,
+            };
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Cannot infer type argument '%s' for generic declaration '%s'; add "
+                     "explicit type arguments",
+                     param_names[missing] ? param_names[missing] : "?", name ? name : "<generic>");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+            xr_free(param_names);
+            xr_free(actual_types);
+            return xr_type_new_error(ctx->analyzer->isolate);
+        }
+    }
+
     if (actual_count > 0) {
         return_type = xr_type_substitute(ctx->analyzer->isolate, return_type, param_names,
                                          actual_types, actual_count);
     }
 
-    // task-221 gap C: for an inferred generic call (no explicit type args), record
-    // the inferred type arguments on the call node so monomorphization and AOT
-    // cgen specialize it exactly like the explicit form. Requires every param to
-    // have been inferred to a concrete type; skip otherwise. Gated by
+    // For an inferred generic call (no explicit type args), record the inferred
+    // type arguments on the call node so monomorphization specializes it exactly
+    // like the explicit form. Gated by
     // writeback_inferred: imported generic functions (e.g. parallel.reduce, which
     // cgen lowers via a native intrinsic rather than ordinary monomorphization)
     // must keep type_arg_count == 0 so their special-casing still applies.

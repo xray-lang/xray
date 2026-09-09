@@ -246,8 +246,9 @@ typedef enum XgBodyKind {
 } XgBodyKind;
 
 enum {
-    /* The body is owned by an open generic class skeleton.  A function's own
-     * type parameters use the canonical erased body and do not imply this. */
+    /* The body still belongs to an open declaration-owned generic domain.
+     * Its own type parameters or an open aggregate owner may define that
+     * domain. It is not executable until an exact specialization owns it. */
     XG_BODY_GENERIC_TEMPLATE = 1u << 0,
 };
 

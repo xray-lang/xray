@@ -37,6 +37,7 @@
 #include "../../base/xmalloc.h"
 
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1566,7 +1567,8 @@ static void mono_rewrite_type_ref(XrTypeRef *tref, XaMonoCollector *collector) {
 // Generic declaration registry: maps generic name → AST node
 typedef struct {
     const char *name;
-    AstNode *node;  // AST_FUNCTION_DECL or AST_CLASS_DECL
+    AstNode *node;   // Exact generic function, method, class, or struct declaration
+    AstNode *owner;  // Declaring class/struct for AST_METHOD_DECL; NULL otherwise
     XrGenericParam **type_params;
     int type_param_count;
     bool is_external;
@@ -1586,7 +1588,7 @@ static void registry_init(XaGenericRegistry *r) {
     r->capacity = 0;
 }
 
-static void registry_add_ex(XaGenericRegistry *r, const char *name, AstNode *node,
+static void registry_add_ex(XaGenericRegistry *r, const char *name, AstNode *node, AstNode *owner,
                             XrGenericParam **tp, int tp_count, bool is_external, bool inject_clone,
                             bool rewrite_member_access) {
     if (r->count >= r->capacity) {
@@ -1601,6 +1603,7 @@ static void registry_add_ex(XaGenericRegistry *r, const char *name, AstNode *nod
     XaGenericDecl *d = &r->decls[r->count++];
     d->name = name;
     d->node = node;
+    d->owner = owner;
     d->type_params = tp;
     d->type_param_count = tp_count;
     d->is_external = is_external;
@@ -1610,13 +1613,23 @@ static void registry_add_ex(XaGenericRegistry *r, const char *name, AstNode *nod
 
 static void registry_add_local(XaGenericRegistry *r, const char *name, AstNode *node,
                                XrGenericParam **tp, int tp_count) {
-    registry_add_ex(r, name, node, tp, tp_count, false, true, false);
+    registry_add_ex(r, name, node, NULL, tp, tp_count, false, true, false);
 }
 
 static void registry_add_external(XaGenericRegistry *r, const char *name, AstNode *node,
                                   XrGenericParam **tp, int tp_count, bool inject_clone,
                                   bool rewrite_member_access) {
-    registry_add_ex(r, name, node, tp, tp_count, true, inject_clone, rewrite_member_access);
+    registry_add_ex(r, name, node, NULL, tp, tp_count, true, inject_clone, rewrite_member_access);
+}
+
+static void registry_add_method(XaGenericRegistry *r, AstNode *owner, AstNode *method,
+                                bool is_external) {
+    if (!r || !owner || !method || method->type != AST_METHOD_DECL ||
+        method->as.method_decl.type_param_count <= 0)
+        return;
+    registry_add_ex(r, method->as.method_decl.name, method, owner,
+                    method->as.method_decl.type_params, method->as.method_decl.type_param_count,
+                    is_external, !is_external, false);
 }
 
 static XaGenericDecl *registry_find(XaGenericRegistry *r, const char *name) {
@@ -1673,10 +1686,30 @@ static XaGenericDecl *registry_find_call(XaGenericRegistry *registry, const Call
     return declaration ? NULL : registry_find_unique(registry, fallback_name);
 }
 
+static void collect_concrete_owner_generic_methods(AstNode *owner, XaGenericRegistry *registry,
+                                                   bool is_external) {
+    if (!owner || !registry || (owner->type != AST_CLASS_DECL && owner->type != AST_STRUCT_DECL))
+        return;
+    ClassDeclNode *decl =
+        owner->type == AST_CLASS_DECL ? &owner->as.class_decl : &owner->as.struct_decl;
+    /* A method on an open generic receiver needs both the receiver tuple and
+     * the method tuple in its specialization key. Keep that separate contract
+     * fail-closed instead of injecting a method into the open owner skeleton. */
+    if (decl->type_param_count > 0 || decl->is_generic_skeleton)
+        return;
+    for (int i = 0; decl->methods && i < decl->method_count; ++i) {
+        AstNode *method = decl->methods[i];
+        if (!method || method->type != AST_METHOD_DECL || method->as.method_decl.is_static ||
+            method->as.method_decl.type_param_count <= 0 || registry_find_decl(registry, method))
+            continue;
+        registry_add_method(registry, owner, method, is_external);
+    }
+}
+
 // External modules contribute generic value-struct templates to the using
-// module, and generic class/function names for namespace-call rewriting. Class
-// and function bodies are injected only into their defining module by scanning
-// cross-module instantiation roots with that module's local registry.
+// module, generic class/function names for namespace-call rewriting, and exact
+// generic methods on concrete receiver declarations. Executable clones remain
+// owned by the defining module, which scans cross-module instantiation roots.
 static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *registry) {
     if (!root || root->type != AST_PROGRAM)
         return;
@@ -1708,8 +1741,8 @@ static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *reg
                                       stmt->as.struct_decl.type_params,
                                       stmt->as.struct_decl.type_param_count, true, false);
             }
-            continue;
         }
+        collect_concrete_owner_generic_methods(stmt, registry, true);
     }
 }
 
@@ -1853,6 +1886,7 @@ static void collect_generic_decls(AstNode *root, XaGenericRegistry *registry) {
                                    stmt->as.struct_decl.type_params,
                                    stmt->as.struct_decl.type_param_count);
             }
+            collect_concrete_owner_generic_methods(stmt, registry, false);
         }
     }
 }
@@ -1906,6 +1940,18 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                 XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
                 xa_mono_collector_add_effect(collector, decl->name, decl->node, call->type_args,
                                              call->type_arg_count, is_cls, effect, &loc);
+            }
+        }
+        if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+            XaGenericDecl *decl =
+                registry_find_call(registry, call, collector ? collector->analyzer : NULL,
+                                   call->callee->as.member_access.name);
+            if (decl && decl->node && decl->node->type == AST_METHOD_DECL &&
+                (!local_only || !decl->is_external) &&
+                decl->type_param_count == call->type_arg_count) {
+                xa_mono_collector_add_effect(collector, decl->name, decl->node, call->type_args,
+                                             call->type_arg_count, false, XA_MONO_EFFECT_NONE,
+                                             &loc);
             }
         }
         // Recurse into callee and arguments
@@ -2451,6 +2497,23 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 }
             }
         }
+        if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+            XaGenericDecl *decl = registry_find_call(registry, call, collector->analyzer,
+                                                     call->callee->as.member_access.name);
+            if (decl && decl->node && decl->node->type == AST_METHOD_DECL) {
+                const char *mangled =
+                    xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
+                                             call->type_arg_count, XA_MONO_EFFECT_NONE);
+                if (mangled) {
+                    if (!mono_publish_specialization(collector, node, decl, call->type_args,
+                                                     call->type_arg_count))
+                        return;
+                    call->callee->as.member_access.name = xr_strdup(mangled);
+                    call->type_args = NULL;
+                    call->type_arg_count = 0;
+                }
+            }
+        }
         const char *member_name = NULL;
         if (mono_call_is_import_member_generic(call, import_aliases, &member_name)) {
             XaGenericDecl *decl =
@@ -2807,6 +2870,30 @@ static void qualify_mono_hof_callback_params(AstNode *cloned, const AstNode *ori
     }
 }
 
+static bool mono_append_method_clone(XrArena *arena, AstNode *owner_node, AstNode *method) {
+    if (!arena || !owner_node || !method || method->type != AST_METHOD_DECL ||
+        (owner_node->type != AST_CLASS_DECL && owner_node->type != AST_STRUCT_DECL))
+        return false;
+    ClassDeclNode *owner = owner_node->type == AST_CLASS_DECL ? &owner_node->as.class_decl
+                                                              : &owner_node->as.struct_decl;
+    if (owner->method_count < 0 || owner->method_count == INT_MAX)
+        return false;
+    size_t count = (size_t) owner->method_count;
+    if (count > 0u && !owner->methods)
+        return false;
+    AstNode **methods =
+        (AstNode **) xr_arena_alloc_array(arena, sizeof(AstNode *), count + 1u);
+    if (!methods)
+        return false;
+    if (owner->methods && count > 0u)
+        memcpy(methods, owner->methods, count * sizeof(AstNode *));
+    methods[count] = method;
+    owner->methods = methods;
+    owner->method_count++;
+    owner->mono_types_rewritten = true;
+    return true;
+}
+
 // Inject monomorphized function declarations into the program AST
 static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
                               XaMonoCollector *collector, const XaMonoImportAliases *import_aliases,
@@ -2861,7 +2948,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             continue;
         }
 
-        // Rename cloned function/class to mangled name
+        // Rename the concrete declaration to its private specialization name.
         if (cloned->type == AST_FUNCTION_DECL) {
             xr_free(cloned->as.function_decl.name);
             cloned->as.function_decl.name = xr_strdup(inst->mangled_name);
@@ -2911,11 +2998,30 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             if (decl->node && decl->node->type == AST_STRUCT_DECL) {
                 decl->node->as.struct_decl.is_generic_skeleton = true;
             }
+        } else if (cloned->type == AST_METHOD_DECL) {
+            xr_free(cloned->as.method_decl.name);
+            cloned->as.method_decl.name = xr_strdup(inst->mangled_name);
+            cloned->as.method_decl.type_param_count = 0;
+            cloned->as.method_decl.type_params = NULL;
         }
 
         if (!mono_publish_specialization(collector, cloned, decl, inst->type_args,
                                          inst->type_arg_count))
             continue;
+
+        if (cloned->type == AST_METHOD_DECL) {
+            if (!mono_append_method_clone(prog->arena, decl->owner, cloned)) {
+                mono_report_rewrite_failure(collector, cloned, decl->name);
+                continue;
+            }
+            if (import_aliases) {
+                int saved_expanding = collector->expanding;
+                collector->expanding = i;
+                collect_instantiation_sites(cloned, registry, collector, import_aliases, false);
+                collector->expanding = saved_expanding;
+            }
+            continue;
+        }
 
         // Find the position of the original generic declaration so we insert
         // the monomorphized clone right after it. This ensures the specialized

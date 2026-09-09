@@ -392,9 +392,14 @@ static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, X
 
 static bool xa_links_require_source_generic_specialization(const XaSymbolLinks *links) {
     const AstNode *declaration = links ? links->function_decl_node : NULL;
-    return links && links->intrinsic_id == XA_INTRINSIC_NONE && links->type_param_count > 0 &&
-           declaration && declaration->type == AST_FUNCTION_DECL &&
-           declaration->as.function_decl.type_param_count == links->type_param_count;
+    if (!links || links->intrinsic_id != XA_INTRINSIC_NONE || links->type_param_count <= 0 ||
+        !declaration)
+        return false;
+    if (declaration->type == AST_FUNCTION_DECL)
+        return declaration->as.function_decl.type_param_count == links->type_param_count;
+    if (declaration->type == AST_METHOD_DECL)
+        return declaration->as.method_decl.type_param_count == links->type_param_count;
+    return false;
 }
 
 static bool xa_simd_shuffle_diag_exists(const XaAnalyzer *analyzer, const XrLocation *loc) {
@@ -8218,13 +8223,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 if (method_sym && method_sym->kind == XA_SYM_METHOD) {
                     XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
                     if (method_links) {
-                        // Apply method's own type parameters. Method-call inferred
-                        // writeback is not needed for the gap C shapes (they rely
-                        // on class-construction writeback plus mono's method-body
-                        // fixpoint), so keep it disabled here.
-                        return_type =
-                            xa_substitute_generic_call(ctx, method_links, callee_type, return_type,
-                                                       call, arg_count, effective_arg_types, false);
+                        // Apply the method's own type parameters. Source-backed
+                        // methods publish an inferred concrete tuple on the call,
+                        // exactly like source-backed free functions, so mono never
+                        // falls back to an erased method body. The common call
+                        // path above already applied the same links when it
+                        // resolved them from this receiver.
+                        if (method_links != fn_links)
+                            return_type = xa_substitute_generic_call(
+                                ctx, method_links, callee_type, return_type, call, arg_count,
+                                effective_arg_types,
+                                xa_links_require_source_generic_specialization(method_links));
 
                         // Also apply class type parameters substitution
                         int class_type_param_count =

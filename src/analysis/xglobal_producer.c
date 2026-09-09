@@ -2759,6 +2759,58 @@ producer_find_method_for_symbol_in_hierarchy(XgProducer *producer, XgClassId cla
     return NULL;
 }
 
+static XgMethodSummary *producer_find_method_by_decl(XgProducer *producer,
+                                                     const AstNode *declaration,
+                                                     XgClassNameRow **owner_out) {
+    if (owner_out)
+        *owner_out = NULL;
+    if (!producer || !producer->evidence || !declaration || declaration->type != AST_METHOD_DECL)
+        return NULL;
+    for (uint32_t class_index = 0u; class_index < producer->nclasses; ++class_index) {
+        XgClassNameRow *owner = &producer->classes[class_index];
+        const AstNode *class_node = owner->class_node;
+        if (!class_node ||
+            (class_node->type != AST_CLASS_DECL && class_node->type != AST_STRUCT_DECL) ||
+            owner->summary_index >= producer->evidence->nclasses)
+            continue;
+        const ClassDeclNode *class_decl = class_node->type == AST_CLASS_DECL
+                                              ? &class_node->as.class_decl
+                                              : &class_node->as.struct_decl;
+        const XgClassSummary *class_summary = &producer->evidence->classes[owner->summary_index];
+        if (!class_decl->methods || class_summary->method_start == 0u ||
+            class_summary->method_count != (uint32_t) class_decl->method_count)
+            continue;
+        for (int ordinal = 0; ordinal < class_decl->method_count; ++ordinal) {
+            if (class_decl->methods[ordinal] != declaration)
+                continue;
+            uint32_t method_index = class_summary->method_start - 1u + (uint32_t) ordinal;
+            XgMethodSummary *method = method_index < producer->evidence->nmethods
+                                          ? &producer->evidence->methods[method_index]
+                                          : NULL;
+            const MethodDeclNode *decl = &declaration->as.method_decl;
+            if (!method || method->owner_class_id != class_summary->class_id ||
+                method->name_id != hash_name32(decl->name) ||
+                method->signature_key != hash_method_signature(decl))
+                return NULL;
+            if (owner_out)
+                *owner_out = owner;
+            return method;
+        }
+    }
+    return NULL;
+}
+
+static XgFuncId producer_method_body_func_id(const XgProducer *producer, XgMethodId method_id) {
+    if (!producer || method_id == XG_NO_ID)
+        return XG_NO_ID;
+    for (uint32_t i = 0u; i < producer->nbodies; ++i) {
+        const XgPendingBody *body = &producer->bodies[i];
+        if (body->kind == XG_BODY_METHOD && body->owner_method_id == method_id)
+            return body->func_id;
+    }
+    return XG_NO_ID;
+}
+
 static bool producer_finalize_class_field_slots_rec(XgProducer *p, uint32_t class_index,
                                                     uint8_t *state, uint32_t *instance_counts) {
     XgClassSummary *summary;
@@ -9631,6 +9683,11 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 if (method)
                     generic_origin_method_id = method->method_id;
                 generic_origin_class_id = receiver_class;
+                generic_origin_decl_id =
+                    producer_lookup_class_decl_id(bc->producer, receiver_class);
+                if (method)
+                    generic_origin_func_id =
+                        producer_method_body_func_id(bc->producer, method->method_id);
                 if (method && (method->flags & XG_METHOD_NATIVE) != 0) {
                     bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
                     bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
@@ -9690,6 +9747,23 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             generic_origin_class_id = aggregate->class_id;
             generic_origin_decl_id =
                 producer_lookup_class_decl_id(bc->producer, aggregate->class_id);
+        } else if (origin && origin->type == AST_METHOD_DECL) {
+            XgClassNameRow *owner = NULL;
+            XgMethodSummary *method = producer_find_method_by_decl(bc->producer, origin, &owner);
+            const XgClassSummary *owner_summary =
+                owner && owner->summary_index < bc->producer->evidence->nclasses
+                    ? &bc->producer->evidence->classes[owner->summary_index]
+                    : NULL;
+            if (!method || !owner_summary) {
+                bc->producer->failed = true;
+                return;
+            }
+            generic_name = origin->as.method_decl.name;
+            generic_kind = XG_GENERIC_INST_METHOD;
+            generic_origin_decl_id = owner_summary->decl_id;
+            generic_origin_func_id = producer_method_body_func_id(bc->producer, method->method_id);
+            generic_origin_method_id = method->method_id;
+            generic_origin_class_id = owner_summary->class_id;
         } else {
             bc->producer->failed = true;
             return;
@@ -11253,9 +11327,11 @@ static bool pending_body_is_generic_template(const XgProducer *producer,
                                              const XgPendingBody *pending) {
     if (!pending)
         return false;
-    /* Function- and method-level generics retain a canonical erased body.
-     * Only an open generic class makes the enclosing receiver/layout
-     * non-executable before specialization. */
+    if (pending->method && pending->method->type_param_count > 0)
+        return true;
+    /* An open generic class also makes every enclosed receiver/layout
+     * non-executable before
+     * specialization. */
     if (!producer || !producer->evidence || pending->current_class_id == XG_NO_ID)
         return false;
     for (uint32_t i = 0; i < producer->evidence->nclasses; i++) {
@@ -11703,7 +11779,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             method.flags |= XG_METHOD_CONSTRUCTOR;
         if (!m->body)
             method.flags |= XG_METHOD_NATIVE;
-        if (!cls->is_monomorphized && (cls->type_param_count > 0 || cls->is_generic_skeleton))
+        if (m->type_param_count > 0 ||
+            (!cls->is_monomorphized && (cls->type_param_count > 0 || cls->is_generic_skeleton)))
             method.flags |= XG_METHOD_GENERIC_TEMPLATE;
         method.return_ownership =
             producer_return_ownership(producer_method_links(p, class_info, m));
@@ -12631,6 +12708,17 @@ static const XgBodySummary *evidence_find_body_by_func_id(const XgGlobalEvidence
     return NULL;
 }
 
+static const XgBodySummary *evidence_find_body_by_method_id(const XgGlobalEvidence *ev,
+                                                            XgMethodId method_id) {
+    if (!ev || method_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        if (ev->bodies[i].kind == XG_BODY_METHOD && ev->bodies[i].owner_method_id == method_id)
+            return &ev->bodies[i];
+    }
+    return NULL;
+}
+
 static const XgBodySummary *evidence_find_matching_body(const XgGlobalEvidence *ev,
                                                         const XgBodySummary *src) {
     const XgBodySummary *match = NULL;
@@ -12842,20 +12930,27 @@ static uint64_t evidence_generic_body_use_hash(const XgGenericInstSummary *inst,
     return h ? h : 1;
 }
 
-static bool evidence_add_generic_function_deepen_rows(XgGlobalEvidence *dst,
-                                                      const XgGenericInstSummary *inst,
-                                                      const XgCallsiteSummary *call,
-                                                      const XgBodySummary *owner_body,
-                                                      const XgBodySummary *origin_body,
-                                                      const XgBodySummary *specialized_body) {
+static bool evidence_add_generic_body_deepen_rows(XgGlobalEvidence *dst,
+                                                  const XgGenericInstSummary *inst,
+                                                  const XgCallsiteSummary *call,
+                                                  const XgBodySummary *owner_body,
+                                                  const XgBodySummary *origin_body,
+                                                  const XgBodySummary *specialized_body) {
     XgGenericBodyUseSummary body_use;
     XgGenericCodeSizeSummary code_size;
     uint32_t origin_size;
     uint32_t specialized_size;
-    if (!dst || !inst || !call || !origin_body || !specialized_body ||
-        inst->kind != XG_GENERIC_INST_FUNCTION || call->static_target_func_id == XG_NO_ID ||
-        call->static_target_func_id == origin_body->func_id ||
-        call->static_target_func_id != specialized_body->func_id)
+    if (!dst || !inst || !call || !origin_body || !specialized_body)
+        return true;
+    bool exact_function = inst->kind == XG_GENERIC_INST_FUNCTION &&
+                          call->kind == XG_CALL_DIRECT_FUNC &&
+                          call->static_target_func_id != XG_NO_ID &&
+                          call->static_target_func_id != origin_body->func_id &&
+                          call->static_target_func_id == specialized_body->func_id;
+    bool exact_method = inst->kind == XG_GENERIC_INST_METHOD && call->kind == XG_CALL_METHOD &&
+                        call->method_id != XG_NO_ID && call->method_id != inst->origin_method_id &&
+                        specialized_body->owner_method_id == call->method_id;
+    if (!exact_function && !exact_method)
         return true;
 
     origin_size = evidence_body_size_estimate(origin_body);
@@ -12907,26 +13002,29 @@ static bool evidence_has_generic_body_use(const XgGlobalEvidence *evidence,
     return false;
 }
 
-static bool evidence_finalize_generic_function_root(XgGlobalEvidence *evidence,
-                                                    XgGenericInstSummary *inst) {
-    if (!evidence || !inst || inst->kind != XG_GENERIC_INST_FUNCTION)
+static bool evidence_finalize_generic_body_root(XgGlobalEvidence *evidence,
+                                                XgGenericInstSummary *inst) {
+    if (!evidence || !inst ||
+        (inst->kind != XG_GENERIC_INST_FUNCTION && inst->kind != XG_GENERIC_INST_METHOD))
         return true;
     const XgCallsiteSummary *call = evidence_find_callsite_by_id(evidence, inst->root_callsite_id);
     const XgBodySummary *origin = evidence_find_body_by_func_id(evidence, inst->origin_func_id);
     const XgBodySummary *owner =
         call ? evidence_find_body_by_func_id(evidence, call->owner_func_id) : NULL;
-    const XgBodySummary *specialized =
-        call && call->static_target_func_id != XG_NO_ID
-            ? evidence_find_body_by_func_id(evidence, call->static_target_func_id)
-            : NULL;
+    const XgBodySummary *specialized = NULL;
+    if (call && inst->kind == XG_GENERIC_INST_FUNCTION && call->kind == XG_CALL_DIRECT_FUNC &&
+        call->static_target_func_id != XG_NO_ID)
+        specialized = evidence_find_body_by_func_id(evidence, call->static_target_func_id);
+    else if (call && inst->kind == XG_GENERIC_INST_METHOD && call->kind == XG_CALL_METHOD &&
+             call->method_id != XG_NO_ID)
+        specialized = evidence_find_body_by_method_id(evidence, call->method_id);
     if (!call || !origin || !specialized || specialized->func_id == origin->func_id)
         return true;
     inst->specialized_func_id = specialized->func_id;
     inst->flags |= XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI;
     if (evidence_has_generic_body_use(evidence, inst->generic_inst_id))
         return true;
-    return evidence_add_generic_function_deepen_rows(evidence, inst, call, owner, origin,
-                                                     specialized);
+    return evidence_add_generic_body_deepen_rows(evidence, inst, call, owner, origin, specialized);
 }
 
 XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
@@ -12940,7 +13038,7 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
      * differs only by a not-yet-derived specialized id and
      * is appended twice. */
     for (uint32_t i = 0u; i < dst->ngeneric_insts; ++i) {
-        if (!evidence_finalize_generic_function_root(dst, &dst->generic_insts[i]))
+        if (!evidence_finalize_generic_body_root(dst, &dst->generic_insts[i]))
             return false;
     }
     for (uint32_t i = 0; i < roots->ngeneric_insts; i++) {
@@ -13013,25 +13111,28 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
                           XG_GENERIC_INST_CONCRETE_STORAGE);
         if (mapped.kind == XG_GENERIC_INST_FUNCTION && dst_call &&
             dst_call->kind == XG_CALL_DIRECT_FUNC && dst_call->static_target_func_id != XG_NO_ID &&
-            dst_call->static_target_func_id != mapped.origin_func_id) {
+            dst_call->static_target_func_id != mapped.origin_func_id)
             dst_specialized_body =
                 evidence_find_body_by_func_id(dst, dst_call->static_target_func_id);
-            if (dst_specialized_body) {
-                mapped.specialized_func_id = dst_specialized_body->func_id;
-                mapped.flags |= XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI;
-            }
+        else if (mapped.kind == XG_GENERIC_INST_METHOD && dst_call &&
+                 dst_call->kind == XG_CALL_METHOD && dst_call->method_id != XG_NO_ID &&
+                 dst_call->method_id != mapped.origin_method_id)
+            dst_specialized_body = evidence_find_body_by_method_id(dst, dst_call->method_id);
+        if (dst_specialized_body) {
+            mapped.specialized_func_id = dst_specialized_body->func_id;
+            mapped.flags |= XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI;
         }
 
         if (evidence_has_equivalent_generic_inst(dst, &mapped))
             continue;
         if (!xg_global_evidence_add_generic_inst(dst, &mapped))
             return false;
-        if (!evidence_add_generic_function_deepen_rows(dst, &mapped, dst_call, dst_owner_body,
-                                                       dst_origin_body, dst_specialized_body))
+        if (!evidence_add_generic_body_deepen_rows(dst, &mapped, dst_call, dst_owner_body,
+                                                   dst_origin_body, dst_specialized_body))
             return false;
     }
     for (uint32_t i = 0u; i < dst->ngeneric_insts; ++i) {
-        if (!evidence_finalize_generic_function_root(dst, &dst->generic_insts[i]))
+        if (!evidence_finalize_generic_body_root(dst, &dst->generic_insts[i]))
             return false;
     }
     return true;

@@ -5131,10 +5131,14 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
                     continue;
                 const XiFunc *callee = resolved_sealed_callee(context, function, call);
                 const XiCallPlan *plan = xi_call_plan(call);
-                uint16_t first = callee && callee->has_receiver ? 0u : 1u;
-                uint16_t parameter = argument >= first ? (uint16_t) (argument - first) : UINT16_MAX;
+                bool method_argument = callee && callee->has_receiver && argument != 0u;
+                bool free_argument = callee && !callee->has_receiver && argument != 0u;
+                uint16_t parameter =
+                    method_argument ? argument
+                                    : (free_argument ? (uint16_t) (argument - 1u) : UINT16_MAX);
+                uint16_t plan_argument = method_argument ? (uint16_t) (parameter - 1u) : parameter;
                 const XiCallArgPlan *argument_plan =
-                    plan && parameter < plan->nargs ? &plan->args[parameter] : NULL;
+                    plan && plan_argument < plan->nargs ? &plan->args[plan_argument] : NULL;
                 bool local_origin = argument_plan &&
                                     argument_plan->origin == XI_PLACE_ORIGIN_STACK_LOCAL &&
                                     xi_var_id_is_valid(argument_plan->origin_var_id) &&
@@ -5145,9 +5149,15 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
                                            xi_value_is_fresh_direct_storage(storage);
                 bool sealed_call = call->op == XI_CALL || call->op == XI_CALL_METHOD ||
                                    call->op == XI_CALL_METHOD_DIRECT;
-                if (!callee || callee->has_receiver || !sealed_call || !call->args || !plan ||
-                    !plan->verified || plan->has_receiver || plan->nargs != callee->nparams ||
-                    call->nargs != (uint32_t) callee->nparams + 1u || argument == 0u ||
+                bool exact_call_shape =
+                    callee && plan &&
+                    (callee->has_receiver
+                         ? (plan->has_receiver && plan->nargs + 1u == callee->nparams &&
+                            call->nargs == callee->nparams)
+                         : (!plan->has_receiver && plan->nargs == callee->nparams &&
+                            call->nargs == (uint32_t) callee->nparams + 1u));
+                if (!callee || (!method_argument && !free_argument) || !sealed_call ||
+                    !call->args || !plan || !plan->verified || !exact_call_shape ||
                     parameter >= callee->nparams || !callee->params ||
                     callee->params[parameter]->param_mode != XR_PARAM_READ || !argument_plan ||
                     argument_plan->param_mode != XR_PARAM_READ ||
@@ -5157,6 +5167,78 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
                     argument_plan->escape != XI_PLACE_ESCAPE_NONE || !argument_plan->addressable ||
                     argument_plan->place != value || !callee->params[parameter]->type ||
                     !xr_type_equals(callee->params[parameter]->type, storage->type))
+                    return false;
+                found = true;
+            }
+        }
+    }
+    return found;
+}
+
+/* Xi passes a READ value-struct receiver through caller storage. Canonical Program has no
+ *
+ * executor-specific call-place ABI, so collapse that address to its immutable value only when
+ *
+ * the complete call plan proves one non-escaping receiver use of the exact concrete method. */
+static bool read_value_receiver_call_place_is_exact(const XrXiBuildContext *context,
+                                                    const XiFunc *function, const XiValue *value) {
+    value = logical_value_identity(value);
+    const XiValue *storage =
+        value && value->op == XI_LOCAL_ADDR && value->nargs == 1u && value->args
+            ? logical_value_identity(value->args[0])
+            : NULL;
+    uint8_t decl_kind = 0u;
+    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    const XiClassData *schema =
+        storage ? find_aggregate_schema(context, storage->type, NULL) : NULL;
+    if (!context || !function || !value || !storage || !value->type || !storage->type ||
+        !xi_local_addr_names_operand_storage(value->aux_int) ||
+        !xr_type_equals(value->type, storage->type) ||
+        !nominal_contract(context, storage->type, &decl_kind, &nominal_kind, NULL) ||
+        decl_kind != XG_DECL_STRUCT || nominal_kind != XR_CORE_IR_NOMINAL_STRUCT || !schema ||
+        !schema->struct_layout || schema->needs_runtime_type || schema->is_generic_skeleton)
+        return false;
+
+    bool found = false;
+    for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+        const XiBlock *block = function->blocks[block_index];
+        if (!canonical_block_is_reachable(context, function, block))
+            continue;
+        if (block->control == value)
+            return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            for (uint16_t argument = 0u; argument < phi->value.nargs; ++argument)
+                if (phi->value.args && phi->value.args[argument] == value)
+                    return false;
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *call = block->values[value_index];
+            for (uint16_t argument = 0u; call && argument < call->nargs; ++argument) {
+                if (call->args[argument] != value)
+                    continue;
+                const XiFunc *callee = resolved_sealed_callee(context, function, call);
+                const XiCallPlan *plan = xi_call_plan(call);
+                const XiCallArgPlan *receiver = plan ? &plan->receiver : NULL;
+                bool local_origin = receiver && receiver->origin == XI_PLACE_ORIGIN_STACK_LOCAL &&
+                                    xi_var_id_is_valid(receiver->origin_var_id) &&
+                                    receiver->origin_var_id < function->source_var_count;
+                bool direct_value_origin = receiver &&
+                                           receiver->origin == XI_PLACE_ORIGIN_DIRECT_VALUE &&
+                                           receiver->origin_var_id == XI_NO_VAR_ID &&
+                                           xi_value_is_fresh_direct_storage(storage);
+                bool sealed_call = call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT;
+                if (!callee || !callee->has_receiver || !callee->receiver_call_place ||
+                    callee->receiver_mode != XR_PARAM_READ || !sealed_call || !call->args ||
+                    argument != 0u || !plan || !plan->verified || !plan->has_receiver ||
+                    plan->nargs + 1u != callee->nparams || call->nargs != callee->nparams ||
+                    !callee->params || !callee->params[0] ||
+                    callee->params[0]->param_mode != XR_PARAM_READ || !receiver ||
+                    receiver->param_mode != XR_PARAM_READ ||
+                    receiver->access != XR_CALL_ARG_PLAIN ||
+                    (!local_origin && !direct_value_origin) ||
+                    receiver->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+                    receiver->escape != XI_PLACE_ESCAPE_NONE || !receiver->addressable ||
+                    receiver->place != value || !callee->params[0]->type ||
+                    !xr_type_equals(callee->params[0]->type, storage->type))
                     return false;
                 found = true;
             }
@@ -5210,6 +5292,10 @@ static const XiValue *exact_logical_value_identity(const XrXiBuildContext *conte
             continue;
         }
         if (read_value_call_place_is_exact(context, function, value)) {
+            value = value->args[0];
+            continue;
+        }
+        if (read_value_receiver_call_place_is_exact(context, function, value)) {
             value = value->args[0];
             continue;
         }
@@ -7912,6 +7998,8 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
     if (read_value_receiver_load_is_exact(context, function, value))
         return true;
     if (read_value_call_place_is_exact(context, function, value))
+        return true;
+    if (read_value_receiver_call_place_is_exact(context, function, value))
         return true;
     if (value->op == XI_PARAM || value->op == XI_THROW || xi_copy_is_identity_alias(value) ||
         cleanup_return_copy_is_exact(value) ||

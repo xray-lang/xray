@@ -343,9 +343,9 @@ static XrAggregateLayout *class_make_native_layout_from_info(XiLower *l, XrClass
     return layout;
 }
 
-static XrAggregateLayout *class_make_native_instance_layout(
-    XiLower *l, ClassDeclNode *cd, const XaBuiltinClass *source_provider,
-    uint16_t *out_inherited) {
+static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
+                                                            const XaBuiltinClass *source_provider,
+                                                            uint16_t *out_inherited) {
     if (!l || !l->func || !l->isolate || !cd)
         return NULL;
 
@@ -578,11 +578,13 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, XaSymbol 
     }
     ml.func->analyzer = l->analyzer;
     ml.func->is_constructor = is_ctor && is_inst;
-    /* A method's own type parameters use the canonical erased method ABI.
-     * Methods on an open generic class skeleton are different: their receiver
-     * layout is not concrete, so the skeleton body is not executable. */
+    /* Open method and receiver templates are evidence-only. Every executable
+     * generic method
+     * is an adjacent concrete clone with no remaining type
+     * parameters. */
     ml.func->is_generic_template =
-        cd && !cd->is_monomorphized && (cd->type_param_count > 0 || cd->is_generic_skeleton);
+        m->type_param_count > 0 ||
+        (cd && !cd->is_monomorphized && (cd->type_param_count > 0 || cd->is_generic_skeleton));
     for (int i = 0; i < m->attr_count; i++) {
         if (m->attributes[i] && m->attributes[i]->kind == ATTR_INLINE)
             ml.func->inline_policy = XI_INLINE_PREFER;
@@ -1158,8 +1160,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             }
         }
         if (!class_info->struct_layout)
-            data->instance_layout = class_make_native_instance_layout(
-                l, cd, source_provider, &data->inherited_field_count);
+            data->instance_layout = class_make_native_instance_layout(l, cd, source_provider,
+                                                                      &data->inherited_field_count);
         if (source_provider) {
             int provider_field = -1;
             for (uint16_t field_index = 0; field_index < data->instance_field_count;
