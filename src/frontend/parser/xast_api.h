@@ -288,7 +288,8 @@ XR_FUNC AstNode *xr_ast_try_catch(XrCompilerSession *session, AstNode *try_body,
                                   XrCatchClause **clauses, int catch_count, int line);
 
 // Create throw statement node
-XR_FUNC AstNode *xr_ast_throw_stmt(XrCompilerSession *session, AstNode *expression, int line);
+XR_FUNC AstNode *xr_ast_throw_stmt(XrCompilerSession *session, AstNode *expression, int line,
+                                   int column);
 
 // Destroy a program AST and release its owning arena in O(1).
 // Only valid for AST_PROGRAM nodes. Non-owning programs (LSP) are no-ops.

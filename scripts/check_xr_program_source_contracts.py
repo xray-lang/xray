@@ -178,6 +178,8 @@ def validate(root: Path) -> None:
         "XrProgramSourceProduct",
         "XrValidatedProgram *program",
         "XrProgramSourceDiagnostic",
+        "source_path",
+        "source_column",
         "XrProgramSourceBuildBudget",
         "max_monomorphization_depth",
         "max_monomorphization_instances",

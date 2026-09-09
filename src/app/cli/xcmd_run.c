@@ -265,6 +265,16 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
 }
 
 static int report_source_failure(const XrCliCanonicalSourceDiagnostic *diagnostic) {
+    if (diagnostic && diagnostic->status == XR_CLI_CANONICAL_SOURCE_BUILD_REJECTED &&
+        diagnostic->build.source_path[0] && diagnostic->build.source_line > 0u) {
+        fprintf(stderr, "%s:%u:%u: error", diagnostic->build.source_path,
+                diagnostic->build.source_line, diagnostic->build.source_column);
+        if (diagnostic->build.underlying_status > 0u)
+            fprintf(stderr, "[E%04u]", diagnostic->build.underlying_status);
+        fprintf(stderr, ": %s\n",
+                diagnostic->message[0] ? diagnostic->message : "source build failed");
+        return XR_CLI_EXIT_FAIL;
+    }
     fprintf(stderr, "XR_RUN_6001: canonical source build failed: %s",
             diagnostic && diagnostic->message[0] ? diagnostic->message : "unknown failure");
     if (diagnostic && diagnostic->status == XR_CLI_CANONICAL_SOURCE_BUILD_REJECTED)

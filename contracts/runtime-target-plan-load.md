@@ -458,7 +458,7 @@ primitive before resuming. Missing capability, unknown request kind, wrong
 arity, or a non-normalized payload fails closed; the CLI does not invoke a
 hidden TargetPlan executor or fall back to the old yieldable-call path.
 
-anchor-sha256: CMakeLists.txt 22555c1478109c8992cbaae6ce1d91b1b75d4c18ff5aea6e7e3e60347bd7375b
+anchor-sha256: CMakeLists.txt ee938660b7587405388ceaa3f14b9379e780d640927fb3385ad8e1a3e0ca8416
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
@@ -497,7 +497,7 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 47203f0c178dc46872e6d
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c 6769b535c81ef682bfec16f7364b2fa5991e037ed7f2e67e70b21d12f331c4a0
 anchor-sha256: src/runtime/xr_target_plan_load.c 162babb92d90b8ead7842e68de5a6bccbb0a304e3e62299de4bb64c8ccf7a22d
 anchor-sha256: src/runtime/xr_runtime_api.c 3cbd014aa9037a69efc4eacc2bbe70e723d603fa16dea6d7f73541edb59a2744
-anchor-sha256: src/app/cli/xcmd_run.c 0bae4a9cc7395dbb462480da91d3065e02f933e18ffa61e85031ef2fee549ed6
+anchor-sha256: src/app/cli/xcmd_run.c e84da631e38d05e4d1075541e68a6bcb6c78e9ac0af607965e30bc18427faca3
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
 anchor-sha256: tests/unit/plan/test_target_plan.c c1237baa6a16a896f9ead9e06729879ad1f5de51d769b85bb801951a0fadfb97

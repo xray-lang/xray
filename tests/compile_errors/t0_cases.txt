@@ -12,3 +12,4 @@ concurrency/linked_go_block_form_removed.xr
 ffi/020_extern_layout_rejects_managed_field.xr
 generics/001_where_unknown_param.xr
 generics/002_where_without_type_params.xr
+stdlib/parallel_reduce_combine_capture_write.xr

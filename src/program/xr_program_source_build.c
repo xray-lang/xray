@@ -88,6 +88,17 @@ static XrProgramSourceBuildStatus reject(XrProgramSourceDiagnostic *diagnostic,
     return status;
 }
 
+static void set_source_location(XrProgramSourceDiagnostic *diagnostic, const XrLocation *location) {
+    if (!diagnostic || !location)
+        return;
+    diagnostic->source_line = location->line > 0 ? (uint32_t) location->line : 0u;
+    diagnostic->source_column = location->column > 0 ? (uint32_t) location->column : 0u;
+    if (location->file) {
+        (void) snprintf(diagnostic->source_path, sizeof(diagnostic->source_path), "%s",
+                        location->file);
+    }
+}
+
 static bool fingerprint_present(XrFingerprint fingerprint) {
     uint8_t combined = 0u;
     for (size_t index = 0u; index < sizeof(fingerprint.bytes); ++index)
@@ -331,6 +342,7 @@ static XrProgramSourceBuildStatus analyze_modules(XrProgramSourceBuildContext *c
                        analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
                        analysis->code >= 0 ? (uint32_t) analysis->code : 0u, "%s",
                        analysis->message ? analysis->message : "source analysis failed");
+            set_source_location(diagnostic, &analysis->location);
             xa_analyzer_clear_diagnostics(context->analyzer);
             return status;
         }
@@ -403,6 +415,7 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
                               diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo,
                               analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
                               0u, "%s", message);
+                set_source_location(diagnostic, &analysis->location);
                 xa_analyzer_clear_diagnostics(context->analyzer);
                 return status;
             }

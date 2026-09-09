@@ -2226,6 +2226,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
 AstNode *xr_parse_throw_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_throw_statement: NULL parser");
     int line = parser->current.line;
+    int column = parser->current.column;
 
     // Consume 'throw'
     xr_parser_advance(parser);
@@ -2238,7 +2239,7 @@ AstNode *xr_parse_throw_statement(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_throw_stmt(parser->compiler_session, expression, line);
+    return xr_ast_throw_stmt(parser->compiler_session, expression, line, column);
 }
 
 // ========== Destructuring assignment helpers ==========

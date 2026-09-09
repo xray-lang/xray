@@ -5890,6 +5890,8 @@ TEST(source_owner_reports_structured_analysis_failure) {
     ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_ANALYSIS);
     ASSERT_EQ_UINT(diagnostic.module_index, 0u);
     ASSERT_EQ_UINT(diagnostic.source_line, 1u);
+    ASSERT_GT(diagnostic.source_column, 0u);
+    ASSERT_NOT_NULL(strstr(diagnostic.source_path, "main.xr"));
     ASSERT_TRUE(diagnostic.message[0] != '\0');
     ASSERT_NULL(product.artifact.bytes);
     ASSERT_NULL(product.program);

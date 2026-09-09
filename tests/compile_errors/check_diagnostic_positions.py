@@ -29,6 +29,7 @@ import re
 import sys
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -51,11 +52,21 @@ CHECK_LINE_RE = re.compile(
     r"^(?P<file>\S.*?):(?P<line>[0-9]+):(?P<col>[0-9]+): (?:error|warning|note): ",
     re.MULTILINE)
 
-# Measured on 00f665c5c across 882 cases / 903 diagnostics: 250 diagnostics
-# carry a line but no column, and 12 carry neither. Both numbers are traced to
-# specific emission points in blockers/9-diagnostic-positions-degenerate.md.
-NO_COLUMN_BUDGET = 250
+# The original 00f665c5c baseline across 882 cases / 903 diagnostics had 250
+# diagnostics with a line but no column. The current 889-case corpus has 239;
+# keep ratcheting this number down whenever a position-losing site is fixed.
+# The 12 diagnostics with no line remain traced in
+# blockers/9-diagnostic-positions-degenerate.md.
+NO_COLUMN_BUDGET = 239
 NO_LINE_BUDGET = 12
+
+
+@dataclass(frozen=True)
+class CasePositions:
+    case: Path
+    rows: list[tuple[str, int, int]]
+    timed_out: bool
+    output: str
 
 
 def collect_cases() -> list[Path]:
@@ -66,15 +77,20 @@ def collect_cases() -> list[Path]:
 
 
 def check_one(xray: Path, case: Path,
-              timeout: float | None) -> list[tuple[str, int, int]]:
+              timeout: float | None) -> CasePositions:
     env = dict(os.environ)
     inherited = os.environ.get("XRAY_TYPEPATH", "")
     env["XRAY_TYPEPATH"] = (f"{case.parent}{os.pathsep}{inherited}"
                             if inherited else str(case.parent))
     env["NO_COLOR"] = "1"
     result = proc.run([xray, "check", case], env=env, timeout=timeout)
-    return [(case.name, int(m.group("line")), int(m.group("col")))
-            for m in CHECK_LINE_RE.finditer(result.combined_text())]
+    output = result.combined_text()
+    return CasePositions(
+        case=case,
+        rows=[(case.name, int(m.group("line")), int(m.group("col")))
+              for m in CHECK_LINE_RE.finditer(output)],
+        timed_out=result.timed_out,
+        output=output)
 
 
 def main(argv: list[str]) -> int:
@@ -88,10 +104,12 @@ def main(argv: list[str]) -> int:
 
     cases = collect_cases()
     jobs = platform.env_int("XRAY_TEST_JOBS", platform.cpu_count())
-    timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 300)
+    timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 30)
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        emitted = [row for rows in pool.map(
-            lambda c: check_one(xray, c, timeout), cases) for row in rows]
+        outcomes = list(pool.map(
+            lambda c: check_one(xray, c, timeout), cases))
+    emitted = [row for outcome in outcomes for row in outcome.rows]
+    timed_out = [outcome for outcome in outcomes if outcome.timed_out]
 
     no_line = [row for row in emitted if row[1] < 1]
     no_column = [row for row in emitted if row[1] >= 1 and row[2] < 1]
@@ -105,6 +123,20 @@ def main(argv: list[str]) -> int:
     print(f"line but no column: {len(no_column)}  (budget {NO_COLUMN_BUDGET})")
     print(f"no line at all:     {len(no_line)}  (budget {NO_LINE_BUDGET})")
     print(f"cases affected:     {len(degenerate)}")
+    print(f"cases timed out:    {len(timed_out)}")
+
+    if timed_out:
+        print("")
+        for outcome in timed_out:
+            relative = outcome.case.relative_to(SCRIPT_DIR)
+            seconds = "unbounded" if timeout is None else f"{timeout:g} seconds"
+            print(f"FAIL: {relative} timed out after {seconds}; "
+                  "process tree was terminated")
+            partial = outcome.output.strip()
+            if partial:
+                print("Partial output:")
+                print(partial[-2000:])
+        return 1
 
     if listing:
         print("")

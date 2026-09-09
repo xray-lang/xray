@@ -2161,8 +2161,20 @@ static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *call
     }
     capture_function_value_alias_state(ctx, saved_alias_state);
 
-    int bound_count = 0;
     int n = param_count < call->arg_count ? param_count : call->arg_count;
+    FunctionValueTarget *arg_targets =
+        n > 0 ? (FunctionValueTarget *) xr_calloc((size_t) n, sizeof(*arg_targets)) : NULL;
+    if (n > 0 && !arg_targets) {
+        xa_effect_summary_mark_incomplete(ctx->current_summary,
+                                          XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE);
+        restore_function_value_alias_state(ctx, saved_alias_state);
+        xr_free(saved_alias_state);
+        return true;
+    }
+
+    /* Resolve all arguments before binding any callee parameter. */
+    /* Early binding can turn a callee alias into a false lambda capture. */
+    /* That false capture makes the finite effect fixed point oscillate. */
     for (int i = 0; i < n; i++) {
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
         if (!arg)
@@ -2170,12 +2182,21 @@ static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *call
         XaSymbol *param_sym = function_like_param_symbol(ctx, fn_node, fn_scope, i);
         if (!param_sym || !symbol_has_function_type(param_sym))
             continue;
-        FunctionValueTarget arg_target = resolve_function_value_expr_target(ctx, arg, 0);
-        if (!function_value_target_is_exact(arg_target))
+        arg_targets[i] = resolve_function_value_expr_target(ctx, arg, 0);
+    }
+
+    int bound_count = 0;
+    for (int i = 0; i < n; i++) {
+        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        if (!arg || !function_value_target_is_exact(arg_targets[i]))
             continue;
-        set_function_value_alias_target(ctx, param_sym, arg_target);
+        XaSymbol *param_sym = function_like_param_symbol(ctx, fn_node, fn_scope, i);
+        if (!param_sym || !symbol_has_function_type(param_sym))
+            continue;
+        set_function_value_alias_target(ctx, param_sym, arg_targets[i]);
         bound_count++;
     }
+    xr_free(arg_targets);
 
     if (bound_count == 0) {
         restore_function_value_alias_state(ctx, saved_alias_state);

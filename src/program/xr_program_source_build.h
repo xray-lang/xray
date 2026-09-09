@@ -22,9 +22,10 @@ struct XrCompilerSession;
 struct XrModuleIdentityAuthority;
 struct XrModuleResolver;
 
-#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(3)
+#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(4)
 #define XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES UINT32_C(1024)
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE 512u
+#define XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE 4096u
 
 /* Requests may tighten but never expand these limits.
  * Specialization usage spans the complete
@@ -117,9 +118,11 @@ typedef struct XrProgramSourceDiagnostic {
     XrProgramSourceBuildStage stage;
     uint32_t module_index;
     uint32_t source_line;
+    uint32_t source_column;
     uint32_t underlying_status;
     XrProgramBuildStatus writer_status;
     XrProgramVerifyStatus verifier_status;
+    char source_path[XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE];
     char message[XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE];
 } XrProgramSourceDiagnostic;
 

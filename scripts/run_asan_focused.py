@@ -80,6 +80,13 @@ ASAN_OPTIONS = ("detect_leaks=0:abort_on_error=1:symbolize=1:"
                 "strict_string_checks=1:detect_stack_use_after_return=1")
 UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
+USAGE = """usage: run_asan_focused.py [-h|--help]
+
+Run the configured ASan+UBSan lane. Select its bounded profile and build tree
+with XR_ASAN_PROFILE and XR_ASAN_BUILD_DIR; all execution settings are explicit
+environment variables documented in this module's header.
+"""
+
 
 def compile_workload(log, xray: Path, main: Path, label: str,
                      timeout: float | None, required: bool) -> bool:
@@ -318,6 +325,15 @@ def _run_main(argv: list[str]) -> int:
 
 
 def main(argv: list[str]) -> int:
+    arguments = argv[1:]
+    if arguments:
+        if len(arguments) == 1 and arguments[0] in ("-h", "--help"):
+            print(USAGE, end="")
+            return 0
+        print(f"run_asan_focused.py: unrecognized arguments: {' '.join(arguments)}",
+              file=sys.stderr)
+        return 2
+
     build_dir = PROJECT_DIR / os.environ.get("XR_ASAN_BUILD_DIR", "build-asan")
     log = sanitizer.LaneLog(LANE)
     try:

@@ -4345,10 +4345,12 @@ if(BUILD_TESTS)
 
     # Negative frontend/semantic cases: programs that must be rejected.
     # Keeps ownership/in/ref diagnostics in the default CTest gate.
+    math(EXPR COMPILE_ERROR_CASE_TIMEOUT "30 * ${XR_TEST_TIMEOUT_SCALE}")
     add_test(
         NAME compile_error_tests
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY=$<TARGET_FILE:xray>
+                XRAY_TEST_CASE_TIMEOUT=${COMPILE_ERROR_CASE_TIMEOUT}
                 ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/run_compile_error_tests.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -4412,6 +4414,7 @@ if(BUILD_TESTS)
         NAME diagnostic_position_census
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY=$<TARGET_FILE:xray>
+                XRAY_TEST_CASE_TIMEOUT=${COMPILE_ERROR_CASE_TIMEOUT}
                 ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/check_diagnostic_positions.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

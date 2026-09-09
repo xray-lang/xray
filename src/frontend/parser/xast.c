@@ -2095,8 +2095,9 @@ AstNode *xr_ast_try_catch(XrCompilerSession *session, AstNode *try_body, XrCatch
 }
 
 // Create throw statement node
-AstNode *xr_ast_throw_stmt(XrCompilerSession *session, AstNode *expression, int line) {
+AstNode *xr_ast_throw_stmt(XrCompilerSession *session, AstNode *expression, int line, int column) {
     AstNode *node = alloc_node(session, AST_THROW_STMT, line);
+    node->column = column;
     node->as.throw_stmt.expression = expression;
     return node;
 }

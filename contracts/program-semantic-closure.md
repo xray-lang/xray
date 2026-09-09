@@ -369,13 +369,13 @@ registrations inside cold handlers. Normal exits close active boundaries; an exp
 may abandon an outer closed boundary and must preserve its reason. Cancellation owner payload
 exactness is checked only after live-in propagation reaches its fixed point.
 
-anchor-sha256: CMakeLists.txt 22555c1478109c8992cbaae6ce1d91b1b75d4c18ff5aea6e7e3e60347bd7375b
+anchor-sha256: CMakeLists.txt ee938660b7587405388ceaa3f14b9379e780d640927fb3385ad8e1a3e0ca8416
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1
 anchor-sha256: src/module/xmodule_graph.c 1477680db64b48d49f7a8d09405964aa6e7ab5328c37712b1d490d248f8159fc
 anchor-sha256: src/frontend/parser/xparse.c 6057b2b9614e1cff0acee51874645a7f03bd3b7957b54fc3ece7299993360642
-anchor-sha256: src/frontend/parser/xparse_decl.c 854cbe555f241dc5e7330522c7b29b6458606e860e2b5283e48e974dd00e0cb4
+anchor-sha256: src/frontend/parser/xparse_decl.c 3f5c544c32fd42a0b66a2d6095e0986dc800cdbf8bc94f8713fb10ab36090ef2
 anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 8f6437b32f0f63f88923b2fdf29bd6b02e68b2042ae49e8da988d49487d1befd
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 22e5a3e52b264bb0cb005a8c9ce4946b0d6551ba52700c6be630545c07693706

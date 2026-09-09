@@ -36,6 +36,7 @@ are byte-for-byte deterministic regardless of completion order.
 Environment:
     XRAY / XRAY_BIN   the xray binary
     XRAY_TEST_JOBS    parallelism (default: number of CPUs)
+    XRAY_TEST_CASE_TIMEOUT  per-case seconds (default: 30)
 
 Usage: run_compile_error_tests.py
 """
@@ -119,6 +120,14 @@ def run_one_case(xray: Path, case: Path, timeout: float | None) -> Result:
         assertions = parse_expected(expected_file)
     except ExpectedFormatError as bad:
         return Result(category, name, FAIL, f"  {RED}✗{NC} {name} - {bad}\n")
+
+    if result.timed_out:
+        budget = "configured budget" if timeout is None else f"{timeout:g} seconds"
+        detail = f"\n    Partial output: {output}" if output else ""
+        return Result(category, name, FAIL, (
+            f"  {RED}✗{NC} {name} - compiler timed out after {budget}; "
+            "the child process tree was terminated"
+            f"{detail}\n"))
 
     if result.returncode == 0:
         return Result(category, name, FAIL,
@@ -211,7 +220,7 @@ def main(argv: list[str]) -> int:
         return 1
 
     jobs = platform.env_int("XRAY_TEST_JOBS", platform.cpu_count())
-    timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 300)
+    timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 30)
 
     selected = list(args.case)
     try:

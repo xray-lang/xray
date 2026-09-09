@@ -63,16 +63,36 @@ class Blessing:
     text: str | None       # the file to write, None when nothing to write
     changed: bool
     notes: list[str]
+    failed: bool = False
 
 
-def _run(xray: Path, case: Path, timeout: float | None) -> list[Diagnostic]:
+@dataclass(frozen=True)
+class DiagnosticRun:
+    diagnostics: list[Diagnostic]
+    timed_out: bool
+    output: str
+
+
+def _run(xray: Path, case: Path, timeout: float | None) -> DiagnosticRun:
     env = dict(os.environ)
     inherited = os.environ.get("XRAY_TYPEPATH", "")
     env["XRAY_TYPEPATH"] = (f"{case.parent}{os.pathsep}{inherited}"
                             if inherited else str(case.parent))
     env["NO_COLOR"] = "1"
     result = proc.run([xray, case], env=env, timeout=timeout)
-    return parse_diagnostics(result.combined_text().rstrip("\n"))
+    output = result.combined_text().rstrip("\n")
+    return DiagnosticRun(parse_diagnostics(output), result.timed_out, output)
+
+
+def _timeout_blessing(case: Path, expected: Path, timeout: float | None,
+                      output: str) -> Blessing:
+    seconds = "unbounded" if timeout is None else f"{timeout:g} seconds"
+    note = (f"timed out after {seconds}; process tree was terminated; "
+            "expected file was not changed")
+    partial = output.strip()
+    if partial:
+        note += f"; partial output: {partial[-2000:]}"
+    return Blessing(case, expected, None, False, [note], failed=True)
 
 
 def _reanchor(old: list[Assertion], emitted: list[Diagnostic],
@@ -145,11 +165,13 @@ def bless_one(xray: Path, case: Path, timeout: float | None,
         if not create_new:
             return Blessing(case, expected, None, False,
                             ["no expected file (use --new)"])
-        emitted = _run(xray, case, timeout)
-        if not emitted:
+        run = _run(xray, case, timeout)
+        if run.timed_out:
+            return _timeout_blessing(case, expected, timeout, run.output)
+        if not run.diagnostics:
             return Blessing(case, expected, None, False,
                             ["no expected file and no diagnostic to seed one from"])
-        seeded = _seed(emitted, case.name)
+        seeded = _seed(run.diagnostics, case.name)
         return Blessing(case, expected, _render(seeded), True,
                         ["seeded from the first diagnostic; trim the wording"])
 
@@ -158,8 +180,10 @@ def bless_one(xray: Path, case: Path, timeout: float | None,
     except ExpectedFormatError as bad:
         return Blessing(case, expected, None, False, [str(bad)])
 
-    emitted = _run(xray, case, timeout)
-    reanchored, orphans = _reanchor(old, emitted, case.name)
+    run = _run(xray, case, timeout)
+    if run.timed_out:
+        return _timeout_blessing(case, expected, timeout, run.output)
+    reanchored, orphans = _reanchor(old, run.diagnostics, case.name)
     notes = [f"wording not found in any diagnostic: {o}" for o in orphans]
     if not reanchored:
         return Blessing(case, expected, None, False, notes or ["nothing to anchor"])
@@ -198,7 +222,7 @@ def main(argv: list[str]) -> int:
     cases = collect_cases()
     if only:
         cases = [c for c in cases if any(token in str(c) for token in only)]
-    timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 300)
+    timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 30)
     jobs = platform.env_int("XRAY_TEST_JOBS", platform.cpu_count())
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -206,8 +230,9 @@ def main(argv: list[str]) -> int:
             lambda c: bless_one(xray, c, timeout, create_new), cases))
     results.sort(key=lambda b: str(b.case))
 
-    changed = written = 0
+    changed = written = failed = 0
     for item in results:
+        failed += int(item.failed)
         if item.changed and item.text is not None:
             changed += 1
             if write:
@@ -218,8 +243,9 @@ def main(argv: list[str]) -> int:
 
     print("")
     print(f"cases: {len(results)}   would change: {changed}"
-          + (f"   written: {written}" if write else "   (dry run; pass --write)"))
-    return 0
+          + (f"   written: {written}" if write else "   (dry run; pass --write)")
+          + f"   failed: {failed}")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

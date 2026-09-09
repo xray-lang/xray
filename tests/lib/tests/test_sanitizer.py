@@ -10,16 +10,47 @@ green result the tree never earned.
 """
 
 import os
+import sys
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from _support import bootstrap_xraytest
+from _support import bootstrap_xraytest, load_module
 
 bootstrap_xraytest()
 from xraytest import sanitizer  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[3]
+SCRIPTS = ROOT / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+asan_runner = load_module(
+    "run_asan_focused_under_test", ROOT / "scripts" / "run_asan_focused.py")
+
+
+class AsanEntryPointTest(unittest.TestCase):
+    def test_help_never_acquires_the_build_tree_or_runs_the_lane(self):
+        with mock.patch.object(asan_runner.buildlock, "BuildTreeLock") as lock, \
+                mock.patch.object(asan_runner, "_run_main") as run, \
+                redirect_stdout(StringIO()) as output:
+            self.assertEqual(
+                asan_runner.main(["run_asan_focused.py", "--help"]), 0)
+        self.assertIn("usage: run_asan_focused.py", output.getvalue())
+        lock.assert_not_called()
+        run.assert_not_called()
+
+    def test_unknown_argument_fails_before_acquiring_the_build_tree(self):
+        with mock.patch.object(asan_runner.buildlock, "BuildTreeLock") as lock, \
+                mock.patch.object(asan_runner, "_run_main") as run, \
+                redirect_stderr(StringIO()) as output:
+            self.assertEqual(asan_runner.main(["run_asan_focused.py", "--typo"]), 2)
+        self.assertIn("unrecognized arguments: --typo", output.getvalue())
+        lock.assert_not_called()
+        run.assert_not_called()
 
 
 class CacheInspectionTest(unittest.TestCase):
