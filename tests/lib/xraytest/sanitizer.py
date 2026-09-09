@@ -467,13 +467,16 @@ def build(spec: BuildSpec, jobs: int, timeout: float | None, log) -> bool:
 
 
 def ctest(build_dir: Path, *, include: str = "", exclude: str = "", jobs: int = 1,
-          timeout_each: int = 300, timeout: float | None = None) -> proc.ProcResult:
+          timeout_each: int = 300, timeout: float | None = None,
+          junit: Path | None = None) -> proc.ProcResult:
     argv = ["ctest", "--test-dir", str(build_dir), "--output-on-failure",
             "-j", str(jobs), "--timeout", str(timeout_each)]
     if include:
         argv.extend(["-R", include])
     if exclude:
         argv.extend(["-E", exclude])
+    if junit is not None:
+        argv.extend(["--output-junit", str(junit)])
     return proc.run(argv, timeout=timeout)
 
 

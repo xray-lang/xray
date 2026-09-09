@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import program_source_fixtures as source_fixtures
 
@@ -104,3 +105,55 @@ def ctest_regex() -> str:
 def listed_ctest_names(output: str) -> tuple[str, ...]:
     pattern = re.compile(r"^\s*Test\s+#[0-9]+:\s+(\S+)", re.MULTILINE)
     return tuple(pattern.findall(output))
+
+
+def executed_ctest_names(report: Path) -> tuple[str, ...]:
+    """Read the tests CTest says it actually ran from its JUnit report.
+
+    CTest's discovery listing proves registration, not execution.  Exact gates
+    need both facts: a disabled or otherwise skipped test can appear in
+    ``ctest -N`` while contributing no qualification evidence.  Treat a
+    missing, malformed, unnamed, duplicated, or non-executed testcase as an
+    invalid report instead of reducing it to a misleading count.
+    """
+    try:
+        root = ET.parse(report).getroot()
+    except OSError as error:
+        raise source_fixtures.FixtureError(
+            f"CTest execution report is missing: {report}"
+        ) from error
+    except ET.ParseError as error:
+        raise source_fixtures.FixtureError(
+            f"CTest execution report is malformed: {error}"
+        ) from error
+
+    names: list[str] = []
+    not_run: list[str] = []
+    for testcase in root.iter():
+        if testcase.tag.rsplit("}", 1)[-1] != "testcase":
+            continue
+        name = testcase.get("name", "").strip()
+        if not name:
+            raise source_fixtures.FixtureError(
+                "CTest execution report contains an unnamed testcase"
+            )
+        skipped = testcase.get("status", "").lower() == "notrun" or any(
+            child.tag.rsplit("}", 1)[-1] == "skipped" for child in testcase
+        )
+        if skipped:
+            not_run.append(name)
+        else:
+            names.append(name)
+
+    if not_run:
+        raise source_fixtures.FixtureError(
+            "CTest execution report contains non-executed tests: "
+            + ", ".join(sorted(not_run))
+        )
+    duplicates = sorted(name for name in set(names) if names.count(name) > 1)
+    if duplicates:
+        raise source_fixtures.FixtureError(
+            "CTest execution report contains duplicate tests: "
+            + ", ".join(duplicates)
+        )
+    return tuple(names)

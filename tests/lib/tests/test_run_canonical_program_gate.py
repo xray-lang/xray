@@ -1,6 +1,7 @@
 """Tests for the small exact canonical-Program lane runner."""
 
 import os
+import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -44,6 +45,34 @@ class CanonicalProgramGateEnvironmentTests(unittest.TestCase):
         self.assertIsNotNone(regex.fullmatch("test_two"))
         self.assertIsNone(regex.fullmatch("test_one_extra"))
         self.assertIsNone(regex.fullmatch("prefix_test_two"))
+
+    def test_lane_execution_requires_the_exact_selected_set(self) -> None:
+        def execute(command, **_kwargs):
+            report = Path(command[command.index("--output-junit") + 1])
+            report.write_text(
+                "<testsuite><testcase name='one'/><testcase name='two'/></testsuite>",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0)
+
+        with mock.patch.object(runner.subprocess, "run", side_effect=execute):
+            self.assertGreaterEqual(
+                runner.run_exact_tests(["ctest"], ("two", "one")), 0.0
+            )
+
+    def test_lane_execution_rejects_equal_count_drift(self) -> None:
+        def execute(command, **_kwargs):
+            report = Path(command[command.index("--output-junit") + 1])
+            report.write_text(
+                "<testsuite><testcase name='one'/><testcase name='wrong'/></testsuite>",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0)
+
+        with mock.patch.object(runner.subprocess, "run", side_effect=execute):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "missing two, unexpected wrong"):
+                runner.run_exact_tests(["ctest"], ("one", "two"))
 
 
 if __name__ == "__main__":

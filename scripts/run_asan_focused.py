@@ -50,7 +50,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import buildlock, platform, proc, sanitizer  # noqa: E402
+from xraytest import buildlock, platform, proc, sanitizer, workspace  # noqa: E402
 import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -114,6 +114,24 @@ def compile_workload(log, xray: Path, main: Path, label: str,
         return True
     finally:
         out.unlink(missing_ok=True)
+
+
+def verify_canonical_execution(report: Path, log) -> bool:
+    """Prove the sanitizer preflight ran the manifest's exact CTest set."""
+    try:
+        executed = canonical_profile.executed_ctest_names(report)
+    except canonical_profile.source_fixtures.FixtureError as error:
+        log(f"canonical-program execution inventory invalid: {error}", error=True)
+        return False
+    actual = set(executed)
+    expected = set(canonical_profile.CTEST_NAMES)
+    if actual == expected and len(executed) == len(canonical_profile.CTEST_NAMES):
+        return True
+    for name in sorted(expected - actual):
+        log(f"canonical-program test was not executed: {name}", error=True)
+    for name in sorted(actual - expected):
+        log(f"unexpected canonical-program test executed: {name}", error=True)
+    return False
 
 
 def _run_main(argv: list[str]) -> int:
@@ -263,11 +281,24 @@ def _run_main(argv: list[str]) -> int:
             return 1
 
     log(f"running unit tests (regex: {ctest_regex}, exclude: {ctest_exclude})")
-    result = sanitizer.ctest(build_dir, include=ctest_regex, exclude=ctest_exclude,
-                            jobs=jobs, timeout_each=300, timeout=timeout)
-    if not result.ok:
-        sanitizer.write_console(sys.stdout, result.combined_text())
-        return 1
+    if profile == "canonical-program":
+        with workspace.Workspace("xray_asan_ctest_evidence") as evidence:
+            report = evidence.path("ctest.xml")
+            result = sanitizer.ctest(
+                build_dir, include=ctest_regex, exclude=ctest_exclude,
+                jobs=jobs, timeout_each=300, timeout=timeout, junit=report
+            )
+            if not result.ok:
+                sanitizer.write_console(sys.stdout, result.combined_text())
+                return 1
+            if not verify_canonical_execution(report, log):
+                return 1
+    else:
+        result = sanitizer.ctest(build_dir, include=ctest_regex, exclude=ctest_exclude,
+                                 jobs=jobs, timeout_each=300, timeout=timeout)
+        if not result.ok:
+            sanitizer.write_console(sys.stdout, result.combined_text())
+            return 1
 
     if profile == "canonical-program":
         log(f"PASS ({len(canonical_profile.CTEST_NAMES)} exact preflight tests; full lane not run)")

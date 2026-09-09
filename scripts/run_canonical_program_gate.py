@@ -20,8 +20,10 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests/lib"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
-from xraytest import buildlock, sanitizer  # noqa: E402
+from xraytest import buildlock, sanitizer, workspace  # noqa: E402
+import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 
 LANES = {
@@ -143,6 +145,25 @@ def run(command: list[str]) -> float:
     return elapsed
 
 
+def run_exact_tests(command: list[str], expected: tuple[str, ...]) -> float:
+    """Run a small lane and prove every selected CTest actually executed."""
+    started = time.perf_counter()
+    with workspace.Workspace("xray_canonical_lane_evidence") as evidence:
+        report = evidence.path("ctest.xml")
+        result = subprocess.run([*command, "--output-junit", str(report)],
+                                cwd=ROOT, check=False)
+        if result.returncode:
+            raise subprocess.CalledProcessError(result.returncode, command)
+        executed = canonical_profile.executed_ctest_names(report)
+    actual = set(executed)
+    wanted = set(expected)
+    if actual != wanted or len(executed) != len(expected):
+        details = [*(f"missing {name}" for name in sorted(wanted - actual)),
+                   *(f"unexpected {name}" for name in sorted(actual - wanted))]
+        raise RuntimeError("CTest execution inventory mismatch: " + ", ".join(details))
+    return time.perf_counter() - started
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--lane", choices=tuple(LANES), default="native")
@@ -176,7 +197,7 @@ def main() -> int:
             lock_wait_seconds = time.perf_counter() - lock_started
             activate_environment(args.lane, build_dir)
             build_seconds = run(build)
-            test_seconds = run(test)
+            test_seconds = run_exact_tests(test, LANES[args.lane][1])
     except (ValueError, TimeoutError, RuntimeError,
             subprocess.CalledProcessError) as error:
         print(f"canonical Program {args.lane} gate failed: {error}", file=sys.stderr)

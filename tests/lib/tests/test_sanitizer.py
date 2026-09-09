@@ -120,6 +120,32 @@ class AsanEntryPointTest(unittest.TestCase):
         lock.assert_not_called()
         run.assert_not_called()
 
+    def test_canonical_execution_requires_manifest_exact_junit_set(self):
+        messages = []
+
+        def log(message, *, error=False):
+            messages.append((message, error))
+
+        with tempfile.TemporaryDirectory(prefix="xt_asan_junit.") as directory:
+            report = Path(directory) / "ctest.xml"
+            cases = "".join(
+                f"<testcase name='{name}'/>"
+                for name in asan_runner.canonical_profile.CTEST_NAMES
+            )
+            report.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
+            self.assertTrue(asan_runner.verify_canonical_execution(report, log))
+            names = list(asan_runner.canonical_profile.CTEST_NAMES)
+            cases = "".join(
+                f"<testcase name='{name}'/>"
+                for name in [*names[:-1], "same_count_wrong_test"]
+            )
+            report.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
+            self.assertFalse(asan_runner.verify_canonical_execution(report, log))
+        self.assertTrue(any("was not executed" in message and error
+                            for message, error in messages))
+        self.assertTrue(any("unexpected" in message and error
+                            for message, error in messages))
+
 
 class CacheInspectionTest(unittest.TestCase):
     def setUp(self):
@@ -587,6 +613,16 @@ class BuildSpecTest(unittest.TestCase):
         self.assertEqual(spec.build_type, "Debug")
         self.assertEqual(spec.c_compiler, "clang")
         self.assertEqual(spec.targets, ())
+
+    def test_ctest_writes_owned_junit_evidence_when_requested(self):
+        completed = sanitizer.proc.ProcResult(
+            argv=("ctest",), returncode=0, stdout=b"", stderr=b"", timed_out=False)
+        with mock.patch.object(sanitizer.proc, "run", return_value=completed) as run:
+            result = sanitizer.ctest(Path("build"), include="^exact$", jobs=3,
+                                     junit=Path("evidence.xml"))
+        self.assertTrue(result.ok)
+        self.assertEqual(run.call_args.args[0][-2:],
+                         ["--output-junit", "evidence.xml"])
 
 
 class DefaultJobsTest(unittest.TestCase):

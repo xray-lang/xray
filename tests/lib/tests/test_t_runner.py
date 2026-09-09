@@ -200,6 +200,64 @@ class PhaseTimingTest(unittest.TestCase):
         self.assertNotIn("timing: ctest=", output)
 
 
+class ExactExecutionInventoryTest(unittest.TestCase):
+    @staticmethod
+    def write_report(command, names, *, skipped=()):
+        report = Path(command[command.index("--output-junit") + 1])
+        cases = "".join(
+            f"<testcase name='{name}'/>" for name in names
+        ) + "".join(
+            f"<testcase name='{name}'><skipped/></testcase>" for name in skipped
+        )
+        report.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
+
+    def run_exact(self, expected, actual, *, skipped=(), returncode=0):
+        output = io.StringIO()
+
+        def execute(command, **_kwargs):
+            self.write_report(command, actual, skipped=skipped)
+            return returncode
+
+        with redirect_stdout(output), mock.patch.object(
+                runner.subprocess, "call", side_effect=execute) as call:
+            code = runner.run_ctest(Path("build"), ["-R", "exact"], {}, expected)
+        return code, output.getvalue(), call
+
+    def test_exact_run_accepts_only_the_complete_execution_set(self):
+        code, output, call = self.run_exact(("alpha", "beta"), ("beta", "alpha"))
+        self.assertEqual(code, 0)
+        self.assertIn("exact executed CTest names (2)", output)
+        self.assertIn("--output-junit", call.call_args.args[0])
+
+    def test_equal_count_with_one_missing_and_one_unexpected_fails(self):
+        code, output, _ = self.run_exact(("alpha", "beta"), ("alpha", "gamma"))
+        self.assertEqual(code, 1)
+        self.assertIn("missing: beta", output)
+        self.assertIn("unexpected: gamma", output)
+
+    def test_skipped_test_and_duplicate_fail_closed(self):
+        for actual, skipped, message in (
+            (("alpha",), ("beta",), "non-executed tests"),
+            (("alpha", "alpha"), (), "duplicate tests"),
+        ):
+            with self.subTest(message=message):
+                code, output, _ = self.run_exact(("alpha", "beta"), actual,
+                                                 skipped=skipped)
+                self.assertEqual(code, 1)
+                self.assertIn(message, output)
+
+    def test_nonexact_run_does_not_claim_junit_output(self):
+        with mock.patch.object(runner.subprocess, "call", return_value=8) as call:
+            self.assertEqual(runner.run_ctest(Path("build"), ["-R", "focus"], {}), 8)
+        self.assertNotIn("--output-junit", call.call_args.args[0])
+
+    def test_exact_profile_rejects_forwarded_junit_destination(self):
+        self.assertTrue(runner.has_ctest_option(["--output-junit", "mine.xml"],
+                                                "--output-junit"))
+        self.assertTrue(runner.has_ctest_option(["--output-junit=mine.xml"],
+                                                "--output-junit"))
+
+
 class EmptySelectionTest(unittest.TestCase):
     def run_selection(self, inventories, *, tier="t0", extra=(), no_build=False,
                       ctest_code=0):

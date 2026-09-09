@@ -367,6 +367,33 @@ def has_explicit_ctest_selection(args: Sequence[str]) -> bool:
     return False
 
 
+def has_ctest_option(args: Sequence[str], option: str) -> bool:
+    """Return whether forwarded arguments already claim an owned CTest option."""
+    return option in args or any(argument.startswith(f"{option}=") for argument in args)
+
+
+def run_ctest(build_dir: Path, args: Sequence[str], env: dict[str, str],
+              expected: Sequence[str] = ()) -> int:
+    """Run CTest and prove an exact profile executed its complete inventory."""
+    command = ["ctest", *args, "--no-tests=error"]
+    if not expected:
+        return subprocess.call(command, cwd=str(build_dir), env=env)
+
+    with workspace.Workspace("xray_t_ctest_evidence") as evidence:
+        report = evidence.path("ctest.xml")
+        code = subprocess.call([*command, "--output-junit", str(report)],
+                               cwd=str(build_dir), env=env)
+        try:
+            executed = canonical_profile.executed_ctest_names(report)
+        except canonical_profile.source_fixtures.FixtureError as error:
+            print(f"{RED}CTest execution inventory invalid{NC}: {error}")
+            return code or 1
+        if not validate_exact_inventory("executed CTest", executed, expected):
+            return code or 1
+        print_exact_inventory("executed CTest names", executed)
+        return code
+
+
 def cache_contains_all(build_dir: Path, entries: Sequence[str]) -> bool:
     cache = build_dir / "CMakeCache.txt"
     if not cache.is_file():
@@ -657,6 +684,9 @@ def _run_main(argv: List[str]) -> int:
         if not validate_exact_inventory(f"{tier} exact profile", selected,
                                         exact_expected):
             return 1
+        if has_ctest_option(extra, "--output-junit"):
+            print(f"{RED}Error{NC}: exact profiles own --output-junit evidence output")
+            return 1
         print_exact_inventory("CTest names", selected)
 
     if not platform.env_flag("XR_NO_BUILD"):
@@ -711,8 +741,7 @@ def _run_main(argv: List[str]) -> int:
         not_covered = f"{not_covered}, {dropped}" if not_covered else dropped
 
     with timed_phase("ctest"):
-        code = subprocess.call(["ctest", *ctest_args, *extra, "--no-tests=error"],
-                               cwd=str(build_dir), env=env)
+        code = run_ctest(build_dir, [*ctest_args, *extra], env, exact_expected)
 
     if not focused_selection:
         if tier == "t1" and not run_regression_corpus(build_dir, True):

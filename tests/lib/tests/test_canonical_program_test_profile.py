@@ -121,6 +121,48 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         """
         self.assertEqual(profile.listed_ctest_names(output), ("alpha", "beta"))
 
+    def test_execution_report_reads_exact_testcase_names(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xr-canonical-junit-") as directory:
+            report = Path(directory) / "ctest.xml"
+            report.write_text(
+                "<testsuite tests='2'>"
+                "<testcase name='alpha' status='run'/>"
+                "<testcase name='beta'><failure/></testcase>"
+                "</testsuite>",
+                encoding="utf-8",
+            )
+            self.assertEqual(profile.executed_ctest_names(report), ("alpha", "beta"))
+
+    def test_execution_report_rejects_missing_malformed_and_unnamed_evidence(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xr-canonical-junit-") as directory:
+            report = Path(directory) / "ctest.xml"
+            with self.assertRaisesRegex(profile.source_fixtures.FixtureError, "missing"):
+                profile.executed_ctest_names(report)
+            report.write_text("<testsuite>", encoding="utf-8")
+            with self.assertRaisesRegex(profile.source_fixtures.FixtureError, "malformed"):
+                profile.executed_ctest_names(report)
+            report.write_text("<testsuite><testcase/></testsuite>", encoding="utf-8")
+            with self.assertRaisesRegex(profile.source_fixtures.FixtureError, "unnamed"):
+                profile.executed_ctest_names(report)
+
+    def test_execution_report_rejects_skipped_and_duplicate_tests(self) -> None:
+        reports = {
+            "non-executed": (
+                "<testsuite><testcase name='alpha' status='notrun'/></testsuite>"
+            ),
+            "duplicate": (
+                "<testsuite><testcase name='alpha'/><testcase name='alpha'/></testsuite>"
+            ),
+        }
+        with tempfile.TemporaryDirectory(prefix="xr-canonical-junit-") as directory:
+            report = Path(directory) / "ctest.xml"
+            for message, contents in reports.items():
+                with self.subTest(message=message):
+                    report.write_text(contents, encoding="utf-8")
+                    with self.assertRaisesRegex(profile.source_fixtures.FixtureError,
+                                                message):
+                        profile.executed_ctest_names(report)
+
     def test_preflight_covers_all_canonical_boundaries(self) -> None:
         required = {
             "test_core_spec",
