@@ -5080,7 +5080,11 @@ static bool cleanup_return_copy_is_exact(const XiValue *value) {
 
 /* A READ parameter is a value in Canonical Program. Xi may still materialize one LOCAL_ADDR
  *
- * because its executors borrow a value-struct argument through caller storage. Collapse that
+ * because its executors borrow a value-struct argument through caller storage. Ordinary calls,
+ *
+ * static class calls and module-qualified calls use different Xi opcodes but retain the same
+ *
+ * leading phase-only carrier plus explicit parameter slots. Collapse that
  *
  * address only when every reachable use is the matching READ slot of one exact sealed call and
  *
@@ -5111,6 +5115,10 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
             continue;
         if (block->control == value)
             return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            for (uint16_t argument = 0u; argument < phi->value.nargs; ++argument)
+                if (phi->value.args && phi->value.args[argument] == value)
+                    return false;
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             const XiValue *call = block->values[value_index];
             for (uint16_t argument = 0u; call && argument < call->nargs; ++argument) {
@@ -5130,8 +5138,12 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
                                            argument_plan->origin == XI_PLACE_ORIGIN_DIRECT_VALUE &&
                                            argument_plan->origin_var_id == XI_NO_VAR_ID &&
                                            xi_value_is_fresh_direct_storage(storage);
-                if (!callee || call->op != XI_CALL || !plan || !plan->verified ||
-                    plan->has_receiver || parameter >= callee->nparams || !callee->params ||
+                bool sealed_call = call->op == XI_CALL || call->op == XI_CALL_METHOD ||
+                                   call->op == XI_CALL_METHOD_DIRECT;
+                if (!callee || callee->has_receiver || !sealed_call || !call->args || !plan ||
+                    !plan->verified || plan->has_receiver || plan->nargs != callee->nparams ||
+                    call->nargs != (uint32_t) callee->nparams + 1u || argument == 0u ||
+                    parameter >= callee->nparams || !callee->params ||
                     callee->params[parameter]->param_mode != XR_PARAM_READ || !argument_plan ||
                     argument_plan->param_mode != XR_PARAM_READ ||
                     argument_plan->access != XR_CALL_ARG_PLAIN ||

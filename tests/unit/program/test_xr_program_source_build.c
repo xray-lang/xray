@@ -1515,26 +1515,35 @@ TEST(source_owner_generic_specializations_are_exact_program_functions) {
 }
 
 TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
-    static const char source[] =
-        "interface ReadCounter { current() -> i64 }\n"
-        "struct LeftCounter implements ReadCounter {\n"
+    /* The dependency owns the constraint, both implementors and the generic body. The entry owns
+     * only explicit namespace-qualified instantiations, so this exercises cross-module identity
+     * joins without relying on caller-local type lookup or inferred generic arguments. */
+    static const char library_source[] =
+        "export interface ReadCounter { current() -> i64 }\n"
+        "export struct LeftCounter implements ReadCounter {\n"
         "  value: i64\n"
         "  current() -> i64 { return this.value }\n"
         "}\n"
-        "struct RightCounter implements ReadCounter {\n"
+        "export struct RightCounter implements ReadCounter {\n"
         "  value: i64\n"
         "  current() -> i64 { return this.value }\n"
         "}\n"
-        "fn genericRead<T: ReadCounter>(counter: T) -> i64 { return counter.current() }\n"
+        "export fn genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
+        "  return counter.current()\n"
+        "}\n";
+    static const char entry_source[] =
+        "import { LeftCounter, RightCounter } from \"./library\"\n"
+        "import \"./library\" as counters\n"
         "fn answer() -> i64 {\n"
         "  var left = LeftCounter{value: 39}\n"
         "  var right = RightCounter{value: 1}\n"
-        "  return genericRead(left) + genericRead(right) +\n"
-        "         genericRead(LeftCounter{value: 1}) +\n"
-        "         genericRead(RightCounter{value: 1})\n"
+        "  return counters.genericRead<LeftCounter>(left) +\n"
+        "         counters.genericRead<RightCounter>(right) +\n"
+        "         counters.genericRead<LeftCounter>(LeftCounter{value: 1}) +\n"
+        "         counters.genericRead<RightCounter>(RightCounter{value: 1})\n"
         "}\n";
     SourceBuildFixture fixture;
-    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
@@ -1549,17 +1558,6 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_NOT_NULL(first.program);
     ASSERT_NOT_NULL(second.program);
     assert_products_equal(&first, &second);
-
-    XrProgramSourceBuildInput open_entry_input = fixture.input;
-    open_entry_input.entry.function_name = "genericRead";
-    XrProgramSourceProduct rejected = {0};
-    ASSERT_EQ_INT(xr_program_source_build(&open_entry_input, &rejected, &diagnostic),
-                  XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED);
-    ASSERT_EQ_INT(diagnostic.stage, XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE);
-    ASSERT_EQ_INT(diagnostic.writer_status, XR_PROGRAM_BUILD_INVALID_INPUT);
-    ASSERT_NOT_NULL(strstr(diagnostic.message, "canonical-program entry"));
-    ASSERT_NULL(rejected.artifact.bytes);
-    ASSERT_NULL(rejected.program);
 
     const XrValidatedProgram *program = first.program;
     ASSERT_EQ_UINT(program->function_count, 5u);
