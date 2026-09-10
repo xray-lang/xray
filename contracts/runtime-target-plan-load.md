@@ -458,7 +458,7 @@ primitive before resuming. Missing capability, unknown request kind, wrong
 arity, or a non-normalized payload fails closed; the CLI does not invoke a
 hidden TargetPlan executor or fall back to the old yieldable-call path.
 
-anchor-sha256: CMakeLists.txt 2e426827b5090782edf47da86e6ccbebe63631e6038f1f8fb1390057e6e0e352
+anchor-sha256: CMakeLists.txt 5cbe10e2f0599c8f4db286797f119e4fdea855f12adea2f89e4ccd420543511b
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d

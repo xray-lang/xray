@@ -1,9 +1,9 @@
 {
   "schema": "xray-core-spec-coverage/1",
-  "semantic_sha256": "3e1a819236cf29266adc940d6b642aa4be3d794f4a7be284f2dbc2892167a323",
+  "semantic_sha256": "482b2ea7f575cf3eeff773b5095e1c4c575c4903c9abf70dc2c65b06e3b5a713",
   "epoch": 1,
-  "operation_count": 57,
-  "normative_kat_count": 232,
+  "operation_count": 62,
+  "normative_kat_count": 243,
   "operations": [
     {
       "stable_id": 1,
@@ -1714,14 +1714,194 @@
           "task": 300
         }
       }
+    },
+    {
+      "stable_id": 142,
+      "spelling": "core.class.construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 143,
+      "spelling": "core.class.share",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 144,
+      "spelling": "core.class.field_load",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 145,
+      "spelling": "core.class.field_place",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 146,
+      "spelling": "core.place.exchange",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
     }
   ],
   "missing_rows": {
     "spec_oracle": [],
-    "decoder": [],
-    "verifier": [],
-    "evaluator": [],
-    "vm": [],
-    "aot": []
+    "decoder": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ],
+    "verifier": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ],
+    "evaluator": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ],
+    "vm": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ],
+    "aot": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ]
   }
 }

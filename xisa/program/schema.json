@@ -1,10 +1,10 @@
 {
-  "schema": "xray-program-format-schema/1",
+  "schema": "xray-program-format-schema/2",
   "format": {
-    "major": 1,
+    "major": 2,
     "minor": 0,
     "magic_hex": "585250524f470d0a",
-    "program_id_domain": "xray-program-id-v1"
+    "program_id_domain": "xray-program-id-v2"
   },
   "encoding": {
     "fixed_integers": "little-endian",
@@ -34,7 +34,8 @@
       "variant",
       "view",
       "callable",
-      "existential"
+      "existential",
+      "class-reference"
     ],
     "ownership_kinds": [
       "0:trivial",
@@ -47,14 +48,15 @@
     ],
     "identity_order": "ascending-semantic-key",
     "aggregate_shape": "declaration-ordered-field-type-ids",
+    "class_reference_shape": "declaration-ordered-field-type-ids; nominal CLASS is implied by the type kind; physical object layout and lifetime representation are forbidden",
     "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
     "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
     "callable_shape": "one canonical SignatureId with visible effect and capability upper bounds; every callable TypeId is affine with explicit copy and its signature has no receiver",
     "callable_pack": "one closed FunctionId plus zero operands for a structurally exact captureless signature, or one consumed affine explicit-copy aggregate owner used as a READ hidden receiver; implementation effects and capabilities must be subsets of the visible upper bounds and target result borrows may not name the hidden receiver",
     "callable_dispatch": "indirect direct/invoke borrow an affine callable value (owned or non-owner) without consuming it and use its SignatureId as the sole visible contract; target identity and optional capture representation remain executor-private",
     "existential_shape": "ordered-(InterfaceId,InterfaceUseKind); READ is trivial-copy snapshot, REF/MOVE/OWNED_STORAGE are affine and copy-forbidden, CONSTRAINT_BOUND is non-runtime",
-    "nominal_kind": "aggregate/variant rows carry NONE/CLASS/STRUCT/ENUM; conformance implementor kind must match",
-    "recursive_value_shape": "reject",
+    "nominal_kind": "aggregate/variant rows carry NONE/STRUCT/ENUM; class-reference rows imply CLASS; conformance implementor kind must match",
+    "recursive_value_shape": "reject by-value aggregate/variant cycles; class-reference field edges terminate by-value cycle traversal",
     "physical_layout": "forbidden"
   },
   "value_system": {

@@ -4310,6 +4310,347 @@
           "task": 300
         }
       }
+    },
+    {
+      "stable_id": 142,
+      "spelling": "core.class.construct",
+      "class": "class-reference",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "C",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "copy-trivial-value-or-transfer-affine-owner"
+        ],
+        "result": "fresh-class-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-class-reference",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one fresh class identity whose fields equal the declaration-ordered operands; every affine field owner transfers exactly once"
+      },
+      "kat_validator": "class-construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 143,
+      "spelling": "core.class.share",
+      "class": "class-reference",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "C"
+        ],
+        "result": "C",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-class-owner-or-rooted-borrow"
+        ],
+        "result": "same-referent-class-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-class-alias",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one independent logical owner that preserves the exact referent identity without consuming the source"
+      },
+      "kat_validator": "class-share",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 144,
+      "spelling": "core.class.field_load",
+      "class": "class-reference",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "C"
+        ],
+        "result": "T",
+        "immediates": {
+          "field_ordinal": "declaration-order-field"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-class-value"
+        ],
+        "result": "trivial-snapshot-or-receiver-rooted-affine-borrow"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-class-field-read",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one declaration-ordinal field snapshot or rooted borrow from the same class referent"
+      },
+      "kat_validator": "class-field-load",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 145,
+      "spelling": "core.class.field_place",
+      "class": "class-reference",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "C"
+        ],
+        "result": "T",
+        "immediates": {
+          "field_ordinal": "declaration-order-field"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-class-value"
+        ],
+        "result": "receiver-rooted-field-place"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-class-field-place",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one verifier-confined place rooted in the receiver and aliasing its declaration-ordinal field"
+      },
+      "kat_validator": "class-field-place",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 146,
+      "spelling": "core.place.exchange",
+      "class": "place",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T",
+          "T"
+        ],
+        "result": "T",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-place",
+          "consume-affine-owner-or-copy-trivial-value"
+        ],
+        "result": "old-owner-if-affine-type-otherwise-non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-atomic-place-exchange",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "the replacement becomes the complete place value atomically and the previous complete value is returned without a control transfer"
+      },
+      "kat_validator": "place-exchange",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
     }
   ]
 }

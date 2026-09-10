@@ -98,12 +98,19 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         {
             "stable_id": row["stable_id"],
             "spelling": row["spelling"],
-            "vm": "COMPLETE",
-            "baseline_view": "COMPLETE",
-            "fixed_row_view": "COMPLETE",
-            "differential_oracle": "XrReferenceEvaluator",
+            "vm": row["coverage"]["vm"]["status"],
+            "baseline_view": row["coverage"]["vm"]["status"],
+            "fixed_row_view": row["coverage"]["vm"]["status"],
+            "differential_oracle": (
+                "XrReferenceEvaluator"
+                if row["coverage"]["vm"]["status"] == "COMPLETE" else None
+            ),
         }
         for row in registry["operations"]
+    ]
+    incomplete = [
+        row["spelling"] for row in registry["operations"]
+        if row["coverage"]["vm"]["status"] != "COMPLETE"
     ]
     return {
         "schema": "xray-program-vm-coverage/1",
@@ -126,6 +133,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         ],
         "operation_count": len(operations),
         "operations": operations,
+        "incomplete_operations": incomplete,
         "profile_matrix": ["lp64-x86_64-windows", "ilp32-wasm32-wasi"],
         "lifecycle_matrix": [
             "active-execute",
@@ -204,11 +212,13 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
 
     for row in registry["operations"]:
         coverage = row.get("coverage", {}).get("vm", {})
-        require(coverage == {"status": "COMPLETE", "task": 299},
+        require(coverage.get("status") in {"COMPLETE", "NOT_YET_ACTIVE"} and
+                coverage.get("task") == 299,
                 f"registry VM coverage is stale for {row['spelling']}")
         token = enum_token(row["spelling"])
-        require(re.search(rf"\bcase\s+{re.escape(token)}\s*:", vm) is not None,
-                f"VM has no explicit handler for {row['spelling']}")
+        has_handler = re.search(rf"\bcase\s+{re.escape(token)}\s*:", vm) is not None
+        require(has_handler == (coverage["status"] == "COMPLETE"),
+                f"VM lifecycle disagrees with registry for {row['spelling']}")
         require(token in test, f"VM differential test omits {row['spelling']}")
 
     for token in ("xr_reference_evaluate", "XR_VM_DECODE_BASELINE_VIEW",

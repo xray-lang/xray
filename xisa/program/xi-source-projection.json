@@ -397,6 +397,26 @@
       "core_operation": "core.block.argument"
     },
     {
+      "source": "exact-class-construction",
+      "core_operation": "core.class.construct"
+    },
+    {
+      "source": "class-identity-alias-requiring-independent-owner",
+      "core_operation": "core.class.share"
+    },
+    {
+      "source": "exact-class-field-load",
+      "core_operation": "core.class.field_load"
+    },
+    {
+      "source": "exact-class-field-place",
+      "core_operation": "core.class.field_place"
+    },
+    {
+      "source": "atomic-owned-place-replacement",
+      "core_operation": "core.place.exchange"
+    },
+    {
       "source": "function-return",
       "core_operation": "core.return"
     },

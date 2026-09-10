@@ -327,9 +327,10 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
             "aggregate-construct", "aggregate-project", "aggregate-update", "assert-condition",
+            "class-construct", "class-share", "class-field-load", "class-field-place",
             "block-arguments", "branch", "cancel-publish", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
-            "place-local", "place-project", "place-store", "place-take", "return",
+            "place-exchange", "place-local", "place-project", "place-store", "place-take", "return",
             "scalar-oracle", "sealed-call",
             "sealed-invoke", "indirect-call", "indirect-invoke", "witness-call",
             "witness-invoke", "callable-pack", "variant-construct",
@@ -831,6 +832,59 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_type") == actual.get("aggregate_type")
                 and isinstance(fields, list) and isinstance(ordinal, int)
                 and 0 <= ordinal < len(fields) and actual.get("value_type") == fields[ordinal])
+    if validator == "class-construct":
+        return (actual.get("type_kind") == "class-reference"
+                and actual.get("operand_types") == actual.get("field_types")
+                and actual.get("type_ownership") == "affine"
+                and actual.get("copy_contract") in {"explicit", "forbidden"}
+                and actual.get("result_ownership") == "owner"
+                and construct_ownership_valid(actual, actual.get("field_types"),
+                                              actual.get("field_type_ownerships")))
+    if validator == "class-share":
+        return (actual.get("type_kind") == "class-reference"
+                and actual.get("operand_type") == actual.get("result_type")
+                and actual.get("type_ownership") == "affine"
+                and actual.get("operand_category") == "value"
+                and actual.get("operand_ownership") in {"owner", "non-owner"}
+                and (actual.get("operand_ownership") == "owner"
+                     or actual.get("source_rooted") is True)
+                and actual.get("result_category") == "value"
+                and actual.get("result_ownership") == "owner"
+                and actual.get("source_consumed") is False
+                and actual.get("referent_identity_preserved") is True)
+    if validator in {"class-field-load", "class-field-place"}:
+        fields = actual.get("field_types")
+        ordinal = actual.get("field_ordinal")
+        shared = (actual.get("type_kind") == "class-reference"
+                  and actual.get("operand_type") == actual.get("class_type")
+                  and actual.get("operand_category") == "value"
+                  and isinstance(fields, list) and isinstance(ordinal, int)
+                  and 0 <= ordinal < len(fields)
+                  and actual.get("result_type") == fields[ordinal]
+                  and actual.get("result_ownership") == "non-owner"
+                  and actual.get("receiver_rooted") is True)
+        if validator == "class-field-load":
+            ownerships = actual.get("field_type_ownerships")
+            if not (shared and isinstance(ownerships, list)
+                    and len(ownerships) == len(fields)):
+                return False
+            semantics = "rooted-borrow" if ownerships[ordinal] == "affine" else "value-snapshot"
+            return actual.get("result_category") == "value" and actual.get("semantics") == semantics
+        return shared and actual.get("result_category") == "place"
+    if validator == "place-exchange":
+        ownership = actual.get("type_ownership")
+        affine = ownership == "affine"
+        return (ownership in {"trivial", "affine"}
+                and actual.get("place_type") == actual.get("replacement_type")
+                and actual.get("place_type") == actual.get("result_type")
+                and actual.get("place_category") == "place"
+                and actual.get("replacement_category") == "value"
+                and actual.get("result_category") == "value"
+                and actual.get("replacement_ownership") == ("owner" if affine else "non-owner")
+                and actual.get("result_ownership") == ("owner" if affine else "non-owner")
+                and actual.get("replacement_consumed") is affine
+                and actual.get("atomic") is True
+                and actual.get("may_transfer_control") is False)
     if validator == "variant-construct":
         payloads = actual.get("variant_payload_types")
         ownerships = actual.get("variant_payload_type_ownerships")

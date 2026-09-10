@@ -1513,7 +1513,9 @@ static bool map_aggregate_type_recursive(XrXiBuildContext *context, const XrType
     }
     storage->field_types = field_types;
     storage->input.key = semantic_key;
-    storage->input.kind = XR_CORE_IR_TYPE_AGGREGATE;
+    storage->input.kind = nominal_kind == XR_CORE_IR_NOMINAL_CLASS
+                              ? XR_CORE_IR_TYPE_CLASS_REFERENCE
+                              : XR_CORE_IR_TYPE_AGGREGATE;
     storage->input.nominal_kind = nominal_kind;
     storage->input.ownership = ownership;
     storage->input.copy_contract = copy_contract;
@@ -6627,13 +6629,13 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         if (!map_type(context, value->type, &result_type))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi class construction v%u has no active nominal type", value->id);
-        const XrXiTypeStorage *aggregate = find_dynamic_type_by_id(context, result_type);
-        if (!aggregate || aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
-            aggregate->input.field_count != field_count ||
-            aggregate->input.nominal_kind == XR_CORE_IR_NOMINAL_NONE)
+        const XrXiTypeStorage *class_reference = find_dynamic_type_by_id(context, result_type);
+        if (!class_reference || class_reference->input.kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+            class_reference->input.field_count != field_count ||
+            class_reference->input.nominal_kind != XR_CORE_IR_NOMINAL_CLASS)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi class construction v%u is not an exact nominal aggregate", value->id);
-        instruction->operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT;
+                        "Xi class construction v%u is not an exact class reference", value->id);
+        instruction->operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT;
         instruction->result = value_key(function, value);
         instruction->result_type_id = result_type;
         instruction->result_ownership = logical_ownership_for_type(context, result_type);

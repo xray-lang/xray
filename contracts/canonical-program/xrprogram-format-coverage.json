@@ -1,12 +1,19 @@
 {
   "schema": "xray-program-format-coverage/1",
-  "format": "1.0",
-  "schema_sha256": "54ef7d8da78858543453d58e219cf818d7c9c7a3cfa8b96deb88986b3fd49bfc",
+  "format": "2.0",
+  "schema_sha256": "8a42de2b883d4bc4b5f37217751e5d6e1200d083303e5fa003d155bc96c79086",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "structural_decoder": "COMPLETE",
-  "semantic_admission": "COMPLETE_TASK_297",
-  "vm_consumer": "COMPLETE_TASK_299",
-  "aot_consumer": "COMPLETE_TASK_300",
+  "semantic_admission": "OPEN",
+  "vm_consumer": "OPEN",
+  "aot_consumer": "OPEN",
+  "incomplete_operations": [
+    "core.class.construct",
+    "core.class.share",
+    "core.class.field_load",
+    "core.class.field_place",
+    "core.place.exchange"
+  ],
   "sections": [
     {
       "stable_id": 1,

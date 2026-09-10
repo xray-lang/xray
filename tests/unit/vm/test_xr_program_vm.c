@@ -35,6 +35,11 @@ _Static_assert(XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT == 38, "indirect direct stab
 _Static_assert(XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE == 39, "indirect invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT == 141,
                "indirect coroutine call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_CONSTRUCT == 142, "class construct stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_SHARE == 143, "class share stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_FIELD_LOAD == 144, "class field load stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_FIELD_PLACE == 145, "class field place stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PLACE_EXCHANGE == 146, "place exchange stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");

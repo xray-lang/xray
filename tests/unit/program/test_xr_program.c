@@ -260,7 +260,7 @@ static void test_determinism_roundtrip_and_identity(void) {
     xr_program_id_hex(first.id, id_hex);
     CHECK(first.size == 383u);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
-    CHECK(strcmp(id_hex, "058b063b1113d81b030d88430900732fe793db639c95dcc05cd19881be1f4fa4") == 0);
+    CHECK(strcmp(id_hex, "335fbda8de3877d374f32d61aae86818e2bb0c76f1573fb8706e010d295d9a0f") == 0);
 
     xr_program_artifact_free(&reencoded);
     xr_program_artifact_free(&rerooted);
@@ -311,7 +311,7 @@ static void test_hostile_structure_and_budget(void) {
     expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_NONCANONICAL);
 
     memcpy(mutated, artifact.bytes, artifact.size);
-    mutated[XR_PROGRAM_MAGIC_SIZE] = 2u;
+    mutated[XR_PROGRAM_MAGIC_SIZE] = 1u;
     expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
 
     expect_decode_status(artifact.bytes, artifact.size - 1u, NULL,

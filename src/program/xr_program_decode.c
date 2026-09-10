@@ -174,7 +174,8 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
         if (type_id != XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index ||
             (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT &&
              kind != XR_PROGRAM_TYPE_KIND_VIEW && kind != XR_PROGRAM_TYPE_KIND_CALLABLE &&
-             kind != XR_PROGRAM_TYPE_KIND_EXISTENTIAL) ||
+             kind != XR_PROGRAM_TYPE_KIND_EXISTENTIAL &&
+             kind != XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE) ||
             ownership > XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
             copy_contract > XR_CORE_IR_COPY_FORBIDDEN ||
             ((ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL) !=
@@ -184,9 +185,24 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             break;
         }
         memcpy(previous_key, key, sizeof(key));
-        if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
+        if (kind == XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE) {
+            if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                copy_contract == XR_CORE_IR_COPY_TRIVIAL ||
+                shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                !count_records(&section, shape_head)) {
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                break;
+            }
+            for (uint64_t field = 0; field < shape_head; ++field) {
+                uint64_t field_type = take_uvar(&section);
+                if (!encoded_type_id_is_valid(field_type, dynamic_count) ||
+                    field_type == XR_CORE_TYPE_VOID)
+                    section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            }
+        } else if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
             uint64_t field_count = take_uvar(&section);
             if (shape_head > XR_CORE_IR_NOMINAL_ENUM ||
+                shape_head == XR_CORE_IR_NOMINAL_CLASS ||
                 field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                 !count_records(&section, field_count)) {
                 section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
@@ -200,7 +216,8 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             }
         } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
             uint64_t variant_count = take_uvar(&section);
-            if (shape_head > XR_CORE_IR_NOMINAL_ENUM || variant_count == 0u ||
+            if (shape_head > XR_CORE_IR_NOMINAL_ENUM ||
+                shape_head == XR_CORE_IR_NOMINAL_CLASS || variant_count == 0u ||
                 variant_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                 !count_records(&section, variant_count)) {
                 section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
@@ -608,8 +625,10 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 uint64_t result_category = take_uvar(&section);
                 uint64_t result_ownership = take_uvar(&section);
                 uint64_t operand_count = take_uvar(&section);
-                if (!xr_core_spec_operation_by_id((uint16_t) operation_id) ||
-                    operation_id > UINT16_MAX ||
+                if (operation_id > UINT16_MAX ||
+                    !xr_core_spec_operation_by_id((uint16_t) operation_id) ||
+                    xr_core_spec_operation_by_id((uint16_t) operation_id)->decoder_status !=
+                        XR_CORE_COVERAGE_COMPLETE ||
                     !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
                     result_category > XR_CORE_IR_PLACE || result_ownership > XR_CORE_IR_OWNER ||
                     (result_category == XR_CORE_IR_PLACE &&

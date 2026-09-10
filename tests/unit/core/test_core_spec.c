@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 57u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 62u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -28,11 +28,20 @@ static void test_registry_identity_and_lookup(void) {
         CHECK(operation->operation_class != NULL);
         CHECK(operation->feature != NULL);
         CHECK(operation->spec_oracle_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->evaluator_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->vm_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->aot_status == XR_CORE_COVERAGE_COMPLETE);
+        if (operation->stable_id < XR_CORE_OP_CORE_CLASS_CONSTRUCT) {
+            CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
+            CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
+            CHECK(operation->evaluator_status == XR_CORE_COVERAGE_COMPLETE);
+            CHECK(operation->vm_status == XR_CORE_COVERAGE_COMPLETE);
+            CHECK(operation->aot_status == XR_CORE_COVERAGE_COMPLETE);
+        } else {
+            CHECK(operation->stable_id <= XR_CORE_OP_CORE_PLACE_EXCHANGE);
+            CHECK(operation->decoder_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+            CHECK(operation->verifier_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+            CHECK(operation->evaluator_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+            CHECK(operation->vm_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+            CHECK(operation->aot_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+        }
         CHECK(xr_core_spec_operation_by_id(operation->stable_id) == operation);
         CHECK(xr_core_spec_operation_by_spelling(operation->spelling) == operation);
         if (index > 0u)

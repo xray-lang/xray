@@ -142,7 +142,7 @@ static void xr_construct_init_types(XrConstructFixture *fixture, XrProgramConstr
                               : forbidden && index != 0u ? XR_CORE_IR_COPY_FORBIDDEN
                                                          : XR_CORE_IR_COPY_EXPLICIT;
     }
-    fixture->types[0].nominal_kind = trivial ? XR_CORE_IR_NOMINAL_STRUCT : XR_CORE_IR_NOMINAL_CLASS;
+    fixture->types[0].nominal_kind = trivial ? XR_CORE_IR_NOMINAL_STRUCT : XR_CORE_IR_NOMINAL_NONE;
     fixture->types[0].field_types = fixture->scalar_fields;
     fixture->types[0].field_count = 1u;
     fixture->types[1].field_types = fixture->middle_fields;

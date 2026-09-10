@@ -1047,6 +1047,13 @@ static bool type_is_existential_ref(const XrCoreIrProgram *program, uint16_t typ
            type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF;
 }
 
+static bool type_is_class_reference(const XrCoreIrProgram *program, uint16_t type_id) {
+    return program && type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+           (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count &&
+           program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].kind ==
+               XR_CORE_IR_TYPE_CLASS_REFERENCE;
+}
+
 static bool existential_receiver_mode_supported(const XrCoreIrType *type, XrParamMode mode) {
     if (!type || type->kind != XR_CORE_IR_TYPE_EXISTENTIAL)
         return false;
@@ -1091,6 +1098,9 @@ static bool signature_is_valid(const XrCoreIrProgram *program,
         !type_id_supported(program, signature->result_type_id) ||
         !type_id_supported(program, signature->error_type_id) ||
         !type_id_supported(program, signature->panic_type_id) ||
+        type_is_class_reference(program, signature->result_type_id) ||
+        type_is_class_reference(program, signature->error_type_id) ||
+        type_is_class_reference(program, signature->panic_type_id) ||
         type_is_existential_ref(program, signature->result_type_id) ||
         type_is_existential_ref(program, signature->error_type_id) ||
         (signature->panic_type_id != XR_CORE_TYPE_VOID &&
@@ -1112,6 +1122,7 @@ static bool signature_is_valid(const XrCoreIrProgram *program,
         return false;
     for (uint32_t parameter = 0; parameter < signature->parameter_count; ++parameter)
         if (!type_id_supported(program, signature->parameter_types[parameter]) ||
+            type_is_class_reference(program, signature->parameter_types[parameter]) ||
             signature->parameter_types[parameter] == XR_CORE_TYPE_VOID ||
             !xr_param_mode_is_valid(signature->parameter_modes[parameter]))
             return false;
@@ -1295,7 +1306,8 @@ static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uin
     state[index] = 1u;
     const XrCoreIrType *type = &program->types[index];
     if (type->kind == XR_CORE_IR_TYPE_VIEW || type->kind == XR_CORE_IR_TYPE_CALLABLE ||
-        type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
+        type->kind == XR_CORE_IR_TYPE_EXISTENTIAL ||
+        type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
         state[index] = 2u;
         return true;
     }
@@ -1339,14 +1351,16 @@ static bool validate_types(const XrCoreIrProgram *program) {
                     ((type->field_count == 0u && !type->field_types) ||
                      (type->field_count != 0u && type->field_types)) &&
                     type->variant_count == 0u && !type->variants &&
-                    type->nominal_kind <= XR_CORE_IR_NOMINAL_ENUM;
+                    type->nominal_kind <= XR_CORE_IR_NOMINAL_ENUM &&
+                    type->nominal_kind != XR_CORE_IR_NOMINAL_CLASS;
             for (uint32_t field = 0; valid && field < type->field_count; ++field)
                 valid = type_id_supported(program, type->field_types[field]) &&
                         type->field_types[field] != XR_CORE_TYPE_VOID;
         } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
             valid = valid && type->field_count == 0u && !type->field_types &&
                     type->variant_count != 0u && type->variants &&
-                    type->nominal_kind <= XR_CORE_IR_NOMINAL_ENUM;
+                    type->nominal_kind <= XR_CORE_IR_NOMINAL_ENUM &&
+                    type->nominal_kind != XR_CORE_IR_NOMINAL_CLASS;
             for (uint32_t variant = 0; valid && variant < type->variant_count; ++variant) {
                 const XrCoreIrVariant *row = &type->variants[variant];
                 valid = row->payload_count == 0u || row->payload_types;
@@ -1388,6 +1402,17 @@ static bool validate_types(const XrCoreIrProgram *program) {
                                    type->copy_contract == XR_CORE_IR_COPY_TRIVIAL
                              : type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
                                    type->copy_contract == XR_CORE_IR_COPY_FORBIDDEN);
+        } else if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+            valid = valid &&
+                    ((type->field_count == 0u && !type->field_types) ||
+                     (type->field_count != 0u && type->field_types)) &&
+                    type->variant_count == 0u && !type->variants &&
+                    type->nominal_kind == XR_CORE_IR_NOMINAL_CLASS &&
+                    type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                    type->copy_contract != XR_CORE_IR_COPY_TRIVIAL;
+            for (uint32_t field = 0; valid && field < type->field_count; ++field)
+                valid = type_id_supported(program, type->field_types[field]) &&
+                        type->field_types[field] != XR_CORE_TYPE_VOID;
         } else {
             valid = false;
         }
@@ -1396,14 +1421,8 @@ static bool validate_types(const XrCoreIrProgram *program) {
     }
     for (uint32_t index = 0; valid && index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
-        XrCoreIrTypeOwnership derived_ownership =
-            type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
-                    type->nominal_kind == XR_CORE_IR_NOMINAL_CLASS
-                ? XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
-                : XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
-        XrCoreIrCopyContract derived_copy = derived_ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
-                                                ? XR_CORE_IR_COPY_EXPLICIT
-                                                : XR_CORE_IR_COPY_TRIVIAL;
+        XrCoreIrTypeOwnership derived_ownership = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+        XrCoreIrCopyContract derived_copy = XR_CORE_IR_COPY_TRIVIAL;
         bool has_affine_child = false;
         for (uint32_t field = 0; valid && field < type->field_count; ++field) {
             uint16_t child = type->field_types[field];
@@ -1487,8 +1506,10 @@ static bool validate_program_tables(const XrCoreIrProgram *program) {
             row->implementor_kind == XR_CORE_IR_NOMINAL_NONE ||
             row->implementor_kind > XR_CORE_IR_NOMINAL_ENUM ||
             implementor->nominal_kind != row->implementor_kind ||
+            implementor->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE ||
             (implementor->kind != XR_CORE_IR_TYPE_AGGREGATE &&
-             implementor->kind != XR_CORE_IR_TYPE_VARIANT) ||
+             implementor->kind != XR_CORE_IR_TYPE_VARIANT &&
+             implementor->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE) ||
             row->slot_count != interface_row->slot_count ||
             (row->slot_count != 0u && !row->slot_functions) ||
             (conformance != 0u &&
@@ -1712,6 +1733,7 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 for (uint32_t index = 0; index < block->argument_count; ++index) {
                     if (xr_core_ir_key_is_zero(block->arguments[index].key) ||
                         !type_id_supported(program, block->arguments[index].type_id) ||
+                        type_is_class_reference(program, block->arguments[index].type_id) ||
                         block->arguments[index].type_id == XR_CORE_TYPE_VOID ||
                         !value_contract_is_valid(program, block->arguments[index].type_id,
                                                  block->arguments[index].category,
@@ -1724,7 +1746,10 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 }
                 for (uint32_t index = 0; index < block->instruction_count; ++index) {
                     const XrCoreIrInstruction *instruction = &block->instructions[index];
-                    if (!xr_core_spec_operation_by_id(instruction->operation_id) ||
+                    const XrCoreOperationSpec *operation =
+                        xr_core_spec_operation_by_id(instruction->operation_id);
+                    if (!operation || operation->decoder_status != XR_CORE_COVERAGE_COMPLETE ||
+                        operation->verifier_status != XR_CORE_COVERAGE_COMPLETE ||
                         instruction->operand_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                         instruction->successor_count > XR_PROGRAM_LIMIT_SUCCESSORS_PER_OPERATION) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
@@ -1733,6 +1758,7 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                     }
                     if (!xr_core_ir_key_is_zero(instruction->result)) {
                         if (!type_id_supported(program, instruction->result_type_id) ||
+                            type_is_class_reference(program, instruction->result_type_id) ||
                             instruction->result_type_id == XR_CORE_TYPE_VOID ||
                             !value_contract_is_valid(program, instruction->result_type_id,
                                                      instruction->result_category,
