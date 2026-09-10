@@ -22,7 +22,7 @@ subset, while claiming the same lane name. It also had no reference from
 CMakeLists or CI: dead code that could only rot.
 
 Environment overrides:
-    XR_ASAN_PROFILE       full (default) or canonical-program preflight
+    XR_ASAN_PROFILE       full (default), canonical-program, or generic-identity
     XR_ASAN_JOBS          parallel build/test jobs (default: all cores)
     XR_ASAN_BUILD_DIR     ASan build directory (default: build-asan)
     XR_ASAN_CTEST_REGEX   unit test name regex (default: ^test_)
@@ -79,6 +79,17 @@ ASAN_OPTIONS = ("detect_leaks=0:abort_on_error=1:symbolize=1:"
                 "strict_string_checks=1:detect_stack_use_after_return=1")
 UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
+EXACT_PROFILES = {
+    "canonical-program": (
+        canonical_profile.CTEST_NAMES,
+        canonical_profile.BUILD_TARGETS,
+    ),
+    "generic-identity": (
+        canonical_profile.GENERIC_IDENTITY_CTEST_NAMES,
+        canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS,
+    ),
+}
+
 USAGE = """usage: run_asan_focused.py [-h|--help]
 
 Run the configured ASan+UBSan lane. Select its bounded profile and build tree
@@ -116,28 +127,30 @@ def compile_workload(log, xray: Path, main: Path, label: str,
         out.unlink(missing_ok=True)
 
 
-def verify_canonical_execution(report: Path, log) -> bool:
-    """Prove the sanitizer preflight ran the manifest's exact CTest set."""
+def verify_exact_execution(report: Path, expected_names: tuple[str, ...], profile_name: str,
+                           log) -> bool:
+    """Prove a sanitizer preflight ran its shared exact CTest set."""
     try:
         executed = canonical_profile.executed_ctest_names(report)
     except canonical_profile.source_fixtures.FixtureError as error:
-        log(f"canonical-program execution inventory invalid: {error}", error=True)
+        log(f"{profile_name} execution inventory invalid: {error}", error=True)
         return False
     actual = set(executed)
-    expected = set(canonical_profile.CTEST_NAMES)
-    if actual == expected and len(executed) == len(canonical_profile.CTEST_NAMES):
+    expected = set(expected_names)
+    if actual == expected and len(executed) == len(expected_names):
         return True
     for name in sorted(expected - actual):
-        log(f"canonical-program test was not executed: {name}", error=True)
+        log(f"{profile_name} test was not executed: {name}", error=True)
     for name in sorted(actual - expected):
-        log(f"unexpected canonical-program test executed: {name}", error=True)
+        log(f"unexpected {profile_name} test executed: {name}", error=True)
     return False
 
 
 def _run_main(argv: list[str]) -> int:
     log = sanitizer.LaneLog(LANE)
     profile = os.environ.get("XR_ASAN_PROFILE", "full")
-    if profile not in ("full", "canonical-program"):
+    exact_profile = EXACT_PROFILES.get(profile)
+    if profile != "full" and exact_profile is None:
         log(f"unknown XR_ASAN_PROFILE={profile!r}", error=True)
         return 1
     jobs = sanitizer.default_jobs("XR_ASAN_JOBS")
@@ -150,7 +163,9 @@ def _run_main(argv: list[str]) -> int:
     serial_regex = os.environ.get("XR_ASAN_CTEST_SERIAL_REGEX", DEFAULT_SERIAL_REGEX)
     diff_regex = os.environ.get("XR_ASAN_DIFF_REGEX", DEFAULT_DIFF_REGEX)
 
-    if profile == "canonical-program":
+    exact_tests: tuple[str, ...] = ()
+    if exact_profile is not None:
+        exact_tests, build_targets = exact_profile
         conflicting = tuple(
             name
             for name in (
@@ -163,11 +178,10 @@ def _run_main(argv: list[str]) -> int:
             if name in os.environ
         )
         if conflicting:
-            log("canonical-program profile owns its exact inventory; remove overrides: " +
+            log(f"{profile} profile owns its exact inventory; remove overrides: " +
                 ", ".join(conflicting), error=True)
             return 1
-        build_targets = canonical_profile.BUILD_TARGETS
-        ctest_regex = canonical_profile.ctest_regex()
+        ctest_regex = canonical_profile.ctest_regex(exact_tests)
         ctest_exclude = ""
     elif "XR_ASAN_BUILD_TARGETS" in os.environ:
         log(
@@ -192,7 +206,7 @@ def _run_main(argv: list[str]) -> int:
 
     log(f"ROOT={PROJECT_DIR}")
     log(f"profile={profile} build dir={build_dir.name} jobs={jobs}")
-    if profile == "canonical-program":
+    if exact_profile is not None:
         log("PARTIAL preflight: this does not qualify the full asan_focused lane")
     if build_targets:
         log(f"build targets={' '.join(build_targets)}")
@@ -245,8 +259,8 @@ def _run_main(argv: list[str]) -> int:
     xray = build_dir / platform.exe_name("xray")
     if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
         return 1
-    if profile == "canonical-program":
-        log("incrementally building exact canonical-program sanitizer targets")
+    if exact_profile is not None:
+        log(f"incrementally building exact {profile} sanitizer targets")
     else:
         log("incrementally building the complete ASan/UBSan tree")
     # Ninja, not the CLI timestamp, owns target-level dependency freshness.
@@ -263,25 +277,25 @@ def _run_main(argv: list[str]) -> int:
         log(f"ASan xray binary not found at {xray}", error=True)
         return 1
 
-    if profile == "canonical-program":
-        listing = proc.run(["ctest", "-N", "-R", canonical_profile.ctest_regex()],
+    if exact_profile is not None:
+        listing = proc.run(["ctest", "-N", "-R", canonical_profile.ctest_regex(exact_tests)],
                            cwd=build_dir)
         if not listing.ok:
-            log("could not enumerate canonical-program preflight tests", error=True)
+            log(f"could not enumerate {profile} preflight tests", error=True)
             sanitizer.write_console(sys.stderr, listing.combined_text())
             return 1
         registered = set(canonical_profile.listed_ctest_names(
             listing.stdout.decode("utf-8", "replace")))
-        expected = set(canonical_profile.CTEST_NAMES)
+        expected = set(exact_tests)
         if registered != expected:
             for name in sorted(expected - registered):
-                log(f"canonical-program preflight test missing: {name}", error=True)
+                log(f"{profile} preflight test missing: {name}", error=True)
             for name in sorted(registered - expected):
-                log(f"unexpected canonical-program preflight test: {name}", error=True)
+                log(f"unexpected {profile} preflight test: {name}", error=True)
             return 1
 
     log(f"running unit tests (regex: {ctest_regex}, exclude: {ctest_exclude})")
-    if profile == "canonical-program":
+    if exact_profile is not None:
         with workspace.Workspace("xray_asan_ctest_evidence") as evidence:
             report = evidence.path("ctest.xml")
             result = sanitizer.ctest(
@@ -291,7 +305,7 @@ def _run_main(argv: list[str]) -> int:
             if not result.ok:
                 sanitizer.write_console(sys.stdout, result.combined_text())
                 return 1
-            if not verify_canonical_execution(report, log):
+            if not verify_exact_execution(report, exact_tests, profile, log):
                 return 1
     else:
         result = sanitizer.ctest(build_dir, include=ctest_regex, exclude=ctest_exclude,
@@ -300,8 +314,8 @@ def _run_main(argv: list[str]) -> int:
             sanitizer.write_console(sys.stdout, result.combined_text())
             return 1
 
-    if profile == "canonical-program":
-        log(f"PASS ({len(canonical_profile.CTEST_NAMES)} exact preflight tests; full lane not run)")
+    if exact_profile is not None:
+        log(f"PASS ({len(exact_tests)} exact preflight tests; full lane not run)")
         return 0
 
     log(f"running subprocess-sensitive unit tests serially (regex: {serial_regex})")

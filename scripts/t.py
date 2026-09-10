@@ -219,6 +219,13 @@ EXACT_PROFILES = {
                      "suites, full backend differential, full ASan/LSan, QEMU and release "
                      "qualification"),
     ),
+    "generic-identity": ExactProfile(
+        tests=canonical_profile.GENERIC_IDENTITY_CTEST_NAMES,
+        targets=canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS,
+        include_xray=False,
+        not_covered=("remaining canonical Program proofs, broad language/runtime suites, "
+                     "VM/AOT differential, full sanitizers and release qualification"),
+    ),
     "infra": ExactProfile(
         tests=("test_build_tree_lock", "test_tiered_test_runner",
                "test_canonical_program_test_profile"),

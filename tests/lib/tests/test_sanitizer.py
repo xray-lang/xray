@@ -120,7 +120,7 @@ class AsanEntryPointTest(unittest.TestCase):
         lock.assert_not_called()
         run.assert_not_called()
 
-    def test_canonical_execution_requires_manifest_exact_junit_set(self):
+    def test_exact_execution_requires_shared_junit_set(self):
         messages = []
 
         def log(message, *, error=False):
@@ -128,23 +128,31 @@ class AsanEntryPointTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="xt_asan_junit.") as directory:
             report = Path(directory) / "ctest.xml"
-            cases = "".join(
-                f"<testcase name='{name}'/>"
-                for name in asan_runner.canonical_profile.CTEST_NAMES
-            )
-            report.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
-            self.assertTrue(asan_runner.verify_canonical_execution(report, log))
-            names = list(asan_runner.canonical_profile.CTEST_NAMES)
-            cases = "".join(
-                f"<testcase name='{name}'/>"
-                for name in [*names[:-1], "same_count_wrong_test"]
-            )
-            report.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
-            self.assertFalse(asan_runner.verify_canonical_execution(report, log))
+            for profile_name, (expected, _) in asan_runner.EXACT_PROFILES.items():
+                with self.subTest(profile=profile_name):
+                    cases = "".join(f"<testcase name='{name}'/>" for name in expected)
+                    report.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
+                    self.assertTrue(asan_runner.verify_exact_execution(
+                        report, expected, profile_name, log
+                    ))
+                    names = list(expected)
+                    cases = "".join(
+                        f"<testcase name='{name}'/>"
+                        for name in [*names[:-1], "same_count_wrong_test"]
+                    )
+                    report.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
+                    self.assertFalse(asan_runner.verify_exact_execution(
+                        report, expected, profile_name, log
+                    ))
         self.assertTrue(any("was not executed" in message and error
                             for message, error in messages))
         self.assertTrue(any("unexpected" in message and error
                             for message, error in messages))
+
+    def test_generic_identity_asan_profile_reuses_shared_inventory(self):
+        tests, targets = asan_runner.EXACT_PROFILES["generic-identity"]
+        self.assertIs(tests, asan_runner.canonical_profile.GENERIC_IDENTITY_CTEST_NAMES)
+        self.assertIs(targets, asan_runner.canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS)
 
 
 class CacheInspectionTest(unittest.TestCase):

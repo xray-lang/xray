@@ -2638,7 +2638,9 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     XrType *import_type = l->type_any;
                     if (m->has_private_target) {
                         import_type = xi_lower_declared_symbol_type(l, m->symbol_id);
-                        if (!import_type || import_type->kind != XR_KIND_FUNCTION) {
+                        if (!import_type || (import_type->kind != XR_KIND_FUNCTION &&
+                                             import_type->kind != XR_KIND_CLASS &&
+                                             import_type->kind != XR_KIND_INSTANCE)) {
                             l->had_error = true;
                             prescan_slot_meta_free(&slot_meta);
                             return;

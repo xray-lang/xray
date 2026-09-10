@@ -3447,9 +3447,11 @@ static XaSymbol *resolve_private_import_target(XaAnalyzer *analyzer, const Impor
     XaSymbol *symbol = target->export_symbols
                            ? (XaSymbol *) xr_hashmap_get(target->export_symbols, member->name)
                            : NULL;
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(analyzer, symbol) : NULL;
+    bool exact_declaration = links && (links->function_decl_node == member->private_target_decl ||
+                                       links->nominal_decl_node == member->private_target_decl);
     XaGenericSpecializationFact fact;
-    if (target->export_symbols_invalid || !symbol ||
-        symbol->links.function_decl_node != member->private_target_decl ||
+    if (target->export_symbols_invalid || !symbol || !exact_declaration ||
         !xa_analyzer_get_generic_specialization(analyzer, member->private_target_decl, &fact) ||
         fact.generic_decl != member->private_generic_decl)
         return NULL;

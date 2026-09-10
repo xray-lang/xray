@@ -26,6 +26,14 @@ class FocusedSelectionTest(unittest.TestCase):
                         set(runner.T0_CTEST_NAMES))
         self.assertNotIn(".*", runner.T0_INCLUDE)
 
+    def test_generic_identity_profile_reuses_the_shared_exact_inventory(self):
+        profile = runner.EXACT_PROFILES["generic-identity"]
+        self.assertIs(profile.tests, runner.canonical_profile.GENERIC_IDENTITY_CTEST_NAMES)
+        self.assertIs(
+            profile.targets, runner.canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS
+        )
+        self.assertFalse(profile.include_xray)
+
     def test_requested_build_dir_matches_fast_tree_selection(self):
         with mock.patch.dict(runner.os.environ, {}, clear=True), mock.patch.object(
                 runner.platform, "IS_WINDOWS", True):
@@ -379,7 +387,7 @@ class EmptySelectionTest(unittest.TestCase):
         return result, output.getvalue(), build, ctest
 
     def test_empty_selection_fails_before_build_or_test_for_every_tier(self):
-        for tier in (*runner.TIERS, "canonical"):
+        for tier in (*runner.TIERS, *runner.EXACT_PROFILES):
             with self.subTest(tier=tier):
                 result, output, build, ctest = self.run_selection(
                     [[], ["test_exists"]], tier=tier, extra=["-R", "^nonexistent$"])

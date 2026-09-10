@@ -18,6 +18,7 @@
 #include "module/xmodule_graph.h"
 #include "module/xmodule_identity.h"
 #include "module/xmodule_resolver.h"
+#include "os/os_temp.h"
 #include "program/xr_program_source_build.h"
 #include "program/xr_reference_evaluator.h"
 #include "program/xr_validated_program_internal.h"
@@ -857,18 +858,12 @@ static void source_build_fixture_free(SourceBuildFixture *fixture) {
 
 static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *entry_source,
                                       const char *dependency_source) {
-    static unsigned int serial;
     if (!fixture || !entry_source)
         return false;
     memset(fixture, 0, sizeof(*fixture));
-    (void) snprintf(fixture->directory, sizeof(fixture->directory),
-                    "xr_program_source_build_%u_XXXXXX", serial++);
-    if (!xr_test_mkdtemp(fixture->directory))
+    if (xr_temp_dir_create("xray-program-source-build", fixture->directory,
+                           sizeof(fixture->directory)) != 0)
         goto fail;
-    char absolute_directory[XR_TEST_PATH_MAX];
-    if (!xr_test_realpath_buf(fixture->directory, absolute_directory, sizeof(absolute_directory)))
-        goto fail;
-    (void) snprintf(fixture->directory, sizeof(fixture->directory), "%s", absolute_directory);
     int entry_length = snprintf(fixture->entry_path, sizeof(fixture->entry_path), "%s/main.xr",
                                 fixture->directory);
     if (entry_length < 0 || (size_t) entry_length >= sizeof(fixture->entry_path) ||
@@ -2161,21 +2156,31 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
 }
 
 TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates) {
-    static const char source[] = "struct Box<R> {\n"
-                                 "  value: R\n"
-                                 "  readAs<U>(_marker: U) -> R { return this.value }\n"
-                                 "  forwardAs<U>(marker: U) -> R { return this.readAs<U>(marker) }\n"
-                                 "}\n"
-                                 "fn answer() -> i64 {\n"
-                                 "  var left = Box<i64>{value: 40}\n"
-                                 "  var right = Box<i64>{value: 1}\n"
-                                 "  var flag = Box<bool>{value: true}\n"
-                                 "  left.value = left.value + right.value\n"
-                                 "  if (flag.forwardAs<i64>(0)) { return left.readAs(false) + 1 }\n"
-                                 "  return 0\n"
-                                 "}\n";
+    static const char library_source[] =
+        "export struct Box<R> {\n"
+        "  value: R\n"
+        "  readAs<U>(_marker: U) -> R { return this.value }\n"
+        "  forwardAs<U>(marker: U) -> R { return this.readAs<U>(marker) }\n"
+        "}\n";
+    static const char facade_source[] = "export { Box } from \"./library\"\n";
+    static const char entry_source[] =
+        "import { Box as DirectBox } from \"./library\"\n"
+        "import { Box as FacadeBox } from \"./facade\"\n"
+        "struct Box<R> {\n"
+        "  value: R\n"
+        "  readAs<U>(_marker: U) -> R { return this.value }\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        "  var left = DirectBox<i64>{value: 40}\n"
+        "  var right = FacadeBox<i64>{value: 1}\n"
+        "  var flag = FacadeBox<bool>{value: true}\n"
+        "  left.value = left.value + right.value\n"
+        "  if (flag.forwardAs<i64>(0)) { return left.readAs(false) + 1 }\n"
+        "  return 0\n"
+        "}\n";
     SourceBuildFixture fixture;
-    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
+    ASSERT_TRUE(source_build_fixture_add_facade(&fixture, facade_source));
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);

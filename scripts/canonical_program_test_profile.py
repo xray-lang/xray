@@ -15,6 +15,15 @@ import xml.etree.ElementTree as ET
 import program_source_fixtures as source_fixtures
 
 
+GENERIC_IDENTITY_CTEST_NAMES = (
+    "test_mono",
+    "test_xglobal_summary",
+    "test_xglobal_cache_payload",
+    "test_xr_program_source_build",
+)
+GENERIC_IDENTITY_BUILD_TARGETS = GENERIC_IDENTITY_CTEST_NAMES
+
+
 _SCRIPT_AND_EXECUTABLE_TESTS = (
     "canonical_source_run_cli",
     "canonical_cutover_manifests",
@@ -28,11 +37,10 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
     "test_xr_program",
     "test_xr_program_aot",
     "test_xr_program_aot_condition_assert",
-    "test_xr_program_source_build",
+) + GENERIC_IDENTITY_CTEST_NAMES + (
     "test_xr_program_verify",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
-    "test_xglobal_summary",
     "test_xi_pipeline_canonical",
     "test_xi_verify_ext",
     "xr_execution_contracts",
@@ -61,11 +69,10 @@ _EXECUTABLE_TARGETS = (
     "test_xr_program",
     "test_xr_program_aot",
     "test_xr_program_aot_condition_assert",
-    "test_xr_program_source_build",
+) + GENERIC_IDENTITY_BUILD_TARGETS + (
     "test_xr_program_verify",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
-    "test_xglobal_summary",
     "test_xi_verify_ext",
 )
 
@@ -96,10 +103,10 @@ def load_inventory(manifest: Path = source_fixtures.MANIFEST,
 CTEST_NAMES, BUILD_TARGETS = load_inventory()
 
 
-def ctest_regex() -> str:
+def ctest_regex(names: tuple[str, ...] = CTEST_NAMES) -> str:
     # CTest uses its C++/POSIX-style regex engine, which has no Python-style
     # non-capturing group syntax.
-    return "^(" + "|".join(re.escape(name) for name in CTEST_NAMES) + ")$"
+    return "^(" + "|".join(re.escape(name) for name in names) + ")$"
 
 
 def listed_ctest_names(output: str) -> tuple[str, ...]:

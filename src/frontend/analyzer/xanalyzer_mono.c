@@ -1856,6 +1856,22 @@ static XaGenericDecl *registry_find_decl(XaGenericRegistry *r, const AstNode *no
     return NULL;
 }
 
+/* Resolve a generic aggregate construction through the analyzer's nominal
+ * declaration identity.
+ * Source spelling is only an import alias (and may also
+ * collide with a local declaration), so it
+ * is never a sound registry key. */
+static XaGenericDecl *registry_find_nominal_site(XaGenericRegistry *registry, const AstNode *site,
+                                                 XaAnalyzer *analyzer) {
+    if (!registry || !site || !analyzer)
+        return NULL;
+    XrType *type = xa_analyzer_get_node_type(analyzer, site);
+    XrClassInfo *info = type && XR_TYPE_IS_INSTANCE(type) ? type->instance.class_ref : NULL;
+    XaSymbol *symbol = info ? info->declaration_symbol : NULL;
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(analyzer, symbol) : NULL;
+    return registry_find_decl(registry, links ? links->nominal_decl_node : NULL);
+}
+
 static XaGenericDecl *registry_find_call(XaGenericRegistry *registry, const AstNode *call_node,
                                          XaAnalyzer *analyzer) {
     if (!registry || !call_node || call_node->type != AST_CALL_EXPR || !analyzer)
@@ -1939,7 +1955,7 @@ static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *reg
             if (!registry_find_decl(registry, stmt)) {
                 registry_add_external(registry, stmt->as.struct_decl.name, stmt,
                                       stmt->as.struct_decl.type_params,
-                                      stmt->as.struct_decl.type_param_count, true, false);
+                                      stmt->as.struct_decl.type_param_count, false, false);
             }
         }
         collect_owner_generic_methods(stmt, registry, true);
@@ -2289,7 +2305,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     if (node->type == AST_STRUCT_LITERAL) {
         StructLiteralNode *sl = &node->as.struct_literal;
         if (sl->type_arg_count > 0 && sl->struct_name) {
-            XaGenericDecl *decl = registry_find(registry, sl->struct_name);
+            XaGenericDecl *decl =
+                registry_find_nominal_site(registry, node, collector ? collector->analyzer : NULL);
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == sl->type_arg_count) {
                 XrLocation loc = mono_node_loc(node);
@@ -2586,9 +2603,14 @@ static bool mono_find_private_target(XaAnalyzer *analyzer,
             continue;
         for (int i = 0; i < root->as.program.count; ++i) {
             AstNode *candidate = root->as.program.statements[i];
-            if (!candidate || candidate->type != AST_FUNCTION_DECL ||
-                !candidate->as.function_decl.name ||
-                strcmp(candidate->as.function_decl.name, export_name) != 0)
+            const char *candidate_name = NULL;
+            if (candidate && candidate->type == AST_FUNCTION_DECL)
+                candidate_name = candidate->as.function_decl.name;
+            else if (candidate && candidate->type == AST_CLASS_DECL)
+                candidate_name = candidate->as.class_decl.name;
+            else if (candidate && candidate->type == AST_STRUCT_DECL)
+                candidate_name = candidate->as.struct_decl.name;
+            if (!candidate_name || strcmp(candidate_name, export_name) != 0)
                 continue;
             XaGenericSpecializationFact fact;
             if (!xa_analyzer_get_generic_specialization(analyzer, candidate, &fact) ||
@@ -2605,6 +2627,30 @@ static bool mono_find_private_target(XaAnalyzer *analyzer,
         return false;
     }
     return false;
+}
+
+static uint32_t mono_imported_nominal_symbol_id(AstNode *root, const char *local_name,
+                                                const AstNode *generic_decl, XaAnalyzer *analyzer) {
+    if (!root || root->type != AST_PROGRAM || !local_name || !generic_decl || !analyzer)
+        return 0u;
+    ProgramNode *program = &root->as.program;
+    for (int stmt_index = 0; stmt_index < program->count; ++stmt_index) {
+        AstNode *stmt = program->statements[stmt_index];
+        if (!stmt || stmt->type != AST_IMPORT_STMT)
+            continue;
+        ImportStmtNode *import = &stmt->as.import_stmt;
+        for (int member_index = 0; member_index < import->member_count; ++member_index) {
+            ImportMember *member = &import->members[member_index];
+            const char *candidate = member->alias ? member->alias : member->name;
+            if (!candidate || strcmp(candidate, local_name) != 0 || member->symbol_id == 0u)
+                continue;
+            XaSymbol *symbol = xa_analyzer_symbol_by_id(analyzer, member->symbol_id);
+            XaSymbolLinks *links = symbol ? xa_analyzer_get_links(analyzer, symbol) : NULL;
+            if (symbol && symbol->is_imported && links && links->nominal_decl_node == generic_decl)
+                return member->symbol_id;
+        }
+    }
+    return 0u;
 }
 
 static bool mono_program_append(AstNode *root, AstNode *statement) {
@@ -2910,18 +2956,28 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
     if (node->type == AST_STRUCT_LITERAL) {
         StructLiteralNode *sl = &node->as.struct_literal;
         if (sl->type_arg_count > 0 && sl->struct_name) {
-            XaGenericDecl *decl = registry_find(registry, sl->struct_name);
+            XaGenericDecl *decl = registry_find_nominal_site(registry, node, collector->analyzer);
             if (decl) {
                 XaGenericSpecializationFact identity = mono_specialization_identity(
                     decl, sl->type_args, sl->type_arg_count, XA_GENERIC_SPECIALIZATION_EFFECT_NONE);
                 const char *mangled = xa_mono_collector_lookup(collector, decl->name, &identity);
                 if (mangled) {
-                    char *name = xr_strdup(mangled);
+                    const char *name = mangled;
+                    if (decl->is_external) {
+                        uint32_t symbol_id = mono_imported_nominal_symbol_id(
+                            collector->rewrite_root, sl->struct_name, decl->node,
+                            collector->analyzer);
+                        name =
+                            mono_append_specialized_import(collector->rewrite_root, symbol_id, decl,
+                                                           &identity, mangled, collector->analyzer);
+                    } else {
+                        name = xr_strdup(mangled);
+                    }
                     if (!name) {
                         mono_report_rewrite_failure(collector, node, decl->name);
                         return;
                     }
-                    sl->struct_name = name;
+                    sl->struct_name = (char *) name;
                     sl->type_args = NULL;
                     sl->type_arg_count = 0;
                 } else if (!mono_specialization_contains_open_type(collector, &identity)) {

@@ -26,8 +26,8 @@ SPEC.loader.exec_module(profile)
 
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
-        self.assertEqual(len(profile.CTEST_NAMES), 57)
-        self.assertEqual(len(profile.BUILD_TARGETS), 33)
+        self.assertEqual(len(profile.CTEST_NAMES), 59)
+        self.assertEqual(len(profile.BUILD_TARGETS), 35)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
         self.assertLessEqual(
@@ -39,6 +39,24 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         self.assertIn("test_xi_pipeline_canonical", profile.CTEST_NAMES)
         self.assertIn("test_xi_pipeline", profile.BUILD_TARGETS)
         self.assertIn("test_xr_program_vm_runtime", profile.BUILD_TARGETS)
+
+    def test_generic_identity_is_an_exact_canonical_subset(self) -> None:
+        self.assertEqual(len(profile.GENERIC_IDENTITY_CTEST_NAMES), 4)
+        self.assertEqual(len(profile.GENERIC_IDENTITY_BUILD_TARGETS), 4)
+        self.assertEqual(
+            len(profile.GENERIC_IDENTITY_CTEST_NAMES),
+            len(set(profile.GENERIC_IDENTITY_CTEST_NAMES)),
+        )
+        self.assertEqual(
+            len(profile.GENERIC_IDENTITY_BUILD_TARGETS),
+            len(set(profile.GENERIC_IDENTITY_BUILD_TARGETS)),
+        )
+        self.assertLessEqual(
+            set(profile.GENERIC_IDENTITY_CTEST_NAMES), set(profile.CTEST_NAMES)
+        )
+        self.assertLessEqual(
+            set(profile.GENERIC_IDENTITY_BUILD_TARGETS), set(profile.BUILD_TARGETS)
+        )
 
     def test_manifest_additions_and_removals_change_both_inventories(self) -> None:
         with tempfile.TemporaryDirectory(prefix="xr-canonical-profile-") as directory:
