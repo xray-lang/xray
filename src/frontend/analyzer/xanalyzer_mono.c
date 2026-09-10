@@ -235,7 +235,9 @@ static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
 }
 
 char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
-    if (!name || count <= 0 || !type_args)
+    if (count > 0 && !type_args)
+        return NULL;
+    if (!name || count <= 0)
         return xr_strdup(name ? name : "");
 
     /* Every type argument whose identity lives in its children needs a
@@ -253,14 +255,14 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     char *qualified = NULL;
     const char **tags = (const char **) xr_calloc((size_t) count, sizeof(const char *));
     if (!tags)
-        return xr_strdup(name);
+        return NULL;
     for (int i = 0; i < count; i++) {
         if (type_args[i] && mono_tag_needs_children(type_args[i]->kind)) {
             if (!qualified) {
                 qualified = (char *) xr_calloc((size_t) count, XR_MONO_TYPE_TAG_CAP);
                 if (!qualified) {
                     xr_free((void *) tags);
-                    return xr_strdup(name);
+                    return NULL;
                 }
             }
             char *slot = qualified + (size_t) i * XR_MONO_TYPE_TAG_CAP;
@@ -282,7 +284,7 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     if (!buf) {
         xr_free(qualified);
         xr_free((void *) tags);
-        return xr_strdup(name);
+        return NULL;
     }
 
     char *p = buf;
@@ -805,12 +807,14 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             if (clone_ctx && clone_ctx->analyzer) {
                 XaGenericSpecializationFact fact;
                 if (xa_analyzer_get_generic_specialization(clone_ctx->analyzer, node, &fact)) {
-                    if (!fact.generic_decl || fact.type_arg_count == 0u ||
-                        fact.type_arg_count != (uint32_t) n->as.call_expr.type_arg_count ||
+                    if (!fact.generic_decl || fact.receiver_type_arg_count != 0u ||
+                        fact.declaration_type_arg_count == 0u ||
+                        fact.declaration_type_arg_count !=
+                            (uint32_t) n->as.call_expr.type_arg_count ||
                         !n->as.call_expr.type_args) {
                         clone_ctx->type_substitution_failed = true;
                     } else {
-                        fact.type_args = n->as.call_expr.type_args;
+                        fact.declaration_type_args = n->as.call_expr.type_args;
                         if (!xa_analyzer_set_generic_specialization(clone_ctx->analyzer, n, &fact))
                             clone_ctx->type_substitution_failed = true;
                     }
@@ -1307,6 +1311,8 @@ void xa_mono_collector_free(XaMonoCollector *c) {
     XR_DCHECK(c != NULL, "xa_mono_collector_free: NULL collector");
     for (int i = 0; i < c->count; i++) {
         xr_free((void *) c->instances[i].generic_name);
+        xr_free(c->instances[i].identity.receiver_type_args);
+        xr_free(c->instances[i].identity.declaration_type_args);
         xr_free((void *) c->instances[i].mangled_name);
     }
     xr_free(c->instances);
@@ -1323,10 +1329,10 @@ void xa_mono_collector_free(XaMonoCollector *c) {
 
 static char *mono_effect_mangle(XaMonoCollector *collector, const char *generic_name,
                                 XrTypeRef **type_args, int type_arg_count,
-                                XaMonoThrowEffect throw_effect) {
+                                XaGenericSpecializationEffect effect) {
     char *base = xr_mono_mangle_in_analyzer(collector ? collector->analyzer : NULL, generic_name,
                                             type_args, type_arg_count);
-    if (!base || throw_effect != XA_MONO_EFFECT_NO_THROW)
+    if (!base || effect != XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW)
         return base;
     size_t len = strlen(base) + sizeof("$nothrow");
     char *result = (char *) xr_malloc(len);
@@ -1424,26 +1430,86 @@ static bool mono_type_ref_contains_open_param(XaAnalyzer *analyzer, const XrType
     return false;
 }
 
-static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *generic_name,
-                                                const AstNode *generic_decl, XrTypeRef **type_args,
-                                                int type_arg_count, bool is_class_generic,
-                                                XaMonoThrowEffect throw_effect,
-                                                const XrLocation *loc) {
-    if (!c || !generic_name)
+static char *mono_specialization_mangle(XaMonoCollector *collector, const char *generic_name,
+                                        const XaGenericSpecializationFact *identity) {
+    if (!collector || !generic_name || !identity)
         return NULL;
+    char *declaration_name =
+        mono_effect_mangle(collector, generic_name, identity->declaration_type_args,
+                           (int) identity->declaration_type_arg_count, identity->effect);
+    if (!declaration_name || identity->receiver_type_arg_count == 0u)
+        return declaration_name;
+    char *receiver_name =
+        xr_mono_mangle_in_analyzer(collector->analyzer, "receiver", identity->receiver_type_args,
+                                   (int) identity->receiver_type_arg_count);
+    if (!receiver_name) {
+        xr_free(declaration_name);
+        return NULL;
+    }
+    size_t length = strlen(declaration_name) + strlen(receiver_name) + sizeof("$on$");
+    char *result = (char *) xr_malloc(length);
+    if (result)
+        snprintf(result, length, "%s$on$%s", declaration_name, receiver_name);
+    xr_free(receiver_name);
+    xr_free(declaration_name);
+    return result;
+}
+
+static bool mono_specialization_contains_open_type(XaMonoCollector *collector,
+                                                   const XaGenericSpecializationFact *identity) {
+    if (!identity)
+        return true;
+    for (uint32_t i = 0u; i < identity->receiver_type_arg_count; ++i) {
+        if (mono_type_ref_contains_open_param(collector ? collector->analyzer : NULL,
+                                              identity->receiver_type_args[i]))
+            return true;
+    }
+    for (uint32_t i = 0u; i < identity->declaration_type_arg_count; ++i) {
+        if (mono_type_ref_contains_open_param(collector ? collector->analyzer : NULL,
+                                              identity->declaration_type_args[i]))
+            return true;
+    }
+    return false;
+}
+
+static XrTypeRef **mono_copy_type_ref_tuple(XrTypeRef **source, uint32_t count) {
+    if (count == 0u)
+        return NULL;
+    XrTypeRef **copy = (XrTypeRef **) xr_malloc(sizeof(*copy) * (size_t) count);
+    if (copy)
+        memcpy(copy, source, sizeof(*copy) * (size_t) count);
+    return copy;
+}
+
+static bool mono_specialization_supported(const XaGenericSpecializationFact *identity) {
+    if (!identity || !identity->generic_decl || identity->generic_decl->type != AST_METHOD_DECL)
+        return true;
+    if (!identity->owner_decl || identity->receiver_type_arg_count != 0u)
+        return false;
+    const ClassDeclNode *owner = identity->owner_decl->type == AST_CLASS_DECL
+                                     ? &identity->owner_decl->as.class_decl
+                                     : &identity->owner_decl->as.struct_decl;
+    return owner->type_param_count == 0 && !owner->is_generic_skeleton && !owner->is_monomorphized;
+}
+
+static const char *xa_mono_collector_add_exact(XaMonoCollector *c, const char *generic_name,
+                                               const XaGenericSpecializationFact *identity,
+                                               const XrLocation *loc) {
+    if (!c || !generic_name || !xa_generic_specialization_fact_valid(identity) ||
+        !mono_specialization_supported(identity)) {
+        mono_report_exact_type_identity(c, generic_name, loc);
+        return NULL;
+    }
 
     /* An instantiation nested in a generic template is not a concrete root yet.
      * Defer it
      * until the enclosing clone substitutes every open parameter; the
      * injection fixpoint
      * will then collect the concrete nested root. */
-    for (int i = 0; i < type_arg_count; ++i) {
-        if (mono_type_ref_contains_open_param(c->analyzer, type_args ? type_args[i] : NULL))
-            return NULL;
-    }
+    if (mono_specialization_contains_open_type(c, identity))
+        return NULL;
 
-    char *candidate_mangled =
-        mono_effect_mangle(c, generic_name, type_args, type_arg_count, throw_effect);
+    char *candidate_mangled = mono_specialization_mangle(c, generic_name, identity);
     if (!candidate_mangled) {
         mono_report_exact_type_identity(c, generic_name, loc);
         return NULL;
@@ -1452,7 +1518,9 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
     // Concrete type arguments define instance identity. ABI-equivalent instances
     // may share code only through explicit verified plans, not collector dedup.
     for (int i = 0; i < c->count; i++) {
-        if ((!generic_decl || c->instances[i].generic_decl == generic_decl) &&
+        if (c->instances[i].identity.generic_decl == identity->generic_decl &&
+            c->instances[i].identity.owner_decl == identity->owner_decl &&
+            c->instances[i].identity.effect == identity->effect &&
             strcmp(c->instances[i].generic_name, generic_name) == 0 &&
             strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
             xr_free(candidate_mangled);
@@ -1494,52 +1562,74 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
         return NULL;
     }
 
-    // Grow if needed
-    if (c->count >= c->capacity) {
-        c->capacity = c->capacity ? c->capacity * 2 : 8;
-        c->instances =
-            (XaMonoInstance *) xr_realloc(c->instances, c->capacity * sizeof(XaMonoInstance));
+    char *generic_name_copy = xr_strdup(generic_name);
+    XrTypeRef **receiver_type_args =
+        mono_copy_type_ref_tuple(identity->receiver_type_args, identity->receiver_type_arg_count);
+    XrTypeRef **declaration_type_args = mono_copy_type_ref_tuple(
+        identity->declaration_type_args, identity->declaration_type_arg_count);
+    if (!generic_name_copy || (identity->receiver_type_arg_count > 0u && !receiver_type_args) ||
+        (identity->declaration_type_arg_count > 0u && !declaration_type_args)) {
+        xr_free(generic_name_copy);
+        xr_free(receiver_type_args);
+        xr_free(declaration_type_args);
+        xr_free(candidate_mangled);
+        mono_report_exact_type_identity(c, generic_name, loc);
+        return NULL;
     }
 
-    XaMonoInstance *inst = &c->instances[c->count++];
-    inst->generic_name = xr_strdup(generic_name);
-    inst->generic_decl = generic_decl;
-    inst->type_args = type_args;
-    inst->type_arg_count = type_arg_count;
-    inst->mangled_name = candidate_mangled;
-    inst->is_class_generic = is_class_generic;
-    inst->throw_effect = throw_effect;
-    inst->parent = parent;
-    inst->depth = depth;
+    if (c->count >= c->capacity) {
+        int new_capacity = c->capacity ? c->capacity * 2 : 8;
+        XaMonoInstance *instances = (XaMonoInstance *) xr_realloc(
+            c->instances, (size_t) new_capacity * sizeof(XaMonoInstance));
+        if (!instances) {
+            xr_free(generic_name_copy);
+            xr_free(receiver_type_args);
+            xr_free(declaration_type_args);
+            xr_free(candidate_mangled);
+            mono_report_exact_type_identity(c, generic_name, loc);
+            return NULL;
+        }
+        c->instances = instances;
+        c->capacity = new_capacity;
+    }
+
+    XaMonoInstance *inst = &c->instances[c->count];
+    *inst = (XaMonoInstance) {
+        .generic_name = generic_name_copy,
+        .identity = *identity,
+        .mangled_name = candidate_mangled,
+        .parent = parent,
+        .depth = depth,
+    };
+    inst->identity.receiver_type_args = receiver_type_args;
+    inst->identity.declaration_type_args = declaration_type_args;
+    c->count++;
     return inst->mangled_name;
 }
 
 const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
-                                  XrTypeRef **type_args, int type_arg_count, bool is_class_generic,
+                                  const XaGenericSpecializationFact *identity,
                                   const XrLocation *loc) {
-    return xa_mono_collector_add_effect(c, generic_name, NULL, type_args, type_arg_count,
-                                        is_class_generic, XA_MONO_EFFECT_NONE, loc);
+    return xa_mono_collector_add_exact(c, generic_name, identity, loc);
 }
 
 // Lookup the exact concrete instance.
 static const char *xa_mono_collector_lookup(XaMonoCollector *c, const char *generic_name,
-                                            const AstNode *generic_decl, XrTypeRef **type_args,
-                                            int type_arg_count, XaMonoThrowEffect throw_effect) {
-    if (!c || !generic_name)
+                                            const XaGenericSpecializationFact *identity) {
+    if (!c || !generic_name || !xa_generic_specialization_fact_valid(identity))
         return NULL;
-    for (int i = 0; i < type_arg_count; ++i) {
-        if (mono_type_ref_contains_open_param(c->analyzer, type_args ? type_args[i] : NULL))
-            return NULL;
-    }
-    char *candidate_mangled =
-        mono_effect_mangle(c, generic_name, type_args, type_arg_count, throw_effect);
+    if (mono_specialization_contains_open_type(c, identity))
+        return NULL;
+    char *candidate_mangled = mono_specialization_mangle(c, generic_name, identity);
     if (!candidate_mangled) {
         mono_report_exact_type_identity(c, generic_name, NULL);
         return NULL;
     }
     const char *result = NULL;
     for (int i = 0; i < c->count; i++) {
-        if ((generic_decl && c->instances[i].generic_decl != generic_decl) ||
+        if (c->instances[i].identity.generic_decl != identity->generic_decl ||
+            c->instances[i].identity.owner_decl != identity->owner_decl ||
+            c->instances[i].identity.effect != identity->effect ||
             strcmp(c->instances[i].generic_name, generic_name) != 0)
             continue;
         if (candidate_mangled && strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
@@ -1549,6 +1639,50 @@ static const char *xa_mono_collector_lookup(XaMonoCollector *c, const char *gene
     }
     xr_free(candidate_mangled);
     return result;
+}
+
+static const AstNode *mono_exact_generic_type_decl(XaMonoCollector *collector,
+                                                   const XrTypeRef *type_ref) {
+    if (!collector || !collector->analyzer || !type_ref)
+        return NULL;
+    XrType *semantic = xa_analyzer_get_type_ref_type(collector->analyzer, type_ref);
+    XrClassInfo *nominal =
+        semantic && XR_TYPE_IS_INSTANCE(semantic) ? semantic->instance.class_ref : NULL;
+    XaSymbol *symbol = nominal ? nominal->declaration_symbol : NULL;
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(collector->analyzer, symbol) : NULL;
+    const AstNode *decl = links ? links->nominal_decl_node : NULL;
+    if (!decl || (decl->type != AST_CLASS_DECL && decl->type != AST_STRUCT_DECL))
+        return NULL;
+    return decl;
+}
+
+static const char *xa_mono_collector_lookup_type(XaMonoCollector *collector,
+                                                 const AstNode *generic_decl, XrTypeRef **type_args,
+                                                 int type_arg_count) {
+    if (!collector || !generic_decl || !type_args || type_arg_count <= 0)
+        return NULL;
+    XaGenericSpecializationFact identity = {
+        .generic_decl = generic_decl,
+        .declaration_type_args = type_args,
+        .declaration_type_arg_count = (uint32_t) type_arg_count,
+        .effect = XA_GENERIC_SPECIALIZATION_EFFECT_NONE,
+    };
+    if (!xa_generic_specialization_fact_valid(&identity) ||
+        mono_specialization_contains_open_type(collector, &identity))
+        return NULL;
+    for (int i = 0; i < collector->count; ++i) {
+        const XaMonoInstance *instance = &collector->instances[i];
+        if (instance->identity.generic_decl != generic_decl ||
+            instance->identity.owner_decl != NULL ||
+            instance->identity.effect != XA_GENERIC_SPECIALIZATION_EFFECT_NONE)
+            continue;
+        char *candidate = mono_specialization_mangle(collector, instance->generic_name, &identity);
+        bool matches = candidate && strcmp(instance->mangled_name, candidate) == 0;
+        xr_free(candidate);
+        if (matches)
+            return instance->mangled_name;
+    }
+    return NULL;
 }
 
 // task-221 gap C: rewrite a type annotation naming a monomorphized generic
@@ -1562,8 +1696,9 @@ static void mono_rewrite_type_ref(XrTypeRef *tref, XaMonoCollector *collector) {
     for (int i = 0; i < tref->nchildren; i++)
         mono_rewrite_type_ref(tref->children[i], collector);
     if (tref->kind == XR_TREF_GENERIC && tref->name && tref->nchildren > 0) {
-        const char *mangled = xa_mono_collector_lookup(collector, tref->name, NULL, tref->children,
-                                                       tref->nchildren, XA_MONO_EFFECT_NONE);
+        const AstNode *generic_decl = mono_exact_generic_type_decl(collector, tref);
+        const char *mangled =
+            xa_mono_collector_lookup_type(collector, generic_decl, tref->children, tref->nchildren);
         if (mangled) {
             // The collector's mangled_name is freed when the mono pass ends, but
             // this type ref must survive into post-monomorphization analysis and
@@ -1694,20 +1829,19 @@ static XaGenericDecl *registry_find_call(XaGenericRegistry *registry, const AstN
     XaGenericSpecializationFact fact;
     if (!xa_analyzer_get_generic_specialization(analyzer, call_node, &fact))
         return NULL;
-    return registry_find_decl(registry, fact.generic_decl);
+    XaGenericDecl *fact_decl = registry_find_decl(registry, fact.generic_decl);
+    if (!fact_decl || !xa_generic_specialization_fact_valid(&fact) ||
+        fact.owner_decl != (fact_decl->node->type == AST_METHOD_DECL ? fact_decl->owner : NULL))
+        return NULL;
+    return fact_decl;
 }
 
-static void collect_concrete_owner_generic_methods(AstNode *owner, XaGenericRegistry *registry,
-                                                   bool is_external) {
+static void collect_owner_generic_methods(AstNode *owner, XaGenericRegistry *registry,
+                                          bool is_external) {
     if (!owner || !registry || (owner->type != AST_CLASS_DECL && owner->type != AST_STRUCT_DECL))
         return;
     ClassDeclNode *decl =
         owner->type == AST_CLASS_DECL ? &owner->as.class_decl : &owner->as.struct_decl;
-    // A method on an open generic receiver needs both the receiver tuple and
-    // method-local tuple in its specialization key. Keep that separate contract
-    // fail-closed instead of injecting a method into the open owner skeleton.
-    if (decl->type_param_count > 0 || decl->is_generic_skeleton)
-        return;
     for (int i = 0; decl->methods && i < decl->method_count; ++i) {
         AstNode *method = decl->methods[i];
         if (!method || method->type != AST_METHOD_DECL ||
@@ -1753,7 +1887,7 @@ static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *reg
                                       stmt->as.struct_decl.type_param_count, true, false);
             }
         }
-        collect_concrete_owner_generic_methods(stmt, registry, true);
+        collect_owner_generic_methods(stmt, registry, true);
     }
 }
 
@@ -1841,16 +1975,27 @@ static bool mono_call_is_import_member_generic(const CallExprNode *call,
  * unqualified function parameters are effect-polymorphic. A compiler-inferred
  * fixed constraint does not create another body dimension. Unknown actuals
  * choose MAY_THROW (fail closed). */
-static XaMonoThrowEffect mono_call_throw_effect(const XaGenericDecl *decl, const CallExprNode *call,
-                                                const XaMonoCollector *collector) {
-    if (!decl || !decl->node || decl->node->type != AST_FUNCTION_DECL || !call)
-        return XA_MONO_EFFECT_NONE;
-    const FunctionDeclNode *fn = &decl->node->as.function_decl;
+static XaGenericSpecializationEffect
+mono_call_specialization_effect(const XaGenericDecl *decl, const CallExprNode *call,
+                                const XaMonoCollector *collector) {
+    if (!decl || !decl->node || !call)
+        return XA_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    XrParamNode **params = NULL;
+    int param_count = 0;
+    if (decl->node->type == AST_FUNCTION_DECL) {
+        params = decl->node->as.function_decl.params;
+        param_count = decl->node->as.function_decl.param_count;
+    } else if (decl->node->type == AST_METHOD_DECL) {
+        params = decl->node->as.method_decl.params;
+        param_count = decl->node->as.method_decl.param_count;
+    } else {
+        return XA_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    }
     bool has_poly_callback = false;
     bool all_no_throw = true;
-    int limit = fn->param_count < call->arg_count ? fn->param_count : call->arg_count;
-    for (int i = 0; i < fn->param_count; i++) {
-        const XrParamNode *param = fn->params ? fn->params[i] : NULL;
+    int limit = param_count < call->arg_count ? param_count : call->arg_count;
+    for (int i = 0; i < param_count; i++) {
+        const XrParamNode *param = params ? params[i] : NULL;
         const XrTypeRef *type = param ? param->type : NULL;
         if (!type || type->kind != XR_TREF_FUNCTION || type->requires_nothrow)
             continue;
@@ -1864,8 +2009,23 @@ static XaMonoThrowEffect mono_call_throw_effect(const XaGenericDecl *decl, const
             all_no_throw = false;
     }
     if (!has_poly_callback)
-        return XA_MONO_EFFECT_NONE;
-    return all_no_throw ? XA_MONO_EFFECT_NO_THROW : XA_MONO_EFFECT_MAY_THROW;
+        return XA_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    return all_no_throw ? XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW
+                        : XA_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW;
+}
+
+static XaGenericSpecializationFact
+mono_specialization_identity(const XaGenericDecl *decl, XrTypeRef **type_args, int type_arg_count,
+                             XaGenericSpecializationEffect effect) {
+    if (!decl || type_arg_count < 0)
+        return (XaGenericSpecializationFact) {0};
+    return (XaGenericSpecializationFact) {
+        .generic_decl = decl->node,
+        .owner_decl = decl->node && decl->node->type == AST_METHOD_DECL ? decl->owner : NULL,
+        .declaration_type_args = type_args,
+        .declaration_type_arg_count = (uint32_t) type_arg_count,
+        .effect = effect,
+    };
 }
 
 // Phase 1: Collect generic function/class declarations from top-level program
@@ -1897,7 +2057,7 @@ static void collect_generic_decls(AstNode *root, XaGenericRegistry *registry) {
                                    stmt->as.struct_decl.type_params,
                                    stmt->as.struct_decl.type_param_count);
             }
-            collect_concrete_owner_generic_methods(stmt, registry, false);
+            collect_owner_generic_methods(stmt, registry, false);
         }
     }
 }
@@ -1916,8 +2076,70 @@ static XrLocation mono_node_loc(const AstNode *node) {
 }
 
 static bool mono_publish_specialization(XaMonoCollector *collector, const AstNode *node,
-                                        const XaGenericDecl *decl, XrTypeRef **type_args,
-                                        int type_arg_count);
+                                        const XaGenericSpecializationFact *identity);
+
+static bool mono_call_specialization_identity(XaMonoCollector *collector, const AstNode *node,
+                                              const XaGenericDecl *decl, const CallExprNode *call,
+                                              XaGenericSpecializationEffect effect,
+                                              XaGenericSpecializationFact *out_identity) {
+    if (!collector || !collector->analyzer || !node || !decl || !call || !out_identity)
+        return false;
+    XaGenericSpecializationFact published = {0};
+    if (xa_analyzer_get_generic_specialization(collector->analyzer, node, &published)) {
+        if (!xa_generic_specialization_fact_valid(&published) ||
+            published.generic_decl != decl->node ||
+            published.owner_decl !=
+                (decl->node && decl->node->type == AST_METHOD_DECL ? decl->owner : NULL)) {
+            mono_report_exact_type_identity(collector, decl->name, NULL);
+            return false;
+        }
+        /* Call inference publishes a conservative effect before the whole-body
+         * effect
+         * fixed point has closed.  Monomorphization runs after that fixed
+         * point and owns
+         * the exact executable specialization dimension.  Keep
+         * every declaration/type
+         * coordinate unchanged and finalize only this
+         * dimension on the same call node.
+         */
+        if (published.effect != effect) {
+            published.effect = effect;
+            if (!mono_publish_specialization(collector, node, &published))
+                return false;
+            /* Publishing replaces the node-table-owned pointer arrays.  Read
+             * the
+             * replacement fact before returning it to the collector. */
+            published = (XaGenericSpecializationFact) {0};
+            if (!xa_analyzer_get_generic_specialization(collector->analyzer, node, &published) ||
+                !xa_generic_specialization_fact_valid(&published) ||
+                published.generic_decl != decl->node ||
+                published.owner_decl !=
+                    (decl->node && decl->node->type == AST_METHOD_DECL ? decl->owner : NULL) ||
+                published.effect != effect) {
+                mono_report_exact_type_identity(collector, decl->name, NULL);
+                return false;
+            }
+        }
+        *out_identity = published;
+        return true;
+    }
+
+    if (decl->node && decl->node->type == AST_METHOD_DECL && decl->owner) {
+        const ClassDeclNode *owner = decl->owner->type == AST_CLASS_DECL
+                                         ? &decl->owner->as.class_decl
+                                         : &decl->owner->as.struct_decl;
+        if (owner->type_param_count > 0) {
+            mono_report_exact_type_identity(collector, decl->name, NULL);
+            return false;
+        }
+    }
+    XaGenericSpecializationFact identity =
+        mono_specialization_identity(decl, call->type_args, call->type_arg_count, effect);
+    if (!mono_publish_specialization(collector, node, &identity))
+        return false;
+    *out_identity = identity;
+    return true;
+}
 
 // Phase 2: Walk AST to find generic call sites (CallExpr with type_args)
 static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *registry,
@@ -1936,16 +2158,14 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                 registry_find_call(registry, node, collector ? collector->analyzer : NULL);
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == call->type_arg_count) {
-                if (!mono_publish_specialization(collector, node, decl, call->type_args,
-                                                 call->type_arg_count))
+                XaGenericSpecializationFact identity = {0};
+                XaGenericSpecializationEffect effect =
+                    mono_call_specialization_effect(decl, call, collector);
+                if (!mono_call_specialization_identity(collector, node, decl, call, effect,
+                                                       &identity))
                     return;
-                if (!collector->record_only) {
-                    bool is_cls =
-                        (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
-                    XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                    xa_mono_collector_add_effect(collector, decl->name, decl->node, call->type_args,
-                                                 call->type_arg_count, is_cls, effect, &loc);
-                }
+                if (!collector->record_only)
+                    xa_mono_collector_add_exact(collector, decl->name, &identity, &loc);
             }
         }
         const char *member_name = NULL;
@@ -1954,16 +2174,14 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                 registry_find_call(registry, node, collector ? collector->analyzer : NULL);
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == call->type_arg_count) {
-                if (!mono_publish_specialization(collector, node, decl, call->type_args,
-                                                 call->type_arg_count))
+                XaGenericSpecializationFact identity = {0};
+                XaGenericSpecializationEffect effect =
+                    mono_call_specialization_effect(decl, call, collector);
+                if (!mono_call_specialization_identity(collector, node, decl, call, effect,
+                                                       &identity))
                     return;
-                if (!collector->record_only) {
-                    bool is_cls =
-                        (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
-                    XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                    xa_mono_collector_add_effect(collector, decl->name, decl->node, call->type_args,
-                                                 call->type_arg_count, is_cls, effect, &loc);
-                }
+                if (!collector->record_only)
+                    xa_mono_collector_add_exact(collector, decl->name, &identity, &loc);
             }
         }
         if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
@@ -1972,13 +2190,14 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             if (decl && decl->node && decl->node->type == AST_METHOD_DECL &&
                 (!local_only || !decl->is_external) &&
                 decl->type_param_count == call->type_arg_count) {
-                if (!mono_publish_specialization(collector, node, decl, call->type_args,
-                                                 call->type_arg_count))
+                XaGenericSpecializationFact identity = {0};
+                XaGenericSpecializationEffect effect =
+                    mono_call_specialization_effect(decl, call, collector);
+                if (!mono_call_specialization_identity(collector, node, decl, call, effect,
+                                                       &identity))
                     return;
                 if (!collector->record_only)
-                    xa_mono_collector_add_effect(collector, decl->name, decl->node, call->type_args,
-                                                 call->type_arg_count, false, XA_MONO_EFFECT_NONE,
-                                                 &loc);
+                    xa_mono_collector_add_exact(collector, decl->name, &identity, &loc);
             }
         }
         // Recurse into callee and arguments
@@ -2000,8 +2219,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == ne->type_arg_count) {
                 XrLocation loc = mono_node_loc(node);
-                xa_mono_collector_add_effect(collector, decl->name, decl->node, ne->type_args,
-                                             ne->type_arg_count, true, XA_MONO_EFFECT_NONE, &loc);
+                XaGenericSpecializationFact identity = mono_specialization_identity(
+                    decl, ne->type_args, ne->type_arg_count, XA_GENERIC_SPECIALIZATION_EFFECT_NONE);
+                xa_mono_collector_add_exact(collector, decl->name, &identity, &loc);
             }
         }
         for (int i = 0; i < ne->arg_count; i++)
@@ -2018,8 +2238,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == sl->type_arg_count) {
                 XrLocation loc = mono_node_loc(node);
-                xa_mono_collector_add_effect(collector, decl->name, decl->node, sl->type_args,
-                                             sl->type_arg_count, true, XA_MONO_EFFECT_NONE, &loc);
+                XaGenericSpecializationFact identity = mono_specialization_identity(
+                    decl, sl->type_args, sl->type_arg_count, XA_GENERIC_SPECIALIZATION_EFFECT_NONE);
+                xa_mono_collector_add_exact(collector, decl->name, &identity, &loc);
             }
         }
         for (int i = 0; i < sl->field_count; i++)
@@ -2287,7 +2508,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     }
 }
 
-static bool mono_find_private_target(XaAnalyzer *analyzer, const AstNode *generic_decl,
+static bool mono_find_private_target(XaAnalyzer *analyzer,
+                                     const XaGenericSpecializationFact *identity,
                                      const char *export_name, int *spec_index_out,
                                      AstNode **target_decl_out) {
     if (spec_index_out)
@@ -2295,7 +2517,8 @@ static bool mono_find_private_target(XaAnalyzer *analyzer, const AstNode *generi
     if (target_decl_out)
         *target_decl_out = NULL;
     XrModuleGraph *graph = analyzer ? (XrModuleGraph *) analyzer->graph : NULL;
-    if (!graph || !generic_decl || !export_name || !spec_index_out || !target_decl_out)
+    if (!graph || !xa_generic_specialization_fact_valid(identity) || !export_name ||
+        !spec_index_out || !target_decl_out)
         return false;
     for (int spec_index = 0; spec_index < graph->spec_count; ++spec_index) {
         AstNode *root = graph->specs[spec_index].ast;
@@ -2303,7 +2526,7 @@ static bool mono_find_private_target(XaAnalyzer *analyzer, const AstNode *generi
             continue;
         bool owns_generic = false;
         for (int i = 0; i < root->as.program.count; ++i)
-            owns_generic |= root->as.program.statements[i] == generic_decl;
+            owns_generic |= root->as.program.statements[i] == identity->generic_decl;
         if (!owns_generic)
             continue;
         for (int i = 0; i < root->as.program.count; ++i) {
@@ -2314,7 +2537,11 @@ static bool mono_find_private_target(XaAnalyzer *analyzer, const AstNode *generi
                 continue;
             XaGenericSpecializationFact fact;
             if (!xa_analyzer_get_generic_specialization(analyzer, candidate, &fact) ||
-                fact.generic_decl != generic_decl)
+                !xa_generic_specialization_fact_valid(&fact) ||
+                fact.generic_decl != identity->generic_decl ||
+                fact.owner_decl != identity->owner_decl || fact.effect != identity->effect ||
+                fact.receiver_type_arg_count != identity->receiver_type_arg_count ||
+                fact.declaration_type_arg_count != identity->declaration_type_arg_count)
                 continue;
             *spec_index_out = spec_index;
             *target_decl_out = candidate;
@@ -2346,9 +2573,10 @@ static bool mono_program_append(AstNode *root, AstNode *statement) {
 
 static const char *mono_append_specialized_import(AstNode *root, uint32_t imported_symbol_id,
                                                   const XaGenericDecl *decl,
+                                                  const XaGenericSpecializationFact *identity,
                                                   const char *export_name, XaAnalyzer *analyzer) {
     if (!root || root->type != AST_PROGRAM || imported_symbol_id == 0 || !decl || !decl->node ||
-        !export_name || !analyzer)
+        !identity || !export_name || !analyzer)
         return NULL;
     ProgramNode *program = &root->as.program;
     XrArena *arena = program->arena;
@@ -2357,7 +2585,7 @@ static const char *mono_append_specialized_import(AstNode *root, uint32_t import
 
     int target_spec_index = -1;
     AstNode *target_decl = NULL;
-    if (!mono_find_private_target(analyzer, decl->node, export_name, &target_spec_index,
+    if (!mono_find_private_target(analyzer, identity, export_name, &target_spec_index,
                                   &target_decl))
         return NULL;
 
@@ -2457,22 +2685,30 @@ static void mono_report_rewrite_failure(XaMonoCollector *collector, const AstNod
 }
 
 static bool mono_publish_specialization(XaMonoCollector *collector, const AstNode *node,
-                                        const XaGenericDecl *decl, XrTypeRef **type_args,
-                                        int type_arg_count) {
-    if (!collector || !collector->analyzer || !node || !decl || !decl->node || !type_args ||
-        type_arg_count <= 0) {
+                                        const XaGenericSpecializationFact *identity) {
+    if (!collector || !collector->analyzer || !node ||
+        !xa_generic_specialization_fact_valid(identity)) {
+        mono_report_exact_type_identity(collector, NULL, NULL);
+        return false;
+    }
+    if (xa_analyzer_set_generic_specialization(collector->analyzer, node, identity))
+        return true;
+    mono_report_exact_type_identity(collector, NULL, NULL);
+    return false;
+}
+
+static bool mono_get_specialization(XaMonoCollector *collector, const AstNode *node,
+                                    const XaGenericDecl *decl,
+                                    XaGenericSpecializationFact *identity) {
+    if (!collector || !collector->analyzer || !node || !decl || !identity ||
+        !xa_analyzer_get_generic_specialization(collector->analyzer, node, identity) ||
+        !xa_generic_specialization_fact_valid(identity) || identity->generic_decl != decl->node ||
+        identity->owner_decl !=
+            (decl->node && decl->node->type == AST_METHOD_DECL ? decl->owner : NULL)) {
         mono_report_exact_type_identity(collector, decl ? decl->name : NULL, NULL);
         return false;
     }
-    XaGenericSpecializationFact fact = {
-        .generic_decl = decl->node,
-        .type_args = type_args,
-        .type_arg_count = (uint32_t) type_arg_count,
-    };
-    if (xa_analyzer_set_generic_specialization(collector->analyzer, node, &fact))
-        return true;
-    mono_report_exact_type_identity(collector, decl->name, NULL);
-    return false;
+    return true;
 }
 
 // Phase 3: Rewrite call sites — replace callee name with mangled name
@@ -2487,20 +2723,17 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_VARIABLE) {
             XaGenericDecl *decl = registry_find_call(registry, node, collector->analyzer);
             if (decl) {
-                XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                const char *mangled =
-                    xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
-                                             call->type_arg_count, effect);
+                XaGenericSpecializationFact identity = {0};
+                if (!mono_get_specialization(collector, node, decl, &identity))
+                    return;
+                const char *mangled = xa_mono_collector_lookup(collector, decl->name, &identity);
                 if (mangled) {
-                    if (!mono_publish_specialization(collector, node, decl, call->type_args,
-                                                     call->type_arg_count))
-                        return;
                     uint32_t original_symbol_id = call->callee->as.variable.symbol_id;
                     XaSymbol *symbol =
                         xa_analyzer_symbol_by_id(collector->analyzer, original_symbol_id);
                     if (decl->is_external && symbol && symbol->is_imported) {
                         const char *alias = mono_append_specialized_import(
-                            collector->rewrite_root, original_symbol_id, decl, mangled,
+                            collector->rewrite_root, original_symbol_id, decl, &identity, mangled,
                             collector->analyzer);
                         if (!alias) {
                             mono_report_rewrite_failure(collector, node, decl->name);
@@ -2509,30 +2742,43 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                         call->callee->as.variable.name = (char *) alias;
                         call->callee->as.variable.symbol_id = 0;
                     } else {
-                        // Old names are compile-lifetime allocations.
-                        call->callee->as.variable.name = xr_strdup(mangled);
+                        char *name = xr_strdup(mangled);
+                        if (!name) {
+                            mono_report_rewrite_failure(collector, node, decl->name);
+                            return;
+                        }
+                        call->callee->as.variable.name = name;
                         if (decl->inject_clone)
                             call->callee->as.variable.symbol_id = 0;
                     }
                     // Clear type args (no longer generic call)
                     call->type_args = NULL;
                     call->type_arg_count = 0;
+                } else if (!mono_specialization_contains_open_type(collector, &identity)) {
+                    mono_report_rewrite_failure(collector, node, decl->name);
+                    return;
                 }
             }
         }
         if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
             XaGenericDecl *decl = registry_find_call(registry, node, collector->analyzer);
             if (decl && decl->node && decl->node->type == AST_METHOD_DECL) {
-                const char *mangled =
-                    xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
-                                             call->type_arg_count, XA_MONO_EFFECT_NONE);
+                XaGenericSpecializationFact identity = {0};
+                if (!mono_get_specialization(collector, node, decl, &identity))
+                    return;
+                const char *mangled = xa_mono_collector_lookup(collector, decl->name, &identity);
                 if (mangled) {
-                    if (!mono_publish_specialization(collector, node, decl, call->type_args,
-                                                     call->type_arg_count))
+                    char *name = xr_strdup(mangled);
+                    if (!name) {
+                        mono_report_rewrite_failure(collector, node, decl->name);
                         return;
-                    call->callee->as.member_access.name = xr_strdup(mangled);
+                    }
+                    call->callee->as.member_access.name = name;
                     call->type_args = NULL;
                     call->type_arg_count = 0;
+                } else if (!mono_specialization_contains_open_type(collector, &identity)) {
+                    mono_report_rewrite_failure(collector, node, decl->name);
+                    return;
                 }
             }
         }
@@ -2540,20 +2786,17 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         if (mono_call_is_import_member_generic(call, import_aliases, &member_name)) {
             XaGenericDecl *decl = registry_find_call(registry, node, collector->analyzer);
             if (decl && decl->rewrite_member_access) {
-                XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
-                const char *mangled =
-                    xa_mono_collector_lookup(collector, decl->name, decl->node, call->type_args,
-                                             call->type_arg_count, effect);
+                XaGenericSpecializationFact identity = {0};
+                if (!mono_get_specialization(collector, node, decl, &identity))
+                    return;
+                const char *mangled = xa_mono_collector_lookup(collector, decl->name, &identity);
                 if (mangled) {
-                    if (!mono_publish_specialization(collector, node, decl, call->type_args,
-                                                     call->type_arg_count))
-                        return;
                     AstNode *object = call->callee->as.member_access.object;
                     uint32_t namespace_symbol_id =
                         object && object->type == AST_VARIABLE ? object->as.variable.symbol_id : 0u;
-                    const char *alias =
-                        mono_append_specialized_import(collector->rewrite_root, namespace_symbol_id,
-                                                       decl, mangled, collector->analyzer);
+                    const char *alias = mono_append_specialized_import(
+                        collector->rewrite_root, namespace_symbol_id, decl, &identity, mangled,
+                        collector->analyzer);
                     if (!alias) {
                         mono_report_rewrite_failure(collector, node, decl->name);
                         return;
@@ -2564,6 +2807,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                     callee->as.variable.name = (char *) alias;
                     call->type_args = NULL;
                     call->type_arg_count = 0;
+                } else if (!mono_specialization_contains_open_type(collector, &identity)) {
+                    mono_report_rewrite_failure(collector, node, decl->name);
+                    return;
                 }
             }
         }
@@ -2583,13 +2829,20 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         if (ne->type_arg_count > 0 && ne->class_name) {
             XaGenericDecl *decl = registry_find(registry, ne->class_name);
             if (decl) {
-                const char *mangled =
-                    xa_mono_collector_lookup(collector, decl->name, decl->node, ne->type_args,
-                                             ne->type_arg_count, XA_MONO_EFFECT_NONE);
+                XaGenericSpecializationFact identity = mono_specialization_identity(
+                    decl, ne->type_args, ne->type_arg_count, XA_GENERIC_SPECIALIZATION_EFFECT_NONE);
+                const char *mangled = xa_mono_collector_lookup(collector, decl->name, &identity);
                 if (mangled) {
-                    // Old class_name is arena-allocated, do not free.
-                    ne->class_name = xr_strdup(mangled);
+                    char *name = xr_strdup(mangled);
+                    if (!name) {
+                        mono_report_rewrite_failure(collector, node, decl->name);
+                        return;
+                    }
+                    ne->class_name = name;
                     // Keep type_args/type_arg_count for display and diagnostics.
+                } else if (!mono_specialization_contains_open_type(collector, &identity)) {
+                    mono_report_rewrite_failure(collector, node, decl->name);
+                    return;
                 }
             }
         }
@@ -2604,14 +2857,21 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         if (sl->type_arg_count > 0 && sl->struct_name) {
             XaGenericDecl *decl = registry_find(registry, sl->struct_name);
             if (decl) {
-                const char *mangled =
-                    xa_mono_collector_lookup(collector, decl->name, decl->node, sl->type_args,
-                                             sl->type_arg_count, XA_MONO_EFFECT_NONE);
+                XaGenericSpecializationFact identity = mono_specialization_identity(
+                    decl, sl->type_args, sl->type_arg_count, XA_GENERIC_SPECIALIZATION_EFFECT_NONE);
+                const char *mangled = xa_mono_collector_lookup(collector, decl->name, &identity);
                 if (mangled) {
-                    // Old struct_name is arena-allocated, do not free.
-                    sl->struct_name = xr_strdup(mangled);
+                    char *name = xr_strdup(mangled);
+                    if (!name) {
+                        mono_report_rewrite_failure(collector, node, decl->name);
+                        return;
+                    }
+                    sl->struct_name = name;
                     sl->type_args = NULL;
                     sl->type_arg_count = 0;
+                } else if (!mono_specialization_contains_open_type(collector, &identity)) {
+                    mono_report_rewrite_failure(collector, node, decl->name);
+                    return;
                 }
             }
         }
@@ -2866,17 +3126,33 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
     }
 }
 
-static void qualify_mono_hof_callback_params(AstNode *cloned, const AstNode *origin,
-                                             XaMonoThrowEffect effect) {
-    if (!cloned || !origin || cloned->type != AST_FUNCTION_DECL ||
-        origin->type != AST_FUNCTION_DECL || effect != XA_MONO_EFFECT_NO_THROW)
-        return;
-    FunctionDeclNode *dst = &cloned->as.function_decl;
-    const FunctionDeclNode *src = &origin->as.function_decl;
-    int limit = dst->param_count < src->param_count ? dst->param_count : src->param_count;
+static bool qualify_mono_hof_callback_params(AstNode *cloned, const AstNode *origin,
+                                             XaGenericSpecializationEffect effect) {
+    if (!cloned || !origin)
+        return false;
+    if (effect != XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW)
+        return true;
+    XrParamNode **dst_params = NULL;
+    XrParamNode **src_params = NULL;
+    int dst_count = 0;
+    int src_count = 0;
+    if (cloned->type == AST_FUNCTION_DECL && origin->type == AST_FUNCTION_DECL) {
+        dst_params = cloned->as.function_decl.params;
+        dst_count = cloned->as.function_decl.param_count;
+        src_params = origin->as.function_decl.params;
+        src_count = origin->as.function_decl.param_count;
+    } else if (cloned->type == AST_METHOD_DECL && origin->type == AST_METHOD_DECL) {
+        dst_params = cloned->as.method_decl.params;
+        dst_count = cloned->as.method_decl.param_count;
+        src_params = origin->as.method_decl.params;
+        src_count = origin->as.method_decl.param_count;
+    } else {
+        return false;
+    }
+    int limit = dst_count < src_count ? dst_count : src_count;
     for (int i = 0; i < limit; i++) {
-        XrParamNode *dst_param = dst->params ? dst->params[i] : NULL;
-        const XrParamNode *src_param = src->params ? src->params[i] : NULL;
+        XrParamNode *dst_param = dst_params ? dst_params[i] : NULL;
+        const XrParamNode *src_param = src_params ? src_params[i] : NULL;
         if (!dst_param || !dst_param->type || !src_param || !src_param->type ||
             src_param->type->kind != XR_TREF_FUNCTION || src_param->type->requires_nothrow)
             continue;
@@ -2884,11 +3160,12 @@ static void qualify_mono_hof_callback_params(AstNode *cloned, const AstNode *ori
          * Copy just this node before adding the inferred specialization bit. */
         XrTypeRef *qualified = (XrTypeRef *) xr_calloc(1, sizeof(XrTypeRef));
         if (!qualified)
-            continue;
+            return false;
         *qualified = *dst_param->type;
         qualified->requires_nothrow = true;
         dst_param->type = qualified;
     }
+    return true;
 }
 
 static bool mono_append_method_clone(XrArena *arena, AstNode *owner_node, AstNode *method) {
@@ -2935,27 +3212,34 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
     for (int i = 0; i < collector->count; i++) {
         XaMonoInstance *inst = &collector->instances[i];
-        XaGenericDecl *decl = inst->generic_decl ? registry_find_decl(registry, inst->generic_decl)
-                                                 : registry_find(registry, inst->generic_name);
-        if (!decl || !decl->node)
+        XaGenericDecl *decl = registry_find_decl(registry, inst->identity.generic_decl);
+        if (!decl || !decl->node ||
+            inst->identity.owner_decl !=
+                (decl->node->type == AST_METHOD_DECL ? decl->owner : NULL) ||
+            !mono_specialization_supported(&inst->identity)) {
+            mono_report_exact_type_identity(collector, inst->generic_name, NULL);
             continue;
+        }
         if (!decl->inject_clone)
             continue;
 
         // Build type map from generic params → concrete types
         int map_count = decl->type_param_count;
-        if (map_count > inst->type_arg_count)
-            map_count = inst->type_arg_count;
+        if (map_count < 0 || (uint32_t) map_count != inst->identity.declaration_type_arg_count) {
+            mono_report_exact_type_identity(collector, inst->generic_name, NULL);
+            continue;
+        }
 
         XrMonoTypeMap *map = (XrMonoTypeMap *) xr_calloc(map_count, sizeof(XrMonoTypeMap));
         if (!map)
             continue;
         for (int j = 0; j < map_count; j++) {
             map[j].param_name = decl->type_params[j]->name;
-            map[j].concrete_type = inst->type_args[j];
+            map[j].concrete_type = inst->identity.declaration_type_args[j];
             map[j].concrete_semantic_type =
                 collector->analyzer
-                    ? xa_analyzer_get_type_ref_type(collector->analyzer, inst->type_args[j])
+                    ? xa_analyzer_get_type_ref_type(collector->analyzer,
+                                                    inst->identity.declaration_type_args[j])
                     : NULL;
         }
 
@@ -2975,7 +3259,10 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.function_decl.name = xr_strdup(inst->mangled_name);
             cloned->as.function_decl.type_param_count = 0;
             cloned->as.function_decl.type_params = NULL;
-            qualify_mono_hof_callback_params(cloned, decl->node, inst->throw_effect);
+            if (!qualify_mono_hof_callback_params(cloned, decl->node, inst->identity.effect)) {
+                mono_report_exact_type_identity(collector, inst->generic_name, NULL);
+                continue;
+            }
         } else if (cloned->type == AST_CLASS_DECL) {
             xr_free(cloned->as.class_decl.name);
             cloned->as.class_decl.name = xr_strdup(inst->mangled_name);
@@ -2985,14 +3272,17 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.class_decl.generic_origin_name = xr_strdup(inst->generic_name);
             cloned->as.class_decl.display_name = xr_strdup(inst->generic_name);
             /* Store concrete type arg display names for cold typename/debug metadata. */
-            if (inst->type_arg_count > 0 && inst->type_args) {
-                const char **names =
-                    (const char **) xr_calloc(inst->type_arg_count, sizeof(const char *));
+            if (inst->identity.declaration_type_arg_count > 0u &&
+                inst->identity.declaration_type_args) {
+                const char **names = (const char **) xr_calloc(
+                    inst->identity.declaration_type_arg_count, sizeof(const char *));
                 if (names) {
-                    for (int ti = 0; ti < inst->type_arg_count; ti++)
-                        names[ti] = mono_type_display_name(inst->type_args[ti]);
+                    for (uint32_t ti = 0u; ti < inst->identity.declaration_type_arg_count; ++ti)
+                        names[ti] =
+                            mono_type_display_name(inst->identity.declaration_type_args[ti]);
                     cloned->as.class_decl.mono_type_arg_names = names;
-                    cloned->as.class_decl.mono_type_arg_count = inst->type_arg_count;
+                    cloned->as.class_decl.mono_type_arg_count =
+                        (int) inst->identity.declaration_type_arg_count;
                 }
             }
             if (decl->node && decl->node->type == AST_CLASS_DECL) {
@@ -3006,14 +3296,17 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.struct_decl.is_monomorphized = true;
             cloned->as.struct_decl.generic_origin_name = xr_strdup(inst->generic_name);
             cloned->as.struct_decl.display_name = xr_strdup(inst->generic_name);
-            if (inst->type_arg_count > 0 && inst->type_args) {
-                const char **names =
-                    (const char **) xr_calloc(inst->type_arg_count, sizeof(const char *));
+            if (inst->identity.declaration_type_arg_count > 0u &&
+                inst->identity.declaration_type_args) {
+                const char **names = (const char **) xr_calloc(
+                    inst->identity.declaration_type_arg_count, sizeof(const char *));
                 if (names) {
-                    for (int ti = 0; ti < inst->type_arg_count; ti++)
-                        names[ti] = mono_type_display_name(inst->type_args[ti]);
+                    for (uint32_t ti = 0u; ti < inst->identity.declaration_type_arg_count; ++ti)
+                        names[ti] =
+                            mono_type_display_name(inst->identity.declaration_type_args[ti]);
                     cloned->as.struct_decl.mono_type_arg_names = names;
-                    cloned->as.struct_decl.mono_type_arg_count = inst->type_arg_count;
+                    cloned->as.struct_decl.mono_type_arg_count =
+                        (int) inst->identity.declaration_type_arg_count;
                 }
             }
             if (decl->node && decl->node->type == AST_STRUCT_DECL) {
@@ -3024,10 +3317,13 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.method_decl.name = xr_strdup(inst->mangled_name);
             cloned->as.method_decl.type_param_count = 0;
             cloned->as.method_decl.type_params = NULL;
+            if (!qualify_mono_hof_callback_params(cloned, decl->node, inst->identity.effect)) {
+                mono_report_exact_type_identity(collector, inst->generic_name, NULL);
+                continue;
+            }
         }
 
-        if (!mono_publish_specialization(collector, cloned, decl, inst->type_args,
-                                         inst->type_arg_count))
+        if (!mono_publish_specialization(collector, cloned, &inst->identity))
             continue;
 
         if (cloned->type == AST_METHOD_DECL) {

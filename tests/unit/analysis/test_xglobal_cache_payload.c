@@ -10,8 +10,31 @@
 
 #include "../test_framework.h"
 #include "../../../src/analysis/xglobal_summary.h"
+#include "../../../src/base/xhash.h"
 #include "../../../src/base/xmalloc.h"
+#include <inttypes.h>
 #include <string.h>
+
+static void refresh_cache_payload_hash(char *payload) {
+    char *body = payload;
+    char *encoded_hash;
+    char hash_text[17];
+    uint64_t body_hash;
+
+    ASSERT_NOT_NULL(payload);
+    for (uint32_t i = 0; i < 3; i++) {
+        body = strchr(body, '\n');
+        ASSERT_NOT_NULL(body);
+        body++;
+    }
+    body_hash = xr_hash_bytes64(body, strlen(body));
+    if (body_hash == 0)
+        body_hash = 1;
+    snprintf(hash_text, sizeof(hash_text), "%016" PRIx64, body_hash);
+    encoded_hash = strstr(payload, " payload=");
+    ASSERT_NOT_NULL(encoded_hash);
+    memcpy(encoded_hash + strlen(" payload="), hash_text, 16);
+}
 
 static void finalize_object_shape_fixture(XgObjectShapeSummary *shape) {
     if (!shape)
@@ -128,9 +151,10 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     inst.specialized_func_id = 31;
     inst.root_callsite_id = call.callsite_id;
     inst.name_id = xg_name_id("box");
-    inst.type_key = UINT64_C(0x100000190);
-    inst.type_arg_key_start = UINT64_C(0x200000191);
-    inst.type_arg_count = 1;
+    inst.declaration_type_key = UINT64_C(0x100000190);
+    inst.declaration_type_arg_key_start = UINT64_C(0x200000191);
+    inst.declaration_type_arg_count = 1;
+    inst.specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW;
     inst.source_span_id = 6;
     inst.kind = XG_GENERIC_INST_FUNCTION;
     inst.flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_SPECIALIZED_BODY;
@@ -312,9 +336,10 @@ static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
     body_use.origin_body_func_id = 11;
     body_use.specialized_body_func_id = 31;
     body_use.root_callsite_id = 1;
-    body_use.type_key = UINT64_C(0x100000190);
-    body_use.type_arg_key_start = UINT64_C(0x200000191);
-    body_use.type_arg_count = 1;
+    body_use.declaration_type_key = UINT64_C(0x100000190);
+    body_use.declaration_type_arg_key_start = UINT64_C(0x200000191);
+    body_use.declaration_type_arg_count = 1;
+    body_use.specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW;
     body_use.estimated_body_size = 12;
     body_use.flags = XG_GENERIC_BODY_EXPLICIT_ROOT;
     body_use.body_use_hash = UINT64_C(0xabcd);
@@ -590,6 +615,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_EQ_UINT(info.key_hash, xg_evidence_cache_key_hash(&expected));
     ASSERT_EQ_UINT(info.body_len, info.payload_bytes);
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-payload v2"));
+    ASSERT_NOT_NULL(strstr(payload, "xg-cache-key v1 schema=57"));
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-request v1"));
     ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 param_storages=2 callsites=1"));
     ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
@@ -620,6 +646,88 @@ TEST(cache_payload_parse_exposes_validated_body) {
                    XG_INTERFACE_OBJECT_USE_VALUE | XG_INTERFACE_OBJECT_USE_PARAM);
     ASSERT_STR_EQ(materialized.link_deps[0].name, "mem.copy");
     ASSERT_EQ_UINT(materialized.generic_insts[0].specialized_func_id, 31);
+
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(cache_payload_roundtrips_generic_method_identity) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence materialized = {0};
+    XgGenericInstSummary inst = {
+        .generic_inst_id = 3,
+        .module_id = 7,
+        .receiver_class_id = 20,
+        .receiver_type_key = UINT64_C(0x100000181),
+        .receiver_type_arg_key_start = UINT64_C(0x200000182),
+        .receiver_type_arg_count = 1,
+        .declaration_type_key = UINT64_C(0x300000190),
+        .declaration_type_arg_key_start = UINT64_C(0x400000191),
+        .declaration_type_arg_count = 1,
+        .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW,
+        .kind = XG_GENERIC_INST_METHOD,
+        .flags = XG_GENERIC_INST_CONCRETE_TYPES,
+    };
+    XgGenericBodyUseSummary body_use = {
+        .use_id = 91,
+        .generic_inst_id = 3,
+        .module_id = 7,
+        .receiver_class_id = 20,
+        .receiver_type_key = UINT64_C(0x100000181),
+        .receiver_type_arg_key_start = UINT64_C(0x200000182),
+        .receiver_type_arg_count = 1,
+        .declaration_type_key = UINT64_C(0x300000190),
+        .declaration_type_arg_key_start = UINT64_C(0x400000191),
+        .declaration_type_arg_count = 1,
+        .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW,
+        .estimated_body_size = 12,
+        .flags = XG_GENERIC_BODY_EXPLICIT_ROOT,
+        .body_use_hash = UINT64_C(0xabcd),
+    };
+    char *payload;
+
+    ev.key.module_id = 7;
+    ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_body_use(&ev, &body_use));
+
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v11 generic_body_uses=1"));
+    ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
+    ASSERT_EQ_UINT(materialized.ngeneric_insts, 1);
+    ASSERT_EQ_UINT(materialized.ngeneric_body_uses, 1);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].receiver_class_id, inst.receiver_class_id);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].receiver_type_key, inst.receiver_type_key);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].receiver_type_arg_key_start,
+                   inst.receiver_type_arg_key_start);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].receiver_type_arg_count,
+                   inst.receiver_type_arg_count);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].declaration_type_key,
+                   inst.declaration_type_key);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].declaration_type_arg_key_start,
+                   inst.declaration_type_arg_key_start);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].declaration_type_arg_count,
+                   inst.declaration_type_arg_count);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].specialization_effect,
+                   inst.specialization_effect);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].receiver_class_id,
+                   body_use.receiver_class_id);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].receiver_type_key,
+                   body_use.receiver_type_key);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].receiver_type_arg_key_start,
+                   body_use.receiver_type_arg_key_start);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].receiver_type_arg_count,
+                   body_use.receiver_type_arg_count);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].declaration_type_key,
+                   body_use.declaration_type_key);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].declaration_type_arg_key_start,
+                   body_use.declaration_type_arg_key_start);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].declaration_type_arg_count,
+                   body_use.declaration_type_arg_count);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].specialization_effect,
+                   body_use.specialization_effect);
 
     xg_global_evidence_free(&materialized);
     xr_free(payload);
@@ -793,7 +901,7 @@ TEST(cache_payload_materializes_global_evidence) {
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
     ASSERT_NOT_NULL(strstr(payload, "payload-global v1"));
-    ASSERT_NOT_NULL(strstr(payload, "payload-extra v10 generic_body_uses=1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v11 generic_body_uses=1"));
     expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     materialized_key =
@@ -822,13 +930,20 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.nhash_eqs, 1);
     ASSERT_EQ_UINT(materialized.modules[0].flags, XG_MODULE_EMBEDDED_SOURCE);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].use_id, 91);
-    ASSERT_EQ_UINT(materialized.generic_insts[0].type_key, UINT64_C(0x100000190));
-    ASSERT_EQ_UINT(materialized.generic_insts[0].type_arg_key_start, UINT64_C(0x200000191));
+    ASSERT_EQ_UINT(materialized.generic_insts[0].declaration_type_key,
+                   UINT64_C(0x100000190));
+    ASSERT_EQ_UINT(materialized.generic_insts[0].declaration_type_arg_key_start,
+                   UINT64_C(0x200000191));
+    ASSERT_EQ_UINT(materialized.generic_insts[0].specialization_effect,
+                   XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW);
     ASSERT_EQ_UINT(materialized.classes[0].generic_type_key, UINT64_C(0x300000384));
     ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_key_start, UINT64_C(0x40000038e));
-    ASSERT_EQ_UINT(materialized.generic_body_uses[0].type_key, UINT64_C(0x100000190));
-    ASSERT_EQ_UINT(materialized.generic_body_uses[0].type_arg_key_start,
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].declaration_type_key,
+                   UINT64_C(0x100000190));
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].declaration_type_arg_key_start,
                    UINT64_C(0x200000191));
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].specialization_effect,
+                   XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW);
     ASSERT_EQ_UINT(materialized.object_shapes[0].object_shape_id, 101);
     ASSERT_EQ_UINT(materialized.object_shapes[0].domain, XG_OBJECT_DOMAIN_STRUCT);
     ASSERT_EQ_UINT(materialized.json_codecs[0].input_shape_id, 101);
@@ -844,6 +959,16 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.interface_impls[0].type_contract_complete, 1);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].source_node_id, 104);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].use_kind, XG_INTERFACE_USE_REF);
+
+    char *extra_version = strstr(payload, "payload-extra v11");
+    ASSERT_NOT_NULL(extra_version);
+    memcpy(extra_version, "payload-extra v10", strlen("payload-extra v10"));
+    refresh_cache_payload_hash(payload);
+    XgEvidenceCachePayloadInfo stale_info;
+    ASSERT(xg_evidence_cache_payload_parse(payload, &stale_info));
+    XgGlobalEvidence rejected = {0};
+    ASSERT(!xg_evidence_cache_payload_materialize(payload, &rejected));
+    xg_global_evidence_free(&rejected);
 
     xg_global_evidence_free(&materialized);
     xr_free(payload);
@@ -1343,6 +1468,7 @@ RUN_TEST(cache_payload_parse_rejects_body_drift);
 RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
 RUN_TEST(cache_payload_parse_rejects_request_drift);
 RUN_TEST(cache_payload_materializes_global_evidence);
+RUN_TEST(cache_payload_roundtrips_generic_method_identity);
 RUN_TEST(cache_payload_imports_package_with_id_remap);
 RUN_TEST(cache_payload_import_reuses_module_stub_without_duplicate_module);
 RUN_TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module);

@@ -119,19 +119,43 @@ typedef struct XaNodeCallableTargetSetEntry {
     XaCallableTargetSetFact fact;
 } XaNodeCallableTargetSetEntry;
 
+/* Effect-polymorphic generic bodies have one explicit specialization
+ * dimension in addition to
+ * their concrete types. NONE means the declaration
+ * has no effect-polymorphic callback parameter;
+ * it is not an unknown value. */
+typedef enum XaGenericSpecializationEffect {
+    XA_GENERIC_SPECIALIZATION_EFFECT_NONE = 0,
+    XA_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW,
+    XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW,
+} XaGenericSpecializationEffect;
+
 /* Exact generic specialization selected before monomorphization rewrites the
  * call or declaration
- * into its non-generic executable form. The declaration
- * and type refs are AST-owned; the node
- * table owns only the copied pointer
- * array. Xglobal consumes this fact instead of reconstructing
- * semantic
- * identity from a mangled name or display spelling. */
+ * into its non-generic executable form. A method identity
+ * has two independently bounded tuples:
+ * receiver_type_args specialize its
+ * source owner and declaration_type_args specialize the
+ * generic declaration.
+ * Functions, classes, and structs have no owner or receiver tuple. The
+ *
+ * declarations and type refs are AST-owned; the node table owns both copied
+ * pointer arrays.
+ *
+ * Xglobal consumes this fact instead of reconstructing semantic identity from
+ * a mangled name or
+ * display spelling. */
 typedef struct XaGenericSpecializationFact {
     const struct AstNode *generic_decl;
-    struct XrTypeRef **type_args;
-    uint32_t type_arg_count;
+    const struct AstNode *owner_decl;
+    struct XrTypeRef **receiver_type_args;
+    uint32_t receiver_type_arg_count;
+    struct XrTypeRef **declaration_type_args;
+    uint32_t declaration_type_arg_count;
+    XaGenericSpecializationEffect effect;
 } XaGenericSpecializationFact;
+
+XR_FUNC bool xa_generic_specialization_fact_valid(const XaGenericSpecializationFact *fact);
 
 XR_FUNC XaNodeTable *xa_node_table_new(void);
 XR_FUNC void xa_node_table_free(XaNodeTable *t);

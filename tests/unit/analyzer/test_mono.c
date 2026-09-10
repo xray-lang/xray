@@ -518,9 +518,16 @@ TEST(mono_collector_basic) {
     xa_mono_collector_init(&c);
     ASSERT_EQ(c.count, 0);
 
+    AstNode declaration = {.type = AST_FUNCTION_DECL};
+    declaration.as.function_decl.type_param_count = 1;
     XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *args[] = {&int_t};
-    const char *name = xa_mono_collector_add(&c, "identity", args, 1, false, NULL);
+    XaGenericSpecializationFact identity = {
+        .generic_decl = &declaration,
+        .declaration_type_args = args,
+        .declaration_type_arg_count = 1u,
+    };
+    const char *name = xa_mono_collector_add(&c, "identity", &identity, NULL);
     ASSERT(name != NULL);
     ASSERT_STR_EQ(name, "identity$i64");
     ASSERT_EQ(c.count, 1);
@@ -532,27 +539,105 @@ TEST(mono_collector_dedup) {
     XaMonoCollector c;
     xa_mono_collector_init(&c);
 
+    AstNode declaration = {.type = AST_FUNCTION_DECL};
+    declaration.as.function_decl.type_param_count = 1;
     XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *args1[] = {&int_t};
-    xa_mono_collector_add(&c, "identity", args1, 1, false, NULL);
+    XaGenericSpecializationFact identity = {
+        .generic_decl = &declaration,
+        .declaration_type_args = args1,
+        .declaration_type_arg_count = 1u,
+    };
+    xa_mono_collector_add(&c, "identity", &identity, NULL);
 
     // bool has different slot type from int (BOOL=11 vs I64=7) ?separate instance
     XrTypeRef bool_t = {.kind = XR_TREF_BOOL};
     XrTypeRef *args2[] = {&bool_t};
-    xa_mono_collector_add(&c, "identity", args2, 1, false, NULL);
+    identity.declaration_type_args = args2;
+    xa_mono_collector_add(&c, "identity", &identity, NULL);
     ASSERT_EQ(c.count, 2);
 
     // Same int type again ?should deduplicate
     XrTypeRef int_t2 = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *args2b[] = {&int_t2};
-    xa_mono_collector_add(&c, "identity", args2b, 1, false, NULL);
+    identity.declaration_type_args = args2b;
+    xa_mono_collector_add(&c, "identity", &identity, NULL);
     ASSERT_EQ(c.count, 2);
 
     // float has different rep ?separate instance
     XrTypeRef float_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_F64};
     XrTypeRef *args3[] = {&float_t};
-    xa_mono_collector_add(&c, "identity", args3, 1, false, NULL);
+    identity.declaration_type_args = args3;
+    xa_mono_collector_add(&c, "identity", &identity, NULL);
     ASSERT_EQ(c.count, 3);
+
+    xa_mono_collector_free(&c);
+}
+
+TEST(mono_collector_uses_exact_method_owner_and_effect_identity) {
+    XaMonoCollector c;
+    xa_mono_collector_init(&c);
+
+    XrTypeRef callback_type = {.kind = XR_TREF_FUNCTION};
+    XrParamNode callback_param = {.type = &callback_type};
+    XrParamNode *params[1] = {&callback_param};
+    AstNode first_method = {.type = AST_METHOD_DECL};
+    first_method.as.method_decl.type_param_count = 1;
+    first_method.as.method_decl.params = params;
+    first_method.as.method_decl.param_count = 1;
+    AstNode *first_methods[1] = {&first_method};
+    AstNode first_owner = {.type = AST_STRUCT_DECL};
+    first_owner.as.struct_decl.methods = first_methods;
+    first_owner.as.struct_decl.method_count = 1;
+
+    XrTypeRef int_type = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef equivalent_int_type = {.kind = XR_TREF_SCALAR,
+                                     .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef *method_args[1] = {&int_type};
+    XaGenericSpecializationFact identity = {
+        .generic_decl = &first_method,
+        .owner_decl = &first_owner,
+        .declaration_type_args = method_args,
+        .declaration_type_arg_count = 1u,
+        .effect = XA_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW,
+    };
+    ASSERT(xa_mono_collector_add(&c, "apply", &identity, NULL) != NULL);
+    method_args[0] = &equivalent_int_type;
+    ASSERT(xa_mono_collector_add(&c, "apply", &identity, NULL) != NULL);
+    ASSERT_EQ(c.count, 1);
+    ASSERT(c.instances[0].identity.declaration_type_args != method_args);
+    ASSERT(c.instances[0].identity.declaration_type_args[0] == &int_type);
+
+    identity.effect = XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW;
+    ASSERT(xa_mono_collector_add(&c, "apply", &identity, NULL) != NULL);
+    ASSERT_EQ(c.count, 2);
+
+    AstNode second_method = first_method;
+    AstNode *second_methods[1] = {&second_method};
+    AstNode second_owner = {.type = AST_CLASS_DECL};
+    second_owner.as.class_decl.methods = second_methods;
+    second_owner.as.class_decl.method_count = 1;
+    identity.generic_decl = &second_method;
+    identity.owner_decl = &second_owner;
+    identity.effect = XA_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW;
+    ASSERT(xa_mono_collector_add(&c, "apply", &identity, NULL) != NULL);
+    ASSERT_EQ(c.count, 3);
+
+    AstNode generic_method = first_method;
+    AstNode *generic_methods[1] = {&generic_method};
+    AstNode generic_owner = {.type = AST_STRUCT_DECL};
+    generic_owner.as.struct_decl.type_param_count = 1;
+    generic_owner.as.struct_decl.methods = generic_methods;
+    generic_owner.as.struct_decl.method_count = 1;
+    XrTypeRef *receiver_args[1] = {&int_type};
+    identity.generic_decl = &generic_method;
+    identity.owner_decl = &generic_owner;
+    identity.receiver_type_args = receiver_args;
+    identity.receiver_type_arg_count = 1u;
+    ASSERT(xa_generic_specialization_fact_valid(&identity));
+    ASSERT(xa_mono_collector_add(&c, "apply", &identity, NULL) == NULL);
+    ASSERT_EQ(c.count, 3);
+    ASSERT(c.rewrite_failed);
 
     xa_mono_collector_free(&c);
 }
@@ -667,6 +752,7 @@ int main(void) {
     RUN_TEST_SUITE("Mono Collector");
     RUN_TEST(mono_collector_basic);
     RUN_TEST(mono_collector_dedup);
+    RUN_TEST(mono_collector_uses_exact_method_owner_and_effect_identity);
 
     TEST_REPORT();
     return xr_tests_failed > 0 ? 1 : 0;

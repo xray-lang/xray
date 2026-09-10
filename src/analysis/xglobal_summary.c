@@ -504,14 +504,19 @@ static uint64_t hash_generic_inst_summary(uint64_t hash, const XgGenericInstSumm
     hash = hash_u32(hash, row->origin_func_id);
     hash = hash_u32(hash, row->origin_method_id);
     hash = hash_u32(hash, row->origin_class_id);
+    hash = hash_u32(hash, row->receiver_class_id);
     hash = hash_u32(hash, row->specialized_func_id);
     hash = hash_u32(hash, row->specialized_class_id);
     hash = hash_u32(hash, row->root_callsite_id);
     hash = hash_u32(hash, row->constraint_interface_id);
     hash = hash_u32(hash, row->name_id);
-    hash = hash_u64(hash, row->type_key);
-    hash = hash_u64(hash, row->type_arg_key_start);
-    hash = hash_u32(hash, row->type_arg_count);
+    hash = hash_u64(hash, row->receiver_type_key);
+    hash = hash_u64(hash, row->receiver_type_arg_key_start);
+    hash = hash_u32(hash, row->receiver_type_arg_count);
+    hash = hash_u64(hash, row->declaration_type_key);
+    hash = hash_u64(hash, row->declaration_type_arg_key_start);
+    hash = hash_u32(hash, row->declaration_type_arg_count);
+    hash = hash_u8(hash, row->specialization_effect);
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u8(hash, row->kind);
     return hash_u32(hash, row->flags);
@@ -527,9 +532,14 @@ static uint64_t hash_generic_body_use_summary(uint64_t hash, const XgGenericBody
     hash = hash_u32(hash, row->origin_body_func_id);
     hash = hash_u32(hash, row->specialized_body_func_id);
     hash = hash_u32(hash, row->root_callsite_id);
-    hash = hash_u64(hash, row->type_key);
-    hash = hash_u64(hash, row->type_arg_key_start);
-    hash = hash_u32(hash, row->type_arg_count);
+    hash = hash_u32(hash, row->receiver_class_id);
+    hash = hash_u64(hash, row->receiver_type_key);
+    hash = hash_u64(hash, row->receiver_type_arg_key_start);
+    hash = hash_u32(hash, row->receiver_type_arg_count);
+    hash = hash_u64(hash, row->declaration_type_key);
+    hash = hash_u64(hash, row->declaration_type_arg_key_start);
+    hash = hash_u32(hash, row->declaration_type_arg_count);
+    hash = hash_u8(hash, row->specialization_effect);
     hash = hash_u32(hash, row->estimated_body_size);
     hash = hash_u32(hash, row->flags);
     return hash_u64(hash, row->body_use_hash);
@@ -2328,11 +2338,55 @@ xg_global_evidence_add_link_dependency(XgGlobalEvidence *evidence,
     return row;
 }
 
+static bool generic_type_identity_valid(uint64_t type_key, uint64_t type_arg_key_start,
+                                        uint16_t type_arg_count) {
+    return type_key != 0 && ((type_arg_count == 0u) == (type_arg_key_start == UINT64_C(0)));
+}
+
+static bool generic_specialization_identity_valid(
+    uint8_t kind, XgClassId receiver_class_id, uint64_t receiver_type_key,
+    uint64_t receiver_type_arg_key_start, uint16_t receiver_type_arg_count,
+    uint64_t declaration_type_key, uint64_t declaration_type_arg_key_start,
+    uint16_t declaration_type_arg_count, uint8_t specialization_effect) {
+    if (kind < XG_GENERIC_INST_FUNCTION || kind > XG_GENERIC_INST_CONTAINER ||
+        specialization_effect > XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW ||
+        !generic_type_identity_valid(declaration_type_key, declaration_type_arg_key_start,
+                                     declaration_type_arg_count))
+        return false;
+    if (kind != XG_GENERIC_INST_METHOD)
+        return receiver_class_id == XG_NO_ID && receiver_type_key == 0 &&
+               receiver_type_arg_key_start == 0 && receiver_type_arg_count == 0u &&
+               declaration_type_arg_count > 0u;
+    return receiver_class_id != XG_NO_ID &&
+           generic_type_identity_valid(receiver_type_key, receiver_type_arg_key_start,
+                                       receiver_type_arg_count) &&
+           (receiver_type_arg_count > 0u || declaration_type_arg_count > 0u);
+}
+
+static bool generic_body_use_identity_matches(const XgGenericInstSummary *inst,
+                                              const XgGenericBodyUseSummary *use) {
+    return inst && use && inst->generic_inst_id == use->generic_inst_id &&
+           inst->module_id == use->module_id && inst->receiver_class_id == use->receiver_class_id &&
+           inst->receiver_type_key == use->receiver_type_key &&
+           inst->receiver_type_arg_key_start == use->receiver_type_arg_key_start &&
+           inst->receiver_type_arg_count == use->receiver_type_arg_count &&
+           inst->declaration_type_key == use->declaration_type_key &&
+           inst->declaration_type_arg_key_start == use->declaration_type_arg_key_start &&
+           inst->declaration_type_arg_count == use->declaration_type_arg_count &&
+           inst->specialization_effect == use->specialization_effect;
+}
+
 XR_FUNC XgGenericInstSummary *
 xg_global_evidence_add_generic_inst(XgGlobalEvidence *evidence,
                                     const XgGenericInstSummary *summary) {
     XgGenericInstSummary *row;
-    if (!evidence || !summary ||
+    if (!evidence || !summary || summary->generic_inst_id == XG_NO_ID ||
+        summary->module_id == XG_NO_ID ||
+        !generic_specialization_identity_valid(
+            summary->kind, summary->receiver_class_id, summary->receiver_type_key,
+            summary->receiver_type_arg_key_start, summary->receiver_type_arg_count,
+            summary->declaration_type_key, summary->declaration_type_arg_key_start,
+            summary->declaration_type_arg_count, summary->specialization_effect) ||
         !xg_global_evidence_reserve_generic_insts(evidence, evidence->ngeneric_insts + 1))
         return NULL;
     row = &evidence->generic_insts[evidence->ngeneric_insts++];
@@ -2344,7 +2398,23 @@ XR_FUNC XgGenericBodyUseSummary *
 xg_global_evidence_add_generic_body_use(XgGlobalEvidence *evidence,
                                         const XgGenericBodyUseSummary *summary) {
     XgGenericBodyUseSummary *row;
-    if (!evidence || !summary ||
+    const XgGenericInstSummary *inst = NULL;
+    if (!evidence || !summary || summary->use_id == XG_NO_ID ||
+        summary->generic_inst_id == XG_NO_ID || summary->module_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
+        if (evidence->generic_insts[i].generic_inst_id == summary->generic_inst_id) {
+            inst = &evidence->generic_insts[i];
+            break;
+        }
+    }
+    if (!inst ||
+        !generic_specialization_identity_valid(
+            inst->kind, summary->receiver_class_id, summary->receiver_type_key,
+            summary->receiver_type_arg_key_start, summary->receiver_type_arg_count,
+            summary->declaration_type_key, summary->declaration_type_arg_key_start,
+            summary->declaration_type_arg_count, summary->specialization_effect) ||
+        !generic_body_use_identity_matches(inst, summary) ||
         !xg_global_evidence_reserve_generic_body_uses(evidence, evidence->ngeneric_body_uses + 1))
         return NULL;
     row = &evidence->generic_body_uses[evidence->ngeneric_body_uses++];
@@ -4520,19 +4590,25 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
         const XgGenericInstSummary *g = &evidence->generic_insts[i];
         fprintf(out,
                 "generic-inst id=%u module=%u origin_decl=%u origin_func=%u origin_method=%u "
-                "origin_class=%u spec_func=%u spec_class=%u root=%u constraint=%u name=%u "
-                "type=%" PRIu64 " args=%" PRIu64 "+%u span=%u kind=%u flags=0x%x\n",
+                "origin_class=%u receiver_class=%u spec_func=%u spec_class=%u root=%u "
+                "constraint=%u name=%u receiver_type=%" PRIu64 " receiver_type_args=%" PRIu64
+                "+%u declaration_type=%" PRIu64 " declaration_type_args=%" PRIu64
+                "+%u specialization_effect=%u "
+                "span=%u kind=%u flags=0x%x\n",
                 g->generic_inst_id, g->module_id, g->origin_decl_id, g->origin_func_id,
-                g->origin_method_id, g->origin_class_id, g->specialized_func_id,
-                g->specialized_class_id, g->root_callsite_id, g->constraint_interface_id,
-                g->name_id, g->type_key, g->type_arg_key_start, (unsigned) g->type_arg_count,
+                g->origin_method_id, g->origin_class_id, g->receiver_class_id,
+                g->specialized_func_id, g->specialized_class_id, g->root_callsite_id,
+                g->constraint_interface_id, g->name_id, g->receiver_type_key,
+                g->receiver_type_arg_key_start, (unsigned) g->receiver_type_arg_count,
+                g->declaration_type_key, g->declaration_type_arg_key_start,
+                (unsigned) g->declaration_type_arg_count, (unsigned) g->specialization_effect,
                 g->source_span_id, (unsigned) g->kind, g->flags);
     }
 }
 
 static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
-            "payload-extra v10 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
+            "payload-extra v11 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
             "seq=%u capacity=%u bulk=%u encoding=%u "
             "json_codecs=%u object_shapes=%u object_fields=%u "
             "object_accesses=%u object_access_cases=%u object_merges=%u "
@@ -4552,14 +4628,19 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
         return;
     for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
         const XgGenericBodyUseSummary *u = &evidence->generic_body_uses[i];
-        fprintf(
-            out,
-            "generic-body-use id=%u inst=%u module=%u owner=%u origin_body=%u "
-            "specialized_body=%u root=%u type=%" PRIu64 " args=%" PRIu64 "+%u size=%u flags=0x%x "
-            "hash=%016" PRIx64 "\n",
-            u->use_id, u->generic_inst_id, u->module_id, u->owner_func_id, u->origin_body_func_id,
-            u->specialized_body_func_id, u->root_callsite_id, u->type_key, u->type_arg_key_start,
-            (unsigned) u->type_arg_count, u->estimated_body_size, u->flags, u->body_use_hash);
+        fprintf(out,
+                "generic-body-use id=%u inst=%u module=%u owner=%u origin_body=%u "
+                "specialized_body=%u root=%u receiver_class=%u receiver_type=%" PRIu64
+                " receiver_type_args=%" PRIu64 "+%u declaration_type=%" PRIu64
+                " declaration_type_args=%" PRIu64 "+%u specialization_effect=%u size=%u "
+                "flags=0x%x hash=%016" PRIx64 "\n",
+                u->use_id, u->generic_inst_id, u->module_id, u->owner_func_id,
+                u->origin_body_func_id, u->specialized_body_func_id, u->root_callsite_id,
+                u->receiver_class_id, u->receiver_type_key, u->receiver_type_arg_key_start,
+                (unsigned) u->receiver_type_arg_count, u->declaration_type_key,
+                u->declaration_type_arg_key_start, (unsigned) u->declaration_type_arg_count,
+                (unsigned) u->specialization_effect, u->estimated_body_size, u->flags,
+                u->body_use_hash);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
         const XgGenericStorageSummary *s = &evidence->generic_storages[i];
@@ -5487,7 +5568,9 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
     }
     for (uint32_t i = 0; i < generic_inst_count; i++) {
         XgGenericInstSummary row;
-        uint32_t type_arg_count = 0;
+        uint32_t receiver_type_arg_count = 0;
+        uint32_t declaration_type_arg_count = 0;
+        uint32_t specialization_effect = 0;
         uint32_t kind = 0;
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
@@ -5496,16 +5579,26 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         if (sscanf(line,
                    "generic-inst id=%" SCNu32 " module=%" SCNu32 " origin_decl=%" SCNu32
                    " origin_func=%" SCNu32 " origin_method=%" SCNu32 " origin_class=%" SCNu32
-                   " spec_func=%" SCNu32 " spec_class=%" SCNu32 " root=%" SCNu32
-                   " constraint=%" SCNu32 " name=%" SCNu32 " type=%" SCNu64 " args=%" SCNu64
-                   "+%" SCNu32 " span=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " %c",
+                   " receiver_class=%" SCNu32 " spec_func=%" SCNu32 " spec_class=%" SCNu32
+                   " root=%" SCNu32 " constraint=%" SCNu32 " name=%" SCNu32
+                   " receiver_type=%" SCNu64 " receiver_type_args=%" SCNu64 "+%" SCNu32
+                   " declaration_type=%" SCNu64 " declaration_type_args=%" SCNu64 "+%" SCNu32
+                   " specialization_effect=%" SCNu32 " span=%" SCNu32 " kind=%" SCNu32
+                   " flags=0x%" SCNx32 " %c",
                    &row.generic_inst_id, &row.module_id, &row.origin_decl_id, &row.origin_func_id,
-                   &row.origin_method_id, &row.origin_class_id, &row.specialized_func_id,
-                   &row.specialized_class_id, &row.root_callsite_id, &row.constraint_interface_id,
-                   &row.name_id, &row.type_key, &row.type_arg_key_start, &type_arg_count,
-                   &row.source_span_id, &kind, &row.flags, &trailing) != 17)
+                   &row.origin_method_id, &row.origin_class_id, &row.receiver_class_id,
+                   &row.specialized_func_id, &row.specialized_class_id, &row.root_callsite_id,
+                   &row.constraint_interface_id, &row.name_id, &row.receiver_type_key,
+                   &row.receiver_type_arg_key_start, &receiver_type_arg_count,
+                   &row.declaration_type_key, &row.declaration_type_arg_key_start,
+                   &declaration_type_arg_count, &specialization_effect, &row.source_span_id, &kind,
+                   &row.flags, &trailing) != 22 ||
+            receiver_type_arg_count > UINT16_MAX || declaration_type_arg_count > UINT16_MAX ||
+            specialization_effect > UINT8_MAX || kind > UINT8_MAX)
             return false;
-        row.type_arg_count = (uint16_t) type_arg_count;
+        row.receiver_type_arg_count = (uint16_t) receiver_type_arg_count;
+        row.declaration_type_arg_count = (uint16_t) declaration_type_arg_count;
+        row.specialization_effect = (uint8_t) specialization_effect;
         row.kind = (uint8_t) kind;
         if (!xg_global_evidence_add_generic_inst(evidence, &row))
             return false;
@@ -5543,7 +5636,7 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
     if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "payload-extra v10 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
+               "payload-extra v11 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
                " generic_code_sizes=%" SCNu32 " seq=%" SCNu32 " capacity=%" SCNu32 " bulk=%" SCNu32
                " encoding=%" SCNu32 " json_codecs=%" SCNu32 " object_shapes=%" SCNu32
                " object_fields=%" SCNu32 " object_accesses=%" SCNu32 " object_access_cases=%" SCNu32
@@ -5578,7 +5671,9 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
 
     for (uint32_t i = 0; i < generic_body_use_count; i++) {
         XgGenericBodyUseSummary row;
-        uint32_t type_arg_count = 0;
+        uint32_t receiver_type_arg_count = 0;
+        uint32_t declaration_type_arg_count = 0;
+        uint32_t specialization_effect = 0;
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
@@ -5586,14 +5681,23 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
         if (sscanf(line,
                    "generic-body-use id=%" SCNu32 " inst=%" SCNu32 " module=%" SCNu32
                    " owner=%" SCNu32 " origin_body=%" SCNu32 " specialized_body=%" SCNu32
-                   " root=%" SCNu32 " type=%" SCNu64 " args=%" SCNu64 "+%" SCNu32 " size=%" SCNu32
-                   " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   " root=%" SCNu32 " receiver_class=%" SCNu32 " receiver_type=%" SCNu64
+                   " receiver_type_args=%" SCNu64 "+%" SCNu32 " declaration_type=%" SCNu64
+                   " declaration_type_args=%" SCNu64 "+%" SCNu32 " specialization_effect=%" SCNu32
+                   " size=%" SCNu32 " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
                    &row.use_id, &row.generic_inst_id, &row.module_id, &row.owner_func_id,
                    &row.origin_body_func_id, &row.specialized_body_func_id, &row.root_callsite_id,
-                   &row.type_key, &row.type_arg_key_start, &type_arg_count,
-                   &row.estimated_body_size, &row.flags, &row.body_use_hash, &trailing) != 13)
+                   &row.receiver_class_id, &row.receiver_type_key, &row.receiver_type_arg_key_start,
+                   &receiver_type_arg_count, &row.declaration_type_key,
+                   &row.declaration_type_arg_key_start, &declaration_type_arg_count,
+                   &specialization_effect, &row.estimated_body_size, &row.flags, &row.body_use_hash,
+                   &trailing) != 18 ||
+            receiver_type_arg_count > UINT16_MAX || declaration_type_arg_count > UINT16_MAX ||
+            specialization_effect > UINT8_MAX)
             return false;
-        row.type_arg_count = (uint16_t) type_arg_count;
+        row.receiver_type_arg_count = (uint16_t) receiver_type_arg_count;
+        row.declaration_type_arg_count = (uint16_t) declaration_type_arg_count;
+        row.specialization_effect = (uint8_t) specialization_effect;
         if (!xg_global_evidence_add_generic_body_use(evidence, &row))
             return false;
     }
@@ -6312,6 +6416,7 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
         offsets->func_id = max_u32(offsets->func_id, row->origin_func_id);
         offsets->method_id = max_u32(offsets->method_id, row->origin_method_id);
         offsets->class_id = max_u32(offsets->class_id, row->origin_class_id);
+        offsets->class_id = max_u32(offsets->class_id, row->receiver_class_id);
         offsets->func_id = max_u32(offsets->func_id, row->specialized_func_id);
         offsets->class_id = max_u32(offsets->class_id, row->specialized_class_id);
         offsets->callsite_id = max_u32(offsets->callsite_id, row->root_callsite_id);
@@ -6325,6 +6430,7 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
         offsets->func_id = max_u32(offsets->func_id, row->origin_body_func_id);
         offsets->func_id = max_u32(offsets->func_id, row->specialized_body_func_id);
         offsets->callsite_id = max_u32(offsets->callsite_id, row->root_callsite_id);
+        offsets->class_id = max_u32(offsets->class_id, row->receiver_class_id);
     }
     for (uint32_t i = 0; i < target->ngeneric_storages; i++) {
         offsets->generic_storage_id =
@@ -6980,6 +7086,8 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         REMAP_ID(row.origin_func_id, offsets.func_id);
         REMAP_ID(row.origin_method_id, offsets.method_id);
         REMAP_ID(row.origin_class_id, offsets.class_id);
+        REMAP_ID(row.receiver_class_id, offsets.class_id);
+        REMAP_ID(row.constraint_interface_id, offsets.interface_id);
         REMAP_ID(row.specialized_func_id, offsets.func_id);
         REMAP_ID(row.specialized_class_id, offsets.class_id);
         REMAP_ID(row.root_callsite_id, offsets.callsite_id);
@@ -6995,6 +7103,7 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         REMAP_ID(row.origin_body_func_id, offsets.func_id);
         REMAP_ID(row.specialized_body_func_id, offsets.func_id);
         REMAP_ID(row.root_callsite_id, offsets.callsite_id);
+        REMAP_ID(row.receiver_class_id, offsets.class_id);
         if (!xg_global_evidence_add_generic_body_use(target, &row))
             goto done;
     }
@@ -7553,28 +7662,35 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         const XgGenericInstSummary *inst = &evidence->generic_insts[i];
         fprintf(out,
                 "generic-inst %u id=%u module=%u kind=%s origin_decl=%u origin_func=%u "
-                "origin_method=%u origin_class=%u specialized_func=%u specialized_class=%u "
-                "root_callsite=%u constraint_iface=%u name=%u type=%" PRIu64 " type_args=%" PRIu64
-                "+%u "
-                "span=%u flags=0x%x\n",
+                "origin_method=%u origin_class=%u receiver_class=%u specialized_func=%u "
+                "specialized_class=%u root_callsite=%u constraint_iface=%u name=%u "
+                "receiver_type=%" PRIu64 " receiver_type_args=%" PRIu64 "+%u "
+                "declaration_type=%" PRIu64 " declaration_type_args=%" PRIu64 "+%u "
+                "specialization_effect=%u span=%u flags=0x%x\n",
                 i, inst->generic_inst_id, inst->module_id, xg_generic_inst_kind_name(inst->kind),
                 inst->origin_decl_id, inst->origin_func_id, inst->origin_method_id,
-                inst->origin_class_id, inst->specialized_func_id, inst->specialized_class_id,
-                inst->root_callsite_id, inst->constraint_interface_id, inst->name_id,
-                inst->type_key, inst->type_arg_key_start, (unsigned) inst->type_arg_count,
-                inst->source_span_id, inst->flags);
+                inst->origin_class_id, inst->receiver_class_id, inst->specialized_func_id,
+                inst->specialized_class_id, inst->root_callsite_id, inst->constraint_interface_id,
+                inst->name_id, inst->receiver_type_key, inst->receiver_type_arg_key_start,
+                (unsigned) inst->receiver_type_arg_count, inst->declaration_type_key,
+                inst->declaration_type_arg_key_start, (unsigned) inst->declaration_type_arg_count,
+                (unsigned) inst->specialization_effect, inst->source_span_id, inst->flags);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
         const XgGenericBodyUseSummary *use = &evidence->generic_body_uses[i];
         fprintf(out,
                 "generic-body-use %u id=%u inst=%u module=%u owner=%u origin_body=%u "
-                "specialized_body=%u root_callsite=%u type=%" PRIu64 " type_args=%" PRIu64
-                "+%u size=%u "
+                "specialized_body=%u root_callsite=%u receiver_class=%u receiver_type=%" PRIu64
+                " receiver_type_args=%" PRIu64 "+%u declaration_type=%" PRIu64
+                " declaration_type_args=%" PRIu64 "+%u specialization_effect=%u size=%u "
                 "flags=0x%x hash=%016" PRIx64 "\n",
                 i, use->use_id, use->generic_inst_id, use->module_id, use->owner_func_id,
                 use->origin_body_func_id, use->specialized_body_func_id, use->root_callsite_id,
-                use->type_key, use->type_arg_key_start, (unsigned) use->type_arg_count,
-                use->estimated_body_size, use->flags, use->body_use_hash);
+                use->receiver_class_id, use->receiver_type_key, use->receiver_type_arg_key_start,
+                (unsigned) use->receiver_type_arg_count, use->declaration_type_key,
+                use->declaration_type_arg_key_start, (unsigned) use->declaration_type_arg_count,
+                (unsigned) use->specialization_effect, use->estimated_body_size, use->flags,
+                use->body_use_hash);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
         const XgGenericStorageSummary *storage = &evidence->generic_storages[i];

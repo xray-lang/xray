@@ -182,24 +182,60 @@ TEST(node_table_generic_specialization_copies_tuple_and_clears_atomically) {
     XaNodeTable *table = xa_node_table_new();
     ASSERT_NOT_NULL(table);
     AstNode call = make_node(180);
-    AstNode generic_decl = make_node(181);
+    AstNode owner_decl = make_node(181);
+    owner_decl.type = AST_STRUCT_DECL;
+    owner_decl.as.struct_decl.type_param_count = 1;
+    AstNode generic_decl = make_node(182);
+    generic_decl.type = AST_METHOD_DECL;
+    generic_decl.as.method_decl.type_param_count = 2;
+    XrTypeRef callback_type = {.kind = XR_TREF_FUNCTION};
+    XrParamNode callback_param = {.type = &callback_type};
+    XrParamNode *params[1] = {&callback_param};
+    generic_decl.as.method_decl.params = params;
+    generic_decl.as.method_decl.param_count = 1;
+    AstNode *methods[1] = {&generic_decl};
+    owner_decl.as.struct_decl.methods = methods;
+    owner_decl.as.struct_decl.method_count = 1;
     XrTypeRef first = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef second = {.kind = XR_TREF_STRING};
-    XrTypeRef *input[2] = {&first, &second};
+    XrTypeRef *receiver_input[1] = {&first};
+    XrTypeRef *declaration_input[2] = {&first, &second};
     XaGenericSpecializationFact fact = {
         .generic_decl = &generic_decl,
-        .type_args = input,
-        .type_arg_count = 2u,
+        .owner_decl = &owner_decl,
+        .receiver_type_args = receiver_input,
+        .receiver_type_arg_count = 1u,
+        .declaration_type_args = declaration_input,
+        .declaration_type_arg_count = 2u,
+        .effect = XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW,
     };
     ASSERT_TRUE(xa_node_table_set_generic_specialization(table, &call, &fact));
-    input[0] = &second;
+    receiver_input[0] = &second;
+    declaration_input[0] = &second;
 
     XaGenericSpecializationFact observed = {0};
     ASSERT_TRUE(xa_node_table_get_generic_specialization(table, &call, &observed));
     ASSERT_EQ_PTR(observed.generic_decl, &generic_decl);
-    ASSERT_EQ_UINT(observed.type_arg_count, 2u);
-    ASSERT_EQ_PTR(observed.type_args[0], &first);
-    ASSERT_EQ_PTR(observed.type_args[1], &second);
+    ASSERT_EQ_PTR(observed.owner_decl, &owner_decl);
+    ASSERT_EQ_UINT(observed.receiver_type_arg_count, 1u);
+    ASSERT_EQ_PTR(observed.receiver_type_args[0], &first);
+    ASSERT_EQ_UINT(observed.declaration_type_arg_count, 2u);
+    ASSERT_EQ_PTR(observed.declaration_type_args[0], &first);
+    ASSERT_EQ_PTR(observed.declaration_type_args[1], &second);
+    ASSERT_EQ_UINT(observed.effect, XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW);
+
+    XaGenericSpecializationFact invalid = fact;
+    invalid.receiver_type_args = NULL;
+    ASSERT_FALSE(xa_node_table_set_generic_specialization(table, &call, &invalid));
+    invalid = fact;
+    invalid.owner_decl = NULL;
+    ASSERT_FALSE(xa_node_table_set_generic_specialization(table, &call, &invalid));
+    invalid = fact;
+    invalid.effect = (XaGenericSpecializationEffect) 255;
+    ASSERT_FALSE(xa_node_table_set_generic_specialization(table, &call, &invalid));
+    ASSERT_TRUE(xa_node_table_get_generic_specialization(table, &call, &observed));
+    ASSERT_EQ_PTR(observed.receiver_type_args[0], &first);
+    ASSERT_EQ_PTR(observed.declaration_type_args[0], &first);
 
     xa_node_table_clear_generic_specializations(table);
     ASSERT_FALSE(xa_node_table_get_generic_specialization(table, &call, &observed));
@@ -297,13 +333,14 @@ TEST(analyzer_type_ref_bindings_follow_graphless_ast_batch) {
     AstNode second = {.type = AST_PROGRAM, .node_id = 4102};
     AstNode call = {.type = AST_CALL_EXPR, .node_id = 4103};
     AstNode generic_decl = {.type = AST_FUNCTION_DECL, .node_id = 4104};
+    generic_decl.as.function_decl.type_param_count = 1;
     XrTypeRef type_ref = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *type_args[1] = {&type_ref};
     XrType type = {.kind = XR_KIND_INT, .scalar_rep = XR_NATIVE_I64};
     XaGenericSpecializationFact specialization = {
         .generic_decl = &generic_decl,
-        .type_args = type_args,
-        .type_arg_count = 1u,
+        .declaration_type_args = type_args,
+        .declaration_type_arg_count = 1u,
     };
     XaGenericSpecializationFact observed = {0};
 

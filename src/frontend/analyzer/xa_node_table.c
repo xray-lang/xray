@@ -110,7 +110,8 @@ void xa_node_table_free(XaNodeTable *t) {
         while (e) {
             XaNodeEntry *next = e->next;
             xr_free((void *) e->callable_target_set.targets);
-            xr_free(e->generic_specialization.type_args);
+            xr_free(e->generic_specialization.receiver_type_args);
+            xr_free(e->generic_specialization.declaration_type_args);
             xr_free(e);
             e = next;
         }
@@ -136,7 +137,8 @@ void xa_node_table_clear(XaNodeTable *t) {
         while (e) {
             XaNodeEntry *next = e->next;
             xr_free((void *) e->callable_target_set.targets);
-            xr_free(e->generic_specialization.type_args);
+            xr_free(e->generic_specialization.receiver_type_args);
+            xr_free(e->generic_specialization.declaration_type_args);
             xr_free(e);
             e = next;
         }
@@ -237,7 +239,8 @@ static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
             XaNodeEntry *to_free = *pp;
             *pp = to_free->next;
             xr_free((void *) to_free->callable_target_set.targets);
-            xr_free(to_free->generic_specialization.type_args);
+            xr_free(to_free->generic_specialization.receiver_type_args);
+            xr_free(to_free->generic_specialization.declaration_type_args);
             xr_free(to_free);
             t->size--;
             return;
@@ -1029,31 +1032,152 @@ void xa_node_table_clear_callable_target_set(XaNodeTable *t, const struct AstNod
         remove_entry_by_id(t, node->node_id);
 }
 
+static bool generic_specialization_tuple_valid(struct XrTypeRef **type_args, uint32_t count) {
+    if ((count == 0u) != (type_args == NULL))
+        return false;
+    for (uint32_t i = 0u; i < count; ++i) {
+        if (!type_args[i])
+            return false;
+    }
+    return true;
+}
+
+static uint32_t generic_specialization_owner_arity(const struct AstNode *owner) {
+    if (!owner)
+        return 0u;
+    if (owner->type == AST_CLASS_DECL)
+        return owner->as.class_decl.type_param_count < 0
+                   ? UINT32_MAX
+                   : (uint32_t) owner->as.class_decl.type_param_count;
+    if (owner->type == AST_STRUCT_DECL)
+        return owner->as.struct_decl.type_param_count < 0
+                   ? UINT32_MAX
+                   : (uint32_t) owner->as.struct_decl.type_param_count;
+    return UINT32_MAX;
+}
+
+static bool generic_specialization_owner_contains_method(const struct AstNode *owner,
+                                                         const struct AstNode *method) {
+    if (!owner || !method || method->type != AST_METHOD_DECL ||
+        (owner->type != AST_CLASS_DECL && owner->type != AST_STRUCT_DECL))
+        return false;
+    const ClassDeclNode *decl =
+        owner->type == AST_CLASS_DECL ? &owner->as.class_decl : &owner->as.struct_decl;
+    for (int i = 0; decl->methods && i < decl->method_count; ++i) {
+        if (decl->methods[i] == method)
+            return true;
+    }
+    return false;
+}
+
+static uint32_t generic_specialization_decl_arity(const struct AstNode *decl) {
+    if (!decl)
+        return UINT32_MAX;
+    switch (decl->type) {
+        case AST_FUNCTION_DECL:
+            return decl->as.function_decl.type_param_count < 0
+                       ? UINT32_MAX
+                       : (uint32_t) decl->as.function_decl.type_param_count;
+        case AST_METHOD_DECL:
+            return decl->as.method_decl.type_param_count < 0
+                       ? UINT32_MAX
+                       : (uint32_t) decl->as.method_decl.type_param_count;
+        case AST_CLASS_DECL:
+            return decl->as.class_decl.type_param_count < 0
+                       ? UINT32_MAX
+                       : (uint32_t) decl->as.class_decl.type_param_count;
+        case AST_STRUCT_DECL:
+            return decl->as.struct_decl.type_param_count < 0
+                       ? UINT32_MAX
+                       : (uint32_t) decl->as.struct_decl.type_param_count;
+        default:
+            return UINT32_MAX;
+    }
+}
+
+static bool generic_specialization_decl_has_effect_dimension(const struct AstNode *decl) {
+    XrParamNode **params = NULL;
+    int count = 0;
+    if (decl && decl->type == AST_FUNCTION_DECL) {
+        params = decl->as.function_decl.params;
+        count = decl->as.function_decl.param_count;
+    } else if (decl && decl->type == AST_METHOD_DECL) {
+        params = decl->as.method_decl.params;
+        count = decl->as.method_decl.param_count;
+    }
+    for (int i = 0; params && i < count; ++i) {
+        const XrParamNode *param = params[i];
+        if (param && param->type && param->type->kind == XR_TREF_FUNCTION &&
+            !param->type->requires_nothrow)
+            return true;
+    }
+    return false;
+}
+
+bool xa_generic_specialization_fact_valid(const XaGenericSpecializationFact *fact) {
+    if (!fact || !fact->generic_decl ||
+        (int) fact->effect < (int) XA_GENERIC_SPECIALIZATION_EFFECT_NONE ||
+        fact->effect > XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW ||
+        !generic_specialization_tuple_valid(fact->receiver_type_args,
+                                            fact->receiver_type_arg_count) ||
+        !generic_specialization_tuple_valid(fact->declaration_type_args,
+                                            fact->declaration_type_arg_count))
+        return false;
+    bool has_effect_dimension =
+        generic_specialization_decl_has_effect_dimension(fact->generic_decl);
+    if ((fact->effect == XA_GENERIC_SPECIALIZATION_EFFECT_NONE) != !has_effect_dimension)
+        return false;
+    uint32_t decl_arity = generic_specialization_decl_arity(fact->generic_decl);
+    if (decl_arity == UINT32_MAX || decl_arity != fact->declaration_type_arg_count)
+        return false;
+    if (fact->generic_decl->type == AST_METHOD_DECL) {
+        if (!generic_specialization_owner_contains_method(fact->owner_decl, fact->generic_decl))
+            return false;
+        uint32_t owner_arity = generic_specialization_owner_arity(fact->owner_decl);
+        return owner_arity != UINT32_MAX && owner_arity == fact->receiver_type_arg_count &&
+               (owner_arity > 0u || decl_arity > 0u);
+    }
+    return !fact->owner_decl && fact->receiver_type_arg_count == 0u && decl_arity > 0u &&
+           (fact->generic_decl->type == AST_FUNCTION_DECL ||
+            fact->effect == XA_GENERIC_SPECIALIZATION_EFFECT_NONE);
+}
+
+static struct XrTypeRef **generic_specialization_tuple_copy(struct XrTypeRef **source,
+                                                            uint32_t count) {
+    if (count == 0u)
+        return NULL;
+    struct XrTypeRef **copy = (struct XrTypeRef **) xr_malloc(sizeof(*copy) * (size_t) count);
+    if (copy)
+        memcpy(copy, source, sizeof(*copy) * (size_t) count);
+    return copy;
+}
+
 bool xa_node_table_set_generic_specialization(XaNodeTable *t, const struct AstNode *node,
                                               const XaGenericSpecializationFact *fact) {
-    if (!t || !node || !fact || !fact->generic_decl || fact->type_arg_count == 0u ||
-        !fact->type_args)
+    if (!t || !node || !xa_generic_specialization_fact_valid(fact))
         return false;
-    struct XrTypeRef **type_args =
-        (struct XrTypeRef **) xr_malloc(sizeof(*type_args) * (size_t) fact->type_arg_count);
-    if (!type_args)
+    struct XrTypeRef **receiver_type_args =
+        generic_specialization_tuple_copy(fact->receiver_type_args, fact->receiver_type_arg_count);
+    if (fact->receiver_type_arg_count > 0u && !receiver_type_args)
         return false;
-    for (uint32_t i = 0u; i < fact->type_arg_count; ++i) {
-        if (!fact->type_args[i]) {
-            xr_free(type_args);
-            return false;
-        }
-        type_args[i] = fact->type_args[i];
+    struct XrTypeRef **declaration_type_args = generic_specialization_tuple_copy(
+        fact->declaration_type_args, fact->declaration_type_arg_count);
+    if (fact->declaration_type_arg_count > 0u && !declaration_type_args) {
+        xr_free(receiver_type_args);
+        return false;
     }
     XaNodeEntry *entry = find_or_create(t, node->node_id);
     if (!entry) {
-        xr_free(type_args);
+        xr_free(receiver_type_args);
+        xr_free(declaration_type_args);
         return false;
     }
-    xr_free(entry->generic_specialization.type_args);
+    xr_free(entry->generic_specialization.receiver_type_args);
+    xr_free(entry->generic_specialization.declaration_type_args);
     entry->has_generic_specialization = true;
     entry->generic_specialization = *fact;
-    entry->generic_specialization.type_args = type_args;
+    entry->generic_specialization.receiver_type_args = receiver_type_args;
+    entry->generic_specialization.declaration_type_args = declaration_type_args;
     return true;
 }
 
@@ -1077,7 +1201,8 @@ void xa_node_table_clear_generic_specializations(XaNodeTable *t) {
         while (*link) {
             XaNodeEntry *entry = *link;
             if (entry->has_generic_specialization) {
-                xr_free(entry->generic_specialization.type_args);
+                xr_free(entry->generic_specialization.receiver_type_args);
+                xr_free(entry->generic_specialization.declaration_type_args);
                 entry->generic_specialization = (XaGenericSpecializationFact) {0};
                 entry->has_generic_specialization = false;
             }

@@ -36,9 +36,12 @@ XR_FUNC bool xa_check_null_safety(XaAnalyzer *analyzer, XrType *target, XrType *
 XR_FUNC XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type,
                                              const char *tp_name, int depth);
 XR_FUNC XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links,
-                                           XrType *callee_type, XrType *return_type,
-                                           AstNode *call_node, CallExprNode *call, int arg_count,
+                                           XrType *callee_type, XrType *receiver_type,
+                                           XrType *return_type, AstNode *call_node,
+                                           CallExprNode *call, int arg_count,
                                            XrType **effective_arg_types, bool writeback_inferred);
+XR_FUNC XrTypeRef **xa_synthesize_type_arg_refs(XaAnalyzer *analyzer, XrType **types,
+                                                int type_count);
 // Record inferred generic type arguments on a call node so monomorphization
 // specializes inferred generic construction, functions, and methods. Defined
 // in xanalyzer_visitor_call.c.

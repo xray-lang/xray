@@ -32,6 +32,7 @@
 #include "../../base/xforward_decl.h"
 #include "../../base/xdefs.h"
 #include "../../base/xlocation.h"
+#include "xa_node_table.h"
 
 /* ========== Instantiation Budgets ==========
  *
@@ -86,16 +87,6 @@ XR_FUNC bool xa_mono_budget_valid(const XaMonoBudget *budget);
 
 typedef struct XaAnalyzer XaAnalyzer;
 
-/* A generic higher-order function has one additional finite specialization
- * dimension.  MAY_THROW deliberately keeps the historical mangled name;
- * NO_THROW adds a suffix, so a concrete type tuple can produce at most two
- * executable bodies. */
-typedef enum XaMonoThrowEffect {
-    XA_MONO_EFFECT_NONE = 0,
-    XA_MONO_EFFECT_MAY_THROW,
-    XA_MONO_EFFECT_NO_THROW,
-} XaMonoThrowEffect;
-
 /* ========== Name Mangling ========== */
 
 // Generate mangled name for a monomorphized function/class.
@@ -144,13 +135,9 @@ XR_FUNC XrTypeRef *xr_mono_type_substitute_in_analyzer(XaAnalyzer *analyzer, XrT
 /* ========== Mono Instance Tracking ========== */
 
 typedef struct {
-    const char *generic_name;  // Original generic name
-    const AstNode *generic_decl;  // Exact source declaration; NULL for standalone collector use
-    XrTypeRef **type_args;     // Concrete type ref arguments
-    int type_arg_count;
-    const char *mangled_name;  // Mangled name (heap-allocated)
-    bool is_class_generic;     // true for class/struct generics
-    XaMonoThrowEffect throw_effect;
+    const char *generic_name;              // owned diagnostic/display name
+    XaGenericSpecializationFact identity;  // owns both pointer arrays
+    const char *mangled_name;              // owned private executable name
     /* Expansion provenance. `parent` is the index of the instance whose
      * specialized body requested this one, or -1 for a site in user-written
      * code; `depth` is that chain's length. Together they reconstruct the
@@ -193,13 +180,13 @@ typedef struct {
 XR_FUNC void xa_mono_collector_init(XaMonoCollector *c);
 XR_FUNC void xa_mono_collector_free(XaMonoCollector *c);
 
-// Add a generic instantiation. Returns the mangled name (owned by collector),
-// or NULL when a budget is exhausted -- in which case a diagnostic has been
-// reported and compilation will fail.
-// Source declaration plus concrete type arguments define compiler instance identity.
+// Add one exact generic specialization. The identity carries independent
+// receiver and declaration tuples plus its effect dimension. Returns the
+// private executable name owned by the collector, or NULL after reporting an
+// invalid identity or exhausted budget.
 XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
-                                          XrTypeRef **type_args, int type_arg_count,
-                                          bool is_class_generic, const XrLocation *loc);
+                                          const XaGenericSpecializationFact *identity,
+                                          const XrLocation *loc);
 
 /* ========== Mono Pass ========== */
 

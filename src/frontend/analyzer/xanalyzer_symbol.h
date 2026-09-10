@@ -236,8 +236,10 @@ struct XaSymbolLinks {
     bool return_fn_effect_scanned;
     bool return_fn_effect_scan_in_progress;
     struct AstNode *function_decl_node;
-    /* Exact source owner for class/struct/union declarations; imported views
-     * retain this pointer instead of recovering nominal identity by name. */
+    /* Exact source nominal declaration, or the exact source nominal owner for
+     * a method.
+     * Imported views retain this pointer instead of recovering
+     * nominal identity by name. */
     struct AstNode *nominal_decl_node;
     struct AstNode *interface_decl_node;
     bool is_deprecated;

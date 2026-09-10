@@ -77,8 +77,11 @@ enum {
      * 54: combines the independent schema 49 and schema 53 lineages.
      * 55: adds exact cooperative-yield suspend-point evidence.
      * 56: preserves the full 64-bit
-     * generic specialization identity. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 56,
+     * generic specialization identity.
+     * 57: splits generic specialization identity into
+     * receiver and
+     * declaration tuples and includes effect specialization. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 57,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -264,6 +267,12 @@ typedef enum XgGenericInstKind {
     XG_GENERIC_INST_CLASS,
     XG_GENERIC_INST_CONTAINER,
 } XgGenericInstKind;
+
+typedef enum XgGenericSpecializationEffect {
+    XG_GENERIC_SPECIALIZATION_EFFECT_NONE = 0,
+    XG_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW,
+    XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW,
+} XgGenericSpecializationEffect;
 
 typedef enum XgGenericStorageKind {
     XG_GENERIC_STORAGE_ARRAY = 1,
@@ -1047,14 +1056,19 @@ typedef struct XgGenericInstSummary {
     XgFuncId origin_func_id;
     XgMethodId origin_method_id;
     XgClassId origin_class_id;
+    XgClassId receiver_class_id;
     XgFuncId specialized_func_id;
     XgClassId specialized_class_id;
     XgCallsiteId root_callsite_id;
     XgInterfaceId constraint_interface_id;
     uint32_t name_id;
-    uint64_t type_key;
-    uint64_t type_arg_key_start;
-    uint16_t type_arg_count;
+    uint64_t receiver_type_key;
+    uint64_t receiver_type_arg_key_start;
+    uint16_t receiver_type_arg_count;
+    uint64_t declaration_type_key;
+    uint64_t declaration_type_arg_key_start;
+    uint16_t declaration_type_arg_count;
+    uint8_t specialization_effect; /* XgGenericSpecializationEffect */
     uint32_t source_span_id;
     uint8_t kind;
     uint32_t flags;
@@ -1068,9 +1082,14 @@ typedef struct XgGenericBodyUseSummary {
     XgFuncId origin_body_func_id;
     XgFuncId specialized_body_func_id;
     XgCallsiteId root_callsite_id;
-    uint64_t type_key;
-    uint64_t type_arg_key_start;
-    uint16_t type_arg_count;
+    XgClassId receiver_class_id;
+    uint64_t receiver_type_key;
+    uint64_t receiver_type_arg_key_start;
+    uint16_t receiver_type_arg_count;
+    uint64_t declaration_type_key;
+    uint64_t declaration_type_arg_key_start;
+    uint16_t declaration_type_arg_count;
+    uint8_t specialization_effect; /* XgGenericSpecializationEffect */
     uint32_t estimated_body_size;
     uint32_t flags;
     uint64_t body_use_hash;

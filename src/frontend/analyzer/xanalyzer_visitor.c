@@ -2627,12 +2627,78 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
     return NULL;
 }
 
+static XaGenericSpecializationEffect
+xa_generic_specialization_effect(XaInferContext *ctx, const AstNode *generic_decl,
+                                 const CallExprNode *call, int arg_count,
+                                 XrType **effective_arg_types) {
+    if (!generic_decl || !call)
+        return XA_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    XrParamNode **params = NULL;
+    int param_count = 0;
+    if (generic_decl->type == AST_FUNCTION_DECL) {
+        params = generic_decl->as.function_decl.params;
+        param_count = generic_decl->as.function_decl.param_count;
+    } else if (generic_decl->type == AST_METHOD_DECL) {
+        params = generic_decl->as.method_decl.params;
+        param_count = generic_decl->as.method_decl.param_count;
+    } else {
+        return XA_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    }
+    bool has_poly_callback = false;
+    bool all_no_throw = true;
+    int limit = param_count < arg_count ? param_count : arg_count;
+    for (int i = 0; i < param_count; ++i) {
+        const XrParamNode *param = params ? params[i] : NULL;
+        const XrTypeRef *type = param ? param->type : NULL;
+        if (!type || type->kind != XR_TREF_FUNCTION || type->requires_nothrow)
+            continue;
+        has_poly_callback = true;
+        XrType *actual = i < limit && effective_arg_types ? effective_arg_types[i] : NULL;
+        if (!actual && i < call->arg_count && ctx && ctx->analyzer)
+            actual = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[i]);
+        if (!xr_type_function_is_no_throw(actual))
+            all_no_throw = false;
+    }
+    if (!has_poly_callback)
+        return XA_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    return all_no_throw ? XA_GENERIC_SPECIALIZATION_EFFECT_NO_THROW
+                        : XA_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW;
+}
+
+static void xa_refresh_generic_specialization_effect(AstNode *node, void *user_data) {
+    XaInferContext *ctx = (XaInferContext *) user_data;
+    XaGenericSpecializationFact fact;
+    if (!ctx || !ctx->analyzer || !node || node->type != AST_CALL_EXPR ||
+        !xa_analyzer_get_generic_specialization(ctx->analyzer, node, &fact))
+        return;
+
+    XaGenericSpecializationEffect effect = xa_generic_specialization_effect(
+        ctx, fact.generic_decl, &node->as.call_expr, node->as.call_expr.arg_count, NULL);
+    if (fact.effect == effect)
+        return;
+    fact.effect = effect;
+    if (!xa_analyzer_set_generic_specialization(ctx->analyzer, node, &fact)) {
+        XrLocation loc = {
+            .file = ctx->file_path,
+            .line = node->line,
+            .column = node->column,
+        };
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
+                                   "compiler could not finalize generic effect identity", &loc);
+    }
+}
+
+static void xa_finalize_generic_specialization_effects(XaInferContext *ctx, AstNode *ast) {
+    if (ctx && ast)
+        xa_ast_visit_calls(ast, xa_refresh_generic_specialization_effect, ctx);
+}
+
 // Helper: apply generic type substitution for a call expression
 // Builds param_names from symbol links, resolves actual types (explicit or inferred),
 // then substitutes into return_type. Returns the substituted type.
 XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, XrType *callee_type,
-                                   XrType *return_type, AstNode *call_node, CallExprNode *call,
-                                   int arg_count, XrType **effective_arg_types,
+                                   XrType *receiver_type, XrType *return_type, AstNode *call_node,
+                                   CallExprNode *call, int arg_count, XrType **effective_arg_types,
                                    bool writeback_inferred) {
     XR_DCHECK(ctx != NULL, "substitute_generic_call: NULL ctx");
     XR_DCHECK(links != NULL, "substitute_generic_call: NULL links");
@@ -2780,10 +2846,33 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
         call->type_arg_count == type_param_count && generic_decl &&
         (generic_decl->type == AST_FUNCTION_DECL || generic_decl->type == AST_METHOD_DECL ||
          generic_decl->type == AST_CLASS_DECL || generic_decl->type == AST_STRUCT_DECL)) {
+        const AstNode *owner_decl =
+            generic_decl->type == AST_METHOD_DECL ? links->nominal_decl_node : NULL;
+        uint32_t receiver_type_arg_count = 0u;
+        XrTypeRef **receiver_type_args = NULL;
+        if (owner_decl &&
+            (owner_decl->type == AST_CLASS_DECL || owner_decl->type == AST_STRUCT_DECL)) {
+            int owner_arity = owner_decl->type == AST_CLASS_DECL
+                                  ? owner_decl->as.class_decl.type_param_count
+                                  : owner_decl->as.struct_decl.type_param_count;
+            if (owner_arity > 0 && receiver_type && XR_TYPE_IS_INSTANCE(receiver_type) &&
+                receiver_type->instance.type_arg_count == owner_arity &&
+                receiver_type->instance.type_args) {
+                receiver_type_args = xa_synthesize_type_arg_refs(
+                    ctx->analyzer, receiver_type->instance.type_args, owner_arity);
+                if (receiver_type_args)
+                    receiver_type_arg_count = (uint32_t) owner_arity;
+            }
+        }
         XaGenericSpecializationFact fact = {
             .generic_decl = generic_decl,
-            .type_args = call->type_args,
-            .type_arg_count = (uint32_t) call->type_arg_count,
+            .owner_decl = owner_decl,
+            .receiver_type_args = receiver_type_args,
+            .receiver_type_arg_count = receiver_type_arg_count,
+            .declaration_type_args = call->type_args,
+            .declaration_type_arg_count = (uint32_t) call->type_arg_count,
+            .effect = xa_generic_specialization_effect(ctx, generic_decl, call, arg_count,
+                                                       effective_arg_types),
         };
         if (!xa_analyzer_set_generic_specialization(ctx->analyzer, call_node, &fact)) {
             XrLocation loc = {
@@ -8214,6 +8303,10 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
 
     // Pass 3: Infer error sets for functions (value-return error system)
     xa_infer_error_sets(analyzer, ast);
+
+    // Pass 3a: Function-value throw effects are final now. Republish the exact
+    // effect dimension before any pre-monomorphization evidence is frozen.
+    xa_finalize_generic_specialization_effects(ctx, ast);
 
     // Pass 3b: function definitions were provisionally POLY during structural
     // interface checking. Enforce canonical throw-effect covariance with the final bits.

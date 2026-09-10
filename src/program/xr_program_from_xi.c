@@ -2944,10 +2944,14 @@ static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildC
             instance->origin_class_id != class_row->generic_origin_class_id ||
             instance->origin_decl_id != origin->decl_id ||
             instance->name_id != class_row->generic_origin_name_id ||
-            instance->type_key != class_row->generic_type_key ||
-            instance->type_arg_key_start != class_row->generic_type_arg_key_start ||
-            instance->type_arg_count != class_row->generic_type_arg_count ||
-            instance->type_arg_count == 0u ||
+            instance->receiver_class_id != XG_NO_ID || instance->receiver_type_key != 0u ||
+            instance->receiver_type_arg_key_start != 0u ||
+            instance->receiver_type_arg_count != 0u ||
+            instance->declaration_type_key != class_row->generic_type_key ||
+            instance->declaration_type_arg_key_start != class_row->generic_type_arg_key_start ||
+            instance->declaration_type_arg_count != class_row->generic_type_arg_count ||
+            instance->declaration_type_arg_count == 0u ||
+            instance->specialization_effect != XG_GENERIC_SPECIALIZATION_EFFECT_NONE ||
             (instance->flags & required_flags) != required_flags ||
             !class_data->generic_origin_name ||
             xg_name_id(class_data->generic_origin_name) != class_row->generic_origin_name_id ||

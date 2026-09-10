@@ -1823,10 +1823,15 @@ static bool xaot_bundle_add_generic_instantiation_plan(XaotBundle *bundle,
     plan->specialized_class_id = inst->specialized_class_id;
     plan->root_callsite_id = inst->root_callsite_id;
     plan->constraint_interface_id = inst->constraint_interface_id;
+    plan->receiver_class_id = inst->receiver_class_id;
+    plan->receiver_type_key = inst->receiver_type_key;
+    plan->receiver_type_arg_key_start = inst->receiver_type_arg_key_start;
+    plan->receiver_type_arg_count = inst->receiver_type_arg_count;
+    plan->declaration_type_key = inst->declaration_type_key;
+    plan->declaration_type_arg_key_start = inst->declaration_type_arg_key_start;
+    plan->declaration_type_arg_count = inst->declaration_type_arg_count;
+    plan->specialization_effect = inst->specialization_effect;
     plan->name_id = inst->name_id;
-    plan->type_key = inst->type_key;
-    plan->type_arg_key_start = inst->type_arg_key_start;
-    plan->type_arg_count = inst->type_arg_count;
     plan->inst_kind = inst->kind;
     plan->action = generic_instantiation_action_for(inst);
     plan->evidence = generic_instantiation_evidence_for(inst);
@@ -1916,7 +1921,7 @@ static uint32_t generic_body_evidence_for(const XgGlobalEvidence *evidence,
         return bits;
     bits |= generic_deepen_inst_evidence(evidence, use->generic_inst_id) &
             XAOT_GENERIC_BODY_EV_GENERIC_INST;
-    if (use->type_key != 0 && use->type_arg_count != 0)
+    if (use->receiver_type_arg_count != 0 || use->declaration_type_arg_count != 0)
         bits |= XAOT_GENERIC_BODY_EV_TYPE_ARGS;
     if (use->origin_body_func_id != XG_NO_ID)
         bits |= XAOT_GENERIC_BODY_EV_ORIGIN_BODY;
@@ -1944,9 +1949,14 @@ static bool xaot_bundle_add_generic_body_plan(XaotBundle *bundle, const XgGlobal
     plan->origin_body_func_id = use->origin_body_func_id;
     plan->specialized_body_func_id = use->specialized_body_func_id;
     plan->root_callsite_id = use->root_callsite_id;
-    plan->type_key = use->type_key;
-    plan->type_arg_key_start = use->type_arg_key_start;
-    plan->type_arg_count = use->type_arg_count;
+    plan->receiver_class_id = use->receiver_class_id;
+    plan->receiver_type_key = use->receiver_type_key;
+    plan->receiver_type_arg_key_start = use->receiver_type_arg_key_start;
+    plan->receiver_type_arg_count = use->receiver_type_arg_count;
+    plan->declaration_type_key = use->declaration_type_key;
+    plan->declaration_type_arg_key_start = use->declaration_type_arg_key_start;
+    plan->declaration_type_arg_count = use->declaration_type_arg_count;
+    plan->specialization_effect = use->specialization_effect;
     plan->estimated_body_size = use->estimated_body_size;
     plan->action = generic_body_action_for(evidence, use);
     plan->evidence = generic_body_evidence_for(evidence, use);
@@ -8135,13 +8145,18 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         fprintf(out,
                 "generic-instantiation %u id=%u module=%u kind=%s origin_decl=%u "
                 "origin_func=%u origin_method=%u origin_class=%u specialized_func=%u "
-                "specialized_class=%u root_callsite=%u constraint_iface=%u name=%u type=%" PRIu64
-                " type_args=%" PRIu64 "+%u action=%s evidence=",
+                "specialized_class=%u root_callsite=%u constraint_iface=%u receiver_class=%u "
+                "receiver_type=%" PRIu64 " receiver_type_args=%" PRIu64
+                "+%u declaration_type=%" PRIu64 " declaration_type_args=%" PRIu64
+                "+%u specialization_effect=%u name=%u action=%s evidence=",
                 gi, gp->generic_inst_id, gp->module_id, xg_generic_inst_kind_name(gp->inst_kind),
                 gp->origin_decl_id, gp->origin_func_id, gp->origin_method_id, gp->origin_class_id,
                 gp->specialized_func_id, gp->specialized_class_id, gp->root_callsite_id,
-                gp->constraint_interface_id, gp->name_id, gp->type_key, gp->type_arg_key_start,
-                (unsigned) gp->type_arg_count, generic_instantiation_action_name(gp->action));
+                gp->constraint_interface_id, gp->receiver_class_id, gp->receiver_type_key,
+                gp->receiver_type_arg_key_start, (unsigned) gp->receiver_type_arg_count,
+                gp->declaration_type_key, gp->declaration_type_arg_key_start,
+                (unsigned) gp->declaration_type_arg_count, (unsigned) gp->specialization_effect,
+                gp->name_id, generic_instantiation_action_name(gp->action));
         print_generic_instantiation_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n",
                 generic_instantiation_unproven_reason_name(gp->unproven_reason));
@@ -8151,13 +8166,17 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         const XaotGenericBodyPlan *gp = &bundle->generic_body_plans[gi];
         fprintf(out,
                 "generic-body-plan %u id=%u inst=%u module=%u owner=%u origin_body=%u "
-                "specialized_body=%u root_callsite=%u type=%" PRIu64 " type_args=%" PRIu64
-                "+%u size=%u "
-                "action=%s evidence=",
+                "specialized_body=%u root_callsite=%u receiver_class=%u receiver_type=%" PRIu64
+                " receiver_type_args=%" PRIu64 "+%u declaration_type=%" PRIu64
+                " declaration_type_args=%" PRIu64
+                "+%u specialization_effect=%u size=%u action=%s evidence=",
                 gi, gp->use_id, gp->generic_inst_id, gp->module_id, gp->owner_func_id,
                 gp->origin_body_func_id, gp->specialized_body_func_id, gp->root_callsite_id,
-                gp->type_key, gp->type_arg_key_start, (unsigned) gp->type_arg_count,
-                gp->estimated_body_size, generic_body_action_name(gp->action));
+                gp->receiver_class_id, gp->receiver_type_key, gp->receiver_type_arg_key_start,
+                (unsigned) gp->receiver_type_arg_count, gp->declaration_type_key,
+                gp->declaration_type_arg_key_start, (unsigned) gp->declaration_type_arg_count,
+                (unsigned) gp->specialization_effect, gp->estimated_body_size,
+                generic_body_action_name(gp->action));
         print_generic_body_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
     }

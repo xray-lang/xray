@@ -588,6 +588,17 @@ static const XgBodySummary *evidence_find_body_by_func(const XgGlobalEvidence *e
     return NULL;
 }
 
+static const XgClassSummary *evidence_find_class_by_id(const XgGlobalEvidence *ev,
+                                                       XgClassId class_id) {
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].class_id == class_id)
+            return &ev->classes[i];
+    }
+    return NULL;
+}
+
 static void assert_byte_u8_sequence_type_keys_canonical(const XgGlobalEvidence *ev) {
     uint32_t expected_u8_key = xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U8);
     uint32_t array_receiver_key = 0;
@@ -1128,9 +1139,9 @@ TEST(global_evidence_hash_is_content_stable) {
     XgGenericInstSummary inst = {.generic_inst_id = 1,
                                  .module_id = 5,
                                  .origin_class_id = 10,
-                                 .type_key = 600,
-                                 .type_arg_key_start = 700,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 600,
+                                 .declaration_type_arg_key_start = 700,
+                                 .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES};
 
@@ -1142,11 +1153,79 @@ TEST(global_evidence_hash_is_content_stable) {
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&b, &inst));
     ASSERT_EQ_UINT(xg_global_evidence_hash(&a), xg_global_evidence_hash(&b));
 
-    b.generic_insts[0].type_arg_count = 2;
+    b.generic_insts[0].declaration_type_arg_count = 2;
+    ASSERT_NE(xg_global_evidence_hash(&a), xg_global_evidence_hash(&b));
+    b.generic_insts[0].declaration_type_arg_count = 1;
+    b.generic_insts[0].receiver_class_id = 10;
+    ASSERT_NE(xg_global_evidence_hash(&a), xg_global_evidence_hash(&b));
+    b.generic_insts[0].receiver_class_id = XG_NO_ID;
+    b.generic_insts[0].specialization_effect =
+        XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW;
     ASSERT_NE(xg_global_evidence_hash(&a), xg_global_evidence_hash(&b));
 
     xg_global_evidence_free(&a);
     xg_global_evidence_free(&b);
+}
+
+TEST(global_evidence_package_import_remaps_generic_constraint_interface) {
+    XgGlobalEvidence package;
+    XgGlobalEvidence target;
+    XgEvidencePackageImportReport report;
+    XgBuildKey package_key = {.module_id = 7, .profile = XG_BUILD_NATIVE_RELEASE};
+    XgBuildKey target_key = {.module_id = 1, .profile = XG_BUILD_NATIVE_RELEASE};
+    XgModuleSummary package_module = {.module_id = 7,
+                                       .name_id = 7,
+                                       .canonical_hash = UINT64_C(0x7007),
+                                       .source_hash = UINT64_C(0x7008),
+                                       .kind = XR_MOD_MEMORY};
+    XgModuleSummary target_module = {.module_id = 1,
+                                      .name_id = 1,
+                                      .canonical_hash = UINT64_C(0x1001),
+                                      .source_hash = UINT64_C(0x1002),
+                                      .kind = XR_MOD_MEMORY};
+    XgGenericInstSummary package_inst = {
+        .generic_inst_id = 1,
+        .module_id = 7,
+        .constraint_interface_id = 5,
+        .name_id = 17,
+        .declaration_type_key = UINT64_C(0x700000001),
+        .declaration_type_arg_key_start = UINT64_C(0x700000002),
+        .declaration_type_arg_count = 1,
+        .kind = XG_GENERIC_INST_FUNCTION,
+        .flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_INTERFACE_CONSTRAINT,
+    };
+    XgGenericInstSummary target_inst = {
+        .generic_inst_id = 10,
+        .module_id = 1,
+        .constraint_interface_id = 100,
+        .name_id = 11,
+        .declaration_type_key = UINT64_C(0x100000001),
+        .declaration_type_arg_key_start = UINT64_C(0x100000002),
+        .declaration_type_arg_count = 1,
+        .kind = XG_GENERIC_INST_FUNCTION,
+        .flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_INTERFACE_CONSTRAINT,
+    };
+    char *payload;
+
+    xg_global_evidence_init(&package, package_key);
+    xg_global_evidence_init(&target, target_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&package, &package_module));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&package, &package_inst));
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&target, &target_module));
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&target, &target_inst));
+
+    payload = xg_global_evidence_cache_payload_dump(&package,
+                                                    XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+    ASSERT_TRUE(xg_global_evidence_import_package_payload(&target, payload, &report));
+    ASSERT_EQ_UINT(report.rows_imported, 1);
+    ASSERT_EQ_UINT(target.ngeneric_insts, 2);
+    ASSERT_EQ_UINT(target.generic_insts[1].generic_inst_id, 11);
+    ASSERT_EQ_UINT(target.generic_insts[1].constraint_interface_id, 105);
+
+    xr_free(payload);
+    xg_global_evidence_free(&target);
+    xg_global_evidence_free(&package);
 }
 
 TEST(global_evidence_records_interface_object_use_rows) {
@@ -1274,11 +1353,14 @@ static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
     XgGenericInstSummary inst = {.generic_inst_id = 1,
                                  .module_id = key.module_id,
                                  .origin_method_id = 1,
+                                 .origin_class_id = 1,
+                                 .receiver_class_id = 1,
+                                 .receiver_type_key = 43,
                                  .root_callsite_id = 1,
                                  .name_id = 14,
-                                 .type_key = 44,
-                                 .type_arg_key_start = 45,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 44,
+                                 .declaration_type_arg_key_start = 45,
+                                 .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_METHOD,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES};
 
@@ -1411,7 +1493,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=56 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=57 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1749,14 +1831,19 @@ TEST(global_evidence_dump_lists_core_rows) {
         .origin_func_id = 4,
         .origin_method_id = 3,
         .origin_class_id = 2,
+        .receiver_class_id = 2,
         .specialized_func_id = 0,
         .specialized_class_id = 2,
         .root_callsite_id = 5,
         .constraint_interface_id = 123,
         .name_id = 900,
-        .type_key = 901,
-        .type_arg_key_start = 902,
-        .type_arg_count = 2,
+        .receiver_type_key = 801,
+        .receiver_type_arg_key_start = 802,
+        .receiver_type_arg_count = 1,
+        .declaration_type_key = 901,
+        .declaration_type_arg_key_start = 902,
+        .declaration_type_arg_count = 2,
+        .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW,
         .source_span_id = 80,
         .kind = XG_GENERIC_INST_METHOD,
         .flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_INTERFACE_CONSTRAINT |
@@ -1785,15 +1872,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=56 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=56 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=56 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=56 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=57 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=57 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=57 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=57 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=56 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -1824,7 +1911,10 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "generic-inst 0 id=9 module=1 kind=method"));
     ASSERT_NOT_NULL(strstr(dump, "origin_decl=2 origin_func=4 origin_method=3 origin_class=2"));
     ASSERT_NOT_NULL(strstr(dump, "root_callsite=5 constraint_iface=123"));
-    ASSERT_NOT_NULL(strstr(dump, "type=901 type_args=902+2 span=80 flags=0xb"));
+    ASSERT_NOT_NULL(strstr(dump, "receiver_class=2"));
+    ASSERT_NOT_NULL(strstr(dump, "receiver_type=801 receiver_type_args=802+1"));
+    ASSERT_NOT_NULL(strstr(
+        dump, "declaration_type=901 declaration_type_args=902+2 specialization_effect=2"));
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
@@ -1839,6 +1929,11 @@ TEST(global_evidence_dump_lists_core_rows) {
     char *plan_dump = xaot_bundle_dump_global_evidence_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
     ASSERT_NOT_NULL(strstr(plan_dump, "generic-instantiation 0 id=9 module=1 kind=method"));
+    ASSERT_NOT_NULL(strstr(
+        plan_dump, "receiver_class=2 receiver_type=801 receiver_type_args=802+1"));
+    ASSERT_NOT_NULL(strstr(
+        plan_dump,
+        "declaration_type=901 declaration_type_args=902+2 specialization_effect=2"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=specialized_abi"));
     ASSERT_NOT_NULL(strstr(plan_dump, "evidence=row+types+origin+root+constraint+abi"));
     xr_free(plan_dump);
@@ -1859,6 +1954,9 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_rows) {
     XgGenericInstSummary inst = {.generic_inst_id = 1,
                                  .module_id = 1,
                                  .specialized_func_id = 99,
+                                 .declaration_type_key = 11,
+                                 .declaration_type_arg_key_start = 12,
+                                 .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_FUNCTION,
                                  .flags = XG_GENERIC_INST_SPECIALIZED_BODY};
     XiFunc init_func;
@@ -1891,6 +1989,47 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_rows) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(global_evidence_verifier_rejects_missing_generic_constraint_interface) {
+    XgGlobalEvidence ev;
+    XgBuildKey key = {.module_id = 1, .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGenericInstSummary inst = {
+        .generic_inst_id = 1,
+        .module_id = 1,
+        .constraint_interface_id = 99,
+        .declaration_type_key = 11,
+        .declaration_type_arg_key_start = 12,
+        .declaration_type_arg_count = 1,
+        .kind = XG_GENERIC_INST_FUNCTION,
+        .flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_INTERFACE_CONSTRAINT,
+    };
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "constraint interface is missing") != NULL, err);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class) {
     XgGlobalEvidence ev;
     XgBuildKey key = {.source_hash = 0x1920,
@@ -1903,9 +2042,9 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class) {
                                  .module_id = 1,
                                  .specialized_class_id = 99,
                                  .name_id = 10,
-                                 .type_key = 11,
-                                 .type_arg_key_start = 12,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 11,
+                                 .declaration_type_arg_key_start = 12,
+                                 .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES |
                                           XG_GENERIC_INST_SPECIALIZED_ABI |
@@ -1970,9 +2109,9 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_ident
                                  .origin_class_id = 1,
                                  .specialized_class_id = 2,
                                  .name_id = 10,
-                                 .type_key = 11,
-                                 .type_arg_key_start = 12,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 11,
+                                 .declaration_type_arg_key_start = 12,
+                                 .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES |
                                           XG_GENERIC_INST_SPECIALIZED_ABI |
@@ -2095,9 +2234,9 @@ TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_class_a
                                  .origin_class_id = 1,
                                  .specialized_class_id = 2,
                                  .name_id = 10,
-                                 .type_key = 11,
-                                 .type_arg_key_start = 12,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 11,
+                                 .declaration_type_arg_key_start = 12,
+                                 .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES |
                                           XG_GENERIC_INST_SPECIALIZED_ABI |
@@ -2150,9 +2289,9 @@ TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_body_an
                                  .module_id = 1,
                                  .specialized_func_id = 99,
                                  .name_id = 10,
-                                 .type_key = 11,
-                                 .type_arg_key_start = 12,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 11,
+                                 .declaration_type_arg_key_start = 12,
+                                 .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_FUNCTION,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES |
                                           XG_GENERIC_INST_SPECIALIZED_BODY};
@@ -7518,9 +7657,15 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     graph.topo_count = 1;
     graph.entry_index = 0;
 
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
+
     XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
     ASSERT_EQ_UINT(ev.ngeneric_insts, 1);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     const XgGenericInstSummary *inst = &ev.generic_insts[0];
@@ -7528,10 +7673,13 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     ASSERT_EQ_UINT(inst->origin_decl_id, 1);
     ASSERT_TRUE(inst->origin_func_id != XG_NO_ID);
     ASSERT_EQ_UINT(inst->root_callsite_id, ev.callsites[0].callsite_id);
-    ASSERT_EQ_UINT(inst->type_arg_count, 1);
+    ASSERT_EQ_UINT(inst->receiver_class_id, XG_NO_ID);
+    ASSERT_EQ_UINT(inst->receiver_type_arg_count, 0);
+    ASSERT_EQ_UINT(inst->declaration_type_arg_count, 1);
+    ASSERT_EQ_UINT(inst->specialization_effect, XG_GENERIC_SPECIALIZATION_EFFECT_NONE);
     ASSERT_TRUE((inst->flags & XG_GENERIC_INST_CONCRETE_TYPES) != 0);
-    ASSERT_TRUE(inst->type_key != 0);
-    ASSERT_TRUE(inst->type_arg_key_start != 0);
+    ASSERT_TRUE(inst->declaration_type_key != 0);
+    ASSERT_TRUE(inst->declaration_type_arg_key_start != 0);
 
     char *dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
@@ -7582,6 +7730,76 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_generic_effect_identity_is_orthogonal_to_type_tuple) {
+    setup_parser_session();
+    const char *source =
+        "enum GenericEffectError { Boom }\n"
+        "fn passGenericEffect(x: i64) -> i64 { return x }\n"
+        "fn failGenericEffect(x: i64) -> i64 { throw GenericEffectError.Boom }\n"
+        "fn applyGenericEffect<T>(x: T, cb: fn(T) -> T) -> T { return cb(x) }\n"
+        "fn useNoThrowGenericEffect() -> i64 {\n"
+        "  return applyGenericEffect<i64>(1, passGenericEffect)\n"
+        "}\n"
+        "fn useMayThrowGenericEffect() -> i64 {\n"
+        "  return applyGenericEffect<i64>(2, failGenericEffect)\n"
+        "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "generic-effect-identity.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {
+        .specs = &spec,
+        .spec_count = 1,
+        .topo_order = topo_order,
+        .topo_count = 1,
+        .entry_index = 0,
+    };
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    const XgGenericInstSummary *may_throw = NULL;
+    const XgGenericInstSummary *no_throw = NULL;
+    for (uint32_t i = 0; i < evidence.ngeneric_insts; ++i) {
+        const XgGenericInstSummary *inst = &evidence.generic_insts[i];
+        if (inst->name_id != xg_name_id("applyGenericEffect"))
+            continue;
+        if (inst->specialization_effect == XG_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW)
+            may_throw = inst;
+        if (inst->specialization_effect == XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW)
+            no_throw = inst;
+    }
+    ASSERT_NOT_NULL(may_throw);
+    ASSERT_NOT_NULL(no_throw);
+    ASSERT_EQ_UINT(may_throw->declaration_type_arg_count, 1u);
+    ASSERT_EQ_UINT(no_throw->declaration_type_arg_count, 1u);
+    ASSERT_EQ_UINT(may_throw->declaration_type_key, no_throw->declaration_type_key);
+    ASSERT_EQ_UINT(may_throw->declaration_type_arg_key_start,
+                   no_throw->declaration_type_arg_key_start);
+    ASSERT_NE(may_throw->specialization_effect, no_throw->specialization_effect);
+
+    XaMonoBudget budget = xa_mono_default_budget();
+    XaMonoUsage usage = {0};
+    AstNode *roots[1] = {ast};
+    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+
+    xg_global_evidence_free(&evidence);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
     teardown_parser_session();
 }
 
@@ -7630,7 +7848,7 @@ TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_bindin
         xg_global_evidence_build_from_module_graph(&evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     xg_global_evidence_free(&evidence);
 
-    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+    ASSERT_FALSE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
         &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
     xg_global_evidence_free(&evidence);
 
@@ -7647,14 +7865,15 @@ TEST(global_evidence_generic_root_merge_preserves_identity_high_bits) {
     XgGenericInstSummary existing = {.generic_inst_id = 1,
                                      .module_id = 1,
                                      .name_id = 7,
-                                     .type_key = UINT64_C(0x100000001),
-                                     .type_arg_key_start = UINT64_C(0x300000002),
-                                     .type_arg_count = 1,
+                                     .declaration_type_key = UINT64_C(0x100000001),
+                                     .declaration_type_arg_key_start = UINT64_C(0x300000002),
+                                     .declaration_type_arg_count = 1,
                                      .kind = XG_GENERIC_INST_FUNCTION,
                                      .flags = XG_GENERIC_INST_CONCRETE_TYPES};
     XgGenericInstSummary distinct = existing;
-    distinct.type_key = UINT64_C(0x200000001);
-    distinct.type_arg_key_start = UINT64_C(0x400000002);
+    distinct.declaration_type_key = UINT64_C(0x200000001);
+    distinct.declaration_type_arg_key_start = UINT64_C(0x400000002);
+    distinct.specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW;
 
     xg_global_evidence_init(&dst, key);
     xg_global_evidence_init(&roots, key);
@@ -7663,9 +7882,12 @@ TEST(global_evidence_generic_root_merge_preserves_identity_high_bits) {
 
     ASSERT_TRUE(xg_global_evidence_merge_generic_inst_roots(&dst, &roots));
     ASSERT_EQ_UINT(dst.ngeneric_insts, 2);
-    ASSERT_EQ_UINT(dst.generic_insts[0].type_key, UINT64_C(0x100000001));
-    ASSERT_EQ_UINT(dst.generic_insts[1].type_key, UINT64_C(0x200000001));
-    ASSERT_EQ_UINT(dst.generic_insts[1].type_arg_key_start, UINT64_C(0x400000002));
+    ASSERT_EQ_UINT(dst.generic_insts[0].declaration_type_key, UINT64_C(0x100000001));
+    ASSERT_EQ_UINT(dst.generic_insts[1].declaration_type_key, UINT64_C(0x200000001));
+    ASSERT_EQ_UINT(dst.generic_insts[1].declaration_type_arg_key_start,
+                   UINT64_C(0x400000002));
+    ASSERT_EQ_UINT(dst.generic_insts[1].specialization_effect,
+                   XG_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW);
 
     xg_global_evidence_free(&roots);
     xg_global_evidence_free(&dst);
@@ -7726,8 +7948,8 @@ TEST(global_evidence_post_mono_records_concrete_nested_generic_root) {
         ASSERT_TRUE(inst->origin_func_id != XG_NO_ID);
         ASSERT_TRUE(inst->specialized_func_id != XG_NO_ID);
         ASSERT_TRUE(inst->root_callsite_id != XG_NO_ID);
-        ASSERT_TRUE(inst->type_key != 0u);
-        ASSERT_TRUE(inst->type_arg_key_start != 0u);
+        ASSERT_TRUE(inst->declaration_type_key != 0u);
+        ASSERT_TRUE(inst->declaration_type_arg_key_start != 0u);
         if (inst->name_id == xg_name_id("outer"))
             outer_roots++;
         if (inst->name_id == xg_name_id("nested"))
@@ -7815,6 +8037,13 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
     ASSERT_TRUE(inst->origin_func_id != XG_NO_ID);
     ASSERT_TRUE(inst->origin_method_id != XG_NO_ID);
     ASSERT_TRUE(inst->origin_class_id != XG_NO_ID);
+    ASSERT_EQ_UINT(inst->receiver_class_id, inst->origin_class_id);
+    ASSERT_EQ_UINT(inst->receiver_type_arg_count, 0u);
+    ASSERT_TRUE(inst->receiver_type_key != 0u);
+    ASSERT_EQ_UINT(inst->declaration_type_arg_count, 1u);
+    ASSERT_TRUE(inst->declaration_type_key != 0u);
+    ASSERT_TRUE(inst->declaration_type_arg_key_start != 0u);
+    ASSERT_EQ_UINT(inst->specialization_effect, XG_GENERIC_SPECIALIZATION_EFFECT_NONE);
     ASSERT_TRUE(inst->specialized_func_id != XG_NO_ID);
     ASSERT_TRUE(inst->specialized_func_id != inst->origin_func_id);
     ASSERT_TRUE((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0u);
@@ -7825,6 +8054,20 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
     ASSERT_EQ_UINT(evidence.generic_body_uses[0].specialized_body_func_id,
                    inst->specialized_func_id);
     ASSERT_EQ_UINT(evidence.generic_body_uses[0].root_callsite_id, inst->root_callsite_id);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].receiver_class_id, inst->receiver_class_id);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].receiver_type_key, inst->receiver_type_key);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].receiver_type_arg_key_start,
+                   inst->receiver_type_arg_key_start);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].receiver_type_arg_count,
+                   inst->receiver_type_arg_count);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].declaration_type_key,
+                   inst->declaration_type_key);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].declaration_type_arg_key_start,
+                   inst->declaration_type_arg_key_start);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].declaration_type_arg_count,
+                   inst->declaration_type_arg_count);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].specialization_effect,
+                   inst->specialization_effect);
 
     const XgCallsiteSummary *root_call = NULL;
     for (uint32_t i = 0u; i < evidence.ncallsites; ++i) {
@@ -7847,6 +8090,85 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
         }
     }
     ASSERT_TRUE(specialized_method_body);
+
+    xg_global_evidence_free(&evidence);
+    xg_global_evidence_free(&pre);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver) {
+    setup_parser_session();
+    const char *source =
+        "class GenericBase {\n"
+        "  apply<T>(value: T) -> T { return value }\n"
+        "}\n"
+        "class GenericChild extends GenericBase { }\n"
+        "fn answer() -> i64 {\n"
+        "  var child = GenericChild()\n"
+        "  return child.apply(42)\n"
+        "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "inherited-generic-method-root.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {
+        .specs = &spec,
+        .spec_count = 1,
+        .topo_order = topo_order,
+        .topo_count = 1,
+        .entry_index = 0,
+    };
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence pre = {0};
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &pre, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_EQ_UINT(pre.ngeneric_insts, 1u);
+    ASSERT_EQ_UINT(pre.generic_insts[0].kind, XG_GENERIC_INST_METHOD);
+    ASSERT_NE(pre.generic_insts[0].receiver_class_id, pre.generic_insts[0].origin_class_id);
+    ASSERT_EQ_UINT(pre.generic_insts[0].receiver_type_arg_count, 0u);
+    ASSERT_TRUE(pre.generic_insts[0].receiver_type_key != 0u);
+    const XgClassSummary *pre_receiver =
+        evidence_find_class_by_id(&pre, pre.generic_insts[0].receiver_class_id);
+    ASSERT_NOT_NULL(pre_receiver);
+    ASSERT_EQ_UINT(pre_receiver->parent_class_id, pre.generic_insts[0].origin_class_id);
+
+    XaMonoBudget budget = xa_mono_default_budget();
+    XaMonoUsage usage = {0};
+    AstNode *roots[1] = {ast};
+    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
+    xa_analyzer_clear_diagnostics(analyzer);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_TRUE(xg_global_evidence_merge_generic_inst_roots(&evidence, &pre));
+    ASSERT_EQ_UINT(evidence.ngeneric_insts, 1u);
+    const XgGenericInstSummary *inst = &evidence.generic_insts[0];
+    ASSERT_NE(inst->receiver_class_id, inst->origin_class_id);
+    const XgClassSummary *receiver =
+        evidence_find_class_by_id(&evidence, inst->receiver_class_id);
+    ASSERT_NOT_NULL(receiver);
+    ASSERT_EQ_UINT(receiver->parent_class_id, inst->origin_class_id);
+    ASSERT_EQ_UINT(evidence.ngeneric_body_uses, 1u);
+    ASSERT_EQ_UINT(evidence.generic_body_uses[0].receiver_class_id, inst->receiver_class_id);
+    const XgBodySummary *specialized =
+        evidence_find_body_by_func(&evidence, inst->specialized_func_id);
+    ASSERT_NOT_NULL(specialized);
+    ASSERT_EQ_UINT(specialized->owner_class_id, inst->origin_class_id);
 
     xg_global_evidence_free(&evidence);
     xg_global_evidence_free(&pre);
@@ -8021,9 +8343,9 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
                                  .specialized_func_id = 2,
                                  .root_callsite_id = 1,
                                  .name_id = xg_name_id("origin"),
-                                 .type_key = 200,
-                                 .type_arg_key_start = 201,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 200,
+                                 .declaration_type_arg_key_start = 201,
+                                 .declaration_type_arg_count = 1,
                                  .source_span_id = 12,
                                  .kind = XG_GENERIC_INST_FUNCTION,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES |
@@ -8036,9 +8358,9 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
                                         .origin_body_func_id = 1,
                                         .specialized_body_func_id = 2,
                                         .root_callsite_id = 1,
-                                        .type_key = 200,
-                                        .type_arg_key_start = 201,
-                                        .type_arg_count = 1,
+                                        .declaration_type_key = 200,
+                                        .declaration_type_arg_key_start = 201,
+                                        .declaration_type_arg_count = 1,
                                         .estimated_body_size = 18,
                                         .flags = XG_GENERIC_BODY_EXPLICIT_ROOT,
                                         .body_use_hash = 0x1836};
@@ -8125,6 +8447,53 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+
+    ev.generic_insts[0].specialization_effect = UINT8_MAX;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "generic inst specialization effect is invalid") != NULL, err);
+    ev.generic_insts[0].specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    ev.generic_insts[0].declaration_type_arg_key_start = 0;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "generic inst declaration type identity is invalid") != NULL, err);
+    ev.generic_insts[0].declaration_type_arg_key_start = 201;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    ev.generic_insts[0].receiver_type_key = 1;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "generic inst non-method receiver identity is invalid") != NULL, err);
+    ev.generic_insts[0].receiver_type_key = 0;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    ev.generic_body_uses[0].declaration_type_key ^= UINT64_C(1);
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "generic body-use identity does not match inst") != NULL, err);
+    ev.generic_body_uses[0].declaration_type_key ^= UINT64_C(1);
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    ev.generic_body_uses[0].specialization_effect =
+        XG_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "generic body-use identity does not match inst") != NULL, err);
+    ev.generic_body_uses[0].specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NONE;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    bundle.generic_body_plans[0].declaration_type_key ^= UINT64_C(1);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic body plan identity does not re-derive"));
+    bundle.generic_body_plans[0].declaration_type_key ^= UINT64_C(1);
 
     bundle.generic_body_plans[0].action = XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY;
     memset(err, 0, sizeof(err));
@@ -8217,9 +8586,9 @@ TEST(global_evidence_generic_code_size_policy_shares_large_body) {
                                  .specialized_func_id = 2,
                                  .root_callsite_id = 1,
                                  .name_id = xg_name_id("large"),
-                                 .type_key = 200,
-                                 .type_arg_key_start = 201,
-                                 .type_arg_count = 1,
+                                 .declaration_type_key = 200,
+                                 .declaration_type_arg_key_start = 201,
+                                 .declaration_type_arg_count = 1,
                                  .source_span_id = 12,
                                  .kind = XG_GENERIC_INST_FUNCTION,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES |
@@ -8231,9 +8600,9 @@ TEST(global_evidence_generic_code_size_policy_shares_large_body) {
                                         .origin_body_func_id = 1,
                                         .specialized_body_func_id = 2,
                                         .root_callsite_id = 1,
-                                        .type_key = 200,
-                                        .type_arg_key_start = 201,
-                                        .type_arg_count = 1,
+                                        .declaration_type_key = 200,
+                                        .declaration_type_arg_key_start = 201,
+                                        .declaration_type_arg_count = 1,
                                         .estimated_body_size = 80,
                                         .flags = XG_GENERIC_BODY_EXPLICIT_ROOT,
                                         .body_use_hash = 0x183e};
@@ -15463,12 +15832,14 @@ RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_decl_kind_capabilities_are_disjoint);
 RUN_TEST(global_evidence_verifier_rejects_param_storage_key_without_vector);
 RUN_TEST(global_evidence_hash_is_content_stable);
+RUN_TEST(global_evidence_package_import_remaps_generic_constraint_interface);
 RUN_TEST(global_evidence_records_interface_object_use_rows);
 RUN_TEST(global_evidence_cache_keys_are_phase_specific);
 RUN_TEST(global_evidence_cache_payload_preserves_source_node_identity);
 RUN_TEST(global_evidence_param_modes_participate_in_signature_keys);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_rows);
+RUN_TEST(global_evidence_verifier_rejects_missing_generic_constraint_interface);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_identity);
 RUN_TEST(global_evidence_verifier_rejects_monomorphized_class_without_generic_inst_anchor);
@@ -15508,10 +15879,12 @@ RUN_TEST(global_evidence_producer_uses_stable_source_identity);
 RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);
 RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
+RUN_TEST(global_evidence_generic_effect_identity_is_orthogonal_to_type_tuple);
 RUN_TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_binding);
 RUN_TEST(global_evidence_generic_root_merge_preserves_identity_high_bits);
 RUN_TEST(global_evidence_post_mono_records_concrete_nested_generic_root);
 RUN_TEST(global_evidence_post_mono_records_concrete_generic_method_root);
+RUN_TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver);
 RUN_TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity);

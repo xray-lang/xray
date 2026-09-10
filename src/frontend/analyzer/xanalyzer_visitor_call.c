@@ -1093,37 +1093,42 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
     }
 }
 
+XrTypeRef **xa_synthesize_type_arg_refs(XaAnalyzer *analyzer, XrType **types, int type_count) {
+    if (!analyzer || !analyzer->compiler_session || !types || type_count <= 0)
+        return NULL;
+    XrCompilerSession *session = analyzer->compiler_session;
+    XrTypeRef *stack_synth[8] = {0};
+    XrTypeRef **synth = type_count <= 8
+                            ? stack_synth
+                            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) type_count);
+    if (!synth)
+        return NULL;
+    for (int i = 0; i < type_count; i++) {
+        synth[i] = xa_synth_tref_from_type(session, types[i]);
+        if (!synth[i]) {
+            if (synth != stack_synth)
+                xr_free(synth);
+            return NULL;
+        }
+        if (!xa_analyzer_bind_type_ref_type(analyzer, synth[i], types[i])) {
+            if (synth != stack_synth)
+                xr_free(synth);
+            return NULL;
+        }
+    }
+    XrTypeRef **published = xr_tref_array_copy(session, synth, type_count);
+    if (synth != stack_synth)
+        xr_free(synth);
+    return published;
+}
+
 // Record a complete inferred type tuple before monomorphization. The tuple is published atomically
 // because a nonzero count with no backing array is not a valid AST state.
 void xa_writeback_inferred_type_args(XaAnalyzer *analyzer, CallExprNode *call, XrType **inferred,
                                      int type_param_count) {
-    if (!analyzer || !analyzer->compiler_session || !call || !inferred || type_param_count <= 0 ||
-        call->type_arg_count != 0)
+    if (!analyzer || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
         return;
-    XrCompilerSession *session = analyzer->compiler_session;
-    XrTypeRef *stack_synth[8] = {0};
-    XrTypeRef **synth =
-        type_param_count <= 8
-            ? stack_synth
-            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) type_param_count);
-    if (!synth)
-        return;
-    for (int i = 0; i < type_param_count; i++) {
-        synth[i] = xa_synth_tref_from_type(session, inferred[i]);
-        if (!synth[i]) {
-            if (synth != stack_synth)
-                xr_free(synth);
-            return;
-        }
-        if (!xa_analyzer_bind_type_ref_type(analyzer, synth[i], inferred[i])) {
-            if (synth != stack_synth)
-                xr_free(synth);
-            return;
-        }
-    }
-    XrTypeRef **published = xr_tref_array_copy(session, synth, type_param_count);
-    if (synth != stack_synth)
-        xr_free(synth);
+    XrTypeRef **published = xa_synthesize_type_arg_refs(analyzer, inferred, type_param_count);
     if (!published)
         return;
     call->type_args = published;
@@ -8170,8 +8175,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // Intrinsics retain their own typed lowering and never enter this path.
     if (return_type && fn_links) {
         return_type = xa_substitute_generic_call(
-            ctx, fn_links, callee_type, return_type, node, call, arg_count, effective_arg_types,
-            xa_links_require_source_generic_specialization(fn_links));
+            ctx, fn_links, callee_type, callee_obj_type, return_type, node, call, arg_count,
+            effective_arg_types, xa_links_require_source_generic_specialization(fn_links));
     }
 
     if (json_path_target) {
@@ -8237,8 +8242,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         // resolved them from this receiver.
                         if (method_links != fn_links)
                             return_type = xa_substitute_generic_call(
-                                ctx, method_links, callee_type, return_type, node, call, arg_count,
-                                effective_arg_types,
+                                ctx, method_links, callee_type, callee_obj_type, return_type, node,
+                                call, arg_count, effective_arg_types,
                                 xa_links_require_source_generic_specialization(method_links));
 
                         // Also apply class type parameters substitution
