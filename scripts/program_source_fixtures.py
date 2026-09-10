@@ -228,11 +228,11 @@ class RegistryTests(unittest.TestCase):
 
     def test_live_registry_and_exact_projection_are_complete(self):
         registry = load_registry()
-        self.assertEqual(len(registry["cases"]), 33)
-        self.assertEqual(len(fixture_records(registry)), 21)
+        self.assertEqual(len(registry["cases"]), 34)
+        self.assertEqual(len(fixture_records(registry)), 22)
         header, cmake = project_registry(registry)
-        self.assertEqual(header.count(b"    X(source_owner_"), 33)
-        self.assertEqual(cmake.count(b"add_xr_program_source_native_fixture("), 21)
+        self.assertEqual(header.count(b"    X(source_owner_"), 34)
+        self.assertEqual(cmake.count(b"add_xr_program_source_native_fixture("), 22)
         with tempfile.TemporaryDirectory(prefix="xr-source-fixture-projection-") as directory:
             root = Path(directory)
             header_path, cmake_path = root / "cases.h", root / "fixtures.cmake"

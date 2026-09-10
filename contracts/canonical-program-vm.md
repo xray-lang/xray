@@ -181,7 +181,12 @@ skeleton. The open `this` receiver fact remains a non-executable template edge u
 cloning substitutes it. Xglobal schema 59 and Program validation independently rederive each
 concrete body, construction, and body-use from the source nominal origin and matching monomorphized
 receiver class identity; incomplete, inconsistent, or coordinated-forged receiver facts are rejected
-before execution. Reference and both VM decode policies return 42. Generic heap/class receivers,
+before execution. Reference and both VM decode policies return 42. A second source-backed fixture
+proves the same exact origin-and-tuple identity for non-escaping generic nominal classes with scalar
+fields and fieldwise constructors. Direct namespace access, inferred construction, renamed facade
+re-export, same-name facade/caller decoys, and distinct `i64`/`bool` tuples produce four exact affine
+class TypeIds and four exact getter targets; Reference and both VM policies return 42. Shared class
+aliases, mutation visibility, owned or nontrivial fields, physical heap lifetime and reclamation,
 interface generic dispatch, parameterized and builtin constraints, generic ownership cleanup,
 arbitrary returned/projected READ places, and valid finite recursive specialization remain outside
 this bounded slice. Non-generic qualified aggregate syntax is a separate parser ambiguity and is not
@@ -216,4 +221,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 61807ded23b895d8fefc3728e7a68873b51887e2443176d7884a398ff653cd71
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 85ba826639663abaa5d582f164b620a6ef7362bf9dea616b936efbbac94f80f2

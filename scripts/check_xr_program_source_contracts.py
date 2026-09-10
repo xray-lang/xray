@@ -313,7 +313,7 @@ def validate(root: Path) -> None:
         "read_value_call_place_is_exact",
         "read_value_receiver_load_is_exact",
         "resolved_value_aggregate_construction",
-        "static_value_struct_publication_is_exact",
+        "static_nominal_publication_is_exact",
         "block_typed_invoke_call",
         "map_function_error_type",
         "XR_CORE_OP_CORE_CALL_SEALED_INVOKE",

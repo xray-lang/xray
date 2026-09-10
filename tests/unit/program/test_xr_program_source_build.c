@@ -2513,6 +2513,262 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
     source_build_fixture_free(&fixture);
 }
 
+TEST(source_owner_generic_scalar_class_specializations_are_exact_nominal_aggregates) {
+    static const char library_source[] = "export class Box<T> {\n"
+                                         "  value: T\n"
+                                         "  constructor(value: T) { this.value = value }\n"
+                                         "  get() -> T { return this.value }\n"
+                                         "}\n";
+    static const char facade_source[] = "export { Box as OriginBox } from \"./library\"\n"
+                                        "export class Box<T> {\n"
+                                        "  value: T\n"
+                                        "  constructor(value: T) { this.value = value }\n"
+                                        "  get() -> T { return this.value }\n"
+                                        "}\n";
+    static const char entry_source[] =
+        "import \"./library\" as direct\n"
+        "import \"./facade\" as facade\n"
+        "class Box<T> {\n"
+        "  value: T\n"
+        "  constructor(value: T) { this.value = value }\n"
+        "  get() -> T { return this.value }\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        "  var a = direct.Box<i64>(20)\n"
+        "  var b = direct.Box(1)\n"
+        "  var c = facade.OriginBox<i64>(1)\n"
+        "  var d = facade.OriginBox(1)\n"
+        "  var e = facade.Box<i64>(10)\n"
+        "  var f = Box<i64>(9)\n"
+        "  var flag = facade.OriginBox<bool>(true)\n"
+        "  if (flag.get()) {\n"
+        "    return a.get() + b.get() + c.get() + d.get() + e.get() + f.get()\n"
+        "  }\n"
+        "  return 0\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, entry_source, library_source));
+    ASSERT_TRUE(source_build_fixture_add_facade(&fixture, facade_source));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+
+    XrProgramSourceProduct first = {0};
+    XrProgramSourceProduct second = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &first, &diagnostic);
+    assert_source_build_ok(&fixture.input, &second, &diagnostic);
+    ASSERT_NOT_NULL(first.program);
+    ASSERT_NOT_NULL(second.program);
+    assert_products_equal(&first, &second);
+
+    const XrValidatedProgram *program = first.program;
+    uint16_t i64_class_types[3] = {XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID};
+    uint16_t bool_class_type = XR_CORE_TYPE_VOID;
+    uint32_t i64_class_count = 0u;
+    uint32_t bool_class_count = 0u;
+    for (uint32_t type_id = XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+         type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + program->type_count; ++type_id) {
+        const XrValidatedType *type = xr_validated_program_type(program, (uint16_t) type_id);
+        if (!type || type->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+            type->nominal_kind != XR_CORE_IR_NOMINAL_CLASS)
+            continue;
+        ASSERT_EQ_INT(type->ownership, XR_CORE_IR_TYPE_OWNERSHIP_AFFINE);
+        ASSERT_EQ_INT(type->copy_contract, XR_CORE_IR_COPY_EXPLICIT);
+        ASSERT_EQ_UINT(type->field_count, 1u);
+        ASSERT_NOT_NULL(type->field_types);
+        if (type->field_types[0] == XR_CORE_TYPE_I64) {
+            ASSERT_LT(i64_class_count, 3u);
+            i64_class_types[i64_class_count++] = (uint16_t) type_id;
+        } else if (type->field_types[0] == XR_CORE_TYPE_BOOL) {
+            ASSERT_EQ_UINT(bool_class_count, 0u);
+            bool_class_type = (uint16_t) type_id;
+            ++bool_class_count;
+        } else {
+            ASSERT_TRUE(false);
+        }
+    }
+    ASSERT_EQ_UINT(i64_class_count, 3u);
+    ASSERT_EQ_UINT(bool_class_count, 1u);
+    ASSERT_TRUE(bool_class_type != XR_CORE_TYPE_VOID);
+    for (uint32_t left = 0u; left < i64_class_count; ++left) {
+        const XrValidatedType *left_type =
+            xr_validated_program_type(program, i64_class_types[left]);
+        ASSERT_NOT_NULL(left_type);
+        ASSERT_TRUE(!xr_core_ir_key_equal(
+            left_type->key, xr_validated_program_type(program, bool_class_type)->key));
+        for (uint32_t right = left + 1u; right < i64_class_count; ++right) {
+            const XrValidatedType *right_type =
+                xr_validated_program_type(program, i64_class_types[right]);
+            ASSERT_NOT_NULL(right_type);
+            ASSERT_TRUE(!xr_core_ir_key_equal(left_type->key, right_type->key));
+        }
+    }
+
+    uint32_t entry = xr_validated_program_entry_function(program);
+    ASSERT_LT(entry, program->function_count);
+    const XrValidatedFunction *entry_function = &program->functions[entry];
+    uint32_t construct_counts[3] = {0u, 0u, 0u};
+    uint32_t bool_constructs = 0u;
+    uint32_t class_calls = 0u;
+    uint32_t class_drops = 0u;
+    uint32_t unique_method_targets[4] = {UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    uint32_t unique_method_target_count = 0u;
+    for (uint32_t block_index = 0u; block_index < entry_function->block_count; ++block_index) {
+        const XrValidatedBlock *block = &entry_function->blocks[block_index];
+        for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+             ++instruction_index) {
+            const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
+            if (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT) {
+                const XrValidatedType *type =
+                    xr_validated_program_type(program, instruction->result_type_id);
+                if (!type || type->nominal_kind != XR_CORE_IR_NOMINAL_CLASS)
+                    continue;
+                ASSERT_EQ_UINT(instruction->operand_count, 1u);
+                ASSERT_EQ_INT(instruction->result_ownership, XR_CORE_IR_OWNER);
+                ASSERT_EQ_INT(entry_function->value_ownerships[instruction->operands[0]],
+                              XR_CORE_IR_NON_OWNER);
+                if (instruction->result_type_id == bool_class_type) {
+                    ASSERT_EQ_UINT(entry_function->value_types[instruction->operands[0]],
+                                   XR_CORE_TYPE_BOOL);
+                    ++bool_constructs;
+                } else {
+                    bool matched = false;
+                    for (uint32_t index = 0u; index < i64_class_count; ++index) {
+                        if (instruction->result_type_id != i64_class_types[index])
+                            continue;
+                        ASSERT_EQ_UINT(entry_function->value_types[instruction->operands[0]],
+                                       XR_CORE_TYPE_I64);
+                        ++construct_counts[index];
+                        matched = true;
+                    }
+                    ASSERT_TRUE(matched);
+                }
+            } else if (instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT) {
+                ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FUNCTION);
+                ASSERT_LT(instruction->immediate.function_id, program->function_count);
+                const XrValidatedFunction *callee =
+                    &program->functions[instruction->immediate.function_id];
+                if (!callee->has_receiver)
+                    continue;
+                ASSERT_EQ_UINT(callee->parameter_count, 1u);
+                ASSERT_EQ_UINT(instruction->operand_count, 1u);
+                ASSERT_EQ_INT(callee->receiver_mode, XR_PARAM_READ);
+                ASSERT_EQ_UINT(entry_function->value_types[instruction->operands[0]],
+                               callee->parameter_types[0]);
+                bool known = false;
+                for (uint32_t target = 0u; target < unique_method_target_count; ++target)
+                    known |= unique_method_targets[target] == instruction->immediate.function_id;
+                if (!known) {
+                    ASSERT_LT(unique_method_target_count, 4u);
+                    unique_method_targets[unique_method_target_count++] =
+                        instruction->immediate.function_id;
+                }
+                ++class_calls;
+            } else if (instruction->operation_id == XR_CORE_OP_CORE_OWNER_DROP &&
+                       instruction->operand_count == 1u) {
+                const XrValidatedType *operand_type = xr_validated_program_type(
+                    program, entry_function->value_types[instruction->operands[0]]);
+                if (operand_type && operand_type->nominal_kind == XR_CORE_IR_NOMINAL_CLASS)
+                    ++class_drops;
+            }
+        }
+    }
+    uint32_t origin_type_index = UINT32_MAX;
+    uint32_t singleton_i64_types = 0u;
+    for (uint32_t index = 0u; index < i64_class_count; ++index) {
+        if (construct_counts[index] == 4u)
+            origin_type_index = index;
+        else if (construct_counts[index] == 1u)
+            ++singleton_i64_types;
+    }
+    ASSERT_LT(origin_type_index, i64_class_count);
+    ASSERT_EQ_UINT(singleton_i64_types, 2u);
+    ASSERT_EQ_UINT(bool_constructs, 1u);
+    ASSERT_EQ_UINT(class_calls, 7u);
+    ASSERT_EQ_UINT(unique_method_target_count, 4u);
+    /* The flag is dropped before the branch. Each of the six i64 owners has one terminal drop on
+     * the true edge and one on the false edge. */
+    ASSERT_EQ_UINT(class_drops, 13u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_OWNER_COPY), 0u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_OWNER_MOVE), 0u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_AGGREGATE_UPDATE), 0u);
+
+    XrReferenceProfile reference_profile = {.pointer_width = 64u};
+    XrReferenceOutcome reference =
+        xr_reference_evaluate(program, entry, NULL, 0u, &reference_profile, NULL);
+    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
+    ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
+    ASSERT_EQ_INT(reference.value.as.i64, 42);
+
+    XrExecutionBindingInput binding = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = first.program,
+        .profile = profile,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_NOT_NULL(instance);
+    static const XrVmDecodePolicy policies[] = {
+        XR_VM_DECODE_BASELINE_VIEW,
+        XR_VM_DECODE_FIXED_ROWS,
+    };
+    for (uint32_t policy = 0u; policy < sizeof(policies) / sizeof(policies[0]); ++policy) {
+        XrVmCodeOptions vm_options = xr_vm_code_default_options();
+        vm_options.decode_policy = (uint8_t) policies[policy];
+        XrVmCode *vm_code = NULL;
+        XrVmCodeDiagnostic vm_diagnostic;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &vm_options, &vm_code, &vm_diagnostic),
+                      XR_VM_CODE_OK);
+        ASSERT_NOT_NULL(vm_code);
+        XrVmOutcome vm_result = xr_vm_code_execute(vm_code, instance, entry, NULL, 0u);
+        ASSERT_EQ_INT(vm_result.kind, XR_VM_OUTCOME_RETURN);
+        ASSERT_EQ_INT(vm_result.value.kind, XR_VM_VALUE_I64);
+        ASSERT_EQ_INT(vm_result.value.as.i64, reference.value.as.i64);
+        xr_vm_code_free(vm_code);
+    }
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_GENERIC_SCALAR_CLASS);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+    ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
+                  XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
+    ASSERT_EQ_INT(xr_execution_instance_free(&instance, &execution_diagnostic), XR_EXECUTION_OK);
+    xr_program_source_product_free(&second);
+    xr_program_source_product_free(&first);
+    xr_target_profile_free(profile);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
     static const char source[] = "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
                                  "  return body(value)\n"

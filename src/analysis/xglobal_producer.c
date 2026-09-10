@@ -36,6 +36,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_MSC_VER)
+#define XG_SNPRINTF(buffer, size, format, ...)                                                     \
+    _snprintf_s((buffer), (size), _TRUNCATE, (format), __VA_ARGS__)
+#else
+#define XG_SNPRINTF(buffer, size, format, ...) snprintf((buffer), (size), (format), __VA_ARGS__)
+#endif
+
 enum {
     XG_SMALL_MAP_LITERAL_MAX = 4,
     XG_DENSE_ENUM_MEMBER_MAX = 256
@@ -782,7 +789,7 @@ static bool producer_add_stdlib_symbol_dependency(XgProducer *p, XgModuleId modu
     int n;
     if (!module || !module[0] || !member || !member[0])
         return true;
-    n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
+    n = XG_SNPRINTF(symbol, sizeof(symbol), "%s.%s", module, member);
     if (n <= 0 || n >= (int) sizeof(symbol))
         return true;
     return producer_add_link_dependency(p, module_id, XG_NO_ID, owner_func_id, source_span_id,
@@ -4925,7 +4932,7 @@ static bool body_add_options_shape_fields(XgBodyCollect *bc, XgObjectShapeId sha
     for (uint16_t ordinal = 0; ordinal < field_count; ordinal++) {
         char name[32];
         XgObjectFieldSummary field;
-        int written = snprintf(name, sizeof(name), "$arg%u", (unsigned) ordinal);
+        int written = XG_SNPRINTF(name, sizeof(name), "$arg%u", (unsigned) ordinal);
         if (written <= 0 || (size_t) written >= sizeof(name))
             return false;
         memset(&field, 0, sizeof(field));
@@ -9878,6 +9885,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.method_name_id = constructor->name_id;
             row.method_signature_key = constructor->signature_key;
             generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_decl_id = class_summary->decl_id;
             generic_origin_class_id = class_row->class_id;
             generic_origin_method_id = constructor->method_id;
         } else if (class_row && class_summary) {
@@ -9889,6 +9897,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.kind = XG_CALL_CLASS_ALLOC;
             row.receiver_static_class_id = class_row->class_id;
             generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_decl_id = class_summary->decl_id;
             generic_origin_class_id = class_row->class_id;
         } else if (body_global_builtin_call_is_leaf_intrinsic(callee_name,
                                                               call->as.call_expr.arg_count)) {
@@ -10002,12 +10011,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.method_name_id = module_constructor->name_id;
             row.method_signature_key = module_constructor->signature_key;
             generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_decl_id = module_class_summary->decl_id;
             generic_origin_class_id = module_class->class_id;
             generic_origin_method_id = module_constructor->method_id;
         } else if (module_class && module_class_summary) {
             row.kind = XG_CALL_CLASS_ALLOC;
             row.receiver_static_class_id = module_class->class_id;
             generic_kind = XG_GENERIC_INST_CLASS;
+            generic_origin_decl_id = module_class_summary->decl_id;
             generic_origin_class_id = module_class->class_id;
         } else if (receiver_interface != XG_NO_ID) {
             const XgInterfaceMethodSummary *interface_method =
@@ -10030,10 +10041,10 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                                            : producer_find_interface_method_signature(
                                                  bc->producer, receiver_interface, method_name_id);
         } else {
-            XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
-            if (receiver_class == XG_NO_ID && bc->producer->analyzer)
-                receiver_class =
-                    producer_lookup_class_from_analyzer_type(bc->producer, analyzer_receiver_type);
+            XgClassId receiver_class =
+                bc->producer->analyzer
+                    ? producer_lookup_class_from_analyzer_type(bc->producer, analyzer_receiver_type)
+                    : body_resolve_expr_class(bc, callee->as.member_access.object);
             /* A function-typed field called directly (obj.field(args)) is an
              *
              * indirect closure call, not a method dispatch: the field holds a
@@ -12220,8 +12231,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     XaSymbolLinks *class_links = producer_class_links(p, cls);
     XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
     XaGenericSpecializationFact mono_fact = {0};
-    XgClassNameRow *generic_origin_row = NULL;
-    const XgDeclSummary *generic_origin_decl = NULL;
+    XgClassId generic_origin_class_id = XG_NO_ID;
+    uint64_t generic_origin_nominal_key = 0u;
     if (cls->is_monomorphized) {
         if (!p->analyzer ||
             !xa_analyzer_get_generic_specialization(p->analyzer, node, &mono_fact) ||
@@ -12231,13 +12242,16 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             mono_fact.declaration_type_arg_count == 0u || !mono_fact.declaration_type_args ||
             mono_fact.declaration_type_arg_count != (uint32_t) cls->mono_type_arg_count)
             return false;
-        generic_origin_row = producer_lookup_class_row_by_decl(p, mono_fact.generic_decl);
+        const XgClassNameRow *generic_origin_row =
+            producer_lookup_class_row_by_decl(p, mono_fact.generic_decl);
         if (!generic_origin_row)
             return false;
-        generic_origin_decl =
+        const XgDeclSummary *generic_origin_decl =
             producer_decl_by_id(p, producer_lookup_class_decl_id(p, generic_origin_row->class_id));
         if (!generic_origin_decl || generic_origin_decl->nominal_key == 0)
             return false;
+        generic_origin_class_id = generic_origin_row->class_id;
+        generic_origin_nominal_key = generic_origin_decl->nominal_key;
     }
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
@@ -12348,9 +12362,9 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     if (cls->is_monomorphized) {
         const char *origin_name = cls->generic_origin_name;
         csum.flags |= XG_CLASS_MONOMORPHIZED;
-        csum.generic_origin_class_id = generic_origin_row->class_id;
+        csum.generic_origin_class_id = generic_origin_class_id;
         csum.generic_origin_name_id = hash_name32(origin_name);
-        csum.generic_origin_nominal_key = generic_origin_decl->nominal_key;
+        csum.generic_origin_nominal_key = generic_origin_nominal_key;
         csum.generic_type_arg_key_start = hash_tref_list64_exact(
             p, mono_fact.declaration_type_args, (int) mono_fact.declaration_type_arg_count,
             UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
@@ -12382,9 +12396,9 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     if (!producer_add_decl_derives(p, module_id, decl_id, (uint32_t) node->line, cls->name,
                                    derive_flags, cls, class_id))
         return false;
-    if (!add_monomorphized_class_instantiation(
-            p, module_id, node, cls, class_id, cls->is_monomorphized ? &mono_fact : NULL,
-            generic_origin_row ? generic_origin_row->class_id : XG_NO_ID))
+    if (!add_monomorphized_class_instantiation(p, module_id, node, cls, class_id,
+                                               cls->is_monomorphized ? &mono_fact : NULL,
+                                               generic_origin_class_id))
         return false;
     return producer_register_class(p, module_id, cls->name, cls->super_name, node, class_id,
                                    p->evidence->nclasses - 1);

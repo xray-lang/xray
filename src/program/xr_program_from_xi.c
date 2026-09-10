@@ -2612,14 +2612,108 @@ static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, con
     return find_xi_function_by_xg_id(context, row->static_target_func_id);
 }
 
-/* A source `C()` with no declared constructor still uses a class carrier in
- * Xi. The carrier is
- * phase-only in Program, but it may disappear only when
- * its exact local, imported, or namespace
- * export resolution and the Xglobal
- * class-allocation row name the same declaration. Restrict
- * this normalization
- * to fieldless declarations; defaults need an explicit value graph. */
+/* A closed nominal runtime type is admitted only after Xi, Xglobal and the source type agree on
+ * one declaration. A monomorphized declaration must also name one schema-59 specialization row.
+ * Source classes and value structs share this identity proof while retaining distinct storage and
+ * ownership policies. */
+static bool resolved_closed_nominal_identity(const XrXiBuildContext *context,
+                                             const XiClassData *class_data,
+                                             const XgClassSummary *class_row, const XrType *type,
+                                             uint32_t module_index, uint8_t expected_decl_kind,
+                                             XrCoreIrNominalKind expected_nominal_kind) {
+    const XgGlobalEvidence *evidence =
+        context && context->source ? context->source->global_evidence : NULL;
+    const XrClassInfo *info = nominal_info_for_type(type);
+    const XgDeclSummary *decl_row =
+        class_row ? find_xg_decl_by_id(evidence, class_row->decl_id) : NULL;
+    uint8_t decl_kind = 0u;
+    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    uint64_t nominal_key = 0u;
+    if (!evidence || !class_data || !class_row || !type || !info || info->xg_class_id == XG_NO_ID ||
+        info->xg_decl_id == XG_NO_ID || info->xg_nominal_key == 0u ||
+        module_index >= context->source->module_count || !decl_row ||
+        class_data->xg_class_id != class_row->class_id ||
+        class_row->class_id != info->xg_class_id || class_row->decl_id != info->xg_decl_id ||
+        decl_row->decl_id != info->xg_decl_id || decl_row->nominal_key != info->xg_nominal_key ||
+        class_row->module_id != (XgModuleId) (module_index + 1u) ||
+        decl_row->module_id != class_row->module_id || class_row->decl_kind != expected_decl_kind ||
+        decl_row->kind != expected_decl_kind || class_row->parent_class_id != XG_NO_ID ||
+        (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u || class_data->is_generic_skeleton ||
+        (((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) != class_data->is_monomorphized) ||
+        !nominal_contract(context, type, &decl_kind, &nominal_kind, &nominal_key) ||
+        decl_kind != expected_decl_kind || nominal_kind != expected_nominal_kind ||
+        nominal_key != info->xg_nominal_key)
+        return false;
+
+    if ((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) {
+        const XgClassSummary *origin =
+            find_xg_class_by_id(evidence, class_row->generic_origin_class_id);
+        const XgDeclSummary *origin_decl =
+            origin ? find_xg_decl_by_id(evidence, origin->decl_id) : NULL;
+        const XgModuleSummary *origin_module =
+            origin_decl ? find_xg_module_by_id(evidence, origin_decl->module_id) : NULL;
+        const XgGenericInstSummary *instance = NULL;
+        for (uint32_t index = 0u; index < evidence->ngeneric_insts; ++index) {
+            const XgGenericInstSummary *candidate = &evidence->generic_insts[index];
+            if (candidate->specialized_class_id != class_row->class_id)
+                continue;
+            if (instance)
+                return false;
+            instance = candidate;
+        }
+        const uint32_t required_flags = XG_GENERIC_INST_CONCRETE_TYPES |
+                                        XG_GENERIC_INST_SPECIALIZED_ABI |
+                                        XG_GENERIC_INST_CONCRETE_STORAGE;
+        if (!origin || !origin_decl || !origin_module || !instance ||
+            origin_decl->kind != expected_decl_kind || origin->decl_kind != expected_decl_kind ||
+            origin->decl_id != origin_decl->decl_id ||
+            origin->module_id != origin_decl->module_id ||
+            origin->name_id != origin_decl->name_id || origin_decl->nominal_key == 0u ||
+            origin_decl->nominal_key !=
+                xg_nominal_decl_key(origin_module->canonical_hash, origin_decl->source_node_id,
+                                    origin_decl->kind, origin_decl->type_key) ||
+            (origin->flags & XG_CLASS_GENERIC_SKELETON) == 0u ||
+            (origin->flags & XG_CLASS_MONOMORPHIZED) != 0u ||
+            origin->generic_origin_class_id != XG_NO_ID || origin->generic_origin_name_id != 0u ||
+            origin->generic_origin_nominal_key != 0u || origin->generic_type_key != 0u ||
+            origin->generic_type_arg_key_start != 0u || origin->generic_type_arg_count != 0u ||
+            instance->kind != XG_GENERIC_INST_CLASS ||
+            instance->origin_class_id != class_row->generic_origin_class_id ||
+            instance->origin_decl_id != origin->decl_id ||
+            instance->origin_nominal_key != origin_decl->nominal_key ||
+            class_row->generic_origin_nominal_key != origin_decl->nominal_key ||
+            instance->name_id != class_row->generic_origin_name_id ||
+            instance->name_id != origin->name_id || instance->receiver_class_id != XG_NO_ID ||
+            instance->receiver_type_key != 0u || instance->receiver_type_arg_key_start != 0u ||
+            instance->receiver_type_arg_count != 0u ||
+            instance->declaration_type_key != class_row->generic_type_key ||
+            class_row->generic_type_key !=
+                xg_generic_nominal_type_key(
+                    class_row->generic_origin_nominal_key, class_row->generic_type_arg_key_start,
+                    class_row->generic_type_arg_count, XG_GENERIC_INST_CLASS) ||
+            instance->declaration_type_arg_key_start != class_row->generic_type_arg_key_start ||
+            instance->declaration_type_arg_count != class_row->generic_type_arg_count ||
+            instance->declaration_type_arg_count == 0u ||
+            instance->specialization_effect != XG_GENERIC_SPECIALIZATION_EFFECT_NONE ||
+            (instance->flags & required_flags) != required_flags ||
+            !class_data->generic_origin_name ||
+            xg_name_id(class_data->generic_origin_name) != class_row->generic_origin_name_id ||
+            class_data->mono_type_arg_count != class_row->generic_type_arg_count)
+            return false;
+    } else if (class_row->generic_origin_class_id != XG_NO_ID ||
+               class_row->generic_origin_name_id != 0u || class_row->generic_type_key != 0u ||
+               class_row->generic_type_arg_key_start != 0u ||
+               class_row->generic_type_arg_count != 0u || class_data->generic_origin_name ||
+               class_data->mono_type_arg_count != 0u) {
+        return false;
+    }
+    return true;
+}
+
+/* A source `C()` with no declared constructor still uses a class carrier in Xi. The carrier is
+ * phase-only in Program, but it may disappear only when its exact local, imported, or namespace
+ * export resolution and the Xglobal class-allocation row name the same declaration. Restrict this
+ * normalization to fieldless declarations; defaults need an explicit value graph. */
 static const XiClassData *resolved_empty_class_allocation(const XrXiBuildContext *context,
                                                           const XiFunc *caller,
                                                           const XiValue *call) {
@@ -2641,38 +2735,19 @@ static const XiClassData *resolved_empty_class_allocation(const XrXiBuildContext
         if (class_data->methods && class_data->methods[method].is_constructor &&
             !class_data->methods[method].is_static)
             return NULL;
-    const XrClassInfo *info = nominal_info_for_type(call->type);
-    uint8_t decl_kind = 0u;
-    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
-    uint64_t nominal_key = 0u;
     const XgClassSummary *class_row =
         find_xg_class_by_id(context->source->global_evidence, row->receiver_static_class_id);
-    const XgDeclSummary *decl_row =
-        class_row ? find_xg_decl_by_id(context->source->global_evidence, class_row->decl_id) : NULL;
-    if (!info || !class_row || !decl_row ||
-        class_row->module_id != (XgModuleId) (module_index + 1u) ||
-        decl_row->module_id != class_row->module_id || class_row->class_id != info->xg_class_id ||
-        class_row->class_id != class_data->xg_class_id || class_row->decl_id != info->xg_decl_id ||
-        decl_row->decl_id != class_row->decl_id || class_row->decl_kind != XG_DECL_CLASS ||
-        decl_row->kind != XG_DECL_CLASS || class_row->parent_class_id != XG_NO_ID ||
-        (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u ||
-        !nominal_contract(context, call->type, &decl_kind, &nominal_kind, &nominal_key) ||
-        decl_kind != XG_DECL_CLASS || nominal_kind != XR_CORE_IR_NOMINAL_CLASS ||
-        nominal_key != info->xg_nominal_key || decl_row->nominal_key != nominal_key)
+    if (!resolved_closed_nominal_identity(context, class_data, class_row, call->type, module_index,
+                                          XG_DECL_CLASS, XR_CORE_IR_NOMINAL_CLASS))
         return NULL;
     return class_data;
 }
 
-/* Canonical Program has one target-neutral aggregate construction primitive;
- * a source
- * constructor may collapse into it only when the complete constructor
- * body proves that it is
- * exactly a record initializer. Xglobal owns every
- * declaration identity in this proof, while Xi
- * owns the concrete parameter to
- * field value graph. No spelling-based lookup, default
- * evaluation, inherited
- * layout, computation, effect, or control flow is admitted. */
+/* Canonical Program has one target-neutral aggregate construction primitive; a source constructor
+ * may collapse into it only when the complete constructor body proves that it is exactly a record
+ * initializer. Xglobal owns every declaration identity in this proof, while Xi owns the concrete
+ * parameter-to-field value graph. No spelling-based lookup, default evaluation, inherited layout,
+ * computation, effect, or control flow is admitted. */
 static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildContext *context,
                                                                 const XiFunc *caller,
                                                                 const XiValue *call) {
@@ -2696,19 +2771,13 @@ static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildC
         context, caller, call->args[0], callsite->receiver_static_class_id, &module_index);
     const XgClassSummary *class_row =
         class_data ? find_xg_class_by_id(evidence, callsite->receiver_static_class_id) : NULL;
-    const XrClassInfo *result_info = nominal_info_for_type(call->type);
-    uint8_t result_decl_kind = 0u;
-    if (!class_data || !class_row || !result_info ||
-        class_row->module_id != (XgModuleId) (module_index + 1u) ||
-        class_row->decl_kind != XG_DECL_CLASS || class_row->parent_class_id != XG_NO_ID ||
-        class_row->decl_id != result_info->xg_decl_id ||
-        class_data->xg_class_id != class_row->class_id || class_data->instance_field_count == 0u ||
+    if (!resolved_closed_nominal_identity(context, class_data, class_row, call->type, module_index,
+                                          XG_DECL_CLASS, XR_CORE_IR_NOMINAL_CLASS) ||
+        class_data->instance_field_count == 0u ||
         class_data->instance_field_count != call->nargs - 1u ||
         class_row->field_count != class_data->instance_field_count ||
         class_row->field_start == 0u || !class_data->instance_field_names ||
-        !class_data->instance_field_types || !class_data->instance_field_source_node_ids ||
-        !nominal_contract(context, call->type, &result_decl_kind, NULL, NULL) ||
-        result_decl_kind != XG_DECL_CLASS)
+        !class_data->instance_field_types || !class_data->instance_field_source_node_ids)
         return NULL;
 
     const XgMethodSummary *method = NULL;
@@ -2906,100 +2975,18 @@ static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildC
                                                            info->xg_class_id, &module_index);
     const XgGlobalEvidence *evidence = context->source->global_evidence;
     const XgClassSummary *class_row = find_xg_class_by_id(evidence, info->xg_class_id);
-    const XgDeclSummary *decl_row =
-        class_row ? find_xg_decl_by_id(evidence, class_row->decl_id) : NULL;
-    uint8_t decl_kind = 0u;
-    XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
-    uint64_t nominal_key = 0u;
-    bool identity_exact =
-        class_data && class_row && decl_row && module_index < context->source->module_count &&
-        class_data->xg_class_id == class_row->class_id && class_row->decl_id == info->xg_decl_id &&
-        decl_row->decl_id == info->xg_decl_id && decl_row->nominal_key == info->xg_nominal_key &&
-        class_row->module_id == (XgModuleId) (module_index + 1u) &&
-        decl_row->module_id == class_row->module_id;
-    bool declaration_exact = identity_exact && class_row->decl_kind == XG_DECL_STRUCT &&
-                             decl_row->kind == XG_DECL_STRUCT &&
-                             class_row->parent_class_id == XG_NO_ID;
-    bool specialization_exact =
-        declaration_exact && (class_row->flags & XG_CLASS_GENERIC_SKELETON) == 0u &&
-        !class_data->is_generic_skeleton &&
-        (((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) == class_data->is_monomorphized);
-    bool layout_exact = specialization_exact && class_data->struct_layout &&
-                        xr_aggregate_layout_semantically_equal(class_data->struct_layout, layout) &&
-                        class_data->instance_field_count == layout->field_count &&
-                        class_row->field_count == layout->field_count &&
-                        (layout->field_count == 0u ||
-                         (class_data->instance_field_names && class_data->instance_field_types &&
-                          class_data->instance_field_source_node_ids));
-    bool nominal_exact =
-        nominal_contract(context, allocation->type, &decl_kind, &nominal_kind, &nominal_key) &&
-        decl_kind == XG_DECL_STRUCT && nominal_kind == XR_CORE_IR_NOMINAL_STRUCT &&
-        nominal_key == info->xg_nominal_key;
-    if (!layout_exact || !nominal_exact)
+    bool layout_exact =
+        resolved_closed_nominal_identity(context, class_data, class_row, allocation->type,
+                                         module_index, XG_DECL_STRUCT, XR_CORE_IR_NOMINAL_STRUCT) &&
+        class_data->struct_layout &&
+        xr_aggregate_layout_semantically_equal(class_data->struct_layout, layout) &&
+        class_data->instance_field_count == layout->field_count &&
+        class_row->field_count == layout->field_count &&
+        (layout->field_count == 0u ||
+         (class_data->instance_field_names && class_data->instance_field_types &&
+          class_data->instance_field_source_node_ids));
+    if (!layout_exact)
         return NULL;
-
-    if ((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) {
-        const XgClassSummary *origin =
-            find_xg_class_by_id(evidence, class_row->generic_origin_class_id);
-        const XgDeclSummary *origin_decl =
-            origin ? find_xg_decl_by_id(evidence, origin->decl_id) : NULL;
-        const XgModuleSummary *origin_module =
-            origin_decl ? find_xg_module_by_id(evidence, origin_decl->module_id) : NULL;
-        const XgGenericInstSummary *instance = NULL;
-        for (uint32_t index = 0u; index < evidence->ngeneric_insts; ++index) {
-            const XgGenericInstSummary *candidate = &evidence->generic_insts[index];
-            if (candidate->specialized_class_id != class_row->class_id)
-                continue;
-            if (instance)
-                return NULL;
-            instance = candidate;
-        }
-        const uint32_t required_flags = XG_GENERIC_INST_CONCRETE_TYPES |
-                                        XG_GENERIC_INST_SPECIALIZED_ABI |
-                                        XG_GENERIC_INST_CONCRETE_STORAGE;
-        if (!origin || !origin_decl || !origin_module || !instance ||
-            origin_decl->kind != XG_DECL_STRUCT || origin->decl_kind != XG_DECL_STRUCT ||
-            origin->decl_id != origin_decl->decl_id ||
-            origin->module_id != origin_decl->module_id ||
-            origin->name_id != origin_decl->name_id || origin_decl->nominal_key == 0u ||
-            origin_decl->nominal_key !=
-                xg_nominal_decl_key(origin_module->canonical_hash, origin_decl->source_node_id,
-                                    origin_decl->kind, origin_decl->type_key) ||
-            (origin->flags & XG_CLASS_GENERIC_SKELETON) == 0u ||
-            (origin->flags & XG_CLASS_MONOMORPHIZED) != 0u ||
-            origin->generic_origin_class_id != XG_NO_ID || origin->generic_origin_name_id != 0u ||
-            origin->generic_origin_nominal_key != 0u || origin->generic_type_key != 0u ||
-            origin->generic_type_arg_key_start != 0u || origin->generic_type_arg_count != 0u ||
-            instance->kind != XG_GENERIC_INST_CLASS ||
-            instance->origin_class_id != class_row->generic_origin_class_id ||
-            instance->origin_decl_id != origin->decl_id ||
-            instance->origin_nominal_key != origin_decl->nominal_key ||
-            class_row->generic_origin_nominal_key != origin_decl->nominal_key ||
-            instance->name_id != class_row->generic_origin_name_id ||
-            instance->name_id != origin->name_id || instance->receiver_class_id != XG_NO_ID ||
-            instance->receiver_type_key != 0u || instance->receiver_type_arg_key_start != 0u ||
-            instance->receiver_type_arg_count != 0u ||
-            instance->declaration_type_key != class_row->generic_type_key ||
-            class_row->generic_type_key !=
-                xg_generic_nominal_type_key(
-                    class_row->generic_origin_nominal_key, class_row->generic_type_arg_key_start,
-                    class_row->generic_type_arg_count, XG_GENERIC_INST_CLASS) ||
-            instance->declaration_type_arg_key_start != class_row->generic_type_arg_key_start ||
-            instance->declaration_type_arg_count != class_row->generic_type_arg_count ||
-            instance->declaration_type_arg_count == 0u ||
-            instance->specialization_effect != XG_GENERIC_SPECIALIZATION_EFFECT_NONE ||
-            (instance->flags & required_flags) != required_flags ||
-            !class_data->generic_origin_name ||
-            xg_name_id(class_data->generic_origin_name) != class_row->generic_origin_name_id ||
-            class_data->mono_type_arg_count != class_row->generic_type_arg_count)
-            return NULL;
-    } else if (class_row->generic_origin_class_id != XG_NO_ID ||
-               class_row->generic_origin_name_id != 0u || class_row->generic_type_key != 0u ||
-               class_row->generic_type_arg_key_start != 0u ||
-               class_row->generic_type_arg_count != 0u || class_data->generic_origin_name ||
-               class_data->mono_type_arg_count != 0u) {
-        return NULL;
-    }
 
     uint64_t seen_fields = 0u;
     uint32_t initialization_count = 0u;
@@ -8021,20 +8008,15 @@ static bool static_import_publication_is_exact(const XrXiBuildContext *context,
            resolved_import_reference_is_exact(context, value);
 }
 
-/* A source value-struct declaration publishes a phase-only class token through
- * module shared
- * storage even though instances are represented by their frozen
- * aggregate TypeId.  Erase that
- * token and its store only when one initializer,
- * one slot, one Xi descriptor and one Xglobal
- * struct declaration all agree.
- * Heap classes remain outside this rule because their runtime type
- * object is a
- * real execution value. */
-static const XiClassData *static_value_struct_publication_source(const XrXiBuildContext *context,
-                                                                 const XiFunc *function,
-                                                                 const XiValue *source,
-                                                                 uint32_t *slot_out) {
+/* A nominal declaration publishes an Xi class carrier through module shared storage. Canonical
+ * Program represents runtime identity with an exact nominal TypeId, so the carrier and its store
+ * are phase-only when one initializer, one slot, one Xi descriptor and one Xglobal declaration
+ * agree. Any later first-class use still fails closed because every carrier load must also be
+ * proven to be an elided nominal operand. */
+static const XiClassData *static_nominal_publication_source(const XrXiBuildContext *context,
+                                                            const XiFunc *function,
+                                                            const XiValue *source,
+                                                            uint32_t *slot_out) {
     if (slot_out)
         *slot_out = UINT32_MAX;
     source = logical_value_identity(source);
@@ -8044,7 +8026,7 @@ static const XiClassData *static_value_struct_publication_source(const XrXiBuild
     if (!context || !context->source || !context->source->global_evidence || !function || !module ||
         module->init != function || !source || source->block == NULL ||
         source->block->func != function || source->nargs != 0u || !class_data ||
-        class_data->needs_runtime_type || class_data->xg_class_id == XG_NO_ID)
+        class_data->xg_class_id == XG_NO_ID)
         return NULL;
     uint32_t module_index = UINT32_MAX;
     if (!find_collected_xi_function_module(context, function, &module_index) ||
@@ -8057,14 +8039,18 @@ static const XiClassData *static_value_struct_publication_source(const XrXiBuild
         class_row ? find_xg_decl_by_id(context->source->global_evidence, class_row->decl_id) : NULL;
     bool skeleton = (class_row && (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u);
     bool monomorphized = (class_row && (class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u);
+    bool value_struct = class_row && decl_row && class_row->decl_kind == XG_DECL_STRUCT &&
+                        decl_row->kind == XG_DECL_STRUCT && !class_data->needs_runtime_type;
+    bool heap_class = class_row && decl_row && class_row->decl_kind == XG_DECL_CLASS &&
+                      decl_row->kind == XG_DECL_CLASS && class_data->needs_runtime_type;
     if (!class_row || !decl_row || class_row->module_id != (XgModuleId) (module_index + 1u) ||
-        decl_row->module_id != class_row->module_id || class_row->decl_kind != XG_DECL_STRUCT ||
-        decl_row->kind != XG_DECL_STRUCT || class_row->parent_class_id != XG_NO_ID ||
-        class_row->class_id != class_data->xg_class_id ||
+        decl_row->module_id != class_row->module_id || (!value_struct && !heap_class) ||
+        class_row->parent_class_id != XG_NO_ID || class_row->class_id != class_data->xg_class_id ||
         skeleton != class_data->is_generic_skeleton ||
         monomorphized != class_data->is_monomorphized || (skeleton && monomorphized) ||
-        (!skeleton && !class_data->struct_layout) ||
-        (class_data->struct_layout && class_data->struct_layout->kind != XR_AGG_LAYOUT_STRUCT &&
+        (value_struct && !skeleton && !class_data->struct_layout) ||
+        (value_struct && class_data->struct_layout &&
+         class_data->struct_layout->kind != XR_AGG_LAYOUT_STRUCT &&
          class_data->struct_layout->kind != XR_AGG_LAYOUT_PACKED_STRUCT))
         return NULL;
 
@@ -8101,17 +8087,16 @@ static const XiClassData *static_value_struct_publication_source(const XrXiBuild
     return class_data;
 }
 
-static bool static_value_struct_publication_is_exact(const XrXiBuildContext *context,
-                                                     const XiFunc *function, const XiValue *value) {
+static bool static_nominal_publication_is_exact(const XrXiBuildContext *context,
+                                                const XiFunc *function, const XiValue *value) {
     if (!value)
         return false;
     if (value->op == XI_CLASS_CREATE)
-        return static_value_struct_publication_source(context, function, value, NULL) != NULL;
+        return static_nominal_publication_source(context, function, value, NULL) != NULL;
     if (value->op != XI_SET_SHARED || value->nargs != 1u || !value->args || value->aux_int < 0)
         return false;
     uint32_t slot = UINT32_MAX;
-    return static_value_struct_publication_source(context, function, value->args[0], &slot) !=
-               NULL &&
+    return static_nominal_publication_source(context, function, value->args[0], &slot) != NULL &&
            slot == (uint32_t) value->aux_int;
 }
 
@@ -8147,7 +8132,7 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         return true;
     if (static_import_publication_is_exact(context, function, value))
         return true;
-    if (static_value_struct_publication_is_exact(context, function, value))
+    if (static_nominal_publication_is_exact(context, function, value))
         return true;
     if (value_aggregate_initializer_is_exact(context, function, value))
         return true;

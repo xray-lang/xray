@@ -180,9 +180,14 @@ materialize on the exact monomorphized receiver, while the open `this` receiver 
 non-executable template edge until cloning substitutes it. Xglobal schema 59, Program validation,
 and the AOT verifier independently rederive the source nominal origin, call-site owner module, and
 monomorphized receiver identity; coordinated corruption of the instantiation, body-use, and derived
-AOT plans is rejected. Repeated C remains byte-identical and strict native execution returns 42.
-Generic heap/class receivers, interface generic dispatch, parameterized/builtin constraints,
-generic ownership cleanup, arbitrary returned/projected READ places, and valid finite recursive
+AOT plans is rejected. Repeated C remains byte-identical and strict native execution returns 42. A
+second source-backed fixture proves the same exact identity for non-escaping generic nominal classes
+with scalar fields and fieldwise constructors. Namespace access, inferred construction, renamed
+re-export, same-name facade/caller decoys, and distinct `i64`/`bool` tuples produce four exact affine
+class TypeIds and four exact getter targets. Repeated C is byte-identical and strict native execution
+returns 42. Shared class aliases, mutation visibility, owned or nontrivial fields, physical heap
+lifetime and reclamation, interface generic dispatch, parameterized/builtin constraints, generic
+ownership cleanup, arbitrary returned/projected READ places, and valid finite recursive
 specialization remain unqualified. Non-generic qualified aggregate syntax is a separate parser
 ambiguity and is not claimed by this generic aggregate slice.
 Before AOT receives a validated Program,
@@ -244,4 +249,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 61807ded23b895d8fefc3728e7a68873b51887e2443176d7884a398ff653cd71
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 85ba826639663abaa5d582f164b620a6ef7362bf9dea616b936efbbac94f80f2
