@@ -124,8 +124,7 @@ def main() -> int:
     rejected_run = invoke(args.binary, "run", str(mono_depth))
     require(rejected_run.returncode != 0, "run accepted unbounded generic specialization")
     require(
-        "E0389:" in rejected_run.stderr
-        and "stage=4 status=resource-limit" in rejected_run.stderr,
+        ":1033:0: error[E0389]: E0389:" in rejected_run.stderr,
         f"run lost the exact monomorphization budget failure: {rejected_run.stderr!r}",
     )
     rejected_check = invoke(args.binary, "check", str(mono_depth))

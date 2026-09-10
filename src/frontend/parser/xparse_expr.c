@@ -1158,8 +1158,128 @@ AstNode *xr_parse_unary(Parser *parser) {
 
 /* ========== Infix Parsing ========== */
 
-// Try to parse generic call: callee<Type, ...>(args)
-// Returns NULL if not a generic call (should fallback to comparison)
+static void xr_parser_recover_struct_literal_field(Parser *parser) {
+    if (!parser)
+        return;
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    while (!xr_parser_check(parser, TK_EOF)) {
+        XrTokenType type = parser->current.type;
+        if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 &&
+            (type == TK_COMMA || type == TK_RBRACE))
+            break;
+        if (type == TK_LPAREN)
+            paren_depth++;
+        else if (type == TK_RPAREN && paren_depth > 0)
+            paren_depth--;
+        else if (type == TK_LBRACKET)
+            bracket_depth++;
+        else if (type == TK_RBRACKET && bracket_depth > 0)
+            bracket_depth--;
+        else if (type == TK_LBRACE)
+            brace_depth++;
+        else if (type == TK_RBRACE && brace_depth > 0)
+            brace_depth--;
+        xr_parser_advance(parser);
+    }
+    parser->panic_mode = 0;
+}
+
+AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
+                                            XrTypeRef **type_args, int type_arg_count) {
+    XR_DCHECK(parser != NULL, "parse_struct_literal_after_type: NULL parser");
+    XR_DCHECK(type_path != NULL, "parse_struct_literal_after_type: NULL type path");
+    XR_DCHECK(type_arg_count >= 0, "parse_struct_literal_after_type: negative type argument count");
+    if (!parser || !type_path || type_arg_count < 0 || !xr_parser_match(parser, TK_LBRACE))
+        return NULL;
+
+    char **field_names = NULL;
+    AstNode **field_values = NULL;
+    int field_count = 0;
+    int field_capacity = 0;
+
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        if (field_count >= field_capacity) {
+            int old_capacity = field_capacity;
+            field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
+            char **grown_names = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *),
+                                                           (size_t) field_capacity);
+            AstNode **grown_values = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) field_capacity);
+            if (!grown_names || !grown_values)
+                return NULL;
+            if (old_capacity > 0) {
+                memcpy(grown_names, field_names, sizeof(char *) * (size_t) old_capacity);
+                memcpy(grown_values, field_values, sizeof(AstNode *) * (size_t) old_capacity);
+            }
+            field_names = grown_names;
+            field_values = grown_values;
+        }
+
+        if (!xr_parser_check(parser, TK_NAME)) {
+            xr_parser_error(parser, "expected field name in struct literal");
+            xr_parser_recover_struct_literal_field(parser);
+            if (xr_parser_match(parser, TK_COMMA))
+                continue;
+            break;
+        }
+        xr_parser_advance(parser);
+        char *field_name =
+            (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1u);
+        if (!field_name)
+            return NULL;
+        memcpy(field_name, parser->previous.start, (size_t) parser->previous.length);
+        field_name[parser->previous.length] = '\0';
+        field_names[field_count] = field_name;
+        if (!xr_parser_match(parser, TK_COLON)) {
+            xr_parser_error(parser, "expected ':' after field name");
+            xr_parser_recover_struct_literal_field(parser);
+            if (xr_parser_match(parser, TK_COMMA))
+                continue;
+            break;
+        }
+        AstNode *field_value = xr_parse_expression(parser);
+        if (!field_value) {
+            xr_parser_recover_struct_literal_field(parser);
+            if (xr_parser_match(parser, TK_COMMA))
+                continue;
+            break;
+        }
+        field_values[field_count] = field_value;
+        field_count++;
+
+        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_match(parser, TK_COMMA)) {
+            xr_parser_error(parser, "expected ',' or '}' in struct literal");
+            xr_parser_recover_struct_literal_field(parser);
+            if (xr_parser_match(parser, TK_COMMA))
+                continue;
+            break;
+        }
+    }
+
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
+    AstNode *node = xr_ast_struct_literal(parser->compiler_session, type_path, field_names,
+                                          field_values, field_count, type_path->line);
+    if (!node)
+        return NULL;
+    node->column = type_path->column;
+    node->end_line = parser->previous.line;
+    node->end_column = parser->previous.column + parser->previous.length;
+    if (type_arg_count > 0) {
+        XrTypeRef **copy = (XrTypeRef **) ast_alloc_array(
+            parser->compiler_session, sizeof(XrTypeRef *), (size_t) type_arg_count);
+        if (!copy)
+            return NULL;
+        memcpy(copy, type_args, sizeof(XrTypeRef *) * (size_t) type_arg_count);
+        node->as.struct_literal.type_args = copy;
+        node->as.struct_literal.type_arg_count = type_arg_count;
+    }
+    return node;
+}
+
+// Try to parse generic invocation or namespace-qualified aggregate construction.
+// Returns NULL when '<' is a comparison rather than a generic suffix.
 AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
     // Only try if callee is an identifier or member access
     if (callee->type != AST_VARIABLE && callee->type != AST_MEMBER_ACCESS) {
@@ -1185,9 +1305,11 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
 
         XrTypeRef *type = xr_parse_type_annotation(parser);
         if (parser->error_count > saved_error_count) {
+            *parser = checkpoint;
+            parser->panic_mode = saved_panic_mode;
             return NULL;
         }
-        if (!type || parser->had_error) {
+        if (!type) {
             // Not valid type args, restore and return NULL
             *parser = checkpoint;
             parser->panic_mode = saved_panic_mode;
@@ -1211,7 +1333,17 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
         }
     }
 
-    // Must be followed by '(' for function call
+    if (xr_parser_check(parser, TK_LBRACE)) {
+        if (callee->type != AST_MEMBER_ACCESS) {
+            *parser = checkpoint;
+            parser->panic_mode = saved_panic_mode;
+            return NULL;
+        }
+        parser->panic_mode = saved_panic_mode;
+        return xr_parse_struct_literal_after_type(parser, callee, type_args, type_arg_count);
+    }
+
+    // Every remaining generic suffix is a call and must be followed by '('.
     if (!xr_parser_check(parser, TK_LPAREN)) {
         *parser = checkpoint;
         parser->panic_mode = saved_panic_mode;

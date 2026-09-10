@@ -582,6 +582,34 @@ TEST(removed_top_level_oop_modifier_drops_invalid_class) {
     teardown();
 }
 
+TEST(malformed_namespace_struct_literal_does_not_invent_field_or_hide_sibling) {
+    setup();
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("var broken = boxes.Box<i64>{: 1}\n"
+                                     "var after = 4\n",
+                                     &parser, &sink, 0, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_TRUE(parser.had_error != 0);
+    ASSERT_TRUE(sink.count >= 1);
+    ASSERT_TRUE(program_decl_count(ast) >= 2);
+    AstNode *broken = ast->as.program.statements[0];
+    ASSERT_NOT_NULL(broken);
+    ASSERT_EQ_INT(broken->type, AST_VAR_DECL);
+    ASSERT_NOT_NULL(broken->as.var_decl.initializer);
+    ASSERT_EQ_INT(broken->as.var_decl.initializer->type, AST_STRUCT_LITERAL);
+    ASSERT_EQ_INT(broken->as.var_decl.initializer->as.struct_literal.field_count, 0);
+
+    AstNode *after = ast->as.program.statements[ast->as.program.count - 1];
+    ASSERT_NOT_NULL(after);
+    ASSERT_EQ_INT(after->type, AST_VAR_DECL);
+    ASSERT_STR_EQ(after->as.var_decl.name, "after");
+    release_arena(arena);
+    teardown();
+}
+
 TEST(null_parser_returns_null_safely) {
     // NULL-safety: xr_parse_recoverable with NULL parser must NOT
     // crash. Callers (e.g. fuzz harness) rely on this for early-
@@ -611,5 +639,6 @@ RUN_TEST(malformed_type_list_recovers_without_unbounded_growth);
 RUN_TEST(invalid_loop_label_recovers_without_revisiting_tokens);
 RUN_TEST(removed_oop_member_modifier_drops_invalid_member);
 RUN_TEST(removed_top_level_oop_modifier_drops_invalid_class);
+RUN_TEST(malformed_namespace_struct_literal_does_not_invent_field_or_hide_sibling);
 RUN_TEST(null_parser_returns_null_safely);
 TEST_MAIN_END()

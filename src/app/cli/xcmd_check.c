@@ -96,7 +96,9 @@ static int check_file(XrVMRuntime *X, XaAnalyzer *analyzer, const char *path, in
         if (!has_error) {
             XaMonoBudget mono_budget = xa_mono_default_budget();
             XaMonoUsage mono_usage = {0};
-            bool mono_ok = xa_mono_pass(ast, NULL, 0, X, &mono_budget, &mono_usage, analyzer);
+            AstNode *mono_roots[1] = {ast};
+            bool mono_ok =
+                xa_mono_graph_pass(mono_roots, 1, X, &mono_budget, &mono_usage, analyzer);
             int mono_errors = report_analyzer_diagnostics(analyzer, path, true);
             if (!mono_ok && mono_errors == 0) {
                 fprintf(stderr, "%s:0:0: error: monomorphization failed without a diagnostic\n",
@@ -234,14 +236,15 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
     }
 
     if (analyzer && errors == 0) {
-        /* Check the entry module's local generic closure.
-         * The source-build owner checks
-         * the full graph.
-         * Repeating it here costs more and mutates imports twice. */
         XrModuleSpec *entry = &graph->specs[graph->entry_index];
+        AstNode **mono_roots =
+            (AstNode **) xr_calloc((size_t) graph->topo_count, sizeof(*mono_roots));
         XaMonoBudget mono_budget = xa_mono_default_budget();
         XaMonoUsage mono_usage = {0};
-        bool mono_ok = xa_mono_pass(entry->ast, NULL, 0, X, &mono_budget, &mono_usage, analyzer);
+        for (int topo = 0; mono_roots && topo < graph->topo_count; ++topo)
+            mono_roots[topo] = graph->specs[graph->topo_order[topo]].ast;
+        bool mono_ok = mono_roots && xa_mono_graph_pass(mono_roots, graph->topo_count, X,
+                                                        &mono_budget, &mono_usage, analyzer);
         int mono_errors = report_analyzer_diagnostics(analyzer, entry->source_path, true);
         if (!mono_ok && mono_errors == 0) {
             fprintf(stderr, "%s:0:0: error: monomorphization failed without a diagnostic\n",
@@ -250,13 +253,17 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
         }
         errors += mono_errors;
         if (mono_ok && errors == 0) {
-            xa_analyzer_analyze(analyzer, entry->source_path, (XrAstNode *) entry->ast);
-            if (entry->export_symbols)
-                xr_hashmap_free(entry->export_symbols);
-            entry->export_symbols =
-                xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) entry->ast);
-            errors += report_analyzer_diagnostics(analyzer, entry->source_path, true);
+            for (int topo = 0; topo < graph->topo_count; ++topo) {
+                XrModuleSpec *spec = &graph->specs[graph->topo_order[topo]];
+                xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+                if (spec->export_symbols)
+                    xr_hashmap_free(spec->export_symbols);
+                spec->export_symbols =
+                    xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
+                errors += report_analyzer_diagnostics(analyzer, spec->source_path, true);
+            }
         }
+        xr_free(mono_roots);
     }
 
     if (analyzer && errors == 0 && verbose)

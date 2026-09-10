@@ -701,6 +701,20 @@ static const XgDeclSummary *find_xg_decl_by_id(const XgGlobalEvidence *evidence,
     return found;
 }
 
+static const XgModuleSummary *find_xg_module_by_id(const XgGlobalEvidence *evidence,
+                                                   XgModuleId module_id) {
+    const XgModuleSummary *found = NULL;
+    for (uint32_t index = 0; evidence && index < evidence->nmodules; ++index) {
+        const XgModuleSummary *candidate = &evidence->modules[index];
+        if (candidate->module_id != module_id)
+            continue;
+        if (found)
+            return NULL;
+        found = candidate;
+    }
+    return found;
+}
+
 static const XiClassData *find_aggregate_schema(const XrXiBuildContext *context, const XrType *type,
                                                 const XiModule **owner_module) {
     const XiClassData *found = NULL;
@@ -2927,6 +2941,10 @@ static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildC
     if ((class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u) {
         const XgClassSummary *origin =
             find_xg_class_by_id(evidence, class_row->generic_origin_class_id);
+        const XgDeclSummary *origin_decl =
+            origin ? find_xg_decl_by_id(evidence, origin->decl_id) : NULL;
+        const XgModuleSummary *origin_module =
+            origin_decl ? find_xg_module_by_id(evidence, origin_decl->module_id) : NULL;
         const XgGenericInstSummary *instance = NULL;
         for (uint32_t index = 0u; index < evidence->ngeneric_insts; ++index) {
             const XgGenericInstSummary *candidate = &evidence->generic_insts[index];
@@ -2939,15 +2957,33 @@ static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildC
         const uint32_t required_flags = XG_GENERIC_INST_CONCRETE_TYPES |
                                         XG_GENERIC_INST_SPECIALIZED_ABI |
                                         XG_GENERIC_INST_CONCRETE_STORAGE;
-        if (!origin || !instance || (origin->flags & XG_CLASS_GENERIC_SKELETON) == 0u ||
+        if (!origin || !origin_decl || !origin_module || !instance ||
+            origin_decl->kind != XG_DECL_STRUCT || origin->decl_kind != XG_DECL_STRUCT ||
+            origin->decl_id != origin_decl->decl_id ||
+            origin->module_id != origin_decl->module_id ||
+            origin->name_id != origin_decl->name_id || origin_decl->nominal_key == 0u ||
+            origin_decl->nominal_key !=
+                xg_nominal_decl_key(origin_module->canonical_hash, origin_decl->source_node_id,
+                                    origin_decl->kind, origin_decl->type_key) ||
+            (origin->flags & XG_CLASS_GENERIC_SKELETON) == 0u ||
+            (origin->flags & XG_CLASS_MONOMORPHIZED) != 0u ||
+            origin->generic_origin_class_id != XG_NO_ID || origin->generic_origin_name_id != 0u ||
+            origin->generic_origin_nominal_key != 0u || origin->generic_type_key != 0u ||
+            origin->generic_type_arg_key_start != 0u || origin->generic_type_arg_count != 0u ||
             instance->kind != XG_GENERIC_INST_CLASS ||
             instance->origin_class_id != class_row->generic_origin_class_id ||
             instance->origin_decl_id != origin->decl_id ||
+            instance->origin_nominal_key != origin_decl->nominal_key ||
+            class_row->generic_origin_nominal_key != origin_decl->nominal_key ||
             instance->name_id != class_row->generic_origin_name_id ||
-            instance->receiver_class_id != XG_NO_ID || instance->receiver_type_key != 0u ||
-            instance->receiver_type_arg_key_start != 0u ||
+            instance->name_id != origin->name_id || instance->receiver_class_id != XG_NO_ID ||
+            instance->receiver_type_key != 0u || instance->receiver_type_arg_key_start != 0u ||
             instance->receiver_type_arg_count != 0u ||
             instance->declaration_type_key != class_row->generic_type_key ||
+            class_row->generic_type_key !=
+                xg_generic_nominal_type_key(
+                    class_row->generic_origin_nominal_key, class_row->generic_type_arg_key_start,
+                    class_row->generic_type_arg_count, XG_GENERIC_INST_CLASS) ||
             instance->declaration_type_arg_key_start != class_row->generic_type_arg_key_start ||
             instance->declaration_type_arg_count != class_row->generic_type_arg_count ||
             instance->declaration_type_arg_count == 0u ||

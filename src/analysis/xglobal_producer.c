@@ -1345,6 +1345,11 @@ static uint64_t hash_ast_shape(const AstNode *node, uint64_t h) {
             if (node->as.variable.name)
                 h = fold_bytes(h, node->as.variable.name, strlen(node->as.variable.name));
             break;
+        case AST_MEMBER_ACCESS:
+            h = hash_ast_shape(node->as.member_access.object, h);
+            if (node->as.member_access.name)
+                h = fold_bytes(h, node->as.member_access.name, strlen(node->as.member_access.name));
+            break;
         case AST_CALL_EXPR:
             h = hash_ast_shape(node->as.call_expr.callee, h);
             h = fold_u64(h, (uint64_t) node->as.call_expr.type_arg_count);
@@ -1368,9 +1373,7 @@ static uint64_t hash_ast_shape(const AstNode *node, uint64_t h) {
                 h = hash_ast_shape(node->as.new_expr.arguments[i], h);
             break;
         case AST_STRUCT_LITERAL:
-            if (node->as.struct_literal.struct_name)
-                h = fold_bytes(h, node->as.struct_literal.struct_name,
-                               strlen(node->as.struct_literal.struct_name));
+            h = hash_ast_shape(node->as.struct_literal.type_path, h);
             h = fold_u64(h, (uint64_t) node->as.struct_literal.type_arg_count);
             for (int i = 0; i < node->as.struct_literal.type_arg_count; i++)
                 h = hash_tref(h, node->as.struct_literal.type_args
@@ -2748,6 +2751,8 @@ static XgClassNameRow *producer_lookup_class_row_by_decl(const XgProducer *p,
 static XgClassId producer_lookup_class_from_analyzer_type(const XgProducer *producer,
                                                           const XrType *type) {
     const XrClassInfo *info = NULL;
+    const XaSymbol *symbol = NULL;
+    const XaSymbolLinks *links = NULL;
     const XgDeclSummary *decl = NULL;
     XgClassNameRow *class_row = NULL;
     const XgClassSummary *class_summary = NULL;
@@ -2755,20 +2760,38 @@ static XgClassId producer_lookup_class_from_analyzer_type(const XgProducer *prod
         (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
         return XG_NO_ID;
     info = type->instance.class_ref;
-    if (!info || info->xg_class_id == XG_NO_ID || info->xg_decl_id == XG_NO_ID ||
-        info->xg_nominal_key == 0)
+    if (!info)
         return XG_NO_ID;
-    decl = producer_decl_by_id(producer, info->xg_decl_id);
-    class_row = producer_lookup_class_row_by_id(producer, info->xg_class_id);
+    if (info->xg_class_id != XG_NO_ID && info->xg_decl_id != XG_NO_ID &&
+        info->xg_nominal_key != 0) {
+        decl = producer_decl_by_id(producer, info->xg_decl_id);
+        class_row = producer_lookup_class_row_by_id(producer, info->xg_class_id);
+    } else {
+        /* Analyzer snapshots can predate Xglobal id publication. Resolve that
+         * exact
+         * declaration directly; never recover identity from class_name. */
+        symbol = info->declaration_symbol;
+        links = symbol && producer->analyzer
+                    ? xa_analyzer_get_links(producer->analyzer, (XaSymbol *) symbol)
+                    : NULL;
+        class_row = links && links->nominal_decl_node
+                        ? producer_lookup_class_row_by_decl(producer, links->nominal_decl_node)
+                        : NULL;
+        decl = class_row ? producer_decl_by_id(producer, producer_lookup_class_decl_id(
+                                                             producer, class_row->class_id))
+                         : NULL;
+    }
     class_summary = class_row && class_row->summary_index < producer->evidence->nclasses
                         ? &producer->evidence->classes[class_row->summary_index]
                         : NULL;
-    if (!decl || !class_summary || decl->nominal_key != info->xg_nominal_key ||
-        producer_nominal_key(producer, decl) != info->xg_nominal_key ||
+    if (!decl || !class_summary ||
+        (info->xg_nominal_key != 0 && decl->nominal_key != info->xg_nominal_key) ||
+        producer_nominal_key(producer, decl) != decl->nominal_key ||
         (decl->kind != XG_DECL_CLASS && decl->kind != XG_DECL_STRUCT &&
          decl->kind != XG_DECL_UNION) ||
-        class_summary->class_id != info->xg_class_id ||
-        class_summary->decl_id != info->xg_decl_id || class_summary->module_id != decl->module_id ||
+        (info->xg_class_id != XG_NO_ID && class_summary->class_id != info->xg_class_id) ||
+        (info->xg_decl_id != XG_NO_ID && class_summary->decl_id != info->xg_decl_id) ||
+        class_summary->decl_id != decl->decl_id || class_summary->module_id != decl->module_id ||
         class_summary->decl_kind != decl->kind)
         return XG_NO_ID;
     return class_summary->class_id;
@@ -3872,6 +3895,12 @@ static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr)
             return body_lookup_local_class(bc, expr->as.variable.name);
         case AST_NEW_EXPR:
             return producer_lookup_class(bc->producer, expr->as.new_expr.class_name);
+        case AST_STRUCT_LITERAL: {
+            XrType *type = bc->producer && bc->producer->analyzer
+                               ? xa_analyzer_get_node_type(bc->producer->analyzer, expr)
+                               : NULL;
+            return producer_lookup_class_from_analyzer_type(bc->producer, type);
+        }
         case AST_CALL_EXPR:
             callee = expr->as.call_expr.callee;
             if (callee && callee->type == AST_VARIABLE)
@@ -4689,6 +4718,53 @@ static const XrTypeRef *body_expr_type_ref(XgBodyCollect *bc, const AstNode *exp
 static const ObjectLiteralNode *body_static_object_literal(const AstNode *node);
 static uint32_t body_struct_object_type_key(const ObjectLiteralNode *obj);
 
+static uint32_t body_struct_literal_type_key(XgBodyCollect *bc, const AstNode *expr) {
+    const StructLiteralNode *literal =
+        expr && expr->type == AST_STRUCT_LITERAL ? &expr->as.struct_literal : NULL;
+    XrType *type = bc && bc->producer && bc->producer->analyzer && expr
+                       ? xa_analyzer_get_node_type(bc->producer->analyzer, expr)
+                       : NULL;
+    XgClassId class_id = producer_lookup_class_from_analyzer_type(bc ? bc->producer : NULL, type);
+    XgClassNameRow *class_row = producer_lookup_class_row_by_id(bc ? bc->producer : NULL, class_id);
+    const XgClassSummary *class_summary =
+        class_row && bc && bc->evidence && class_row->summary_index < bc->evidence->nclasses
+            ? &bc->evidence->classes[class_row->summary_index]
+            : NULL;
+    uint64_t nominal_key = producer_lookup_class_nominal_key(bc ? bc->producer : NULL, class_id);
+    if (!literal || !class_row || !class_summary || nominal_key == 0)
+        return 0;
+    if ((class_summary->flags & XG_CLASS_MONOMORPHIZED) != 0u)
+        return class_summary->generic_type_key != 0u
+                   ? hash_folded32(class_summary->generic_type_key)
+                   : 0u;
+    if (literal->type_arg_count > 0) {
+        /* An aggregate inside a generic source body is a template edge, not
+         * an
+         * executable concrete type.  The monomorphized clone will carry
+         * the substituted
+         * tuple and publish its exact schema-59 key.  Keep
+         * the source declaration class
+         * above for field/member resolution,
+         * but do not invent a nominal type key for an
+         * open tuple here. */
+        for (int i = 0; i < literal->type_arg_count; ++i) {
+            if (body_type_ref_contains_type_param(literal->type_args ? literal->type_args[i]
+                                                                     : NULL))
+                return 0;
+        }
+        uint64_t tuple_key =
+            hash_tref_list64_exact(bc->producer, literal->type_args, literal->type_arg_count,
+                                   UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
+        uint64_t generic_key = xg_generic_nominal_type_key(
+            nominal_key, tuple_key, (uint16_t) literal->type_arg_count, XG_GENERIC_INST_CLASS);
+        return generic_key != 0u ? hash_folded32(generic_key) : 0u;
+    }
+    /* Non-generic qualified aggregates retain their established syntax-key
+     * contract until
+     * that separate parser ambiguity is cut over. */
+    return hash_named_type_key32(literal->struct_name, NULL, 0);
+}
+
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
     if (!bc || !expr)
         return 0;
@@ -4775,9 +4851,7 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_named_type_key32(expr->as.new_expr.class_name, expr->as.new_expr.type_args,
                                          expr->as.new_expr.type_arg_count);
         case AST_STRUCT_LITERAL:
-            return hash_named_type_key32(expr->as.struct_literal.struct_name,
-                                         expr->as.struct_literal.type_args,
-                                         expr->as.struct_literal.type_arg_count);
+            return body_struct_literal_type_key(bc, expr);
         default:
             break;
     }
@@ -9662,33 +9736,95 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         const char *callee_name = callee->as.variable.name;
         const XgModuleImportRow *import =
             producer_lookup_module_import(bc->producer, bc->module_id, callee_name);
-        XgFuncNameRow *target =
-            import && import->exact_target_decl
-                ? producer_lookup_func_row_by_decl(bc->producer, import->exact_target_decl)
-            : import && import->member_name
-                ? producer_lookup_func_row_scoped(
-                      bc->producer,
-                      producer_module_id_for_coordinate(bc->producer, bc->module_id,
-                                                        import->module_name),
-                      import->member_name)
-                : NULL;
-        if (target && import && import->exact_target_decl &&
-            (import->exact_target_module_id == XG_NO_ID ||
-             target->module_id != import->exact_target_module_id)) {
-            bc->producer->failed = true;
-            return;
+        XgFuncNameRow *target = NULL;
+        XgClassNameRow *imported_class = NULL;
+        XaSymbol *analyzer_symbol = NULL;
+        XaSymbolLinks *analyzer_links = NULL;
+        XgFuncNameRow *analyzer_function = NULL;
+        XgClassNameRow *analyzer_class = NULL;
+        if (bc->producer->analyzer) {
+            if (callee->as.variable.symbol_id != 0u)
+                analyzer_symbol =
+                    xa_analyzer_symbol_by_id(bc->producer->analyzer, callee->as.variable.symbol_id);
+            if (!analyzer_symbol && bc->producer->analyzer->node_table)
+                analyzer_symbol = xa_node_table_get_symbol(
+                    (const XaNodeTable *) bc->producer->analyzer->node_table, callee);
+            analyzer_links = analyzer_symbol
+                                 ? xa_analyzer_get_links(bc->producer->analyzer, analyzer_symbol)
+                                 : NULL;
+            if (analyzer_symbol && analyzer_symbol->kind == XA_SYM_FUNCTION)
+                analyzer_function = producer_lookup_func_row_by_decl(
+                    bc->producer,
+                    analyzer_links && analyzer_links->function_decl_node
+                        ? analyzer_links->function_decl_node
+                        : (analyzer_links ? analyzer_links->nominal_decl_node : NULL));
+            if (analyzer_symbol && analyzer_symbol->kind == XA_SYM_CLASS)
+                analyzer_class = producer_lookup_class_row_by_decl(
+                    bc->producer, analyzer_links ? analyzer_links->nominal_decl_node : NULL);
         }
-        if (!target && import && import->exact_target_decl) {
-            bc->producer->failed = true;
-            return;
+        if (import && import->exact_target_decl) {
+            switch (import->exact_target_decl->type) {
+                case AST_FUNCTION_DECL:
+                    target =
+                        producer_lookup_func_row_by_decl(bc->producer, import->exact_target_decl);
+                    break;
+                case AST_CLASS_DECL:
+                case AST_STRUCT_DECL:
+                    imported_class =
+                        producer_lookup_class_row_by_decl(bc->producer, import->exact_target_decl);
+                    break;
+                default:
+                    break;
+            }
+            XgModuleId exact_module = target           ? target->module_id
+                                      : imported_class ? imported_class->module_id
+                                                       : XG_NO_ID;
+            if (exact_module == XG_NO_ID || import->exact_target_module_id == XG_NO_ID ||
+                exact_module != import->exact_target_module_id) {
+                bc->producer->failed = true;
+                return;
+            }
+            if ((analyzer_function && analyzer_function != target) ||
+                (analyzer_class && analyzer_class != imported_class)) {
+                bc->producer->failed = true;
+                return;
+            }
+        } else if (import && import->member_name) {
+            XgModuleId imported_module_id =
+                producer_module_id_for_coordinate(bc->producer, bc->module_id, import->module_name);
+            if (analyzer_symbol && !analyzer_symbol->is_imported) {
+                bc->producer->failed = true;
+                return;
+            }
+            target = analyzer_function ? analyzer_function
+                                       : producer_lookup_func_row_scoped(
+                                             bc->producer, imported_module_id, import->member_name);
+            imported_class =
+                analyzer_class
+                    ? analyzer_class
+                    : producer_lookup_class_row_scoped(bc->producer, imported_module_id,
+                                                       hash_name32(import->member_name), false);
+            if ((!analyzer_function && target && target->module_id != imported_module_id) ||
+                (!analyzer_class && imported_class &&
+                 imported_class->module_id != imported_module_id)) {
+                bc->producer->failed = true;
+                return;
+            }
+        } else {
+            target =
+                analyzer_function
+                    ? analyzer_function
+                    : producer_lookup_func_row_scoped(bc->producer, bc->module_id, callee_name);
+            imported_class =
+                analyzer_class ? analyzer_class
+                               : producer_lookup_class_row_scoped(bc->producer, bc->module_id,
+                                                                  hash_name32(callee_name), false);
         }
-        if (!target)
-            target = producer_lookup_func_row(bc->producer, callee_name);
         const XgPendingBody *child_target =
             !target ? producer_find_child_function_body(bc->producer, bc->owner_func_id,
                                                         hash_name32(callee_name))
                     : NULL;
-        XgClassNameRow *class_row = producer_lookup_class_row(bc->producer, callee_name);
+        XgClassNameRow *class_row = imported_class;
         XgClassSummary *class_summary =
             class_row && class_row->summary_index < bc->evidence->nclasses
                 ? &bc->evidence->classes[class_row->summary_index]
@@ -11336,8 +11472,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 if (origin_class == XG_NO_ID) {
                     bc->producer->failed = true;
                 } else {
+                    const XgClassNameRow *origin_row =
+                        producer_lookup_class_row_by_id(bc->producer, origin_class);
+                    if (!origin_row || !origin_row->name) {
+                        bc->producer->failed = true;
+                        break;
+                    }
                     XgGenericInstInput input = {
-                        .name = node->as.struct_literal.struct_name,
+                        .name = origin_row->name,
                         .declaration_type_args = node->as.struct_literal.type_args,
                         .declaration_type_arg_count =
                             (uint32_t) node->as.struct_literal.type_arg_count,
@@ -13017,9 +13159,16 @@ static bool xg_global_evidence_build_from_module_graph_impl(
         }
     }
 
-    if (!producer_publish_nominal_conformances(&producer) ||
-        !producer_finalize_class_graph(&producer) || !producer_emit_body_summaries(&producer) ||
-        !producer_finalize_interface_method_contracts(&producer)) {
+    const char *failed_stage = NULL;
+    if (!producer_publish_nominal_conformances(&producer))
+        failed_stage = "nominal-conformance";
+    else if (!producer_finalize_class_graph(&producer))
+        failed_stage = "class-graph";
+    else if (!producer_emit_body_summaries(&producer))
+        failed_stage = "body-summary";
+    else if (!producer_finalize_interface_method_contracts(&producer))
+        failed_stage = "interface-contract";
+    if (failed_stage) {
         xr_free(producer.classes);
         xr_free(producer.interfaces);
         xr_free(producer.enums);

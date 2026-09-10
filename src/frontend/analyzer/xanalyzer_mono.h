@@ -191,16 +191,14 @@ XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generi
 
 /* ========== Mono Pass ========== */
 
-/* Run the full monomorphization pass on a program AST: collect generic
- * declarations and instantiation sites, clone+substitute for each concrete
- * type combination, inject into the program, rewrite call sites. A program
- * with no generics is a no-op.
- *
- * `external_roots` are dependency-module ASTs (may be NULL/0 for a single
- * unit). The current module may instantiate generic value structs imported
- * from them, and may rewrite imported generic class/function namespace calls
- * to specializations injected by their defining modules. Value-struct clones
- * stay local to the using module so lowering has a concrete local layout.
+/* Close monomorphization once for the complete analyzed source graph. The pass
+ * registers every
+ * declaration with its defining root, collects all concrete
+ * roots, materializes the dynamic
+ * nested-specialization fixpoint in exact
+ * declaration owners, and only then rewrites every root.
+ * A one-file compile
+ * passes a one-element roots array; there is no per-module variant.
  *
  * `analyzer` is required. It classifies generic HOF throw effects.
  * It also receives E0388 and
@@ -208,14 +206,15 @@ XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generi
  * Without diagnostics, exhaustion could leave calls generic.
  *
  *
- * `usage` accumulates across a complete source build.
- * Thus max_instances is a whole-program
- * budget.
- * Declaring modules can still be specialized in separate passes.
- * Returns false when a
- * budget diagnostic was reported; the caller must not proceed to lowering. */
-XR_FUNC bool xa_mono_pass(AstNode *root, AstNode **external_roots, int external_root_count,
-                          XrVMRuntime *isolate, const XaMonoBudget *budget, XaMonoUsage *usage,
-                          XaAnalyzer *analyzer);
+ * `usage` is updated once for the complete graph, so max_instances is a
+ * whole-program budget.
+ * Returns false for invalid graph roots, incomplete
+ * exact identity, unmaterialized concrete
+ * instances, or budget exhaustion;
+ * the caller must not proceed to canonicalization or lowering.
+ */
+XR_FUNC bool xa_mono_graph_pass(AstNode **roots, int root_count, XrVMRuntime *isolate,
+                                const XaMonoBudget *budget, XaMonoUsage *usage,
+                                XaAnalyzer *analyzer);
 
 #endif  // XANALYZER_MONO_H

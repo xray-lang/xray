@@ -4424,6 +4424,36 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         xa_check_span_generic_class_type_args(ctx, node, ne->class_name, resolved_targs,
                                               ne->type_arg_count);
 
+        /* Monomorphization is graph-wide, so a display name cannot identify
+         * this
+         * declaration: another module may own an equally named class.
+         * Publish the
+         * analyzer-selected nominal declaration while the source
+         * scope is still
+         * authoritative. */
+        if (class_links && xa_symbol_links_get_type_param_count(class_links) > 0) {
+            XaGenericSpecializationFact fact = {
+                .generic_decl = class_links->nominal_decl_node,
+                .declaration_type_args = ne->type_args,
+                .declaration_type_arg_count = (uint32_t) ne->type_arg_count,
+                .effect = XA_GENERIC_SPECIALIZATION_EFFECT_NONE,
+            };
+            if (!xa_generic_specialization_fact_valid(&fact) ||
+                !xa_analyzer_set_generic_specialization(ctx->analyzer, node, &fact)) {
+                XrLocation location = {
+                    .file = ctx->file_path,
+                    .line = node->line,
+                    .column = node->column,
+                };
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
+                    "generic class construction has no exact specialization identity", &location);
+                if (resolved_targs != resolved_targs_buf)
+                    xr_free(resolved_targs);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
+        }
+
         // Check constructor argument types against substituted parameter types
         if (class_info && class_links && ne->arg_count > 0) {
             int type_param_count = xa_symbol_links_get_type_param_count(class_links);
@@ -4702,24 +4732,113 @@ static void xa_check_aggregate_literal_fields(XaInferContext *ctx, AstNode *node
     }
 }
 
+static XaSymbol *xa_struct_literal_type_symbol(XaInferContext *ctx, AstNode *node,
+                                               StructLiteralNode *literal,
+                                               bool *resolution_failed) {
+    if (resolution_failed)
+        *resolution_failed = false;
+    if (!ctx || !ctx->analyzer || !node || !literal || !literal->type_path) {
+        if (resolution_failed)
+            *resolution_failed = true;
+        return NULL;
+    }
+
+    XrType *path_type = xa_visit_infer_expr(ctx, literal->type_path);
+    if (XR_TYPE_IS_ERROR(path_type)) {
+        if (resolution_failed)
+            *resolution_failed = true;
+        return NULL;
+    }
+
+    XaSymbol *symbol = NULL;
+    if (literal->type_path->type == AST_VARIABLE) {
+        if (literal->type_path->as.variable.symbol_id != 0u)
+            symbol =
+                xa_analyzer_symbol_by_id(ctx->analyzer, literal->type_path->as.variable.symbol_id);
+        if (!symbol && ctx->analyzer->node_table)
+            symbol = xa_node_table_get_symbol((const XaNodeTable *) ctx->analyzer->node_table,
+                                              literal->type_path);
+        if (!symbol && literal->type_path->as.variable.name) {
+            XaSymbol *visible = xa_lookup_visible_symbol(ctx, literal->type_path->as.variable.name);
+            if (visible && visible->kind == XA_SYM_CLASS)
+                symbol = visible;
+        }
+    } else if (literal->type_path->type == AST_MEMBER_ACCESS) {
+        const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, literal->type_path);
+        if (selection && selection->kind == XA_SEL_MODULE_EXPORT)
+            symbol = selection->target_symbol;
+    }
+    if (!symbol && literal->type_path->type == AST_VARIABLE && path_type &&
+        (path_type->kind == XR_KIND_CLASS || path_type->kind == XR_KIND_INSTANCE) &&
+        path_type->instance.class_ref)
+        symbol = path_type->instance.class_ref->declaration_symbol;
+
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(ctx->analyzer, symbol) : NULL;
+    if (symbol && symbol->kind == XA_SYM_CLASS && links && links->class_info &&
+        links->nominal_decl_node)
+        return symbol;
+
+    char message[224];
+    snprintf(message, sizeof(message),
+             "struct literal target '%s' does not resolve to a nominal aggregate type",
+             literal->struct_name ? literal->struct_name : "?");
+    XrLocation location = {
+        .file = ctx->file_path,
+        .line = literal->type_path->line,
+        .column = literal->type_path->column,
+    };
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               message, &location);
+    if (resolution_failed)
+        *resolution_failed = true;
+    return NULL;
+}
+
+static void xa_visit_struct_literal_values(XaInferContext *ctx, StructLiteralNode *literal,
+                                           XrClassInfo *class_info) {
+    if (!ctx || !literal)
+        return;
+    for (int i = 0; i < literal->field_count; i++) {
+        XrType *saved_expected = ctx->expected_type;
+        ctx->expected_type =
+            class_info ? class_info_field_type(ctx, class_info, literal->field_names[i]) : NULL;
+        XrType *field_value_type = xa_visit_infer_expr(ctx, literal->field_values[i]);
+        xa_check_pointer_borrow_escape(ctx, literal->field_values[i], literal->field_values[i],
+                                       field_value_type,
+                                       "store raw pointer borrow in struct literal");
+        ctx->expected_type = saved_expected;
+    }
+}
+
 XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
 
     StructLiteralNode *sl = &node->as.struct_literal;
-    const char *struct_name = sl->struct_name;
-
-    // Look up struct symbol
-    XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, struct_name);
-    if (!class_sym) {
-        class_sym = xa_scope_lookup(ctx->analyzer->global_scope, struct_name);
+    bool resolution_failed = false;
+    XaSymbol *class_sym = xa_struct_literal_type_symbol(ctx, node, sl, &resolution_failed);
+    if (resolution_failed) {
+        xa_visit_struct_literal_values(ctx, sl, NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
-
-    XaSymbolLinks *links = NULL;
-    XrClassInfo *class_info = NULL;
-    if (class_sym && class_sym->kind == XA_SYM_CLASS) {
-        links = xa_analyzer_get_links(ctx->analyzer, class_sym);
-        class_info = links ? links->class_info : NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
+    XrClassInfo *class_info = links->class_info;
+    const char *struct_name = class_sym->name ? class_sym->name : sl->struct_name;
+    int expected_type_arg_count = xa_symbol_links_get_type_param_count(links);
+    if (expected_type_arg_count != sl->type_arg_count) {
+        char message[224];
+        snprintf(message, sizeof(message), "generic struct '%s' expects %d type argument%s, got %d",
+                 struct_name ? struct_name : "?", expected_type_arg_count,
+                 expected_type_arg_count == 1 ? "" : "s", sl->type_arg_count);
+        XrLocation location = {
+            .file = ctx->file_path,
+            .line = node->line,
+            .column = node->column,
+        };
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   message, &location);
+        xa_visit_struct_literal_values(ctx, sl, class_info);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     XrType *resolved_targs_buf[8] = {0};
@@ -4745,6 +4864,7 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
             if (poisoned_type_arg) {
                 if (resolved_targs != resolved_targs_buf)
                     xr_free(resolved_targs);
+                xa_visit_struct_literal_values(ctx, sl, class_info);
                 return xr_type_new_error(NULL);
             }
             xa_check_span_generic_class_type_args(ctx, node, struct_name, resolved_targs,
@@ -4752,52 +4872,46 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    if (sl->type_arg_count > 0) {
+        XaGenericSpecializationFact fact = {
+            .generic_decl = links->nominal_decl_node,
+            .declaration_type_args = sl->type_args,
+            .declaration_type_arg_count = (uint32_t) sl->type_arg_count,
+            .effect = XA_GENERIC_SPECIALIZATION_EFFECT_NONE,
+        };
+        if (!xa_generic_specialization_fact_valid(&fact) ||
+            !xa_analyzer_set_generic_specialization(ctx->analyzer, node, &fact)) {
+            XrLocation location = {
+                .file = ctx->file_path,
+                .line = node->line,
+                .column = node->column,
+            };
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
+                "generic struct literal has no exact specialization identity", &location);
+            xa_visit_struct_literal_values(ctx, sl, class_info);
+            if (resolved_targs && resolved_targs != resolved_targs_buf)
+                xr_free(resolved_targs);
+            return xr_type_new_error(ctx->analyzer->isolate);
+        }
+    }
+
     xa_check_aggregate_literal_fields(ctx, node, struct_name, class_info, sl);
 
     // Infer field value types (for side effects / type checking), propagating
     // struct field types so nested literals lower to the declared layout.
-    for (int i = 0; i < sl->field_count; i++) {
-        XrType *saved_expected = ctx->expected_type;
-        ctx->expected_type =
-            class_info ? class_info_field_type(ctx, class_info, sl->field_names[i]) : NULL;
-        XrType *field_value_type = xa_visit_infer_expr(ctx, sl->field_values[i]);
-        xa_check_pointer_borrow_escape(ctx, sl->field_values[i], sl->field_values[i],
-                                       field_value_type,
-                                       "store raw pointer borrow in struct literal");
-        ctx->expected_type = saved_expected;
-    }
+    xa_visit_struct_literal_values(ctx, sl, class_info);
 
-    if (class_sym && class_sym->kind == XA_SYM_CLASS) {
-        if (links && links->class_info) {
-            XrType *inst_type =
-                resolved_targs ? xr_type_new_generic_instance(ctx->analyzer->isolate, struct_name,
-                                                              links->class_info, resolved_targs,
-                                                              sl->type_arg_count)
-                               : xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
-            if (links->type && links->type->is_value_type) {
-                inst_type->is_value_type = true;
-            }
-            if (resolved_targs && resolved_targs != resolved_targs_buf)
-                xr_free(resolved_targs);
-            return inst_type;
-        }
-        if (links && links->type) {
-            if (resolved_targs && resolved_targs != resolved_targs_buf)
-                xr_free(resolved_targs);
-            return links->type;
-        }
-    }
-
-    if (struct_name) {
-        XrType *t = xr_type_new_class(ctx->analyzer->isolate, struct_name);
-        t->is_value_type = true;
-        if (resolved_targs && resolved_targs != resolved_targs_buf)
-            xr_free(resolved_targs);
-        return t;
-    }
+    XrType *inst_type =
+        resolved_targs
+            ? xr_type_new_generic_instance(ctx->analyzer->isolate, struct_name, class_info,
+                                           resolved_targs, sl->type_arg_count)
+            : xr_type_new_instance(ctx->analyzer->isolate, class_info);
+    if (links->type && links->type->is_value_type)
+        inst_type->is_value_type = true;
     if (resolved_targs && resolved_targs != resolved_targs_buf)
         xr_free(resolved_targs);
-    return xr_type_new_unknown(NULL);
+    return inst_type;
 }
 
 XrType *xa_visit_ternary(XaInferContext *ctx, AstNode *node) {

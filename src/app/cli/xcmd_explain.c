@@ -571,17 +571,17 @@ static int explain_effect_view(const char *subject, bool suspend_view) {
         xa_analyzer_clear_diagnostics(analyzer);
     }
     AstNode **mono_roots = (AstNode **) xr_calloc((size_t) graph->topo_count, sizeof(AstNode *));
-    if (mono_roots) {
+    if (!mono_roots) {
+        errors++;
+    } else {
         for (int ti = 0; ti < graph->topo_count; ti++)
             mono_roots[ti] = graph->specs[graph->topo_order[ti]].ast;
         XaMonoBudget mono_budget = xa_mono_default_budget();
         XaMonoUsage mono_usage = {0};
-        for (int ti = 0; ti < graph->topo_count; ti++) {
-            XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
-            xa_mono_pass(spec->ast, mono_roots, graph->topo_count, isolate, &mono_budget,
-                         &mono_usage, analyzer);
-        }
-        for (int ti = 0; ti < graph->topo_count; ti++) {
+        if (!xa_mono_graph_pass(mono_roots, graph->topo_count, isolate, &mono_budget, &mono_usage,
+                                analyzer))
+            errors++;
+        for (int ti = 0; errors == 0 && ti < graph->topo_count; ti++) {
             XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
             xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
             if (spec->export_symbols)

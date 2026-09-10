@@ -1175,7 +1175,10 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         // Struct literal: Name{field: val, ...}
         case AST_STRUCT_LITERAL: {
             StructLiteralNode *sl = &node->as.struct_literal;
-            xfmt_write_str(ctx, sl->struct_name);
+            if (sl->type_path)
+                xfmt_emit_expression(ctx, sl->type_path);
+            else
+                xfmt_write_str(ctx, sl->struct_name);
             xfmt_emit_generic_args(ctx, sl->type_args, sl->type_arg_count);
             bool sl_wrap = ctx->config && ctx->config->wrap_long_lines && sl->field_count > 0;
             XfmtSnapshot sl_snap;

@@ -2162,20 +2162,39 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
         "  readAs<U>(_marker: U) -> R { return this.value }\n"
         "  forwardAs<U>(marker: U) -> R { return this.readAs<U>(marker) }\n"
         "}\n";
-    static const char facade_source[] = "export { Box } from \"./library\"\n";
+    static const char facade_source[] =
+        "export { Box as OriginBox } from \"./library\"\n"
+        "export struct Box<R> {\n"
+        "  value: R\n"
+        "  readAs<U>(_marker: U) -> R { return this.value }\n"
+        "}\n";
     static const char entry_source[] =
-        "import { Box as DirectBox } from \"./library\"\n"
-        "import { Box as FacadeBox } from \"./facade\"\n"
+        "import \"./library\" as direct\n"
+        "import \"./facade\" as facade\n"
         "struct Box<R> {\n"
         "  value: R\n"
         "  readAs<U>(_marker: U) -> R { return this.value }\n"
         "}\n"
+        "class Maker {\n"
+        "  directValue<T>(value: T) -> T {\n"
+        "    var box = direct.Box<T>{value: value}\n"
+        "    return box.value\n"
+        "  }\n"
+        "}\n"
+        "fn facadeValue<T>(value: T) -> T {\n"
+        "  var box = facade.OriginBox<T>{value: value}\n"
+        "  return box.forwardAs<bool>(false)\n"
+        "}\n"
         "fn answer() -> i64 {\n"
-        "  var left = DirectBox<i64>{value: 40}\n"
-        "  var right = FacadeBox<i64>{value: 1}\n"
-        "  var flag = FacadeBox<bool>{value: true}\n"
-        "  left.value = left.value + right.value\n"
-        "  if (flag.forwardAs<i64>(0)) { return left.readAs(false) + 1 }\n"
+        "  var left = direct.Box<i64>{value: 38}\n"
+        "  var same = facade.OriginBox<i64>{value: 1}\n"
+        "  var other = facade.Box<i64>{value: 1}\n"
+        "  var nestedOrigin = facadeValue<bool>(true)\n"
+        "  var nestedDirect = Maker().directValue<bool>(true)\n"
+        "  left.value = left.value + same.value + other.value\n"
+        "  if (nestedOrigin && nestedDirect) {\n"
+        "    return left.readAs(false) + same.readAs(false) + other.readAs(false)\n"
+        "  }\n"
         "  return 0\n"
         "}\n";
     SourceBuildFixture fixture;
@@ -2197,22 +2216,20 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
     assert_products_equal(&first, &second);
 
     const XrValidatedProgram *program = first.program;
-    ASSERT_EQ_UINT(program->function_count, 4u);
-    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 3u);
+    ASSERT_EQ_UINT(program->function_count, 7u);
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CALL_SEALED_DIRECT), 7u);
     uint32_t entry = xr_validated_program_entry_function(program);
     ASSERT_LT(entry, program->function_count);
     const XrValidatedFunction *function = &program->functions[entry];
     ASSERT_EQ_UINT(function->parameter_count, 0u);
     ASSERT_EQ_UINT(function->result_type_id, XR_CORE_TYPE_I64);
 
-    uint16_t i64_aggregate = XR_CORE_TYPE_VOID;
-    uint16_t bool_aggregate = XR_CORE_TYPE_VOID;
-    uint32_t i64_constructs = 0u;
-    uint32_t bool_constructs = 0u;
+    uint16_t aggregate_types[3] = {XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID};
+    uint32_t aggregate_constructs = 0u;
     uint32_t projects = 0u;
     uint32_t updates = 0u;
     uint32_t method_calls = 0u;
-    uint32_t method_targets[2] = {UINT32_MAX, UINT32_MAX};
+    uint32_t method_targets[3] = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
     for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
         const XrValidatedBlock *block = &function->blocks[block_index];
         for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
@@ -2223,6 +2240,8 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
                     xr_validated_program_type(program, instruction->result_type_id);
                 ASSERT_NOT_NULL(type);
                 ASSERT_EQ_INT(type->kind, XR_CORE_IR_TYPE_AGGREGATE);
+                if (type->nominal_kind != XR_CORE_IR_NOMINAL_STRUCT)
+                    continue;
                 ASSERT_EQ_INT(type->nominal_kind, XR_CORE_IR_NOMINAL_STRUCT);
                 ASSERT_EQ_INT(type->ownership, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL);
                 ASSERT_EQ_INT(type->copy_contract, XR_CORE_IR_COPY_TRIVIAL);
@@ -2230,18 +2249,8 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
                 ASSERT_NOT_NULL(type->field_types);
                 ASSERT_EQ_UINT(instruction->operand_count, 1u);
                 ASSERT_EQ_INT(instruction->result_ownership, XR_CORE_IR_NON_OWNER);
-                if (type->field_types[0] == XR_CORE_TYPE_I64) {
-                    if (i64_aggregate == XR_CORE_TYPE_VOID)
-                        i64_aggregate = instruction->result_type_id;
-                    ASSERT_EQ_UINT(instruction->result_type_id, i64_aggregate);
-                    ++i64_constructs;
-                } else {
-                    ASSERT_EQ_UINT(type->field_types[0], XR_CORE_TYPE_BOOL);
-                    if (bool_aggregate == XR_CORE_TYPE_VOID)
-                        bool_aggregate = instruction->result_type_id;
-                    ASSERT_EQ_UINT(instruction->result_type_id, bool_aggregate);
-                    ++bool_constructs;
-                }
+                ASSERT_LT(aggregate_constructs, 3u);
+                aggregate_types[aggregate_constructs++] = instruction->result_type_id;
             } else if (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_PROJECT) {
                 ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FIELD);
                 ASSERT_EQ_UINT(instruction->immediate.field_ordinal, 0u);
@@ -2249,14 +2258,20 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
             } else if (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_UPDATE) {
                 ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FIELD);
                 ASSERT_EQ_UINT(instruction->immediate.field_ordinal, 0u);
-                ASSERT_EQ_UINT(instruction->result_type_id, i64_aggregate);
                 ++updates;
             } else if (instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT) {
                 ASSERT_EQ_INT(instruction->immediate_kind, XR_CORE_IR_IMMEDIATE_FUNCTION);
                 ASSERT_LT(instruction->immediate.function_id, program->function_count);
-                ASSERT_LT(method_calls, 2u);
                 const XrValidatedFunction *callee =
                     &program->functions[instruction->immediate.function_id];
+                if (!callee->has_receiver || callee->parameter_count == 0u)
+                    continue;
+                const XrValidatedType *receiver_type =
+                    xr_validated_program_type(program, callee->parameter_types[0]);
+                if (!receiver_type || receiver_type->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                    receiver_type->nominal_kind != XR_CORE_IR_NOMINAL_STRUCT)
+                    continue;
+                ASSERT_LT(method_calls, 3u);
                 ASSERT_TRUE(callee->has_receiver);
                 ASSERT_EQ_INT(callee->receiver_mode, XR_PARAM_READ);
                 ASSERT_EQ_UINT(callee->parameter_count, 2u);
@@ -2271,29 +2286,96 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
             }
         }
     }
-    ASSERT_EQ_UINT(i64_constructs, 2u);
-    ASSERT_EQ_UINT(bool_constructs, 1u);
-    ASSERT_EQ_UINT(projects, 2u);
+    ASSERT_EQ_UINT(aggregate_constructs, 3u);
+    ASSERT_EQ_UINT(aggregate_types[0], aggregate_types[1]);
+    ASSERT_TRUE(aggregate_types[0] != aggregate_types[2]);
+    ASSERT_EQ_UINT(projects, 3u);
     ASSERT_EQ_UINT(updates, 1u);
-    ASSERT_EQ_UINT(method_calls, 2u);
-    ASSERT_TRUE(i64_aggregate != XR_CORE_TYPE_VOID);
-    ASSERT_TRUE(bool_aggregate != XR_CORE_TYPE_VOID);
-    ASSERT_TRUE(i64_aggregate != bool_aggregate);
-    const XrValidatedType *i64_type = xr_validated_program_type(program, i64_aggregate);
-    const XrValidatedType *bool_type = xr_validated_program_type(program, bool_aggregate);
-    ASSERT_NOT_NULL(i64_type);
-    ASSERT_NOT_NULL(bool_type);
-    ASSERT_TRUE(!xr_core_ir_key_equal(i64_type->key, bool_type->key));
-    ASSERT_TRUE(method_targets[0] != method_targets[1]);
+    ASSERT_EQ_UINT(method_calls, 3u);
+    const XrValidatedType *origin_i64_type =
+        xr_validated_program_type(program, aggregate_types[0]);
+    const XrValidatedType *decoy_i64_type =
+        xr_validated_program_type(program, aggregate_types[2]);
+    ASSERT_NOT_NULL(origin_i64_type);
+    ASSERT_NOT_NULL(decoy_i64_type);
+    ASSERT_EQ_UINT(origin_i64_type->field_types[0], XR_CORE_TYPE_I64);
+    ASSERT_EQ_UINT(decoy_i64_type->field_types[0], XR_CORE_TYPE_I64);
+    ASSERT_TRUE(!xr_core_ir_key_equal(origin_i64_type->key, decoy_i64_type->key));
 
-    bool saw_bool_receiver = false;
-    bool saw_i64_receiver = false;
+    uint32_t origin_i64_calls = 0u;
+    uint32_t decoy_i64_calls = 0u;
+    uint32_t origin_i64_target = UINT32_MAX;
+    uint32_t decoy_i64_target = UINT32_MAX;
+    for (uint32_t call_index = 0u; call_index < method_calls; ++call_index) {
+        const XrValidatedFunction *method = &program->functions[method_targets[call_index]];
+        if (method->parameter_types[0] == aggregate_types[0]) {
+            if (origin_i64_target == UINT32_MAX)
+                origin_i64_target = method_targets[call_index];
+            ASSERT_EQ_UINT(method_targets[call_index], origin_i64_target);
+            ++origin_i64_calls;
+        } else if (method->parameter_types[0] == aggregate_types[2]) {
+            decoy_i64_target = method_targets[call_index];
+            ++decoy_i64_calls;
+        } else
+            ASSERT_TRUE(false);
+    }
+    ASSERT_EQ_UINT(origin_i64_calls, 2u);
+    ASSERT_EQ_UINT(decoy_i64_calls, 1u);
+    ASSERT_LT(origin_i64_target, program->function_count);
+    ASSERT_LT(decoy_i64_target, program->function_count);
+    ASSERT_TRUE(origin_i64_target != decoy_i64_target);
+
+    uint16_t nested_origin_types[2] = {XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID};
+    uint32_t nested_origin_constructs = 0u;
+    for (uint32_t function_index = 0u; function_index < program->function_count;
+         ++function_index) {
+        if (function_index == entry)
+            continue;
+        const XrValidatedFunction *candidate = &program->functions[function_index];
+        for (uint32_t block_index = 0u; block_index < candidate->block_count; ++block_index) {
+            const XrValidatedBlock *block = &candidate->blocks[block_index];
+            for (uint32_t instruction_index = 0u;
+                 instruction_index < block->instruction_count; ++instruction_index) {
+                const XrValidatedInstruction *instruction =
+                    &block->instructions[instruction_index];
+                if (instruction->operation_id != XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT)
+                    continue;
+                const XrValidatedType *constructed_type =
+                    xr_validated_program_type(program, instruction->result_type_id);
+                ASSERT_NOT_NULL(constructed_type);
+                if (constructed_type->nominal_kind != XR_CORE_IR_NOMINAL_STRUCT)
+                    continue;
+                ASSERT_LT(nested_origin_constructs, 2u);
+                ASSERT_EQ_UINT(constructed_type->field_types[0], XR_CORE_TYPE_BOOL);
+                nested_origin_types[nested_origin_constructs] = instruction->result_type_id;
+                ++nested_origin_constructs;
+            }
+        }
+    }
+    ASSERT_EQ_UINT(nested_origin_constructs, 2u);
+    ASSERT_EQ_UINT(nested_origin_types[0], nested_origin_types[1]);
+    ASSERT_TRUE(nested_origin_types[0] != aggregate_types[0]);
+    ASSERT_TRUE(nested_origin_types[0] != aggregate_types[2]);
+    ASSERT_TRUE(nested_origin_types[1] != aggregate_types[0]);
+    ASSERT_TRUE(nested_origin_types[1] != aggregate_types[2]);
+
+    const XrValidatedType *origin_bool_type =
+        xr_validated_program_type(program, nested_origin_types[0]);
+    ASSERT_NOT_NULL(origin_bool_type);
+    ASSERT_EQ_UINT(origin_bool_type->field_types[0], XR_CORE_TYPE_BOOL);
+    ASSERT_TRUE(!xr_core_ir_key_equal(origin_i64_type->key, origin_bool_type->key));
+
     uint32_t nested_target = UINT32_MAX;
-    for (uint32_t method_index = 0u; method_index < 2u; ++method_index) {
-        const XrValidatedFunction *method = &program->functions[method_targets[method_index]];
+    uint32_t bool_forward_target = UINT32_MAX;
+    uint32_t bool_read_target = UINT32_MAX;
+    for (uint32_t function_index = 0u; function_index < program->function_count;
+         ++function_index) {
+        const XrValidatedFunction *method = &program->functions[function_index];
+        if (!method->has_receiver || method->parameter_count != 2u ||
+            method->parameter_types[0] != nested_origin_types[0])
+            continue;
         uint32_t method_projects = 0u;
         uint32_t nested_calls = 0u;
-        ASSERT_EQ_UINT(method->parameter_count, 2u);
         for (uint32_t block_index = 0u; block_index < method->block_count; ++block_index) {
             const XrValidatedBlock *block = &method->blocks[block_index];
             for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
@@ -2304,37 +2386,58 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
                     XR_CORE_OP_CORE_CALL_SEALED_DIRECT) {
                     ASSERT_EQ_INT(block->instructions[instruction_index].immediate_kind,
                                   XR_CORE_IR_IMMEDIATE_FUNCTION);
-                    nested_target =
-                        block->instructions[instruction_index].immediate.function_id;
+                    nested_target = block->instructions[instruction_index].immediate.function_id;
                     ++nested_calls;
                 }
             }
         }
-        if (method->parameter_types[0] == bool_aggregate) {
-            ASSERT_EQ_UINT(method->parameter_types[1], XR_CORE_TYPE_I64);
-            ASSERT_EQ_UINT(method->result_type_id, XR_CORE_TYPE_BOOL);
+        ASSERT_EQ_UINT(method->parameter_types[1], XR_CORE_TYPE_BOOL);
+        ASSERT_EQ_UINT(method->result_type_id, XR_CORE_TYPE_BOOL);
+        if (nested_calls == 1u) {
             ASSERT_EQ_UINT(method_projects, 0u);
-            ASSERT_EQ_UINT(nested_calls, 1u);
-            saw_bool_receiver = true;
+            bool_forward_target = function_index;
         } else {
-            ASSERT_EQ_UINT(method->parameter_types[0], i64_aggregate);
-            ASSERT_EQ_UINT(method->parameter_types[1], XR_CORE_TYPE_BOOL);
-            ASSERT_EQ_UINT(method->result_type_id, XR_CORE_TYPE_I64);
-            ASSERT_EQ_UINT(method_projects, 1u);
             ASSERT_EQ_UINT(nested_calls, 0u);
-            saw_i64_receiver = true;
+            ASSERT_EQ_UINT(method_projects, 1u);
+            bool_read_target = function_index;
         }
     }
-    ASSERT_TRUE(saw_bool_receiver);
-    ASSERT_TRUE(saw_i64_receiver);
+    ASSERT_LT(bool_forward_target, program->function_count);
+    ASSERT_LT(bool_read_target, program->function_count);
+    ASSERT_TRUE(bool_forward_target != bool_read_target);
+    ASSERT_EQ_UINT(nested_target, bool_read_target);
+
+    uint32_t unique_targets[2] = {origin_i64_target, decoy_i64_target};
+    for (uint32_t method_index = 0u; method_index < 2u; ++method_index) {
+        const XrValidatedFunction *method = &program->functions[unique_targets[method_index]];
+        uint32_t method_projects = 0u;
+        uint32_t nested_calls = 0u;
+        ASSERT_EQ_UINT(method->parameter_count, 2u);
+        for (uint32_t block_index = 0u; block_index < method->block_count; ++block_index) {
+            const XrValidatedBlock *block = &method->blocks[block_index];
+            for (uint32_t instruction_index = 0u;
+                 instruction_index < block->instruction_count; ++instruction_index) {
+                method_projects += block->instructions[instruction_index].operation_id ==
+                                   XR_CORE_OP_CORE_AGGREGATE_PROJECT;
+                nested_calls += block->instructions[instruction_index].operation_id ==
+                                XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
+            }
+        }
+        ASSERT_TRUE(method->parameter_types[0] == aggregate_types[0] ||
+                    method->parameter_types[0] == aggregate_types[2]);
+        ASSERT_EQ_UINT(method->parameter_types[1], XR_CORE_TYPE_BOOL);
+        ASSERT_EQ_UINT(method->result_type_id, XR_CORE_TYPE_I64);
+        ASSERT_EQ_UINT(method_projects, 1u);
+        ASSERT_EQ_UINT(nested_calls, 0u);
+    }
     ASSERT_LT(nested_target, program->function_count);
-    ASSERT_TRUE(nested_target != method_targets[0]);
-    ASSERT_TRUE(nested_target != method_targets[1]);
+    ASSERT_TRUE(nested_target != origin_i64_target);
+    ASSERT_TRUE(nested_target != decoy_i64_target);
     const XrValidatedFunction *nested_method = &program->functions[nested_target];
     ASSERT_TRUE(nested_method->has_receiver);
     ASSERT_EQ_UINT(nested_method->parameter_count, 2u);
-    ASSERT_EQ_UINT(nested_method->parameter_types[0], bool_aggregate);
-    ASSERT_EQ_UINT(nested_method->parameter_types[1], XR_CORE_TYPE_I64);
+    ASSERT_EQ_UINT(nested_method->parameter_types[0], nested_origin_types[0]);
+    ASSERT_EQ_UINT(nested_method->parameter_types[1], XR_CORE_TYPE_BOOL);
     ASSERT_EQ_UINT(nested_method->result_type_id, XR_CORE_TYPE_BOOL);
 
     XrReferenceProfile reference_profile = {.pointer_width = 64u};

@@ -3723,6 +3723,10 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     sym->is_exported = node->is_exported;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links) {
+        links->nominal_decl_node = node;
+        links->file_path = ctx->file_path;
+    }
     const char *stdlib_module = xa_intrinsic_owner_module(ctx);
     if (links && stdlib_module) {
         /* Preserve canonical stdlib provenance past analysis.  Lowering uses

@@ -201,6 +201,7 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             break;
 
         case AST_STRUCT_LITERAL:
+            visit_node(node->as.struct_literal.type_path, v);
             for (int i = 0; i < node->as.struct_literal.field_count; i++) {
                 visit_node(node->as.struct_literal.field_values[i], v);
             }

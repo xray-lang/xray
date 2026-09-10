@@ -331,16 +331,12 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
         roots[ti] = state->graph->specs[state->graph->topo_order[ti]].ast;
     XaMonoBudget mono_budget = xa_mono_default_budget();
     XaMonoUsage mono_usage = {0};
-    for (int ti = 0; ti < state->graph->topo_count; ti++) {
-        XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
-        /* A budget failure leaves calls unspecialized, so any shape contract
-         * proven below would describe code that was never going to be built.
-         * The diagnostic is also counted in the analysis loop; failing here
-         * makes verify's dependence on it explicit rather than incidental. */
-        if (!xa_mono_pass(spec->ast, roots, state->graph->topo_count, state->isolate, &mono_budget,
-                          &mono_usage, state->analyzer))
-            errors++;
-    }
+    /* A closure failure leaves some graph callsites unspecialized, so any
+     * shape contract
+     * proven below would describe code that cannot execute. */
+    if (!xa_mono_graph_pass(roots, state->graph->topo_count, state->isolate, &mono_budget,
+                            &mono_usage, state->analyzer))
+        errors++;
     for (int ti = 0; ti < state->graph->topo_count; ti++) {
         XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
         xa_analyzer_analyze(state->analyzer, spec->source_path, (XrAstNode *) spec->ast);

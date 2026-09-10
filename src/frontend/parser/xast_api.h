@@ -204,8 +204,8 @@ XR_FUNC AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name
 XR_FUNC AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode **fields,
                                    int field_count, int line);
 
-// Create struct literal node: Point{x: 1.0, y: 2.0}
-XR_FUNC AstNode *xr_ast_struct_literal(XrCompilerSession *session, const char *name,
+// Create struct literal node from its lexical or namespace-qualified nominal path.
+XR_FUNC AstNode *xr_ast_struct_literal(XrCompilerSession *session, AstNode *type_path,
                                        char **field_names, AstNode **field_values, int field_count,
                                        int line);
 

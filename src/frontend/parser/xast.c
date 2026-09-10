@@ -1004,11 +1004,17 @@ AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode
     return node;
 }
 
-// Create struct literal node: Point{x: 1.0, y: 2.0}
-AstNode *xr_ast_struct_literal(XrCompilerSession *session, const char *name, char **field_names,
+// Create a struct literal with one authoritative nominal path.
+AstNode *xr_ast_struct_literal(XrCompilerSession *session, AstNode *type_path, char **field_names,
                                AstNode **field_values, int field_count, int line) {
     AstNode *node = alloc_node(session, AST_STRUCT_LITERAL, line);
-    node->as.struct_literal.struct_name = (char *) name;
+    const char *name = NULL;
+    if (type_path && type_path->type == AST_VARIABLE)
+        name = type_path->as.variable.name;
+    else if (type_path && type_path->type == AST_MEMBER_ACCESS)
+        name = type_path->as.member_access.name;
+    node->as.struct_literal.type_path = type_path;
+    node->as.struct_literal.struct_name = ast_strdup(session, name);
     node->as.struct_literal.field_names = field_names;
     node->as.struct_literal.field_values = field_values;
     node->as.struct_literal.field_count = field_count;

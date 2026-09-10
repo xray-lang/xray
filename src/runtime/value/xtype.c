@@ -1963,32 +1963,6 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (xr_type_equals(target, source))
         return true;
 
-    // Enum / class-name alias: the parser cannot distinguish an enum
-    // type annotation `Color` from a class annotation, so it produces
-    // XR_KIND_CLASS (or XR_KIND_INSTANCE for generic forms like
-    // Result<int, string>) for any user-defined name. The analyzer
-    // later produces XR_KIND_ENUM for enum-static and enum-iter
-    // expressions. Treat CLASS/INSTANCE(name=X) and ENUM(enum_name=X)
-    // as the same type when the names match, regardless of generic
-    // type arguments (enums are type-erased at runtime).
-    {
-        const char *t_name = NULL;
-        const char *s_name = NULL;
-        if ((target->kind == XR_KIND_CLASS || target->kind == XR_KIND_INSTANCE) &&
-            target->instance.class_name)
-            t_name = target->instance.class_name;
-        else if (target->kind == XR_KIND_ENUM && target->enum_type.enum_name)
-            t_name = target->enum_type.enum_name;
-        if ((source->kind == XR_KIND_CLASS || source->kind == XR_KIND_INSTANCE) &&
-            source->instance.class_name)
-            s_name = source->instance.class_name;
-        else if (source->kind == XR_KIND_ENUM && source->enum_type.enum_name)
-            s_name = source->enum_type.enum_name;
-        if (t_name && s_name && strcmp(t_name, s_name) == 0 && target->kind != source->kind) {
-            return true;
-        }
-    }
-
     // null is compatible with nullable type (T?)
     if (XR_TYPE_IS_NULL(source) && target->is_nullable)
         return true;
@@ -2607,16 +2581,17 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return true;
     }
     if (a->kind == XR_KIND_INSTANCE || a->kind == XR_KIND_CLASS) {
-        // Compare class references first
-        if (a->instance.class_ref && b->instance.class_ref &&
-            a->instance.class_ref == b->instance.class_ref) {
-            // Same class, check type arguments
+        // A resolved class reference is the nominal identity. Never fall back
+        // to a display name when either side has exact declaration authority.
+        if (a->instance.class_ref || b->instance.class_ref) {
+            if (!a->instance.class_ref || !b->instance.class_ref ||
+                a->instance.class_ref != b->instance.class_ref)
+                return false;
             if (a->instance.type_arg_count != b->instance.type_arg_count)
                 return false;
             for (int i = 0; i < a->instance.type_arg_count; i++) {
-                if (!xr_type_equals(a->instance.type_args[i], b->instance.type_args[i])) {
+                if (!xr_type_equals(a->instance.type_args[i], b->instance.type_args[i]))
                     return false;
-                }
             }
             return true;
         }
@@ -2792,7 +2767,7 @@ XrType *xr_type_non_nullable(XrVMRuntime *X, XrType *type) {
 // Moved to xtype_generic.c: xr_type_substitute, xr_type_satisfies_constraint,
 //   xr_type_is_iterable, xr_type_is_iterator
 
-// Helper: compare base class names (strip generic parameters)
+// Helper for declaration-less builtin types only.
 static bool class_names_match(const char *name_a, const char *name_b) {
     if (!name_a || !name_b)
         return false;
@@ -2801,6 +2776,28 @@ static bool class_names_match(const char *name_a, const char *name_b) {
     size_t len_a = lt_a ? (size_t) (lt_a - name_a) : strlen(name_a);
     size_t len_b = lt_b ? (size_t) (lt_b - name_b) : strlen(name_b);
     return len_a == len_b && strncmp(name_a, name_b, len_a) == 0;
+}
+
+static bool nominal_instance_args_equal(const XrType *left, const XrType *right) {
+    if (!left || !right || left->instance.type_arg_count != right->instance.type_arg_count)
+        return false;
+    for (int index = 0; index < left->instance.type_arg_count; ++index) {
+        if (!xr_type_equals(left->instance.type_args ? left->instance.type_args[index] : NULL,
+                            right->instance.type_args ? right->instance.type_args[index] : NULL))
+            return false;
+    }
+    return true;
+}
+
+static bool nominal_instance_matches(const XrType *candidate, const XrType *target) {
+    if (!candidate || !target)
+        return false;
+    if (candidate->instance.class_ref || target->instance.class_ref)
+        return candidate->instance.class_ref && target->instance.class_ref &&
+               candidate->instance.class_ref == target->instance.class_ref &&
+               nominal_instance_args_equal(candidate, target);
+    return class_names_match(candidate->instance.class_name, target->instance.class_name) &&
+           nominal_instance_args_equal(candidate, target);
 }
 
 // Class inheritance: walk up superclass chain
@@ -2817,17 +2814,11 @@ bool xr_type_is_subclass_of(XrType *type, XrType *target) {
     if (target->kind != XR_KIND_CLASS && target->kind != XR_KIND_INSTANCE)
         return false;
 
-    const char *target_name = target->instance.class_name;
-    if (!target_name)
-        return false;
-
     // Walk up inheritance chain via XrType.superclass first
     XrType *current = type;
     while (current) {
-        if (current->instance.class_name &&
-            class_names_match(current->instance.class_name, target_name)) {
+        if (nominal_instance_matches(current, target))
             return true;
-        }
         current = current->instance.superclass;
     }
 
@@ -2835,6 +2826,25 @@ bool xr_type_is_subclass_of(XrType *type, XrType *target) {
     // This is needed because xr_type_new_instance() doesn't propagate
     // superclass from the class declaration's XrType.
     XrClassInfo *info = type->instance.class_ref;
+    if (target->instance.class_ref) {
+        /* Class-info base links prove exact nominal heads but do not carry a
+         * substituted
+         * generic tuple. Parameterized inheritance must therefore
+         * be proven by the typed
+         * superclass chain above. */
+        if (target->instance.type_arg_count != 0)
+            return false;
+        while (info) {
+            if (info == target->instance.class_ref)
+                return true;
+            info = info->base;
+        }
+        return false;
+    }
+
+    const char *target_name = target->instance.class_name;
+    if (!target_name)
+        return false;
     while (info) {
         if (info->name && class_names_match(info->name, target_name)) {
             return true;

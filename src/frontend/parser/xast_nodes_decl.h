@@ -85,7 +85,7 @@ typedef struct ClassDeclNode {
     XrGenericParam **type_params;  // Generic type parameters
     int type_param_count;
     uint32_t symbol_id;  // Unique ID from analyzer; 0 = unresolved
-    /* Monomorphization metadata (set by xa_mono_pass) */
+    /* Monomorphization metadata (set by xa_mono_graph_pass) */
     bool is_monomorphized;             // true for cloned generic instances (e.g. Box$i64)
     bool is_generic_skeleton;          // true for original generic decl kept as skeleton
     bool mono_types_rewritten;         // mono pass rewrote a member type annotation

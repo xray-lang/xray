@@ -13,6 +13,7 @@
 
 struct AstNode;
 struct XaAnalyzer;
+struct XrType;
 
 typedef enum XrCtValueKind {
     XR_CT_NONE,
@@ -43,6 +44,7 @@ typedef struct XrCtFixedArrayValue {
 typedef XrCtElementListValue XrCtTupleValue;
 
 typedef struct XrCtStructValue {
+    struct XrType *exact_type;
     const char *struct_name;
     const char **field_names;
     XrCtValue *field_values;

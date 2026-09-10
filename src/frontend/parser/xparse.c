@@ -1704,61 +1704,10 @@ AstNode *xr_parse_variable(Parser *parser) {
 
         // Check if this is a generic struct literal: Name<T1, T2>{field: value}
         if (xr_parser_check(parser, TK_LBRACE)) {
-            xr_parser_advance(parser);  // Consume {
-
-            char **field_names = NULL;
-            AstNode **field_values = NULL;
-            int field_count = 0;
-            int field_capacity = 0;
-
-            if (!xr_parser_check(parser, TK_RBRACE)) {
-                do {
-                    if (field_count >= field_capacity) {
-                        int old_field_capacity = field_capacity;
-                        field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
-
-                        char **new_names = (char **) ast_alloc_array(
-                            parser->compiler_session, sizeof(char *), (size_t) field_capacity);
-                        if (old_field_capacity > 0 && field_names) {
-                            memcpy(new_names, field_names,
-                                   sizeof(char *) * (size_t) old_field_capacity);
-                        }
-                        field_names = new_names;
-
-                        AstNode **new_values = (AstNode **) ast_alloc_array(
-                            parser->compiler_session, sizeof(AstNode *), (size_t) field_capacity);
-                        if (old_field_capacity > 0 && field_values) {
-                            memcpy(new_values, field_values,
-                                   sizeof(AstNode *) * (size_t) old_field_capacity);
-                        }
-                        field_values = new_values;
-                    }
-
-                    xr_parser_consume(parser, TK_NAME, "expected field name in struct literal");
-                    char *fname = (char *) ast_alloc(parser->compiler_session,
-                                                     (size_t) parser->previous.length + 1);
-                    memcpy(fname, parser->previous.start, parser->previous.length);
-                    fname[parser->previous.length] = '\0';
-                    field_names[field_count] = fname;
-
-                    xr_parser_consume(parser, TK_COLON, "expected ':' after field name");
-                    field_values[field_count] = xr_parse_expression(parser);
-                    field_count++;
-                } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
-            }
-
-            xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
-
-            AstNode *node = xr_ast_struct_literal(parser->compiler_session, name, field_names,
-                                                  field_values, field_count, line);
-            node->column = column;
-            // Attach generic type arguments for monomorphization
-            XrTypeRef **ta = (XrTypeRef **) ast_alloc_array(
-                parser->compiler_session, sizeof(XrTypeRef *), (size_t) type_arg_count);
-            memcpy(ta, type_args, sizeof(XrTypeRef *) * type_arg_count);
-            node->as.struct_literal.type_args = ta;
-            node->as.struct_literal.type_arg_count = type_arg_count;
-            return node;
+            AstNode *type_path = xr_ast_variable(parser->compiler_session, name, line);
+            if (type_path)
+                type_path->column = column;
+            return xr_parse_struct_literal_after_type(parser, type_path, type_args, type_arg_count);
         }
 
         // Generic call detected: identifier<T1, T2>(args)
@@ -1827,56 +1776,10 @@ AstNode *xr_parse_variable(Parser *parser) {
         parser->panic_mode = saved_panic_mode;
 
         if (is_struct_literal) {
-            // Parse struct literal
-            xr_parser_advance(parser);  // consume '{'
-
-            char **field_names = NULL;
-            AstNode **field_values = NULL;
-            int field_count = 0;
-            int field_capacity = 0;
-
-            if (!xr_parser_check(parser, TK_RBRACE)) {
-                do {
-                    if (field_count >= field_capacity) {
-                        int old_field_capacity = field_capacity;
-                        field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
-
-                        char **new_names = (char **) ast_alloc_array(
-                            parser->compiler_session, sizeof(char *), (size_t) field_capacity);
-                        if (old_field_capacity > 0 && field_names) {
-                            memcpy(new_names, field_names,
-                                   sizeof(char *) * (size_t) old_field_capacity);
-                        }
-                        field_names = new_names;
-
-                        AstNode **new_values = (AstNode **) ast_alloc_array(
-                            parser->compiler_session, sizeof(AstNode *), (size_t) field_capacity);
-                        if (old_field_capacity > 0 && field_values) {
-                            memcpy(new_values, field_values,
-                                   sizeof(AstNode *) * (size_t) old_field_capacity);
-                        }
-                        field_values = new_values;
-                    }
-
-                    xr_parser_consume(parser, TK_NAME, "expected field name in struct literal");
-                    char *fname = (char *) ast_alloc(parser->compiler_session,
-                                                     (size_t) parser->previous.length + 1);
-                    memcpy(fname, parser->previous.start, parser->previous.length);
-                    fname[parser->previous.length] = '\0';
-                    field_names[field_count] = fname;
-
-                    xr_parser_consume(parser, TK_COLON, "expected ':' after field name");
-                    field_values[field_count] = xr_parse_expression(parser);
-                    field_count++;
-                } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
-            }
-
-            xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
-
-            AstNode *node = xr_ast_struct_literal(parser->compiler_session, name, field_names,
-                                                  field_values, field_count, line);
-            node->column = column;
-            return node;
+            AstNode *type_path = xr_ast_variable(parser->compiler_session, name, line);
+            if (type_path)
+                type_path->column = column;
+            return xr_parse_struct_literal_after_type(parser, type_path, NULL, 0);
         }
     }
 

@@ -8,7 +8,7 @@
     {"name": "source_owner_function_parameter_callable_has_one_program_and_private_executors", "fixture": {"id": "function_parameter", "expected_exit": 48, "labels": ["closure", "callable", "call"]}},
     {"name": "source_owner_generic_specializations_are_exact_program_functions", "fixture": {"id": "generic_specialization", "expected_exit": 42, "labels": ["generic", "value-representation", "call"]}},
     {"name": "source_owner_generic_constraint_methods_have_exact_concrete_targets", "fixture": {"id": "generic_constraint_method", "expected_exit": 42, "labels": ["generic", "constraint", "method", "call", "value-representation"]}},
-    {"name": "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates", "fixture": {"id": "generic_value_struct", "expected_exit": 42, "labels": ["generic", "value-representation", "aggregate"]}},
+    {"name": "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates", "fixture": {"id": "generic_value_struct", "expected_exit": 42, "labels": ["module-graph", "namespace", "generic", "value-representation", "aggregate"]}},
     {"name": "source_owner_function_parameter_suspending_callable_has_one_program", "fixture": {"id": "function_parameter_suspending", "expected_exit": 42, "labels": ["closure", "callable", "coroutine", "cancel", "call"]}},
     {"name": "source_owner_clock_provider_is_exact_across_private_executors", "fixture": {"id": "clock_provider", "expected_exit": 1, "labels": ["provider", "clock"]}},
     {"name": "source_owner_provider_refusal_runs_nested_explicit_trap_cleanup", "fixture": {"id": "provider_trap_cleanup", "expected_exit": 207, "labels": ["provider", "clock", "refusal", "cleanup", "trap"]}},

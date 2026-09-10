@@ -191,7 +191,7 @@ def validate(root: Path) -> None:
         "xr_module_graph_build",
         "xa_analyzer_analyze",
         "pre_monomorphization_evidence",
-        "xa_mono_pass",
+        "xa_mono_graph_pass",
         "xr_canon_program",
         "xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer",
         "xg_global_evidence_merge_generic_inst_roots",
@@ -242,7 +242,7 @@ def validate(root: Path) -> None:
                 f"canonical run route regained legacy execution: {forbidden}")
     for token in (
         "xa_mono_default_budget",
-        "xa_mono_pass",
+        "xa_mono_graph_pass",
         "monomorphization failed without a diagnostic",
         'fprintf(stderr, "E%04d: ", diagnostic->code)',
     ):
@@ -270,7 +270,7 @@ def validate(root: Path) -> None:
         "source fingerprint drifted across CRLF ingestion",
         "run accepted unbounded generic specialization",
         "check accepted unbounded generic specialization",
-        "stage=4 status=resource-limit",
+        ":1033:0: error[E0389]: E0389:",
     ):
         require(token in run_route_test, f"canonical run evidence lacks {token}")
     for token in (

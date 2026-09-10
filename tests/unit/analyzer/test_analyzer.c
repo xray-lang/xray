@@ -829,6 +829,29 @@ TEST(type_class_instance) {
     xa_class_info_free(info);
 }
 
+TEST(type_class_instance_equality_uses_exact_nominal_owner) {
+    XrClassInfo *left_info = xa_class_info_new("Box");
+    XrClassInfo *right_info = xa_class_info_new("Box");
+    ASSERT(left_info != NULL && right_info != NULL);
+    XrType *arg = xr_type_new_int_width(NULL, XR_NATIVE_I64);
+    XrType *left_args[] = {arg};
+    XrType *right_args[] = {arg};
+    XrType *left =
+        xr_type_new_generic_instance(g_isolate, "Box", left_info, left_args, 1);
+    XrType *same =
+        xr_type_new_generic_instance(g_isolate, "Box", left_info, right_args, 1);
+    XrType *different =
+        xr_type_new_generic_instance(g_isolate, "Box", right_info, right_args, 1);
+    ASSERT(left != NULL && same != NULL && different != NULL);
+    ASSERT(xr_type_equals(left, same));
+    ASSERT(!xr_type_equals(left, different));
+    ASSERT(xa_typecheck_assignable(left, same));
+    ASSERT(!xa_typecheck_assignable(left, different));
+    ASSERT(!xa_typecheck_assignable(different, left));
+    xa_class_info_free(right_info);
+    xa_class_info_free(left_info);
+}
+
 TEST(type_function_complex) {
     // (int, string) -> Array<int>
     XrType *param1 = xr_type_new_int(NULL);
@@ -2658,7 +2681,8 @@ TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
     XaMonoBudget mono_budget = xa_mono_default_budget();
     XaMonoUsage mono_usage = {0};
-    xa_mono_pass(program, NULL, 0, g_isolate, &mono_budget, &mono_usage, a);
+    AstNode *mono_roots[1] = {program};
+    xa_mono_graph_pass(mono_roots, 1, g_isolate, &mono_budget, &mono_usage, a);
     xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
 
     int diagnostic_count = 0;
@@ -3652,7 +3676,8 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
     ASSERT(!analyzer_diag_contains(a, "error"));
     XaMonoBudget mono_budget = xa_mono_default_budget();
     XaMonoUsage mono_usage = {0};
-    xa_mono_pass(program, NULL, 0, g_isolate, &mono_budget, &mono_usage, a);
+    AstNode *mono_roots[1] = {program};
+    xa_mono_graph_pass(mono_roots, 1, g_isolate, &mono_budget, &mono_usage, a);
     xa_analyzer_analyze(a, "effect_generic_specialization.xr", program);
     ASSERT(!analyzer_diag_contains(a, "error"));
 
@@ -8088,6 +8113,7 @@ int main(void) {
 
     printf("\nAdditional type tests:\n");
     RUN_TEST(type_class_instance);
+    RUN_TEST(type_class_instance_equality_uses_exact_nominal_owner);
     RUN_TEST(type_function_complex);
     RUN_TEST(type_function_throw_effect_covariance);
     RUN_TEST(type_void_never);

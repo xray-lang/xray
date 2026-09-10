@@ -292,6 +292,7 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
             }
             return true;
         case AST_STRUCT_LITERAL:
+            emit(w, n->as.struct_literal.type_path);
             emit_type_refs(w, n->as.struct_literal.type_args, n->as.struct_literal.type_arg_count);
             emit_array(w, n->as.struct_literal.field_values, n->as.struct_literal.field_count);
             return true;

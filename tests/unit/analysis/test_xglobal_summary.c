@@ -7970,7 +7970,7 @@ TEST(global_evidence_generic_effect_identity_is_orthogonal_to_type_tuple) {
     XaMonoBudget budget = xa_mono_default_budget();
     XaMonoUsage usage = {0};
     AstNode *roots[1] = {ast};
-    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_TRUE(xa_mono_graph_pass(roots, 1, g_iso, &budget, &usage, analyzer));
 
     xg_global_evidence_free(&evidence);
     xa_analyzer_set_graph(analyzer, NULL);
@@ -8104,7 +8104,7 @@ TEST(global_evidence_post_mono_records_concrete_nested_generic_root) {
     XaMonoBudget budget = xa_mono_default_budget();
     XaMonoUsage usage = {0};
     AstNode *roots[1] = {ast};
-    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_TRUE(xa_mono_graph_pass(roots, 1, g_iso, &budget, &usage, analyzer));
     ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
     xa_analyzer_clear_diagnostics(analyzer);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8195,7 +8195,7 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
     XaMonoBudget budget = xa_mono_default_budget();
     XaMonoUsage usage = {0};
     AstNode *roots[1] = {ast};
-    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_TRUE(xa_mono_graph_pass(roots, 1, g_iso, &budget, &usage, analyzer));
     ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
     xa_analyzer_clear_diagnostics(analyzer);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8327,7 +8327,7 @@ TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver
     XaMonoBudget budget = xa_mono_default_budget();
     XaMonoUsage usage = {0};
     AstNode *roots[1] = {ast};
-    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_TRUE(xa_mono_graph_pass(roots, 1, g_iso, &budget, &usage, analyzer));
     ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
     xa_analyzer_clear_diagnostics(analyzer);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8546,7 +8546,7 @@ TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver) {
     XaMonoBudget budget = xa_mono_default_budget();
     XaMonoUsage usage = {0};
     AstNode *roots[1] = {ast};
-    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_TRUE(xa_mono_graph_pass(roots, 1, g_iso, &budget, &usage, analyzer));
     ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
     xa_analyzer_clear_diagnostics(analyzer);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8613,7 +8613,7 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
     XaMonoBudget budget = xa_mono_default_budget();
     XaMonoUsage usage = {0};
     AstNode *roots[1] = {ast};
-    ok = ok && xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer);
+    ok = ok && xa_mono_graph_pass(roots, 1, g_iso, &budget, &usage, analyzer);
     xa_analyzer_clear_diagnostics(analyzer);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
     ok = ok && analyzer->diagnostic_count == 0u;

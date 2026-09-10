@@ -1171,6 +1171,28 @@ TEST(parser_member_generic_call_uintsize_after_binary_op) {
     teardown();
 }
 
+TEST(parser_member_generic_struct_literal_preserves_type_path) {
+    setup();
+    AstNode *expr = parse_expr("boxes.Box<i64>{value: 42}");
+    ASSERT_NOT_NULL(expr);
+    ASSERT_EQ_INT(expr->type, AST_STRUCT_LITERAL);
+    ASSERT_STR_EQ(expr->as.struct_literal.struct_name, "Box");
+    ASSERT_NOT_NULL(expr->as.struct_literal.type_path);
+    ASSERT_EQ_INT(expr->as.struct_literal.type_path->type, AST_MEMBER_ACCESS);
+    ASSERT_STR_EQ(expr->as.struct_literal.type_path->as.member_access.name, "Box");
+    AstNode *namespace_object = expr->as.struct_literal.type_path->as.member_access.object;
+    ASSERT_NOT_NULL(namespace_object);
+    ASSERT_EQ_INT(namespace_object->type, AST_VARIABLE);
+    ASSERT_STR_EQ(namespace_object->as.variable.name, "boxes");
+    ASSERT_EQ_INT(expr->as.struct_literal.type_arg_count, 1);
+    ASSERT_EQ_INT(expr->as.struct_literal.type_args[0]->kind, XR_TREF_SCALAR);
+    ASSERT_EQ_INT(expr->as.struct_literal.type_args[0]->scalar_rep, XR_NATIVE_I64);
+    ASSERT_EQ_INT(expr->as.struct_literal.field_count, 1);
+    ASSERT_STR_EQ(expr->as.struct_literal.field_names[0], "value");
+    ASSERT_EQ_INT(expr->as.struct_literal.field_values[0]->type, AST_LITERAL_INT);
+    teardown();
+}
+
 TEST(parser_scalar_spelling_registry_roundtrip) {
     setup();
     AstNode *alias = parse_first("type Scalars = (i8, i16, i32, i64, u8, u16, u32, u64, "
@@ -1544,6 +1566,7 @@ int main(void) {
     RUN_TEST(parser_member_access);
     RUN_TEST(parser_member_generic_call_uintsize_type_arg);
     RUN_TEST(parser_member_generic_call_uintsize_after_binary_op);
+    RUN_TEST(parser_member_generic_struct_literal_preserves_type_path);
     RUN_TEST(parser_scalar_spelling_registry_roundtrip);
     RUN_TEST(parser_retired_scalar_spelling_is_ordinary_identifier);
 

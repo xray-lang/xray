@@ -389,41 +389,49 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
         .max_instances = context->input->budget.max_monomorphization_instances,
     };
     XaMonoUsage mono_usage = {0};
-    for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
-        if (!xa_mono_pass(context->ast_roots[topo], context->ast_roots, (int) context->module_count,
-                          isolate, &mono_budget, &mono_usage, context->analyzer)) {
-            int diagnostic_count = 0;
-            XaDiagnostic *analysis =
-                xa_analyzer_get_diagnostics(context->analyzer, &diagnostic_count);
-            for (; analysis; analysis = analysis->next) {
-                if (analysis->severity != XR_DIAG_SEV_ERROR)
-                    continue;
-                uint32_t code = analysis->code >= 0 ? (uint32_t) analysis->code : 0u;
-                XrProgramSourceBuildStatus failure =
-                    code == XR_ERR_ANALYZE_MONO_BUDGET || code == XR_ERR_ANALYZE_MONO_DEPTH
-                        ? XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT
-                        : XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED;
-                const char *message =
-                    analysis->message ? analysis->message : "module monomorphization failed";
-                XrProgramSourceBuildStatus status =
-                    code > 0u
-                        ? reject(
-                              diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo,
-                              analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
-                              code, "E%04u: %s", code, message)
-                        : reject(
-                              diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo,
-                              analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
-                              0u, "%s", message);
-                set_source_location(diagnostic, &analysis->location);
-                xa_analyzer_clear_diagnostics(context->analyzer);
-                return status;
+    if (!xa_mono_graph_pass(context->ast_roots, (int) context->module_count, isolate, &mono_budget,
+                            &mono_usage, context->analyzer)) {
+        int diagnostic_count = 0;
+        XaDiagnostic *analysis = xa_analyzer_get_diagnostics(context->analyzer, &diagnostic_count);
+        for (; analysis; analysis = analysis->next) {
+            if (analysis->severity != XR_DIAG_SEV_ERROR)
+                continue;
+            uint32_t module_index = UINT32_MAX;
+            if (analysis->location.file) {
+                for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
+                    int spec_index = context->graph->topo_order[topo];
+                    const char *source_path = context->graph->specs[spec_index].source_path;
+                    if (source_path && strcmp(source_path, analysis->location.file) == 0) {
+                        module_index = topo;
+                        break;
+                    }
+                }
             }
+            uint32_t code = analysis->code >= 0 ? (uint32_t) analysis->code : 0u;
+            XrProgramSourceBuildStatus failure =
+                code == XR_ERR_ANALYZE_MONO_BUDGET || code == XR_ERR_ANALYZE_MONO_DEPTH
+                    ? XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT
+                    : XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED;
+            const char *message =
+                analysis->message ? analysis->message : "graph monomorphization failed";
+            XrProgramSourceBuildStatus status =
+                code > 0u
+                    ? reject(diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION,
+                             module_index,
+                             analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
+                             code, "E%04u: %s", code, message)
+                    : reject(diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION,
+                             module_index,
+                             analysis->location.line > 0 ? (uint32_t) analysis->location.line : 0u,
+                             0u, "%s", message);
+            set_source_location(diagnostic, &analysis->location);
             xa_analyzer_clear_diagnostics(context->analyzer);
-            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED,
-                          XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, topo, 0u, 0u,
-                          "module monomorphization failed without a diagnostic");
+            return status;
         }
+        xa_analyzer_clear_diagnostics(context->analyzer);
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED,
+                      XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, UINT32_MAX, 0u, 0u,
+                      "graph monomorphization failed without a diagnostic");
     }
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         int spec_index = context->graph->topo_order[topo];

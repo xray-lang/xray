@@ -4255,14 +4255,16 @@ static XiValue *lower_ct_fixed_array_value(XiLower *l, AstNode *node, const XrCt
 
 static XrClassInfo *xi_lower_ct_struct_class_info(XiLower *l, struct XrType *target_type,
                                                   const XrCtStructValue *st) {
+    (void) l;
     if (target_type &&
         (target_type->kind == XR_KIND_INSTANCE || target_type->kind == XR_KIND_CLASS) &&
         target_type->instance.class_ref)
         return target_type->instance.class_ref;
-    const char *class_name = target_type ? xr_type_get_class_name(target_type) : NULL;
-    if (!class_name && st)
-        class_name = st->struct_name;
-    return class_name ? xi_lower_lookup_class_info(l, class_name) : NULL;
+    if (st && st->exact_type &&
+        (st->exact_type->kind == XR_KIND_INSTANCE || st->exact_type->kind == XR_KIND_CLASS) &&
+        st->exact_type->instance.class_ref)
+        return st->exact_type->instance.class_ref;
+    return NULL;
 }
 
 static struct XrType *xi_lower_ct_struct_declared_field_type(XiLower *l, XrClassInfo *info,
@@ -4281,16 +4283,28 @@ static XiValue *lower_ct_struct_value(XiLower *l, AstNode *node, const XrCtValue
 
     const XrCtStructValue *st = &value->as.struct_val;
     const char *struct_name = st->struct_name;
-    struct XrType *result_type = target_type;
-    if ((!result_type || XR_TYPE_IS_UNKNOWN(result_type)) && struct_name)
-        result_type = xr_type_new_named_instance(l->isolate, struct_name);
-    if (!result_type)
-        result_type = l->type_any;
+    if (!st->exact_type ||
+        (st->exact_type->kind != XR_KIND_INSTANCE && st->exact_type->kind != XR_KIND_CLASS) ||
+        !st->exact_type->instance.class_ref ||
+        (target_type && !XR_TYPE_IS_UNKNOWN(target_type) &&
+         !xr_type_equals(target_type, st->exact_type))) {
+        fprintf(stderr, "[LOWER] comptime struct value has no exact nominal type at line %d\n",
+                (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    struct XrType *result_type =
+        target_type && !XR_TYPE_IS_UNKNOWN(target_type) ? target_type : st->exact_type;
 
     XrAggregateLayout *slayout = xi_lower_type_struct_layout(l, result_type);
-    if (!slayout && struct_name)
-        slayout = xi_lower_lookup_struct_layout(l, struct_name);
     XrClassInfo *info = xi_lower_ct_struct_class_info(l, result_type, st);
+    if (!slayout || !info || info != st->exact_type->instance.class_ref ||
+        !info->declaration_symbol) {
+        fprintf(stderr, "[LOWER] comptime struct value lacks exact declaration layout at line %d\n",
+                (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
 
     int count = st->field_count;
     if (count < 0 || count > XI_LOWER_MAX_VARIADIC_VALUES) {
@@ -4309,17 +4323,21 @@ static XiValue *lower_ct_struct_value(XiLower *l, AstNode *node, const XrCtValue
     for (int i = 0; i < count; i++) {
         const char *field_name = st->field_names ? st->field_names[i] : NULL;
         struct XrType *field_type = xi_lower_ct_struct_declared_field_type(l, info, field_name);
-        if (slayout) {
-            int fidx = xi_lower_struct_field_index(slayout, field_name);
-            if (fidx >= 0)
-                field_type = xi_lower_struct_field_type(l, field_type, slayout, fidx);
+        int fidx = xi_lower_struct_field_index(slayout, field_name);
+        if (!field_type || fidx < 0) {
+            fprintf(stderr, "[LOWER] comptime struct value has no exact field at line %d\n",
+                    (int) node->line);
+            l->had_error = true;
+            return NULL;
         }
+        field_type = xi_lower_struct_field_type(l, field_type, slayout, fidx);
         field_vals[i] = lower_ct_value(l, node, &st->field_values[i], field_type);
         if (!field_vals[i])
             return NULL;
     }
 
-    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, NULL, 0, NULL);
+    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, NULL, 0,
+                                    info->declaration_symbol);
     if (!inst)
         return NULL;
 
@@ -4327,31 +4345,20 @@ static XiValue *lower_ct_struct_value(XiLower *l, AstNode *node, const XrCtValue
         const char *field_name = st->field_names ? st->field_names[i] : NULL;
         if (!field_name || !field_vals[i])
             continue;
-        if (slayout) {
-            int fidx = xi_lower_struct_field_index(slayout, field_name);
-            if (fidx < 0)
-                continue;
-            XiValue *field_val = xi_lower_narrow_for_native_field(
-                l, node, field_vals[i], slayout->fields[fidx].native_type);
-            XiValue *set = xi_value_new(l->func, l->cur_block, XI_AGG_SET, l->type_unit, 2);
-            if (!set)
-                return NULL;
-            set->args[0] = inst;
-            set->args[1] = field_val;
-            set->aux = (void *) slayout;
-            set->aux_int = fidx;
-            set->flags |= XI_FLAG_SIDE_EFFECT;
-            set->line = (uint32_t) node->line;
-            continue;
+        int fidx = xi_lower_struct_field_index(slayout, field_name);
+        if (fidx < 0) {
+            l->had_error = true;
+            return NULL;
         }
-
-        XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD, l->type_unit, 2);
+        XiValue *field_val = xi_lower_narrow_for_native_field(l, node, field_vals[i],
+                                                              slayout->fields[fidx].native_type);
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_AGG_SET, l->type_unit, 2);
         if (!set)
             return NULL;
         set->args[0] = inst;
-        set->args[1] = field_vals[i];
-        set->aux = (void *) arena_strdup(l->func, field_name);
-        set->aux_int = xi_lower_method_symbol(l, field_name);
+        set->args[1] = field_val;
+        set->aux = (void *) slayout;
+        set->aux_int = fidx;
         set->flags |= XI_FLAG_SIDE_EFFECT;
         set->line = (uint32_t) node->line;
     }
@@ -10325,7 +10332,8 @@ generic_constructor:;
         (result_type && result_type->kind == XR_KIND_INSTANCE &&
          result_type->instance.class_ref != NULL);
     {
-        int var_id = xi_lower_var_find(l, 0, cname);
+        uint32_t symbol_id = class_sym ? class_sym->id : 0u;
+        int var_id = xi_lower_var_find(l, symbol_id, cname);
         if (var_id >= 0) {
             if (l->is_program && l->shared_map[var_id] >= 0) {
                 XiTopBinding b;
@@ -10339,13 +10347,14 @@ generic_constructor:;
         }
     }
     if (!cls) {
-        XiTopBinding tb = xi_lower_find_top_binding(l, 0, cname);
+        XiTopBinding tb = xi_lower_find_top_binding(l, class_sym ? class_sym->id : 0u, cname);
         if (xi_top_binding_valid(tb))
             cls = xi_lower_emit_top_load(l, tb, l->type_any);
     }
     if (!cls) {
         struct XrType *upval_type = NULL;
-        int upval_idx = xi_lower_resolve_upvalue(l, 0, cname, &upval_type);
+        int upval_idx =
+            xi_lower_resolve_upvalue(l, class_sym ? class_sym->id : 0u, cname, &upval_type);
         if (upval_idx >= 0) {
             cls = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL, l->type_any, 0);
             if (cls)
@@ -11512,6 +11521,18 @@ static XiValue *lower_range_expr(XiLower *l, AstNode *node) {
     return v;
 }
 
+static bool lower_tref_contains_open_type(const XrTypeRef *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_TREF_TYPE_PARAM)
+        return true;
+    for (int i = 0; i < type->nchildren; ++i) {
+        if (lower_tref_contains_open_type(type->children ? type->children[i] : NULL))
+            return true;
+    }
+    return false;
+}
+
 static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     StructLiteralNode *sl = &node->as.struct_literal;
     int count = sl->field_count;
@@ -11535,40 +11556,27 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
             return NULL;
     }
 
-    /* Resolve struct class from scope: local → shared → upvalue.
-     * Struct declarations are lowered as XI_CLASS_CREATE and bound to
-     * a variable with the struct name, so the lookup chain works the
-     * same way as for class constructors in lower_new_expr. */
+    /* A concrete specialization must have been rewritten to one exact
+     * compiler-private
+     * variable binding.  An open generic source body is the
+     * only exception: it is an erased
+     * template ABI, so consume its complete
+     * analyzer-resolved path directly without
+     * manufacturing a concrete
+     * specialization or consulting the terminal spelling. */
     const char *sname = sl->struct_name;
-    XiValue *cls = NULL;
-    if (sname) {
-        int var_id = xi_lower_var_find(l, 0, sname);
-        if (var_id >= 0) {
-            if (l->is_program && l->shared_map[var_id] >= 0) {
-                XiTopBinding b;
-                b.slot = l->shared_map[var_id];
-                b.name = l->vars[var_id].name;
-                b.type = l->vars[var_id].type;
-                cls = xi_lower_emit_top_load(l, b, l->type_any);
-            } else {
-                cls = xi_lower_braun_read(l, var_id, l->cur_block);
-            }
-        }
-        if (!cls) {
-            XiTopBinding tb = xi_lower_find_top_binding(l, 0, sname);
-            if (xi_top_binding_valid(tb))
-                cls = xi_lower_emit_top_load(l, tb, l->type_any);
-        }
-        if (!cls) {
-            struct XrType *upval_type = NULL;
-            int upval_idx = xi_lower_resolve_upvalue(l, 0, sname, &upval_type);
-            if (upval_idx >= 0) {
-                cls = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL, l->type_any, 0);
-                if (cls)
-                    cls->aux_int = upval_idx;
-            }
-        }
+    bool open_template = false;
+    for (int i = 0; i < sl->type_arg_count && !open_template; ++i)
+        open_template = lower_tref_contains_open_type(sl->type_args ? sl->type_args[i] : NULL);
+    bool exact_private_path = sl->type_path && sl->type_path->type == AST_VARIABLE &&
+                              sl->type_path->as.variable.symbol_id != 0u;
+    if (!sl->type_path || (!exact_private_path && !open_template)) {
+        fprintf(stderr, "[LOWER] unresolved struct literal type path '%s' at line %d\n",
+                sname ? sname : "<anonymous>", (int) node->line);
+        l->had_error = true;
+        return NULL;
     }
+    XiValue *cls = xi_lower_expr(l, sl->type_path);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 
@@ -11576,8 +11584,6 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
      * Emitter decides stack vs heap based on local use-scan. */
     if (cls) {
         XrAggregateLayout *slayout = xi_lower_type_struct_layout(l, result_type);
-        if (!slayout)
-            slayout = xi_lower_lookup_struct_layout(l, sname);
 
         if (slayout) {
             XiValue *inst = xi_value_new(l->func, l->cur_block, XI_AGG_NEW, result_type, 1);

@@ -8219,16 +8219,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (callee_obj_type && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
 
-        // Look up method in class
-        if (XR_TYPE_IS_INSTANCE(callee_obj_type) && callee_obj_type->instance.class_name) {
-            XaSymbol *class_sym =
-                xa_lookup_visible_class_symbol(ctx, callee_obj_type->instance.class_name);
-            XaSymbolLinks *class_links = (class_sym && class_sym->kind == XA_SYM_CLASS)
+        // The receiver's resolved nominal reference is authoritative. Its
+        // class_name is a display spelling and can collide across modules.
+        if (XR_TYPE_IS_INSTANCE(callee_obj_type) && callee_obj_type->instance.class_ref) {
+            XrClassInfo *class_info = callee_obj_type->instance.class_ref;
+            XaSymbol *class_sym = class_info->declaration_symbol;
+            XaSymbolLinks *class_links = class_sym && class_sym->kind == XA_SYM_CLASS
                                              ? xa_analyzer_get_links(ctx->analyzer, class_sym)
                                              : NULL;
-            XrClassInfo *class_info = (class_links && class_links->class_info)
-                                          ? class_links->class_info
-                                          : callee_obj_type->instance.class_ref;
+            if (class_links && class_links->class_info != class_info)
+                class_links = NULL;
             if (class_info) {
                 XaSymbol *method_sym = xa_class_info_lookup_instance_member(class_info, ma->name);
                 if (method_sym && method_sym->kind == XA_SYM_METHOD) {

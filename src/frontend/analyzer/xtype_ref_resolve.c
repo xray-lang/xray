@@ -359,9 +359,7 @@ static bool ct_fixed_arrays_equal(const XrCtFixedArrayValue *a, const XrCtFixedA
 static bool ct_struct_values_equal(const XrCtStructValue *a, const XrCtStructValue *b) {
     if (!a || !b || a->field_count != b->field_count)
         return false;
-    const char *an = a->struct_name ? a->struct_name : "";
-    const char *bn = b->struct_name ? b->struct_name : "";
-    if (strcmp(an, bn) != 0)
+    if (!a->exact_type || !b->exact_type || !xr_type_equals(a->exact_type, b->exact_type))
         return false;
     for (int i = 0; i < a->field_count; i++) {
         const char *af = a->field_names && a->field_names[i] ? a->field_names[i] : "";
@@ -513,8 +511,13 @@ static bool ct_eval_tuple_literal(XaAnalyzer *analyzer, const AstNode *expr, XrC
 static bool ct_eval_struct_literal(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
                                    const char **err, uint32_t *stack, int depth) {
     const StructLiteralNode *sl = &expr->as.struct_literal;
+    XrType *exact_type = analyzer ? xa_analyzer_get_node_type(analyzer, expr) : NULL;
     if (!sl->struct_name)
         return ct_fail(err, "struct consteval literal is missing a type name");
+    if (!exact_type ||
+        (exact_type->kind != XR_KIND_CLASS && exact_type->kind != XR_KIND_INSTANCE) ||
+        !exact_type->instance.class_ref)
+        return ct_fail(err, "struct consteval literal is missing exact nominal identity");
     if (sl->field_count <= 0)
         return ct_fail(err, "struct consteval literal must have at least one field");
 
@@ -536,6 +539,7 @@ static bool ct_eval_struct_literal(XaAnalyzer *analyzer, const AstNode *expr, Xr
     }
 
     out->kind = XR_CT_STRUCT_VALUE;
+    out->as.struct_val.exact_type = exact_type;
     out->as.struct_val.struct_name = sl->struct_name;
     out->as.struct_val.field_names = field_names;
     out->as.struct_val.field_values = field_values;

@@ -177,8 +177,14 @@ typedef struct SetLiteralNode {
     int count;
 } SetLiteralNode;
 
-// Struct literal node: Point{x: 1.0, y: 2.0} or Pair<int, string>{first: 1, second: "a"}
+// Struct literal node: Point{x: 1.0, y: 2.0} or pkg.Pair<int, string>{first: 1}
 typedef struct StructLiteralNode {
+    /* The syntactic nominal path is the only source-resolution authority.
+     * struct_name is its
+     * terminal spelling and may be replaced with a private
+     * monomorphized import before the
+     * second analysis pass. */
+    struct AstNode *type_path;
     char *struct_name;
     char **field_names;
     AstNode **field_values;
