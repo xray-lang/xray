@@ -41,6 +41,7 @@ class AsanEntryPointTest(unittest.TestCase):
             self.assertEqual(
                 asan_runner.main(["run_asan_focused.py", "--help"]), 0)
         self.assertIn("usage: run_asan_focused.py", output.getvalue())
+        self.assertIn("generic-scalar-class", output.getvalue())
         lock.assert_not_called()
         run.assert_not_called()
 
@@ -153,6 +154,15 @@ class AsanEntryPointTest(unittest.TestCase):
         tests, targets = asan_runner.EXACT_PROFILES["generic-identity"]
         self.assertIs(tests, asan_runner.canonical_profile.GENERIC_IDENTITY_CTEST_NAMES)
         self.assertIs(targets, asan_runner.canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS)
+
+    def test_generic_scalar_class_asan_profile_reuses_shared_inventory(self):
+        tests, targets = asan_runner.EXACT_PROFILES["generic-scalar-class"]
+        self.assertIs(
+            tests, asan_runner.canonical_profile.GENERIC_SCALAR_CLASS_CTEST_NAMES
+        )
+        self.assertIs(
+            targets, asan_runner.canonical_profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS
+        )
 
 
 class CacheInspectionTest(unittest.TestCase):

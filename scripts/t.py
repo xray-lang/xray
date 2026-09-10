@@ -35,6 +35,7 @@ USAGE                                          measured, warm tree, 18 cores
     scripts/t.py infra   test-runner-only edit exact Python self-tests
     scripts/t.py t0 -R <re>  one test          ~3s   (builds only that test)
     scripts/t.py canonical  canonical Program edit preflight; exact inventory
+    scripts/t.py generic-scalar-class  scalar generic class VM/AOT preflight
     scripts/t.py t1      before a commit       ~1min
     scripts/t.py t2      before a push         ~4min
     scripts/t.py t3      periodic / release    everything, ~8min
@@ -61,7 +62,7 @@ Environment:
     XR_BUILD_LOCK_TIMEOUT seconds to wait for exclusive ownership of the build
                    tree (default: 600; 0 fails immediately)
     XR_NO_BUILD=1  skip the incremental build step
-    XR_FAST=1      t0/t1/canonical: build in build-fast (build-fast-clang on
+    XR_FAST=1      t0/t1/exact preflights: build in build-fast (build-fast-clang on
                    Windows), load stdlib source
                    from disk, and omit stdlib VM fastpaths. This removes both
                    self-hosted stdlib generation edges from the edit loop; the
@@ -225,6 +226,13 @@ EXACT_PROFILES = {
         include_xray=False,
         not_covered=("remaining canonical Program proofs, broad language/runtime suites, "
                      "VM/AOT differential, full sanitizers and release qualification"),
+    ),
+    "generic-scalar-class": ExactProfile(
+        tests=canonical_profile.GENERIC_SCALAR_CLASS_CTEST_NAMES,
+        targets=canonical_profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS,
+        include_xray=False,
+        not_covered=("remaining canonical Program proofs, broad language/runtime suites, "
+                     "full backend differential, full sanitizers and release qualification"),
     ),
     "infra": ExactProfile(
         tests=("test_build_tree_lock", "test_tiered_test_runner",
