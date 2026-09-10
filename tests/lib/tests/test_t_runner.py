@@ -34,6 +34,17 @@ class FocusedSelectionTest(unittest.TestCase):
         )
         self.assertFalse(profile.include_xray)
 
+    def test_generic_scalar_class_profile_reuses_the_shared_exact_inventory(self):
+        profile = runner.EXACT_PROFILES["generic-scalar-class"]
+        self.assertIs(
+            profile.tests, runner.canonical_profile.GENERIC_SCALAR_CLASS_CTEST_NAMES
+        )
+        self.assertIs(
+            profile.targets,
+            runner.canonical_profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS,
+        )
+        self.assertFalse(profile.include_xray)
+
     def test_requested_build_dir_matches_fast_tree_selection(self):
         with mock.patch.dict(runner.os.environ, {}, clear=True), mock.patch.object(
                 runner.platform, "IS_WINDOWS", True):

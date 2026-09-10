@@ -58,6 +58,41 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             set(profile.GENERIC_IDENTITY_BUILD_TARGETS), set(profile.BUILD_TARGETS)
         )
 
+    def test_generic_scalar_class_adds_one_native_exact_witness(self) -> None:
+        self.assertEqual(len(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES), 5)
+        self.assertEqual(
+            len(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES),
+            len(set(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES)),
+        )
+        self.assertEqual(
+            profile.GENERIC_SCALAR_CLASS_CTEST_NAMES[:-1],
+            profile.GENERIC_IDENTITY_CTEST_NAMES,
+        )
+        self.assertEqual(
+            profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS[:-1],
+            profile.GENERIC_IDENTITY_BUILD_TARGETS,
+        )
+        self.assertEqual(
+            profile.GENERIC_SCALAR_CLASS_CTEST_NAMES[-1],
+            profile.GENERIC_SCALAR_CLASS_NATIVE_CTEST_NAME,
+        )
+        self.assertEqual(
+            profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS,
+            profile.GENERIC_SCALAR_CLASS_CTEST_NAMES,
+        )
+        self.assertIn(
+            profile.GENERIC_SCALAR_CLASS_NATIVE_CTEST_NAME,
+            profile.source_fixtures.native_target_names(
+                profile.source_fixtures.load_registry()
+            ),
+        )
+        self.assertLessEqual(
+            set(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES), set(profile.CTEST_NAMES)
+        )
+        self.assertLessEqual(
+            set(profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS), set(profile.BUILD_TARGETS)
+        )
+
     def test_manifest_additions_and_removals_change_both_inventories(self) -> None:
         with tempfile.TemporaryDirectory(prefix="xr-canonical-profile-") as directory:
             manifest = Path(directory) / "cases.json"

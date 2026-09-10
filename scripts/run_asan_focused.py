@@ -22,7 +22,8 @@ subset, while claiming the same lane name. It also had no reference from
 CMakeLists or CI: dead code that could only rot.
 
 Environment overrides:
-    XR_ASAN_PROFILE       full (default), canonical-program, or generic-identity
+    XR_ASAN_PROFILE       full (default), canonical-program, generic-identity,
+                          or generic-scalar-class
     XR_ASAN_JOBS          parallel build/test jobs (default: all cores)
     XR_ASAN_BUILD_DIR     ASan build directory (default: build-asan)
     XR_ASAN_CTEST_REGEX   unit test name regex (default: ^test_)
@@ -88,6 +89,10 @@ EXACT_PROFILES = {
         canonical_profile.GENERIC_IDENTITY_CTEST_NAMES,
         canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS,
     ),
+    "generic-scalar-class": (
+        canonical_profile.GENERIC_SCALAR_CLASS_CTEST_NAMES,
+        canonical_profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS,
+    ),
 }
 
 USAGE = """usage: run_asan_focused.py [-h|--help]
@@ -95,6 +100,12 @@ USAGE = """usage: run_asan_focused.py [-h|--help]
 Run the configured ASan+UBSan lane. Select its bounded profile and build tree
 with XR_ASAN_PROFILE and XR_ASAN_BUILD_DIR; all execution settings are explicit
 environment variables documented in this module's header.
+
+XR_ASAN_PROFILE choices:
+    full                  complete qualifying lane (default)
+    canonical-program     partial canonical Program preflight
+    generic-identity      partial generic identity preflight
+    generic-scalar-class  generic identity plus scalar-class native AOT witness
 """
 
 
